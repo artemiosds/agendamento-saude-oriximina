@@ -229,21 +229,98 @@ export async function downloadProntuarioPdf(
     return;
   }
 
-  const { prontuario, paciente, profissional, unidade, ciclo, pts, customFieldsHtml, procs, exames } = data;
+  const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades } = data;
   const config = await loadDocumentConfig();
-  const title = `PRONTUÁRIO DE ATENDIMENTO — ${prontuario.tipo_registro?.toUpperCase().replace(/_/g, ' ') || 'CLÍNICO'}`;
+  const tipoRegistro = prontuario.tipo_registro || 'sessao';
+  const title = `PRONTUÁRIO DE ATENDIMENTO — ${tipoRegistro.toUpperCase().replace(/_/g, ' ')}`;
+
+  // 1. Determine which sections to show based on system_config
+  const adminCampos = (configTipos?.campos || []) as any[];
+  const activeFieldsForType = adminCampos
+    .filter(c => c.tiposProntuario && c.tiposProntuario.includes(tipoRegistro === 'avaliacao_inicial' ? 'primeira_consulta' : tipoRegistro))
+    .sort((a, b) => a.order - b.order);
+
+  // 2. Build clinical sections HTML dynamically
+  let clinicalContentHtml = "";
+
+  const renderSection = (label: string, value: any) => {
+    const sValue = safe(value);
+    if (!sValue) return "";
+    return `
+      <div class="section" style="margin-bottom: 4px;">
+        <div class="section-title" style="font-size: 8pt; border-bottom: 0.5px solid #0369a1; color: #0369a1; padding-bottom: 1px; margin-bottom: 1px;">${escapeHtml(label)}</div>
+        <div class="section-content" style="font-size: 9.5pt; line-height: 1.1; white-space: pre-wrap; text-align: justify;">${escapeHtml(sValue).replace(/\n/g, "<br/>")}</div>
+      </div>`;
+  };
+
+  // Special handling for SOAP
+  const soapLabels = configTipos?.soapLabels || { subjetivo: 'Subjetivo', objetivo: 'Objetivo', avaliacao: 'Avaliação', plano: 'Plano' };
+  clinicalContentHtml += renderSection(`S — ${soapLabels.subjetivo}`, prontuario.soap_subjetivo);
+  clinicalContentHtml += renderSection(`O — ${soapLabels.objetivo}`, prontuario.soap_objetivo);
+  clinicalContentHtml += renderSection(`A — ${soapLabels.avaliacao}`, prontuario.soap_avaliacao);
+  clinicalContentHtml += renderSection(`P — ${soapLabels.plano}`, prontuario.soap_plano);
+
+  // Dynamic fields from admin config
+  activeFieldsForType.forEach(f => {
+    if (f.habilitado === false) return;
+    if (['evolucao.subjetivo', 'evolucao.objetivo', 'evolucao.avaliacao', 'evolucao.plano'].includes(f.key)) return;
+    
+    let val = prontuario[f.key];
+    // If not in direct columns, check custom_data
+    if (val === undefined && prontuario.custom_data) {
+      val = (prontuario.custom_data as any)[f.key];
+    }
+    
+    if (val) {
+      clinicalContentHtml += renderSection(f.label, val);
+    }
+  });
+
+  // Especialidade fields handling
+  if (prontuario.custom_data) {
+    const cd = prontuario.custom_data as any;
+    Object.entries(cd).forEach(([key, val]) => {
+      if (key.startsWith('esp_') && val) {
+        const fieldKey = key.replace('esp_', '');
+        // Find label for this specialty field if possible
+        let label = fieldKey.replace(/_/g, ' ');
+        if (configEspecialidades) {
+          for (const esp of configEspecialidades) {
+            const f = esp.campos?.find((c: any) => c.key === fieldKey || c.id === fieldKey);
+            if (f) { label = f.label; break; }
+          }
+        }
+        clinicalContentHtml += renderSection(label, val);
+      }
+    });
+  }
+
+  // Fallback for some hardcoded essential fields if they have value but weren't in config
+  const legacyFields = [
+    { k: 'anamnese', l: 'Anamnese / Histórico' },
+    { k: 'sinais_sintomas', l: 'Sinais e Sintomas' },
+    { k: 'exame_fisico', l: 'Exame Físico' },
+    { k: 'hipotese', l: 'Hipótese' },
+    { k: 'conduta', l: 'Conduta' },
+    { k: 'evolucao', l: 'Evolução' },
+    { k: 'observacoes', l: 'Observações Gerais' }
+  ];
+  legacyFields.forEach(f => {
+    if (!activeFieldsForType.some(af => af.key === f.k) && prontuario[f.k]) {
+      clinicalContentHtml += renderSection(f.l, prontuario[f.k]);
+    }
+  });
 
   let cicloHtml = "";
   if (ciclo) {
     cicloHtml = `
-      <div class="section" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 6px; margin-bottom: 8px;">
-        <div class="section-title" style="border-bottom-color: #0369a1; margin-bottom: 2px; font-size: 8pt;">Ciclo de Tratamento Ativo</div>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; font-size: 8pt;">
+      <div class="section" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 4px; margin-bottom: 6px;">
+        <div class="section-title" style="border-bottom-color: #0369a1; margin-bottom: 2px; font-size: 7.5pt;">Ciclo de Tratamento Ativo</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px 6px; font-size: 8pt;">
           <div><strong>Tipo:</strong> ${escapeHtml(ciclo.treatment_type)}</div>
           <div><strong>Especialidade:</strong> ${escapeHtml(ciclo.specialty || (profissional as any)?.profissao || "—")}</div>
-          <div><strong>Frequência:</strong> ${escapeHtml(ciclo.frequency)}</div>
-          <div><strong>Início:</strong> ${fmtDate(ciclo.start_date)}</div>
           <div><strong>Sessões:</strong> ${ciclo.sessions_done}/${ciclo.total_sessions}</div>
+          <div><strong>Início:</strong> ${fmtDate(ciclo.start_date)}</div>
           <div><strong>Status:</strong> ${escapeHtml(ciclo.status)}</div>
         </div>
       </div>
@@ -253,12 +330,11 @@ export async function downloadProntuarioPdf(
   let ptsHtml = "";
   if (pts) {
     ptsHtml = `
-      <div class="section" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px; margin-bottom: 8px;">
-        <div class="section-title" style="font-size: 8pt;">Plano Terapêutico Singular (PTS)</div>
-        <div style="font-size: 8pt; display: grid; grid-template-columns: 1fr; gap: 2px;">
+      <div class="section" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px; margin-bottom: 6px;">
+        <div class="section-title" style="font-size: 7.5pt;">Plano Terapêutico Singular (PTS)</div>
+        <div style="font-size: 8pt; display: grid; grid-template-columns: 1fr; gap: 1px;">
           <div><strong>Diagnóstico Funcional:</strong> ${escapeHtml(pts.diagnostico_funcional)}</div>
           <div><strong>Objetivos Terapêuticos:</strong> ${escapeHtml(pts.objetivos_terapeuticos)}</div>
-          <div><strong>Metas Curto Prazo:</strong> ${escapeHtml(pts.metas_curto_prazo || "—")}</div>
           <div><strong>Especialidades:</strong> ${escapeHtml((pts.especialidades_envolvidas as string[])?.join(", ") || "—")}</div>
         </div>
       </div>
@@ -270,80 +346,47 @@ export async function downloadProntuarioPdf(
   const idadeStr = calcIdade(dataNasc);
   
   const infoPacienteHtml = `
-    <div style="margin-bottom: 10px;">
-      <div style="font-weight: 700; font-size: 8pt; color: #0369a1; margin-bottom: 4px; border-bottom: 1px solid #0369a1; text-transform: uppercase;">Dados do Paciente</div>
-      
-      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 4px; margin-bottom: 6px;">
-        <div class="info-item"><span class="info-label">Nome:</span><span class="info-value" style="font-size: 9.5pt;">${escapeHtml(pData.nome || prontuario.paciente_nome)}</span></div>
+    <div style="margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px; background: #fff;">
+      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 4px; margin-bottom: 4px;">
+        <div class="info-item"><span class="info-label">Paciente:</span><span class="info-value" style="font-size: 10pt; font-weight: 700;">${escapeHtml(pData.nome || prontuario.paciente_nome)}</span></div>
         <div class="info-item"><span class="info-label">CPF:</span><span class="info-value">${escapeHtml(pData.cpf || "—")}</span></div>
-        <div class="info-item"><span class="info-label">CNS:</span><span class="info-value">${escapeHtml(pData.cns || "—")}</span></div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 6px;">
         <div class="info-item"><span class="info-label">Nascimento:</span><span class="info-value">${fmtDate(dataNasc)} (${idadeStr})</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 4px;">
         <div class="info-item"><span class="info-label">Sexo:</span><span class="info-value">${escapeHtml(pData.sexo || "—")}</span></div>
+        <div class="info-item"><span class="info-label">CNS:</span><span class="info-value">${escapeHtml(pData.cns || "—")}</span></div>
         <div class="info-item"><span class="info-label">Mãe:</span><span class="info-value">${escapeHtml(pData.nome_mae || "—")}</span></div>
         <div class="info-item"><span class="info-label">Telefone:</span><span class="info-value">${escapeHtml(pData.telefone || "—")}</span></div>
       </div>
-
-      <div style="display: grid; grid-template-columns: 1fr; gap: 4px; margin-bottom: 6px; background: #fdfdfd; padding: 4px; border: 0.5px solid #eee;">
-        <div class="info-item">
-          <span class="info-label">Endereço:</span>
-          <span class="info-value">${escapeHtml([pData.tipo_logradouro, pData.logradouro, pData.numero, pData.complemento, pData.bairro, pData.cep, pData.municipio, pData.uf].filter(Boolean).join(", ") || "—")}</span>
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px;">
-        <div class="info-item"><span class="info-label">UBS Origem:</span><span class="info-value">${escapeHtml(pData.ubs_origem || "—")}</span></div>
-        <div class="info-item"><span class="info-label">Prof. Solicitante:</span><span class="info-value">${escapeHtml(pData.profissional_solicitante || "—")}</span></div>
-        <div class="info-item"><span class="info-label">Encaminhamento:</span><span class="info-value">${escapeHtml(pData.tipo_encaminhamento || "—")}</span></div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
-        <div class="info-item"><span class="info-label">Unidade/Setor:</span><span class="info-value">${escapeHtml(unidade?.nome || "—")} / ${escapeHtml(prontuario.setor || "—")}</span></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px;">
+        <div class="info-item"><span class="info-label">Data Atendimento:</span><span class="info-value" style="font-weight: 600;">${fmtDate(prontuario.data_atendimento)} ${prontuario.hora_atendimento || ""}</span></div>
         <div class="info-item"><span class="info-label">Profissional Resp.:</span><span class="info-value">${escapeHtml(prontuario.profissional_nome)}</span></div>
-        <div class="info-item"><span class="info-label">Data Atendimento:</span><span class="info-value">${fmtDate(prontuario.data_atendimento)} ${prontuario.hora_atendimento || ""}</span></div>
+        <div class="info-item"><span class="info-label">Unidade/Setor:</span><span class="info-value">${escapeHtml(unidade?.nome || "—")} / ${escapeHtml(prontuario.setor || "—")}</span></div>
       </div>
     </div>
   `;
 
   const procsHtml = procs.length > 0 ? `
-    <div class="section">
+    <div class="section" style="margin-top: 6px;">
       <div class="section-title">Procedimentos Realizados</div>
       <table style="width: 100%; border-collapse: collapse; margin-top: 2px;">
         <thead>
           <tr style="background: #f1f5f9;">
-            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 8pt;">Código</th>
-            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 8pt;">Procedimento</th>
-            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: center; font-size: 8pt;">Qtd</th>
-            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 8pt;">Obs</th>
+            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 7.5pt;">Código</th>
+            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 7.5pt;">Procedimento</th>
+            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: center; font-size: 7.5pt;">Qtd</th>
           </tr>
         </thead>
         <tbody>
           ${procs.map((p: any) => `
             <tr>
-              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8.5pt;">${escapeHtml(p.procedimentos?.codigo_sigtap || "—")}</td>
-              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8.5pt;">${escapeHtml(p.procedimentos?.nome || "—")}</td>
-              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: center; font-size: 8.5pt;">${p.quantidade || 1}</td>
-              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8pt;">${escapeHtml(p.observacao || "")}</td>
+              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8pt;">${escapeHtml(p.procedimentos?.codigo_sigtap || "—")}</td>
+              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8pt;">${escapeHtml(p.procedimentos?.nome || "—")}</td>
+              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: center; font-size: 8pt;">${p.quantidade || 1}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
-    </div>
-  ` : "";
-
-  const examesHtml = exames.length > 0 ? `
-    <div class="section">
-      <div class="section-title">Exames Registrados</div>
-      <div style="font-size: 8.5pt;">
-        ${exames.map((e: any) => `
-          <div style="margin-bottom: 4px; border-left: 2px solid #e2e8f0; padding-left: 6px;">
-            <strong>${escapeHtml(e.nome_exame)}</strong> (${escapeHtml(e.tipo_exame)}) - ${fmtDate(e.data_exame)}<br/>
-            ${e.resultado_descrito ? `<em>Resultado:</em> ${escapeHtml(e.resultado_descrito)}` : ""}
-          </div>
-        `).join('')}
-      </div>
     </div>
   ` : "";
 
@@ -356,11 +399,10 @@ export async function downloadProntuarioPdf(
   });
 
   const carimboFinal = carimboHtml || `
-    <div class="signature">
+    <div class="signature" style="margin-top: 20px;">
       <div class="signature-line"></div>
       <div class="name">${escapeHtml(prontuario.profissional_nome).toUpperCase()}</div>
       <div class="role">${escapeHtml((profissional as any)?.profissao || (profissional as any)?.cargo || "")}</div>
-      <div class="extra">Assinatura e carimbo do profissional</div>
     </div>
   `;
 
@@ -370,39 +412,17 @@ export async function downloadProntuarioPdf(
     ${ptsHtml}
     
     <div class="clinical-content">
-      ${section("Queixa Principal", safe(prontuario.queixa_principal))}
-      
-      <div style="display: grid; grid-template-columns: 1fr; gap: 0;">
-        ${section("S — Subjetivo", safe(prontuario.soap_subjetivo))}
-        ${section("O — Objetivo", safe(prontuario.soap_objetivo))}
-        ${section("A — Avaliação", safe(prontuario.soap_avaliacao))}
-        ${section("P — Plano", safe(prontuario.soap_plano))}
-      </div>
-
-      ${customFieldsHtml}
-
-      ${section("Anamnese / Histórico", safe(prontuario.anamnese))}
-      ${section("Sinais e Sintomas", safe(prontuario.sinais_sintomas))}
-      ${section("Exame Físico / Sinais Vitais", safe(prontuario.exame_fisico))}
-      ${section("Hipótese / Diagnóstico", safe(prontuario.hipotese))}
-      ${(prontuario as any).cid || (paciente as any)?.cid ? section("CID Principal", (prontuario as any).cid || (paciente as any)?.cid) : ""}
-      ${section("Conduta / Evolução", safe(prontuario.conduta) || safe(prontuario.evolucao))}
-      
+      ${clinicalContentHtml}
       ${procsHtml}
-      ${section("Procedimentos (Complementar)", safe(prontuario.procedimentos_texto))}
-      
-      ${examesHtml}
-      ${section("Solicitação de Exames", safe(prontuario.solicitacao_exames))}
-      ${section("Resultado de Exames (Anexo)", safe(prontuario.resultado_exame))}
-
-      ${section("Prescrição / Orientações", safe(prontuario.prescricao))}
-      ${section("Observações Gerais", safe(prontuario.observacoes))}
-      
-      ${prontuario.indicacao_retorno && prontuario.indicacao_retorno !== 'no_indication' && prontuario.indicacao_retorno !== 'sem_retorno' ? section("Indicação de Retorno", prontuario.indicacao_retorno) : ""}
     </div>
 
     ${carimboFinal}
   `;
+
+  const html = buildDocumentShell(title, body, config);
+  printViaIframe(html);
+}
+
 
   const html = buildDocumentShell(title, body, config);
   printViaIframe(html);
