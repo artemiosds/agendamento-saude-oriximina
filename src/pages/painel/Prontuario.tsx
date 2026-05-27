@@ -3260,11 +3260,7 @@ const ProntuarioPage: React.FC = () => {
                           Registre os dados da evolução para a Sessão {currentSessionForRegistration.session_number}
                         </div>
                       )}
-                      <div className="space-y-3">
-                        <div><Label>Procedimentos Realizados</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
-                        <div><Label>Resposta do Paciente</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
-                        <div><Label>Intercorrências</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Sem intercorrências" /></div>
-                      </div>
+                      {/* Campos dinâmicos da configuração agora são a fonte única de verdade */}
                     </div>
                     {/* Specific fields for Session */}
                     <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4">
