@@ -180,7 +180,26 @@ const ProntuarioPage: React.FC = () => {
               onCheckedChange={(checked) => handleFieldChange(fieldKey, checked)}
             />
             <span className="text-sm">{bloco.label}</span>
-          </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        {records.map((r) => (
+          <Card key={r.id} className="p-4 flex items-center justify-between">
+            <div>
+              <p className="font-semibold">{r.paciente_nome}</p>
+              <p className="text-xs text-muted-foreground">
+                {r.tipo_registro} - {new Date(r.data_atendimento).toLocaleDateString()}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => {
+              setEditId(r.id);
+              setDialogOpen(true);
+            }}>
+              Editar
+            </Button>
+          </Card>
+        ))}
+      </div>
         );
       default:
         return (
