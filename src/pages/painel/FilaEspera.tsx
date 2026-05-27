@@ -604,8 +604,8 @@ const FilaEspera: React.FC = () => {
       descricaoClinica: form.descricaoClinica,
       cid: form.cid,
     });
-    const unidade = unidades.find((u) => u.id === form.unidadeId);
-    const prof = form.profissionalId ? funcionarios.find((f) => f.id === form.profissionalId) : null;
+    const unidade = unitMap.get(form.unidadeId);
+    const prof = form.profissionalId ? employeeMap.get(form.profissionalId) : null;
     ensurePortalAccess({
       pacienteId,
       contexto: "fila",
