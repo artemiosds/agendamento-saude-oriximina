@@ -1549,6 +1549,7 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: f.solicitacao_exames,
         evolucao: f.evolucao,
         observacoes: f.observacoes,
+        custom_data: (f as any).custom_data || {},
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
