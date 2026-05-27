@@ -196,6 +196,15 @@ const retornoOptions = [
   { value: "outro", label: "Outro prazo" },
 ];
 
+const sessionStatusLabels: Record<string, string> = {
+  pendente_agendamento: "Ag. Agendamento",
+  agendada: "Agendada",
+  realizada: "Realizada",
+  paciente_faltou: "Faltou",
+  cancelada: "Cancelada",
+  remarcada: "Remarcada",
+};
+
 const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
