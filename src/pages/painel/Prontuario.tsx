@@ -1279,6 +1279,7 @@ const ProntuarioPage: React.FC = () => {
         setEspecialidadeFields({});
       }
     } catch { setEspecialidadeFields({}); }
+    setCustomData((p as any).custom_data || {});
     setDialogOpen(true);
     const pac = pacientes.find((px) => px.id === p.paciente_id);
     logAction({
