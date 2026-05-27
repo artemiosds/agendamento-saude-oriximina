@@ -535,10 +535,12 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
 
-    if (!currentSessionForRegistration) {
-      toast.error(`Nenhuma sessão disponível para ${registrationReferenceDateLabel}.`);
+    if (!session) {
+      toast.error(`Sessão não selecionada.`);
       return;
     }
+
+    setSelectSessionOpen(false);
 
     const shouldSubmitSession = sessionRegistrationRequested || form.tipo_registro === 'sessao';
 
@@ -547,8 +549,8 @@ const ProntuarioPage: React.FC = () => {
     setForm((prev) => ({
       ...prev,
       tipo_registro: 'sessao',
-      data_atendimento: registrationReferenceDate,
-      agendamento_id: prev.agendamento_id || currentSessionForRegistration.appointment_id || '',
+      data_atendimento: session.scheduled_date || prev.data_atendimento || registrationReferenceDate,
+      agendamento_id: prev.agendamento_id || session.appointment_id || '',
     }));
 
     if (shouldSubmitSession) {
