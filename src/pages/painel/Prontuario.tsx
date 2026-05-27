@@ -2792,8 +2792,6 @@ const ProntuarioPage: React.FC = () => {
                   />
                 )}
 
-                <div><Label>Diagnóstico Funcional</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Diagnóstico funcional baseado na avaliação..." /></div>
-                <div><Label>Conduta Inicial</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} placeholder="Conduta clínica inicial..." /></div>
 
                 {/* Decisão Clínica: PTS / Tratamento */}
                 {!editId && form.paciente_id && (
