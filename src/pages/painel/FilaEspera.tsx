@@ -170,11 +170,29 @@ const FilaEspera: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
-  const { pacientes: allPatients } = useData();
+  
+  const pacienteMap = useMemo(() => {
+    const map = new Map<string, (typeof pacientes)[0]>();
+    pacientes.forEach(p => map.set(p.id, p));
+    return map;
+  }, [pacientes]);
+
+  const unitMap = useMemo(() => {
+    const map = new Map<string, (typeof unidades)[0]>();
+    unidades.forEach(u => map.set(u.id, u));
+    return map;
+  }, [unidades]);
+
+  const employeeMap = useMemo(() => {
+    const map = new Map<string, (typeof funcionarios)[0]>();
+    funcionarios.forEach(f => map.set(f.id, f));
+    return map;
+  }, [funcionarios]);
+
   const resolvePaciente = useCallback((pacienteId: string, fallbackNome?: string): string => {
-    const pac = allPatients.find(p => p.id === pacienteId);
-    return pac?.nome || fallbackNome || 'Paciente não encontrado';
-  }, [allPatients]);
+    return pacienteMap.get(pacienteId)?.nome || fallbackNome || 'Paciente não encontrado';
+  }, [pacienteMap]);
+
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
@@ -340,7 +358,7 @@ const FilaEspera: React.FC = () => {
   const filteredFila = useMemo(() => {
     // Helper: calculate age from dataNascimento
     const getAge = (pacienteId: string): number => {
-      const pac = allPatients.find((p) => p.id === pacienteId);
+      const pac = pacienteMap.get(pacienteId);
       if (!pac?.dataNascimento) return 0;
       const birth = new Date(pac.dataNascimento);
       if (isNaN(birth.getTime())) return 0;
@@ -408,7 +426,7 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, allPatients, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery, resolvePaciente]);
+  }, [fila, pacienteMap, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery, resolvePaciente]);
 
   const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
   const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;
@@ -586,8 +604,8 @@ const FilaEspera: React.FC = () => {
       descricaoClinica: form.descricaoClinica,
       cid: form.cid,
     });
-    const unidade = unidades.find((u) => u.id === form.unidadeId);
-    const prof = form.profissionalId ? funcionarios.find((f) => f.id === form.profissionalId) : null;
+    const unidade = unitMap.get(form.unidadeId);
+    const prof = form.profissionalId ? employeeMap.get(form.profissionalId) : null;
     ensurePortalAccess({
       pacienteId,
       contexto: "fila",
@@ -640,7 +658,7 @@ const FilaEspera: React.FC = () => {
       toast.success("Registro atualizado!");
       setDialogOpen(false);
     } else {
-      const pac = allPatients.find((p) => p.id === form.pacienteId);
+      const pac = pacienteMap.get(form.pacienteId);
       await addToFilaWithPatient(form.pacienteId, form.pacienteNome, pac?.telefone || "", pac?.email || "");
     }
   };
@@ -777,8 +795,8 @@ const FilaEspera: React.FC = () => {
         dataSolicitacaoOriginal: sortableDate,
         origemCadastro: "demanda_reprimida",
       });
-      const unidade = unidades.find((u) => u.id === importForm.unidadeId);
-      const prof = importForm.profissionalId ? funcionarios.find((f) => f.id === importForm.profissionalId) : null;
+      const unidade = unitMap.get(importForm.unidadeId);
+      const prof = importForm.profissionalId ? employeeMap.get(importForm.profissionalId) : null;
       ensurePortalAccess({
         pacienteId,
         contexto: "fila",
@@ -855,7 +873,7 @@ const FilaEspera: React.FC = () => {
       toast.error("Preencha todos os campos.");
       return;
     }
-    const prof = funcionarios.find((f) => f.id === manualSlot.profissionalId);
+    const prof = employeeMap.get(manualSlot.profissionalId);
     await chamarProximoDaFila(
       {
         data: manualSlot.data,
@@ -954,8 +972,8 @@ const FilaEspera: React.FC = () => {
       toast.error(reasons[result?.reason] || "Horário indisponível.");
       return;
     }
-    const prof = funcionarios.find((fn) => fn.id === rescheduleSlot.profissionalId);
-    const pac = allPatients.find((p) => p.id === rescheduleFilaItem.pacienteId);
+    const prof = employeeMap.get(rescheduleSlot.profissionalId);
+    const pac = pacienteMap.get(rescheduleFilaItem.pacienteId);
     const agId = `ag${Date.now()}`;
     const { error } = await supabase.from("agendamentos").insert({
       id: agId,
@@ -994,7 +1012,7 @@ const FilaEspera: React.FC = () => {
       user,
       modulo: "fila_espera",
     });
-    const unidade = unidades.find((u) => u.id === rescheduleSlot.unidadeId);
+    const unidade = unitMap.get(rescheduleSlot.unidadeId);
     await notify({
       evento: "reagendamento",
       paciente_nome: rescheduleFilaItem.pacienteNome,
@@ -1335,7 +1353,7 @@ const FilaEspera: React.FC = () => {
                 />
                 {form.pacienteNome.length >= 2 && !form.pacienteId && (
                   <div className="mt-1 max-h-32 overflow-y-auto border rounded-md bg-background">
-                    {allPatients
+                    {pacientes
                       .filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase()))
                       .slice(0, 5)
                       .map((p) => (
@@ -1348,7 +1366,7 @@ const FilaEspera: React.FC = () => {
                           <span className="text-muted-foreground ml-2">— {p.telefone}</span>
                         </button>
                       ))}
-                    {allPatients.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
+                    {pacientes.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
                       0 && (
                       <div className="px-3 py-2 text-sm text-muted-foreground italic">Nenhum paciente encontrado</div>
                     )}
@@ -1840,8 +1858,8 @@ const FilaEspera: React.FC = () => {
           </Card>
         ) : (
           filteredFila.map((f, i) => {
-            const prof = f.profissionalId ? funcionarios.find((fn) => fn.id === f.profissionalId) : null;
-            const unidade = unidades.find((u) => u.id === f.unidadeId);
+            const prof = f.profissionalId ? employeeMap.get(f.profissionalId) : null;
+            const unidade = unitMap.get(f.unidadeId);
             const reservaTime = getReservaTimeLeft(f.id);
             const isChamado = f.status === "chamado";
             const isActive = ["aguardando", "chamado", "em_atendimento"].includes(f.status);
@@ -1965,7 +1983,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <ContactActionButton
-                      phone={allPatients.find((p) => p.id === f.pacienteId)?.telefone}
+                      phone={pacienteMap.get(f.pacienteId)?.telefone}
                       patientName={f.pacienteNome}
                       unitName={unidade?.nome}
                     />
@@ -2018,8 +2036,8 @@ const FilaEspera: React.FC = () => {
                                 minute: "2-digit",
                               }),
                             });
-                            const pac = allPatients.find((p) => p.id === f.pacienteId);
-                            const unidadeN = unidades.find((u) => u.id === f.unidadeId);
+                            const pac = pacienteMap.get(f.pacienteId);
+                            const unidadeN = unitMap.get(f.unidadeId);
                             await notify({
                               evento: "fila_chamada",
                               paciente_nome: f.pacienteNome,
@@ -2347,11 +2365,11 @@ const FilaEspera: React.FC = () => {
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes da Fila">
         {detalheFila &&
           (() => {
-            const pac = pacientes.find((p) => p.id === detalheFila.pacienteId);
-            const prof = detalheFila.profissionalId
-              ? funcionarios.find((fn) => fn.id === detalheFila.profissionalId)
+            const pac = pacienteMap.get(detalheFila.pacienteId);
+            const prof = detalheFila.profissionalId 
+              ? employeeMap.get(detalheFila.profissionalId)
               : null;
-            const unidade = unidades.find((u) => u.id === detalheFila.unidadeId);
+            const unidade = unitMap.get(detalheFila.unidadeId);
             return (
               <>
                 <Secao titulo="Dados do Paciente">
