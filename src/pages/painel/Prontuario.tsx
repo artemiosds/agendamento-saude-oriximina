@@ -1818,7 +1818,7 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     const soapPayload = sessionSoapPayload;
-    const soapError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+    const soapError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
     if (soapError) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
