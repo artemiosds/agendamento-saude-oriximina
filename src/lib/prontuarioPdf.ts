@@ -1,8 +1,11 @@
 /**
  * Geração de PDF/impressão de Prontuário e Histórico Clínico.
+ * 
+ * MELHORIA: Busca dados completos do banco para garantir fidelidade total.
  */
 
 import { buildDocumentShell, loadDocumentConfig, printViaIframe, docCarimboFor } from "./printLayout";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ProntuarioLike {
   id: string;
@@ -32,6 +35,7 @@ interface ProntuarioLike {
   resultado_exame?: string;
   indicacao_retorno?: string;
   episodio_id?: string | null;
+  // Metadata extras
   paciente_data_nasc?: string;
   paciente_cpf?: string;
   paciente_cns?: string;
@@ -39,8 +43,6 @@ interface ProntuarioLike {
   paciente_telefone?: string;
   unidade_nome?: string;
   profissional_especialidade?: string;
-  ciclo_info?: any;
-  pts_info?: any;
 }
 
 function fmtDate(iso: string | undefined): string {
@@ -115,33 +117,119 @@ function section(label: string, value: string): string {
     </div>`;
 }
 
-export async function downloadProntuarioPdf(
-  p: ProntuarioLike,
-): Promise<void> {
-  const config = await loadDocumentConfig();
-  const title = `PRONTUÁRIO DE ATENDIMENTO — ${p.tipo_registro?.toUpperCase().replace('_', ' ') || 'CLÍNICO'}`;
+/**
+ * Busca dados completos do prontuário, paciente, profissional e ciclos/PTS
+ * para garantir que nada falte no PDF.
+ */
+async function fetchFullProntuarioData(prontuarioId: string) {
+  // 1. Prontuário
+  const { data: prontuario, error: pErr } = await supabase
+    .from('prontuarios')
+    .select('*')
+    .eq('id', prontuarioId)
+    .single();
+  
+  if (pErr || !prontuario) return null;
 
+  // 2. Paciente
+  const { data: paciente } = await supabase
+    .from('pacientes')
+    .select('*')
+    .eq('id', prontuario.paciente_id)
+    .single();
+
+  // 3. Profissional
+  const { data: profissional } = await supabase
+    .from('funcionarios')
+    .select('*')
+    .eq('id', prontuario.profissional_id)
+    .single();
+
+  // 4. Unidade
+  const { data: unidade } = await supabase
+    .from('unidades')
+    .select('nome')
+    .eq('id', prontuario.unidade_id)
+    .single();
+
+  // 5. Ciclo de Tratamento Ativo
+  const { data: ciclo } = await supabase
+    .from('treatment_cycles')
+    .select('*')
+    .eq('patient_id', prontuario.paciente_id)
+    .eq('status', 'em_andamento')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // 6. PTS Vinculado
+  let pts = null;
+  if (ciclo?.pts_id) {
+    const { data: ptsData } = await supabase
+      .from('pts')
+      .select('*')
+      .eq('id', ciclo.pts_id)
+      .single();
+    pts = ptsData;
+  } else {
+    // Busca PTS ativo se não houver ciclo vinculado
+    const { data: ptsData } = await supabase
+      .from('pts')
+      .select('*')
+      .eq('patient_id', prontuario.paciente_id)
+      .eq('status', 'ativo')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    pts = ptsData;
+  }
+
+  return {
+    prontuario,
+    paciente,
+    profissional,
+    unidade,
+    ciclo,
+    pts
+  };
+}
+
+export async function downloadProntuarioPdf(
+  input: ProntuarioLike | string,
+): Promise<void> {
+  const prontuarioId = typeof input === 'string' ? input : input.id;
+  const data = await fetchFullProntuarioData(prontuarioId);
+  
+  if (!data) {
+    console.error("Erro ao carregar dados completos do prontuário");
+    return;
+  }
+
+  const { prontuario, paciente, profissional, unidade, ciclo, pts } = data;
+  const config = await loadDocumentConfig();
+  const title = `PRONTUÁRIO DE ATENDIMENTO — ${prontuario.tipo_registro?.toUpperCase().replace('_', ' ') || 'CLÍNICO'}`;
+
+  // Seção de Ciclo
   let cicloHtml = "";
-  if (p.ciclo_info) {
-    const c = p.ciclo_info;
+  if (ciclo) {
     cicloHtml = `
       <div class="section" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 8px; margin-bottom: 12px;">
         <div class="section-title" style="border-bottom-color: #0369a1; margin-bottom: 4px;">Ciclo de Tratamento Ativo</div>
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 8.5pt;">
-          <div><strong>Tipo:</strong> ${escapeHtml(c.treatment_type)}</div>
-          <div><strong>Especialidade:</strong> ${escapeHtml(c.specialty || p.profissional_especialidade || "—")}</div>
-          <div><strong>Frequência:</strong> ${escapeHtml(c.frequency)}</div>
-          <div><strong>Início:</strong> ${fmtDate(c.start_date)}</div>
-          <div><strong>Sessões:</strong> ${c.sessions_done}/${c.total_sessions}</div>
-          <div><strong>Status:</strong> ${escapeHtml(c.status)}</div>
+          <div><strong>Tipo:</strong> ${escapeHtml(ciclo.treatment_type)}</div>
+          <div><strong>Especialidade:</strong> ${escapeHtml(ciclo.specialty || profissional?.profissao || "—")}</div>
+          <div><strong>Frequência:</strong> ${escapeHtml(ciclo.frequency)}</div>
+          <div><strong>Início:</strong> ${fmtDate(ciclo.start_date)}</div>
+          <div><strong>Sessões:</strong> ${ciclo.sessions_done}/${ciclo.total_sessions}</div>
+          <div><strong>Status:</strong> ${escapeHtml(ciclo.status)}</div>
         </div>
       </div>
     `;
   }
 
+  // Seção de PTS
   let ptsHtml = "";
-  if (p.pts_info) {
-    const pts = p.pts_info;
+  if (pts) {
     ptsHtml = `
       <div class="section" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px; margin-bottom: 12px;">
         <div class="section-title">Plano Terapêutico Singular (PTS)</div>
@@ -155,70 +243,75 @@ export async function downloadProntuarioPdf(
     `;
   }
 
-  const idadeStr = calcIdade(p.paciente_data_nasc);
+  const idadeStr = calcIdade(paciente?.dataNascimento);
   const infoPacienteHtml = `
     <div class="info-grid">
       <div class="info-item" style="grid-column: span 3;">
         <span class="info-label">Paciente:</span>
-        <span class="info-value" style="font-size: 11.5pt;">${escapeHtml(p.paciente_nome)}</span>
+        <span class="info-value" style="font-size: 11pt;">${escapeHtml(paciente?.nome || prontuario.paciente_nome)}</span>
       </div>
       <div class="info-item">
         <span class="info-label">CPF:</span>
-        <span class="info-value">${escapeHtml(p.paciente_cpf || "—")}</span>
+        <span class="info-value">${escapeHtml(paciente?.cpf || "—")}</span>
       </div>
       <div class="info-item">
         <span class="info-label">CNS:</span>
-        <span class="info-value">${escapeHtml(p.paciente_cns || "—")}</span>
+        <span class="info-value">${escapeHtml(paciente?.cns || "—")}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Data Nasc:</span>
-        <span class="info-value">${fmtDate(p.paciente_data_nasc)} ${idadeStr ? `(${idadeStr})` : ""}</span>
+        <span class="info-value">${fmtDate(paciente?.dataNascimento)} ${idadeStr ? `(${idadeStr})` : ""}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Sexo:</span>
-        <span class="info-value">${escapeHtml(p.paciente_sexo || "—")}</span>
+        <span class="info-value">${escapeHtml(paciente?.sexo || "—")}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Telefone:</span>
+        <span class="info-value">${escapeHtml(paciente?.telefone || "—")}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Data Atend.:</span>
-        <span class="info-value">${fmtDate(p.data_atendimento)} ${p.hora_atendimento || ""}</span>
+        <span class="info-value">${fmtDate(prontuario.data_atendimento)} ${prontuario.hora_atendimento || ""}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Unidade/Setor:</span>
-        <span class="info-value">${escapeHtml(p.unidade_nome || "—")} / ${escapeHtml(p.setor || "—")}</span>
+        <span class="info-value">${escapeHtml(unidade?.nome || "—")} / ${escapeHtml(prontuario.setor || "—")}</span>
       </div>
     </div>
   `;
 
-  const carimboHtml = await docCarimboFor(p.profissional_id, { 
-    nome: p.profissional_nome, 
-    especialidade: p.profissional_especialidade 
+  const carimboHtml = await docCarimboFor(prontuario.profissional_id, { 
+    nome: prontuario.profissional_nome, 
+    especialidade: profissional?.profissao || profissional?.cargo 
   });
 
+  // Campos SOAP e Clínicos
   const body = `
     ${infoPacienteHtml}
     ${cicloHtml}
     ${ptsHtml}
     
     <div class="clinical-content">
-      ${section("Queixa Principal", safe(p.queixa_principal))}
+      ${section("Queixa Principal", safe(prontuario.queixa_principal))}
       
       <div style="display: grid; grid-template-columns: 1fr; gap: 0;">
-        ${section("S — Subjetivo", safe(p.soap_subjetivo))}
-        ${section("O — Objetivo", safe(p.soap_objetivo))}
-        ${section("A — Avaliação", safe(p.soap_avaliacao))}
-        ${section("P — Plano", safe(p.soap_plano))}
+        ${section("S — Subjetivo", safe(prontuario.soap_subjetivo))}
+        ${section("O — Objetivo", safe(prontuario.soap_objetivo))}
+        ${section("A — Avaliação", safe(prontuario.soap_avaliacao))}
+        ${section("P — Plano", safe(prontuario.soap_plano))}
       </div>
 
-      ${section("Anamnese / Histórico", safe(p.anamnese))}
-      ${section("Exame Físico / Sinais Vitais", safe(p.exame_fisico))}
-      ${section("Hipótese / Diagnóstico", safe(p.hipotese))}
-      ${section("Conduta / Evolução", safe(p.conduta) || safe(p.evolucao))}
-      ${section("Procedimentos Realizados", safe(p.procedimentos_texto))}
-      ${section("Prescrição / Orientações", safe(p.prescricao))}
-      ${section("Solicitação de Exames", safe(p.solicitacao_exames))}
-      ${section("Resultado de Exames", safe(p.resultado_exame))}
-      ${section("Observações Gerais", safe(p.observacoes))}
-      ${p.indicacao_retorno && p.indicacao_retorno !== 'no_indication' ? section("Indicação de Retorno", p.indicacao_retorno) : ""}
+      ${section("Anamnese / Histórico", safe(prontuario.anamnese))}
+      ${section("Exame Físico / Sinais Vitais", safe(prontuario.exame_fisico))}
+      ${section("Hipótese / Diagnóstico", safe(prontuario.hipotese))}
+      ${section("Conduta / Evolução", safe(prontuario.conduta) || safe(prontuario.evolucao))}
+      ${section("Procedimentos Realizados", safe(prontuario.procedimentos_texto))}
+      ${section("Prescrição / Orientações", safe(prontuario.prescricao))}
+      ${section("Solicitação de Exames", safe(prontuario.solicitacao_exames))}
+      ${section("Resultado de Exames", safe(prontuario.resultado_exame))}
+      ${section("Observações Gerais", safe(prontuario.observacoes))}
+      ${prontuario.indicacao_retorno && prontuario.indicacao_retorno !== 'no_indication' ? section("Indicação de Retorno", prontuario.indicacao_retorno) : ""}
     </div>
 
     ${carimboHtml}
@@ -245,7 +338,7 @@ export async function downloadFullHistoryPdf(
 ): Promise<void> {
   const config = await loadDocumentConfig();
 
-  const sorted = [...entries].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const sorted = [...entries].sort((a, b) => (a.date || "").localeCompare(a.date || ""));
   const first = sorted[0]?.date ? fmtDate(sorted[0].date) : "—";
   const last = sorted[sorted.length - 1]?.date ? fmtDate(sorted[sorted.length - 1].date) : "—";
 
