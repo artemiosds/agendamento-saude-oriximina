@@ -1,11 +1,5 @@
 /**
  * Geração de PDF/impressão de Prontuário e Histórico Clínico.
- * 
- * REFATORADO: passou a usar o shell institucional global 
- * (`buildDocumentShell` + `printViaIframe`) em vez de jsPDF.
- * Isto garante fidelidade absoluta entre preview, impressão e 
- * "Salvar como PDF" do navegador, respeitando o que estiver 
- * configurado em Configurações → Impressão e Documentos.
  */
 
 import { buildDocumentShell, loadDocumentConfig, printViaIframe, docCarimboFor } from "./printLayout";
@@ -38,7 +32,6 @@ interface ProntuarioLike {
   resultado_exame?: string;
   indicacao_retorno?: string;
   episodio_id?: string | null;
-  // Campos extras que podem ser passados para enriquecer o PDF
   paciente_data_nasc?: string;
   paciente_cpf?: string;
   paciente_cns?: string;
@@ -116,9 +109,9 @@ function safe(str: string | undefined | null): string {
 function section(label: string, value: string): string {
   if (!value) return "";
   return `
-    <div class="section" style="margin-bottom: 12px; page-break-inside: avoid;">
-      <div class="section-title" style="font-weight: 700; font-size: 10pt; text-transform: uppercase; color: #0369a1; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; margin-bottom: 4px;">${escapeHtml(label)}</div>
-      <div class="section-content" style="font-size: 10.5pt; line-height: 1.4; white-space: pre-wrap; color: #1a1a1a;">${escapeHtml(value).replace(/\n/g, "<br/>")}</div>
+    <div class="section">
+      <div class="section-title">${escapeHtml(label)}</div>
+      <div class="section-content">${escapeHtml(value).replace(/\n/g, "<br/>")}</div>
     </div>`;
 }
 
@@ -128,14 +121,13 @@ export async function downloadProntuarioPdf(
   const config = await loadDocumentConfig();
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${p.tipo_registro?.toUpperCase().replace('_', ' ') || 'CLÍNICO'}`;
 
-  // Seções de Ciclo de Tratamento
   let cicloHtml = "";
   if (p.ciclo_info) {
     const c = p.ciclo_info;
     cicloHtml = `
-      <div class="bg-muted/30" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px; margin-bottom: 16px;">
-        <h3 style="font-size: 10pt; font-weight: 700; color: #0c4a6e; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #0369a1; padding-bottom: 2px;">Ciclo de Tratamento Ativo</h3>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 9.5pt;">
+      <div class="section" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 8px; margin-bottom: 12px;">
+        <div class="section-title" style="border-bottom-color: #0369a1; margin-bottom: 4px;">Ciclo de Tratamento Ativo</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 8.5pt;">
           <div><strong>Tipo:</strong> ${escapeHtml(c.treatment_type)}</div>
           <div><strong>Especialidade:</strong> ${escapeHtml(c.specialty || p.profissional_especialidade || "—")}</div>
           <div><strong>Frequência:</strong> ${escapeHtml(c.frequency)}</div>
@@ -147,19 +139,16 @@ export async function downloadProntuarioPdf(
     `;
   }
 
-  // Seção de PTS
   let ptsHtml = "";
   if (p.pts_info) {
     const pts = p.pts_info;
     ptsHtml = `
-      <div class="bg-muted/30" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px; margin-bottom: 16px; page-break-inside: avoid;">
-        <h3 style="font-size: 10pt; font-weight: 700; color: #0c4a6e; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #0369a1; padding-bottom: 2px;">Plano Terapêutico Singular (PTS)</h3>
-        <div style="font-size: 9.5pt; line-height: 1.4;">
-          <div style="margin-bottom: 4px;"><strong>Diagnóstico Funcional:</strong><br/> ${escapeHtml(pts.diagnostico_funcional)}</div>
-          <div style="margin-bottom: 4px;"><strong>Objetivos Terapêuticos:</strong><br/> ${escapeHtml(pts.objetivos_terapeuticos)}</div>
-          <div style="margin-bottom: 4px;"><strong>Metas Curto Prazo:</strong> ${escapeHtml(pts.metas_curto_prazo || "—")}</div>
-          <div style="margin-bottom: 4px;"><strong>Metas Médio Prazo:</strong> ${escapeHtml(pts.metas_medio_prazo || "—")}</div>
-          <div style="margin-bottom: 4px;"><strong>Metas Longo Prazo:</strong> ${escapeHtml(pts.metas_longo_prazo || "—")}</div>
+      <div class="section" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px; margin-bottom: 12px;">
+        <div class="section-title">Plano Terapêutico Singular (PTS)</div>
+        <div style="font-size: 8.5pt; display: grid; grid-template-columns: 1fr; gap: 4px;">
+          <div><strong>Diagnóstico Funcional:</strong> ${escapeHtml(pts.diagnostico_funcional)}</div>
+          <div><strong>Objetivos Terapêuticos:</strong> ${escapeHtml(pts.objetivos_terapeuticos)}</div>
+          <div><strong>Metas Curto Prazo:</strong> ${escapeHtml(pts.metas_curto_prazo || "—")}</div>
           <div><strong>Especialidades:</strong> ${escapeHtml(pts.especialidades_envolvidas?.join(", ") || "—")}</div>
         </div>
       </div>
@@ -168,34 +157,34 @@ export async function downloadProntuarioPdf(
 
   const idadeStr = calcIdade(p.paciente_data_nasc);
   const infoPacienteHtml = `
-    <div class="info-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;">
-      <div style="grid-column: span 3; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 4px;">
-        <span class="info-label" style="font-weight: 700; font-size: 8pt; color: #64748b;">NOME DO PACIENTE:</span><br/>
-        <span class="info-value" style="font-size: 11pt; font-weight: 700;">${escapeHtml(p.paciente_nome)}</span>
+    <div class="info-grid">
+      <div class="info-item" style="grid-column: span 3;">
+        <span class="info-label">Paciente:</span>
+        <span class="info-value" style="font-size: 11.5pt;">${escapeHtml(p.paciente_nome)}</span>
       </div>
-      <div>
-        <span class="info-label" style="font-weight: 700; font-size: 8pt; color: #64748b;">CPF:</span><br/>
-        <span class="info-value" style="font-size: 9.5pt;">${escapeHtml(p.paciente_cpf || "—")}</span>
+      <div class="info-item">
+        <span class="info-label">CPF:</span>
+        <span class="info-value">${escapeHtml(p.paciente_cpf || "—")}</span>
       </div>
-      <div>
-        <span class="info-label" style="font-weight: 700; font-size: 8pt; color: #64748b;">CNS:</span><br/>
-        <span class="info-value" style="font-size: 9.5pt;">${escapeHtml(p.paciente_cns || "—")}</span>
+      <div class="info-item">
+        <span class="info-label">CNS:</span>
+        <span class="info-value">${escapeHtml(p.paciente_cns || "—")}</span>
       </div>
-      <div>
-        <span class="info-label" style="font-weight: 700; font-size: 8pt; color: #64748b;">DATA NASC:</span><br/>
-        <span class="info-value" style="font-size: 9.5pt;">${fmtDate(p.paciente_data_nasc)} ${idadeStr ? `(${idadeStr})` : ""}</span>
+      <div class="info-item">
+        <span class="info-label">Data Nasc:</span>
+        <span class="info-value">${fmtDate(p.paciente_data_nasc)} ${idadeStr ? `(${idadeStr})` : ""}</span>
       </div>
-      <div>
-        <span class="info-label" style="font-weight: 700; font-size: 8pt; color: #64748b;">SEXO:</span><br/>
-        <span class="info-value" style="font-size: 9.5pt;">${escapeHtml(p.paciente_sexo || "—")}</span>
+      <div class="info-item">
+        <span class="info-label">Sexo:</span>
+        <span class="info-value">${escapeHtml(p.paciente_sexo || "—")}</span>
       </div>
-      <div>
-        <span class="info-label" style="font-weight: 700; font-size: 8pt; color: #64748b;">DATA/HORA ATEND.:</span><br/>
-        <span class="info-value" style="font-size: 9.5pt;">${fmtDate(p.data_atendimento)} ${p.hora_atendimento || ""}</span>
+      <div class="info-item">
+        <span class="info-label">Data Atend.:</span>
+        <span class="info-value">${fmtDate(p.data_atendimento)} ${p.hora_atendimento || ""}</span>
       </div>
-      <div>
-        <span class="info-label" style="font-weight: 700; font-size: 8pt; color: #64748b;">UNIDADE/SETOR:</span><br/>
-        <span class="info-value" style="font-size: 9.5pt;">${escapeHtml(p.unidade_nome || "—")} / ${escapeHtml(p.setor || "—")}</span>
+      <div class="info-item">
+        <span class="info-label">Unidade/Setor:</span>
+        <span class="info-value">${escapeHtml(p.unidade_nome || "—")} / ${escapeHtml(p.setor || "—")}</span>
       </div>
     </div>
   `;
@@ -213,7 +202,7 @@ export async function downloadProntuarioPdf(
     <div class="clinical-content">
       ${section("Queixa Principal", safe(p.queixa_principal))}
       
-      <div style="display: grid; grid-template-columns: 1fr; gap: 4px; margin-bottom: 8px;">
+      <div style="display: grid; grid-template-columns: 1fr; gap: 0;">
         ${section("S — Subjetivo", safe(p.soap_subjetivo))}
         ${section("O — Objetivo", safe(p.soap_objetivo))}
         ${section("A — Avaliação", safe(p.soap_avaliacao))}
@@ -232,9 +221,7 @@ export async function downloadProntuarioPdf(
       ${p.indicacao_retorno && p.indicacao_retorno !== 'no_indication' ? section("Indicação de Retorno", p.indicacao_retorno) : ""}
     </div>
 
-    <div style="margin-top: 40px;">
-      ${carimboHtml}
-    </div>
+    ${carimboHtml}
   `;
 
   const html = buildDocumentShell(title, body, config);
@@ -254,6 +241,7 @@ interface TimelineEntry {
 export async function downloadFullHistoryPdf(
   pacienteNome: string,
   entries: TimelineEntry[],
+  currentProfessionalId?: string,
 ): Promise<void> {
   const config = await loadDocumentConfig();
 
@@ -266,42 +254,48 @@ export async function downloadFullHistoryPdf(
     .map(
       (e) => `
         <tr>
-          <td>${fmtDate(e.date)}</td>
+          <td style="white-space:nowrap;">${fmtDate(e.date)}</td>
           <td>${escapeHtml([e.type || "—", e.sessionInfo].filter(Boolean).join(" "))}</td>
           <td>${escapeHtml(e.professional || "—")}</td>
           <td>${escapeHtml(e.specialty || "—")}</td>
-          <td>${escapeHtml((e.summary || "").slice(0, 1000))}</td>
+          <td><div style="max-height: 100px; overflow: hidden; line-height:1.2;">${escapeHtml((e.summary || "").slice(0, 800))}</div></td>
         </tr>`
     )
     .join("");
 
+  const carimboHtml = currentProfessionalId ? await docCarimboFor(currentProfessionalId) : "";
+
   const body = `
-    <div class="summary" style="display: flex; gap: 10px; margin-bottom: 20px;">
-      <div class="stat" style="flex: 1; padding: 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; text-align: center;">
-        <strong style="display: block; font-size: 16pt; color: #0369a1;">${entries.length}</strong>
-        <small style="font-size: 8pt; color: #64748b; text-transform: uppercase;">Total de Eventos</small>
+    <div class="summary" style="display: flex; gap: 8px; margin-bottom: 12px;">
+      <div class="stat" style="flex: 1; padding: 6px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; text-align: center;">
+        <strong style="display: block; font-size: 14pt; color: #0369a1;">${entries.length}</strong>
+        <small style="font-size: 7pt; color: #64748b; text-transform: uppercase;">Eventos</small>
       </div>
-      <div class="stat" style="flex: 1; padding: 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; text-align: center;">
-        <strong style="display: block; font-size: 16pt; color: #0369a1;">${first}</strong>
-        <small style="font-size: 8pt; color: #64748b; text-transform: uppercase;">Início do Histórico</small>
+      <div class="stat" style="flex: 1; padding: 6px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; text-align: center;">
+        <strong style="display: block; font-size: 14pt; color: #0369a1;">${first}</strong>
+        <small style="font-size: 7pt; color: #64748b; text-transform: uppercase;">Início</small>
       </div>
-      <div class="stat" style="flex: 1; padding: 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; text-align: center;">
-        <strong style="display: block; font-size: 16pt; color: #0369a1;">${last}</strong>
-        <small style="font-size: 8pt; color: #64748b; text-transform: uppercase;">Último Evento</small>
+      <div class="stat" style="flex: 1; padding: 6px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; text-align: center;">
+        <strong style="display: block; font-size: 14pt; color: #0369a1;">${last}</strong>
+        <small style="font-size: 7pt; color: #64748b; text-transform: uppercase;">Último</small>
       </div>
     </div>
-    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+    <table>
       <thead>
-        <tr style="background: #f1f5f9;">
-          <th style="width:12%; padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-size: 9pt;">Data</th>
-          <th style="width:15%; padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-size: 9pt;">Tipo/Sessão</th>
-          <th style="width:20%; padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-size: 9pt;">Profissional</th>
-          <th style="width:15%; padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-size: 9pt;">Especialidade</th>
-          <th style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-size: 9pt;">Resumo Clínico</th>
+        <tr>
+          <th style="width:10%;">Data</th>
+          <th style="width:15%;">Tipo</th>
+          <th style="width:20%;">Profissional</th>
+          <th style="width:15%;">Especialidade</th>
+          <th>Resumo Clínico</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    
+    <div style="margin-top: 20px;">
+      ${carimboHtml}
+    </div>`;
 
   const html = buildDocumentShell(
     `Histórico Clínico Completo — ${pacienteNome}`,

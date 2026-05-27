@@ -15,7 +15,7 @@ import {
   HeartPulse, Eye, FileDown,
 } from "lucide-react";
 import { downloadFullHistoryPdf } from "@/lib/prontuarioPdf";
-import { openPrintDocument } from "@/lib/printLayout";
+import { openPrintDocument, docCarimboFor } from "@/lib/printLayout";
 import { Printer } from "lucide-react";
 import { getSpecialtyColors } from "@/lib/specialtyColors";
 
@@ -430,10 +430,11 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
         unidade: e.unidade,
         sessionInfo: e.sessionInfo,
       })),
+      currentProfissionalId,
     );
   };
 
-  const handlePrintOfficial = () => {
+  const handlePrintOfficial = async () => {
     if (filteredEvents.length === 0) return;
     const rows = [...filteredEvents]
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
@@ -443,21 +444,27 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
           <td>${TYPE_CONFIG[e.type]?.label || e.type}${e.sessionInfo ? ' — ' + e.sessionInfo : ''}</td>
           <td>${e.professional || '—'}</td>
           <td>${e.specialty || '—'}</td>
-          <td>${(e.summary || e.queixaPrincipal || e.conduta || '').replace(/</g, '&lt;').slice(0, 400)}</td>
+          <td><div style="font-size:9.5pt; line-height:1.2;">${(e.summary || e.queixaPrincipal || e.conduta || '').replace(/</g, '&lt;').slice(0, 800)}</div></td>
         </tr>`).join('');
+    
+    const carimboHtml = currentProfissionalId ? await docCarimboFor(currentProfissionalId) : "";
+
     const body = `
-      <h2>Histórico Clínico Consolidado</h2>
+      <h3 style="margin:12px 0 8px;font-size:12pt;font-weight:700;color:#0c4a6e;text-transform:uppercase;border-bottom:2px solid #0369a1;">Histórico Clínico Consolidado</h3>
       <table>
         <thead>
           <tr><th>Data</th><th>Tipo</th><th>Profissional</th><th>Especialidade</th><th>Resumo</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
+      
+      <div style="margin-top: 20px;">
+        ${carimboHtml}
+      </div>
     `;
     openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, {
       'Paciente': pacienteNome,
       'Total de eventos': String(filteredEvents.length),
-      'Emitido em': new Date().toLocaleString('pt-BR'),
     });
   };
 
