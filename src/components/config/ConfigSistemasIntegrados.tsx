@@ -340,35 +340,37 @@ const ConfigSistemasIntegrados: React.FC = () => {
                 </p>
               </div>
 
-              <div>
-                <Label className="flex items-center gap-1">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Token de ENTRADA
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-100 space-y-3">
+                <Label className="flex items-center gap-1 text-emerald-800">
+                  <ShieldCheck className="w-4 h-4" /> Token de ENTRADA (Gerado por este sistema)
                 </Label>
                 <div className="flex items-center gap-2">
                   <Input
                     readOnly
                     value={editing.token_entrada_prefix ? `${editing.token_entrada_prefix}••••••••••••••••` : '— ainda não gerado —'}
-                    className="font-mono text-xs"
+                    className="font-mono text-xs bg-white"
                   />
-                  {editing.id && (
+                  {editing.id ? (
                     <Button
                       type="button" size="sm" variant="outline"
                       onClick={() => gerarTokenV2(editing.id!)}
                       disabled={generating === editing.id}
+                      className="whitespace-nowrap bg-white hover:bg-emerald-50"
                     >
                       {generating === editing.id
                         ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <><KeyRound className="w-4 h-4 mr-1" /> Gerar token de entrada</>}
+                        : <><RefreshCw className="w-4 h-4 mr-1 text-emerald-600" /> {editing.token_entrada_prefix ? 'Regenerar' : 'Gerar Token'}</>}
                     </Button>
-                  )}
+                  ) : null}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1 flex items-start gap-1">
+                <p className="text-[11px] text-muted-foreground flex items-start gap-1">
                   <Info className="w-3 h-3 mt-0.5" />
-                  Gere um token neste sistema e copie para o outro sistema usar como <strong>Token de SAÍDA</strong>. Após gerado, o valor não pode ser visto novamente — apenas regenerado.
+                  Gere este token e copie para o outro sistema usar como <strong>Token de SAÍDA</strong>. 
+                  Por segurança, o valor completo só aparece no momento da geração.
                 </p>
                 {!editing.id && (
-                  <p className="text-[11px] text-amber-600 mt-1">
-                    Salve o sistema primeiro para poder gerar o Token de Entrada.
+                  <p className="text-[11px] text-amber-600 font-medium bg-amber-50 p-2 rounded border border-amber-100">
+                    Clique em "Salvar" abaixo para habilitar a geração do Token de Entrada.
                   </p>
                 )}
               </div>
