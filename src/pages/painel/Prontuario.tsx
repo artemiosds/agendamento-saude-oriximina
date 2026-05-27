@@ -139,15 +139,25 @@ const ProntuarioPage: React.FC = () => {
   }, [editId]);
 
   const handleFieldChange = (key: string, value: any) => {
-    if (PRONTUARIO_COLUMNS.includes(key)) {
-      setForm((prev) => ({ ...prev, [key]: value }));
+    let targetKey = key;
+    if (key.startsWith("evolucao.")) {
+      targetKey = key.replace("evolucao.", "soap_");
+    }
+    
+    if (PRONTUARIO_COLUMNS.includes(targetKey)) {
+      setForm((prev) => ({ ...prev, [targetKey]: value }));
     } else {
       setCustomData((prev) => ({ ...prev, [key]: value }));
     }
   };
 
   const getFieldValue = (key: string): any => {
-    if (PRONTUARIO_COLUMNS.includes(key)) return (form as any)[key] || "";
+    let targetKey = key;
+    if (key.startsWith("evolucao.")) {
+      targetKey = key.replace("evolucao.", "soap_");
+    }
+
+    if (PRONTUARIO_COLUMNS.includes(targetKey)) return (form as any)[targetKey] || "";
     return customData[key] ?? "";
   };
 
