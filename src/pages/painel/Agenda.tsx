@@ -1723,8 +1723,13 @@ const Agenda: React.FC = () => {
 
     // Atualiza status FALTOSO/BLOQUEADO do paciente
     try {
-      await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: ag.pacienteId });
-    } catch (err) { console.error('atualizar_status_falta:', err); }
+      await (supabase as any).rpc('atualizar_status_falta', { 
+        p_paciente_id: ag.pacienteId,
+        p_profissional_id: ag.profissionalId
+      });
+    } catch (err) { 
+      console.error('[Agenda][Falta] Erro ao atualizar status falta no RPC:', err); 
+    }
 
     await Promise.all([refreshAgendamentos(), refreshFila()]);
     toast.success(`Falta registrada para ${ag.pacienteNome}.`);
