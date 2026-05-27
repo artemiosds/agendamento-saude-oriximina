@@ -38,7 +38,7 @@ interface MasterCampo {
   isBuiltin: boolean;
   order: number;
   opcoes?: string[];
-  tipos_prontuario?: TipoProntuario[];
+  tipos_prontuario?: SpecialtyTipoProntuario[];
   ajuda?: string;
   valor_padrao?: string;
   condicao?: CondicaoVisibilidade;
@@ -52,7 +52,7 @@ interface MasterEspecialidade {
   campos: MasterCampo[];
 }
 
-const DEFAULT_TIPOS: TipoProntuario[] = ['avaliacao', 'retorno'];
+const DEFAULT_TIPOS: SpecialtyTipoProntuario[] = ['avaliacao', 'retorno'];
 
 const KEY_ALIASES: Record<string, string> = {
   forca_muscular: 'forca_mrc',
@@ -94,7 +94,7 @@ const SPECIALTY_CONFIG: Record<string, { title: string; icon: string }> = {
   psicologia: { title: "Avaliação Psicológica", icon: "🧠" },
   fonoaudiologia: { title: "Avaliação Fonoaudiológica", icon: "🗣️" },
   nutricao: { title: "Avaliação Nutricional", icon: "🥗" },
-  terapia_ocupacional: { title: "Avaliação de Terapia Ocupacional", icon: "🤲" },
+  terapia_occupacional: { title: "Avaliação de Terapia Ocupacional", icon: "🤲" },
   medicina: { title: "Avaliação Médica", icon: "⚕️" },
   odontologia: { title: "Avaliação Odontológica", icon: "🦷" },
   enfermagem: { title: "Avaliação de Enfermagem", icon: "💉" },
@@ -155,7 +155,7 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       .filter(c => {
         if (!c.habilitado) return false;
         const tipos = c.tipos_prontuario && c.tipos_prontuario.length > 0 ? c.tipos_prontuario : DEFAULT_TIPOS;
-        const currentTipo = tipoProntuario === 'avaliacao_inicial' ? 'avaliacao' : (tipoProntuario as any);
+        const currentTipo = (tipoProntuario === 'avaliacao_inicial' || tipoProntuario === 'primeira_consulta') ? 'avaliacao' : (tipoProntuario as any);
         if (tipoProntuario && !tipos.includes(currentTipo)) return false;
         if (!condicaoSatisfeita(c.condicao)) return false;
         return true;
@@ -171,44 +171,47 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       case 'textarea':
         return (
           <div key={c.id}>
-            <Label>{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
+            <Label className="text-xs">{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
             <DebouncedTextarea
               rows={3}
               value={value}
               onChange={e => set(key, e.target.value)}
               placeholder={c.ajuda || ""}
+              className="text-sm min-h-[80px]"
             />
           </div>
         );
       case 'text':
         return (
           <div key={c.id}>
-            <Label>{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
+            <Label className="text-xs">{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
             <DebouncedInput
               value={value}
               onChange={e => set(key, e.target.value)}
               placeholder={c.ajuda || ""}
+              className="h-8 text-sm"
             />
           </div>
         );
       case 'number':
         return (
           <div key={c.id}>
-            <Label>{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
+            <Label className="text-xs">{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
             <DebouncedInput
               type="number"
               value={value}
               onChange={e => set(key, e.target.value)}
               placeholder={c.ajuda || ""}
+              className="h-8 text-sm"
             />
           </div>
         );
       case 'select':
         return (
           <div key={c.id}>
-            <Label>{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
+            <Label className="text-xs">{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
             <Select value={value} onValueChange={val => set(key, val)}>
-              <SelectTrigger>
+              <SelectTrigger className="h-8 text-sm">
                 <SelectValue placeholder="Selecione..." />
               </SelectTrigger>
               <SelectContent>
@@ -225,7 +228,7 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
         const isEva = key === 'dor_eva';
         return (
           <div key={c.id}>
-            <Label className="flex items-center gap-2">
+            <Label className="text-xs flex items-center gap-2">
               {c.label}: <Badge className={isEva ? `${evaColor(numVal)} text-white` : "bg-primary"}>{numVal}</Badge>
             </Label>
             <Slider
@@ -245,11 +248,12 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       case 'date':
         return (
           <div key={c.id}>
-            <Label>{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
+            <Label className="text-xs">{c.label} {c.obrigatorio && <span className="text-destructive">*</span>}</Label>
             <DebouncedInput
               type="date"
               value={value}
               onChange={e => set(key, e.target.value)}
+              className="h-8 text-sm"
             />
           </div>
         );
@@ -260,15 +264,15 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
 
   return (
     <Card className="border-primary/20 bg-primary/5 shadow-sm">
-      <CardHeader className="py-3 px-4 flex flex-row items-center gap-2">
+      <CardHeader className="py-2 px-3 flex flex-row items-center gap-2">
         <Stethoscope className="w-4 h-4 text-primary" />
-        <CardTitle className="text-sm font-semibold text-primary">{config.icon} {config.title}</CardTitle>
+        <CardTitle className="text-xs font-semibold text-primary uppercase tracking-wider">{config.icon} {config.title}</CardTitle>
       </CardHeader>
-      <CardContent className="px-4 pb-4 pt-0 space-y-4">
+      <CardContent className="px-3 pb-3 pt-0 space-y-3">
         {visibleFields.length > 0 ? (
           visibleFields.map(renderField)
         ) : (
-          <p className="text-xs text-muted-foreground italic">Nenhum campo de especialidade configurado para este tipo de prontuário.</p>
+          <p className="text-[10px] text-muted-foreground italic">Nenhum campo de especialidade configurado para este tipo de prontuário.</p>
         )}
       </CardContent>
     </Card>
