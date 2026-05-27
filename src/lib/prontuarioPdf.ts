@@ -198,23 +198,10 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     .select('*')
     .eq('prontuario_id', prontuarioId);
 
-  // Busca campos personalizados (custom_data) se existirem
-  let customFieldsHtml = "";
-  if (prontuario.custom_data && typeof prontuario.custom_data === 'object') {
-    const entries = Object.entries(prontuario.custom_data);
-    if (entries.length > 0) {
-      customFieldsHtml = entries
-        .map(([key, val]) => {
-          if (!val) return "";
-          return `
-            <div class="section">
-              <div class="section-title">${escapeHtml(key.replace(/_/g, ' '))}</div>
-              <div class="section-content">${escapeHtml(String(val))}</div>
-            </div>`;
-        })
-        .join("");
-    }
-  }
+  // Busca configurações do prontuário para saber o que exibir e qual label usar
+  const { data: sysCfg } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+  const configTipos = (sysCfg?.configuracoes as any)?.config_prontuario_tipos;
+  const configEspecialidades = (sysCfg?.configuracoes as any)?.config_especialidades_campos;
 
   return {
     prontuario,
@@ -223,11 +210,13 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     unidade,
     ciclo,
     pts,
-    customFieldsHtml,
     procs: procs || [],
-    exames: exames || []
+    exames: exames || [],
+    configTipos,
+    configEspecialidades
   };
 }
+
 
 export async function downloadProntuarioPdf(
   input: ProntuarioLike | string,
