@@ -2769,18 +2769,16 @@ const ProntuarioPage: React.FC = () => {
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
             {form.tipo_registro === 'avaliacao_inicial' && (
               <div className="space-y-4">
-                <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-foreground mb-3">🟢 Avaliação Inicial</h4>
-                  <div className="space-y-3">
-                    <div><Label>Queixa Principal <span className="text-destructive">*</span></Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
-                    <div><Label>História da Doença Atual <span className="text-destructive">*</span></Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="HDA detalhada..." /></div>
-                    <div><Label>Histórico de Saúde</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Antecedentes pessoais, familiares..." /></div>
-                    <div><Label>Medicações em Uso</Label><DebouncedTextarea rows={2} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} placeholder="Medicações atuais do paciente..." /></div>
-                    <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                      <Label className="flex items-center gap-1">⚠️ Alergias</Label>
-                      <DebouncedTextarea rows={1} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} placeholder="Listar alergias conhecidas..." className="border-destructive/30" />
-                    </div>
-                  </div>
+                <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    Avaliação Inicial
+                  </h4>
+                  <DynamicProntuarioFields
+                    fields={structureFields}
+                    values={form}
+                    onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                  />
                 </div>
 
                 {/* Card de Especialidade */}
