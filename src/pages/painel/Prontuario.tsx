@@ -3303,7 +3303,7 @@ const ProntuarioPage: React.FC = () => {
                       <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
                       {currentSessionForRegistration && sessaoHighlightSOAP && (
                         <div className="bg-primary/10 border border-primary/30 rounded-md p-2 mb-3 text-sm text-primary font-medium">
-                          Preencha a evolução para registrar esta sessão (Sessão {currentSessionForRegistration.session_number})
+                          Registre os dados da evolução para a Sessão {currentSessionForRegistration.session_number}
                         </div>
                       )}
                       <div className="space-y-3">
