@@ -53,17 +53,17 @@ export interface DocumentConfig {
 
 const DEFAULT_TYPOGRAPHY: DocumentTypography = {
   fonte: 'Arial',
-  tamanhoBase: 11,
-  tamanhoTitulo: 14,
-  espacamento: 1.15, // Mais compacto conforme solicitado
+  tamanhoBase: 10,
+  tamanhoTitulo: 12,
+  espacamento: 1.1, 
   alinhamento: 'justify',
 };
 
 const DEFAULT_MARGINS: DocumentMargins = {
-  superior: 25,
-  inferior: 20,
-  esquerda: 25,
-  direita: 20,
+  superior: 15,
+  inferior: 15,
+  esquerda: 15,
+  direita: 15,
 };
 
 const defaultSlot = (altura: number, ativo = true): LogoSlotConfig => ({ altura, redonda: false, ativo });
@@ -183,7 +183,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     padding: 0;
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
-    line-height: 1.15;
+    line-height: 1.1;
   }
 
   /* HEADER */
@@ -270,21 +270,21 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   /* SECTIONS */
   .section { 
-    margin-bottom: 8px; 
+    margin-bottom: 6px; 
     page-break-inside: avoid; 
   }
   .section-title { 
     font-weight: 700; 
-    font-size: 9pt; 
+    font-size: 8.5pt; 
     text-transform: uppercase; 
     color: #0369a1; 
     border-bottom: 0.5px solid #e2e8f0; 
-    padding-bottom: 1px; 
-    margin-bottom: 2px; 
+    padding-bottom: 0px; 
+    margin-bottom: 1px; 
   }
   .section-content { 
     font-size: ${t.tamanhoBase}pt; 
-    line-height: 1.3; 
+    line-height: 1.15; 
     white-space: pre-wrap; 
     color: #1a1a1a; 
     text-align: justify;
@@ -294,16 +294,16 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .info-grid { 
     display: grid; 
     grid-template-columns: repeat(3, 1fr); 
-    gap: 6px; 
-    margin-bottom: 12px; 
-    padding: 8px; 
+    gap: 4px; 
+    margin-bottom: 10px; 
+    padding: 6px; 
     background: #f8fafc; 
     border: 1px solid #e2e8f0; 
     border-radius: 4px; 
   }
   .info-item { display: flex; flex-direction: column; }
-  .info-label { font-weight: 700; font-size: 7.5pt; color: #64748b; text-transform: uppercase; }
-  .info-value { font-size: ${t.tamanhoBase - 0.5}pt; color: #1a1a1a; font-weight: 500; }
+  .info-label { font-weight: 700; font-size: 7pt; color: #64748b; text-transform: uppercase; }
+  .info-value { font-size: ${t.tamanhoBase - 1}pt; color: #1a1a1a; font-weight: 500; }
 
   /* SIGNATURE / CARIMBO */
   .signature { 
@@ -482,7 +482,7 @@ export async function loadCarimbo(profissionalId: string): Promise<CarimboData |
   }
 }
 
-export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; especialidade?: string }): string {
+export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; especialidade?: string; conselho?: string; numero_registro?: string; uf?: string }): string {
   if (!c && !fallback) return '';
   const cd = c?.custom_data || {};
   const posicao = cd.posicao || 'center';
@@ -493,9 +493,9 @@ export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; es
 
   const nome = (c?.nome || fallback?.nome || '').toUpperCase();
   const especialidade = c?.especialidade || fallback?.especialidade || '';
-  const conselho = c?.conselho || '';
-  const numero = c?.numero_registro || '';
-  const uf = c?.uf || '';
+  const conselho = c?.conselho || fallback?.conselho || '';
+  const numero = c?.numero_registro || fallback?.numero_registro || '';
+  const uf = c?.uf || fallback?.uf || '';
   const conselhoStr = [conselho, numero].filter(Boolean).join(' ') + (uf ? `/${uf}` : '');
   const cbo = cd.cbo || '';
   const cns = cd.cns_profissional || '';
@@ -523,7 +523,7 @@ export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; es
     </div>`;
 }
 
-export async function docCarimboFor(profissionalId: string, fallback?: { nome?: string; especialidade?: string }): Promise<string> {
+export async function docCarimboFor(profissionalId: string, fallback?: { nome?: string; especialidade?: string; conselho?: string; numero_registro?: string; uf?: string }): Promise<string> {
   const c = await loadCarimbo(profissionalId);
   return docCarimbo(c, fallback);
 }
