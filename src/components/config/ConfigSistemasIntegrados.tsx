@@ -278,7 +278,13 @@ const ConfigSistemasIntegrados: React.FC = () => {
                       <Button size="sm" variant="outline" onClick={() => testar(s.id)} disabled={testing === s.id}>
                         {testing === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => gerarTokenV2(s.id)} disabled={generating === s.id}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => gerarTokenV2(s.id)} 
+                        disabled={generating === s.id}
+                        title={s.token_entrada_prefix ? "Regenerar Token de Entrada" : "Gerar Token de Entrada"}
+                      >
                         {generating === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => setEditing(s)}>
