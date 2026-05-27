@@ -2,6 +2,7 @@
  * Geração de PDF/impressão de Prontuário e Histórico Clínico.
  * 
  * MELHORIA: Busca dados completos do banco para garantir fidelidade total.
+ * FOCO: Layout compacto, institucional, fonte 9.5-10pt, padrão clínico A4.
  */
 
 import { buildDocumentShell, loadDocumentConfig, printViaIframe, docCarimboFor } from "./printLayout";
@@ -35,6 +36,7 @@ export interface ProntuarioLike {
   resultado_exame?: string;
   indicacao_retorno?: string;
   episodio_id?: string | null;
+  cid?: string;
   // Metadata extras legados
   paciente_data_nasc?: string;
   paciente_cpf?: string;
@@ -175,6 +177,27 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     pts = ptsData;
   }
 
+  // Busca procedimentos vinculados
+  const { data: procs } = await supabase
+    .from('prontuario_procedimentos')
+    .select(`
+      id,
+      observacao,
+      procedimento_id,
+      quantidade,
+      procedimentos (
+        nome,
+        codigo_sigtap
+      )
+    `)
+    .eq('prontuario_id', prontuarioId);
+
+  // Busca exames vinculados
+  const { data: exames } = await supabase
+    .from('prontuario_exames')
+    .select('*')
+    .eq('prontuario_id', prontuarioId);
+
   // Busca campos personalizados (custom_data) se existirem
   let customFieldsHtml = "";
   if (prontuario.custom_data && typeof prontuario.custom_data === 'object') {
@@ -200,7 +223,9 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     unidade,
     ciclo,
     pts,
-    customFieldsHtml
+    customFieldsHtml,
+    procs: procs || [],
+    exames: exames || []
   };
 }
 
@@ -215,16 +240,16 @@ export async function downloadProntuarioPdf(
     return;
   }
 
-  const { prontuario, paciente, profissional, unidade, ciclo, pts, customFieldsHtml } = data;
+  const { prontuario, paciente, profissional, unidade, ciclo, pts, customFieldsHtml, procs, exames } = data;
   const config = await loadDocumentConfig();
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${prontuario.tipo_registro?.toUpperCase().replace(/_/g, ' ') || 'CLÍNICO'}`;
 
   let cicloHtml = "";
   if (ciclo) {
     cicloHtml = `
-      <div class="section" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 8px; margin-bottom: 12px;">
-        <div class="section-title" style="border-bottom-color: #0369a1; margin-bottom: 4px;">Ciclo de Tratamento Ativo</div>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 8.5pt;">
+      <div class="section" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 6px; margin-bottom: 8px;">
+        <div class="section-title" style="border-bottom-color: #0369a1; margin-bottom: 2px; font-size: 8pt;">Ciclo de Tratamento Ativo</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; font-size: 8pt;">
           <div><strong>Tipo:</strong> ${escapeHtml(ciclo.treatment_type)}</div>
           <div><strong>Especialidade:</strong> ${escapeHtml(ciclo.specialty || (profissional as any)?.profissao || "—")}</div>
           <div><strong>Frequência:</strong> ${escapeHtml(ciclo.frequency)}</div>
@@ -239,9 +264,9 @@ export async function downloadProntuarioPdf(
   let ptsHtml = "";
   if (pts) {
     ptsHtml = `
-      <div class="section" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px; margin-bottom: 12px;">
-        <div class="section-title">Plano Terapêutico Singular (PTS)</div>
-        <div style="font-size: 8.5pt; display: grid; grid-template-columns: 1fr; gap: 4px;">
+      <div class="section" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px; margin-bottom: 8px;">
+        <div class="section-title" style="font-size: 8pt;">Plano Terapêutico Singular (PTS)</div>
+        <div style="font-size: 8pt; display: grid; grid-template-columns: 1fr; gap: 2px;">
           <div><strong>Diagnóstico Funcional:</strong> ${escapeHtml(pts.diagnostico_funcional)}</div>
           <div><strong>Objetivos Terapêuticos:</strong> ${escapeHtml(pts.objetivos_terapeuticos)}</div>
           <div><strong>Metas Curto Prazo:</strong> ${escapeHtml(pts.metas_curto_prazo || "—")}</div>
@@ -256,46 +281,90 @@ export async function downloadProntuarioPdf(
   const idadeStr = calcIdade(dataNasc);
   
   const infoPacienteHtml = `
-    <div class="info-grid">
-      <div class="info-item" style="grid-column: span 3;">
-        <span class="info-label">Paciente:</span>
-        <span class="info-value" style="font-size: 11pt;">${escapeHtml(pData.nome || prontuario.paciente_nome)}</span>
+    <div style="margin-bottom: 10px;">
+      <div style="font-weight: 700; font-size: 8pt; color: #0369a1; margin-bottom: 4px; border-bottom: 1px solid #0369a1; text-transform: uppercase;">Dados do Paciente</div>
+      
+      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 4px; margin-bottom: 6px;">
+        <div class="info-item"><span class="info-label">Nome:</span><span class="info-value" style="font-size: 9.5pt;">${escapeHtml(pData.nome || prontuario.paciente_nome)}</span></div>
+        <div class="info-item"><span class="info-label">CPF:</span><span class="info-value">${escapeHtml(pData.cpf || "—")}</span></div>
+        <div class="info-item"><span class="info-label">CNS:</span><span class="info-value">${escapeHtml(pData.cns || "—")}</span></div>
       </div>
-      <div class="info-item">
-        <span class="info-label">CPF:</span>
-        <span class="info-value">${escapeHtml(pData.cpf || "—")}</span>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 6px;">
+        <div class="info-item"><span class="info-label">Nascimento:</span><span class="info-value">${fmtDate(dataNasc)} (${idadeStr})</span></div>
+        <div class="info-item"><span class="info-label">Sexo:</span><span class="info-value">${escapeHtml(pData.sexo || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Mãe:</span><span class="info-value">${escapeHtml(pData.nome_mae || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Telefone:</span><span class="info-value">${escapeHtml(pData.telefone || "—")}</span></div>
       </div>
-      <div class="info-item">
-        <span class="info-label">CNS:</span>
-        <span class="info-value">${escapeHtml(pData.cns || "—")}</span>
+
+      <div style="display: grid; grid-template-columns: 1fr; gap: 4px; margin-bottom: 6px; background: #fdfdfd; padding: 4px; border: 0.5px solid #eee;">
+        <div class="info-item">
+          <span class="info-label">Endereço:</span>
+          <span class="info-value">${escapeHtml([pData.tipo_logradouro, pData.logradouro, pData.numero, pData.complemento, pData.bairro, pData.cep, pData.municipio, pData.uf].filter(Boolean).join(", ") || "—")}</span>
+        </div>
       </div>
-      <div class="info-item">
-        <span class="info-label">Data Nasc:</span>
-        <span class="info-value">${fmtDate(dataNasc)} ${idadeStr ? `(${idadeStr})` : ""}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Sexo:</span>
-        <span class="info-value">${escapeHtml(pData.sexo || "—")}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Telefone:</span>
-        <span class="info-value">${escapeHtml(pData.telefone || "—")}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Data Atend.:</span>
-        <span class="info-value">${fmtDate(prontuario.data_atendimento)} ${prontuario.hora_atendimento || ""}</span>
-      </div>
-      <div class="info-item" style="grid-column: span 2;">
-        <span class="info-label">Unidade/Setor:</span>
-        <span class="info-value">${escapeHtml(unidade?.nome || "—")} / ${escapeHtml(prontuario.setor || "—")}</span>
+
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
+        <div class="info-item"><span class="info-label">Unidade/Setor:</span><span class="info-value">${escapeHtml(unidade?.nome || "—")} / ${escapeHtml(prontuario.setor || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Profissional:</span><span class="info-value">${escapeHtml(prontuario.profissional_nome)}</span></div>
+        <div class="info-item"><span class="info-label">Data Atendimento:</span><span class="info-value">${fmtDate(prontuario.data_atendimento)} ${prontuario.hora_atendimento || ""}</span></div>
       </div>
     </div>
   `;
+
+  const procsHtml = procs.length > 0 ? `
+    <div class="section">
+      <div class="section-title">Procedimentos Realizados</div>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 2px;">
+        <thead>
+          <tr style="background: #f1f5f9;">
+            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 8pt;">Código</th>
+            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 8pt;">Procedimento</th>
+            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: center; font-size: 8pt;">Qtd</th>
+            <th style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: left; font-size: 8pt;">Obs</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${procs.map((p: any) => `
+            <tr>
+              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8.5pt;">${escapeHtml(p.procedimentos?.codigo_sigtap || "—")}</td>
+              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8.5pt;">${escapeHtml(p.procedimentos?.nome || "—")}</td>
+              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; text-align: center; font-size: 8.5pt;">${p.quantidade || 1}</td>
+              <td style="padding: 2px 4px; border: 0.5px solid #cbd5e1; font-size: 8pt;">${escapeHtml(p.observacao || "")}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : "";
+
+  const examesHtml = exames.length > 0 ? `
+    <div class="section">
+      <div class="section-title">Exames Registrados</div>
+      <div style="font-size: 8.5pt;">
+        ${exames.map((e: any) => `
+          <div style="margin-bottom: 4px; border-left: 2px solid #e2e8f0; padding-left: 6px;">
+            <strong>${escapeHtml(e.nome_exame)}</strong> (${escapeHtml(e.tipo_exame)}) - ${fmtDate(e.data_exame)}<br/>
+            ${e.resultado_descrito ? `<em>Resultado:</em> ${escapeHtml(e.resultado_descrito)}` : ""}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : "";
 
   const carimboHtml = await docCarimboFor(prontuario.profissional_id, { 
     nome: prontuario.profissional_nome, 
     especialidade: (profissional as any)?.profissao || (profissional as any)?.cargo 
   });
+
+  const carimboFinal = carimboHtml || `
+    <div class="signature">
+      <div class="signature-line"></div>
+      <div class="name">${escapeHtml(prontuario.profissional_nome).toUpperCase()}</div>
+      <div class="role">${escapeHtml((profissional as any)?.profissao || (profissional as any)?.cargo || "")}</div>
+      <div class="extra">Assinatura e carimbo do profissional</div>
+    </div>
+  `;
 
   const body = `
     ${infoPacienteHtml}
@@ -318,16 +387,23 @@ export async function downloadProntuarioPdf(
       ${section("Sinais e Sintomas", safe(prontuario.sinais_sintomas))}
       ${section("Exame Físico / Sinais Vitais", safe(prontuario.exame_fisico))}
       ${section("Hipótese / Diagnóstico", safe(prontuario.hipotese))}
+      ${prontuario.cid ? section("CID Principal", prontuario.cid) : ""}
       ${section("Conduta / Evolução", safe(prontuario.conduta) || safe(prontuario.evolucao))}
-      ${section("Procedimentos Realizados", safe(prontuario.procedimentos_texto))}
-      ${section("Prescrição / Orientações", safe(prontuario.prescricao))}
+      
+      ${procsHtml}
+      ${section("Procedimentos (Complementar)", safe(prontuario.procedimentos_texto))}
+      
+      ${examesHtml}
       ${section("Solicitação de Exames", safe(prontuario.solicitacao_exames))}
-      ${section("Resultado de Exames", safe(prontuario.resultado_exame))}
+      ${section("Resultado de Exames (Anexo)", safe(prontuario.resultado_exame))}
+
+      ${section("Prescrição / Orientações", safe(prontuario.prescricao))}
       ${section("Observações Gerais", safe(prontuario.observacoes))}
+      
       ${prontuario.indicacao_retorno && prontuario.indicacao_retorno !== 'no_indication' && prontuario.indicacao_retorno !== 'sem_retorno' ? section("Indicação de Retorno", prontuario.indicacao_retorno) : ""}
     </div>
 
-    ${carimboHtml}
+    ${carimboFinal}
   `;
 
   const html = buildDocumentShell(title, body, config);
@@ -364,7 +440,7 @@ export async function downloadFullHistoryPdf(
           <td>${escapeHtml([e.type || "—", e.sessionInfo].filter(Boolean).join(" "))}</td>
           <td>${escapeHtml(e.professional || "—")}</td>
           <td>${escapeHtml(e.specialty || "—")}</td>
-          <td><div style="max-height: 100px; overflow: hidden; line-height:1.2;">${escapeHtml((e.summary || "").slice(0, 800))}</div></td>
+          <td><div style="max-height: 100px; overflow: hidden; line-height:1.1;">${escapeHtml((e.summary || "").slice(0, 1000))}</div></td>
         </tr>`
     )
     .join("");
@@ -374,15 +450,15 @@ export async function downloadFullHistoryPdf(
   const body = `
     <div class="summary" style="display: flex; gap: 8px; margin-bottom: 12px;">
       <div class="stat" style="flex: 1; padding: 6px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; text-align: center;">
-        <strong style="display: block; font-size: 14pt; color: #0369a1;">${entries.length}</strong>
+        <strong style="display: block; font-size: 12pt; color: #0369a1;">${entries.length}</strong>
         <small style="font-size: 7pt; color: #64748b; text-transform: uppercase;">Eventos</small>
       </div>
       <div class="stat" style="flex: 1; padding: 6px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; text-align: center;">
-        <strong style="display: block; font-size: 14pt; color: #0369a1;">${first}</strong>
+        <strong style="display: block; font-size: 12pt; color: #0369a1;">${first}</strong>
         <small style="font-size: 7pt; color: #64748b; text-transform: uppercase;">Início</small>
       </div>
       <div class="stat" style="flex: 1; padding: 6px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; text-align: center;">
-        <strong style="display: block; font-size: 14pt; color: #0369a1;">${last}</strong>
+        <strong style="display: block; font-size: 12pt; color: #0369a1;">${last}</strong>
         <small style="font-size: 7pt; color: #64748b; text-transform: uppercase;">Último</small>
       </div>
     </div>
