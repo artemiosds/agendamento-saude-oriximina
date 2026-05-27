@@ -417,13 +417,6 @@ export async function downloadProntuarioPdf(
     </div>
 
     ${carimboFinal}
-  `;
-
-  const html = buildDocumentShell(title, body, config);
-  printViaIframe(html);
-}
-
-
   const html = buildDocumentShell(title, body, config);
   printViaIframe(html);
 }
