@@ -18,6 +18,7 @@ export type BuilderFieldType = 'text' | 'textarea' | 'checkbox' | 'select' | 'da
 
 export interface BuilderField {
   id: string;
+  key: string;       // chave estável para o banco de dados
   type: BuilderFieldType;
   label: string;
   required: boolean;
