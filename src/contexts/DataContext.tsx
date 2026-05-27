@@ -923,10 +923,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (id) setPacientes((prev) => removeById(prev, id));
         return;
       }
-      // For INSERT/UPDATE: reload full list so all consumers (Prontuário,
-      // Agenda, Triagem, Tratamentos, PTS, BPA) get fresh data including
-      // custom_data, municipio, etc.
-      loadPacientes();
+      
+      const row = payload.new as any;
+      if (!row?.id) return;
+
+      // Unit isolation
+      const isGlobal = isGlobalAdmin;
+      const userUnidade = userUnidadeId;
+      if (!isGlobal && userUnidade && row.unidade_id && row.unidade_id !== userUnidade) {
+        // Only ignore if the row has a different unit AND it's not null/empty
+        // (Orphan patients are visible to everyone in their scoped context)
+        return;
+      }
+
+      setPacientes((prev) => upsertById(prev, mapPacienteRow(row)));
     },
     poll: loadPacientes,
   });
