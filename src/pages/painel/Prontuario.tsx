@@ -610,8 +610,8 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const sessionSoapValidationError = useMemo(
-    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(user?.profissao) }),
-    [sessionSoapPayload, soapEnabled, user?.profissao],
+    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(effectiveProfissao) }),
+    [sessionSoapPayload, soapEnabled, effectiveProfissao],
   );
 
   const canConfirmSessionRegistration = useMemo(
