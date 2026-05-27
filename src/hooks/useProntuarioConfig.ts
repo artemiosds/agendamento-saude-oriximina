@@ -14,6 +14,10 @@ export interface BlocoConfig {
   admin_obrigatorio?: boolean;
   /** Admin disabled this field — professional cannot re-enable */
   admin_desabilitado?: boolean;
+  tipo?: string;
+  opcoes?: string[];
+  ajuda?: string;
+  valor_padrao?: string;
 }
 
 export interface CampoExtraConfig {
