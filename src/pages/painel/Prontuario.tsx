@@ -1,25 +1,139 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Skeleton } from "@/components/ui/skeleton";
+import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
+import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
-import { DebouncedInput } from "@/components/ui/debounced-input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { useData } from "@/contexts/DataContext";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, CheckCircle, Plus, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DebouncedInput } from "@/components/ui/debounced-input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
+import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
+import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
+import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
+import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Progress } from "@/components/ui/progress";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import AtendimentoTimer from "@/components/AtendimentoTimer";
+import { openPrintDocument } from "@/lib/printLayout";
+import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
+import { Lock, FileDown } from "lucide-react";
+import { HistoricoClinico } from "@/components/HistoricoClinico";
+import { BuscaPaciente } from "@/components/BuscaPaciente";
+import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import DocumentosHistorico from "@/components/DocumentosHistorico";
+
+import SolicitacaoExames from "@/components/SolicitacaoExames";
+import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
-import { Checkbox } from "@/components/ui/checkbox";
+import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+import EncaminhamentoInternoModal from "@/components/EncaminhamentoInternoModal";
+import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
+import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
+import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
+import { Stamp } from "lucide-react";
+import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+
+const PTS_SPECIALTIES = [
+  'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
+  'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
+];
+
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges } from '@/lib/treatmentSessionGenerator';
+
+interface ProntuarioDB {
+  id: string;
+  paciente_id: string;
+  paciente_nome: string;
+  profissional_id: string;
+  profissional_nome: string;
+  unidade_id: string;
+  sala_id: string;
+  setor: string;
+  agendamento_id: string;
+  data_atendimento: string;
+  hora_atendimento: string;
+  queixa_principal: string;
+  anamnese: string;
+  sinais_sintomas: string;
+  exame_fisico: string;
+  hipotese: string;
+  conduta: string;
+  prescricao: string;
+  solicitacao_exames: string;
+  evolucao: string;
+  observacoes: string;
+  indicacao_retorno: string;
+  motivo_alteracao: string;
+  procedimentos_texto: string;
+  outro_procedimento: string;
+  episodio_id: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+interface ProcedimentoDB {
+  uuid: string;
+  id: string;
+  nome: string;
+  profissao: string;
+  especialidade: string;
+  profissionais_ids: string[] | null;
+  ativo: boolean;
+  origem?: 'SIGTAP' | 'PERSONALIZADO';
+}
+
+const TIPOS_REGISTRO = [
+  { value: 'avaliacao_inicial', label: '🟢 Avaliação Inicial' },
+  { value: 'retorno', label: '🔵 Retorno' },
+  { value: 'sessao', label: '🟡 Sessão' },
+  { value: 'urgencia', label: '🔴 Urgência' },
+  { value: 'procedimento', label: '🟣 Procedimento' },
+  { value: 'consulta', label: 'Consulta (legado)' },
+  { value: 'reavaliacao', label: 'Reavaliação (legado)' },
+  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
+  { value: 'pts', label: 'PTS (legado)' },
+  { value: 'triagem_inicial', label: 'Triagem Inicial (legado)' },
+];
 
 const emptyForm = {
   paciente_id: "",
   paciente_nome: "",
+  profissional_id: "",
+  profissional_nome: "",
+  agendamento_id: "",
   data_atendimento: new Date().toISOString().split("T")[0],
   hora_atendimento: "",
-  tipo_registro: "avaliacao_inicial",
+  tipo_registro: "consulta",
   queixa_principal: "",
   anamnese: "",
   sinais_sintomas: "",
@@ -32,361 +146,4083 @@ const emptyForm = {
   observacoes: "",
   resultado_exame: "",
   indicacao_retorno: "",
+  motivo_alteracao: "",
+  procedimentos_texto: "",
+  outro_procedimento: "",
+  episodio_id: "",
   soap_subjetivo: "",
   soap_objetivo: "",
   soap_avaliacao: "",
   soap_plano: "",
 };
 
-const PRONTUARIO_COLUMNS = [
-  "queixa_principal", "anamnese", "sinais_sintomas", "exame_fisico",
-  "hipotese", "conduta", "evolucao", "prescricao", "solicitacao_exames",
-  "observacoes", "resultado_exame", "indicacao_retorno",
-  "soap_subjetivo", "soap_objetivo", "soap_avaliacao", "soap_plano",
-];
+const classificarIMC = (imc: number): string => {
+  if (imc < 18.5) return "Abaixo do peso";
+  if (imc < 25) return "Normal";
+  if (imc < 30) return "Sobrepeso";
+  if (imc < 35) return "Obesidade grau I";
+  if (imc < 40) return "Obesidade grau II";
+  return "Obesidade grau III";
+};
 
-const TIPOS = [
-  { value: "avaliacao_inicial", label: "🟢 Avaliação Inicial" },
-  { value: "retorno", label: "🔵 Retorno" },
-  { value: "sessao", label: "🟡 Sessão" },
-  { value: "urgencia", label: "🔴 Urgência" },
-  { value: "procedimento", label: "🟣 Procedimento" },
+interface TriagemData {
+  peso?: number;
+  altura?: number;
+  imc?: number;
+  pressao_arterial?: string;
+  temperatura?: number;
+  frequencia_cardiaca?: number;
+  saturacao_oxigenio?: number;
+  glicemia?: number;
+  alergias?: string[];
+  medicamentos?: string[];
+  queixa?: string;
+  confirmado_em?: string;
+  tecnico_nome?: string;
+  tecnico_coren?: string;
+  custom_data?: any;
+}
+
+const retornoOptions = [
+  { value: "no_indication", label: "Sem indicação" },
+  { value: "sem_retorno", label: "Sem retorno" },
+  { value: "7_dias", label: "Retorno em 7 dias" },
+  { value: "15_dias", label: "Retorno em 15 dias" },
+  { value: "30_dias", label: "Retorno em 30 dias" },
+  { value: "60_dias", label: "Retorno em 60 dias" },
+  { value: "90_dias", label: "Retorno em 90 dias" },
+  { value: "outro", label: "Outro prazo" },
 ];
 
 const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
+  const { can } = usePermissions();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, bloqueios } = useData();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [customData, setCustomData] = useState<Record<string, any>>({});
-  const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
-  const [records, setRecords] = useState<any[]>([]);
-  const [loadingRecords, setLoadingRecords] = useState(true);
-
-  const fetchRecords = async () => {
-    setLoadingRecords(true);
-    const { data } = await supabase
-      .from("prontuarios")
-      .select("*")
-      .order("criado_em", { ascending: false })
-      .limit(10);
-    if (data) setRecords(data);
-    setLoadingRecords(false);
-  };
-
-  useEffect(() => {
-    fetchRecords();
-  }, []);
-
-  const { visibleBlocks, isBlocoVisible, tipoNormalized } = useProntuarioConfig(
-    user?.id,
-    form.tipo_registro,
-    user?.profissao,
+  const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
+  // Autosave state
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autosaveAt, setAutosaveAt] = useState<Date | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutosaveHashRef = useRef<string>('');
+  const editIdRef = useRef<string | null>(null);
+  const formRef = useRef(emptyForm);
+  const autosaveInFlightRef = useRef(false);
+  useEffect(() => { editIdRef.current = editId; }, [editId]);
+  useEffect(() => { formRef.current = form; }, [form]);
+  const [search, setSearch] = useState("");
+  const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
+    null,
   );
 
-  useEffect(() => {
-    if (!editId) return;
-    const fetchRecord = async () => {
-      const { data } = await supabase
-        .from("prontuarios")
-        .select("*")
-        .eq("id", editId)
-        .maybeSingle();
-      
-      if (data) {
-        setForm({
-          paciente_id: data.paciente_id || "",
-          paciente_nome: data.paciente_nome || "",
-          data_atendimento: data.data_atendimento || "",
-          hora_atendimento: data.hora_atendimento || "",
-          tipo_registro: data.tipo_registro || "avaliacao_inicial",
-          queixa_principal: data.queixa_principal || "",
-          anamnese: data.anamnese || "",
-          sinais_sintomas: data.sinais_sintomas || "",
-          exame_fisico: data.exame_fisico || "",
-          hipotese: data.hipotese || "",
-          conduta: data.conduta || "",
-          prescricao: data.prescricao || "",
-          solicitacao_exames: data.solicitacao_exames || "",
-          evolucao: data.evolucao || "",
-          observacoes: data.observacoes || "",
-          resultado_exame: data.resultado_exame || "",
-          indicacao_retorno: data.indicacao_retorno || "",
-          soap_subjetivo: data.soap_subjetivo || "",
-          soap_objetivo: data.soap_objetivo || "",
-          soap_avaliacao: data.soap_avaliacao || "",
-          soap_plano: data.soap_plano || "",
-        });
-        
-        const cData = data.custom_data || {};
-        const espFields: Record<string, string> = {};
-        const otherFields: Record<string, any> = {};
-        
-        Object.entries(cData).forEach(([k, v]) => {
-          if (k.startsWith("esp_")) {
-            espFields[k] = String(v);
-          } else {
-            otherFields[k] = v;
-          }
-        });
-        
-        setCustomData(otherFields);
-        setEspecialidadeFields(espFields);
-      }
-    };
-    fetchRecord();
-  }, [editId]);
+  // Computed: can we finalize this appointment? Based on agendamento status, not just activeAtendimento
+  const canFinalize = useMemo(() => {
+    if (activeAtendimento) return true;
+    if (!form.agendamento_id) return false;
+    const ag = agendamentos.find((a: any) => a.id === form.agendamento_id);
+    return ag && ag.status === 'em_atendimento';
+  }, [activeAtendimento, form.agendamento_id, agendamentos]);
+  const [triagem, setTriagem] = useState<TriagemData | null>(null);
+  const [showHistorico, setShowHistorico] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
 
-  const handleFieldChange = (key: string, value: any) => {
-    let targetKey = key;
-    if (key.startsWith("evolucao.")) {
-      targetKey = key.replace("evolucao.", "soap_");
+  // PTS inline creation
+  const [ptsOpen, setPtsOpen] = useState(false);
+  const [ptsSaving, setPtsSaving] = useState(false);
+  const [ptsForm, setPtsForm] = useState({
+    diagnostico_funcional: '', objetivos_terapeuticos: '',
+    metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
+    especialidades: [] as string[],
+  });
+
+  // Treatment cycle inline creation
+  const [cycleOpen, setCycleOpen] = useState(false);
+  const [cycleSaving, setCycleSaving] = useState(false);
+  const [cycleForm, setCycleForm] = useState({
+    treatment_type: '', total_sessions: 0, frequency: '1x_semana',
+    start_date: new Date().toISOString().split("T")[0], clinical_notes: '',
+    weekdays: [] as number[], duration_months: 3,
+  });
+
+  const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
+  const [sigtapDisponibilizarTodos, setSigtapDisponibilizarTodos] = useState<boolean>(false);
+  const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
+  const [procDetails, setProcDetails] = useState<Record<string, { quantidade: number; observacao: string }>>({});
+  const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
+  const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
+  const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
+  const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string; isGlobal?: boolean }[]>([]);
+  const [novoProcOpen, setNovoProcOpen] = useState(false);
+  const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
+  const [procSearch, setProcSearch] = useState("");
+  const [cidSearchByProc, setCidSearchByProc] = useState<Record<string, string>>({});
+  const [cidSearchResults, setCidSearchResults] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
+  const [cidSearchLoading, setCidSearchLoading] = useState<Record<string, boolean>>({});
+
+  const loadCidsForProc = useCallback((procId: string) => {
+    if (cidsByProc[procId]) return;
+    procedureService.getCidsForProcedure(procId).then((list) => {
+      setCidsByProc((m) => ({ ...m, [procId]: list }));
+      // Preserve any pre-existing user/loaded selection; do NOT auto-select all suggested CIDs.
+      setSelectedCidsByProc((m) => ({ ...m, [procId]: m[procId] ?? [] }));
+    });
+  }, [cidsByProc]);
+
+  const toggleExpandProc = useCallback((procId: string) => {
+    setExpandedProcId((prev) => {
+      const next = prev === procId ? null : procId;
+      if (next) loadCidsForProc(next);
+      return next;
+    });
+  }, [loadCidsForProc]);
+
+  // ===== Unified Search (SIGTAP + CID-10) =====
+  const [unifiedQuery, setUnifiedQuery] = useState("");
+  const [unifiedResults, setUnifiedResults] = useState<{
+    procedimentos: {
+      codigo: string;
+      nome: string;
+      especialidade: string | null;
+      matched_by?: 'codigo' | 'nome' | 'cid';
+      cid_codigo?: string | null;
+      cid_descricao?: string | null;
+    }[];
+    cids: { codigo: string; descricao: string }[];
+  }>({ procedimentos: [], cids: [] });
+  const [unifiedLoading, setUnifiedLoading] = useState(false);
+  const [unifiedOpen, setUnifiedOpen] = useState(false);
+  const unifiedDebounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (unifiedDebounceRef.current) window.clearTimeout(unifiedDebounceRef.current);
+    const q = unifiedQuery.trim();
+    if (q.length < 2) {
+      setUnifiedResults({ procedimentos: [], cids: [] });
+      setUnifiedLoading(false);
+      return;
+    }
+    setUnifiedLoading(true);
+    unifiedDebounceRef.current = window.setTimeout(async () => {
+      const res = await procedureService.searchUnified(q, 50);
+      setUnifiedResults(res);
+      setUnifiedLoading(false);
+    }, 300);
+    return () => { if (unifiedDebounceRef.current) window.clearTimeout(unifiedDebounceRef.current); };
+  }, [unifiedQuery]);
+
+  const handlePickProcedimento = useCallback((codigo: string, nome: string) => {
+    setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
+    setProcDetails((prev) => ({ ...prev, [codigo]: prev[codigo] || { quantidade: 1, observacao: "" } }));
+    loadCidsForProc(codigo);
+    setExpandedProcId(codigo);
+    setUnifiedQuery("");
+    setUnifiedOpen(false);
+    toast.success(`Procedimento adicionado: ${codigo} — ${nome}`);
+  }, [loadCidsForProc]);
+
+  const handlePickCid = useCallback(async (cid: { codigo: string; descricao: string }) => {
+    // 1) If there is an expanded/selected procedure, attach there
+    const targetProc = expandedProcId && selectedProcIds.includes(expandedProcId)
+      ? expandedProcId
+      : selectedProcIds[selectedProcIds.length - 1] || null;
+
+    if (targetProc) {
+      setCidsByProc((m) => {
+        const cur = m[targetProc] || [];
+        return cur.some((x) => x.codigo === cid.codigo) ? m : { ...m, [targetProc]: [...cur, cid] };
+      });
+      setSelectedCidsByProc((m) => ({
+        ...m,
+        [targetProc]: Array.from(new Set([...(m[targetProc] || []), cid.codigo])),
+      }));
+      setUnifiedQuery("");
+      setUnifiedOpen(false);
+      toast.success(`CID ${cid.codigo} vinculado ao procedimento selecionado.`);
+      return;
+    }
+
+    // 2) Otherwise look up procedures linked to this CID
+    const linked = await procedureService.getProceduresForCid(cid.codigo, 5);
+    if (linked.length === 0) {
+      toast.error("Selecione um procedimento antes de adicionar o CID (não há procedimento vinculado a este CID).");
+      return;
+    }
+    const first = linked[0];
+    handlePickProcedimento(first.codigo, first.nome);
+    // Attach the CID to it
+    setCidsByProc((m) => {
+      const cur = m[first.codigo] || [];
+      return cur.some((x) => x.codigo === cid.codigo) ? m : { ...m, [first.codigo]: [...cur, cid] };
+    });
+    setSelectedCidsByProc((m) => ({
+      ...m,
+      [first.codigo]: Array.from(new Set([...(m[first.codigo] || []), cid.codigo])),
+    }));
+    toast.success(`Procedimento ${first.codigo} sugerido pelo CID ${cid.codigo} foi adicionado.`);
+  }, [expandedProcId, selectedProcIds, handlePickProcedimento]);
+
+
+  const isProfissional = user?.role === "profissional";
+  const canEdit = can('prontuario', 'can_edit');
+  const canDelete = can('prontuario', 'can_delete');
+  const tempoLimite = user?.tempoAtendimento || 30;
+  const { getEnabledFields: getStructureSections } = useProntuarioStructure();
+  const structureSections = getStructureSections();
+  const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
+  // Custom fields storage (for fields not in DB columns)
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const soapCustom = useSoapCustomOptions(user?.id);
+  const showSoapDropdown = hasDropdownSoap(user?.profissao);
+  const [docModalOpen, setDocModalOpen] = useState(false);
+  const [encInternoOpen, setEncInternoOpen] = useState(false);
+  const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
+  const [viewerProntuario, setViewerProntuario] = useState<any | null>(null);
+  const [historicoPacienteId, setHistoricoPacienteId] = useState<{ id: string; nome: string } | null>(null);
+  const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
+  const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
+  const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
+
+  // Sessão: cycle + PTS state
+  interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
+  interface ActiveCycle { id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; }
+  interface ActivePTS { id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; }
+  const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
+  const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
+  const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
+  const [sessaoPtsSigtap, setSessaoPtsSigtap] = useState<{ procedimento_codigo: string; procedimento_nome: string; especialidade: string }[]>([]);
+  const [sessaoPtsCids, setSessaoPtsCids] = useState<{ cid_codigo: string; cid_descricao: string }[]>([]);
+  const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
+  const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
+  const [soapErrors, setSoapErrors] = useState(false);
+  const [soapEnabled, setSoapEnabled] = useState(true);
+  const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
+  const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
+  const soapRef = useRef<HTMLDivElement>(null);
+
+  const loadSessaoData = async (patientId: string, _professionalId?: string) => {
+    setSessaoDataLoading(true);
+    try {
+      // Search for ANY active cycle for this patient (not filtered by professional)
+      // so cycles created by other professionals are also detected
+      let cycleQuery = (supabase as any).from('treatment_cycles').select('*')
+        .eq('patient_id', patientId)
+        .in('status', ['em_andamento', 'ativo'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const [cycleRes, ptsRes] = await Promise.all([
+        cycleQuery.maybeSingle(),
+        supabase.from('pts').select('*')
+          .eq('patient_id', patientId)
+          .eq('status', 'ativo')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      const cycle = cycleRes.data;
+      setSessaoCycle(cycle || null);
+      
+      const pts = ptsRes.data as ActivePTS | null;
+      setSessaoPts(pts);
+
+      if (pts) {
+        const [sigtapRes, cidRes] = await Promise.all([
+          (supabase as any).from('pts_sigtap').select('procedimento_codigo, procedimento_nome, especialidade').eq('pts_id', pts.id),
+          (supabase as any).from('pts_cid').select('cid_codigo, cid_descricao').eq('pts_id', pts.id),
+        ]);
+        setSessaoPtsSigtap(sigtapRes.data || []);
+        setSessaoPtsCids(cidRes.data || []);
+      } else {
+        setSessaoPtsSigtap([]);
+        setSessaoPtsCids([]);
+      }
+
+      if (cycle) {
+        const { data: sessions } = await (supabase as any).from('treatment_sessions').select('*')
+          .eq('cycle_id', cycle.id)
+          .order('session_number', { ascending: true });
+        setSessaoCycleSessions(sessions || []);
+      } else {
+        setSessaoCycleSessions([]);
+      }
+    } catch (err) {
+      console.error('[loadSessaoData]', err);
+    }
+    setSessaoDataLoading(false);
+  };
+
+  const registrationReferenceDate =
+    form.data_atendimento || searchParams.get('data') || new Date().toISOString().split('T')[0];
+  const registrationReferenceDateLabel = registrationReferenceDate
+    ? new Date(`${registrationReferenceDate}T12:00:00`).toLocaleDateString('pt-BR')
+    : 'a data do prontuário';
+
+  const availableSessionsForRegistration = useMemo(() => {
+    if (!sessaoCycle || sessaoCycleSessions.length === 0) return [];
+
+    return sessaoCycleSessions.filter(
+      (session) => !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(session.status),
+    );
+  }, [sessaoCycle, sessaoCycleSessions]);
+
+  // Session matching the current prontuário date (for inline registration)
+  const currentSessionForRegistration = useMemo(() => {
+    if (!sessaoCycle || availableSessionsForRegistration.length === 0 || !registrationReferenceDate) return null;
+
+    if (form.agendamento_id) {
+      const exactAppointmentMatch = availableSessionsForRegistration.find(
+        (session) =>
+          session.appointment_id === form.agendamento_id &&
+          session.scheduled_date === registrationReferenceDate,
+      );
+
+      if (exactAppointmentMatch) {
+        return exactAppointmentMatch;
+      }
+    }
+
+    return (
+      availableSessionsForRegistration.find(
+        (session) => session.scheduled_date === registrationReferenceDate,
+      ) || null
+    );
+  }, [availableSessionsForRegistration, form.agendamento_id, registrationReferenceDate, sessaoCycle]);
+
+  const isSessionRegistrationFlow = useMemo(() => {
+    if (!sessaoCycle || !currentSessionForRegistration) return false;
+    return sessionRegistrationRequested || form.tipo_registro === 'sessao';
+  }, [currentSessionForRegistration, form.tipo_registro, sessaoCycle, sessionRegistrationRequested]);
+
+  const sessionRegistrationError = useMemo(() => {
+    if (!(sessionRegistrationRequested || form.tipo_registro === 'sessao')) return null;
+    if (!sessaoCycle) return null; // No cycle is OK — user can create one
+    if (!registrationReferenceDate) return 'Defina a data do prontuário para registrar a sessão.';
+    // Don't block if no current session — user can still confirm past sessions from the table
+    return null;
+  }, [
+    form.tipo_registro,
+    registrationReferenceDate,
+    sessaoCycle,
+    sessionRegistrationRequested,
+  ]);
+
+  const handleRegistrarSessaoClick = () => {
+    if (sessionRegistrationError) {
+      toast.error(sessionRegistrationError);
+      return;
+    }
+
+    if (!currentSessionForRegistration) {
+      toast.error(`Nenhuma sessão disponível para ${registrationReferenceDateLabel}.`);
+      return;
+    }
+
+    const shouldSubmitSession = sessionRegistrationRequested || form.tipo_registro === 'sessao';
+
+    setSessionRegistrationRequested(true);
+    setSoapErrors(false);
+    setForm((prev) => ({
+      ...prev,
+      tipo_registro: 'sessao',
+      data_atendimento: registrationReferenceDate,
+      agendamento_id: prev.agendamento_id || currentSessionForRegistration.appointment_id || '',
+    }));
+
+    if (shouldSubmitSession) {
+      const effectiveError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+      if (effectiveError) {
+        setSoapErrors(true);
+        setSessaoHighlightSOAP(true);
+        setTimeout(() => {
+          soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        setTimeout(() => setSessaoHighlightSOAP(false), 4000);
+        toast.error(effectiveError);
+        return;
+      }
+
+      void handleSave();
+      return;
+    }
+
+    setSessaoHighlightSOAP(true);
+    setTimeout(() => {
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+    setTimeout(() => setSessaoHighlightSOAP(false), 4000);
+  };
+
+  const sessionSoapPayload = useMemo(
+    () =>
+      normalizeSoapPayload({
+        subjetivo: form.soap_subjetivo,
+        objetivo: form.soap_objetivo,
+        avaliacao: form.soap_avaliacao,
+        plano: form.soap_plano,
+      }),
+    [form.soap_avaliacao, form.soap_objetivo, form.soap_plano, form.soap_subjetivo],
+  );
+
+  const sessionSoapValidationError = useMemo(
+    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(user?.profissao) }),
+    [sessionSoapPayload, soapEnabled, user?.profissao],
+  );
+
+  const canConfirmSessionRegistration = useMemo(
+    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && (!soapEnabled || !sessionSoapValidationError)),
+    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError, soapEnabled],
+  );
+
+  // Medications & exam types state
+  interface MedicationDB {
+    id: string; nome: string; principio_ativo: string; classe_terapeutica: string;
+    apresentacao: string; dosagem_padrao: string; via_padrao: string; is_global: boolean;
+    profissional_id: string | null; ativo: boolean;
+  }
+  const [medications, setMedications] = useState<MedicationDB[]>([]);
+  const [profPreferences, setProfPreferences] = useState<{ tipo: string; item_id: string; desabilitado: boolean }[]>([]);
+
+  // Derived: active medications (filtered by preferences)
+  const activeMedications = useMemo(() => {
+    const disabledMedIds = new Set(
+      profPreferences.filter(p => p.tipo === 'medication' && p.desabilitado).map(p => p.item_id)
+    );
+    return medications.filter(m => m.ativo && !disabledMedIds.has(m.id));
+  }, [medications, profPreferences]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const profId = user.id;
+    const loadAll = async () => {
+      const { procedureService } = await import("@/services/procedureService");
+      const [procsList, medsRes, prefsRes, sigCfg] = await Promise.all([
+        procedureService.getActive(),
+        (supabase as any).from("medications").select("*").or(`is_global.eq.true,profissional_id.eq.${profId}`),
+        supabase.from("professional_preferences").select("tipo,item_id,desabilitado").eq("profissional_id", profId),
+        procedureService.getSigtapConfig(user?.unidadeId || null),
+      ]);
+      setProcedimentos(procsList as any as ProcedimentoDB[]);
+      if (medsRes.data) setMedications(medsRes.data as MedicationDB[]);
+      if (prefsRes.data) setProfPreferences(prefsRes.data as any[]);
+      setSigtapDisponibilizarTodos(!!sigCfg?.disponibilizarTodos);
+    };
+    loadAll();
+  }, [user?.id, user?.unidadeId]);
+
+  // Realtime: react to changes in system_config so the SIGTAP config flips immediately
+  useEffect(() => {
+    const channel = supabase
+      .channel('prontuario-sigtap-config')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, async () => {
+        const { procedureService } = await import('@/services/procedureService');
+        const cfg = await procedureService.getSigtapConfig(user?.unidadeId || null);
+        setSigtapDisponibilizarTodos(!!cfg?.disponibilizarTodos);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.unidadeId]);
+
+  const filteredProcedimentos = useMemo(() => {
+    if (!user) return [];
+    const q = procSearch.trim().toLowerCase();
+    
+    // Agora a base SIGTAP importada é completa e disponível para todos por padrão.
+    // O filtro por profissão/especialidade só é aplicado se a flag de disponibilização estiver desativada.
+    const semFiltroProfissao = sigtapDisponibilizarTodos;
+
+    return procedimentos.filter((p) => {
+      // Filtro de segurança/associação específica por profissional continua valendo
+      if (p.profissionais_ids && p.profissionais_ids.length > 0) {
+        if (!p.profissionais_ids.includes(user.id)) return false;
+      }
+
+      // Filtro por profissão só se a config global 'disponibilizarTodos' for false
+      if (!semFiltroProfissao) {
+        if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
+      }
+
+      if (q) {
+        const hay = `${p.nome} ${p.id} ${p.especialidade}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [procedimentos, user, procSearch, sigtapDisponibilizarTodos]);
+
+  const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
+  const listedProcedimentos = useMemo(() => {
+    const available = filteredProcedimentos.filter((p) => !selectedProcIdSet.has(p.id));
+    // Sem busca: corta para evitar render pesado (todos seguem acessíveis via busca unificada acima).
+    // Com busca: NÃO cortar — todos os resultados compatíveis devem aparecer.
+    return procSearch.trim() ? available : available.slice(0, 200);
+  }, [filteredProcedimentos, selectedProcIdSet, procSearch]);
+
+  // Lighter projection for listing (avoid heavy text columns until detail)
+  const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
+
+  const prontuariosQueryKey = useMemo(
+    () => ['prontuarios', 'lista', user?.usuario === 'admin.sms' ? 'all' : (user?.unidadeId || 'none')] as const,
+    [user?.usuario, user?.unidadeId],
+  );
+
+  // Two-phase fetch: paint first 100 instantly via setQueryData, then page the rest in background.
+  const fetchProntuariosLeve = useCallback(async (): Promise<ProntuarioDB[]> => {
+    const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
+
+    // Phase 1 — first 100 most recent
+    let firstQuery = (supabase as any)
+      .from("prontuarios")
+      .select(LIST_COLS)
+      .order("data_atendimento", { ascending: false })
+      .order("criado_em", { ascending: false })
+      .range(0, 99);
+    if (restrictUnit) firstQuery = firstQuery.eq("unidade_id", user!.unidadeId);
+    const { data: first, error: firstErr } = await firstQuery;
+    if (firstErr) {
+      console.error("Error loading prontuarios:", firstErr);
+      return [];
+    }
+
+    const firstPage: any[] = (first as any) || [];
+    // Paint immediately while remaining pages stream in
+    queryClient.setQueryData(prontuariosQueryKey, firstPage);
+
+    // Phase 2 — paginate remaining silently
+    const PAGE_SIZE = 1000;
+    let fromIdx = 100;
+    const collected: any[] = [...firstPage];
+    while (true) {
+      let q = (supabase as any)
+        .from("prontuarios")
+        .select(LIST_COLS)
+        .order("data_atendimento", { ascending: false })
+        .order("criado_em", { ascending: false })
+        .range(fromIdx, fromIdx + PAGE_SIZE - 1);
+      if (restrictUnit) q = q.eq("unidade_id", user!.unidadeId);
+      const { data, error } = await q;
+      if (error) { console.error("Background load error:", error); break; }
+      if (!data || data.length === 0) break;
+      collected.push(...data);
+      queryClient.setQueryData(prontuariosQueryKey, [...collected]);
+      if (data.length < PAGE_SIZE) break;
+      fromIdx += PAGE_SIZE;
+    }
+    if (import.meta.env.DEV) console.debug("[Prontuarios] total carregado:", collected.length);
+    return collected;
+  }, [user?.id, user?.usuario, user?.unidadeId, prontuariosQueryKey, queryClient]);
+
+  const { data: prontuarios = [], isLoading: prontuariosLoading, refetch: refetchProntuarios } = useQuery<ProntuarioDB[]>({
+    queryKey: prontuariosQueryKey,
+    queryFn: fetchProntuariosLeve,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  // Backwards-compat alias for legacy call sites that triggered a reload.
+  const loadProntuarios = useCallback(() => {
+    refetchProntuarios();
+  }, [refetchProntuarios]);
+
+  // Reflect query loading state into the existing `loading` flag (used by skeletons).
+  useEffect(() => {
+    setLoading(prontuariosLoading && prontuarios.length === 0);
+  }, [prontuariosLoading, prontuarios.length]);
+
+  const dialogOpenRef = useRef(false);
+  useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
+
+  const silentRefreshProntuarios = useCallback(() => {
+    // Don't refresh while user is editing — it resets form state (SOAP fields)
+    if (dialogOpenRef.current) return;
+    queryClient.invalidateQueries({ queryKey: prontuariosQueryKey });
+  }, [queryClient, prontuariosQueryKey]);
+
+  useRealtimeSubscription({
+    tables: ['prontuarios', 'treatment_cycles', 'treatment_sessions'],
+    onchange: silentRefreshProntuarios,
+  });
+
+  // Prefetch detail on hover — opening becomes instant when user clicks.
+  const handleProntuarioHover = useCallback((id: string) => {
+    queryClient.prefetchQuery({
+      queryKey: ['prontuario', id],
+      queryFn: async () => {
+        const { data, error } = await (supabase as any)
+          .from("prontuarios")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw error;
+        return data;
+      },
+      staleTime: 2 * 60 * 1000,
+    });
+  }, [queryClient]);
+
+  const loadTriagem = async (agendamentoId: string) => {
+    try {
+      // Try to find triage by agendamento_id first
+      let { data } = await (supabase as any)
+        .from("triage_records")
+        .select("*")
+        .eq("agendamento_id", agendamentoId)
+        .not("confirmado_em", "is", null)
+        .maybeSingle();
+
+      // If not found, also try searching by patient + recent date (for demanda reprimida)
+      if (!data) {
+        const pacienteId = searchParams.get("pacienteId");
+        if (pacienteId) {
+          const { data: fallback } = await (supabase as any)
+            .from("triage_records")
+            .select("*")
+            .not("confirmado_em", "is", null)
+            .order("confirmado_em", { ascending: false })
+            .limit(10);
+          // Match by checking if any record's agendamento_id corresponds to a fila entry for this patient
+          if (fallback && fallback.length > 0) {
+            const { data: filaIds } = await supabase
+              .from("fila_espera")
+              .select("id")
+              .eq("paciente_id", pacienteId);
+            const filaIdSet = new Set((filaIds || []).map((f: any) => f.id));
+            data = fallback.find((t: any) => filaIdSet.has(t.agendamento_id)) || null;
+          }
+        }
+      }
+
+      if (data) {
+        const { data: tecnico } = await supabase
+          .from("funcionarios")
+          .select("nome, coren")
+          .eq("id", data.tecnico_id)
+          .maybeSingle();
+        setTriagem({
+          ...data,
+          tecnico_nome: (tecnico as any)?.nome || "",
+          tecnico_coren: (tecnico as any)?.coren || "",
+        });
+      } else {
+        setTriagem(null);
+      }
+    } catch {
+      setTriagem(null);
+    }
+  };
+
+  const loadProntuarioProcedimentos = async (prontuarioId: string, patientId?: string, date?: string) => {
+    // 1. Load procedures specific to THIS prontuario (current visit)
+    let prontuarioProcs: any[] = [];
+    if (prontuarioId) {
+      const { data } = await (supabase as any)
+        .from("prontuario_procedimentos")
+        .select("procedimento_id, cids_selecionados, quantidade, observacao")
+        .eq("prontuario_id", prontuarioId);
+      prontuarioProcs = data || [];
     }
     
-    if (PRONTUARIO_COLUMNS.includes(targetKey)) {
-      setForm((prev) => ({ ...prev, [targetKey]: value }));
-    } else {
-      setCustomData((prev) => ({ ...prev, [key]: value }));
-    }
-  };
-
-  const getFieldValue = (key: string): any => {
-    let targetKey = key;
-    if (key.startsWith("evolucao.")) {
-      targetKey = key.replace("evolucao.", "soap_");
+    // 2. Load global procedures for this patient on this specific date
+    let globalProcs: any[] = [];
+    if (patientId && date) {
+      const { data } = await (supabase as any)
+        .from("procedimentos_realizados")
+        .select("procedimento_id, cids_selecionados, quantidade, observacao")
+        .eq("paciente_id", patientId)
+        .eq("data_atendimento", date);
+      globalProcs = data || [];
     }
 
-    if (PRONTUARIO_COLUMNS.includes(targetKey)) return (form as any)[targetKey] || "";
-    return customData[key] ?? "";
-  };
-
-  const renderField = (bloco: any) => {
-    const fieldKey = bloco.id.replace("evolucao.", "");
-    const value = getFieldValue(fieldKey);
-    const tipo = bloco.tipo || 'textarea';
-
-    switch (tipo) {
-      case 'textarea':
-        return (
-          <DebouncedTextarea
-            rows={3}
-            value={value}
-            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
-            placeholder={`${bloco.label}...`}
-            className="text-sm"
-          />
-        );
-      case 'number':
-        return (
-          <DebouncedInput
-            type="number"
-            value={value}
-            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
-            placeholder={`${bloco.label}...`}
-            className="text-sm"
-          />
-        );
-      case 'select':
-        return (
-          <Select value={value} onValueChange={(v) => handleFieldChange(fieldKey, v)}>
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Selecione..." />
-            </SelectTrigger>
-            <SelectContent>
-              {bloco.opcoes?.map((opt: string) => (
-                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        );
-      case 'checkbox':
-        return (
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={!!value}
-              onCheckedChange={(checked) => handleFieldChange(fieldKey, checked)}
-            />
-            <span className="text-sm">{bloco.label}</span>
-          </div>
-        );
-      default:
-        return (
-          <DebouncedInput
-            value={value}
-            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
-            placeholder={`${bloco.label}...`}
-            className="text-sm"
-          />
-        );
-    }
-  };
-
-  const renderDynamicBlocks = () => {
-    return visibleBlocks.map((bloco) => {
-      if (bloco.id === "especialidade") return null;
-      if (bloco.id === "soap") {
-        // Render SOAP individual fields if they are visible
-        return null; 
+    // Merge both, with current prontuario procedures taking precedence
+    const combinedData = [...prontuarioProcs];
+    globalProcs.forEach(p => {
+      if (!combinedData.some(cp => cp.procedimento_id === p.procedimento_id)) {
+        combinedData.push(p);
       }
+    });
+    
+    if (combinedData.length > 0) {
+      const ids: string[] = [];
+      const cidsMap: Record<string, string[]> = {};
+      const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
       
-      return (
-        <div key={bloco.id} className="space-y-1.5">
-          <Label className="text-xs font-semibold uppercase tracking-wider">
-            {bloco.label}
-            {(bloco.obrigatorio || bloco.admin_obrigatorio) && (
-              <span className="text-destructive ml-0.5">*</span>
-            )}
-          </Label>
-          {renderField(bloco)}
-          {bloco.ajuda && <p className="text-[10px] text-muted-foreground italic">💡 {bloco.ajuda}</p>}
-        </div>
-      );
+      combinedData.forEach((d: any) => {
+        const proc = procedimentos.find(p => p.uuid === d.procedimento_id);
+        const displayId = proc ? proc.id : d.procedimento_id;
+        
+        ids.push(displayId);
+        cidsMap[displayId] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
+        detailsMap[displayId] = {
+          quantidade: d.quantidade || 1,
+          observacao: d.observacao || ""
+        };
+        
+        if (proc) {
+          loadCidsForProc(proc.id);
+        }
+      });
+      
+      setSelectedProcIds(ids);
+      setSelectedCidsByProc(cidsMap);
+      setProcDetails(detailsMap);
+    } else {
+      setSelectedProcIds([]);
+      setSelectedCidsByProc({});
+      setProcDetails({});
+    }
+  };
+
+  const loadEpisodios = async (pacienteId: string) => {
+    const { data } = await (supabase as any)
+      .from("episodios_clinicos")
+      .select("id,titulo,status")
+      .eq("paciente_id", pacienteId)
+      .eq("status", "ativo");
+    if (data) setEpisodios(data);
+    else setEpisodios([]);
+  };
+
+  // Map agenda tipo to prontuário tipo_registro
+  const mapAgendaTipoToRegistro = (agendaTipo: string | null): string => {
+    if (!agendaTipo) return 'avaliacao_inicial';
+    const map: Record<string, string> = {
+      'Consulta': 'avaliacao_inicial',
+      'Primeira Consulta': 'avaliacao_inicial',
+      'Retorno': 'retorno',
+      'Sessão de Tratamento': 'sessao',
+      'Sessão': 'sessao',
+      'Urgência': 'urgencia',
+      'Procedimento': 'procedimento',
+      'Exame': 'procedimento',
+    };
+    return map[agendaTipo] || 'avaliacao_inicial';
+  };
+
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    const pacienteId = searchParams.get("pacienteId");
+    const pacienteNome = searchParams.get("pacienteNome");
+    const agendamentoId = searchParams.get("agendamentoId");
+    const horaInicio = searchParams.get("horaInicio");
+    const data = searchParams.get("data");
+    const agendaTipo = searchParams.get("tipo");
+
+    if (pacienteId && pacienteNome && agendamentoId) {
+      // Only initialize once per searchParams to avoid re-opening/resetting the form
+      // when prontuarios refresh in background
+      if (initializedRef.current) {
+        // If already initialized, only update if we find an existing prontuário for this agendamento
+        // and we don't already have the dialog open
+        if (!dialogOpen) {
+          const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
+          if (existingForAgendamento) {
+            openEdit(existingForAgendamento);
+          }
+        }
+        return;
+      }
+      initializedRef.current = true;
+
+      loadTriagem(agendamentoId);
+      loadEpisodios(pacienteId);
+      const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
+      if (existingForAgendamento) {
+        openEdit(existingForAgendamento);
+      } else {
+        const tipoRegistro = mapAgendaTipoToRegistro(agendaTipo);
+        setSessionRegistrationRequested(false);
+        setEditId(null);
+        setSelectedProcIds([]);
+        setSelectedCidsByProc({});
+        setProcDetails({});
+        loadProntuarioProcedimentos("", pacienteId, data || new Date().toISOString().split("T")[0]); // Load global patient procedures for this date
+        setForm({
+          ...emptyForm,
+          paciente_id: pacienteId,
+          paciente_nome: pacienteNome,
+          agendamento_id: agendamentoId || "",
+          data_atendimento: data || new Date().toISOString().split("T")[0],
+          hora_atendimento: horaInicio || "",
+          tipo_registro: tipoRegistro,
+        });
+        setDialogOpen(true);
+      }
+      if (horaInicio) {
+        setActiveAtendimento({ agendamentoId, horaInicio });
+      } else {
+        const stored = localStorage.getItem(`timer_${agendamentoId}`);
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            setActiveAtendimento({ agendamentoId, horaInicio: parsed.horaInicio });
+          } catch {}
+        }
+      }
+    } else if (pacienteId && pacienteNome) {
+      setSearch(pacienteNome);
+    }
+  }, [searchParams, prontuarios.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load cycle + PTS data when sessao type is selected or patient changes
+  useEffect(() => {
+    if (form.paciente_id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
+      loadSessaoData(form.paciente_id);
+    }
+  }, [form.tipo_registro, form.paciente_id, form.agendamento_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const matchesCurrentSessionByAppointment = currentSessionForRegistration?.appointment_id === form.agendamento_id;
+    const matchesCurrentSessionByDate = currentSessionForRegistration?.scheduled_date === form.data_atendimento;
+
+    if (
+      editId ||
+      !form.agendamento_id ||
+      form.tipo_registro !== 'consulta' ||
+      !currentSessionForRegistration ||
+      (!matchesCurrentSessionByAppointment && !matchesCurrentSessionByDate)
+    ) {
+      return;
+    }
+
+    setSessionRegistrationRequested(true);
+    setForm((prev) => {
+      if (prev.tipo_registro !== 'consulta') return prev;
+      return { ...prev, tipo_registro: 'sessao' };
+    });
+  }, [currentSessionForRegistration, editId, form.agendamento_id, form.tipo_registro]);
+
+  const patientHistory = useMemo(() => {
+    if (!form.paciente_id) return [];
+    return prontuarios
+      .filter((p) => p.paciente_id === form.paciente_id && p.id !== editId)
+      .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
+  }, [form.paciente_id, prontuarios, editId]);
+
+  // Carrega histórico de procedimentos do paciente (sugestões)
+  useEffect(() => {
+    if (!form.paciente_id) { setPacienteProcHistory([]); return; }
+    (async () => {
+      // 1. Suggest from Prontuario Procedures (Historical)
+      const { data: prontuarioData } = await (supabase as any)
+        .from("prontuario_procedimentos")
+        .select("procedimento_id, prontuarios!inner(paciente_id, data_atendimento)")
+        .eq("prontuarios.paciente_id", form.paciente_id)
+        .order("criado_em", { ascending: false })
+        .limit(25);
+        
+      // 2. Suggest from Global Production Table (Global History)
+      const { data: globalData } = await (supabase as any)
+        .from("procedimentos_realizados")
+        .select("procedimento_id, data_atendimento")
+        .eq("paciente_id", form.paciente_id)
+        .order("data_atendimento", { ascending: false })
+        .limit(25);
+
+      const seen = new Map<string, { id: string; nome: string; ultima: string; isGlobal?: boolean }>();
+      
+      const processItem = (r: any, isGlobal = false) => {
+        const proc = procedimentos.find((p) => p.uuid === r.procedimento_id);
+        if (proc && !seen.has(proc.id)) {
+          const dt = (r.prontuarios?.data_atendimento || r.data_atendimento || '');
+          const ultima = dt ? new Date(dt + 'T12:00:00').toLocaleDateString('pt-BR') : '';
+          seen.set(proc.id, { id: proc.id, nome: proc.nome, ultima, isGlobal });
+        }
+      };
+
+      (globalData || []).forEach(r => processItem(r, true));
+      (prontuarioData || []).forEach(r => processItem(r));
+      
+      setPacienteProcHistory(Array.from(seen.values()));
+    })();
+  }, [form.paciente_id, procedimentos]);
+
+  const openNew = (pacienteId?: string, pacienteNome?: string) => {
+    setEditId(null);
+    setActiveAtendimento(null);
+    setSessionRegistrationRequested(false);
+    setSelectedProcIds([]);
+    setSelectedCidsByProc({});
+    setProcDetails({});
+    setEpisodios([]);
+    setListaExames([]);
+    setListaPrescricao([]);
+    setEspecialidadeFields({});
+    setSoapErrors(false);
+    setSoapEnabled(true);
+    
+    if (pacienteId) {
+      loadProntuarioProcedimentos("", pacienteId, new Date().toISOString().split("T")[0]);
+    }
+    
+    setForm({ 
+      ...emptyForm, 
+      paciente_id: pacienteId || "",
+      paciente_nome: pacienteNome || "",
+      data_atendimento: new Date().toISOString().split("T")[0], 
+      tipo_registro: "avaliacao_inicial" 
+    });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (p: ProntuarioDB) => {
+    setEditId(p.id);
+    setActiveAtendimento(null);
+    setSessionRegistrationRequested(false);
+    
+    // Clear state before loading
+    setSelectedProcIds([]);
+    setSelectedCidsByProc({});
+    setProcDetails({});
+
+    loadProntuarioProcedimentos(p.id, p.paciente_id, p.data_atendimento);
+    loadEpisodios(p.paciente_id);
+    const formData = {
+      paciente_id: p.paciente_id,
+      paciente_nome: p.paciente_nome,
+      profissional_id: p.profissional_id || "",
+      profissional_nome: p.profissional_nome || "",
+      agendamento_id: p.agendamento_id || "",
+      data_atendimento: p.data_atendimento,
+      hora_atendimento: p.hora_atendimento || "",
+      tipo_registro: (p as any).tipo_registro || "consulta",
+      queixa_principal: p.queixa_principal || "",
+      anamnese: p.anamnese || "",
+      sinais_sintomas: p.sinais_sintomas || "",
+      exame_fisico: p.exame_fisico || "",
+      hipotese: p.hipotese || "",
+      conduta: p.conduta || "",
+      prescricao: p.prescricao || "",
+      solicitacao_exames: p.solicitacao_exames || "",
+      evolucao: p.evolucao || "",
+      observacoes: p.observacoes || "",
+      resultado_exame: (p as any).resultado_exame || "",
+      indicacao_retorno: p.indicacao_retorno || "",
+      motivo_alteracao: "",
+      procedimentos_texto: p.procedimentos_texto || "",
+      outro_procedimento: p.outro_procedimento || "",
+      episodio_id: p.episodio_id || "",
+      soap_subjetivo: (p as any).soap_subjetivo || "",
+      soap_objetivo: (p as any).soap_objetivo || "",
+      soap_avaliacao: (p as any).soap_avaliacao || "",
+      soap_plano: (p as any).soap_plano || "",
+    };
+    setForm(formData);
+    setPreviousForm(formData);
+    // Load exames from solicitacao_exames JSON
+    try {
+      const parsed = p.solicitacao_exames ? JSON.parse(p.solicitacao_exames) : null;
+      if (parsed?.exames && Array.isArray(parsed.exames)) setListaExames(parsed.exames);
+      else setListaExames([]);
+    } catch { setListaExames([]); }
+    // Load prescriptions from prescricao JSON
+    try {
+      const parsed = p.prescricao ? JSON.parse(p.prescricao) : null;
+      if (parsed?.medicamentos && Array.isArray(parsed.medicamentos)) setListaPrescricao(parsed.medicamentos);
+      else setListaPrescricao([]);
+    } catch { setListaPrescricao([]); }
+    // Load specialty fields from observacoes JSON
+    try {
+      const parsed = p.observacoes ? JSON.parse(p.observacoes) : null;
+      if (parsed?.especialidade_fields && typeof parsed.especialidade_fields === 'object') {
+        setEspecialidadeFields(parsed.especialidade_fields);
+      } else {
+        setEspecialidadeFields({});
+      }
+    } catch { setEspecialidadeFields({}); }
+    setDialogOpen(true);
+    const pac = pacientes.find((px) => px.id === p.paciente_id);
+    logAction({
+      acao: "prontuario_visualizado",
+      entidade: "prontuario",
+      entidadeId: p.id,
+      modulo: "prontuario",
+      user,
+      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || "" },
     });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     if (!form.paciente_nome || !form.data_atendimento) {
       toast.error("Paciente e data são obrigatórios.");
-      return;
+      return false;
     }
+    // Prevent creating/editing prontuários for future dates
+    const today = new Date().toISOString().split("T")[0];
+    if (form.data_atendimento > today && !editId) {
+      toast.error("Não é possível registrar prontuário para data futura. O atendimento precisa ocorrer primeiro.");
+      return false;
+    }
+    // Motivo da alteração agora é opcional ao editar.
+    if (sessionRegistrationError) {
+      toast.error(sessionRegistrationError);
+      return false;
+    }
+    const soapPayload = sessionSoapPayload;
+    const soapValidationError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+    if (soapValidationError) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error(soapValidationError);
+      return false;
+    }
+    setSoapErrors(false);
     setSaving(true);
+    // CRÍTICO: cancela autosave pendente e aguarda autosave em andamento para
+    // evitar duplicação de prontuário (autosave INSERT + handleSave INSERT).
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    // Aguarda autosave em voo terminar (até 5s) antes de prosseguir
+    const autosaveStart = Date.now();
+    while (autosaveInFlightRef.current && Date.now() - autosaveStart < 5000) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    // Usa editIdRef.current como fonte de verdade (autosave pode ter criado o registro)
+    const effectiveEditId = editId || editIdRef.current;
+    let insertedNewProntuario = false;
+    let prontuarioId: string | null = effectiveEditId;
     try {
+      const procTexto = selectedProcIds
+        .map((id) => {
+          const p = procedimentos.find((pr) => pr.id === id);
+          const detail = procDetails[id];
+          const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
+          return p ? `${p.nome}${qtdStr}` : '';
+        })
+        .filter(Boolean)
+        .join(", ");
+
+      // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
+      // ao criar, usa o usuário logado.
+      const profIdToSave = effectiveEditId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeToSave = effectiveEditId
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdToSave)?.nome || user?.nome || "")
+        : (user?.nome || "");
+
       const record: any = {
-        ...form,
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
-        profissional_id: user?.id || "",
-        profissional_nome: user?.nome || "",
-        unidade_id: user?.unidadeId || "",
-        setor: user?.setor || "",
-        custom_data: { ...customData, ...especialidadeFields },
+        paciente_nome: form.paciente_nome,
+        profissional_id: profIdToSave,
+        profissional_nome: profNomeToSave,
+        ...(effectiveEditId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
+        agendamento_id: form.agendamento_id,
+        data_atendimento: form.data_atendimento,
+        hora_atendimento: form.hora_atendimento,
+        queixa_principal: form.queixa_principal,
+        anamnese: form.anamnese,
+        sinais_sintomas: form.sinais_sintomas,
+        exame_fisico: form.exame_fisico,
+        hipotese: form.hipotese,
+        conduta: form.conduta,
+        prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
+        solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
+        evolucao: form.evolucao,
+        observacoes: Object.keys(especialidadeFields).length > 0
+          ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes })
+          : form.observacoes,
+        resultado_exame: form.resultado_exame || "",
+        // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
+        indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
+        motivo_alteracao: effectiveEditId ? form.motivo_alteracao : "",
+        procedimentos_texto: procTexto || form.procedimentos_texto || "",
+        outro_procedimento: form.outro_procedimento || "",
+        tipo_registro: form.tipo_registro || "consulta",
+        soap_subjetivo: soapPayload.subjetivo,
+        soap_objetivo: soapPayload.objetivo,
+        soap_avaliacao: soapPayload.avaliacao,
+        soap_plano: soapPayload.plano,
       };
-      if (editId) {
-        await supabase.from("prontuarios").update(record).eq("id", editId);
-      } else {
-        const { data } = await supabase.from("prontuarios").insert(record).select("id").single();
-        if (data?.id) setEditId(data.id);
+
+      // CORRIGIDO: não salva 'no_episode' no banco
+      if (form.episodio_id && form.episodio_id !== "no_episode") {
+        record.episodio_id = form.episodio_id;
       }
-      toast.success("Prontuário salvo!");
-      fetchRecords();
-      setDialogOpen(false);
+
+      const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
+      if (effectiveEditId) {
+        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
+        if (error) throw error;
+        const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
+        if (previousForm) {
+          const fieldLabels: Record<string, string> = {
+            queixa_principal: "Queixa Principal",
+            anamnese: "Anamnese",
+            sinais_sintomas: "Sinais/Sintomas",
+            exame_fisico: "Exame Físico",
+            hipotese: "Hipótese",
+            conduta: "Conduta",
+            prescricao: "Prescrição",
+            solicitacao_exames: "Solicitação Exames",
+            evolucao: "Evolução",
+            observacoes: "Observações",
+            resultado_exame: "Resultado de Exame",
+            indicacao_retorno: "Indicação Retorno",
+            procedimentos_texto: "Procedimentos",
+            outro_procedimento: "Outro Procedimento",
+          };
+          for (const [key, label] of Object.entries(fieldLabels)) {
+            const prev = (previousForm as any)[key] || "";
+            const curr = key === "procedimentos_texto" ? procTexto : (form as any)[key] || "";
+            if (prev !== curr) {
+              camposAlterados[label] = { anterior: prev.substring(0, 200), novo: curr.substring(0, 200) };
+            }
+          }
+        }
+        // Detecta troca de profissional responsável (registro explícito de auditoria)
+        const prevProfId = previousForm ? (previousForm as any).profissional_id || "" : "";
+        const prevProfNome = previousForm ? (previousForm as any).profissional_nome || "" : "";
+        if (prevProfId && prevProfId !== profIdToSave) {
+          camposAlterados["Profissional Responsável"] = {
+            anterior: prevProfNome.substring(0, 200),
+            novo: profNomeToSave.substring(0, 200),
+          };
+        }
+        await logAction({
+          acao: "prontuario_editado",
+          entidade: "prontuario",
+          entidadeId: effectiveEditId,
+          modulo: "prontuario",
+          user,
+          pacienteId: form.paciente_id || record.paciente_id,
+          pacienteNome: form.paciente_nome,
+          profissionalId: profIdToSave,
+          profissionalNome: profNomeToSave,
+          prontuarioId: effectiveEditId,
+          before: previousForm,
+          after: record,
+          detalhes: {
+            motivo_alteracao: form.motivo_alteracao,
+            campos_alterados: camposAlterados,
+            editado_por_id: user?.id || "",
+            editado_por_nome: user?.nome || "",
+          },
+        });
+
+      } else {
+        const { data: inserted, error } = await (supabase as any)
+          .from("prontuarios")
+          .insert(record)
+          .select("id")
+          .single();
+        if (error) throw error;
+        prontuarioId = inserted?.id;
+        insertedNewProntuario = true;
+        // Sincroniza imediatamente o ref para que próximos saves não dupliquem
+        if (prontuarioId) {
+          editIdRef.current = prontuarioId;
+          setEditId(prontuarioId);
+        }
+      }
+
+      if (prontuarioId) {
+        // First, fetch current procedures to avoid unnecessary deletion if no changes
+        const { data: existingProcs } = await (supabase as any)
+          .from("prontuario_procedimentos")
+          .select("procedimento_id, quantidade, observacao, cids_selecionados")
+          .eq("prontuario_id", prontuarioId);
+
+        // Prepare the new list of links to insert
+        const linksToInsert = selectedProcIds.map((pid) => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontuarioId,
+            procedimento_id: proc?.uuid || pid, // Use UUID if found
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
+
+        // Simple strategy: delete and re-insert if different
+        // We compare existing vs new to see if we need to do anything
+        const hasChanges = JSON.stringify(existingProcs || []) !== JSON.stringify(linksToInsert.map(l => ({
+          procedimento_id: l.procedimento_id,
+          quantidade: l.quantidade,
+          observacao: l.observacao,
+          cids_selecionados: l.cids_selecionados
+        })));
+
+        if (hasChanges || !existingProcs || existingProcs.length !== linksToInsert.length) {
+          // Verify each procedure UUID is valid before deleting/inserting
+          const validLinks = linksToInsert.filter(l => {
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id);
+            if (!isUuid) {
+              console.warn(`[Prontuario] Pulando procedimento com ID inválido (não é UUID): ${l.procedimento_id}`);
+            }
+            return isUuid;
+          });
+
+          const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          if (deleteError) {
+            console.error("[Prontuario] Erro real ao remover procedimentos antigos", {
+              error: deleteError,
+              prontuarioId,
+              action: "delete_procedures"
+            });
+            // We don't throw here to allow the main record to remain saved, but we warn the user
+            toast.error("Erro ao atualizar lista de procedimentos. O prontuário principal foi salvo.");
+          } else if (validLinks.length > 0) {
+            const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
+            if (insertError) {
+              console.error("[Prontuario] Erro real ao salvar procedimentos", {
+                error: insertError,
+                prontuarioId,
+                validLinks,
+                action: "insert_procedures"
+              });
+              toast.error("O prontuário foi salvo, mas houve um erro ao vincular os procedimentos.");
+            }
+          }
+        }
+      }
+
+      const shouldRegisterSession = Boolean(isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
+
+      if (shouldRegisterSession) {
+        const procedureDone =
+          procTexto ||
+          form.procedimentos_texto?.trim() ||
+          form.outro_procedimento?.trim() ||
+          form.queixa_principal?.trim() ||
+          'Sessão registrada';
+
+        const result = await treatmentService.registerCompletedSession({
+          cycle: sessaoCycle,
+          session: currentSessionForRegistration,
+          soap: soapPayload,
+          procedureDone,
+          userId: user?.id,
+          appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
+        });
+
+        if (result.cycleStatus === 'concluido') {
+          toast.info('🎉 Ciclo de tratamento concluído!');
+        }
+
+        await logAction({
+          acao: 'sessao_registrada',
+          entidade: 'treatment_session',
+          entidadeId: currentSessionForRegistration.id,
+          modulo: 'prontuario',
+          user,
+          detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+        });
+        toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+      } else {
+        toast.success(effectiveEditId ? "Prontuário atualizado!" : "Prontuário criado!");
+      }
+
+      if (!effectiveEditId) {
+        await logAction({
+          acao: "prontuario_criado",
+          entidade: "prontuario",
+          entidadeId: prontuarioId || "",
+          modulo: "prontuario",
+          user,
+          pacienteId: form.paciente_id || record.paciente_id,
+          pacienteNome: form.paciente_nome,
+          profissionalId: profIdToSave,
+          profissionalNome: profNomeToSave,
+          prontuarioId: prontuarioId || "",
+          after: record,
+          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || "" },
+        });
+
+      }
+
+      // Reload data in BACKGROUND — não bloquear UI (close dialog imediatamente)
+      void Promise.all([
+        loadProntuarios(),
+        refreshAgendamentos(),
+        form.tipo_registro === 'sessao' && form.paciente_id
+          ? loadSessaoData(form.paciente_id)
+          : Promise.resolve(),
+      ]).catch(err => console.error('[Prontuario] background reload failed:', err));
+
+      setSessionRegistrationRequested(false);
+      // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
+      if (!shouldRegisterSession) {
+        setDialogOpen(false);
+      } else {
+        // Session registered: update editId to the saved prontuário so user can continue editing
+        if (prontuarioId) {
+          setEditId(prontuarioId);
+          // Refresh procedures for the newly saved record
+          loadProntuarioProcedimentos(prontuarioId, form.paciente_id, form.data_atendimento);
+        }
+        // Keep SOAP fields intact so user can still view/edit the prontuário
+      }
+      setPreviousForm(null);
+      return true;
     } catch (err: any) {
-      toast.error("Erro ao salvar: " + (err?.message || "desconhecido"));
+      if (insertedNewProntuario && prontuarioId) {
+        try {
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
+        } catch (rollbackError) {
+          console.error("Erro ao reverter prontuário após falha na sessão:", rollbackError);
+        }
+      }
+      console.error("Erro ao salvar prontuário/sessão:", {
+        error: err,
+        message: err?.message,
+        tipo_registro: form.tipo_registro,
+        paciente_id: form.paciente_id,
+        agendamento_id: form.agendamento_id || null,
+        cycle_id: sessaoCycle?.id || null,
+        session_id: currentSessionForRegistration?.id || null,
+      });
+      if (form.tipo_registro === 'sessao' && !editId) {
+        toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
+      } else {
+        toast.error("Erro ao salvar: " + (err?.message || "erro desconhecido"));
+      }
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const openNew = () => {
-    setEditId(null);
-    setForm(emptyForm);
-    setCustomData({});
-    setEspecialidadeFields({});
-    setDialogOpen(true);
+  // ============== AUTOSAVE ==============
+  // Silent autosave: persists draft without validations/toasts/logs/navigation.
+  // Does NOT change agendamento status. Finalize button continues to set "concluido".
+  const performAutosave = useCallback(async () => {
+    if (autosaveInFlightRef.current) return;
+    const f = formRef.current;
+    // Skip when no patient selected, no date, future date (new), or in session-registration flow
+    if (!f.paciente_nome || !f.paciente_id || !f.data_atendimento) return;
+    if (f.tipo_registro === 'sessao' && !editIdRef.current) return; // require explicit "Registrar Sessão"
+    const today = new Date().toISOString().split('T')[0];
+    if (!editIdRef.current && f.data_atendimento > today) return;
+
+    autosaveInFlightRef.current = true;
+    setAutosaveStatus('saving');
+    try {
+      const procTexto = selectedProcIds
+        .map((id) => {
+          const p = procedimentos.find((pr) => pr.id === id);
+          const detail = procDetails[id];
+          const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
+          return p ? `${p.nome}${qtdStr}` : '';
+        })
+        .filter(Boolean)
+        .join(', ');
+      // Preserva profissional ao editar; usa logado ao criar
+      const isEditing = Boolean(editIdRef.current);
+      const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
+      const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
+      const record: any = {
+        paciente_id: f.paciente_id,
+        paciente_nome: f.paciente_nome,
+        profissional_id: profIdAuto,
+        profissional_nome: profNomeAuto,
+        ...(isEditing ? {} : { unidade_id: user?.unidadeId || '', setor: user?.setor || '' }),
+        agendamento_id: f.agendamento_id,
+        data_atendimento: f.data_atendimento,
+        hora_atendimento: f.hora_atendimento,
+        queixa_principal: f.queixa_principal,
+        anamnese: f.anamnese,
+        sinais_sintomas: f.sinais_sintomas,
+        exame_fisico: f.exame_fisico,
+        hipotese: f.hipotese,
+        conduta: f.conduta,
+        prescricao: f.prescricao,
+        solicitacao_exames: f.solicitacao_exames,
+        evolucao: f.evolucao,
+        observacoes: f.observacoes,
+        indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
+        motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
+        procedimentos_texto: procTexto || f.procedimentos_texto || '',
+        outro_procedimento: f.outro_procedimento || '',
+        tipo_registro: f.tipo_registro || 'consulta',
+      };
+      if (f.episodio_id && f.episodio_id !== 'no_episode') record.episodio_id = f.episodio_id;
+
+      let prontId = editIdRef.current;
+      if (prontId) {
+        const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
+        if (error) throw error;
+      } else {
+        const { data: inserted, error } = await (supabase as any)
+          .from('prontuarios')
+          .insert(record)
+          .select('id')
+          .single();
+        if (error) throw error;
+        if (inserted?.id) {
+          prontId = inserted.id;
+          setEditId(prontId);
+          editIdRef.current = prontId;
+          // Reset status de faltas ao registrar novo atendimento
+          try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: record.paciente_id }); } catch {}
+        }
+      }
+
+      // Autosave procedures to junction table
+      if (prontId) {
+        const links = selectedProcIds.map((pid) => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontId,
+            procedimento_id: proc?.uuid || pid,
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+        
+        // Use a single transaction (delete + insert)
+        const validLinks = links.filter(l => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id));
+        
+        const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
+        if (!deleteError && validLinks.length > 0) {
+          const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
+          if (insertError) {
+            console.error('[autosave] Erro ao inserir procedimentos:', insertError);
+          }
+        } else if (deleteError) {
+          console.error('[autosave] Erro ao remover procedimentos:', deleteError);
+        }
+      }
+      setAutosaveStatus('saved');
+      setAutosaveAt(new Date());
+    } catch (err) {
+      console.error('[autosave] erro:', err);
+      setAutosaveStatus('error');
+    } finally {
+      autosaveInFlightRef.current = false;
+    }
+  }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos]);
+
+  // Keep latest performAutosave in a ref so the debounce effect doesn't re-run
+  // every time selectedProcIds/procDetails/selectedCidsByProc/procedimentos change.
+  const performAutosaveRef = useRef(performAutosave);
+  useEffect(() => { performAutosaveRef.current = performAutosave; }, [performAutosave]);
+
+  // Debounced trigger watching form changes while dialog is open
+  useEffect(() => {
+    if (!dialogOpen) return;
+    if (!form.paciente_id || !form.paciente_nome) return;
+    // Build a hash of editable text fields to detect real changes
+    const hash = JSON.stringify({
+      qp: form.queixa_principal, an: form.anamnese, ss: form.sinais_sintomas,
+      ef: form.exame_fisico, hp: form.hipotese, cd: form.conduta,
+      pr: form.prescricao, se: form.solicitacao_exames, ev: form.evolucao,
+      ob: form.observacoes, ir: form.indicacao_retorno, op: form.outro_procedimento,
+      pt: form.procedimentos_texto, ep: form.episodio_id, tr: form.tipo_registro,
+      da: form.data_atendimento, ho: form.hora_atendimento,
+      // Include selected procedures in hash to trigger autosave
+      sp: selectedProcIds,
+      pd: procDetails,
+      sc: selectedCidsByProc,
+    });
+    if (hash === lastAutosaveHashRef.current) return;
+    lastAutosaveHashRef.current = hash;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => { void performAutosaveRef.current(); }, 2500);
+    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
+  }, [
+    dialogOpen,
+    form.paciente_id,
+    form.paciente_nome,
+    form.queixa_principal,
+    form.anamnese,
+    form.sinais_sintomas,
+    form.exame_fisico,
+    form.hipotese,
+    form.conduta,
+    form.prescricao,
+    form.solicitacao_exames,
+    form.evolucao,
+    form.observacoes,
+    form.indicacao_retorno,
+    form.outro_procedimento,
+    form.procedimentos_texto,
+    form.episodio_id,
+    form.tipo_registro,
+    form.data_atendimento,
+    form.hora_atendimento,
+    selectedProcIds,
+    procDetails,
+    selectedCidsByProc,
+  ]);
+
+  // Flush on tab hide / before unload
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const flush = () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      void performAutosave();
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [dialogOpen, performAutosave]);
+
+  // Reset autosave indicator when dialog closes/opens
+  useEffect(() => {
+    if (!dialogOpen) {
+      setAutosaveStatus('idle');
+      setAutosaveAt(null);
+      lastAutosaveHashRef.current = '';
+      if (autosaveTimerRef.current) { clearTimeout(autosaveTimerRef.current); autosaveTimerRef.current = null; }
+    }
+  }, [dialogOpen]);
+  // ============ END AUTOSAVE ============
+
+  const handleFinalizarAtendimento = async () => {
+    const saved = await handleSave();
+    if (!saved) return;
+
+    // Resolve the agendamento ID — from activeAtendimento or form
+    const agendamentoId = activeAtendimento?.agendamentoId || form.agendamento_id;
+    if (!agendamentoId) {
+      toast.error("Nenhum agendamento vinculado para finalizar.");
+      return;
+    }
+
+    const now = new Date();
+    const horaFim = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    let duracaoMinutos = 0;
+    if (activeAtendimento?.horaInicio) {
+      const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
+      const [hf, mf] = horaFim.split(":").map(Number);
+      duracaoMinutos = hf * 60 + mf - (hi * 60 + mi);
+    }
+    const pac = pacientes.find((px) => px.id === form.paciente_id);
+
+    // Fire-and-forget: side-effects rodam em background, navegação é instantânea
+    void (async () => {
+      try {
+        const tasks: Promise<any>[] = [
+          (supabase as any)
+            .from("atendimentos")
+            .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
+            .eq("agendamento_id", agendamentoId),
+          logAction({
+            acao: "atendimento_finalizado",
+            entidade: "atendimento",
+            entidadeId: agendamentoId,
+            modulo: "atendimento",
+            user,
+            detalhes: {
+              paciente_nome: form.paciente_nome,
+              paciente_cpf: pac?.cpf || "",
+              hora_inicio: activeAtendimento?.horaInicio || "",
+              hora_fim: horaFim,
+              duracao_minutos: Math.max(0, duracaoMinutos),
+              unidade: user?.unidadeId || "",
+              sala: user?.salaId || "",
+            },
+          }),
+        ];
+
+        // Auto-discharge: if cycle completed, register discharge
+        if (sessaoCycle && form.tipo_registro === 'sessao') {
+          const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
+          if (completedCount >= sessaoCycle.total_sessions) {
+            tasks.push(
+              (async () => {
+                await (supabase as any).from('treatment_cycles').update({
+                  status: 'finalizado_alta',
+                  updated_at: new Date().toISOString(),
+                }).eq('id', sessaoCycle.id);
+                await (supabase as any).from('patient_discharges').insert({
+                  cycle_id: sessaoCycle.id,
+                  patient_id: form.paciente_id,
+                  professional_id: user?.id || '',
+                  reason: 'Alta automática — ciclo concluído',
+                  final_notes: 'Tratamento finalizado com todas as sessões realizadas.',
+                });
+                toast.success("🎉 Paciente recebeu alta automática — tratamento concluído!");
+              })()
+            );
+          }
+        }
+
+        await Promise.allSettled(tasks);
+      } catch (err) {
+        console.error("[Prontuario] background finalizar tasks failed:", err);
+      }
+    })();
+
+    localStorage.removeItem(`timer_${agendamentoId}`);
+    updateAgendamento(agendamentoId, { status: "concluido" });
+    setActiveAtendimento(null);
+    toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
+    navigate("/painel/agenda");
   };
 
-  return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FileText className="w-6 h-6 text-primary" />
-          Prontuários
-        </h1>
-        <Button onClick={openNew}>
-          <Plus className="w-4 h-4 mr-2" /> Novo Prontuário
-        </Button>
-      </div>
+  // Dedicated handler: register session only (no close)
+  const handleRegistrarSessaoOnly = async () => {
+    if (!currentSessionForRegistration || !sessaoCycle) {
+      toast.error("Nenhuma sessão disponível para registro.");
+      return;
+    }
+    if (sessionRegistrationError) {
+      toast.error(sessionRegistrationError);
+      return;
+    }
+    const soapPayload = sessionSoapPayload;
+    const soapError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+    if (soapError) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error(soapError);
+      return;
+    }
+    setSoapErrors(false);
+    setSaving(true);
+    let insertedNewProntuario = false;
+    let prontuarioId: string | null = editId;
+    try {
+      const procTexto = selectedProcIds.map(id => procedimentos.find(pr => pr.id === id)?.nome || "").filter(Boolean).join(", ");
+      const profIdSess = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeSess = editId
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
+        : (user?.nome || "");
+      const record: any = {
+        paciente_id: form.paciente_id || `manual_${Date.now()}`,
+        paciente_nome: form.paciente_nome,
+        profissional_id: profIdSess,
+        profissional_nome: profNomeSess,
+        ...(editId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
+        agendamento_id: form.agendamento_id,
+        data_atendimento: form.data_atendimento,
+        hora_atendimento: form.hora_atendimento,
+        queixa_principal: form.queixa_principal,
+        anamnese: form.anamnese,
+        sinais_sintomas: form.sinais_sintomas,
+        exame_fisico: form.exame_fisico,
+        hipotese: form.hipotese,
+        conduta: form.conduta,
+        prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
+        solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
+        evolucao: form.evolucao,
+        observacoes: Object.keys(especialidadeFields).length > 0 ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes }) : form.observacoes,
+        indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
+        motivo_alteracao: editId ? form.motivo_alteracao : "",
+        procedimentos_texto: procTexto || form.procedimentos_texto || "",
+        outro_procedimento: form.outro_procedimento || "",
+        tipo_registro: 'sessao',
+        soap_subjetivo: soapPayload.subjetivo,
+        soap_objetivo: soapPayload.objetivo,
+        soap_avaliacao: soapPayload.avaliacao,
+        soap_plano: soapPayload.plano,
+      };
+      if (form.episodio_id && form.episodio_id !== "no_episode") record.episodio_id = form.episodio_id;
 
-      <div className="grid grid-cols-1 gap-3">
-        {loadingRecords ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      if (editId) {
+        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
+        if (error) throw error;
+      } else {
+        const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("id").single();
+        if (error) throw error;
+        prontuarioId = inserted?.id;
+        insertedNewProntuario = true;
+      }
+
+      if (prontuarioId) {
+        const validLinks = selectedProcIds.map(pid => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontuarioId,
+            procedimento_id: proc?.uuid || pid,
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id));
+
+        const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+        if (!deleteError && validLinks.length > 0) {
+          const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
+          if (insertError) {
+            console.error("[RegistrarSessao] Erro ao inserir procedimentos:", insertError);
+          }
+        } else if (deleteError) {
+          console.error("[RegistrarSessao] Erro ao remover procedimentos:", deleteError);
+        }
+      }
+
+      const procedureDone = procTexto || form.procedimentos_texto?.trim() || form.outro_procedimento?.trim() || form.queixa_principal?.trim() || 'Sessão registrada';
+      const result = await treatmentService.registerCompletedSession({
+        cycle: sessaoCycle,
+        session: currentSessionForRegistration,
+        soap: soapPayload,
+        procedureDone,
+        userId: user?.id,
+        appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
+      });
+
+      if (result.cycleStatus === 'concluido') {
+        toast.info('🎉 Ciclo de tratamento concluído!');
+      }
+
+      await logAction({
+        acao: 'sessao_registrada',
+        entidade: 'treatment_session',
+        entidadeId: currentSessionForRegistration.id,
+        modulo: 'prontuario',
+        user,
+        detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+      });
+      toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+
+      if (prontuarioId) setEditId(prontuarioId);
+
+      await Promise.all([
+        loadProntuarios(),
+        refreshAgendamentos(),
+        loadSessaoData(form.paciente_id),
+      ]);
+      setSessionRegistrationRequested(false);
+    } catch (err: any) {
+      if (insertedNewProntuario && prontuarioId) {
+        try {
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
+        } catch {}
+      }
+      console.error("Erro ao registrar sessão:", err);
+      toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Confirm any individual session (including past dates) — no SOAP required, no prontuário close
+  const handleConfirmSession = async (session: CycleSession) => {
+    if (!sessaoCycle) return;
+    setConfirmingSessionId(session.id);
+    try {
+      // Minimal registration: mark as realizada, update cycle counter
+      const result = await treatmentService.registerCompletedSession({
+        cycle: sessaoCycle,
+        session,
+        soap: null, // SOAP not required for simple confirmation
+        procedureDone: 'Comparecimento confirmado',
+        userId: user?.id,
+        appointmentId: session.appointment_id || null,
+      });
+
+      if (result.cycleStatus === 'concluido') {
+        toast.info('🎉 Ciclo de tratamento concluído!');
+      }
+
+      await logAction({
+        acao: 'sessao_confirmada',
+        entidade: 'treatment_session',
+        entidadeId: session.id,
+        modulo: 'prontuario',
+        user,
+        detalhes: { paciente: form.paciente_nome, sessao_numero: session.session_number, ciclo_id: sessaoCycle.id },
+      });
+      toast.success(`✅ Sessão ${session.session_number} confirmada!`);
+
+      // Refresh data
+      await Promise.all([
+        loadSessaoData(form.paciente_id),
+        refreshAgendamentos(),
+      ]);
+    } catch (err: any) {
+      console.error("Erro ao confirmar sessão:", err);
+      toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao confirmar sessão.');
+    } finally {
+      setConfirmingSessionId(null);
+    }
+  };
+
+  const handleDelete = async (p: ProntuarioDB) => {
+    try {
+      await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", p.id);
+      await (supabase as any).from("prontuarios").delete().eq("id", p.id);
+      await logAction({
+        acao: "excluir",
+        entidade: "prontuario",
+        entidadeId: p.id,
+        detalhes: { paciente: p.paciente_nome, profissional: p.profissional_nome, data: p.data_atendimento },
+        user,
+      });
+      // Optimistic local update + cache invalidation to stay in sync with React Query
+      queryClient.setQueryData<ProntuarioDB[]>(prontuariosQueryKey, (prev) =>
+        (prev || []).filter((pr) => pr.id !== p.id),
+      );
+      queryClient.invalidateQueries({ queryKey: prontuariosQueryKey });
+      toast.success("Prontuário excluído!");
+    } catch (err) {
+      console.error("Error deleting:", err);
+      toast.error("Erro ao excluir prontuário.");
+    }
+  };
+
+  const handlePrint = (p: ProntuarioDB) => {
+    const pac = pacientes.find((px) => px.id === p.paciente_id);
+    logAction({
+      acao: "prontuario_exportado_pdf",
+      entidade: "prontuario",
+      entidadeId: p.id,
+      modulo: "prontuario",
+      user,
+      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || "" },
+    });
+    const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
+    const sections = [
+      { title: "Queixa Principal", content: p.queixa_principal },
+      { title: "Anamnese", content: p.anamnese },
+      { title: "Sinais e Sintomas", content: p.sinais_sintomas },
+      { title: "Exame Físico", content: p.exame_fisico },
+      { title: "Hipótese / Avaliação", content: p.hipotese },
+      { title: "Conduta", content: p.conduta },
+      { title: "Prescrição / Orientações", content: p.prescricao },
+      { title: "Solicitação de Exames", content: p.solicitacao_exames },
+      { title: "Evolução", content: p.evolucao },
+      { title: "Procedimentos", content: p.procedimentos_texto },
+      { title: "Observações Gerais", content: p.observacoes },
+      { title: "Indicação de Retorno", content: p.indicacao_retorno },
+    ]
+      .filter((s) => s.content)
+      .map(
+        (s) =>
+          `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`,
+      )
+      .join("");
+    const body = `
+      <div class="info-grid">
+        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${p.paciente_nome}</span></div>
+        <div><span class="info-label">Data:</span><br/><span class="info-value">${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}</span></div>
+        <div><span class="info-label">Profissional:</span><br/><span class="info-value">${p.profissional_nome}</span></div>
+        <div><span class="info-label">Hora:</span><br/><span class="info-value">${p.hora_atendimento || "-"}</span></div>
+        <div><span class="info-label">Unidade:</span><br/><span class="info-value">${unidadeNome}</span></div>
+        <div><span class="info-label">Setor:</span><br/><span class="info-value">${p.setor || "-"}</span></div>
+      </div>
+      ${sections}
+      <div class="signature">
+        <div class="signature-line"></div>
+        <div class="name">${p.profissional_nome}</div>
+        <div class="role">${p.setor || ""}</div>
+      </div>`;
+    openPrintDocument("Prontuário de Atendimento", body, { Unidade: unidadeNome });
+  };
+
+  const handlePrintFullHistory = (pacienteId: string, pacienteNome: string) => {
+    const patientRecords = prontuarios
+      .filter((p) => p.paciente_id === pacienteId)
+      .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
+    if (patientRecords.length === 0) {
+      toast.info("Nenhum prontuário encontrado para este paciente.");
+      return;
+    }
+    const pac = pacientes.find((px) => px.id === pacienteId);
+    logAction({
+      acao: "historico_completo_exportado_pdf",
+      entidade: "prontuario",
+      entidadeId: pacienteId,
+      modulo: "prontuario",
+      user,
+      detalhes: { paciente_nome: pacienteNome, paciente_cpf: pac?.cpf || "", total_registros: patientRecords.length },
+    });
+
+    const allSections = patientRecords.map((p) => {
+      const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
+      const fields = [
+        { title: "Queixa Principal", content: p.queixa_principal },
+        { title: "Anamnese", content: p.anamnese },
+        { title: "Sinais e Sintomas", content: p.sinais_sintomas },
+        { title: "Exame Físico", content: p.exame_fisico },
+        { title: "Hipótese / Avaliação", content: p.hipotese },
+        { title: "Conduta", content: p.conduta },
+        { title: "Prescrição", content: p.prescricao },
+        { title: "Evolução", content: p.evolucao },
+        { title: "Procedimentos", content: p.procedimentos_texto },
+        { title: "Observações", content: p.observacoes },
+      ].filter((s) => s.content).map(
+        (s) => `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`
+      ).join("");
+      return `
+        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #ddd;border-radius:8px;padding:16px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <strong>${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} ${p.hora_atendimento || ""}</strong>
+            <span style="color:#666;">Prof. ${p.profissional_nome} • ${unidadeNome}</span>
           </div>
-        ) : records.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Nenhum prontuário encontrado.</p>
-        ) : (
-          records.map((r) => (
-            <Card key={r.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-foreground">{r.paciente_nome}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {TIPOS.find(t => t.value === r.tipo_registro)?.label || r.tipo_registro} • {new Date(r.data_atendimento).toLocaleDateString()}
-                  </p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => {
-                  setEditId(r.id);
-                  setDialogOpen(true);
-                }}>
-                  Visualizar/Editar
-                </Button>
-              </CardContent>
-            </Card>
-          ))
-        )}
+          ${fields}
+        </div>`;
+    }).join("");
+
+    const body = `
+      <div class="info-grid">
+        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${pacienteNome}</span></div>
+        <div><span class="info-label">CPF:</span><br/><span class="info-value">${pac?.cpf || "—"}</span></div>
+        <div><span class="info-label">CNS:</span><br/><span class="info-value">${(pac as any)?.cns || "—"}</span></div>
+        <div><span class="info-label">Total de Registros:</span><br/><span class="info-value">${patientRecords.length}</span></div>
+      </div>
+      <h3 style="margin:16px 0 8px;font-size:14px;font-weight:bold;">Histórico Clínico Completo</h3>
+      ${allSections}`;
+    openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, { Paciente: pacienteNome });
+  };
+
+  // ---- PTS inline creation ----
+  const handleCreatePTS = async () => {
+    if (!form.paciente_id || !ptsForm.diagnostico_funcional || !ptsForm.objetivos_terapeuticos) {
+      toast.error("Preencha diagnóstico funcional e objetivos terapêuticos.");
+      return;
+    }
+    setPtsSaving(true);
+    try {
+      const { data: inserted, error } = await supabase.from("pts").insert({
+        patient_id: form.paciente_id,
+        professional_id: user?.id || "",
+        unit_id: user?.unidadeId || "",
+        diagnostico_funcional: ptsForm.diagnostico_funcional,
+        objetivos_terapeuticos: ptsForm.objetivos_terapeuticos,
+        metas_curto_prazo: ptsForm.metas_curto_prazo,
+        metas_medio_prazo: ptsForm.metas_medio_prazo,
+        metas_longo_prazo: ptsForm.metas_longo_prazo,
+        especialidades_envolvidas: ptsForm.especialidades,
+        status: "ativo",
+      }).select("id").single();
+      if (error) throw error;
+      await logAction({
+        acao: "criar_pts",
+        entidade: "pts",
+        entidadeId: inserted?.id || "",
+        modulo: "prontuario",
+        user,
+        detalhes: { paciente: form.paciente_nome },
+      });
+      toast.success("PTS criado com sucesso!");
+      setPtsOpen(false);
+      setPtsForm({ diagnostico_funcional: '', objetivos_terapeuticos: '', metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '', especialidades: [] });
+    } catch (err: any) {
+      toast.error("Erro ao criar PTS: " + (err?.message || ""));
+    }
+    setPtsSaving(false);
+  };
+
+  const handleCreateCycle = async () => {
+    if (!form.paciente_id || !cycleForm.treatment_type) {
+      toast.error("Preencha tipo de tratamento.");
+      return;
+    }
+    if (isWeekdayFrequency(cycleForm.frequency) && cycleForm.weekdays.length !== getMaxWeekdays(cycleForm.frequency)) {
+      toast.error(`Selecione exatamente ${getMaxWeekdays(cycleForm.frequency)} dia(s) da semana.`);
+      return;
+    }
+    setCycleSaving(true);
+    try {
+      const totalSessions = cycleForm.frequency === 'manual'
+        ? cycleForm.total_sessions
+        : calculateTotalSessions(cycleForm.frequency, cycleForm.duration_months, cycleForm.weekdays);
+
+      const blockedRanges = buildBlockedRanges(bloqueios, user?.id || '', user?.unidadeId || '');
+      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, totalSessions, blockedRanges);
+      const endDate = calcEndDateFromSessions(sessionDates);
+
+      if (skippedCount > 0) {
+        toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
+      }
+
+      const { data: cycleData, error: cycleError } = await supabase.from("treatment_cycles").insert({
+        patient_id: form.paciente_id,
+        professional_id: user?.id || "",
+        unit_id: user?.unidadeId || "",
+        specialty: user?.profissao || "",
+        treatment_type: cycleForm.treatment_type,
+        start_date: cycleForm.start_date,
+        end_date_predicted: endDate,
+        total_sessions: totalSessions,
+        sessions_done: 0,
+        frequency: cycleForm.frequency,
+        status: "em_andamento",
+        clinical_notes: cycleForm.clinical_notes,
+        created_by: user?.id || "",
+      }).select().single();
+      if (cycleError) throw cycleError;
+
+      const sessionsToCreate = sessionDates.map((date, i) => ({
+        cycle_id: cycleData.id,
+        patient_id: form.paciente_id,
+        professional_id: user?.id || "",
+        session_number: i + 1,
+        total_sessions: totalSessions,
+        scheduled_date: date,
+        status: "pendente_agendamento",
+      }));
+      await supabase.from("treatment_sessions").insert(sessionsToCreate);
+
+      await logAction({
+        acao: "criar_ciclo_tratamento",
+        entidade: "treatment_cycle",
+        entidadeId: cycleData.id,
+        modulo: "prontuario",
+        user,
+        detalhes: { paciente: form.paciente_nome, tipo: cycleForm.treatment_type, sessoes: totalSessions },
+      });
+      toast.success(`Ciclo criado com ${totalSessions} sessões! Aguardam agendamento pela recepção.`);
+      setCycleOpen(false);
+      setCycleForm({ treatment_type: '', total_sessions: 0, frequency: '1x_semana', start_date: new Date().toISOString().split("T")[0], clinical_notes: '', weekdays: [], duration_months: 3 });
+    } catch (err: any) {
+      toast.error("Erro ao criar ciclo: " + (err?.message || ""));
+    }
+    setCycleSaving(false);
+  };
+
+  const queryPacienteId = searchParams.get("pacienteId");
+  const deferredSearch = useDeferredValue(search);
+  const pacienteByIdMap = useMemo(() => {
+    const m = new Map<string, any>();
+    pacientes.forEach((p: any) => m.set(p.id, p));
+    return m;
+  }, [pacientes]);
+  const filtered = useMemo(() => {
+    return prontuarios.filter((p) => {
+      if (queryPacienteId) return p.paciente_id === queryPacienteId;
+      if (!deferredSearch) return true;
+      const term = deferredSearch.toLowerCase();
+      const termDigits = term.replace(/[.\-/]/g, "");
+      const pac = pacienteByIdMap.get(p.paciente_id);
+      return (
+        p.paciente_nome.toLowerCase().includes(term) ||
+        p.profissional_nome.toLowerCase().includes(term) ||
+        ((pac?.cpf || "").replace(/[.\-/]/g, "").includes(termDigits)) ||
+        ((pac?.cns || "").includes(termDigits))
+      );
+    });
+  }, [prontuarios, queryPacienteId, deferredSearch, pacienteByIdMap]);
+
+  // Virtualized list — render only visible rows for instant scroll on huge lists
+  const listParentRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => listParentRef.current,
+    estimateSize: () => 132,
+    overscan: 8,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 132,
+  });
+  const queryPacienteNome = searchParams.get("pacienteNome");
+
+  // Stable derived data for the side history panel — prevents re-renders on every keystroke
+  const pacienteForPanel = useMemo(() => {
+    if (form.paciente_id) {
+      return pacienteByIdMap.get(form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null);
+    }
+    return form.paciente_nome ? { nome: form.paciente_nome } : null;
+  }, [form.paciente_id, form.paciente_nome, pacienteByIdMap]);
+
+  const funcionariosLight = useMemo(
+    () => funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true })),
+    [funcionarios],
+  );
+
+  const handleViewProntuarioFromHistory = useCallback((p: any) => {
+    setViewerProntuario(p);
+  }, []);
+
+  const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
+  const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
+  const unidadeAtualNome = useMemo(() => unidades.find(u => u.id === user?.unidadeId)?.nome, [unidades, user?.unidadeId]);
+  const soapValues = useMemo(() => ({
+    soap_subjetivo: form.soap_subjetivo,
+    soap_objetivo: form.soap_objetivo,
+    soap_avaliacao: form.soap_avaliacao,
+    soap_plano: form.soap_plano,
+  }), [form.soap_avaliacao, form.soap_objetivo, form.soap_plano, form.soap_subjetivo]);
+  const triagemHeaderData = useMemo(() => triagem ? {
+    pressao_arterial: triagem.pressao_arterial,
+    temperatura: triagem.temperatura,
+    saturacao_oxigenio: triagem.saturacao_oxigenio,
+    frequencia_cardiaca: triagem.frequencia_cardiaca,
+    classificacao_risco: (triagem as any).classificacao_risco,
+  } : null, [triagem]);
+  const handleSoapChange = useCallback((field: keyof typeof soapValues, value: string) => {
+    setForm(p => ((p as any)[field] === value ? p : { ...p, [field]: value }));
+  }, []);
+  const handleClearSoapErrors = useCallback(() => setSoapErrors(false), []);
+  const handleEspecialidadeChange = useCallback((key: string, val: string) => {
+    setEspecialidadeFields(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
+  }, []);
+  const handlePacienteChange = useCallback((id: string, nome: string) => {
+    setForm((prev) => prev.paciente_id === id && prev.paciente_nome === nome ? prev : { ...prev, paciente_id: id, paciente_nome: nome });
+    if (id) loadEpisodios(id);
+  }, []);
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold font-display text-foreground">
+            {queryPacienteId ? `Prontuários — ${queryPacienteNome || "Paciente"}` : "Prontuários"}
+          </h1>
+          <p className="text-muted-foreground text-sm">{filtered.length} registro(s)</p>
+        </div>
+        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
+          {queryPacienteId && (
+            <>
+              <Button variant="outline" onClick={() => setShowHistorico(!showHistorico)}>
+                <Activity className="w-4 h-4 mr-2" />
+                {showHistorico ? "Ocultar" : "Ver"} Histórico
+              </Button>
+              <Button variant="default" onClick={() => setHistoricoCompletoOpen(true)} className="gradient-primary text-primary-foreground">
+                <FileText className="w-4 h-4 mr-2" />
+                Histórico Completo
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handlePrintFullHistory(queryPacienteId, queryPacienteNome || "Paciente")}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir Histórico Completo
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setDocModalOpen(true)}
+              >
+                <Stamp className="w-4 h-4 mr-2" />
+                Gerar Documento
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setEncInternoOpen(true)}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Encaminhar Paciente
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
+                Ver todos
+              </Button>
+            </>
+          )}
+          {canEdit && (
+            <Button onClick={() => openNew(queryPacienteId || undefined, queryPacienteNome || undefined)} className="gradient-primary text-primary-foreground">
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Prontuário
+            </Button>
+          )}
+        </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Registro de Atendimento</DialogTitle>
+      {queryPacienteId && showHistorico && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-4">
+            <HistoricoClinico
+              pacienteId={queryPacienteId}
+              pacienteNome={queryPacienteNome || ""}
+              currentProfissionalId={user?.id}
+              unidades={unidades}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+
+
+
+      {queryPacienteId && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-4">
+            <DocumentosHistorico
+              pacienteId={queryPacienteId}
+              pacienteNome={queryPacienteNome || "Paciente"}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {!queryPacienteId && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por paciente, profissional, CPF ou CNS..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      )}
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setActiveAtendimento(null);
+            setSessionRegistrationRequested(false);
+            setSoapErrors(false);
+          }
+        }}
+      >
+        <DialogContent className="w-screen max-w-none h-screen sm:rounded-none p-0 flex flex-col overflow-hidden gap-0" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader className="px-6 py-3 border-b border-border shrink-0">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
+              <div className="text-xs flex items-center gap-1.5" aria-live="polite">
+                {autosaveStatus === 'saving' && (
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
+                  </span>
+                )}
+                {autosaveStatus === 'saved' && autosaveAt && (
+                  <span className="text-success flex items-center gap-1.5">
+                    <CheckCircle className="w-3 h-3" /> Salvo automaticamente às {autosaveAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                {autosaveStatus === 'error' && (
+                  <span className="text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3" /> Falha ao salvar — tentaremos novamente
+                  </span>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-[65%_35%] min-h-0 overflow-hidden">
+          <div className="flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+
+          {activeAtendimento && (
+            <AtendimentoTimer
+              horaInicio={activeAtendimento.horaInicio}
+              tempoLimite={tempoLimite}
+              agendamentoId={activeAtendimento.agendamentoId}
+            />
+          )}
+
+          {form.paciente_id && (
+            <FichaPacienteCabecalho
+              pacienteId={form.paciente_id}
+              profissionalNome={form.paciente_id ? (funcionarios.find(f => f.id === (searchParams.get("profissionalId") || user?.id))?.nome || user?.nome || "") : ""}
+              profissionalId={searchParams.get("profissionalId") || user?.id || ""}
+              agendamentoId={form.agendamento_id || undefined}
+              triagem={triagemHeaderData}
+              funcionarios={funcionariosLight}
+              onPacienteUpdated={loadProntuarios}
+            />
+          )}
+
+          {triagem && (() => {
+            const risco = (triagem as any).classificacao_risco as string | undefined;
+            const RISCO_LABEL: Record<string, string> = {
+              nao_urgente: "Não urgente",
+              pouco_urgente: "Pouco urgente",
+              urgente: "Urgente",
+              muito_urgente: "Muito urgente",
+              emergencia: "Emergência",
+            };
+            const RISCO_BG: Record<string, string> = {
+              nao_urgente: "bg-emerald-50 text-emerald-700 border-emerald-200",
+              pouco_urgente: "bg-amber-50 text-amber-700 border-amber-200",
+              urgente: "bg-orange-50 text-orange-700 border-orange-200",
+              muito_urgente: "bg-red-50 text-red-700 border-red-200",
+              emergencia: "bg-red-100 text-red-800 border-red-300",
+            };
+            const vitais: { label: string; value: React.ReactNode }[] = [];
+            if (triagem.peso) vitais.push({ label: "Peso", value: <>{triagem.peso} <span className="text-muted-foreground">kg</span></> });
+            if (triagem.altura) vitais.push({ label: "Altura", value: <>{triagem.altura} <span className="text-muted-foreground">cm</span></> });
+            if (triagem.imc) vitais.push({ label: "IMC", value: <>{triagem.imc} <span className="text-[10px] text-muted-foreground">({classificarIMC(triagem.imc)})</span></> });
+            if (triagem.pressao_arterial) vitais.push({ label: "PA", value: <>{triagem.pressao_arterial} <span className="text-muted-foreground">mmHg</span></> });
+            if (triagem.temperatura) vitais.push({ label: "Temp", value: <>{triagem.temperatura} <span className="text-muted-foreground">°C</span></> });
+            if (triagem.frequencia_cardiaca) vitais.push({ label: "FC", value: <>{triagem.frequencia_cardiaca} <span className="text-muted-foreground">bpm</span></> });
+            if (triagem.saturacao_oxigenio) vitais.push({ label: "SatO₂", value: <>{triagem.saturacao_oxigenio} <span className="text-muted-foreground">%</span></> });
+            if (triagem.glicemia) vitais.push({ label: "Glicemia", value: <>{triagem.glicemia} <span className="text-muted-foreground">mg/dL</span></> });
+
+            return (
+              <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden pointer-events-none select-text">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3 bg-muted/40 border-b border-border/40">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Heart className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold font-display text-foreground tracking-wide">
+                        Dados da Triagem
+                      </h3>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                        Somente leitura · atendimento atual
+                      </span>
+                    </div>
+                  </div>
+                  {risco && RISCO_LABEL[risco] && (
+                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${RISCO_BG[risco] || "bg-muted text-muted-foreground border-border"}`}>
+                      {RISCO_LABEL[risco]}
+                    </span>
+                  )}
+                </div>
+
+                {/* Body */}
+                <div className="px-5 py-4 space-y-3">
+                  {/* Alergias destacadas */}
+                  {triagem.alergias && triagem.alergias.length > 0 && (
+                    <div className="flex items-start gap-2 rounded-lg border-l-4 border-l-destructive bg-destructive/10 p-3">
+                      <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <strong className="text-destructive">Alergias:</strong>{" "}
+                        <span className="text-foreground">{triagem.alergias.join(", ")}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sinais vitais em grade */}
+                  {vitais.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        Sinais vitais
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {vitais.map((v, i) => (
+                          <div key={i} className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{v.label}</p>
+                            <p className="text-sm font-semibold text-foreground mt-0.5">{v.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Medicamentos em uso */}
+                  {triagem.medicamentos && triagem.medicamentos.length > 0 && (
+                    <div className="text-sm">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                        Medicamentos em uso
+                      </p>
+                      <p className="text-foreground">{triagem.medicamentos.join(", ")}</p>
+                    </div>
+                  )}
+
+                  {/* Comorbidades e Sintomas */}
+                  {(triagem.custom_data?.comorbidades?.length > 0 || triagem.custom_data?.sintomas_30_dias?.length > 0) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-border/40 pt-3">
+                      {triagem.custom_data?.comorbidades?.length > 0 && (
+                        <div className="text-sm">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                            Comorbidades
+                          </p>
+                          <p className="text-foreground">{triagem.custom_data.comorbidades.join(", ")}</p>
+                        </div>
+                      )}
+                      {triagem.custom_data?.sintomas_30_dias?.length > 0 && (
+                        <div className="text-sm">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                            Sintomas (últimos 30 dias)
+                          </p>
+                          <p className="text-foreground">{triagem.custom_data.sintomas_30_dias.join(", ")}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Queixa */}
+                  {triagem.queixa && (
+                    <div className="text-sm">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                        Queixa principal
+                      </p>
+                      <p className="text-foreground whitespace-pre-wrap leading-relaxed">{triagem.queixa}</p>
+                    </div>
+                  )}
+
+                  {/* Rodapé: profissional/data */}
+                  {(triagem.tecnico_nome || triagem.confirmado_em) && (
+                    <div className="text-[11px] text-muted-foreground pt-2 border-t border-border/40">
+                      Realizada por{" "}
+                      <strong className="text-foreground">{triagem.tecnico_nome || "—"}</strong>
+                      {triagem.tecnico_coren && ` · COREN ${triagem.tecnico_coren}`}
+                      {triagem.confirmado_em &&
+                        ` · ${new Date(triagem.confirmado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}`}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+          {form.agendamento_id && !triagem && (
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-5 py-4 text-center">
+              <p className="text-sm text-muted-foreground italic">
+                Nenhuma triagem registrada para este atendimento.
+              </p>
+            </div>
+          )}
+
+          {/* Histórico central removido — exibido apenas no painel lateral direito */}
+
+          {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Paciente</Label>
-                <DebouncedInput
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                  value={form.paciente_nome}
-                  onChange={(e) => setForm((p) => ({ ...p, paciente_nome: e.target.value }))}
+                <Label>Paciente *</Label>
+                <BuscaPaciente
+                  pacientes={pacientes}
+                  value={form.paciente_id}
+                  onChange={handlePacienteChange}
                 />
               </div>
-              <div>
-                <Label className="text-xs">Tipo de Registro</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label>Data *</Label>
+                  <Input
+                    type="date"
+                    value={form.data_atendimento}
+                    onChange={(e) => setForm((p) => ({ ...p, data_atendimento: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Hora</Label>
+                  <Input
+                    type="time"
+                    value={form.hora_atendimento}
+                    onChange={(e) => setForm((p) => ({ ...p, hora_atendimento: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Seletor de Profissional Responsável — somente Master ao editar */}
+            {editId && user?.role === 'master' && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <Label className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  Profissional Responsável pelo Atendimento *
+                </Label>
                 <Select
-                  value={form.tipo_registro}
-                  onValueChange={(v) => setForm((p) => ({ ...p, tipo_registro: v }))}
+                  value={form.profissional_id || ""}
+                  onValueChange={(v) => {
+                    const f = funcionarios.find((x) => x.id === v);
+                    setForm((p) => ({
+                      ...p,
+                      profissional_id: v,
+                      profissional_nome: f?.nome || p.profissional_nome,
+                    }));
+                  }}
                 >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
+                  <SelectTrigger className="mt-1 bg-background">
+                    <SelectValue placeholder="Selecione o profissional responsável" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {funcionarios
+                      .filter((f) => f.ativo !== false)
+                      .map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.nome}{f.profissao ? ` — ${f.profissao}` : ""}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Como Master, você pode corrigir o profissional responsável. A alteração ficará registrada na auditoria. O autor da edição (você) é gravado separadamente.
+                </p>
+              </div>
+            )}
+
+            {episodios.length > 0 && (
+              <div>
+                <Label>Episódio Clínico / Tratamento Ativo</Label>
+                <Select
+                  value={form.episodio_id || "no_episode"}
+                  onValueChange={(v) => setForm((p) => ({ ...p, episodio_id: v === "no_episode" ? "" : v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Vincular a um tratamento (opcional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
+                    <SelectItem value="no_episode">Nenhum</SelectItem>
+                    {episodios.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.titulo}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            )}
+
+            {/* Tipo de Registro */}
+            <div>
+              <Label>Tipo de Registro *</Label>
+              <Select
+                value={form.tipo_registro}
+                onValueChange={(v) => {
+                  setSessionRegistrationRequested((prev) => (v === 'sessao' ? prev : false));
+                  setForm((p) => ({ ...p, tipo_registro: v }));
+                }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS_REGISTRO.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center justify-end mt-1">
+                <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1" onClick={() => navigate('/painel/meu-prontuario')}>
+                  <Settings className="w-3 h-3" /> Personalizar meu prontuário
+                </Button>
+              </div>
             </div>
 
-            <div className="bg-muted/30 p-4 rounded-lg space-y-4">
-              {renderDynamicBlocks()}
+            {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
 
-              {isBlocoVisible("especialidade") && user?.profissao && (
-                <CamposEspecialidade
-                  profissao={user.profissao}
-                  profissionalId={user.id}
-                  tipoProntuario={tipoNormalized}
-                  values={especialidadeFields}
-                  onChange={(k, v) => setEspecialidadeFields((p) => ({ ...p, [k]: v }))}
+            {/* SOAP Evolution — ALL 5 types */}
+            <SoapFieldsAdaptive
+              profissao={user?.profissao}
+              values={soapValues}
+              onChange={handleSoapChange}
+              soapErrors={soapErrors}
+              onClearErrors={handleClearSoapErrors}
+              soapEnabled={soapEnabled}
+              onToggleSoap={setSoapEnabled}
+              highlightSOAP={sessaoHighlightSOAP}
+              soapRef={soapRef as React.RefObject<HTMLDivElement>}
+              customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
+              customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
+              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, user?.profissao || '') : undefined}
+              onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
+            />
+
+            {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
+            {form.tipo_registro === 'avaliacao_inicial' && (
+              <div className="space-y-4">
+                <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
+                  <h4 className="text-sm font-semibold text-foreground mb-3">🟢 Avaliação Inicial</h4>
+                  <div className="space-y-3">
+                    <div><Label>Queixa Principal <span className="text-destructive">*</span></Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
+                    <div><Label>História da Doença Atual <span className="text-destructive">*</span></Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="HDA detalhada..." /></div>
+                    <div><Label>Histórico de Saúde</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Antecedentes pessoais, familiares..." /></div>
+                    <div><Label>Medicações em Uso</Label><DebouncedTextarea rows={2} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} placeholder="Medicações atuais do paciente..." /></div>
+                    <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
+                      <Label className="flex items-center gap-1">⚠️ Alergias</Label>
+                      <DebouncedTextarea rows={1} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} placeholder="Listar alergias conhecidas..." className="border-destructive/30" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card de Especialidade */}
+                {user?.profissao && (
+                  <CamposEspecialidade
+                    profissao={user.profissao}
+                    profissionalId={user.id}
+                    tipoProntuario={form.tipo_registro as any}
+                    values={especialidadeFields}
+                    onChange={handleEspecialidadeChange}
+                  />
+                )}
+
+                <div><Label>Diagnóstico Funcional</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Diagnóstico funcional baseado na avaliação..." /></div>
+                <div><Label>Conduta Inicial</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} placeholder="Conduta clínica inicial..." /></div>
+
+                {/* Decisão Clínica: PTS / Tratamento */}
+                {!editId && form.paciente_id && (
+                  <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-primary" /> Decisão Clínica (opcional)
+                    </h3>
+                    <p className="text-xs text-muted-foreground">Crie PTS ou ciclo de tratamento para este paciente.</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
+                        <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                        <Activity className="w-3.5 h-3.5 mr-1" /> Criar Ciclo de Tratamento
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 🔵 PRONTUÁRIO 2 — RETORNO */}
+            {form.tipo_registro === 'retorno' && (
+              <div className="space-y-4">
+                <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
+                  <h4 className="text-sm font-semibold text-foreground mb-3">🔵 Retorno</h4>
+                  <div className="space-y-3">
+                    {patientHistory.length > 0 && (
+                      <div className="bg-muted/50 rounded-md p-2 border">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Resumo do último atendimento (somente leitura)</p>
+                        <p className="text-sm text-foreground">{patientHistory[0]?.queixa_principal || "Sem queixa registrada"}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(patientHistory[0]?.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} — {patientHistory[0]?.profissional_nome}
+                        </p>
+                      </div>
+                    )}
+                    <div><Label>Reavaliação</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Reavaliação do quadro clínico..." /></div>
+                    <div><Label>Evolução Clínica</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente evoluiu desde o último atendimento..." /></div>
+                    <div><Label>Ajuste de Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Mudanças na conduta terapêutica..." /></div>
+                  </div>
+                </div>
+
+                {user?.profissao && (
+                  <CamposEspecialidade
+                    profissao={user.profissao}
+                    profissionalId={user.id}
+                    tipoProntuario={form.tipo_registro as any}
+                    values={especialidadeFields}
+                    onChange={handleEspecialidadeChange}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* 🟡 PRONTUÁRIO 3 — SESSÃO */}
+            {form.tipo_registro === 'sessao' && (
+              <div className="space-y-4">
+                {sessaoDataLoading ? (
+                  <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                ) : (
+                  <>
+                    {/* 1. CICLO DE TRATAMENTO ATIVO */}
+                    <div className="rounded-lg border bg-card p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
+                      </h4>
+                      {sessaoCycle ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div><span className="text-muted-foreground">Tipo:</span> <strong>{sessaoCycle.treatment_type}</strong></div>
+                            <div><span className="text-muted-foreground">Status:</span>{' '}
+                              <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-xs">
+                                {sessaoCycle.status === 'em_andamento' ? 'Ativo' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
+                              </Badge>
+                            </div>
+                            <div><span className="text-muted-foreground">Início:</span> <strong>{new Date(sessaoCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</strong></div>
+                            <div><span className="text-muted-foreground">Previsão:</span> <strong>{sessaoCycle.end_date_predicted ? new Date(sessaoCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</strong></div>
+                            <div><span className="text-muted-foreground">Frequência:</span> <strong>{sessaoCycle.frequency}</strong></div>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Sessão {sessaoCycle.sessions_done} de {sessaoCycle.total_sessions} realizadas</span>
+                              <span>{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</span>
+                            </div>
+                            <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-2" />
+                          </div>
+                          {/* Session list */}
+                          {sessaoCycleSessions.length > 0 && (
+                            <div className="border rounded-md overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/50">
+                                  <tr>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Nº</th>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Data</th>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Status</th>
+                                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Ação</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sessaoCycleSessions.map(s => {
+                                    const isCurrent = currentSessionForRegistration?.id === s.id;
+                                    const isRealizada = s.status === 'realizada';
+                                    const isPending = !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(s.status);
+                                    const isConfirming = confirmingSessionId === s.id;
+                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : isPending ? '⏳' : '❌';
+                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Atual' : s.status === 'falta' || s.status === 'paciente_faltou' ? 'Falta' : s.status === 'cancelada' ? 'Cancelada' : 'Aguardando';
+                                    return (
+                                      <tr key={s.id} className={`border-t ${isCurrent ? 'bg-primary/5' : ''}`}>
+                                        <td className="px-2 py-1.5 font-mono">{s.session_number}</td>
+                                        <td className="px-2 py-1.5">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                                        <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
+                                        <td className="px-2 py-1.5 text-right">
+                                          {isPending && !isRealizada && (
+                                            <Button
+                                              size="sm"
+                                              variant={isCurrent ? "default" : "outline"}
+                                              className="h-6 text-xs px-2"
+                                              onClick={() => handleConfirmSession(s)}
+                                              disabled={isConfirming || saving}
+                                            >
+                                              {isConfirming ? 'Confirmando...' : '✓ Confirmar'}
+                                            </Button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="space-y-2">
+                          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Nenhum ciclo ativo</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                              <Activity className="w-3.5 h-3.5 mr-1" /> Criar ciclo de tratamento
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {sessaoCycle?.status === 'concluido' && (
+                        <div className="space-y-2">
+                          <Badge variant="secondary" className="bg-green-500/10 text-green-700 border-green-500/30">Ciclo concluído</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                              <Activity className="w-3.5 h-3.5 mr-1" /> Iniciar novo ciclo
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. PTS VINCULADO */}
+                    <div className="rounded-lg border bg-card p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-primary" /> PTS Vinculado
+                      </h4>
+                      {sessaoPts ? (() => {
+                        const createdAt = new Date(sessaoPts.created_at);
+                        const now = new Date();
+                        const monthsDiff = (now.getFullYear() - createdAt.getFullYear()) * 12 + (now.getMonth() - createdAt.getMonth());
+                        const isOutdated = monthsDiff >= 12;
+                        const metaPeriod = monthsDiff < 3 ? 'curto' : monthsDiff < 6 ? 'medio' : 'longo';
+                        const profName = funcionarios.find(f => f.id === sessaoPts.professional_id)?.nome || '';
+                        return (
+                          <>
+                            {isOutdated && (
+                              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> PTS desatualizado — revisar
+                              </Badge>
+                            )}
+                            <div className="text-sm space-y-2">
+                              <div><span className="text-muted-foreground">Diagnóstico Funcional:</span><p className="text-foreground">{sessaoPts.diagnostico_funcional}</p></div>
+                              <div><span className="text-muted-foreground">Objetivos Terapêuticos:</span><p className="text-foreground">{sessaoPts.objetivos_terapeuticos}</p></div>
+                              
+                              {sessaoPtsSigtap.length > 0 && (
+                                <div className="space-y-1">
+                                  <span className="text-muted-foreground">Procedimentos SIGTAP:</span>
+                                  {sessaoPtsSigtap.map(s => (
+                                    <div key={s.procedimento_codigo} className="flex items-center gap-2 text-xs">
+                                      <Badge variant="secondary" className="font-mono">{s.procedimento_codigo}</Badge>
+                                      <span>{s.procedimento_nome}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {sessaoPtsCids.length > 0 && (
+                                <div className="space-y-1">
+                                  <span className="text-muted-foreground">CIDs:</span>
+                                  {sessaoPtsCids.map(c => (
+                                    <div key={c.cid_codigo} className="flex items-center gap-2 text-xs">
+                                      <Badge variant="secondary" className="font-mono">{c.cid_codigo}</Badge>
+                                      <span>{c.cid_descricao}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Highlighted meta based on period */}
+                              <div className={`rounded-md p-2 border ${metaPeriod === 'curto' ? 'bg-primary/5 border-primary/20' : metaPeriod === 'medio' ? 'bg-accent border-accent-foreground/10' : 'bg-muted/50 border-border'}`}>
+                                <span className="text-xs font-semibold text-muted-foreground">
+                                  {metaPeriod === 'curto' ? '🎯 Metas Curto Prazo (1-3 meses)' : metaPeriod === 'medio' ? '📋 Metas Médio Prazo (3-6 meses)' : '🔭 Metas Longo Prazo (6+ meses)'}
+                                </span>
+                                <p className="text-foreground text-sm mt-1">
+                                  {metaPeriod === 'curto' ? sessaoPts.metas_curto_prazo : metaPeriod === 'medio' ? sessaoPts.metas_medio_prazo : sessaoPts.metas_longo_prazo}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {sessaoPts.especialidades_envolvidas.map(e => (
+                                  <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>
+                                ))}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Criado em {new Date(sessaoPts.created_at).toLocaleDateString('pt-BR')}
+                                {profName && ` por ${profName}`}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })() : (
+                        <div className="space-y-2">
+                          <Badge variant="outline">PTS não cadastrado</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
+                              <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3-5. Sessão fields */}
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
+                      {currentSessionForRegistration && sessaoHighlightSOAP && (
+                        <div className="bg-primary/10 border border-primary/30 rounded-md p-2 mb-3 text-sm text-primary font-medium">
+                          Preencha a evolução para registrar esta sessão (Sessão {currentSessionForRegistration.session_number})
+                        </div>
+                      )}
+                      <div className="space-y-3">
+                        <div><Label>Procedimentos Realizados</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
+                        <div><Label>Resposta do Paciente</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
+                        <div><Label>Intercorrências</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Sem intercorrências" /></div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 🔴 PRONTUÁRIO 4 — URGÊNCIA */}
+            {form.tipo_registro === 'urgencia' && (
+              <div className="space-y-4">
+                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
+                  <h4 className="text-sm font-semibold text-foreground mb-3">🔴 Urgência</h4>
+                  <div className="space-y-3">
+                    {triagem && (
+                      <div className="bg-muted/50 rounded-md p-2 border text-xs space-y-1">
+                        <p className="font-semibold">Sinais Vitais (Triagem)</p>
+                        <div className="flex flex-wrap gap-3">
+                          {triagem.pressao_arterial && <span>PA: <strong>{triagem.pressao_arterial}</strong></span>}
+                          {triagem.frequencia_cardiaca && <span>FC: <strong>{triagem.frequencia_cardiaca} bpm</strong></span>}
+                          {triagem.temperatura && <span>Temp: <strong>{triagem.temperatura}°C</strong></span>}
+                          {triagem.saturacao_oxigenio && <span>SatO₂: <strong>{triagem.saturacao_oxigenio}%</strong></span>}
+                          {triagem.glicemia && <span>Glicemia: <strong>{triagem.glicemia} mg/dL</strong></span>}
+                        </div>
+                      </div>
+                    )}
+                    <div><Label>Queixa Imediata <span className="text-destructive">*</span></Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Queixa principal de urgência..." /></div>
+                    <div><Label>Conduta Rápida</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Conduta imediata adotada..." /></div>
+                    <div><Label>Encaminhamento</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Encaminhamento realizado (se aplicável)..." /></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 🟣 PRONTUÁRIO 5 — PROCEDIMENTO */}
+            {form.tipo_registro === 'procedimento' && (
+              <div className="space-y-4">
+                <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3">
+                  <h4 className="text-sm font-semibold text-foreground mb-3">🟣 Procedimento</h4>
+                  <div className="space-y-3">
+                    <div><Label>Tipo de Exame/Procedimento</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Tipo de procedimento realizado..." /></div>
+                    <div><Label>Resultado</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Resultado do procedimento/exame..." /></div>
+                    <div><Label>Observações</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Observações durante o procedimento..." /></div>
+                    <div><Label>Conduta Pós-Procedimento</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Orientações pós-procedimento..." /></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Legacy types: show generic fields */}
+            {!['avaliacao_inicial', 'retorno', 'sessao', 'urgencia', 'procedimento'].includes(form.tipo_registro) && (
+              <div className="space-y-3">
+                <div><Label>Queixa Principal</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
+                <div><Label>Anamnese</Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} /></div>
+                <div><Label>Sinais e Sintomas</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} /></div>
+                <div><Label>Exame Físico</Label><DebouncedTextarea rows={3} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} /></div>
+                <div><Label>Hipótese / Avaliação</Label><DebouncedTextarea rows={2} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} /></div>
+                <div><Label>Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} /></div>
+                <div><Label>Evolução</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} /></div>
+                <div><Label>Observações Gerais</Label><DebouncedTextarea rows={2} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} /></div>
+              </div>
+            )}
+
+            {/* Histórico de Procedimentos do Paciente */}
+            {isProfBlocoVisible('procedimentos') && form.paciente_id && pacienteProcHistory.length > 0 && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <Label className="mb-2 flex items-center gap-2 text-primary">
+                  <History className="h-4 w-4" /> Histórico do paciente
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {pacienteProcHistory.slice(0, 6).map((h) => (
+                    <Button
+                      key={h.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-auto py-1 text-xs"
+                      onClick={() => {
+                        if (!selectedProcIds.includes(h.id)) {
+                          setSelectedProcIds((prev) => [...prev, h.id]);
+                          setProcDetails(prev => ({ ...prev, [h.id]: { quantidade: 1, observacao: "" } }));
+                          setExpandedProcId(h.id);
+                          loadCidsForProc(h.id);
+                        } else {
+                          setExpandedProcId(h.id);
+                        }
+                      }}
+                    >
+                      <Clock className="h-3 w-3 mr-1" /> {h.nome}
+                      <span className="ml-1 text-muted-foreground">({h.ultima})</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Procedimentos Realizados — checkboxes */}
+            {isProfBlocoVisible('procedimentos') && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Procedimentos Realizados</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
+                    <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
+                  </Button>
+                </div>
+                {/* === Busca Unificada SIGTAP + CID-10 (índices GIN trigram) === */}
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
+                  <Input
+                    value={unifiedQuery}
+                    onChange={(e) => { setUnifiedQuery(e.target.value); setUnifiedOpen(true); }}
+                    onFocus={() => unifiedQuery.trim().length >= 2 && setUnifiedOpen(true)}
+                    onBlur={() => setTimeout(() => setUnifiedOpen(false), 150)}
+                    placeholder="🔎 Buscar SIGTAP ou CID-10 (código ou descrição)..."
+                    className="pl-7 h-9 text-sm border-primary/30 focus-visible:ring-primary"
+                  />
+                  {unifiedOpen && unifiedQuery.trim().length >= 2 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 rounded-md border bg-popover shadow-lg max-h-[420px] overflow-y-auto">
+                      {unifiedLoading && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Buscando em 4.990 procedimentos e 81k+ CIDs...</div>
+                      )}
+                      {!unifiedLoading && unifiedResults.procedimentos.length === 0 && unifiedResults.cids.length === 0 && (
+                        <div className="px-3 py-3 text-xs text-muted-foreground text-center">Nenhum resultado encontrado.</div>
+                      )}
+                      {unifiedResults.procedimentos.length > 0 && (
+                        <div>
+                          <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide bg-blue-500/10 text-blue-700 dark:text-blue-300 border-b">
+                            🔵 Procedimentos SIGTAP ({unifiedResults.procedimentos.length})
+                          </div>
+                          {unifiedResults.procedimentos.map((p) => {
+                            const already = selectedProcIds.includes(p.codigo);
+                            const viaCid = p.matched_by === 'cid';
+                            return (
+                              <button
+                                key={`p-${p.codigo}`}
+                                type="button"
+                                disabled={already}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => !already && handlePickProcedimento(p.codigo, p.nome)}
+                                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 ${already ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={viaCid && p.cid_codigo ? `Vinculado pelo CID ${p.cid_codigo} — ${p.cid_descricao ?? ''}` : undefined}
+                              >
+                                <span className="font-mono text-[10px] text-muted-foreground shrink-0">{p.codigo}</span>
+                                <span className="truncate flex-1">{p.nome}</span>
+                                {viaCid && (
+                                  <Badge variant="secondary" className="h-4 text-[9px] shrink-0">
+                                    via CID {p.cid_codigo}
+                                  </Badge>
+                                )}
+                                {already && <Badge variant="outline" className="h-4 text-[9px] shrink-0">já adicionado</Badge>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {unifiedResults.cids.length > 0 && (
+                        <div>
+                          <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-b">
+                            🟢 CID-10 ({unifiedResults.cids.length})
+                          </div>
+                          {unifiedResults.cids.map((c) => (
+                            <button
+                              key={`c-${c.codigo}`}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handlePickCid(c)}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2"
+                            >
+                              <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-300 shrink-0">{c.codigo}</span>
+                              <span className="truncate flex-1">{c.descricao}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Filtro local da lista de procedimentos disponíveis (mantido) */}
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={procSearch}
+                    onChange={(e) => setProcSearch(e.target.value)}
+                    placeholder="Filtrar lista abaixo (nome, código SIGTAP, especialidade)..."
+                    className="pl-7 h-8 text-sm"
+                  />
+                </div>
+
+                {/* Display selected procedures first */}
+                {selectedProcIds.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mb-2 bg-primary/5 rounded-lg p-2 border border-primary/20">
+                    <Label className="text-[10px] uppercase text-primary mb-1">Selecionados</Label>
+                    {selectedProcIds.map(id => {
+                      const proc = procedimentos.find(p => p.id === id);
+                      if (!proc) return null;
+                      
+                      // Check if it's already in the filtered list to avoid duplication if user wants
+                      // But for now, showing it here is enough.
+                      const isExpanded = expandedProcId === proc.id;
+                      const selCids = selectedCidsByProc[proc.id] || [];
+                      
+                      return (
+                        <div key={`sel-${proc.id}`} className="rounded-md border bg-background border-primary/40 p-1.5 flex items-center gap-2">
+                           <Checkbox
+                              id={`sel-proc-${proc.id}`}
+                              checked={true}
+                              onCheckedChange={(c) => {
+                                if (!c) setSelectedProcIds((prev) => prev.filter((pid) => pid !== id));
+                              }}
+                            />
+                            <div className="flex-1 truncate cursor-pointer" onClick={() => toggleExpandProc(proc.id)}>
+                              <span className="text-sm">
+                                <span className="font-mono text-[10px] text-muted-foreground mr-2">{proc.id}</span>
+                                {proc.nome}
+                              </span>
+                            </div>
+                            {selCids.length > 0 && (
+                              <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
+                            )}
+                            {pacienteProcHistory.find(h => h.id === proc.id)?.isGlobal && (
+                              <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-primary text-primary">Vínculo Global</Badge>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleExpandProc(proc.id)}>
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                            </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {filteredProcedimentos.length > 0 ? (
+                  <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
+                    {listedProcedimentos.map((proc) => {
+                      const checked = selectedProcIdSet.has(proc.id);
+                      const cids = cidsByProc[proc.id] || [];
+                      const selCids = selectedCidsByProc[proc.id] || [];
+                      const isCustom = proc.origem === 'PERSONALIZADO';
+                      const isExpanded = expandedProcId === proc.id;
+                      const cidQuery = (cidSearchByProc[proc.id] || '').trim().toLowerCase();
+                      const filteredCids = cidQuery
+                        ? cids.filter((c) => c.codigo.toLowerCase().includes(cidQuery) || (c.descricao || '').toLowerCase().includes(cidQuery))
+                        : cids;
+                      const searchResults = cidSearchResults[proc.id] || [];
+                      return (
+                        <div key={proc.id} className={`rounded-md border bg-background transition-colors ${checked ? 'border-primary/40' : ''}`}>
+                          <div
+                            className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 rounded-md px-2 py-1.5"
+                            onClick={() => toggleExpandProc(proc.id)}
+                          >
+                            <Checkbox
+                              id={`proc-${proc.id}`}
+                              checked={checked}
+                              onClick={(e) => e.stopPropagation()}
+                                onCheckedChange={(c) => {
+                                  setSelectedProcIds((prev) => c ? [...prev, proc.id] : prev.filter((id) => id !== proc.id));
+                                  if (c) {
+                                    loadCidsForProc(proc.id);
+                                    setProcDetails(prev => ({
+                                      ...prev,
+                                      [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                    }));
+                                  }
+                                }}
+                            />
+                            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 ${isExpanded ? '' : '-rotate-90'}`} />
+                            {isCustom
+                              ? <PencilIcon className="h-3 w-3 text-accent-foreground shrink-0" />
+                              : <Tag className="h-3 w-3 text-muted-foreground shrink-0" />}
+                            <span className="text-sm flex-1 truncate select-none">
+                              {!isCustom && (
+                                <span className="font-mono text-[11px] text-muted-foreground mr-2">{proc.id}</span>
+                              )}
+                              {proc.nome}
+                            </span>
+                            {checked && selCids.length > 0 && (
+                              <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
+                            )}
+                          </div>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 pt-1 border-t bg-muted/10 space-y-3">
+                              {proc.especialidade && (
+                                <p className="text-[11px] text-muted-foreground">{proc.especialidade}</p>
+                              )}
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-[10px] uppercase text-muted-foreground">Quantidade</Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={procDetails[proc.id]?.quantidade || 1}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 1;
+                                      setProcDetails(prev => ({
+                                        ...prev,
+                                        [proc.id]: { ...(prev[proc.id] || { observacao: "" }), quantidade: val }
+                                      }));
+                                    }}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] uppercase text-muted-foreground">Observação do Procedimento</Label>
+                                  <Input
+                                    value={procDetails[proc.id]?.observacao || ""}
+                                    onChange={(e) => {
+                                      setProcDetails(prev => ({
+                                        ...prev,
+                                        [proc.id]: { ...(prev[proc.id] || { quantidade: 1 }), observacao: e.target.value }
+                                      }));
+                                    }}
+                                    placeholder="Ex: Lado direito, observação clínica..."
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              {!isCustom && !proc.id.includes('.') && (
+                                <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                  <p className="text-[10px] text-amber-700">Procedimento sem SIGTAP não será validado para produção BPA-I.</p>
+                                </div>
+                              )}
+
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                                <Input
+                                  value={cidSearchByProc[proc.id] || ''}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setCidSearchByProc((m) => ({ ...m, [proc.id]: v }));
+                                    const q = v.trim();
+                                    if (q.length < 2) {
+                                      setCidSearchResults((m) => ({ ...m, [proc.id]: [] }));
+                                      return;
+                                    }
+                                    setCidSearchLoading((m) => ({ ...m, [proc.id]: true }));
+                                    procedureService.searchCids(q).then((res) => {
+                                      setCidSearchResults((m) => ({ ...m, [proc.id]: res }));
+                                      setCidSearchLoading((m) => ({ ...m, [proc.id]: false }));
+                                    });
+                                  }}
+                                  placeholder="Pesquisar CIDs (filtra sugeridos e busca novos)..."
+                                  className="pl-7 h-8 text-xs"
+                                />
+                              </div>
+
+                              {/* CIDs sugeridos (filtrados) */}
+                              <p className="text-[11px] font-medium text-muted-foreground mb-1">📋 Sugeridos</p>
+                              {!cidsByProc[proc.id] ? (
+                                <p className="text-xs text-muted-foreground italic">Carregando...</p>
+                              ) : filteredCids.length === 0 ? (
+                                <p className="text-xs text-muted-foreground italic">
+                                  {cids.length === 0 ? 'Nenhum CID vinculado.' : 'Nenhum CID sugerido corresponde à busca.'}
+                                </p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {filteredCids.map((c) => {
+                                    const isSel = selCids.includes(c.codigo);
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={c.codigo}
+                                        onClick={() => {
+                                          setSelectedCidsByProc((m) => ({
+                                            ...m,
+                                            [proc.id]: isSel
+                                              ? (m[proc.id] || []).filter((x) => x !== c.codigo)
+                                              : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
+                                          }));
+                                          // Auto-mark procedure when selecting a CID (rule: no CID without procedure)
+                                                if (!isSel && !selectedProcIdSet.has(proc.id)) {
+                                                setSelectedProcIds((prev) => [...prev, proc.id]);
+                                                setProcDetails(prev => ({
+                                                  ...prev,
+                                                  [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                                }));
+                                              }
+                                        }}
+                                        aria-pressed={isSel}
+                                        title={c.descricao || c.codigo}
+                                        className={
+                                          "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors " +
+                                          (isSel
+                                            ? "bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90"
+                                            : "bg-background text-foreground border-border hover:bg-muted")
+                                        }
+                                      >
+                                        {isSel && <CheckCircle className="h-3 w-3 shrink-0" />}
+                                        <span className="font-mono">{c.codigo}</span>
+                                        {c.descricao && (
+                                          <span className={isSel ? "opacity-90" : "text-muted-foreground"}>
+                                            · {c.descricao.slice(0, 36)}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Resultados externos da busca */}
+                              {cidSearchLoading[proc.id] && (
+                                <p className="text-xs text-muted-foreground italic mt-2">Buscando no catálogo...</p>
+                              )}
+                              {searchResults.length > 0 && (
+                                <>
+                                  <p className="text-[11px] font-medium text-muted-foreground mt-2 mb-1">🔎 Outros resultados</p>
+                                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                                    {searchResults
+                                      .filter((c) => !cids.some((x) => x.codigo === c.codigo))
+                                      .map((c) => {
+                                        const isSel = (selectedCidsByProc[proc.id] || []).includes(c.codigo);
+                                        return (
+                                          <button
+                                            type="button"
+                                            key={c.codigo}
+                                            onClick={() => {
+                                              setCidsByProc((m) => ({
+                                                ...m,
+                                                [proc.id]: (m[proc.id] || []).some((x) => x.codigo === c.codigo)
+                                                  ? (m[proc.id] || [])
+                                                  : [...(m[proc.id] || []), c],
+                                              }));
+                                              setSelectedCidsByProc((m) => ({
+                                                ...m,
+                                                [proc.id]: isSel
+                                                  ? (m[proc.id] || []).filter((x) => x !== c.codigo)
+                                                  : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
+                                              }));
+                                          if (!isSel && !selectedProcIdSet.has(proc.id)) {
+                                            setSelectedProcIds((prev) => [...prev, proc.id]);
+                                            setProcDetails(prev => ({
+                                              ...prev,
+                                              [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                            }));
+                                          }
+                                            }}
+                                            aria-pressed={isSel}
+                                            title={c.descricao || c.codigo}
+                                            className={
+                                              "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors " +
+                                              (isSel
+                                                ? "bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90"
+                                                : "bg-secondary text-secondary-foreground border-border hover:bg-muted")
+                                            }
+                                          >
+                                            {isSel ? <CheckCircle className="h-3 w-3 shrink-0" /> : <Plus className="h-3 w-3 shrink-0" />}
+                                            <span className="font-mono">{c.codigo}</span>
+                                            {c.descricao && (
+                                              <span className={isSel ? "opacity-90" : "text-muted-foreground"}>
+                                                · {c.descricao.slice(0, 36)}
+                                              </span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Nenhum procedimento disponível para sua profissão.</p>
+                )}
+              </div>
+            )}
+
+            <div>
+              <Label>Outro Procedimento</Label>
+              <DebouncedInput value={form.outro_procedimento} onChange={(e) => setForm((p) => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." />
+            </div>
+
+            <NovoProcedimentoModal
+              open={novoProcOpen}
+              onOpenChange={setNovoProcOpen}
+              defaultProfissao={user?.profissao}
+              criadoPor={user?.id}
+              onCreated={async (codigo) => {
+                const list = await procedureService.getActive();
+                setProcedimentos(list as any);
+                setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
+                setProcDetails(prev => ({ ...prev, [codigo]: { quantidade: 1, observacao: "" } }));
+                setExpandedProcId(codigo); // Auto-expand to show details/CIDs
+              }}
+            />
+
+            {isProfBlocoVisible('indicacao_retorno') && (
+            <div>
+              <Label>Indicação de Retorno</Label>
+              <Select value={form.indicacao_retorno || "no_indication"} onValueChange={(v) => setForm((p) => ({ ...p, indicacao_retorno: v === "no_indication" ? "" : v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {retornoOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            )}
+
+            {/* Prescrição de Medicamentos — ALL types */}
+            {isProfBlocoVisible('prescricao') && (
+            <PrescricaoMedicamentos
+              profissionalId={user?.id || ""}
+              value={listaPrescricao}
+              onChange={setListaPrescricao}
+              pacienteNome={form.paciente_nome}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
+              dataAtendimento={form.data_atendimento}
+              profissionalNome={user?.nome}
+              profissionalConselho={user?.numeroConselho}
+              profissionalTipoConselho={user?.tipoConselho}
+              profissionalUfConselho={user?.ufConselho}
+              unidadeNome={unidadeAtualNome}
+            />
+            )}
+
+            {/* Solicitação de Exames — ALL types */}
+            {isProfBlocoVisible('solicitacao_exames') && (
+            <SolicitacaoExames
+              profissionalId={user?.id || ""}
+              value={listaExames}
+              onChange={setListaExames}
+              pacienteNome={form.paciente_nome}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
+              dataAtendimento={form.data_atendimento}
+              profissionalNome={user?.nome}
+              profissionalConselho={user?.numeroConselho}
+              profissionalTipoConselho={user?.tipoConselho}
+              profissionalUfConselho={user?.ufConselho}
+              unidadeNome={unidadeAtualNome}
+            />
+            )}
+
+            {/* Resultado de Exame trazido pelo paciente (transcrição manual) */}
+            <div className="bg-muted/30 rounded-lg p-4 border space-y-3 mt-2 mb-2">
+              <div className="flex items-start gap-2">
+                <FlaskConical className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <Label className="text-sm font-semibold text-foreground">Resultado de Exame</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Use este campo para registrar exames trazidos pelo paciente ou analisados durante o atendimento.
+                  </p>
+                </div>
+              </div>
+              <DebouncedTextarea
+                value={form.resultado_exame}
+                onChange={(e) => setForm((p) => ({ ...p, resultado_exame: e.target.value }))}
+                placeholder="Registre os resultados de exames apresentados pelo paciente, valores relevantes, alterações encontradas e interpretação clínica..."
+                className="min-h-[140px] md:min-h-[160px] bg-background resize-y leading-relaxed"
+              />
+            </div>
+
+            {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
+            {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
+              <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-primary" /> Decisão Clínica (opcional)
+                </h3>
+                <div className="flex gap-2 flex-wrap">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
+                    <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                    <Activity className="w-3.5 h-3.5 mr-1" /> Criar Ciclo de Tratamento
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {editId && (
+              <div>
+                <Label className="text-muted-foreground">Motivo da Alteração <span className="text-xs">(opcional)</span></Label>
+                <DebouncedTextarea
+                  rows={2}
+                  value={form.motivo_alteracao}
+                  onChange={(e) => setForm((p) => ({ ...p, motivo_alteracao: e.target.value }))}
+                  placeholder="Ex: Correção de informação, complemento clínico..."
+                  className="border-warning/50"
                 />
+              </div>
+            )}
+
+            {form.paciente_id && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoricoCompletoOpen(true)}
+                className="w-full"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Ver Histórico Completo do Paciente
+              </Button>
+            )}
+
+            {/* Alerta inteligente de progresso do tratamento */}
+            {sessaoCycle && form.tipo_registro === 'sessao' && (() => {
+              const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
+              const remaining = sessaoCycle.total_sessions - completedCount;
+              const progressPercent = sessaoCycle.total_sessions > 0 ? Math.round((completedCount / sessaoCycle.total_sessions) * 100) : 0;
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Progresso do tratamento</span>
+                    <span className="font-semibold">{completedCount}/{sessaoCycle.total_sessions} sessões</span>
+                  </div>
+                  <Progress value={progressPercent} className="h-2" />
+                  <div className="flex items-center gap-2">
+                    {remaining === 0 ? (
+                      <Badge className="bg-green-500/10 text-green-700 border-green-500/30">✅ Tratamento concluído</Badge>
+                    ) : remaining <= 2 ? (
+                      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        Atenção: {remaining === 1 ? 'última sessão' : `faltam ${remaining} sessões`}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Faltam {remaining} sessões</Badge>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+          </div>{/* end scroll area */}
+          </div>{/* end left column */}
+
+          {/* Painel direito fixo — Histórico do paciente */}
+          <HistoricoPacientePanel
+            paciente={pacienteForPanel}
+            historico={patientHistory}
+            currentId={editId || undefined}
+            onView={handleViewProntuarioFromHistory}
+          />
+          </div>{/* end grid split */}
+
+            <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
+              {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
+              {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
+                <Button
+                  type="button"
+                  onClick={handleRegistrarSessaoOnly}
+                  disabled={saving}
+                  variant="outline"
+                  className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  <Activity className="w-4 h-4 mr-2" />
+                  Registrar Sessão {currentSessionForRegistration.session_number}
+                </Button>
+              )}
+
+              {canFinalize ? (
+                <>
+                  <Button onClick={() => { void handleSave(); }} disabled={saving} variant="outline" className="flex-1">
+                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
+                  </Button>
+                  <Button
+                    onClick={handleFinalizarAtendimento}
+                    disabled={saving}
+                    className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Finalizar Prontuário
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => { void handleSave(); }}
+                  disabled={saving}
+                  className="flex-1 gradient-primary text-primary-foreground"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  {editId ? "Salvar Alterações" : "Registrar Prontuário"}
+                </Button>
               )}
             </div>
+        </DialogContent>
+      </Dialog>
 
-            <Button className="w-full" onClick={handleSave} disabled={saving}>
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <CheckCircle className="w-4 h-4 mr-2" />
-              )}
-              {editId ? "Salvar Alterações" : "Registrar Prontuário"}
+      {/* PTS Dialog */}
+      <Dialog open={ptsOpen} onOpenChange={setPtsOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Criar PTS — {form.paciente_nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Diagnóstico Funcional *</Label>
+              <Textarea rows={3} value={ptsForm.diagnostico_funcional}
+                onChange={(e) => setPtsForm(p => ({ ...p, diagnostico_funcional: e.target.value }))}
+                placeholder="Descrição funcional global do paciente..." />
+            </div>
+            <div>
+              <Label>Objetivos Terapêuticos *</Label>
+              <Textarea rows={2} value={ptsForm.objetivos_terapeuticos}
+                onChange={(e) => setPtsForm(p => ({ ...p, objetivos_terapeuticos: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Curto Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_curto_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_curto_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Médio Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_medio_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_medio_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Longo Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_longo_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_longo_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="mb-2 block">Especialidades Envolvidas</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {PTS_SPECIALTIES.map(spec => (
+                  <div key={spec} className="flex items-center gap-2">
+                    <Checkbox id={`pts-spec-${spec}`}
+                      checked={ptsForm.especialidades.includes(spec)}
+                      onCheckedChange={(checked) => {
+                        setPtsForm(p => ({
+                          ...p,
+                          especialidades: checked
+                            ? [...p.especialidades, spec]
+                            : p.especialidades.filter(s => s !== spec)
+                        }));
+                      }} />
+                    <label htmlFor={`pts-spec-${spec}`} className="text-sm cursor-pointer">{spec}</label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <Button onClick={handleCreatePTS} disabled={ptsSaving} className="w-full gradient-primary text-primary-foreground">
+              {ptsSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Criar PTS
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Treatment Cycle Dialog */}
+      <Dialog open={cycleOpen} onOpenChange={setCycleOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Criar Ciclo de Tratamento — {form.paciente_nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Tipo de Tratamento *</Label>
+              <Input value={cycleForm.treatment_type}
+                onChange={(e) => setCycleForm(p => ({ ...p, treatment_type: e.target.value }))}
+                placeholder="Ex: Fisioterapia motora, Fonoterapia..." />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Frequência *</Label>
+                <Select value={cycleForm.frequency} onValueChange={(v) => {
+                  setCycleForm(p => ({ ...p, frequency: v, weekdays: [] }));
+                }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCY_OPTIONS_NEW.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Duração (meses)</Label>
+                <Input type="number" min={1} max={24} value={cycleForm.duration_months}
+                  onChange={(e) => setCycleForm(p => ({ ...p, duration_months: parseInt(e.target.value) || 1 }))} />
+              </div>
+            </div>
+
+            {isWeekdayFrequency(cycleForm.frequency) && (
+              <div>
+                <Label className="mb-2 block">Dias da Semana * (selecione {getMaxWeekdays(cycleForm.frequency)})</Label>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAY_LABELS.map(day => {
+                    const checked = cycleForm.weekdays.includes(day.value);
+                    const maxReached = cycleForm.weekdays.length >= getMaxWeekdays(cycleForm.frequency);
+                    return (
+                      <label key={day.value} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer text-sm transition-colors ${checked ? 'bg-primary/10 border-primary text-primary' : maxReached ? 'opacity-40 cursor-not-allowed border-border' : 'border-border hover:bg-accent'}`}>
+                        <Checkbox
+                          checked={checked}
+                          disabled={!checked && maxReached}
+                          onCheckedChange={(c) => {
+                            setCycleForm(p => ({
+                              ...p,
+                              weekdays: c
+                                ? [...p.weekdays, day.value]
+                                : p.weekdays.filter(d => d !== day.value),
+                            }));
+                          }}
+                        />
+                        {day.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {cycleForm.frequency === 'manual' && (
+              <div>
+                <Label>Sessões Previstas</Label>
+                <Input type="number" min={1} value={cycleForm.total_sessions}
+                  onChange={(e) => setCycleForm(p => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))} />
+              </div>
+            )}
+
+            <div>
+              <Label>Data de Início</Label>
+              <Input type="date" value={cycleForm.start_date}
+                onChange={(e) => setCycleForm(p => ({ ...p, start_date: e.target.value }))} />
+            </div>
+
+            <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+              <div>
+                <span className="text-muted-foreground">Sessões previstas: </span>
+                <strong>
+                  {cycleForm.frequency === 'manual'
+                    ? cycleForm.total_sessions
+                    : calculateTotalSessions(cycleForm.frequency, cycleForm.duration_months, cycleForm.weekdays)}
+                </strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Previsão término: </span>
+                <strong>
+                  {(() => {
+                    const total = cycleForm.frequency === 'manual' ? cycleForm.total_sessions : calculateTotalSessions(cycleForm.frequency, cycleForm.duration_months, cycleForm.weekdays);
+                    const ranges = buildBlockedRanges(bloqueios, user?.id || '', user?.unidadeId || '');
+                    const dates = generateSessionDates(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, total, ranges);
+                    return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+                  })()}
+                </strong>
+              </div>
+            </div>
+
+            <div>
+              <Label>Notas Clínicas</Label>
+              <Textarea rows={2} value={cycleForm.clinical_notes}
+                onChange={(e) => setCycleForm(p => ({ ...p, clinical_notes: e.target.value }))} />
+            </div>
+            <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg text-xs text-warning">
+              ℹ️ As sessões serão criadas com status <strong>Aguardando Agendamento</strong>. A recepção agendará cada sessão individualmente.
+            </div>
+            <Button onClick={handleCreateCycle} disabled={cycleSaving} className="w-full gradient-primary text-primary-foreground">
+              {cycleSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Criar Ciclo de Tratamento
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {loading ? (
+        <div className="space-y-3" aria-label="Carregando prontuários">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={`pr-skel-${i}`} className="shadow-card border-0">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-4 w-24 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-2/5" />
+                    <Skeleton className="h-3 w-3/5" />
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {Array.from({ length: 5 }).map((__, j) => (
+                      <Skeleton key={j} className="h-8 w-8 rounded-md" />
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-8 text-center">
+            <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">Nenhum prontuário encontrado.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div
+          ref={listParentRef}
+          className="overflow-auto rounded-lg"
+          style={{ height: "calc(100vh - 280px)", minHeight: 420, contain: "strict" }}
+        >
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const p = filtered[virtualRow.index];
+              if (!p) return null;
+              const isOwn = p.profissional_id === user?.id;
+              return (
+                <div
+                  key={p.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                    paddingBottom: 12,
+                  }}
+                  onMouseEnter={() => handleProntuarioHover(p.id)}
+                  onFocus={() => handleProntuarioHover(p.id)}
+                >
+                  <Card className="shadow-card border border-transparent hover:border-primary/30 hover:shadow-md transition-all duration-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-foreground">{p.paciente_nome}</p>
+                            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                              {new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}
+                            </span>
+                            {p.hora_atendimento && (
+                              <span className="text-xs text-muted-foreground">{p.hora_atendimento}</span>
+                            )}
+                            {p.indicacao_retorno &&
+                              p.indicacao_retorno !== "sem_retorno" &&
+                              p.indicacao_retorno !== "no_indication" && (
+                                <Badge variant="outline" className="text-xs text-primary border-primary/30">
+                                  ↩{" "}
+                                  {retornoOptions.find((o) => o.value === p.indicacao_retorno)?.label ||
+                                    p.indicacao_retorno}
+                                </Badge>
+                              )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Prof. {p.profissional_nome}
+                            {p.setor ? ` • ${p.setor}` : ""}
+                          </p>
+                          {p.procedimentos_texto && (
+                            <p className="text-xs text-muted-foreground mt-1">📋 {p.procedimentos_texto}</p>
+                          )}
+                          {p.queixa_principal && (
+                            <p className="text-sm text-foreground mt-1 line-clamp-2">
+                              <strong>QP:</strong> {p.queixa_principal}
+                            </p>
+                          )}
+                          {!isOwn && isProfissional && (
+                            <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
+                              <Lock className="w-3 h-3" />
+                              <span className="font-medium">Prontuário de outro profissional (somente leitura)</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setViewerProntuario(p)}
+                            title="Visualizar prontuário"
+                            aria-label="Visualizar prontuário"
+                          >
+                            <Eye className="w-4 h-4 text-primary" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setHistoricoPacienteId({ id: p.paciente_id, nome: p.paciente_nome });
+                              setHistoricoCompletoOpen(true);
+                            }}
+                            title="Histórico do paciente"
+                            aria-label="Histórico do paciente"
+                          >
+                            <History className="w-4 h-4 text-primary" />
+                          </Button>
+                          {(isProfissional ? isOwn : true) ? (
+                            <Button size="icon" variant="ghost" onClick={() => openEdit(p)} title="Editar">
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <Button size="icon" variant="ghost" disabled title="Somente leitura — prontuário de outro profissional">
+                              <Pencil className="w-4 h-4 opacity-40" />
+                            </Button>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => { downloadProntuarioPdf(p); toast.success("PDF gerado"); }}
+                            title="Baixar PDF"
+                            aria-label="Baixar PDF"
+                          >
+                            <FileDown className="w-4 h-4 text-primary" />
+                          </Button>
+                          <Button size="icon" variant="ghost" onClick={() => handlePrint(p)} title="Imprimir">
+                            <Printer className="w-4 h-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost" title="Mais ações" aria-label="Mais ações">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url;
+                                  a.download = `prontuario_${p.id}.json`;
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                  toast.success("JSON exportado");
+                                }}
+                              >
+                                <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  const link = `${window.location.origin}/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`;
+                                  navigator.clipboard.writeText(link);
+                                  toast.success("Link copiado");
+                                }}
+                              >
+                                <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    `/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`,
+                                  )
+                                }
+                              >
+                                <FileText className="w-3.5 h-3.5 mr-2" /> Abrir histórico completo
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {(canDelete || (isProfissional && isOwn)) && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="icon" variant="ghost" className="text-destructive">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Excluir prontuário?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Excluir o prontuário de {p.paciente_nome} (
+                                    {new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")})?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDelete(p)}
+                                    className="bg-destructive text-destructive-foreground"
+                                  >
+                                    Excluir
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div ref={printRef} className="hidden" />
+
+      {/* Modal Gerar Documento Clínico */}
+      {docModalOpen && (
+        <GerarDocumentoModal
+          open={docModalOpen}
+          onOpenChange={setDocModalOpen}
+          paciente={(() => {
+            const p = pacientes.find(x => x.id === queryPacienteId);
+            return p ? { id: p.id, nome: p.nome, cpf: p.cpf, cns: p.cns, data_nascimento: p.dataNascimento, cid: p.cid, especialidade_destino: '' } : undefined;
+          })()}
+          profissional={user ? { id: user.id, nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
+          unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
+          dataAtendimento={new Date().toLocaleDateString('pt-BR')}
+        />
+      )}
+
+      {/* Modal Encaminhamento Interno */}
+      {encInternoOpen && queryPacienteId && (() => {
+        const p = pacientes.find(x => x.id === queryPacienteId);
+        if (!p) return null;
+        return (
+          <EncaminhamentoInternoModal
+            open={encInternoOpen}
+            onOpenChange={setEncInternoOpen}
+            paciente={{
+              id: p.id,
+              nome: p.nome,
+              cpf: p.cpf,
+              cns: p.cns,
+              data_nascimento: p.dataNascimento,
+              cid: p.cid,
+              unidadeId: p.unidadeId,
+            }}
+          />
+        );
+      })()}
+
+      {/* Histórico Completo Modal */}
+      {(historicoPacienteId || queryPacienteId || form.paciente_id) && (
+        <HistoricoCompletoModal
+          open={historicoCompletoOpen}
+          onOpenChange={(open) => {
+            setHistoricoCompletoOpen(open);
+            if (!open) setHistoricoPacienteId(null);
+          }}
+          pacienteId={historicoPacienteId?.id || queryPacienteId || form.paciente_id}
+          pacienteNome={historicoPacienteId?.nome || queryPacienteNome || form.paciente_nome || "Paciente"}
+          unidades={unidades}
+          currentProfissionalId={user?.id}
+          onViewProntuario={(p) => { setViewerProntuario(p); setHistoricoCompletoOpen(false); }}
+        />
+      )}
+
+      {/* Drawer de visualização rápida do prontuário */}
+      <Sheet open={!!viewerProntuario} onOpenChange={(open) => !open && setViewerProntuario(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
+          {viewerProntuario && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Prontuário — {viewerProntuario.paciente_nome}
+                </SheetTitle>
+                <SheetDescription>
+                  {new Date(viewerProntuario.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}
+                  {viewerProntuario.hora_atendimento && ` às ${viewerProntuario.hora_atendimento}`}
+                  {" • "}Prof. {viewerProntuario.profissional_nome}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-4 space-y-4 text-sm">
+                {viewerProntuario.queixa_principal && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Queixa Principal</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.queixa_principal}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_subjetivo && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">S — Subjetivo</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_subjetivo}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_objetivo && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">O — Objetivo</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_objetivo}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_avaliacao && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">A — Avaliação</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_avaliacao}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_plano && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">P — Plano</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_plano}</p>
+                  </div>
+                )}
+                {viewerProntuario.evolucao && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Evolução</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.evolucao}</p>
+                  </div>
+                )}
+                {viewerProntuario.conduta && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Conduta</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.conduta}</p>
+                  </div>
+                )}
+                {viewerProntuario.procedimentos_texto && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Procedimentos</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.procedimentos_texto}</p>
+                  </div>
+                )}
+                {viewerProntuario.prescricao && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Prescrição</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.prescricao}</p>
+                  </div>
+                )}
+                {viewerProntuario.solicitacao_exames && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Exames Solicitados</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.solicitacao_exames}</p>
+                  </div>
+                )}
+                {viewerProntuario.resultado_exame && (
+                  <div className="bg-muted/30 rounded-lg p-3 border">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                      <FlaskConical className="w-3.5 h-3.5" /> Resultado de Exame
+                    </p>
+                    <p className="text-foreground whitespace-pre-wrap leading-relaxed">{viewerProntuario.resultado_exame}</p>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="my-4" />
+
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario); toast.success("PDF gerado"); }}>
+                  <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handlePrint(viewerProntuario)}>
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setHistoricoPacienteId({ id: viewerProntuario.paciente_id, nome: viewerProntuario.paciente_nome });
+                    setHistoricoCompletoOpen(true);
+                  }}
+                >
+                  <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
+                </Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
