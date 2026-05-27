@@ -1858,8 +1858,8 @@ const FilaEspera: React.FC = () => {
           </Card>
         ) : (
           filteredFila.map((f, i) => {
-            const prof = f.profissionalId ? funcionarios.find((fn) => fn.id === f.profissionalId) : null;
-            const unidade = unidades.find((u) => u.id === f.unidadeId);
+            const prof = f.profissionalId ? employeeMap.get(f.profissionalId) : null;
+            const unidade = unitMap.get(f.unidadeId);
             const reservaTime = getReservaTimeLeft(f.id);
             const isChamado = f.status === "chamado";
             const isActive = ["aguardando", "chamado", "em_atendimento"].includes(f.status);
