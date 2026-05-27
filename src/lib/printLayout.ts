@@ -70,7 +70,7 @@ const DEFAULT_TYPOGRAPHY: DocumentTypography = {
 };
 
 const DEFAULT_MARGINS: DocumentMargins = {
-  superior: 20,
+  superior: 25,
   inferior: 20,
   esquerda: 25,
   direita: 20,
