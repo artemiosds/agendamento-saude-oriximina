@@ -3266,6 +3266,18 @@ const ProntuarioPage: React.FC = () => {
                         <div><Label>Intercorrências</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Sem intercorrências" /></div>
                       </div>
                     </div>
+                    {/* Specific fields for Session */}
+                    <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4">
+                      <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                        Registro de Sessão
+                      </h4>
+                      <DynamicProntuarioFields
+                        fields={structureFields}
+                        values={form}
+                        onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                      />
+                    </div>
                   </>
                 )}
               </div>
