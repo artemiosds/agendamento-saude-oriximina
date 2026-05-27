@@ -63,6 +63,7 @@ interface AdminCampoEspecialidade {
   isBuiltin: boolean;
   order: number;
   opcoes?: string[];
+  tipos_prontuario?: string[];
 }
 
 interface AdminEspecialidadeConfig {
