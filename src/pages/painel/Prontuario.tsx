@@ -59,6 +59,7 @@ import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import EncaminhamentoInternoModal from "@/components/EncaminhamentoInternoModal";
 import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
+import DynamicProntuarioFields from "@/components/prontuario/DynamicProntuarioFields";
 import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
