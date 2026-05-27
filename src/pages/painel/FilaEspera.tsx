@@ -170,7 +170,11 @@ const FilaEspera: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
-  const resolvePaciente = usePacienteNomeResolver();
+  const { pacientes: allPatients } = useData();
+  const resolvePaciente = useCallback((pacienteId: string, fallbackNome?: string): string => {
+    const pac = allPatients.find(p => p.id === pacienteId);
+    return pac?.nome || fallbackNome || 'Paciente não encontrado';
+  }, [allPatients]);
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
@@ -192,7 +196,7 @@ const FilaEspera: React.FC = () => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    const t = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
     return () => window.clearTimeout(t);
   }, [searchQuery]);
 
