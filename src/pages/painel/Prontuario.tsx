@@ -575,7 +575,7 @@ const ProntuarioPage: React.FC = () => {
     }));
 
     if (shouldSubmitSession) {
-      const effectiveError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
+      const effectiveError = null;
       if (effectiveError) {
         setSoapErrors(true);
         setSessaoHighlightSOAP(true);
@@ -610,7 +610,7 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const sessionSoapValidationError = useMemo(
-    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(effectiveProfissao) }),
+    () => getSoapValidationError(sessionSoapPayload, { required: false }),
     [sessionSoapPayload, soapEnabled, effectiveProfissao],
   );
 
@@ -1204,13 +1204,7 @@ const ProntuarioPage: React.FC = () => {
       return false;
     }
     const soapPayload = sessionSoapPayload;
-    const soapValidationError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
-    if (soapValidationError) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error(soapValidationError);
-      return false;
-    }
+    const soapValidationError = null;
     setSoapErrors(false);
     setSaving(true);
     // CRÍTICO: cancela autosave pendente e aguarda autosave em andamento para
@@ -1818,13 +1812,7 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     const soapPayload = sessionSoapPayload;
-    const soapError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
-    if (soapError) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error(soapError);
-      return;
-    }
+    const soapError = null;
     setSoapErrors(false);
     setSaving(true);
     let insertedNewProntuario = false;
@@ -3315,7 +3303,7 @@ const ProntuarioPage: React.FC = () => {
                       <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
                       {currentSessionForRegistration && sessaoHighlightSOAP && (
                         <div className="bg-primary/10 border border-primary/30 rounded-md p-2 mb-3 text-sm text-primary font-medium">
-                          Preencha a evolução para registrar esta sessão (Sessão {currentSessionForRegistration.session_number})
+                          Registre os dados da evolução para a Sessão {currentSessionForRegistration.session_number}
                         </div>
                       )}
                       <div className="space-y-3">
