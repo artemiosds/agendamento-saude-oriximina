@@ -213,7 +213,8 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     procs: procs || [],
     exames: exames || [],
     configTipos,
-    configEspecialidades
+    configEspecialidades,
+    allConfigs: sysCfg?.configuracoes as any
   };
 }
 
