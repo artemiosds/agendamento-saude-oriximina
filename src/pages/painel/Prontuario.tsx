@@ -416,6 +416,7 @@ const ProntuarioPage: React.FC = () => {
   const [agendarSessaoSalaId, setAgendarSessaoSalaId] = useState("");
   const [agendandoSessao, setAgendandoSessao] = useState(false);
   const [remarcarSaving, setRemarcarSaving] = useState(false);
+  const [selectSessionOpen, setSelectSessionOpen] = useState(false);
 
   const loadSessaoData = async (patientId: string, _professionalId?: string) => {
     setSessaoDataLoading(true);
