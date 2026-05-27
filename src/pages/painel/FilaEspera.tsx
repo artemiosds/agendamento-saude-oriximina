@@ -2365,11 +2365,11 @@ const FilaEspera: React.FC = () => {
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes da Fila">
         {detalheFila &&
           (() => {
-            const pac = pacientes.find((p) => p.id === detalheFila.pacienteId);
-            const prof = detalheFila.profissionalId
-              ? funcionarios.find((fn) => fn.id === detalheFila.profissionalId)
+            const pac = pacienteMap.get(detalheFila.pacienteId);
+            const prof = detalheFila.profissionalId 
+              ? employeeMap.get(detalheFila.profissionalId)
               : null;
-            const unidade = unidades.find((u) => u.id === detalheFila.unidadeId);
+            const unidade = unitMap.get(detalheFila.unidadeId);
             return (
               <>
                 <Secao titulo="Dados do Paciente">
