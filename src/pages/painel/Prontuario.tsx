@@ -1985,7 +1985,7 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  const handlePrint = (p: ProntuarioDB) => {
+  const handlePrint = (p: ProntuarioDB, extraSections?: { title: string; content: string }[]) => {
     const pac = pacientes.find((px) => px.id === p.paciente_id);
     logAction({
       acao: "prontuario_exportado_pdf",
@@ -1996,7 +1996,7 @@ const ProntuarioPage: React.FC = () => {
       detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || "" },
     });
     const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
-    const sections = [
+    const baseSections = [
       { title: "Queixa Principal", content: p.queixa_principal },
       { title: "Anamnese", content: p.anamnese },
       { title: "Sinais e Sintomas", content: p.sinais_sintomas },
@@ -2009,7 +2009,11 @@ const ProntuarioPage: React.FC = () => {
       { title: "Procedimentos", content: p.procedimentos_texto },
       { title: "Observações Gerais", content: p.observacoes },
       { title: "Indicação de Retorno", content: p.indicacao_retorno },
-    ]
+    ];
+
+    const allSections = extraSections ? [...baseSections, ...extraSections] : baseSections;
+
+    const sectionsHtml = allSections
       .filter((s) => s.content)
       .map(
         (s) =>
@@ -2025,7 +2029,7 @@ const ProntuarioPage: React.FC = () => {
         <div><span class="info-label">Unidade:</span><br/><span class="info-value">${unidadeNome}</span></div>
         <div><span class="info-label">Setor:</span><br/><span class="info-value">${p.setor || "-"}</span></div>
       </div>
-      ${sections}
+      ${sectionsHtml}
       <div class="signature">
         <div class="signature-line"></div>
         <div class="name">${p.profissional_nome}</div>
