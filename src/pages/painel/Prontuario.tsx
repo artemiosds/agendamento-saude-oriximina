@@ -575,7 +575,7 @@ const ProntuarioPage: React.FC = () => {
     }));
 
     if (shouldSubmitSession) {
-      const effectiveError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
+      const effectiveError = null;
       if (effectiveError) {
         setSoapErrors(true);
         setSessaoHighlightSOAP(true);
