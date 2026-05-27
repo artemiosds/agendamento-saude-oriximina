@@ -2784,176 +2784,290 @@ const ProntuarioPage: React.FC = () => {
                 ) : (
                   <>
                     {/* 1. CICLO DE TRATAMENTO ATIVO */}
-                    <div className="rounded-lg border bg-card p-4 space-y-3">
-                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
-                      </h4>
-                      {sessaoCycle ? (
-                        <>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div><span className="text-muted-foreground">Tipo:</span> <strong>{sessaoCycle.treatment_type}</strong></div>
-                            <div><span className="text-muted-foreground">Status:</span>{' '}
-                              <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-xs">
-                                {sessaoCycle.status === 'em_andamento' ? 'Ativo' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
-                              </Badge>
+                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
+                        </h4>
+                        {sessaoCycle && (
+                          <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-[10px] h-5">
+                            {sessaoCycle.status === 'em_andamento' ? 'Em andamento' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="p-4 space-y-4">
+                        {sessaoCycle ? (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div className="flex items-start gap-2">
+                                <Activity className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Tratamento</span>
+                                  <strong className="text-foreground">{sessaoCycle.treatment_type}</strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <Target className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Especialidade</span>
+                                  <strong className="text-foreground">{sessaoCycle.specialty || '—'}</strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <User className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Profissional</span>
+                                  <strong className="text-foreground">
+                                    {funcionarios.find(f => f.id === sessaoCycle.professional_id)?.nome || '—'}
+                                  </strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <MapPin className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Unidade</span>
+                                  <strong className="text-foreground">
+                                    {unidades.find(u => u.id === sessaoCycle.unit_id)?.nome || '—'}
+                                  </strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <Calendar className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Início</span>
+                                  <strong className="text-foreground">{new Date(sessaoCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <Clock className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Previsão</span>
+                                  <strong className="text-foreground">{sessaoCycle.end_date_predicted ? new Date(sessaoCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</strong>
+                                </div>
+                              </div>
                             </div>
-                            <div><span className="text-muted-foreground">Início:</span> <strong>{new Date(sessaoCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</strong></div>
-                            <div><span className="text-muted-foreground">Previsão:</span> <strong>{sessaoCycle.end_date_predicted ? new Date(sessaoCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</strong></div>
-                            <div><span className="text-muted-foreground">Frequência:</span> <strong>{sessaoCycle.frequency}</strong></div>
-                          </div>
-                          {/* Progress bar */}
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>Sessão {sessaoCycle.sessions_done} de {sessaoCycle.total_sessions} realizadas</span>
-                              <span>{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</span>
+
+                            <div className="pt-2 border-t space-y-2">
+                              <div className="flex justify-between text-xs items-center">
+                                <span className="font-medium text-muted-foreground uppercase tracking-tight">Progresso do Ciclo</span>
+                                <Badge variant="secondary" className="h-4 text-[10px]">{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</Badge>
+                              </div>
+                              <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-1.5" />
+                              <div className="flex justify-between text-[10px] text-muted-foreground">
+                                <span>{sessaoCycle.sessions_done} realizadas</span>
+                                <span>Total: {sessaoCycle.total_sessions} sessões</span>
+                              </div>
                             </div>
-                            <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-2" />
-                          </div>
-                          {/* Session list */}
-                          {sessaoCycleSessions.length > 0 && (
-                            <div className="border rounded-md overflow-hidden">
-                              <table className="w-full text-xs">
-                                <thead className="bg-muted/50">
-                                  <tr>
-                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Nº</th>
-                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Data</th>
-                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Status</th>
-                                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Ação</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {sessaoCycleSessions.map(s => {
-                                    const isCurrent = currentSessionForRegistration?.id === s.id;
-                                    const isRealizada = s.status === 'realizada';
-                                    const isPending = !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(s.status);
-                                    const isConfirming = confirmingSessionId === s.id;
-                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : isPending ? '⏳' : '❌';
-                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Atual' : s.status === 'falta' || s.status === 'paciente_faltou' ? 'Falta' : s.status === 'cancelada' ? 'Cancelada' : 'Aguardando';
-                                    return (
-                                      <tr key={s.id} className={`border-t ${isCurrent ? 'bg-primary/5' : ''}`}>
-                                        <td className="px-2 py-1.5 font-mono">{s.session_number}</td>
-                                        <td className="px-2 py-1.5">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-                                        <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
-                                        <td className="px-2 py-1.5 text-right">
-                                          {isPending && !isRealizada && (
-                                            <Button
-                                              size="sm"
-                                              variant={isCurrent ? "default" : "outline"}
-                                              className="h-6 text-xs px-2"
-                                              onClick={() => handleConfirmSession(s)}
-                                              disabled={isConfirming || saving}
-                                            >
-                                              {isConfirming ? 'Confirmando...' : '✓ Confirmar'}
-                                            </Button>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
+
+                            {(() => {
+                              const nextSession = sessaoCycleSessions.find(s => s.status === 'agendada' && s.scheduled_date >= new Date().toISOString().split('T')[0]);
+                              const waitingSchedule = sessaoCycleSessions.filter(s => s.status === 'pendente_agendamento' || !s.appointment_id).length;
+                              
+                              if (!nextSession && waitingSchedule === 0) return null;
+                              
+                              return (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                                  {nextSession && (
+                                    <div className="bg-primary/5 rounded-lg p-2 border border-primary/10">
+                                      <span className="text-[9px] text-primary uppercase font-bold tracking-widest block">Próxima Sessão</span>
+                                      <div className="flex items-center justify-between mt-1">
+                                        <span className="text-xs font-semibold">{new Date(nextSession.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">#{nextSession.session_number}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {waitingSchedule > 0 && (
+                                    <div className="bg-amber-500/5 rounded-lg p-2 border border-amber-500/10">
+                                      <span className="text-[9px] text-amber-600 uppercase font-bold tracking-widest block">Aguardando Agenda</span>
+                                      <div className="flex items-center justify-between mt-1">
+                                        <span className="text-xs font-semibold">{waitingSchedule} sessões</span>
+                                        <span className="text-[10px] text-muted-foreground">Pendente</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            <div className="flex flex-wrap gap-2 pt-2 border-t">
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/tratamentos?cycleId=${sessaoCycle.id}`)}
+                              >
+                                <Eye className="w-3 h-3" /> Detalhes
+                              </Button>
+                              <Button 
+                                type="button"
+                                variant="default" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5 gradient-primary"
+                                onClick={handleRegistrarSessaoClick}
+                              >
+                                <CheckCircle className="w-3 h-3" /> Registrar sessão
+                              </Button>
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/tratamentos?cycleId=${sessaoCycle.id}&action=schedule`)}
+                              >
+                                <Calendar className="w-3 h-3" /> Agendar
+                              </Button>
+                              {!sessaoPts && (
+                                <Button 
+                                  type="button"
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="h-8 text-xs gap-1.5 border-purple-200 text-purple-600 hover:bg-purple-50"
+                                  onClick={() => setPtsOpen(true)}
+                                >
+                                  <Link2 className="w-3 h-3" /> Vincular PTS
+                                </Button>
+                              )}
                             </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="space-y-2">
-                          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Nenhum ciclo ativo</Badge>
-                          <div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
-                              <Activity className="w-3.5 h-3.5 mr-1" /> Criar ciclo de tratamento
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-6 text-center space-y-3">
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              <Activity className="w-5 h-5 text-muted-foreground/60" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">Nenhum ciclo de tratamento ativo.</p>
+                              <p className="text-xs text-muted-foreground max-w-[280px]">Crie um ciclo para acompanhar o progresso terapêutico.</p>
+                            </div>
+                            <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setCycleOpen(true)}>
+                              <Plus className="w-3.5 h-3.5 mr-1" /> Criar ciclo
                             </Button>
                           </div>
-                        </div>
-                      )}
-                      {sessaoCycle?.status === 'concluido' && (
-                        <div className="space-y-2">
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-700 border-green-500/30">Ciclo concluído</Badge>
-                          <div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
-                              <Activity className="w-3.5 h-3.5 mr-1" /> Iniciar novo ciclo
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     {/* 2. PTS VINCULADO */}
-                    <div className="rounded-lg border bg-card p-4 space-y-3">
-                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-primary" /> PTS Vinculado
-                      </h4>
-                      {sessaoPts ? (() => {
-                        const createdAt = new Date(sessaoPts.created_at);
-                        const now = new Date();
-                        const monthsDiff = (now.getFullYear() - createdAt.getFullYear()) * 12 + (now.getMonth() - createdAt.getMonth());
-                        const isOutdated = monthsDiff >= 12;
-                        const metaPeriod = monthsDiff < 3 ? 'curto' : monthsDiff < 6 ? 'medio' : 'longo';
-                        const profName = funcionarios.find(f => f.id === sessaoPts.professional_id)?.nome || '';
-                        return (
-                          <>
-                            {isOutdated && (
-                              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
-                                <AlertTriangle className="w-3 h-3 mr-1" /> PTS desatualizado — revisar
-                              </Badge>
-                            )}
-                            <div className="text-sm space-y-2">
-                              <div><span className="text-muted-foreground">Diagnóstico Funcional:</span><p className="text-foreground">{sessaoPts.diagnostico_funcional}</p></div>
-                              <div><span className="text-muted-foreground">Objetivos Terapêuticos:</span><p className="text-foreground">{sessaoPts.objetivos_terapeuticos}</p></div>
-                              
-                              {sessaoPtsSigtap.length > 0 && (
-                                <div className="space-y-1">
-                                  <span className="text-muted-foreground">Procedimentos SIGTAP:</span>
-                                  {sessaoPtsSigtap.map(s => (
-                                    <div key={s.procedimento_codigo} className="flex items-center gap-2 text-xs">
-                                      <Badge variant="secondary" className="font-mono">{s.procedimento_codigo}</Badge>
-                                      <span>{s.procedimento_nome}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <ClipboardList className="w-4 h-4 text-primary" /> PTS Vinculado
+                        </h4>
+                        {sessaoPts && (
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] h-5",
+                            sessaoPts.status === 'ativo' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-muted text-muted-foreground border-border'
+                          )}>
+                            {sessaoPts.status === 'ativo' ? 'Ativo' : sessaoPts.status}
+                          </Badge>
+                        )}
+                      </div>
 
-                              {sessaoPtsCids.length > 0 && (
-                                <div className="space-y-1">
-                                  <span className="text-muted-foreground">CIDs:</span>
-                                  {sessaoPtsCids.map(c => (
-                                    <div key={c.cid_codigo} className="flex items-center gap-2 text-xs">
-                                      <Badge variant="secondary" className="font-mono">{c.cid_codigo}</Badge>
-                                      <span>{c.cid_descricao}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Highlighted meta based on period */}
-                              <div className={`rounded-md p-2 border ${metaPeriod === 'curto' ? 'bg-primary/5 border-primary/20' : metaPeriod === 'medio' ? 'bg-accent border-accent-foreground/10' : 'bg-muted/50 border-border'}`}>
-                                <span className="text-xs font-semibold text-muted-foreground">
-                                  {metaPeriod === 'curto' ? '🎯 Metas Curto Prazo (1-3 meses)' : metaPeriod === 'medio' ? '📋 Metas Médio Prazo (3-6 meses)' : '🔭 Metas Longo Prazo (6+ meses)'}
-                                </span>
-                                <p className="text-foreground text-sm mt-1">
-                                  {metaPeriod === 'curto' ? sessaoPts.metas_curto_prazo : metaPeriod === 'medio' ? sessaoPts.metas_medio_prazo : sessaoPts.metas_longo_prazo}
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap gap-1">
+                      <div className="p-4 space-y-4">
+                        {sessaoPts ? (
+                          <>
+                            <div className="space-y-3">
+                              <div className="flex flex-wrap gap-1.5">
                                 {sessaoPts.especialidades_envolvidas.map(e => (
-                                  <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>
+                                  <Badge key={e} variant="secondary" className="text-[10px] h-5 px-2 bg-primary/5 text-primary border-primary/10 hover:bg-primary/10">{e}</Badge>
                                 ))}
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                Criado em {new Date(sessaoPts.created_at).toLocaleDateString('pt-BR')}
-                                {profName && ` por ${profName}`}
+
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Diagnóstico Funcional</span>
+                                <p className="text-sm text-foreground leading-relaxed line-clamp-2">{sessaoPts.diagnostico_funcional}</p>
+                              </div>
+
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Objetivos Terapêuticos</span>
+                                <p className="text-sm text-foreground leading-relaxed line-clamp-2">{sessaoPts.objetivos_terapeuticos}</p>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-2">
+                                <div className="rounded-lg p-2.5 border bg-primary/5 border-primary/10">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Target className="w-3 h-3 text-primary" />
+                                    <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Metas de Curto Prazo</span>
+                                  </div>
+                                  <p className="text-xs text-foreground line-clamp-2">{sessaoPts.metas_curto_prazo || 'Não informada'}</p>
+                                </div>
+                                <div className="rounded-lg p-2.5 border bg-muted/30 border-border">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <ClipboardList className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Metas Médio/Longo Prazo</span>
+                                  </div>
+                                  <p className="text-xs text-foreground line-clamp-2">{sessaoPts.metas_medio_prazo || sessaoPts.metas_longo_prazo || 'Não informada'}</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 text-[10px] text-muted-foreground border-t">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" /> {new Date(sessaoPts.created_at).toLocaleDateString('pt-BR')}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <User className="w-3 h-3" /> {funcionarios.find(f => f.id === sessaoPts.professional_id)?.nome || '—'}
+                                </span>
                               </div>
                             </div>
+
+                            <div className="flex flex-wrap gap-2 pt-2 border-t">
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/pts?id=${sessaoPts.id}`)}
+                              >
+                                <Eye className="w-3 h-3" /> Ver PTS
+                              </Button>
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/pts?id=${sessaoPts.id}&edit=true`)}
+                              >
+                                <Pencil className="w-3 h-3" /> Editar
+                              </Button>
+                              {!sessaoCycle?.pts_id && sessaoCycle && (
+                                <Button 
+                                  type="button"
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="h-8 text-xs gap-1.5 border-primary/20 text-primary hover:bg-primary/5"
+                                  onClick={async () => {
+                                    const { error } = await supabase
+                                      .from('treatment_cycles')
+                                      .update({ pts_id: sessaoPts.id })
+                                      .eq('id', sessaoCycle.id);
+                                    if (error) toast.error('Erro ao vincular PTS');
+                                    else {
+                                      toast.success('PTS vinculado com sucesso');
+                                      loadSessaoData(sessaoCycle.patient_id);
+                                    }
+                                  }}
+                                >
+                                  <Link2 className="w-3 h-3" /> Vincular ao Ciclo
+                                </Button>
+                              )}
+                            </div>
                           </>
-                        );
-                      })() : (
-                        <div className="space-y-2">
-                          <Badge variant="outline">PTS não cadastrado</Badge>
-                          <div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
-                              <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-6 text-center space-y-3">
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              <ClipboardList className="w-5 h-5 text-muted-foreground/60" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">PTS não cadastrado.</p>
+                              <p className="text-xs text-muted-foreground max-w-[280px]">Crie um Projeto Terapêutico Singular para registrar objetivos e metas.</p>
+                            </div>
+                            <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setPtsOpen(true)}>
+                              <Plus className="w-3.5 h-3.5 mr-1" /> Criar PTS
                             </Button>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     {/* 3-5. Sessão fields */}
