@@ -1612,27 +1612,32 @@ const Agenda: React.FC = () => {
     if (!faltaTarget) return;
     const ag = faltaTarget;
 
-    if (ag.status === "falta" || ag.status === "concluido") {
-      toast.error("Esta sessão já possui registro.");
-      setFaltaTarget(null);
-      return;
-    }
+    try {
+      if (ag.status === "falta" || ag.status === "concluido") {
+        toast.error("Esta sessão já possui registro.");
+        setFaltaTarget(null);
+        return;
+      }
 
-    const obsAnterior = ag.observacoes || "";
-    const detalheFalta = [
-      `[FALTA ${dados.tipoFalta.toUpperCase()}]`,
-      dados.documento ? `Documento: ${dados.documento}` : "",
-      dados.descricao ? `Motivo: ${dados.descricao}` : "",
-      `Por: ${user?.nome || "Sistema"} | Em: ${new Date().toLocaleString("pt-BR")}`,
-    ].filter(Boolean).join(" | ");
-    const novaObs = `${obsAnterior}\n${detalheFalta}`.trim();
+      const obsAnterior = ag.observacoes || "";
+      const detalheFalta = [
+        `[FALTA ${dados.tipoFalta.toUpperCase()}]`,
+        dados.documento ? `Documento: ${dados.documento}` : "",
+        dados.descricao ? `Motivo: ${dados.descricao}` : "",
+        `Por: ${user?.nome || "Sistema"} | Em: ${new Date().toLocaleString("pt-BR")}`,
+      ].filter(Boolean).join(" | ");
+      const novaObs = `${obsAnterior}\n${detalheFalta}`.trim();
 
-    await updateAgendamento(ag.id, { status: "falta" as any });
-    await (supabase as any).from("agendamentos").update({
-      observacoes: novaObs,
-      tipo_falta: dados.tipoFalta,
-      falta_justificativa: dados.descricao || dados.documento || null,
-    }).eq("id", ag.id);
+      const { error: updateError } = await (supabase as any).from("agendamentos").update({
+        status: "falta",
+        observacoes: novaObs,
+        tipo_falta: dados.tipoFalta,
+        falta_justificativa: dados.descricao || dados.documento || null,
+      }).eq("id", ag.id);
+
+      if (updateError) throw updateError;
+      
+      await updateAgendamento(ag.id, { status: "falta" as any });
 
     // Update linked treatment session
     try {
