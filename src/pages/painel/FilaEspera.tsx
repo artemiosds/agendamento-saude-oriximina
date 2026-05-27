@@ -413,7 +413,7 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, allPatients, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery, resolvePaciente]);
+  }, [fila, pacienteMap, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery, resolvePaciente]);
 
   const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
   const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;
