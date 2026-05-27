@@ -1353,7 +1353,7 @@ const FilaEspera: React.FC = () => {
                 />
                 {form.pacienteNome.length >= 2 && !form.pacienteId && (
                   <div className="mt-1 max-h-32 overflow-y-auto border rounded-md bg-background">
-                    {allPatients
+                    {pacientes
                       .filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase()))
                       .slice(0, 5)
                       .map((p) => (
@@ -1366,7 +1366,7 @@ const FilaEspera: React.FC = () => {
                           <span className="text-muted-foreground ml-2">— {p.telefone}</span>
                         </button>
                       ))}
-                    {allPatients.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
+                    {pacientes.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
                       0 && (
                       <div className="px-3 py-2 text-sm text-muted-foreground italic">Nenhum paciente encontrado</div>
                     )}
