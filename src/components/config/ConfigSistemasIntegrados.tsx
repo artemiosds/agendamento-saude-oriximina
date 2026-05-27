@@ -82,16 +82,23 @@ const ConfigSistemasIntegrados: React.FC = () => {
       unidade_id: editing.unidade_id ?? userUnidade,
       criado_por: user?.usuario || '',
     };
-    let error;
+    
+    let result;
     if (editing.id) {
-      ({ error } = await supabase.from('sistemas_integrados').update(payload).eq('id', editing.id));
+      result = await supabase.from('sistemas_integrados').update(payload).eq('id', editing.id).select().single();
     } else {
-      ({ error } = await supabase.from('sistemas_integrados').insert(payload));
+      result = await supabase.from('sistemas_integrados').insert(payload).select().single();
     }
+    
     setSaving(false);
-    if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
+    if (result.error) { 
+      toast.error('Erro ao salvar: ' + result.error.message); 
+      return; 
+    }
+    
     toast.success('Sistema salvo.');
-    setEditing(null);
+    // Atualiza o estado de edição com os dados salvos (incluindo o ID novo se for o caso)
+    setEditing(result.data);
     carregar();
   };
 
