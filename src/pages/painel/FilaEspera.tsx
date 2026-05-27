@@ -1348,7 +1348,7 @@ const FilaEspera: React.FC = () => {
                           <span className="text-muted-foreground ml-2">— {p.telefone}</span>
                         </button>
                       ))}
-                    {pacientes.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
+                    {allPatients.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
                       0 && (
                       <div className="px-3 py-2 text-sm text-muted-foreground italic">Nenhum paciente encontrado</div>
                     )}
