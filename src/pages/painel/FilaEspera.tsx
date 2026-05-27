@@ -955,7 +955,7 @@ const FilaEspera: React.FC = () => {
       return;
     }
     const prof = funcionarios.find((fn) => fn.id === rescheduleSlot.profissionalId);
-    const pac = pacientes.find((p) => p.id === rescheduleFilaItem.pacienteId);
+    const pac = allPatients.find((p) => p.id === rescheduleFilaItem.pacienteId);
     const agId = `ag${Date.now()}`;
     const { error } = await supabase.from("agendamentos").insert({
       id: agId,
