@@ -4,12 +4,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
+import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, CheckCircle, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const emptyForm = {
   paciente_id: "",
@@ -59,7 +61,7 @@ const ProntuarioPage: React.FC = () => {
   const [customData, setCustomData] = useState<Record<string, any>>({});
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
-  const { visibleBlocks, isBlocoVisible } = useProntuarioConfig(
+  const { visibleBlocks, isBlocoVisible, tipoNormalized } = useProntuarioConfig(
     user?.id,
     form.tipo_registro,
     user?.profissao,
@@ -73,30 +75,76 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  const getFieldValue = (key: string): string => {
+  const getFieldValue = (key: string): any => {
     if (PRONTUARIO_COLUMNS.includes(key)) return (form as any)[key] || "";
-    return customData[key] || "";
+    return customData[key] ?? "";
+  };
+
+  const renderField = (bloco: any) => {
+    const fieldKey = bloco.id.replace("evolucao.", "");
+    const value = getFieldValue(fieldKey);
+    const tipo = bloco.tipo || 'textarea';
+
+    switch (tipo) {
+      case 'textarea':
+        return (
+          <DebouncedTextarea
+            rows={3}
+            value={value}
+            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
+            placeholder={`${bloco.label}...`}
+            className="text-sm"
+          />
+        );
+      case 'number':
+        return (
+          <DebouncedInput
+            type="number"
+            value={value}
+            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
+            placeholder={`${bloco.label}...`}
+            className="text-sm"
+          />
+        );
+      case 'select':
+        return (
+          <Select value={value} onValueChange={(v) => handleFieldChange(fieldKey, v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione..." />
+            </SelectTrigger>
+            <SelectContent>
+              {bloco.opcoes?.map((opt: string) => (
+                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      case 'checkbox':
+        return (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={!!value}
+              onCheckedChange={(checked) => handleFieldChange(fieldKey, checked)}
+            />
+            <span className="text-sm">{bloco.label}</span>
+          </div>
+        );
+      default:
+        return (
+          <DebouncedInput
+            value={value}
+            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
+            placeholder={`${bloco.label}...`}
+            className="text-sm"
+          />
+        );
+    }
   };
 
   const renderDynamicBlocks = () => {
-    if (!visibleBlocks || visibleBlocks.length === 0) {
-      return (
-        <p className="text-xs text-muted-foreground italic">
-          Nenhum campo configurado para este tipo de prontuário.
-        </p>
-      );
-    }
     return visibleBlocks.map((bloco) => {
-      if (
-        bloco.id === "soap" ||
-        bloco.id === "especialidade" ||
-        bloco.id === "prescricao" ||
-        bloco.id === "solicitacao_exames" ||
-        bloco.id === "procedimentos"
-      ) {
-        return null;
-      }
-      const fieldKey = bloco.id.replace("evolucao.", "");
+      if (bloco.id === "especialidade") return null; // Render separately
+      
       return (
         <div key={bloco.id} className="space-y-1.5">
           <Label className="text-xs font-semibold uppercase tracking-wider">
@@ -105,13 +153,8 @@ const ProntuarioPage: React.FC = () => {
               <span className="text-destructive ml-0.5">*</span>
             )}
           </Label>
-          <DebouncedTextarea
-            rows={2}
-            value={getFieldValue(fieldKey)}
-            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
-            placeholder={`${bloco.label}...`}
-            className="text-sm"
-          />
+          {renderField(bloco)}
+          {bloco.ajuda && <p className="text-[10px] text-muted-foreground italic">💡 {bloco.ajuda}</p>}
         </div>
       );
     });
@@ -208,7 +251,7 @@ const ProntuarioPage: React.FC = () => {
                 <CamposEspecialidade
                   profissao={user.profissao}
                   profissionalId={user.id}
-                  tipoProntuario={form.tipo_registro}
+                  tipoProntuario={tipoNormalized}
                   values={especialidadeFields}
                   onChange={(k, v) => setEspecialidadeFields((p) => ({ ...p, [k]: v }))}
                 />
