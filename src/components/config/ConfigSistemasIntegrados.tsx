@@ -82,16 +82,23 @@ const ConfigSistemasIntegrados: React.FC = () => {
       unidade_id: editing.unidade_id ?? userUnidade,
       criado_por: user?.usuario || '',
     };
-    let error;
+    
+    let result;
     if (editing.id) {
-      ({ error } = await supabase.from('sistemas_integrados').update(payload).eq('id', editing.id));
+      result = await supabase.from('sistemas_integrados').update(payload).eq('id', editing.id).select().single();
     } else {
-      ({ error } = await supabase.from('sistemas_integrados').insert(payload));
+      result = await supabase.from('sistemas_integrados').insert(payload).select().single();
     }
+    
     setSaving(false);
-    if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
+    if (result.error) { 
+      toast.error('Erro ao salvar: ' + result.error.message); 
+      return; 
+    }
+    
     toast.success('Sistema salvo.');
-    setEditing(null);
+    // Atualiza o estado de edição com os dados salvos (incluindo o ID novo se for o caso)
+    setEditing(result.data);
     carregar();
   };
 
@@ -146,6 +153,12 @@ const ConfigSistemasIntegrados: React.FC = () => {
     setGenerating(null);
     if (r?.ok) {
       setGeneratedToken({ id: sistemaId, token: r.token });
+      
+      // Atualiza o prefixo no estado local de edição se for o mesmo sistema
+      if (editing?.id === sistemaId) {
+        setEditing(prev => prev ? { ...prev, token_entrada_prefix: r.prefix } : null);
+      }
+      
       carregar();
       toast.success('Token gerado.');
     } else {
@@ -180,6 +193,27 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-primary" /> Identificador deste sistema
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Forneça este identificador para o outro sistema reconhecer esta unidade.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 bg-white p-2 rounded border border-primary/20">
+            <code className="text-sm font-bold text-primary">
+              {"sistema-" + (import.meta.env.VITE_SUPABASE_URL || "").replace(/\W/g, "").slice(-12)}
+            </code>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copy("sistema-" + (import.meta.env.VITE_SUPABASE_URL || "").replace(/\W/g, "").slice(-12))}>
+              <Copy className="w-3 h-3" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -244,7 +278,13 @@ const ConfigSistemasIntegrados: React.FC = () => {
                       <Button size="sm" variant="outline" onClick={() => testar(s.id)} disabled={testing === s.id}>
                         {testing === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => gerarTokenV2(s.id)} disabled={generating === s.id}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => gerarTokenV2(s.id)} 
+                        disabled={generating === s.id}
+                        title={s.token_entrada_prefix ? "Regenerar Token de Entrada" : "Gerar Token de Entrada"}
+                      >
                         {generating === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => setEditing(s)}>
@@ -284,14 +324,16 @@ const ConfigSistemasIntegrados: React.FC = () => {
                 </div>
                 <div>
                   <Label>Identificador do sistema *</Label>
-                  <Input
-                    value={editing.identificador || ''}
-                    onChange={(e) => setEditing({ ...editing, identificador: e.target.value })}
-                    placeholder="Ex.: caps-ii-oriximina"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={editing.identificador || ''}
+                      onChange={(e) => setEditing({ ...editing, identificador: e.target.value })}
+                      placeholder="Ex.: cer-ii-oriximina"
+                    />
+                  </div>
                   <p className="text-[11px] text-muted-foreground mt-1 flex items-start gap-1">
                     <Info className="w-3 h-3 mt-0.5" />
-                    Use um identificador único e igual nos dois sistemas (ex.: cer-ii-oriximina ou caps-ii-oriximina).
+                    Este deve ser o "Identificador deste sistema" que aparece no outro sistema. Recomendamos usar nomes padronizados (ex: cer-ii-oriximina).
                   </p>
                 </div>
               </div>
@@ -311,51 +353,54 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
               <Separator />
 
-              <div>
-                <Label className="flex items-center gap-1">
-                  <ShieldAlert className="w-4 h-4 text-amber-600" /> Token de SAÍDA
+              <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-100 space-y-3">
+                <Label className="flex items-center gap-1 text-amber-800">
+                  <ShieldAlert className="w-4 h-4" /> Token de SAÍDA (Token do sistema externo)
                 </Label>
                 <Input
                   type="password"
                   value={editing.token_saida || ''}
                   onChange={(e) => setEditing({ ...editing, token_saida: e.target.value })}
-                  placeholder="Cole aqui o Token de ENTRADA gerado no outro sistema"
+                  placeholder="Cole aqui o Token de ENTRADA do sistema externo"
+                  className="bg-white"
                 />
-                <p className="text-[11px] text-muted-foreground mt-1 flex items-start gap-1">
+                <p className="text-[11px] text-muted-foreground flex items-start gap-1">
                   <Info className="w-3 h-3 mt-0.5" />
-                  Cole aqui o <strong>Token de ENTRADA</strong> gerado no outro sistema. Este token será usado para enviar dados para ele.
+                  Cole o <strong>Token de ENTRADA</strong> gerado no outro sistema. Este token permite que este sistema envie dados para ele.
                 </p>
               </div>
 
-              <div>
-                <Label className="flex items-center gap-1">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Token de ENTRADA
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-100 space-y-3">
+                <Label className="flex items-center gap-1 text-emerald-800">
+                  <ShieldCheck className="w-4 h-4" /> Token de ENTRADA (Gerado por este sistema)
                 </Label>
                 <div className="flex items-center gap-2">
                   <Input
                     readOnly
                     value={editing.token_entrada_prefix ? `${editing.token_entrada_prefix}••••••••••••••••` : '— ainda não gerado —'}
-                    className="font-mono text-xs"
+                    className="font-mono text-xs bg-white"
                   />
-                  {editing.id && (
+                  {editing.id ? (
                     <Button
                       type="button" size="sm" variant="outline"
                       onClick={() => gerarTokenV2(editing.id!)}
                       disabled={generating === editing.id}
+                      className="whitespace-nowrap bg-white hover:bg-emerald-50"
                     >
                       {generating === editing.id
                         ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <><KeyRound className="w-4 h-4 mr-1" /> Gerar token de entrada</>}
+                        : <><RefreshCw className="w-4 h-4 mr-1 text-emerald-600" /> {editing.token_entrada_prefix ? 'Regenerar' : 'Gerar Token'}</>}
                     </Button>
-                  )}
+                  ) : null}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1 flex items-start gap-1">
+                <p className="text-[11px] text-muted-foreground flex items-start gap-1">
                   <Info className="w-3 h-3 mt-0.5" />
-                  Gere um token neste sistema e copie para o outro sistema usar como <strong>Token de SAÍDA</strong>. Após gerado, o valor não pode ser visto novamente — apenas regenerado.
+                  Gere este token e copie para o outro sistema usar como <strong>Token de SAÍDA</strong>. 
+                  Por segurança, o valor completo só aparece no momento da geração.
                 </p>
                 {!editing.id && (
-                  <p className="text-[11px] text-amber-600 mt-1">
-                    Salve o sistema primeiro para poder gerar o Token de Entrada.
+                  <p className="text-[11px] text-amber-600 font-medium bg-amber-50 p-2 rounded border border-amber-100">
+                    Clique em "Salvar" abaixo para habilitar a geração do Token de Entrada.
                   </p>
                 )}
               </div>
