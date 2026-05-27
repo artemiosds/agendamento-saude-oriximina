@@ -384,8 +384,7 @@ const ProntuarioPage: React.FC = () => {
   const canEdit = can('prontuario', 'can_edit');
   const canDelete = can('prontuario', 'can_delete');
   const tempoLimite = user?.tempoAtendimento || 30;
-  const { getEnabledFields: getStructureSections } = useProntuarioStructure();
-  const structureSections = getStructureSections();
+  const { enabledFields: structureFields } = useProntuarioStructure(form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
