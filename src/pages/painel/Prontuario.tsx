@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
-import { cn } from "@/lib/utils";
+import { cn, todayLocalStr } from "@/lib/utils";
+import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -198,7 +199,7 @@ const retornoOptions = [
 const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, bloqueios } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, getAvailableDates, salas, bloqueios } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -4059,7 +4060,7 @@ const ProntuarioPage: React.FC = () => {
         cycle={sessaoCycle}
         pacienteNome={form.paciente_nome}
         profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
-        salas={unidades.find(u => u.id === sessaoCycle?.unit_id)?.salas || []}
+        salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
         availableDates={getAvailableDates(sessaoCycle?.professional_id || '', sessaoCycle?.unit_id || '')}
         getAvailableSlots={getAvailableSlots}
         onConfirm={async (data, hora, salaId) => {
@@ -4090,7 +4091,7 @@ const ProntuarioPage: React.FC = () => {
             status: "confirmado",
             tipo: "Sessão de Tratamento",
             observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${sessaoCycle.treatment_type}`,
-            origem: "prontuario",
+            origem: "profissional",
             criadoEm: new Date().toISOString(),
             criadoPor: user?.id || "",
           });
@@ -4115,7 +4116,7 @@ const ProntuarioPage: React.FC = () => {
         cycle={sessaoCycle}
         pacienteNome={form.paciente_nome}
         profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
-        salas={unidades.find(u => u.id === sessaoCycle?.unit_id)?.salas || []}
+        salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
         availableDates={getAvailableDates(sessaoCycle?.professional_id || '', sessaoCycle?.unit_id || '')}
         getAvailableSlots={getAvailableSlots}
         onConfirm={async (data, hora, salaId) => {
