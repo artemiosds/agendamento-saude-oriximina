@@ -3286,25 +3286,28 @@ const ProntuarioPage: React.FC = () => {
             {/* 🔴 PRONTUÁRIO 4 — URGÊNCIA */}
             {form.tipo_registro === 'urgencia' && (
               <div className="space-y-4">
-                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-foreground mb-3">🔴 Urgência</h4>
-                  <div className="space-y-3">
-                    {triagem && (
-                      <div className="bg-muted/50 rounded-md p-2 border text-xs space-y-1">
-                        <p className="font-semibold">Sinais Vitais (Triagem)</p>
-                        <div className="flex flex-wrap gap-3">
-                          {triagem.pressao_arterial && <span>PA: <strong>{triagem.pressao_arterial}</strong></span>}
-                          {triagem.frequencia_cardiaca && <span>FC: <strong>{triagem.frequencia_cardiaca} bpm</strong></span>}
-                          {triagem.temperatura && <span>Temp: <strong>{triagem.temperatura}°C</strong></span>}
-                          {triagem.saturacao_oxigenio && <span>SatO₂: <strong>{triagem.saturacao_oxigenio}%</strong></span>}
-                          {triagem.glicemia && <span>Glicemia: <strong>{triagem.glicemia} mg/dL</strong></span>}
-                        </div>
+                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-destructive" />
+                    Atendimento de Urgência
+                  </h4>
+                  {triagem && (
+                    <div className="bg-muted/50 rounded-md p-3 border text-xs space-y-1 mb-4">
+                      <p className="font-semibold mb-2">Sinais Vitais (Triagem)</p>
+                      <div className="flex flex-wrap gap-4">
+                        {triagem.pressao_arterial && <span>PA: <strong>{triagem.pressao_arterial}</strong></span>}
+                        {triagem.frequencia_cardiaca && <span>FC: <strong>{triagem.frequencia_cardiaca} bpm</strong></span>}
+                        {triagem.temperatura && <span>Temp: <strong>{triagem.temperatura}°C</strong></span>}
+                        {triagem.saturacao_oxigenio && <span>SatO₂: <strong>{triagem.saturacao_oxigenio}%</strong></span>}
+                        {triagem.glicemia && <span>Glicemia: <strong>{triagem.glicemia} mg/dL</strong></span>}
                       </div>
-                    )}
-                    <div><Label>Queixa Imediata <span className="text-destructive">*</span></Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Queixa principal de urgência..." /></div>
-                    <div><Label>Conduta Rápida</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Conduta imediata adotada..." /></div>
-                    <div><Label>Encaminhamento</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Encaminhamento realizado (se aplicável)..." /></div>
-                  </div>
+                    </div>
+                  )}
+                  <DynamicProntuarioFields
+                    fields={structureFields}
+                    values={form}
+                    onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                  />
                 </div>
               </div>
             )}
@@ -3312,14 +3315,16 @@ const ProntuarioPage: React.FC = () => {
             {/* 🟣 PRONTUÁRIO 5 — PROCEDIMENTO */}
             {form.tipo_registro === 'procedimento' && (
               <div className="space-y-4">
-                <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-foreground mb-3">🟣 Procedimento</h4>
-                  <div className="space-y-3">
-                    <div><Label>Tipo de Exame/Procedimento</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Tipo de procedimento realizado..." /></div>
-                    <div><Label>Resultado</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Resultado do procedimento/exame..." /></div>
-                    <div><Label>Observações</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Observações durante o procedimento..." /></div>
-                    <div><Label>Conduta Pós-Procedimento</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Orientações pós-procedimento..." /></div>
-                  </div>
+                <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-purple-500" />
+                    Registro de Procedimento
+                  </h4>
+                  <DynamicProntuarioFields
+                    fields={structureFields}
+                    values={form}
+                    onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                  />
                 </div>
               </div>
             )}
