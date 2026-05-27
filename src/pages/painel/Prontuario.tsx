@@ -389,8 +389,9 @@ const ProntuarioPage: React.FC = () => {
   const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+
   const soapCustom = useSoapCustomOptions(user?.id);
-  const showSoapDropdown = hasDropdownSoap(user?.profissao);
+
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
@@ -405,6 +406,17 @@ const ProntuarioPage: React.FC = () => {
   interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
   interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
+
+  const effectiveProfissao = useMemo(() => {
+    // Se for registro de sessão e tiver ciclo, prioriza a especialidade do ciclo
+    if (form.tipo_registro === 'sessao' && sessaoCycle?.specialty) {
+      return sessaoCycle.specialty;
+    }
+    // Caso contrário, usa a do usuário logado
+    return user?.profissao;
+  }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
+
+  const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
   const [sessaoPtsSigtap, setSessaoPtsSigtap] = useState<{ procedimento_codigo: string; procedimento_nome: string; especialidade: string }[]>([]);
@@ -563,7 +575,7 @@ const ProntuarioPage: React.FC = () => {
     }));
 
     if (shouldSubmitSession) {
-      const effectiveError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+      const effectiveError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
       if (effectiveError) {
         setSoapErrors(true);
         setSessaoHighlightSOAP(true);
@@ -598,8 +610,8 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const sessionSoapValidationError = useMemo(
-    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(user?.profissao) }),
-    [sessionSoapPayload, soapEnabled, user?.profissao],
+    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(effectiveProfissao) }),
+    [sessionSoapPayload, soapEnabled, effectiveProfissao],
   );
 
   const canConfirmSessionRegistration = useMemo(
@@ -1192,7 +1204,7 @@ const ProntuarioPage: React.FC = () => {
       return false;
     }
     const soapPayload = sessionSoapPayload;
-    const soapValidationError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+    const soapValidationError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
     if (soapValidationError) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1806,7 +1818,7 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     const soapPayload = sessionSoapPayload;
-    const soapError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+    const soapError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
     if (soapError) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2798,7 +2810,7 @@ const ProntuarioPage: React.FC = () => {
 
             {/* SOAP Evolution — ALL 5 types */}
             <SoapFieldsAdaptive
-              profissao={user?.profissao}
+              profissao={effectiveProfissao}
               values={soapValues}
               onChange={handleSoapChange}
               soapErrors={soapErrors}
@@ -2809,7 +2821,7 @@ const ProntuarioPage: React.FC = () => {
               soapRef={soapRef as React.RefObject<HTMLDivElement>}
               customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
               customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
-              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, user?.profissao || '') : undefined}
+              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, effectiveProfissao || '') : undefined}
               onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
             />
 
