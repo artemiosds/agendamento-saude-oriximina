@@ -1204,13 +1204,7 @@ const ProntuarioPage: React.FC = () => {
       return false;
     }
     const soapPayload = sessionSoapPayload;
-    const soapValidationError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
-    if (soapValidationError) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error(soapValidationError);
-      return false;
-    }
+    const soapValidationError = null;
     setSoapErrors(false);
     setSaving(true);
     // CRÍTICO: cancela autosave pendente e aguarda autosave em andamento para
