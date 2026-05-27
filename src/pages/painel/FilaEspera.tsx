@@ -171,10 +171,15 @@ const FilaEspera: React.FC = () => {
   const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
   const { pacientes: allPatients } = useData();
-  const resolvePaciente = useCallback((pacienteId: string, fallbackNome?: string): string => {
-    const pac = allPatients.find(p => p.id === pacienteId);
-    return pac?.nome || fallbackNome || 'Paciente não encontrado';
+  const pacienteMap = useMemo(() => {
+    const map = new Map<string, (typeof allPatients)[0]>();
+    allPatients.forEach(p => map.set(p.id, p));
+    return map;
   }, [allPatients]);
+
+  const resolvePaciente = useCallback((pacienteId: string, fallbackNome?: string): string => {
+    return pacienteMap.get(pacienteId)?.nome || fallbackNome || 'Paciente não encontrado';
+  }, [pacienteMap]);
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
