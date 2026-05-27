@@ -2668,6 +2668,66 @@ const ProntuarioPage: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
+              
+              {/* CONFIGURAÇÃO DINÂMICA (useProntuarioConfig) */}
+              {dynamicConfig.visibleBlocks.length > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-4">
+                  <div className="flex items-center gap-2 text-primary font-semibold text-sm mb-2">
+                    <Settings className="w-4 h-4" /> Configurações Personalizadas
+                  </div>
+                  {dynamicConfig.visibleBlocks.map((bloco: any) => {
+                    // Ignorar blocos que já têm campos nativos complexos ou que o usuário pediu para não substituir
+                    if (['soap', 'evolucao', 'especialidade', 'prescricao', 'solicitacao_exames', 'procedimentos'].includes(bloco.id)) return null;
+                    
+                    const value = (form as any).custom_data?.[bloco.id] || "";
+                    const setVal = (val: any) => setForm(p => ({
+                      ...p,
+                      custom_data: { ...(p as any).custom_data, [bloco.id]: val }
+                    }));
+
+                    return (
+                      <div key={bloco.id} className="space-y-1.5">
+                        <Label className="text-xs font-semibold uppercase tracking-wider">
+                          {bloco.label}
+                          {(bloco.obrigatorio || bloco.admin_obrigatorio) && <span className="text-destructive ml-0.5">*</span>}
+                        </Label>
+                        {bloco.tipo === 'textarea' ? (
+                          <DebouncedTextarea
+                            rows={3}
+                            value={value}
+                            onChange={(e) => setVal(e.target.value)}
+                            placeholder={`${bloco.label}...`}
+                            className="text-sm"
+                          />
+                        ) : bloco.tipo === 'select' ? (
+                          <Select value={value} onValueChange={setVal}>
+                            <SelectTrigger className="h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                            <SelectContent>
+                              {bloco.opcoes?.map((opt: string) => (
+                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : bloco.tipo === 'checkbox' ? (
+                          <div className="flex items-center gap-2">
+                            <Checkbox checked={!!value} onCheckedChange={setVal} />
+                            <span className="text-sm">{bloco.label}</span>
+                          </div>
+                        ) : (
+                          <DebouncedInput
+                            value={value}
+                            onChange={(e) => setVal(e.target.value)}
+                            placeholder={`${bloco.label}...`}
+                            className="text-sm"
+                          />
+                        )}
+                        {bloco.ajuda && <p className="text-[10px] text-muted-foreground italic">💡 {bloco.ajuda}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className="flex items-center justify-end mt-1">
                 <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1" onClick={() => navigate('/painel/meu-prontuario')}>
                   <Settings className="w-3 h-3" /> Personalizar meu prontuário
