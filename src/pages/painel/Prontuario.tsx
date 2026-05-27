@@ -2877,35 +2877,39 @@ const ProntuarioPage: React.FC = () => {
             />
 
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
-            {form.tipo_registro === 'avaliacao_inicial' && (
+            {['avaliacao_inicial', 'retorno', 'urgencia', 'procedimento'].includes(form.tipo_registro) && (
               <div className="space-y-4">
-                <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-foreground mb-3">🟢 Avaliação Inicial</h4>
-                  <div className="space-y-3">
-                    <div><Label>Queixa Principal <span className="text-destructive">*</span></Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
-                    <div><Label>História da Doença Atual <span className="text-destructive">*</span></Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="HDA detalhada..." /></div>
-                    <div><Label>Histórico de Saúde</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Antecedentes pessoais, familiares..." /></div>
-                    <div><Label>Medicações em Uso</Label><DebouncedTextarea rows={2} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} placeholder="Medicações atuais do paciente..." /></div>
-                    <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                      <Label className="flex items-center gap-1">⚠️ Alergias</Label>
-                      <DebouncedTextarea rows={1} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} placeholder="Listar alergias conhecidas..." className="border-destructive/30" />
-                    </div>
+                <div className={cn(
+                  "border rounded-lg p-4 space-y-4",
+                  form.tipo_registro === 'avaliacao_inicial' ? "bg-green-500/5 border-green-500/20" :
+                  form.tipo_registro === 'retorno' ? "bg-blue-500/5 border-blue-500/20" :
+                  form.tipo_registro === 'urgencia' ? "bg-destructive/5 border-destructive/20" :
+                  "bg-purple-500/5 border-purple-500/20"
+                )}>
+                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    {form.tipo_registro === 'avaliacao_inicial' ? "🟢 Avaliação Inicial" :
+                     form.tipo_registro === 'retorno' ? "🔵 Retorno" :
+                     form.tipo_registro === 'urgencia' ? "🔴 Urgência" :
+                     "🟣 Procedimento"}
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    {renderDynamicBlocks()}
                   </div>
                 </div>
 
                 {/* Card de Especialidade */}
-                {user?.profissao && (
+                {isProfBlocoVisible('especialidade') && user?.profissao && (
                   <CamposEspecialidade
                     profissao={user.profissao}
                     profissionalId={user.id}
-                    tipoProntuario={form.tipo_registro as any}
+                    tipoProntuario={form.tipo_registro}
                     values={especialidadeFields}
                     onChange={handleEspecialidadeChange}
                   />
                 )}
-
-                <div><Label>Diagnóstico Funcional</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Diagnóstico funcional baseado na avaliação..." /></div>
-                <div><Label>Conduta Inicial</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} placeholder="Conduta clínica inicial..." /></div>
+              </div>
+            )}
 
                 {/* Decisão Clínica: PTS / Tratamento */}
                 {!editId && form.paciente_id && (
