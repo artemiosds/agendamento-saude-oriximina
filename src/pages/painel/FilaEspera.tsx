@@ -1335,7 +1335,7 @@ const FilaEspera: React.FC = () => {
                 />
                 {form.pacienteNome.length >= 2 && !form.pacienteId && (
                   <div className="mt-1 max-h-32 overflow-y-auto border rounded-md bg-background">
-                    {pacientes
+                    {allPatients
                       .filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase()))
                       .slice(0, 5)
                       .map((p) => (
