@@ -62,6 +62,8 @@ import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
+import { todayLocalStr } from "@/lib/utils";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -99,6 +101,7 @@ interface ProntuarioDB {
   episodio_id: string | null;
   criado_em: string;
   atualizado_em: string;
+  custom_data?: any;
 }
 
 interface ProcedimentoDB {
