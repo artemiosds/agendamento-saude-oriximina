@@ -65,7 +65,11 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
         .maybeSingle();
       const cfg = (data?.configuracoes as any) || {};
       const stored = cfg[configKeyFor(tipoKey)] as BuilderSchema | undefined;
-      setFields(stored?.fields ?? []);
+      const loadedFields = (stored?.fields ?? []).map((f: any) => ({
+        ...f,
+        key: f.key || `custom_${f.id}`
+      }));
+      setFields(loadedFields);
     } catch {
       setFields([]);
     } finally {
