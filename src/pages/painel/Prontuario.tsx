@@ -2816,9 +2816,12 @@ const ProntuarioPage: React.FC = () => {
             {/* 🔵 PRONTUÁRIO 2 — RETORNO */}
             {form.tipo_registro === 'retorno' && (
               <div className="space-y-4">
-                <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-foreground mb-3">🔵 Retorno</h4>
-                  <div className="space-y-3">
+                <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    Retorno
+                  </h4>
+                  <div className="space-y-4">
                     {patientHistory.length > 0 && (
                       <div className="bg-muted/50 rounded-md p-2 border">
                         <p className="text-xs font-semibold text-muted-foreground mb-1">Resumo do último atendimento (somente leitura)</p>
@@ -2828,9 +2831,11 @@ const ProntuarioPage: React.FC = () => {
                         </p>
                       </div>
                     )}
-                    <div><Label>Reavaliação</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Reavaliação do quadro clínico..." /></div>
-                    <div><Label>Evolução Clínica</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente evoluiu desde o último atendimento..." /></div>
-                    <div><Label>Ajuste de Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Mudanças na conduta terapêutica..." /></div>
+                    <DynamicProntuarioFields
+                      fields={structureFields}
+                      values={form}
+                      onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                    />
                   </div>
                 </div>
 
