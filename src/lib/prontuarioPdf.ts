@@ -237,7 +237,12 @@ export async function downloadProntuarioPdf(
   // 1. Determine which sections to show based on system_config
   const adminCampos = (configTipos?.campos || []) as any[];
   const activeFieldsForType = adminCampos
-    .filter(c => c.tiposProntuario && c.tiposProntuario.includes(tipoRegistro === 'avaliacao_inicial' ? 'primeira_consulta' : tipoRegistro))
+    .filter(c => {
+      if (!c.habilitado || !c.tiposProntuario) return false;
+      const normalized = tipoRegistro === 'avaliacao_inicial' ? 'avaliacao_inicial' : tipoRegistro;
+      const legacy = tipoRegistro === 'avaliacao_inicial' ? 'primeira_consulta' : tipoRegistro;
+      return c.tiposProntuario.includes(normalized) || c.tiposProntuario.includes(legacy);
+    })
     .sort((a, b) => a.order - b.order);
 
   // 2. Build clinical sections HTML dynamically
