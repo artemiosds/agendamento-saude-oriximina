@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,8 @@ import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, CheckCircle, Plus } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, CheckCircle, Plus, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
@@ -60,11 +61,34 @@ const ProntuarioPage: React.FC = () => {
   const [form, setForm] = useState(emptyForm);
   const [customData, setCustomData] = useState<Record<string, any>>({});
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
+  const [records, setRecords] = useState<any[]>([]);
+  const [loadingRecords, setLoadingRecords] = useState(true);
 
-  React.useEffect(() => {
+  const fetchRecords = async () => {
+    setLoadingRecords(true);
+    const { data } = await supabase
+      .from("prontuarios")
+      .select("*")
+      .order("criado_em", { ascending: false })
+      .limit(10);
+    if (data) setRecords(data);
+    setLoadingRecords(false);
+  };
+
+  useEffect(() => {
+    fetchRecords();
+  }, []);
+
+  const { visibleBlocks, isBlocoVisible, tipoNormalized } = useProntuarioConfig(
+    user?.id,
+    form.tipo_registro,
+    user?.profissao,
+  );
+
+  useEffect(() => {
     if (!editId) return;
     const fetchRecord = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("prontuarios")
         .select("*")
         .eq("id", editId)
@@ -114,12 +138,6 @@ const ProntuarioPage: React.FC = () => {
     fetchRecord();
   }, [editId]);
 
-  const { visibleBlocks, isBlocoVisible, tipoNormalized } = useProntuarioConfig(
-    user?.id,
-    form.tipo_registro,
-    user?.profissao,
-  );
-
   const handleFieldChange = (key: string, value: any) => {
     if (PRONTUARIO_COLUMNS.includes(key)) {
       setForm((prev) => ({ ...prev, [key]: value }));
@@ -162,7 +180,7 @@ const ProntuarioPage: React.FC = () => {
       case 'select':
         return (
           <Select value={value} onValueChange={(v) => handleFieldChange(fieldKey, v)}>
-            <SelectTrigger>
+            <SelectTrigger className="h-9">
               <SelectValue placeholder="Selecione..." />
             </SelectTrigger>
             <SelectContent>
@@ -180,26 +198,7 @@ const ProntuarioPage: React.FC = () => {
               onCheckedChange={(checked) => handleFieldChange(fieldKey, checked)}
             />
             <span className="text-sm">{bloco.label}</span>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4">
-        {records.map((r) => (
-          <Card key={r.id} className="p-4 flex items-center justify-between">
-            <div>
-              <p className="font-semibold">{r.paciente_nome}</p>
-              <p className="text-xs text-muted-foreground">
-                {r.tipo_registro} - {new Date(r.data_atendimento).toLocaleDateString()}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => {
-              setEditId(r.id);
-              setDialogOpen(true);
-            }}>
-              Editar
-            </Button>
-          </Card>
-        ))}
-      </div>
+          </div>
         );
       default:
         return (
@@ -215,7 +214,11 @@ const ProntuarioPage: React.FC = () => {
 
   const renderDynamicBlocks = () => {
     return visibleBlocks.map((bloco) => {
-      if (bloco.id === "especialidade") return null; // Render separately
+      if (bloco.id === "especialidade") return null;
+      if (bloco.id === "soap") {
+        // Render SOAP individual fields if they are visible
+        return null; 
+      }
       
       return (
         <div key={bloco.id} className="space-y-1.5">
@@ -255,6 +258,7 @@ const ProntuarioPage: React.FC = () => {
         if (data?.id) setEditId(data.id);
       }
       toast.success("Prontuário salvo!");
+      fetchRecords();
       setDialogOpen(false);
     } catch (err: any) {
       toast.error("Erro ao salvar: " + (err?.message || "desconhecido"));
@@ -274,10 +278,42 @@ const ProntuarioPage: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Prontuários</h1>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <FileText className="w-6 h-6 text-primary" />
+          Prontuários
+        </h1>
         <Button onClick={openNew}>
           <Plus className="w-4 h-4 mr-2" /> Novo Prontuário
         </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3">
+        {loadingRecords ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : records.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">Nenhum prontuário encontrado.</p>
+        ) : (
+          records.map((r) => (
+            <Card key={r.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-foreground">{r.paciente_nome}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {TIPOS.find(t => t.value === r.tipo_registro)?.label || r.tipo_registro} • {new Date(r.data_atendimento).toLocaleDateString()}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setEditId(r.id);
+                  setDialogOpen(true);
+                }}>
+                  Visualizar/Editar
+                </Button>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -290,7 +326,7 @@ const ProntuarioPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Paciente</Label>
-                <input
+                <DebouncedInput
                   className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
                   value={form.paciente_nome}
                   onChange={(e) => setForm((p) => ({ ...p, paciente_nome: e.target.value }))}
