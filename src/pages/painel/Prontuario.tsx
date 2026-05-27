@@ -390,17 +390,8 @@ const ProntuarioPage: React.FC = () => {
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
-  const effectiveProfissao = useMemo(() => {
-    // Se for registro de sessão e tiver ciclo, prioriza a especialidade do ciclo
-    if (form.tipo_registro === 'sessao' && sessaoCycle?.specialty) {
-      return sessaoCycle.specialty;
-    }
-    // Caso contrário, usa a do usuário logado
-    return user?.profissao;
-  }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
-
   const soapCustom = useSoapCustomOptions(user?.id);
-  const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
+
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
@@ -415,6 +406,17 @@ const ProntuarioPage: React.FC = () => {
   interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
   interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
+
+  const effectiveProfissao = useMemo(() => {
+    // Se for registro de sessão e tiver ciclo, prioriza a especialidade do ciclo
+    if (form.tipo_registro === 'sessao' && sessaoCycle?.specialty) {
+      return sessaoCycle.specialty;
+    }
+    // Caso contrário, usa a do usuário logado
+    return user?.profissao;
+  }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
+
+  const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
   const [sessaoPtsSigtap, setSessaoPtsSigtap] = useState<{ procedimento_codigo: string; procedimento_nome: string; especialidade: string }[]>([]);
