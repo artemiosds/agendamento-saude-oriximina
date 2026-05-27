@@ -411,6 +411,23 @@ export function mergeAdminAndProfConfig(
     merged.blocos = updatedBlocos;
   }
 
+  // 1.1 Apply SOAP Labels
+  if (adminProntuario && adminProntuario.soapLabels) {
+    merged.blocos = merged.blocos.map(b => {
+      if (b.id === 'soap' || b.id === 'evolucao.soap') {
+         // This is a special case where "soap" is a single block in BLOCOS_BASE
+         // but we might want to split it or rename it.
+         // Standard SOAP labels are usually applied if the individual fields are used.
+         return b;
+      }
+      if (b.id === 'evolucao.subjetivo') return { ...b, label: adminProntuario.soapLabels.subjetivo || b.label };
+      if (b.id === 'evolucao.objetivo') return { ...b, label: adminProntuario.soapLabels.objetivo || b.label };
+      if (b.id === 'evolucao.avaliacao') return { ...b, label: adminProntuario.soapLabels.avaliacao || b.label };
+      if (b.id === 'evolucao.plano') return { ...b, label: adminProntuario.soapLabels.plano || b.label };
+      return b;
+    });
+  }
+
   // 2. Apply Custom Fields (from ConfigPersonalizarCampos)
   if (adminCustomFields && adminCustomFields.length > 0) {
     const specialtyKey = profissao ? normalizeProfissao(profissao) : null;
