@@ -12,14 +12,14 @@ import { Stethoscope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeProfissao } from "@/hooks/useProntuarioConfig";
 
-type TipoProntuario = 'avaliacao' | 'retorno' | 'sessao' | 'urgencia' | 'procedimento';
+type SpecialtyTipoProntuario = 'avaliacao' | 'retorno' | 'sessao' | 'urgencia' | 'procedimento';
 
 interface CamposEspecialidadeProps {
   profissao: string;
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
   profissionalId?: string;
-  tipoProntuario?: TipoProntuario;
+  tipoProntuario?: string;
 }
 
 interface CondicaoVisibilidade {
