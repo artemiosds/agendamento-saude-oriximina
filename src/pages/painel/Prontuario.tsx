@@ -387,7 +387,29 @@ const ProntuarioPage: React.FC = () => {
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();
   // Custom fields storage (for fields not in DB columns)
-  const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const [customData, setCustomData] = useState<Record<string, any>>({});
+  
+  const PRONTUARIO_COLUMNS = useMemo(() => [
+    'queixa_principal', 'anamnese', 'sinais_sintomas', 'exame_fisico', 
+    'hipotese', 'conduta', 'evolucao', 'prescricao', 'solicitacao_exames', 
+    'observacoes', 'resultado_exame', 'indicacao_retorno', 'soap_subjetivo', 
+    'soap_objetivo', 'soap_avaliacao', 'soap_plano'
+  ], []);
+
+  const handleFieldChange = (key: string, value: any) => {
+    if (PRONTUARIO_COLUMNS.includes(key)) {
+      setForm(prev => ({ ...prev, [key]: value }));
+    } else {
+      setCustomData(prev => ({ ...prev, [key]: value }));
+    }
+  };
+
+  const getFieldValue = (key: string) => {
+    if (PRONTUARIO_COLUMNS.includes(key)) {
+      return (form as any)[key] || "";
+    }
+    return customData[key] || "";
+  };
 
   const soapCustom = useSoapCustomOptions(user?.id);
 
