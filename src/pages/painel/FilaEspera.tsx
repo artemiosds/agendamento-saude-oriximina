@@ -658,7 +658,7 @@ const FilaEspera: React.FC = () => {
       toast.success("Registro atualizado!");
       setDialogOpen(false);
     } else {
-      const pac = allPatients.find((p) => p.id === form.pacienteId);
+      const pac = pacientes.find((p) => p.id === form.pacienteId);
       await addToFilaWithPatient(form.pacienteId, form.pacienteNome, pac?.telefone || "", pac?.email || "");
     }
   };
