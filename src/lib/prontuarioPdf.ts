@@ -304,9 +304,15 @@ export async function downloadProntuarioPdf(
         </div>
       </div>
 
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px;">
+        <div class="info-item"><span class="info-label">UBS Origem:</span><span class="info-value">${escapeHtml(pData.ubs_origem || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Prof. Solicitante:</span><span class="info-value">${escapeHtml(pData.profissional_solicitante || "—")}</span></div>
+        <div class="info-item"><span class="info-label">Encaminhamento:</span><span class="info-value">${escapeHtml(pData.tipo_encaminhamento || "—")}</span></div>
+      </div>
+
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
         <div class="info-item"><span class="info-label">Unidade/Setor:</span><span class="info-value">${escapeHtml(unidade?.nome || "—")} / ${escapeHtml(prontuario.setor || "—")}</span></div>
-        <div class="info-item"><span class="info-label">Profissional:</span><span class="info-value">${escapeHtml(prontuario.profissional_nome)}</span></div>
+        <div class="info-item"><span class="info-label">Profissional Resp.:</span><span class="info-value">${escapeHtml(prontuario.profissional_nome)}</span></div>
         <div class="info-item"><span class="info-label">Data Atendimento:</span><span class="info-value">${fmtDate(prontuario.data_atendimento)} ${prontuario.hora_atendimento || ""}</span></div>
       </div>
     </div>
