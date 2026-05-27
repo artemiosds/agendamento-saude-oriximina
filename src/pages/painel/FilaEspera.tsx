@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
+
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -170,7 +170,11 @@ const FilaEspera: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
-  const resolvePaciente = usePacienteNomeResolver();
+  const { pacientes: allPatients } = useData();
+  const resolvePaciente = useCallback((pacienteId: string, fallbackNome?: string): string => {
+    const pac = allPatients.find(p => p.id === pacienteId);
+    return pac?.nome || fallbackNome || 'Paciente não encontrado';
+  }, [allPatients]);
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
@@ -192,7 +196,7 @@ const FilaEspera: React.FC = () => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    const t = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
     return () => window.clearTimeout(t);
   }, [searchQuery]);
 
@@ -336,7 +340,7 @@ const FilaEspera: React.FC = () => {
   const filteredFila = useMemo(() => {
     // Helper: calculate age from dataNascimento
     const getAge = (pacienteId: string): number => {
-      const pac = pacientes.find((p) => p.id === pacienteId);
+      const pac = allPatients.find((p) => p.id === pacienteId);
       if (!pac?.dataNascimento) return 0;
       const birth = new Date(pac.dataNascimento);
       if (isNaN(birth.getTime())) return 0;
@@ -404,7 +408,7 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, pacientes, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery]);
+  }, [fila, allPatients, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery, resolvePaciente]);
 
   const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
   const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;
@@ -636,7 +640,7 @@ const FilaEspera: React.FC = () => {
       toast.success("Registro atualizado!");
       setDialogOpen(false);
     } else {
-      const pac = pacientes.find((p) => p.id === form.pacienteId);
+      const pac = allPatients.find((p) => p.id === form.pacienteId);
       await addToFilaWithPatient(form.pacienteId, form.pacienteNome, pac?.telefone || "", pac?.email || "");
     }
   };
@@ -951,7 +955,7 @@ const FilaEspera: React.FC = () => {
       return;
     }
     const prof = funcionarios.find((fn) => fn.id === rescheduleSlot.profissionalId);
-    const pac = pacientes.find((p) => p.id === rescheduleFilaItem.pacienteId);
+    const pac = allPatients.find((p) => p.id === rescheduleFilaItem.pacienteId);
     const agId = `ag${Date.now()}`;
     const { error } = await supabase.from("agendamentos").insert({
       id: agId,
@@ -1331,7 +1335,7 @@ const FilaEspera: React.FC = () => {
                 />
                 {form.pacienteNome.length >= 2 && !form.pacienteId && (
                   <div className="mt-1 max-h-32 overflow-y-auto border rounded-md bg-background">
-                    {pacientes
+                    {allPatients
                       .filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase()))
                       .slice(0, 5)
                       .map((p) => (
@@ -1344,7 +1348,7 @@ const FilaEspera: React.FC = () => {
                           <span className="text-muted-foreground ml-2">— {p.telefone}</span>
                         </button>
                       ))}
-                    {pacientes.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
+                    {allPatients.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
                       0 && (
                       <div className="px-3 py-2 text-sm text-muted-foreground italic">Nenhum paciente encontrado</div>
                     )}
@@ -1961,7 +1965,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <ContactActionButton
-                      phone={pacientes.find((p) => p.id === f.pacienteId)?.telefone}
+                      phone={allPatients.find((p) => p.id === f.pacienteId)?.telefone}
                       patientName={f.pacienteNome}
                       unitName={unidade?.nome}
                     />
@@ -2014,7 +2018,7 @@ const FilaEspera: React.FC = () => {
                                 minute: "2-digit",
                               }),
                             });
-                            const pac = pacientes.find((p) => p.id === f.pacienteId);
+                            const pac = allPatients.find((p) => p.id === f.pacienteId);
                             const unidadeN = unidades.find((u) => u.id === f.unidadeId);
                             await notify({
                               evento: "fila_chamada",
