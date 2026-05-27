@@ -230,7 +230,7 @@ export async function downloadProntuarioPdf(
     return;
   }
 
-  const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades } = data;
+  const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades, allConfigs } = data;
   const config = await loadDocumentConfig();
   const tipoRegistro = prontuario.tipo_registro || 'sessao';
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${tipoRegistro.toUpperCase().replace(/_/g, ' ')}`;
