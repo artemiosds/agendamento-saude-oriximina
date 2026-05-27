@@ -523,7 +523,7 @@ export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; es
     </div>`;
 }
 
-export async function docCarimboFor(profissionalId: string, fallback?: { nome?: string; especialidade?: string }): Promise<string> {
+export async function docCarimboFor(profissionalId: string, fallback?: { nome?: string; especialidade?: string; conselho?: string; numero_registro?: string; uf?: string }): Promise<string> {
   const c = await loadCarimbo(profissionalId);
   return docCarimbo(c, fallback);
 }
