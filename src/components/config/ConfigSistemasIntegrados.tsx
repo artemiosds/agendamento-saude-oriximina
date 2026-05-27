@@ -318,14 +318,16 @@ const ConfigSistemasIntegrados: React.FC = () => {
                 </div>
                 <div>
                   <Label>Identificador do sistema *</Label>
-                  <Input
-                    value={editing.identificador || ''}
-                    onChange={(e) => setEditing({ ...editing, identificador: e.target.value })}
-                    placeholder="Ex.: caps-ii-oriximina"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={editing.identificador || ''}
+                      onChange={(e) => setEditing({ ...editing, identificador: e.target.value })}
+                      placeholder="Ex.: cer-ii-oriximina"
+                    />
+                  </div>
                   <p className="text-[11px] text-muted-foreground mt-1 flex items-start gap-1">
                     <Info className="w-3 h-3 mt-0.5" />
-                    Use um identificador único e igual nos dois sistemas (ex.: cer-ii-oriximina ou caps-ii-oriximina).
+                    Este deve ser o "Identificador deste sistema" que aparece no outro sistema. Recomendamos usar nomes padronizados (ex: cer-ii-oriximina).
                   </p>
                 </div>
               </div>
