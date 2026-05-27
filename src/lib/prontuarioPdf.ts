@@ -387,7 +387,7 @@ export async function downloadProntuarioPdf(
       ${section("Sinais e Sintomas", safe(prontuario.sinais_sintomas))}
       ${section("Exame Físico / Sinais Vitais", safe(prontuario.exame_fisico))}
       ${section("Hipótese / Diagnóstico", safe(prontuario.hipotese))}
-      ${prontuario.cid ? section("CID Principal", prontuario.cid) : ""}
+      ${prontuario.cid || paciente?.cid ? section("CID Principal", prontuario.cid || paciente?.cid) : ""}
       ${section("Conduta / Evolução", safe(prontuario.conduta) || safe(prontuario.evolucao))}
       
       ${procsHtml}
