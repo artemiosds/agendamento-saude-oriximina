@@ -1738,7 +1738,21 @@ const Agenda: React.FC = () => {
 
     await Promise.all([refreshAgendamentos(), refreshFila()]);
     toast.success(`Falta registrada para ${ag.pacienteNome}.`);
-    setFaltaTarget(null);
+    } catch (err: any) {
+      console.error("[Agenda][Falta] Erro ao registrar falta", {
+        pacienteId: ag.pacienteId,
+        profissionalId: ag.profissionalId,
+        agendamentoId: ag.id,
+        tipoFalta: dados.tipoFalta,
+        errorMessage: err?.message,
+        errorDetails: err?.details,
+        errorCode: err?.code,
+        rawError: err
+      });
+      toast.error("Não foi possível registrar a falta deste paciente.");
+    } finally {
+      setFaltaTarget(null);
+    }
   };
 
   const handleDeleteAgendamento = async (agId: string) => {
