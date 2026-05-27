@@ -389,8 +389,18 @@ const ProntuarioPage: React.FC = () => {
   const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+
+  const effectiveProfissao = useMemo(() => {
+    // Se for registro de sessão e tiver ciclo, prioriza a especialidade do ciclo
+    if (form.tipo_registro === 'sessao' && sessaoCycle?.specialty) {
+      return sessaoCycle.specialty;
+    }
+    // Caso contrário, usa a do usuário logado
+    return user?.profissao;
+  }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
+
   const soapCustom = useSoapCustomOptions(user?.id);
-  const showSoapDropdown = hasDropdownSoap(user?.profissao);
+  const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
