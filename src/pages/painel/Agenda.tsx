@@ -1612,27 +1612,32 @@ const Agenda: React.FC = () => {
     if (!faltaTarget) return;
     const ag = faltaTarget;
 
-    if (ag.status === "falta" || ag.status === "concluido") {
-      toast.error("Esta sessão já possui registro.");
-      setFaltaTarget(null);
-      return;
-    }
+    try {
+      if (ag.status === "falta" || ag.status === "concluido") {
+        toast.error("Esta sessão já possui registro.");
+        setFaltaTarget(null);
+        return;
+      }
 
-    const obsAnterior = ag.observacoes || "";
-    const detalheFalta = [
-      `[FALTA ${dados.tipoFalta.toUpperCase()}]`,
-      dados.documento ? `Documento: ${dados.documento}` : "",
-      dados.descricao ? `Motivo: ${dados.descricao}` : "",
-      `Por: ${user?.nome || "Sistema"} | Em: ${new Date().toLocaleString("pt-BR")}`,
-    ].filter(Boolean).join(" | ");
-    const novaObs = `${obsAnterior}\n${detalheFalta}`.trim();
+      const obsAnterior = ag.observacoes || "";
+      const detalheFalta = [
+        `[FALTA ${dados.tipoFalta.toUpperCase()}]`,
+        dados.documento ? `Documento: ${dados.documento}` : "",
+        dados.descricao ? `Motivo: ${dados.descricao}` : "",
+        `Por: ${user?.nome || "Sistema"} | Em: ${new Date().toLocaleString("pt-BR")}`,
+      ].filter(Boolean).join(" | ");
+      const novaObs = `${obsAnterior}\n${detalheFalta}`.trim();
 
-    await updateAgendamento(ag.id, { status: "falta" as any });
-    await (supabase as any).from("agendamentos").update({
-      observacoes: novaObs,
-      tipo_falta: dados.tipoFalta,
-      falta_justificativa: dados.descricao || dados.documento || null,
-    }).eq("id", ag.id);
+      const { error: updateError } = await (supabase as any).from("agendamentos").update({
+        status: "falta",
+        observacoes: novaObs,
+        tipo_falta: dados.tipoFalta,
+        falta_justificativa: dados.descricao || dados.documento || null,
+      }).eq("id", ag.id);
+
+      if (updateError) throw updateError;
+      
+      await updateAgendamento(ag.id, { status: "falta" as any });
 
     // Update linked treatment session
     try {
@@ -1723,12 +1728,31 @@ const Agenda: React.FC = () => {
 
     // Atualiza status FALTOSO/BLOQUEADO do paciente
     try {
-      await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: ag.pacienteId });
-    } catch (err) { console.error('atualizar_status_falta:', err); }
+      await (supabase as any).rpc('atualizar_status_falta', { 
+        p_paciente_id: ag.pacienteId,
+        p_profissional_id: ag.profissionalId
+      });
+    } catch (err) { 
+      console.error('[Agenda][Falta] Erro ao atualizar status falta no RPC:', err); 
+    }
 
     await Promise.all([refreshAgendamentos(), refreshFila()]);
     toast.success(`Falta registrada para ${ag.pacienteNome}.`);
-    setFaltaTarget(null);
+    } catch (err: any) {
+      console.error("[Agenda][Falta] Erro ao registrar falta", {
+        pacienteId: ag.pacienteId,
+        profissionalId: ag.profissionalId,
+        agendamentoId: ag.id,
+        tipoFalta: dados.tipoFalta,
+        errorMessage: err?.message,
+        errorDetails: err?.details,
+        errorCode: err?.code,
+        rawError: err
+      });
+      toast.error("Não foi possível registrar a falta deste paciente.");
+    } finally {
+      setFaltaTarget(null);
+    }
   };
 
   const handleDeleteAgendamento = async (agId: string) => {
