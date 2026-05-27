@@ -241,6 +241,7 @@ interface TimelineEntry {
 export async function downloadFullHistoryPdf(
   pacienteNome: string,
   entries: TimelineEntry[],
+  currentProfessionalId?: string,
 ): Promise<void> {
   const config = await loadDocumentConfig();
 
