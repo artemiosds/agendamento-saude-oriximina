@@ -795,8 +795,8 @@ const FilaEspera: React.FC = () => {
         dataSolicitacaoOriginal: sortableDate,
         origemCadastro: "demanda_reprimida",
       });
-      const unidade = unidades.find((u) => u.id === importForm.unidadeId);
-      const prof = importForm.profissionalId ? funcionarios.find((f) => f.id === importForm.profissionalId) : null;
+      const unidade = unitMap.get(importForm.unidadeId);
+      const prof = importForm.profissionalId ? employeeMap.get(importForm.profissionalId) : null;
       ensurePortalAccess({
         pacienteId,
         contexto: "fila",
@@ -873,7 +873,7 @@ const FilaEspera: React.FC = () => {
       toast.error("Preencha todos os campos.");
       return;
     }
-    const prof = funcionarios.find((f) => f.id === manualSlot.profissionalId);
+    const prof = employeeMap.get(manualSlot.profissionalId);
     await chamarProximoDaFila(
       {
         data: manualSlot.data,
@@ -972,7 +972,7 @@ const FilaEspera: React.FC = () => {
       toast.error(reasons[result?.reason] || "Horário indisponível.");
       return;
     }
-    const prof = funcionarios.find((fn) => fn.id === rescheduleSlot.profissionalId);
+    const prof = employeeMap.get(rescheduleSlot.profissionalId);
     const pac = pacienteMap.get(rescheduleFilaItem.pacienteId);
     const agId = `ag${Date.now()}`;
     const { error } = await supabase.from("agendamentos").insert({
@@ -1012,7 +1012,7 @@ const FilaEspera: React.FC = () => {
       user,
       modulo: "fila_espera",
     });
-    const unidade = unidades.find((u) => u.id === rescheduleSlot.unidadeId);
+    const unidade = unitMap.get(rescheduleSlot.unidadeId);
     await notify({
       evento: "reagendamento",
       paciente_nome: rescheduleFilaItem.pacienteNome,
@@ -2037,7 +2037,7 @@ const FilaEspera: React.FC = () => {
                               }),
                             });
                             const pac = pacienteMap.get(f.pacienteId);
-                            const unidadeN = unidades.find((u) => u.id === f.unidadeId);
+                            const unidadeN = unitMap.get(f.unidadeId);
                             await notify({
                               evento: "fila_chamada",
                               paciente_nome: f.pacienteNome,
