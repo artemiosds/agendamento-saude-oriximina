@@ -224,7 +224,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
               Conecte este sistema a outros sistemas (CER II, CAPS II, etc.) para enviar e receber encaminhamentos com segurança.
             </p>
           </div>
-          <Button onClick={() => setEditing({ ...empty, unidade_id: userUnidade, identificador: "sistema-" + (import.meta.env.VITE_SUPABASE_URL || "").replace(/\W/g, "").slice(-12) })} size="sm">
+          <Button onClick={() => setEditing({ ...empty, unidade_id: userUnidade })} size="sm">
             <Plus className="w-4 h-4 mr-1" /> Novo Sistema
           </Button>
         </CardHeader>
