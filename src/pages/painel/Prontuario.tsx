@@ -61,6 +61,59 @@ const ProntuarioPage: React.FC = () => {
   const [customData, setCustomData] = useState<Record<string, any>>({});
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
+  React.useEffect(() => {
+    if (!editId) return;
+    const fetchRecord = async () => {
+      const { data, error } = await supabase
+        .from("prontuarios")
+        .select("*")
+        .eq("id", editId)
+        .maybeSingle();
+      
+      if (data) {
+        setForm({
+          paciente_id: data.paciente_id || "",
+          paciente_nome: data.paciente_nome || "",
+          data_atendimento: data.data_atendimento || "",
+          hora_atendimento: data.hora_atendimento || "",
+          tipo_registro: data.tipo_registro || "avaliacao_inicial",
+          queixa_principal: data.queixa_principal || "",
+          anamnese: data.anamnese || "",
+          sinais_sintomas: data.sinais_sintomas || "",
+          exame_fisico: data.exame_fisico || "",
+          hipotese: data.hipotese || "",
+          conduta: data.conduta || "",
+          prescricao: data.prescricao || "",
+          solicitacao_exames: data.solicitacao_exames || "",
+          evolucao: data.evolucao || "",
+          observacoes: data.observacoes || "",
+          resultado_exame: data.resultado_exame || "",
+          indicacao_retorno: data.indicacao_retorno || "",
+          soap_subjetivo: data.soap_subjetivo || "",
+          soap_objetivo: data.soap_objetivo || "",
+          soap_avaliacao: data.soap_avaliacao || "",
+          soap_plano: data.soap_plano || "",
+        });
+        
+        const cData = data.custom_data || {};
+        const espFields: Record<string, string> = {};
+        const otherFields: Record<string, any> = {};
+        
+        Object.entries(cData).forEach(([k, v]) => {
+          if (k.startsWith("esp_")) {
+            espFields[k] = String(v);
+          } else {
+            otherFields[k] = v;
+          }
+        });
+        
+        setCustomData(otherFields);
+        setEspecialidadeFields(espFields);
+      }
+    };
+    fetchRecord();
+  }, [editId]);
+
   const { visibleBlocks, isBlocoVisible, tipoNormalized } = useProntuarioConfig(
     user?.id,
     form.tipo_registro,
