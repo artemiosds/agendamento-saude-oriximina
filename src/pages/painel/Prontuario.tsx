@@ -1377,6 +1377,7 @@ const ProntuarioPage: React.FC = () => {
         soap_objetivo: soapPayload.objetivo,
         soap_avaliacao: soapPayload.avaliacao,
         soap_plano: soapPayload.plano,
+        custom_data: { ...customData, ...especialidadeFields },
       };
 
       // CORRIGIDO: não salva 'no_episode' no banco
