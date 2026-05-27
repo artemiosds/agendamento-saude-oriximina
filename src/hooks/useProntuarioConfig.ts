@@ -496,6 +496,26 @@ export function mergeAdminAndProfConfig(
     }
   }
 
+  // 4. Apply professional's personal extra fields
+  if (profConfig.campos_extras && profConfig.campos_extras.length > 0) {
+    profConfig.campos_extras.forEach(ce => {
+      const idx = merged.blocos.findIndex(b => b.id === ce.id || b.id === `extra_${ce.id}`);
+      if (idx === -1) {
+        merged.blocos.push({
+          id: ce.id,
+          label: ce.label,
+          visivel: true,
+          obrigatorio: !!ce.obrigatorio,
+          favorito: false,
+          colapsado_padrao: false,
+          ordem: ce.ordem || merged.blocos.length * 10,
+          tipo: ce.tipo,
+          opcoes: ce.opcoes,
+        });
+      }
+    });
+  }
+
   // Sort by order at the end
   merged.blocos = merged.blocos.sort((a, b) => a.ordem - b.ordem);
 
