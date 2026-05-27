@@ -386,7 +386,6 @@ const ProntuarioPage: React.FC = () => {
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();
-  const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
@@ -415,6 +414,8 @@ const ProntuarioPage: React.FC = () => {
     // Caso contrário, usa a do usuário logado
     return user?.profissao;
   }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
+
+  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(user?.id, form.tipo_registro, effectiveProfissao);
 
   const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
