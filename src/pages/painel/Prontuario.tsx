@@ -1812,13 +1812,7 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     const soapPayload = sessionSoapPayload;
-    const soapError = soapEnabled && !isMedico(effectiveProfissao) ? sessionSoapValidationError : null;
-    if (soapError) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error(soapError);
-      return;
-    }
+    const soapError = null;
     setSoapErrors(false);
     setSaving(true);
     let insertedNewProntuario = false;
