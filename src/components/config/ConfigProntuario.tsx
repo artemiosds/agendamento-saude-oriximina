@@ -19,7 +19,7 @@ import ConstrutorProntuarioModal from '@/components/ConstrutorProntuarioModal';
 const CONFIG_KEY = 'config_prontuario_tipos';
 
 const TIPOS_PRONTUARIO = [
-  { key: 'primeira_consulta', label: 'Avaliação Inicial', color: 'bg-success/10 text-success' },
+  { key: 'avaliacao_inicial', label: 'Avaliação Inicial', color: 'bg-success/10 text-success' },
   { key: 'retorno', label: 'Retorno', color: 'bg-info/10 text-info' },
   { key: 'sessao', label: 'Sessão', color: 'bg-warning/10 text-warning' },
   { key: 'urgencia', label: 'Urgência', color: 'bg-destructive/10 text-destructive' },
