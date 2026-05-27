@@ -3010,7 +3010,7 @@ const ProntuarioPage: React.FC = () => {
                                        </div>
                                        
                                        <div className="flex gap-1.5 flex-wrap">
-                                         {(isPendente || isAgendada) && sessaoCycle.status === 'em_andamento' && (
+                                         {(isPendente || isAgendada) && sessaoCycle?.status === 'em_andamento' && (
                                            <Button 
                                              type="button" 
                                              size="sm" 
@@ -3027,7 +3027,7 @@ const ProntuarioPage: React.FC = () => {
                                            </Button>
                                          )}
                                          
-                                         {isAgendada && sessaoCycle.status === 'em_andamento' && (
+                                         {isAgendada && sessaoCycle?.status === 'em_andamento' && (
                                            <>
                                              <Button 
                                                type="button" 
@@ -4061,7 +4061,7 @@ const ProntuarioPage: React.FC = () => {
         pacienteNome={form.paciente_nome}
         profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
         salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
-        availableDates={getAvailableDates(sessaoCycle?.professional_id || '', sessaoCycle?.unit_id || '')}
+        availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
         getAvailableSlots={getAvailableSlots}
         onConfirm={async (data, hora, salaId) => {
           if (!agendarSessaoTarget || !sessaoCycle) return;
@@ -4117,7 +4117,7 @@ const ProntuarioPage: React.FC = () => {
         pacienteNome={form.paciente_nome}
         profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
         salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
-        availableDates={getAvailableDates(sessaoCycle?.professional_id || '', sessaoCycle?.unit_id || '')}
+        availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
         getAvailableSlots={getAvailableSlots}
         onConfirm={async (data, hora, salaId) => {
           if (!remarcarTarget || !sessaoCycle) return;
