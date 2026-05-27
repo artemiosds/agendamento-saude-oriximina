@@ -2786,7 +2786,7 @@ const ProntuarioPage: React.FC = () => {
                   <CamposEspecialidade
                     profissao={user.profissao}
                     profissionalId={user.id}
-                    tipoProntuario={form.tipo_registro as any}
+                    tipoProntuario={form.tipo_registro === 'avaliacao_inicial' ? 'avaliacao' : form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={handleEspecialidadeChange}
                   />
