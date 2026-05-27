@@ -386,7 +386,6 @@ const ProntuarioPage: React.FC = () => {
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();
-  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(user?.id, form.tipo_registro, effectiveProfissao);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
