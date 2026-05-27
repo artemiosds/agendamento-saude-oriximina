@@ -31,7 +31,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical, ChevronRight, Calendar, User, MapPin, Target } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical, ChevronRight, Calendar, User, MapPin, Target, CalendarClock, Eraser } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
@@ -392,8 +392,8 @@ const ProntuarioPage: React.FC = () => {
 
   // Sessão: cycle + PTS state
   interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
-  interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id?: string; specialty?: string; pts_id?: string | null; }
-  interface ActivePTS { id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
+  interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
+  interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
@@ -406,6 +406,15 @@ const ProntuarioPage: React.FC = () => {
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
   const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const soapRef = useRef<HTMLDivElement>(null);
+
+  // Modal Agendar/Remarcar states
+  const [agendarSessaoTarget, setAgendarSessaoTarget] = useState<CycleSession | null>(null);
+  const [remarcarTarget, setRemarcarTarget] = useState<CycleSession | null>(null);
+  const [agendarSessaoData, setAgendarSessaoData] = useState("");
+  const [agendarSessaoHora, setAgendarSessaoHora] = useState("");
+  const [agendarSessaoSalaId, setAgendarSessaoSalaId] = useState("");
+  const [agendandoSessao, setAgendandoSessao] = useState(false);
+  const [remarcarSaving, setRemarcarSaving] = useState(false);
 
   const loadSessaoData = async (patientId: string, _professionalId?: string) => {
     setSessaoDataLoading(true);
@@ -1949,6 +1958,101 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
+  const handleDesmarcarSessao = async (session: CycleSession) => {
+    if (session.status === "realizada") {
+      toast.error("Sessão já realizada não pode ser desmarcada.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será EXCLUÍDO da agenda (horário liberado) e a sessão voltará para "Aguardando agendamento".`
+    );
+    if (!confirmed) return;
+
+    try {
+      if (session.appointment_id) {
+        const { error: delErr } = await supabase.from("agendamentos").delete().eq("id", session.appointment_id);
+        if (delErr) throw delErr;
+      }
+
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({
+          status: "pendente_agendamento",
+          appointment_id: null,
+        })
+        .eq("id", session.id);
+      if (error) throw error;
+
+      await logAction({
+        acao: "desmarcar_sessao",
+        entidade: "treatment_session",
+        entidadeId: session.id,
+        modulo: "prontuario",
+        user,
+        detalhes: {
+          ciclo: sessaoCycle?.id,
+          sessao: session.session_number,
+          agendamento_excluido: session.appointment_id,
+        },
+      });
+
+      toast.success(`Sessão ${session.session_number} desmarcada e horário liberado na agenda.`);
+      await Promise.all([
+        loadSessaoData(form.paciente_id),
+        refreshAgendamentos(),
+      ]);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao desmarcar sessão: " + (err?.message || ""));
+    }
+  };
+
+  const handleClearRealizada = async (session: CycleSession) => {
+    if (!sessaoCycle) return;
+    const confirmed = window.confirm(
+      `Tem certeza que deseja limpar a sessão ${session.session_number}/${session.total_sessions}?\n\nIsto reverterá o status para "Agendada" e apagará os dados clínicos.`
+    );
+    if (!confirmed) return;
+    try {
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({
+          status: "agendada",
+          clinical_notes: "",
+          procedure_done: "",
+        })
+        .eq("id", session.id);
+      if (error) throw error;
+
+      const completedCount = sessaoCycleSessions.filter(s => s.id !== session.id && s.status === 'realizada').length;
+      const { error: cycErr } = await supabase
+        .from("treatment_cycles")
+        .update({
+          sessions_done: completedCount,
+          status: 'em_andamento',
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", sessaoCycle.id);
+      if (cycErr) throw cycErr;
+
+      await logAction({
+        acao: "limpar_sessao_realizada",
+        entidade: "treatment_session",
+        entidadeId: session.id,
+        modulo: "prontuario",
+        user,
+        detalhes: { ciclo: sessaoCycle.id, sessao: session.session_number },
+      });
+
+      toast.success(`Sessão ${session.session_number} retornada ao status Agendada.`);
+      await loadSessaoData(form.paciente_id);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao limpar sessão: " + err.message);
+    }
+  };
+
   const handleDelete = async (p: ProntuarioDB) => {
     try {
       await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", p.id);
@@ -2848,17 +2952,133 @@ const ProntuarioPage: React.FC = () => {
                               </div>
                             </div>
 
-                            <div className="pt-2 border-t space-y-2">
-                              <div className="flex justify-between text-xs items-center">
-                                <span className="font-medium text-muted-foreground uppercase tracking-tight">Progresso do Ciclo</span>
-                                <Badge variant="secondary" className="h-4 text-[10px]">{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</Badge>
-                              </div>
-                              <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-1.5" />
-                              <div className="flex justify-between text-[10px] text-muted-foreground">
-                                <span>{sessaoCycle.sessions_done} realizadas</span>
-                                <span>Total: {sessaoCycle.total_sessions} sessões</span>
-                              </div>
-                            </div>
+                             <div className="pt-2 border-t space-y-2">
+                               <div className="flex justify-between text-xs items-center">
+                                 <span className="font-medium text-muted-foreground uppercase tracking-tight">Progresso do Ciclo</span>
+                                 <Badge variant="secondary" className="h-4 text-[10px]">{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</Badge>
+                               </div>
+                               <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-1.5" />
+                               <div className="flex justify-between text-[10px] text-muted-foreground">
+                                 <span>{sessaoCycle.sessions_done} realizadas</span>
+                                 <span>Total: {sessaoCycle.total_sessions} sessões</span>
+                               </div>
+                             </div>
+
+                             <div className="pt-2 space-y-2">
+                               <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block mb-1">Sessões do ciclo</span>
+                               <div className="max-h-[300px] overflow-y-auto border rounded-lg divide-y bg-background">
+                                 {sessaoCycleSessions.map((s) => {
+                                   const isPendente = s.status === "pendente_agendamento";
+                                   const isAgendada = s.status === "agendada";
+                                   const isRealizada = s.status === "realizada";
+                                   const isFaltou = s.status === "paciente_faltou";
+                                   
+                                   const sessionStatusColors: Record<string, string> = {
+                                     pendente_agendamento: "bg-warning/10 text-warning",
+                                     agendada: "bg-info/10 text-info",
+                                     realizada: "bg-success/10 text-success",
+                                     paciente_faltou: "bg-destructive/10 text-destructive",
+                                     cancelada: "bg-muted text-muted-foreground",
+                                     remarcada: "bg-warning/10 text-warning",
+                                   };
+                                   
+                                   const sessionStatusLabels: Record<string, string> = {
+                                     pendente_agendamento: "Ag. Agendamento",
+                                     agendada: "Agendada",
+                                     realizada: "Realizada",
+                                     paciente_faltou: "Faltou",
+                                     cancelada: "Cancelada",
+                                     remarcada: "Remarcada",
+                                   };
+
+                                   return (
+                                     <div key={s.id} className="p-2.5 flex flex-col gap-1.5">
+                                       <div className="flex items-center gap-2">
+                                         <span className="text-xs font-mono font-bold text-primary w-8 shrink-0">
+                                           {s.session_number}/{s.total_sessions}
+                                         </span>
+                                         <div className="flex-1 min-w-0">
+                                           <p className="text-xs font-medium">
+                                             {s.scheduled_date ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR") : "Sem data"}
+                                             {isPendente && <span className="ml-1 text-[10px] text-warning opacity-80">· Pendente</span>}
+                                           </p>
+                                         </div>
+                                         <Badge className={cn("text-[9px] h-4 px-1.5 shrink-0", sessionStatusColors[s.status])}>
+                                           {sessionStatusLabels[s.status] || s.status}
+                                         </Badge>
+                                       </div>
+                                       
+                                       <div className="flex gap-1.5 flex-wrap">
+                                         {(isPendente || isAgendada) && sessaoCycle.status === 'em_andamento' && (
+                                           <Button 
+                                             type="button" 
+                                             size="sm" 
+                                             variant="outline" 
+                                             className="h-6 text-[10px] px-2 border-primary text-primary hover:bg-primary/5"
+                                             onClick={() => {
+                                               setAgendarSessaoTarget(s);
+                                               setAgendarSessaoData("");
+                                               setAgendarSessaoHora("");
+                                               setAgendarSessaoSalaId("");
+                                             }}
+                                           >
+                                             <Calendar className="w-2.5 h-2.5 mr-1" /> Agendar
+                                           </Button>
+                                         )}
+                                         
+                                         {isAgendada && sessaoCycle.status === 'em_andamento' && (
+                                           <>
+                                             <Button 
+                                               type="button" 
+                                               size="sm" 
+                                               variant="outline" 
+                                               className="h-6 text-[10px] px-2 border-warning text-warning hover:bg-warning/5"
+                                               onClick={() => setRemarcarTarget(s)}
+                                             >
+                                               <CalendarClock className="w-2.5 h-2.5 mr-1" /> Remarcar
+                                             </Button>
+                                             <Button 
+                                               type="button" 
+                                               size="sm" 
+                                               variant="outline" 
+                                               className="h-6 text-[10px] px-2 border-destructive text-destructive hover:bg-destructive/5"
+                                               onClick={() => handleDesmarcarSessao(s)}
+                                             >
+                                               <X className="w-2.5 h-2.5 mr-1" /> Desmarcar
+                                             </Button>
+                                             {s.scheduled_date === todayLocalStr() && (
+                                               <Button 
+                                                 type="button" 
+                                                 size="sm" 
+                                                 variant="default" 
+                                                 className="h-6 text-[10px] px-2 bg-success hover:bg-success/90"
+                                                 onClick={() => handleConfirmSession(s)}
+                                                 disabled={confirmingSessionId === s.id}
+                                               >
+                                                 {confirmingSessionId === s.id ? <Loader2 className="w-2.5 h-2.5 animate-spin mr-1" /> : <CheckCircle className="w-2.5 h-2.5 mr-1" />}
+                                                 Confirmar
+                                               </Button>
+                                             )}
+                                           </>
+                                         )}
+
+                                         {isRealizada && (
+                                           <Button 
+                                             type="button" 
+                                             size="sm" 
+                                             variant="outline" 
+                                             className="h-6 text-[10px] px-2"
+                                             onClick={() => handleClearRealizada(s)}
+                                           >
+                                             <Eraser className="w-2.5 h-2.5 mr-1" /> Limpar
+                                           </Button>
+                                         )}
+                                       </div>
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+                             </div>
 
                             {(() => {
                               const nextSession = sessaoCycleSessions.find(s => s.status === 'agendada' && s.scheduled_date >= new Date().toISOString().split('T')[0]);
@@ -3830,6 +4050,94 @@ const ProntuarioPage: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Agendar Sessão */}
+      <ModalAgendarSessao
+        open={!!agendarSessaoTarget}
+        onClose={() => setAgendarSessaoTarget(null)}
+        session={agendarSessaoTarget}
+        cycle={sessaoCycle}
+        pacienteNome={form.paciente_nome}
+        profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
+        salas={unidades.find(u => u.id === sessaoCycle?.unit_id)?.salas || []}
+        availableDates={getAvailableDates(sessaoCycle?.professional_id || '', sessaoCycle?.unit_id || '')}
+        getAvailableSlots={getAvailableSlots}
+        onConfirm={async (data, hora, salaId) => {
+          if (!agendarSessaoTarget || !sessaoCycle) return;
+          const pac = pacienteByIdMap.get(sessaoCycle.patient_id);
+          
+          const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+          if (!isPacienteIsentoBloqueio(pac)) {
+            const bloqueado = await isPacienteBloqueadoParaProfissional(sessaoCycle.patient_id, sessaoCycle.professional_id);
+            if (bloqueado) {
+              toast.error("Paciente bloqueado por faltas injustificadas para este profissional.");
+              return;
+            }
+          }
+
+          const agId = `ag${Date.now()}`;
+          await addAgendamento({
+            id: agId,
+            pacienteId: sessaoCycle.patient_id,
+            pacienteNome: form.paciente_nome,
+            unidadeId: sessaoCycle.unit_id,
+            salaId: salaId || "",
+            setorId: "",
+            profissionalId: sessaoCycle.professional_id,
+            profissionalNome: funcionarios.find(f => f.id === sessaoCycle.professional_id)?.nome || "",
+            data,
+            hora,
+            status: "confirmado",
+            tipo: "Sessão de Tratamento",
+            observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${sessaoCycle.treatment_type}`,
+            origem: "prontuario",
+            criadoEm: new Date().toISOString(),
+            criadoPor: user?.id || "",
+          });
+
+          await supabase
+            .from("treatment_sessions")
+            .update({ appointment_id: agId, status: "agendada", scheduled_date: data })
+            .eq("id", agendarSessaoTarget.id);
+
+          toast.success("Sessão agendada com sucesso!");
+          await loadSessaoData(form.paciente_id);
+          refreshAgendamentos();
+        }}
+        mode="agendar"
+        isMaster={user?.role === 'master' || isProfissional}
+      />
+
+      <ModalAgendarSessao
+        open={!!remarcarTarget}
+        onClose={() => setRemarcarTarget(null)}
+        session={remarcarTarget}
+        cycle={sessaoCycle}
+        pacienteNome={form.paciente_nome}
+        profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
+        salas={unidades.find(u => u.id === sessaoCycle?.unit_id)?.salas || []}
+        availableDates={getAvailableDates(sessaoCycle?.professional_id || '', sessaoCycle?.unit_id || '')}
+        getAvailableSlots={getAvailableSlots}
+        onConfirm={async (data, hora, salaId) => {
+          if (!remarcarTarget || !sessaoCycle) return;
+          const oldDate = remarcarTarget.scheduled_date;
+          
+          await supabase
+            .from("treatment_sessions")
+            .update({ scheduled_date: data })
+            .eq("id", remarcarTarget.id);
+
+          if (remarcarTarget.appointment_id) {
+            await supabase.from("agendamentos").update({ data, hora, sala_id: salaId }).eq("id", remarcarTarget.appointment_id);
+          }
+
+          toast.success(`Sessão remarcada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
+          await loadSessaoData(form.paciente_id);
+          refreshAgendamentos();
+        }}
+        mode="remarcar"
+        isMaster={user?.role === 'master' || isProfissional}
+      />
 
       {/* Treatment Cycle Dialog */}
       <Dialog open={cycleOpen} onOpenChange={setCycleOpen}>
