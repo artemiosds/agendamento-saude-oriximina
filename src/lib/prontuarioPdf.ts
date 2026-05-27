@@ -281,6 +281,25 @@ export async function downloadProntuarioPdf(
       clinicalContentHtml += renderSection(f.label, val);
     }
   });
+  
+  // 2b. Include model-specific fields (from ConstrutorProntuarioModal)
+  const modelKey = `estrutura_prontuario_${tipoRegistro}`;
+  const legacyModelKey = tipoRegistro === 'avaliacao_inicial' ? 'estrutura_prontuario_primeira_consulta' : '';
+  const modelSchema = allConfigs?.[modelKey] || (legacyModelKey ? allConfigs?.[legacyModelKey] : null);
+  
+  if (modelSchema?.fields) {
+    modelSchema.fields.forEach((f: any) => {
+      const fieldKey = f.key || `custom_${f.id}`;
+      let val = prontuario[fieldKey];
+      if (val === undefined && prontuario.custom_data) {
+        val = (prontuario.custom_data as any)[fieldKey];
+      }
+      
+      if (val) {
+        clinicalContentHtml += renderSection(f.label, val);
+      }
+    });
+  }
 
   // Especialidade fields handling
   if (prontuario.custom_data) {
