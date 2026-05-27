@@ -114,7 +114,7 @@ const MeuProntuario: React.FC = () => {
 
   const resetToDefault = useCallback(() => {
     const defaults = getDefaultConfig(tipo);
-    const merged = mergeAdminAndProfConfig(adminConfig, profissao, defaults);
+    const merged = mergeAdminAndProfConfig(adminConfig, adminProntuario, profissao, defaults, tipo);
     persist(merged);
     toast.success('Configuração restaurada ao padrão');
   }, [tipo, persist, adminConfig, profissao]);
