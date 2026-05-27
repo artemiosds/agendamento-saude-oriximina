@@ -213,7 +213,8 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     procs: procs || [],
     exames: exames || [],
     configTipos,
-    configEspecialidades
+    configEspecialidades,
+    customFieldsConfig: (sysCfg?.configuracoes as any)?.custom_fields_config?.prontuario
   };
 }
 
@@ -229,7 +230,7 @@ export async function downloadProntuarioPdf(
     return;
   }
 
-  const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades } = data;
+  const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades, customFieldsConfig } = data;
   const config = await loadDocumentConfig();
   const tipoRegistro = prontuario.tipo_registro || 'sessao';
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${tipoRegistro.toUpperCase().replace(/_/g, ' ')}`;
@@ -260,13 +261,26 @@ export async function downloadProntuarioPdf(
   clinicalContentHtml += renderSection(`A — ${soapLabels.avaliacao}`, prontuario.soap_avaliacao);
   clinicalContentHtml += renderSection(`P — ${soapLabels.plano}`, prontuario.soap_plano);
 
-  // Dynamic fields from admin config
-  activeFieldsForType.forEach(f => {
+  // 3. Dynamic fields from admin config + custom fields
+  const allFields = [...activeFieldsForType];
+  
+  if (customFieldsConfig) {
+    const globalFields = customFieldsConfig['__global__']?.fields || [];
+    const unitFields = prontuario.unidade_id ? customFieldsConfig[prontuario.unidade_id]?.fields || [] : [];
+    
+    [...globalFields, ...unitFields].forEach(cf => {
+      if (!cf.ativo) return;
+      if (!allFields.some(f => f.key === cf.nome)) {
+        allFields.push({ key: cf.nome, label: cf.rotulo, order: cf.ordem || 999 });
+      }
+    });
+  }
+
+  allFields.sort((a, b) => a.order - b.order).forEach(f => {
     if (f.habilitado === false) return;
     if (['evolucao.subjetivo', 'evolucao.objetivo', 'evolucao.avaliacao', 'evolucao.plano'].includes(f.key)) return;
     
     let val = prontuario[f.key];
-    // If not in direct columns, check custom_data
     if (val === undefined && prontuario.custom_data) {
       val = (prontuario.custom_data as any)[f.key];
     }
