@@ -482,7 +482,7 @@ export async function loadCarimbo(profissionalId: string): Promise<CarimboData |
   }
 }
 
-export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; especialidade?: string }): string {
+export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; especialidade?: string; conselho?: string; numero_registro?: string; uf?: string }): string {
   if (!c && !fallback) return '';
   const cd = c?.custom_data || {};
   const posicao = cd.posicao || 'center';
@@ -493,9 +493,9 @@ export function docCarimbo(c: CarimboData | null, fallback?: { nome?: string; es
 
   const nome = (c?.nome || fallback?.nome || '').toUpperCase();
   const especialidade = c?.especialidade || fallback?.especialidade || '';
-  const conselho = c?.conselho || '';
-  const numero = c?.numero_registro || '';
-  const uf = c?.uf || '';
+  const conselho = c?.conselho || fallback?.conselho || '';
+  const numero = c?.numero_registro || fallback?.numero_registro || '';
+  const uf = c?.uf || fallback?.uf || '';
   const conselhoStr = [conselho, numero].filter(Boolean).join(' ') + (uf ? `/${uf}` : '');
   const cbo = cd.cbo || '';
   const cns = cd.cns_profissional || '';
