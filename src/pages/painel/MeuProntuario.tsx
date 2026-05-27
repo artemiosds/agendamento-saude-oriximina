@@ -59,7 +59,7 @@ const MeuProntuario: React.FC = () => {
   const { user } = useAuth();
   const { funcionarios } = useData();
   const [tipo, setTipo] = useState('sessao');
-  const { config, adminConfig, loading, saving, saveConfig } = useProntuarioConfig(user?.id, tipo);
+  const { config, adminConfig, adminProntuario, loading, saving, saveConfig } = useProntuarioConfig(user?.id, tipo, profissao);
   const [localConfig, setLocalConfig] = useState<ProntuarioConfigData | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('blocos');
 
