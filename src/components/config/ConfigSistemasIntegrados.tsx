@@ -193,6 +193,27 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-primary" /> Identificador deste sistema
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Forneça este identificador para o outro sistema reconhecer esta unidade.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 bg-white p-2 rounded border border-primary/20">
+            <code className="text-sm font-bold text-primary">
+              {"sistema-" + (import.meta.env.VITE_SUPABASE_URL || "").replace(/\W/g, "").slice(-12)}
+            </code>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copy("sistema-" + (import.meta.env.VITE_SUPABASE_URL || "").replace(/\W/g, "").slice(-12))}>
+              <Copy className="w-3 h-3" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -203,7 +224,7 @@ const ConfigSistemasIntegrados: React.FC = () => {
               Conecte este sistema a outros sistemas (CER II, CAPS II, etc.) para enviar e receber encaminhamentos com segurança.
             </p>
           </div>
-          <Button onClick={() => setEditing({ ...empty, unidade_id: userUnidade })} size="sm">
+          <Button onClick={() => setEditing({ ...empty, unidade_id: userUnidade, identificador: "sistema-" + (import.meta.env.VITE_SUPABASE_URL || "").replace(/\W/g, "").slice(-12) })} size="sm">
             <Plus className="w-4 h-4 mr-1" /> Novo Sistema
           </Button>
         </CardHeader>
