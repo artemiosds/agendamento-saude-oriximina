@@ -2094,22 +2094,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handlePrint = (p: ProntuarioDB) => {
-    const pac = pacientes.find((px) => px.id === p.paciente_id);
-    const prof = funcionarios.find((f) => f.id === p.profissional_id);
-    const unit = unidades.find((u) => u.id === p.unidade_id);
-    
-    downloadProntuarioPdf({
-      ...p,
-      paciente_data_nasc: pac?.dataNascimento,
-      paciente_cpf: pac?.cpf,
-      paciente_cns: pac?.cns,
-      paciente_sexo: (pac as any)?.sexo,
-      paciente_telefone: pac?.telefone,
-      unidade_nome: unit?.nome || p.unidade_id,
-      profissional_especialidade: prof?.profissao || prof?.cargo,
-      ciclo_info: sessaoCycle && sessaoCycle.patient_id === p.paciente_id ? sessaoCycle : undefined,
-      pts_info: sessaoPts && sessaoPts.patient_id === p.paciente_id ? sessaoPts : undefined,
-    });
+    downloadProntuarioPdf(p.id);
     toast.success("Preparando impressão...");
   };
 
