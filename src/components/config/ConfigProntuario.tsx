@@ -296,7 +296,7 @@ const ConfigProntuario: React.FC = () => {
     const updated = { ...config, campos: [...config.campos, campo] };
     saveConfig(updated);
     setAddFieldDialog(false);
-    setNewField({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['primeira_consulta'] });
+    setNewField({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['avaliacao_inicial'] });
   };
 
   const deleteCampo = (id: string) => {
