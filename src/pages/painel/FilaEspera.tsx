@@ -157,7 +157,7 @@ const FilaEspera: React.FC = () => {
     addToFila,
     updateFila,
     removeFromFila,
-    pacientes,
+    pacientes: allPatients,
     funcionarios,
     unidades,
     addPaciente,
@@ -170,7 +170,6 @@ const FilaEspera: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
-  const { pacientes: allPatients, unidades, funcionarios } = useData();
   
   const pacienteMap = useMemo(() => {
     const map = new Map<string, (typeof allPatients)[0]>();
