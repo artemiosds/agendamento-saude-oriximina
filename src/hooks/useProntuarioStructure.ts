@@ -43,8 +43,12 @@ export function useProntuarioStructure(tipoProntuario?: string) {
   }, []);
 
   const getFieldsForType = (type: string) => {
+    // Normalização para retrocompatibilidade
+    const normalizedType = type === 'avaliacao_inicial' ? 'avaliacao_inicial' : type;
+    const legacyType = type === 'avaliacao_inicial' ? 'primeira_consulta' : type;
+
     return fields
-      .filter(f => f.habilitado && f.tiposProntuario.includes(type))
+      .filter(f => f.habilitado && (f.tiposProntuario.includes(normalizedType) || f.tiposProntuario.includes(legacyType)))
       .sort((a, b) => a.order - b.order);
   };
 
