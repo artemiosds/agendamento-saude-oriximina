@@ -1077,7 +1077,8 @@ const ProntuarioPage: React.FC = () => {
       paciente_id: pacienteId || "",
       paciente_nome: pacienteNome || "",
       data_atendimento: new Date().toISOString().split("T")[0], 
-      tipo_registro: "avaliacao_inicial" 
+      tipo_registro: "avaliacao_inicial",
+      custom_data: {},
     });
     setDialogOpen(true);
   };
