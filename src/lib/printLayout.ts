@@ -53,9 +53,9 @@ export interface DocumentConfig {
 
 const DEFAULT_TYPOGRAPHY: DocumentTypography = {
   fonte: 'Arial',
-  tamanhoBase: 10,
-  tamanhoTitulo: 12,
-  espacamento: 1.1, 
+  tamanhoBase: 9.5,
+  tamanhoTitulo: 11,
+  espacamento: 1.05, 
   alinhamento: 'justify',
 };
 
