@@ -2095,51 +2095,22 @@ const ProntuarioPage: React.FC = () => {
 
   const handlePrint = (p: ProntuarioDB) => {
     const pac = pacientes.find((px) => px.id === p.paciente_id);
-    logAction({
-      acao: "prontuario_exportado_pdf",
-      entidade: "prontuario",
-      entidadeId: p.id,
-      modulo: "prontuario",
-      user,
-      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || "" },
+    const prof = funcionarios.find((f) => f.id === p.profissional_id);
+    const unit = unidades.find((u) => u.id === p.unidade_id);
+    
+    downloadProntuarioPdf({
+      ...p,
+      paciente_data_nasc: pac?.dataNascimento,
+      paciente_cpf: pac?.cpf,
+      paciente_cns: pac?.cns,
+      paciente_sexo: (pac as any)?.sexo,
+      paciente_telefone: pac?.telefone,
+      unidade_nome: unit?.nome || p.unidade_id,
+      profissional_especialidade: prof?.profissao || prof?.cargo,
+      ciclo_info: sessaoCycle && sessaoCycle.patient_id === p.paciente_id ? sessaoCycle : undefined,
+      pts_info: sessaoPts && sessaoPts.patient_id === p.paciente_id ? sessaoPts : undefined,
     });
-    const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
-    const sections = [
-      { title: "Queixa Principal", content: p.queixa_principal },
-      { title: "Anamnese", content: p.anamnese },
-      { title: "Sinais e Sintomas", content: p.sinais_sintomas },
-      { title: "Exame Físico", content: p.exame_fisico },
-      { title: "Hipótese / Avaliação", content: p.hipotese },
-      { title: "Conduta", content: p.conduta },
-      { title: "Prescrição / Orientações", content: p.prescricao },
-      { title: "Solicitação de Exames", content: p.solicitacao_exames },
-      { title: "Evolução", content: p.evolucao },
-      { title: "Procedimentos", content: p.procedimentos_texto },
-      { title: "Observações Gerais", content: p.observacoes },
-      { title: "Indicação de Retorno", content: p.indicacao_retorno },
-    ]
-      .filter((s) => s.content)
-      .map(
-        (s) =>
-          `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`,
-      )
-      .join("");
-    const body = `
-      <div class="info-grid">
-        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${p.paciente_nome}</span></div>
-        <div><span class="info-label">Data:</span><br/><span class="info-value">${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}</span></div>
-        <div><span class="info-label">Profissional:</span><br/><span class="info-value">${p.profissional_nome}</span></div>
-        <div><span class="info-label">Hora:</span><br/><span class="info-value">${p.hora_atendimento || "-"}</span></div>
-        <div><span class="info-label">Unidade:</span><br/><span class="info-value">${unidadeNome}</span></div>
-        <div><span class="info-label">Setor:</span><br/><span class="info-value">${p.setor || "-"}</span></div>
-      </div>
-      ${sections}
-      <div class="signature">
-        <div class="signature-line"></div>
-        <div class="name">${p.profissional_nome}</div>
-        <div class="role">${p.setor || ""}</div>
-      </div>`;
-    openPrintDocument("Prontuário de Atendimento", body, { Unidade: unidadeNome });
+    toast.success("Preparando impressão...");
   };
 
   const handlePrintFullHistory = (pacienteId: string, pacienteNome: string) => {
