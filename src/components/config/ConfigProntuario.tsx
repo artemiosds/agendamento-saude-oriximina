@@ -116,10 +116,10 @@ const ConfigProntuario: React.FC = () => {
   const [config, setConfig] = useState<ProntuarioConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [tipoSelecionado, setTipoSelecionado] = useState('primeira_consulta');
+  const [tipoSelecionado, setTipoSelecionado] = useState('avaliacao_inicial');
   const [addFieldDialog, setAddFieldDialog] = useState(false);
   const [addAlertDialog, setAddAlertDialog] = useState(false);
-  const [newField, setNewField] = useState({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['primeira_consulta'] as string[] });
+  const [newField, setNewField] = useState({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['avaliacao_inicial'] as string[] });
   const [newAlert, setNewAlert] = useState({ campo: '', operador: '>=', valor: '', mensagem: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState<{ key: string; label: string } | null>(null);
