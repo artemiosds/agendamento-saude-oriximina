@@ -270,15 +270,15 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   /* SECTIONS */
   .section { 
-    margin-bottom: 6px; 
+    margin-bottom: 4px; 
     page-break-inside: avoid; 
   }
   .section-title { 
     font-weight: 700; 
-    font-size: 8.5pt; 
+    font-size: 8pt; 
     text-transform: uppercase; 
     color: #0369a1; 
-    border-bottom: 0.5px solid #e2e8f0; 
+    border-bottom: 0.5px solid #0369a1; 
     padding-bottom: 0px; 
     margin-bottom: 1px; 
   }
