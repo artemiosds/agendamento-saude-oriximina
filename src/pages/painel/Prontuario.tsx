@@ -2135,36 +2135,37 @@ const ProntuarioPage: React.FC = () => {
       const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
       const fields = [
         { title: "Queixa Principal", content: p.queixa_principal },
-        { title: "Anamnese", content: p.anamnese },
-        { title: "Sinais e Sintomas", content: p.sinais_sintomas },
-        { title: "Exame Físico", content: p.exame_fisico },
-        { title: "Hipótese / Avaliação", content: p.hipotese },
-        { title: "Conduta", content: p.conduta },
-        { title: "Prescrição", content: p.prescricao },
-        { title: "Evolução", content: p.evolucao },
+        { title: "S — Subjetivo", content: (p as any).soap_subjetivo },
+        { title: "O — Objetivo", content: (p as any).soap_objetivo },
+        { title: "A — Avaliação", content: (p as any).soap_avaliacao },
+        { title: "P — Plano", content: (p as any).soap_plano },
+        { title: "Evolução / Conduta", content: p.conduta || p.evolucao },
         { title: "Procedimentos", content: p.procedimentos_texto },
+        { title: "Prescrição", content: p.prescricao },
         { title: "Observações", content: p.observacoes },
       ].filter((s) => s.content).map(
-        (s) => `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`
+        (s) => `<div class="section"><div class="section-title">${s.title}</div><div class="section-content" style="font-size:10pt;">${s.content}</div></div>`
       ).join("");
+
       return `
-        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #ddd;border-radius:8px;padding:16px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-            <strong>${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} ${p.hora_atendimento || ""}</strong>
-            <span style="color:#666;">Prof. ${p.profissional_nome} • ${unidadeNome}</span>
+        <div style="page-break-inside:avoid;margin-bottom:12px;border-bottom:1px solid #eee;padding-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:9pt;font-weight:700;color:#0369a1;">
+            <span>${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} ${p.hora_atendimento || ""}</span>
+            <span style="color:#666;">Prof. ${p.profissional_nome} &middot; ${unidadeNome}</span>
           </div>
-          ${fields}
+          <div style="padding-left: 8px; border-left: 2px solid #f1f5f9;">
+            ${fields}
+          </div>
         </div>`;
     }).join("");
 
     const body = `
       <div class="info-grid">
-        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${pacienteNome}</span></div>
-        <div><span class="info-label">CPF:</span><br/><span class="info-value">${pac?.cpf || "—"}</span></div>
-        <div><span class="info-label">CNS:</span><br/><span class="info-value">${(pac as any)?.cns || "—"}</span></div>
-        <div><span class="info-label">Total de Registros:</span><br/><span class="info-value">${patientRecords.length}</span></div>
+        <div class="info-item"><span class="info-label">Paciente:</span><span class="info-value">${pacienteNome}</span></div>
+        <div class="info-item"><span class="info-label">CPF:</span><span class="info-value">${pac?.cpf || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Data Nasc:</span><span class="info-value">${pac?.dataNascimento ? new Date(pac.dataNascimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</span></div>
       </div>
-      <h3 style="margin:16px 0 8px;font-size:14px;font-weight:bold;">Histórico Clínico Completo</h3>
+      <h3 style="margin:12px 0 8px;font-size:12pt;font-weight:700;color:#0c4a6e;text-transform:uppercase;border-bottom:2px solid #0369a1;">Histórico Clínico Completo</h3>
       ${allSections}`;
     openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, { Paciente: pacienteNome });
   };
