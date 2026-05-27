@@ -263,6 +263,8 @@ export async function downloadFullHistoryPdf(
     )
     .join("");
 
+  const carimboHtml = currentProfessionalId ? await docCarimboFor(currentProfessionalId) : "";
+
   const body = `
     <div class="summary" style="display: flex; gap: 8px; margin-bottom: 12px;">
       <div class="stat" style="flex: 1; padding: 6px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; text-align: center;">
@@ -289,7 +291,11 @@ export async function downloadFullHistoryPdf(
         </tr>
       </thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    
+    <div style="margin-top: 20px;">
+      ${carimboHtml}
+    </div>`;
 
   const html = buildDocumentShell(
     `Histórico Clínico Completo — ${pacienteNome}`,
