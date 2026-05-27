@@ -64,13 +64,13 @@ interface ProntuarioConfig {
 }
 
 const DEFAULT_CAMPOS: CampoConfig[] = [
-  { id: 'c1', key: 'queixa_principal', label: 'Queixa Principal', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: true, order: 1, tiposProntuario: ['primeira_consulta', 'urgencia'] },
-  { id: 'c2', key: 'historia_doenca', label: 'História da Doença Atual', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: false, order: 2, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c3', key: 'historico_saude', label: 'Histórico de Saúde', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 3, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c4', key: 'medicacoes_uso', label: 'Medicações em Uso', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 4, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c5', key: 'alergias', label: 'Alergias', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 5, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c6', key: 'diagnostico_funcional', label: 'Diagnóstico Funcional', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 6, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c7', key: 'conduta', label: 'Conduta', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 7, tiposProntuario: ['primeira_consulta', 'urgencia'] },
+  { id: 'c1', key: 'queixa_principal', label: 'Queixa Principal', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: true, order: 1, tiposProntuario: ['avaliacao_inicial', 'urgencia'] },
+  { id: 'c2', key: 'historia_doenca', label: 'História da Doença Atual', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: false, order: 2, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c3', key: 'historico_saude', label: 'Histórico de Saúde', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 3, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c4', key: 'medicacoes_uso', label: 'Medicações em Uso', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 4, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c5', key: 'alergias', label: 'Alergias', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 5, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c6', key: 'diagnostico_funcional', label: 'Diagnóstico Funcional', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 6, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c7', key: 'conduta', label: 'Conduta', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 7, tiposProntuario: ['avaliacao_inicial', 'urgencia'] },
   { id: 'c8', key: 'reavaliacao', label: 'Reavaliação', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 1, tiposProntuario: ['retorno'] },
   { id: 'c9', key: 'evolucao_clinica', label: 'Evolução Clínica', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 2, tiposProntuario: ['retorno'] },
   { id: 'c10', key: 'ajuste_conduta', label: 'Ajuste de Conduta', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 3, tiposProntuario: ['retorno'] },
