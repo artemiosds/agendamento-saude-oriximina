@@ -18,6 +18,7 @@ export type BuilderFieldType = 'text' | 'textarea' | 'checkbox' | 'select' | 'da
 
 export interface BuilderField {
   id: string;
+  key: string;       // chave estável para o banco de dados
   type: BuilderFieldType;
   label: string;
   required: boolean;
@@ -64,7 +65,11 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
         .maybeSingle();
       const cfg = (data?.configuracoes as any) || {};
       const stored = cfg[configKeyFor(tipoKey)] as BuilderSchema | undefined;
-      setFields(stored?.fields ?? []);
+      const loadedFields = (stored?.fields ?? []).map((f: any) => ({
+        ...f,
+        key: f.key || `custom_${f.id}`
+      }));
+      setFields(loadedFields);
     } catch {
       setFields([]);
     } finally {
@@ -78,8 +83,10 @@ const ConstrutorProntuarioModal: React.FC<ConstrutorProntuarioModalProps> = ({
 
   const addField = (type: BuilderFieldType) => {
     const tool = FIELD_TOOLS.find(t => t.type === type)!;
+    const id = `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const newField: BuilderField = {
-      id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id,
+      key: `custom_${id}`,
       type,
       label: tool.defaultLabel,
       required: false,

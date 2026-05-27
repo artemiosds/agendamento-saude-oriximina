@@ -213,7 +213,8 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     procs: procs || [],
     exames: exames || [],
     configTipos,
-    configEspecialidades
+    configEspecialidades,
+    allConfigs: sysCfg?.configuracoes as any
   };
 }
 
@@ -229,7 +230,7 @@ export async function downloadProntuarioPdf(
     return;
   }
 
-  const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades } = data;
+  const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades, allConfigs } = data;
   const config = await loadDocumentConfig();
   const tipoRegistro = prontuario.tipo_registro || 'sessao';
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${tipoRegistro.toUpperCase().replace(/_/g, ' ')}`;
@@ -237,7 +238,12 @@ export async function downloadProntuarioPdf(
   // 1. Determine which sections to show based on system_config
   const adminCampos = (configTipos?.campos || []) as any[];
   const activeFieldsForType = adminCampos
-    .filter(c => c.tiposProntuario && c.tiposProntuario.includes(tipoRegistro === 'avaliacao_inicial' ? 'primeira_consulta' : tipoRegistro))
+    .filter(c => {
+      if (!c.habilitado || !c.tiposProntuario) return false;
+      const normalized = tipoRegistro === 'avaliacao_inicial' ? 'avaliacao_inicial' : tipoRegistro;
+      const legacy = tipoRegistro === 'avaliacao_inicial' ? 'primeira_consulta' : tipoRegistro;
+      return c.tiposProntuario.includes(normalized) || c.tiposProntuario.includes(legacy);
+    })
     .sort((a, b) => a.order - b.order);
 
   // 2. Build clinical sections HTML dynamically
@@ -275,6 +281,25 @@ export async function downloadProntuarioPdf(
       clinicalContentHtml += renderSection(f.label, val);
     }
   });
+  
+  // 2b. Include model-specific fields (from ConstrutorProntuarioModal)
+  const modelKey = `estrutura_prontuario_${tipoRegistro}`;
+  const legacyModelKey = tipoRegistro === 'avaliacao_inicial' ? 'estrutura_prontuario_primeira_consulta' : '';
+  const modelSchema = allConfigs?.[modelKey] || (legacyModelKey ? allConfigs?.[legacyModelKey] : null);
+  
+  if (modelSchema?.fields) {
+    modelSchema.fields.forEach((f: any) => {
+      const fieldKey = f.key || `custom_${f.id}`;
+      let val = prontuario[fieldKey];
+      if (val === undefined && prontuario.custom_data) {
+        val = (prontuario.custom_data as any)[fieldKey];
+      }
+      
+      if (val) {
+        clinicalContentHtml += renderSection(f.label, val);
+      }
+    });
+  }
 
   // Especialidade fields handling
   if (prontuario.custom_data) {

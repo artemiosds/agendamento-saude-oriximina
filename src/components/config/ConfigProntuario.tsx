@@ -19,7 +19,7 @@ import ConstrutorProntuarioModal from '@/components/ConstrutorProntuarioModal';
 const CONFIG_KEY = 'config_prontuario_tipos';
 
 const TIPOS_PRONTUARIO = [
-  { key: 'primeira_consulta', label: 'Avaliação Inicial', color: 'bg-success/10 text-success' },
+  { key: 'avaliacao_inicial', label: 'Avaliação Inicial', color: 'bg-success/10 text-success' },
   { key: 'retorno', label: 'Retorno', color: 'bg-info/10 text-info' },
   { key: 'sessao', label: 'Sessão', color: 'bg-warning/10 text-warning' },
   { key: 'urgencia', label: 'Urgência', color: 'bg-destructive/10 text-destructive' },
@@ -64,13 +64,13 @@ interface ProntuarioConfig {
 }
 
 const DEFAULT_CAMPOS: CampoConfig[] = [
-  { id: 'c1', key: 'queixa_principal', label: 'Queixa Principal', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: true, order: 1, tiposProntuario: ['primeira_consulta', 'urgencia'] },
-  { id: 'c2', key: 'historia_doenca', label: 'História da Doença Atual', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: false, order: 2, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c3', key: 'historico_saude', label: 'Histórico de Saúde', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 3, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c4', key: 'medicacoes_uso', label: 'Medicações em Uso', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 4, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c5', key: 'alergias', label: 'Alergias', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 5, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c6', key: 'diagnostico_funcional', label: 'Diagnóstico Funcional', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 6, tiposProntuario: ['primeira_consulta'] },
-  { id: 'c7', key: 'conduta', label: 'Conduta', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 7, tiposProntuario: ['primeira_consulta', 'urgencia'] },
+  { id: 'c1', key: 'queixa_principal', label: 'Queixa Principal', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: true, order: 1, tiposProntuario: ['avaliacao_inicial', 'urgencia'] },
+  { id: 'c2', key: 'historia_doenca', label: 'História da Doença Atual', tipo: 'textarea', obrigatorio: true, habilitado: true, isBuiltin: false, order: 2, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c3', key: 'historico_saude', label: 'Histórico de Saúde', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 3, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c4', key: 'medicacoes_uso', label: 'Medicações em Uso', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 4, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c5', key: 'alergias', label: 'Alergias', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 5, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c6', key: 'diagnostico_funcional', label: 'Diagnóstico Funcional', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 6, tiposProntuario: ['avaliacao_inicial'] },
+  { id: 'c7', key: 'conduta', label: 'Conduta', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 7, tiposProntuario: ['avaliacao_inicial', 'urgencia'] },
   { id: 'c8', key: 'reavaliacao', label: 'Reavaliação', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 1, tiposProntuario: ['retorno'] },
   { id: 'c9', key: 'evolucao_clinica', label: 'Evolução Clínica', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 2, tiposProntuario: ['retorno'] },
   { id: 'c10', key: 'ajuste_conduta', label: 'Ajuste de Conduta', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: false, order: 3, tiposProntuario: ['retorno'] },
@@ -116,10 +116,10 @@ const ConfigProntuario: React.FC = () => {
   const [config, setConfig] = useState<ProntuarioConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [tipoSelecionado, setTipoSelecionado] = useState('primeira_consulta');
+  const [tipoSelecionado, setTipoSelecionado] = useState('avaliacao_inicial');
   const [addFieldDialog, setAddFieldDialog] = useState(false);
   const [addAlertDialog, setAddAlertDialog] = useState(false);
-  const [newField, setNewField] = useState({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['primeira_consulta'] as string[] });
+  const [newField, setNewField] = useState({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['avaliacao_inicial'] as string[] });
   const [newAlert, setNewAlert] = useState({ campo: '', operador: '>=', valor: '', mensagem: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState<{ key: string; label: string } | null>(null);
@@ -296,7 +296,7 @@ const ConfigProntuario: React.FC = () => {
     const updated = { ...config, campos: [...config.campos, campo] };
     saveConfig(updated);
     setAddFieldDialog(false);
-    setNewField({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['primeira_consulta'] });
+    setNewField({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['avaliacao_inicial'] });
   };
 
   const deleteCampo = (id: string) => {
