@@ -153,6 +153,12 @@ const ConfigSistemasIntegrados: React.FC = () => {
     setGenerating(null);
     if (r?.ok) {
       setGeneratedToken({ id: sistemaId, token: r.token });
+      
+      // Atualiza o prefixo no estado local de edição se for o mesmo sistema
+      if (editing?.id === sistemaId) {
+        setEditing(prev => prev ? { ...prev, token_entrada_prefix: r.prefix } : null);
+      }
+      
       carregar();
       toast.success('Token gerado.');
     } else {
