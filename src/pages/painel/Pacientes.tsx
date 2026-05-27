@@ -562,27 +562,9 @@ const Pacientes: React.FC = () => {
     const cd: any = form.customData || {};
 
     if (!form.nome.trim()) newErrors.nome = "Nome completo é obrigatório";
-    if (!form.nomeMae?.trim()) newErrors.nomeMae = "Nome da Mãe é obrigatório";
-    if (!form.dataNascimento?.trim()) newErrors.dataNascimento = "Data de Nascimento é obrigatória";
-    const cnsDigits = (form.cns || "").replace(/\D/g, "");
-    if (!cnsDigits) newErrors.cns = "CNS é obrigatório";
-    else if (cnsDigits.length !== 15) newErrors.cns = "CNS deve ter 15 dígitos";
-    if (!form.naturalidade?.trim()) newErrors.naturalidade = "Naturalidade é obrigatória";
-
-    if (!cd.cep?.toString().trim()) newErrors.cep = "CEP é obrigatório";
-    if (!cd.logradouro?.toString().trim()) newErrors.logradouro = "Logradouro é obrigatório";
-    if (!cd.numero?.toString().trim()) newErrors.numero = "Número é obrigatório";
-    if (!cd.bairro?.toString().trim()) newErrors.bairro = "Bairro é obrigatório";
-    if (!form.municipio?.trim()) newErrors.municipio = "Município é obrigatório";
-    if (!cd.uf?.toString().trim()) newErrors.uf = "UF é obrigatória";
-
-    if (!cd.nacionalidade?.toString().trim()) newErrors.nacionalidade = "Nacionalidade é obrigatória";
-    if (!((cd.racaCor || cd.raca_cor || "").toString().trim())) newErrors.racaCor = "Raça/Cor é obrigatória";
 
     const rawPhone = form.telefone?.trim();
-    if (!rawPhone) {
-      newErrors.telefone = "Telefone Principal é obrigatório. Ex: (93) 99999-0000";
-    } else {
+    if (rawPhone) {
       const normalized = normalizePhone(rawPhone);
       if (!normalized) {
         newErrors.telefone = "Informe o telefone com DDD ex: (93) 99999-0000";
