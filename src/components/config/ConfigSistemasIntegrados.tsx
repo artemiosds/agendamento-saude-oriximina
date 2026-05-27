@@ -324,19 +324,20 @@ const ConfigSistemasIntegrados: React.FC = () => {
 
               <Separator />
 
-              <div>
-                <Label className="flex items-center gap-1">
-                  <ShieldAlert className="w-4 h-4 text-amber-600" /> Token de SAÍDA
+              <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-100 space-y-3">
+                <Label className="flex items-center gap-1 text-amber-800">
+                  <ShieldAlert className="w-4 h-4" /> Token de SAÍDA (Token do sistema externo)
                 </Label>
                 <Input
                   type="password"
                   value={editing.token_saida || ''}
                   onChange={(e) => setEditing({ ...editing, token_saida: e.target.value })}
-                  placeholder="Cole aqui o Token de ENTRADA gerado no outro sistema"
+                  placeholder="Cole aqui o Token de ENTRADA do sistema externo"
+                  className="bg-white"
                 />
-                <p className="text-[11px] text-muted-foreground mt-1 flex items-start gap-1">
+                <p className="text-[11px] text-muted-foreground flex items-start gap-1">
                   <Info className="w-3 h-3 mt-0.5" />
-                  Cole aqui o <strong>Token de ENTRADA</strong> gerado no outro sistema. Este token será usado para enviar dados para ele.
+                  Cole o <strong>Token de ENTRADA</strong> gerado no outro sistema. Este token permite que este sistema envie dados para ele.
                 </p>
               </div>
 
