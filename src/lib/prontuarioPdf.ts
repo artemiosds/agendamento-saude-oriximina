@@ -360,7 +360,10 @@ export async function downloadProntuarioPdf(
 
   const carimboHtml = await docCarimboFor(prontuario.profissional_id, { 
     nome: prontuario.profissional_nome, 
-    especialidade: (profissional as any)?.profissao || (profissional as any)?.cargo 
+    especialidade: (profissional as any)?.profissao || (profissional as any)?.cargo,
+    conselho: (profissional as any)?.tipo_conselho,
+    numero_registro: (profissional as any)?.numero_conselho,
+    uf: (profissional as any)?.uf_conselho
   });
 
   const carimboFinal = carimboHtml || `
