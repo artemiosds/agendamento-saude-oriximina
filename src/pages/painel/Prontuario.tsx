@@ -232,6 +232,13 @@ const ProntuarioPage: React.FC = () => {
     const ag = agendamentos.find((a: any) => a.id === form.agendamento_id);
     return ag && ag.status === 'em_atendimento';
   }, [activeAtendimento, form.agendamento_id, agendamentos]);
+
+  const dynamicConfig = useProntuarioConfig(
+    user?.id,
+    form.tipo_registro,
+    user?.profissao,
+  );
+
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
