@@ -1965,7 +1965,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <ContactActionButton
-                      phone={pacientes.find((p) => p.id === f.pacienteId)?.telefone}
+                      phone={allPatients.find((p) => p.id === f.pacienteId)?.telefone}
                       patientName={f.pacienteNome}
                       unitName={unidade?.nome}
                     />
