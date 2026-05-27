@@ -340,7 +340,7 @@ const FilaEspera: React.FC = () => {
   const filteredFila = useMemo(() => {
     // Helper: calculate age from dataNascimento
     const getAge = (pacienteId: string): number => {
-      const pac = pacientes.find((p) => p.id === pacienteId);
+      const pac = allPatients.find((p) => p.id === pacienteId);
       if (!pac?.dataNascimento) return 0;
       const birth = new Date(pac.dataNascimento);
       if (isNaN(birth.getTime())) return 0;
