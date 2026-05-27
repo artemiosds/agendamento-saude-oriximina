@@ -1178,6 +1178,7 @@ const ProntuarioPage: React.FC = () => {
     setListaExames([]);
     setListaPrescricao([]);
     setEspecialidadeFields({});
+    setCustomData({});
     setSoapErrors(false);
     setSoapEnabled(true);
     
