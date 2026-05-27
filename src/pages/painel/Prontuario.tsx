@@ -2094,22 +2094,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handlePrint = (p: ProntuarioDB) => {
-    const pac = pacientes.find((px) => px.id === p.paciente_id);
-    const prof = funcionarios.find((f) => f.id === p.profissional_id);
-    const unit = unidades.find((u) => u.id === p.unidade_id);
-    
-    downloadProntuarioPdf({
-      ...p,
-      paciente_data_nasc: pac?.dataNascimento,
-      paciente_cpf: pac?.cpf,
-      paciente_cns: pac?.cns,
-      paciente_sexo: (pac as any)?.sexo,
-      paciente_telefone: pac?.telefone,
-      unidade_nome: unit?.nome || p.unidade_id,
-      profissional_especialidade: prof?.profissao || prof?.cargo,
-      ciclo_info: sessaoCycle && sessaoCycle.patient_id === p.paciente_id ? sessaoCycle : undefined,
-      pts_info: sessaoPts && sessaoPts.patient_id === p.paciente_id ? sessaoPts : undefined,
-    });
+    downloadProntuarioPdf(p.id);
     toast.success("Preparando impressão...");
   };
 
@@ -4446,7 +4431,7 @@ const ProntuarioPage: React.FC = () => {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => { downloadProntuarioPdf(p); toast.success("PDF gerado"); }}
+                            onClick={() => { downloadProntuarioPdf(p.id); toast.success("PDF gerado"); }}
                             title="Baixar PDF"
                             aria-label="Baixar PDF"
                           >
@@ -4680,7 +4665,7 @@ const ProntuarioPage: React.FC = () => {
               <Separator className="my-4" />
 
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario); toast.success("PDF gerado"); }}>
+                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario.id); toast.success("PDF gerado"); }}>
                   <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handlePrint(viewerProntuario)}>
