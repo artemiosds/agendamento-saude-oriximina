@@ -2810,7 +2810,7 @@ const ProntuarioPage: React.FC = () => {
 
             {/* SOAP Evolution — ALL 5 types */}
             <SoapFieldsAdaptive
-              profissao={user?.profissao}
+              profissao={effectiveProfissao}
               values={soapValues}
               onChange={handleSoapChange}
               soapErrors={soapErrors}
@@ -2821,7 +2821,7 @@ const ProntuarioPage: React.FC = () => {
               soapRef={soapRef as React.RefObject<HTMLDivElement>}
               customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
               customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
-              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, user?.profissao || '') : undefined}
+              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, effectiveProfissao || '') : undefined}
               onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
             />
 
