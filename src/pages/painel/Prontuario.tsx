@@ -2100,10 +2100,10 @@ const ProntuarioPage: React.FC = () => {
     
     downloadProntuarioPdf({
       ...p,
-      paciente_data_nasc: pac?.data_nascimento,
+      paciente_data_nasc: pac?.dataNascimento,
       paciente_cpf: pac?.cpf,
-      paciente_cns: (pac as any)?.cns,
-      paciente_sexo: pac?.sexo,
+      paciente_cns: pac?.cns,
+      paciente_sexo: (pac as any)?.sexo,
       paciente_telefone: pac?.telefone,
       unidade_nome: unit?.nome || p.unidade_id,
       profissional_especialidade: prof?.profissao || prof?.cargo,
