@@ -311,6 +311,30 @@ async function loadAdminEspecialidadeConfig(): Promise<AdminEspecialidadeConfig[
   }
 }
 
+const ADMIN_CUSTOM_FIELDS_KEY = 'custom_fields_config';
+
+async function loadAdminCustomFields(unidadeId?: string): Promise<any[]> {
+  try {
+    const { data } = await supabase
+      .from('system_config')
+      .select('configuracoes')
+      .eq('id', ADMIN_CUSTOM_FIELDS_KEY)
+      .maybeSingle();
+    
+    const cfg = data?.configuracoes as any;
+    if (!cfg || !cfg.prontuario) return [];
+
+    const screenData = cfg.prontuario;
+    const globalCfg = screenData['__global__'] || { fields: [] };
+    const unitCfg = unidadeId ? screenData[unidadeId] || { fields: [] } : { fields: [] };
+
+    // Merge global and unit fields
+    return [...globalCfg.fields, ...unitCfg.fields];
+  } catch {
+    return [];
+  }
+}
+
 const ADMIN_PRONTUARIO_KEY = 'config_prontuario_tipos';
 
 async function loadAdminProntuarioConfig(): Promise<any | null> {
@@ -333,16 +357,20 @@ async function loadAdminProntuarioConfig(): Promise<any | null> {
 export function mergeAdminAndProfConfig(
   adminEspecialidades: AdminEspecialidadeConfig[] | null,
   adminProntuario: any | null,
+  adminCustomFields: any[] | null,
   profissao: string | undefined,
   profConfig: ProntuarioConfigData,
   tipoNormalized: string
 ): ProntuarioConfigData {
   let merged = { ...profConfig };
+  
+  // Normalize tipo for comparison (primeira_consulta <-> avaliacao_inicial)
+  const tipoToMatch = tipoNormalized === 'avaliacao_inicial' ? ['avaliacao_inicial', 'primeira_consulta'] : [tipoNormalized];
 
   // 1. Apply general admin prontuario config (from ConfigProntuario)
   if (adminProntuario && adminProntuario.campos) {
     const adminCampos = (adminProntuario.campos as any[]).filter(c => 
-      c.tiposProntuario && c.tiposProntuario.includes(tipoNormalized)
+      c.tiposProntuario && c.tiposProntuario.some((t: string) => tipoToMatch.includes(t))
     );
 
     // Merge admin fields into blocos
@@ -375,10 +403,46 @@ export function mergeAdminAndProfConfig(
       }
     });
 
-    merged.blocos = updatedBlocos.sort((a, b) => a.ordem - b.ordem);
+    merged.blocos = updatedBlocos;
   }
 
-  // 2. Apply specialty specific admin config
+  // 2. Apply Custom Fields (from ConfigPersonalizarCampos)
+  if (adminCustomFields && adminCustomFields.length > 0) {
+    const specialtyKey = profissao ? normalizeProfissao(profissao) : null;
+    
+    adminCustomFields.forEach(cf => {
+      if (!cf.ativo) return;
+      
+      // Filter by scope
+      if (cf.escopo) {
+        if (!cf.escopo.global) {
+          const matchTipo = !cf.escopo.tiposProntuario || cf.escopo.tiposProntuario.length === 0 || 
+                           cf.escopo.tiposProntuario.some((t: string) => tipoToMatch.includes(t));
+          const matchEsp = !cf.escopo.especialidades || cf.escopo.especialidades.length === 0 || 
+                          (specialtyKey && cf.escopo.especialidades.includes(specialtyKey));
+          
+          if (!matchTipo || !matchEsp) return;
+        }
+      }
+
+      const idx = merged.blocos.findIndex(b => b.id === cf.nome || b.id === `custom_${cf.nome}`);
+      if (idx === -1) {
+        merged.blocos.push({
+          id: cf.nome,
+          label: cf.rotulo,
+          visivel: true,
+          obrigatorio: !!cf.obrigatorio,
+          favorito: false,
+          colapsado_padrao: false,
+          ordem: cf.ordem || merged.blocos.length * 10,
+          admin_obrigatorio: !!cf.obrigatorio,
+          // Store extra info about the custom field if needed
+        });
+      }
+    });
+  }
+
+  // 3. Apply specialty specific admin config
   if (adminEspecialidades && profissao) {
     const specialtyKey = normalizeProfissao(profissao);
     const adminEsp = adminEspecialidades.find(e =>
@@ -389,6 +453,14 @@ export function mergeAdminAndProfConfig(
       merged.blocos = merged.blocos.map(bloco => {
         const adminCampo = adminEsp.campos.find(c => c.key === bloco.id || c.id === bloco.id);
         if (adminCampo) {
+          // Check if field is applicable to this type
+          const tipos = adminCampo.tipos_prontuario && adminCampo.tipos_prontuario.length > 0 ? adminCampo.tipos_prontuario : ['avaliacao', 'retorno'];
+          const currentTipoShort = (tipoNormalized === 'avaliacao_inicial') ? 'avaliacao' : tipoNormalized;
+          
+          if (!tipos.includes(currentTipoShort)) {
+            return { ...bloco, admin_desabilitado: true, visivel: false };
+          }
+
           return {
             ...bloco,
             admin_desabilitado: !adminCampo.habilitado,
@@ -402,6 +474,9 @@ export function mergeAdminAndProfConfig(
     }
   }
 
+  // Sort by order at the end
+  merged.blocos = merged.blocos.sort((a, b) => a.ordem - b.ordem);
+
   return merged;
 }
 
@@ -414,6 +489,7 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
   const [config, setConfig] = useState<ProntuarioConfigData | null>(() => getDefaultConfig(tipoNormalized));
   const [adminConfig, setAdminConfig] = useState<AdminEspecialidadeConfig[] | null>(null);
   const [adminProntuario, setAdminProntuario] = useState<any | null>(null);
+  const [adminCustomFields, setAdminCustomFields] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -424,7 +500,7 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
     const load = async () => {
       setLoading(true);
       try {
-        const [profResult, adminEspResult, adminProntResult] = await Promise.all([
+        const [profResult, adminEspResult, adminProntResult, adminCustomResult] = await Promise.all([
           profissionalId ? (supabase as any)
             .from('prontuario_config')
             .select('config, versao')
@@ -433,11 +509,13 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
             .maybeSingle() : Promise.resolve({ data: null }),
           loadAdminEspecialidadeConfig(),
           loadAdminProntuarioConfig(),
+          loadAdminCustomFields(),
         ]);
 
         if (!cancelled) {
           setAdminConfig(adminEspResult);
           setAdminProntuario(adminProntResult);
+          setAdminCustomFields(adminCustomResult);
           
           const defaults = getDefaultConfig(tipoNormalized);
           let loadedConfig: ProntuarioConfigData;
@@ -458,7 +536,7 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
           }
 
           // Apply merging logic
-          const merged = mergeAdminAndProfConfig(adminEspResult, adminProntResult, profissao, loadedConfig, tipoNormalized);
+          const merged = mergeAdminAndProfConfig(adminEspResult, adminProntResult, adminCustomResult, profissao, loadedConfig, tipoNormalized);
           setConfig(merged);
         }
       } catch (err) {
@@ -514,6 +592,7 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
     config,
     adminConfig,
     adminProntuario,
+    adminCustomFields,
     loading,
     saving,
     saveConfig,
