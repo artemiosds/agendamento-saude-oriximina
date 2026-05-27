@@ -4074,6 +4074,21 @@ const ProntuarioPage: React.FC = () => {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
+                                  const custom_data = p.custom_data || {};
+                                  const sections: any[] = [];
+                                  Object.entries(custom_data).forEach(([key, val]) => {
+                                    if (val) {
+                                      const label = dynamicConfig.visibleBlocks.find((b: any) => b.id === key)?.label || key;
+                                      sections.push({ title: label, content: String(val) });
+                                    }
+                                  });
+                                  handlePrint(p, sections);
+                                }}
+                              >
+                                <Printer className="w-3.5 h-3.5 mr-2" /> Imprimir com campos extras
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
                                   const link = `${window.location.origin}/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`;
                                   navigator.clipboard.writeText(link);
                                   toast.success("Link copiado");
