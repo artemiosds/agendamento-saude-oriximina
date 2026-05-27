@@ -526,6 +526,10 @@ const ProntuarioPage: React.FC = () => {
   ]);
 
   const handleRegistrarSessaoClick = () => {
+    setSelectSessionOpen(true);
+  };
+
+  const handleSelectSessionToRegister = (session: CycleSession) => {
     if (sessionRegistrationError) {
       toast.error(sessionRegistrationError);
       return;
