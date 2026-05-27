@@ -437,10 +437,19 @@ const ProntuarioPage: React.FC = () => {
       if (fieldKey === 'prescricao') {
         return (
           <div key={bloco.id} className="pt-2">
-            <PrescricaoMedicamentos 
-              pacienteId={form.paciente_id} 
-              onItemsChange={setListaPrescricao}
-              initialItems={listaPrescricao}
+            <PrescricaoMedicamentos
+              profissionalId={user?.id || ""}
+              value={listaPrescricao}
+              onChange={setListaPrescricao}
+              pacienteNome={form.paciente_nome}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
+              dataAtendimento={form.data_atendimento}
+              profissionalNome={user?.nome}
+              profissionalConselho={user?.numeroConselho}
+              profissionalTipoConselho={user?.tipoConselho}
+              profissionalUfConselho={user?.ufConselho}
+              unidadeNome={unidadeAtualNome}
             />
           </div>
         );
@@ -449,10 +458,19 @@ const ProntuarioPage: React.FC = () => {
       if (fieldKey === 'solicitacao_exames') {
         return (
           <div key={bloco.id} className="pt-2">
-            <SolicitacaoExames 
-              pacienteId={form.paciente_id} 
-              onExamesChange={setListaExames}
-              initialExames={listaExames}
+            <SolicitacaoExames
+              profissionalId={user?.id || ""}
+              value={listaExames}
+              onChange={setListaExames}
+              pacienteNome={form.paciente_nome}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
+              dataAtendimento={form.data_atendimento}
+              profissionalNome={user?.nome}
+              profissionalConselho={user?.numeroConselho}
+              profissionalTipoConselho={user?.tipoConselho}
+              profissionalUfConselho={user?.ufConselho}
+              unidadeNome={unidadeAtualNome}
             />
           </div>
         );
