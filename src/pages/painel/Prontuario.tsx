@@ -157,6 +157,7 @@ const emptyForm = {
   soap_objetivo: "",
   soap_avaliacao: "",
   soap_plano: "",
+  custom_data: {} as Record<string, any>,
 };
 
 const classificarIMC = (imc: number): string => {
