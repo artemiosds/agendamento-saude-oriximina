@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
+import { cn, todayLocalStr } from "@/lib/utils";
+import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,7 +32,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical, ChevronRight, Calendar, User, MapPin, Target, CalendarClock, Eraser } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
@@ -62,8 +64,6 @@ import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
-import { todayLocalStr } from "@/lib/utils";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -101,7 +101,6 @@ interface ProntuarioDB {
   episodio_id: string | null;
   criado_em: string;
   atualizado_em: string;
-  custom_data?: any;
 }
 
 interface ProcedimentoDB {
@@ -157,7 +156,6 @@ const emptyForm = {
   soap_objetivo: "",
   soap_avaliacao: "",
   soap_plano: "",
-  custom_data: {} as Record<string, any>,
 };
 
 const classificarIMC = (imc: number): string => {
@@ -198,10 +196,19 @@ const retornoOptions = [
   { value: "outro", label: "Outro prazo" },
 ];
 
+const sessionStatusLabels: Record<string, string> = {
+  pendente_agendamento: "Ag. Agendamento",
+  agendada: "Agendada",
+  realizada: "Realizada",
+  paciente_faltou: "Faltou",
+  cancelada: "Cancelada",
+  remarcada: "Remarcada",
+};
+
 const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, bloqueios } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, getAvailableDates, salas, bloqueios } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -233,13 +240,6 @@ const ProntuarioPage: React.FC = () => {
     const ag = agendamentos.find((a: any) => a.id === form.agendamento_id);
     return ag && ag.status === 'em_atendimento';
   }, [activeAtendimento, form.agendamento_id, agendamentos]);
-
-  const dynamicConfig = useProntuarioConfig(
-    user?.id,
-    form.tipo_registro,
-    user?.profissao,
-  );
-
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -386,11 +386,11 @@ const ProntuarioPage: React.FC = () => {
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();
-  const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+
   const soapCustom = useSoapCustomOptions(user?.id);
-  const showSoapDropdown = hasDropdownSoap(user?.profissao);
+
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
@@ -402,9 +402,22 @@ const ProntuarioPage: React.FC = () => {
 
   // Sessão: cycle + PTS state
   interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
-  interface ActiveCycle { id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; }
-  interface ActivePTS { id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; }
+  interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
+  interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
+
+  const effectiveProfissao = useMemo(() => {
+    // Se for registro de sessão e tiver ciclo, prioriza a especialidade do ciclo
+    if (form.tipo_registro === 'sessao' && sessaoCycle?.specialty) {
+      return sessaoCycle.specialty;
+    }
+    // Caso contrário, usa a do usuário logado
+    return user?.profissao;
+  }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
+
+  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(user?.id, form.tipo_registro, effectiveProfissao);
+
+  const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
   const [sessaoPtsSigtap, setSessaoPtsSigtap] = useState<{ procedimento_codigo: string; procedimento_nome: string; especialidade: string }[]>([]);
@@ -416,6 +429,16 @@ const ProntuarioPage: React.FC = () => {
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
   const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const soapRef = useRef<HTMLDivElement>(null);
+
+  // Modal Agendar/Remarcar states
+  const [agendarSessaoTarget, setAgendarSessaoTarget] = useState<CycleSession | null>(null);
+  const [remarcarTarget, setRemarcarTarget] = useState<CycleSession | null>(null);
+  const [agendarSessaoData, setAgendarSessaoData] = useState("");
+  const [agendarSessaoHora, setAgendarSessaoHora] = useState("");
+  const [agendarSessaoSalaId, setAgendarSessaoSalaId] = useState("");
+  const [agendandoSessao, setAgendandoSessao] = useState(false);
+  const [remarcarSaving, setRemarcarSaving] = useState(false);
+  const [selectSessionOpen, setSelectSessionOpen] = useState(false);
 
   const loadSessaoData = async (patientId: string, _professionalId?: string) => {
     setSessaoDataLoading(true);
@@ -525,15 +548,21 @@ const ProntuarioPage: React.FC = () => {
   ]);
 
   const handleRegistrarSessaoClick = () => {
+    setSelectSessionOpen(true);
+  };
+
+  const handleSelectSessionToRegister = (session: CycleSession) => {
     if (sessionRegistrationError) {
       toast.error(sessionRegistrationError);
       return;
     }
 
-    if (!currentSessionForRegistration) {
-      toast.error(`Nenhuma sessão disponível para ${registrationReferenceDateLabel}.`);
+    if (!session) {
+      toast.error(`Sessão não selecionada.`);
       return;
     }
+
+    setSelectSessionOpen(false);
 
     const shouldSubmitSession = sessionRegistrationRequested || form.tipo_registro === 'sessao';
 
@@ -542,12 +571,12 @@ const ProntuarioPage: React.FC = () => {
     setForm((prev) => ({
       ...prev,
       tipo_registro: 'sessao',
-      data_atendimento: registrationReferenceDate,
-      agendamento_id: prev.agendamento_id || currentSessionForRegistration.appointment_id || '',
+      data_atendimento: session.scheduled_date || prev.data_atendimento || registrationReferenceDate,
+      agendamento_id: prev.agendamento_id || session.appointment_id || '',
     }));
 
     if (shouldSubmitSession) {
-      const effectiveError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+      const effectiveError = null;
       if (effectiveError) {
         setSoapErrors(true);
         setSessaoHighlightSOAP(true);
@@ -582,8 +611,8 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const sessionSoapValidationError = useMemo(
-    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(user?.profissao) }),
-    [sessionSoapPayload, soapEnabled, user?.profissao],
+    () => getSoapValidationError(sessionSoapPayload, { required: false }),
+    [sessionSoapPayload, soapEnabled, effectiveProfissao],
   );
 
   const canConfirmSessionRegistration = useMemo(
@@ -1077,8 +1106,7 @@ const ProntuarioPage: React.FC = () => {
       paciente_id: pacienteId || "",
       paciente_nome: pacienteNome || "",
       data_atendimento: new Date().toISOString().split("T")[0], 
-      tipo_registro: "avaliacao_inicial",
-      custom_data: {},
+      tipo_registro: "avaliacao_inicial" 
     });
     setDialogOpen(true);
   };
@@ -1124,7 +1152,6 @@ const ProntuarioPage: React.FC = () => {
       soap_objetivo: (p as any).soap_objetivo || "",
       soap_avaliacao: (p as any).soap_avaliacao || "",
       soap_plano: (p as any).soap_plano || "",
-      custom_data: (p as any).custom_data || {},
     };
     setForm(formData);
     setPreviousForm(formData);
@@ -1178,13 +1205,7 @@ const ProntuarioPage: React.FC = () => {
       return false;
     }
     const soapPayload = sessionSoapPayload;
-    const soapValidationError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
-    if (soapValidationError) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error(soapValidationError);
-      return false;
-    }
+    const soapValidationError = null;
     setSoapErrors(false);
     setSaving(true);
     // CRÍTICO: cancela autosave pendente e aguarda autosave em andamento para
@@ -1551,7 +1572,6 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: f.solicitacao_exames,
         evolucao: f.evolucao,
         observacoes: f.observacoes,
-        custom_data: (f as any).custom_data || {},
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
@@ -1793,13 +1813,7 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     const soapPayload = sessionSoapPayload;
-    const soapError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
-    if (soapError) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error(soapError);
-      return;
-    }
+    const soapError = null;
     setSoapErrors(false);
     setSaving(true);
     let insertedNewProntuario = false;
@@ -1962,6 +1976,101 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
+  const handleDesmarcarSessao = async (session: CycleSession) => {
+    if (session.status === "realizada") {
+      toast.error("Sessão já realizada não pode ser desmarcada.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será EXCLUÍDO da agenda (horário liberado) e a sessão voltará para "Aguardando agendamento".`
+    );
+    if (!confirmed) return;
+
+    try {
+      if (session.appointment_id) {
+        const { error: delErr } = await supabase.from("agendamentos").delete().eq("id", session.appointment_id);
+        if (delErr) throw delErr;
+      }
+
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({
+          status: "pendente_agendamento",
+          appointment_id: null,
+        })
+        .eq("id", session.id);
+      if (error) throw error;
+
+      await logAction({
+        acao: "desmarcar_sessao",
+        entidade: "treatment_session",
+        entidadeId: session.id,
+        modulo: "prontuario",
+        user,
+        detalhes: {
+          ciclo: sessaoCycle?.id,
+          sessao: session.session_number,
+          agendamento_excluido: session.appointment_id,
+        },
+      });
+
+      toast.success(`Sessão ${session.session_number} desmarcada e horário liberado na agenda.`);
+      await Promise.all([
+        loadSessaoData(form.paciente_id),
+        refreshAgendamentos(),
+      ]);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao desmarcar sessão: " + (err?.message || ""));
+    }
+  };
+
+  const handleClearRealizada = async (session: CycleSession) => {
+    if (!sessaoCycle) return;
+    const confirmed = window.confirm(
+      `Tem certeza que deseja limpar a sessão ${session.session_number}/${session.total_sessions}?\n\nIsto reverterá o status para "Agendada" e apagará os dados clínicos.`
+    );
+    if (!confirmed) return;
+    try {
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({
+          status: "agendada",
+          clinical_notes: "",
+          procedure_done: "",
+        })
+        .eq("id", session.id);
+      if (error) throw error;
+
+      const completedCount = sessaoCycleSessions.filter(s => s.id !== session.id && s.status === 'realizada').length;
+      const { error: cycErr } = await supabase
+        .from("treatment_cycles")
+        .update({
+          sessions_done: completedCount,
+          status: 'em_andamento',
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", sessaoCycle.id);
+      if (cycErr) throw cycErr;
+
+      await logAction({
+        acao: "limpar_sessao_realizada",
+        entidade: "treatment_session",
+        entidadeId: session.id,
+        modulo: "prontuario",
+        user,
+        detalhes: { ciclo: sessaoCycle.id, sessao: session.session_number },
+      });
+
+      toast.success(`Sessão ${session.session_number} retornada ao status Agendada.`);
+      await loadSessaoData(form.paciente_id);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao limpar sessão: " + err.message);
+    }
+  };
+
   const handleDelete = async (p: ProntuarioDB) => {
     try {
       await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", p.id);
@@ -1985,57 +2094,9 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  const handlePrint = (p: ProntuarioDB, extraSections?: { title: string; content: string }[]) => {
-    const pac = pacientes.find((px) => px.id === p.paciente_id);
-    logAction({
-      acao: "prontuario_exportado_pdf",
-      entidade: "prontuario",
-      entidadeId: p.id,
-      modulo: "prontuario",
-      user,
-      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || "" },
-    });
-    const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
-    const baseSections = [
-      { title: "Queixa Principal", content: p.queixa_principal },
-      { title: "Anamnese", content: p.anamnese },
-      { title: "Sinais e Sintomas", content: p.sinais_sintomas },
-      { title: "Exame Físico", content: p.exame_fisico },
-      { title: "Hipótese / Avaliação", content: p.hipotese },
-      { title: "Conduta", content: p.conduta },
-      { title: "Prescrição / Orientações", content: p.prescricao },
-      { title: "Solicitação de Exames", content: p.solicitacao_exames },
-      { title: "Evolução", content: p.evolucao },
-      { title: "Procedimentos", content: p.procedimentos_texto },
-      { title: "Observações Gerais", content: p.observacoes },
-      { title: "Indicação de Retorno", content: p.indicacao_retorno },
-    ];
-
-    const allSections = extraSections ? [...baseSections, ...extraSections] : baseSections;
-
-    const sectionsHtml = allSections
-      .filter((s) => s.content)
-      .map(
-        (s) =>
-          `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`,
-      )
-      .join("");
-    const body = `
-      <div class="info-grid">
-        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${p.paciente_nome}</span></div>
-        <div><span class="info-label">Data:</span><br/><span class="info-value">${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}</span></div>
-        <div><span class="info-label">Profissional:</span><br/><span class="info-value">${p.profissional_nome}</span></div>
-        <div><span class="info-label">Hora:</span><br/><span class="info-value">${p.hora_atendimento || "-"}</span></div>
-        <div><span class="info-label">Unidade:</span><br/><span class="info-value">${unidadeNome}</span></div>
-        <div><span class="info-label">Setor:</span><br/><span class="info-value">${p.setor || "-"}</span></div>
-      </div>
-      ${sectionsHtml}
-      <div class="signature">
-        <div class="signature-line"></div>
-        <div class="name">${p.profissional_nome}</div>
-        <div class="role">${p.setor || ""}</div>
-      </div>`;
-    openPrintDocument("Prontuário de Atendimento", body, { Unidade: unidadeNome });
+  const handlePrint = (p: ProntuarioDB) => {
+    downloadProntuarioPdf(p.id);
+    toast.success("Preparando impressão...");
   };
 
   const handlePrintFullHistory = (pacienteId: string, pacienteNome: string) => {
@@ -2060,36 +2121,37 @@ const ProntuarioPage: React.FC = () => {
       const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
       const fields = [
         { title: "Queixa Principal", content: p.queixa_principal },
-        { title: "Anamnese", content: p.anamnese },
-        { title: "Sinais e Sintomas", content: p.sinais_sintomas },
-        { title: "Exame Físico", content: p.exame_fisico },
-        { title: "Hipótese / Avaliação", content: p.hipotese },
-        { title: "Conduta", content: p.conduta },
-        { title: "Prescrição", content: p.prescricao },
-        { title: "Evolução", content: p.evolucao },
+        { title: "S — Subjetivo", content: (p as any).soap_subjetivo },
+        { title: "O — Objetivo", content: (p as any).soap_objetivo },
+        { title: "A — Avaliação", content: (p as any).soap_avaliacao },
+        { title: "P — Plano", content: (p as any).soap_plano },
+        { title: "Evolução / Conduta", content: p.conduta || p.evolucao },
         { title: "Procedimentos", content: p.procedimentos_texto },
+        { title: "Prescrição", content: p.prescricao },
         { title: "Observações", content: p.observacoes },
       ].filter((s) => s.content).map(
-        (s) => `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`
+        (s) => `<div class="section"><div class="section-title">${s.title}</div><div class="section-content" style="font-size:10pt;">${s.content}</div></div>`
       ).join("");
+
       return `
-        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #ddd;border-radius:8px;padding:16px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-            <strong>${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} ${p.hora_atendimento || ""}</strong>
-            <span style="color:#666;">Prof. ${p.profissional_nome} • ${unidadeNome}</span>
+        <div style="page-break-inside:avoid;margin-bottom:12px;border-bottom:1px solid #eee;padding-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:9pt;font-weight:700;color:#0369a1;">
+            <span>${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} ${p.hora_atendimento || ""}</span>
+            <span style="color:#666;">Prof. ${p.profissional_nome} &middot; ${unidadeNome}</span>
           </div>
-          ${fields}
+          <div style="padding-left: 8px; border-left: 2px solid #f1f5f9;">
+            ${fields}
+          </div>
         </div>`;
     }).join("");
 
     const body = `
       <div class="info-grid">
-        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${pacienteNome}</span></div>
-        <div><span class="info-label">CPF:</span><br/><span class="info-value">${pac?.cpf || "—"}</span></div>
-        <div><span class="info-label">CNS:</span><br/><span class="info-value">${(pac as any)?.cns || "—"}</span></div>
-        <div><span class="info-label">Total de Registros:</span><br/><span class="info-value">${patientRecords.length}</span></div>
+        <div class="info-item"><span class="info-label">Paciente:</span><span class="info-value">${pacienteNome}</span></div>
+        <div class="info-item"><span class="info-label">CPF:</span><span class="info-value">${pac?.cpf || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Data Nasc:</span><span class="info-value">${pac?.dataNascimento ? new Date(pac.dataNascimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</span></div>
       </div>
-      <h3 style="margin:16px 0 8px;font-size:14px;font-weight:bold;">Histórico Clínico Completo</h3>
+      <h3 style="margin:12px 0 8px;font-size:12pt;font-weight:700;color:#0c4a6e;text-transform:uppercase;border-bottom:2px solid #0369a1;">Histórico Clínico Completo</h3>
       ${allSections}`;
     openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, { Paciente: pacienteNome });
   };
@@ -2683,66 +2745,6 @@ const ProntuarioPage: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
-              
-              {/* CONFIGURAÇÃO DINÂMICA (useProntuarioConfig) */}
-              {dynamicConfig.visibleBlocks.length > 0 && (
-                <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-4">
-                  <div className="flex items-center gap-2 text-primary font-semibold text-sm mb-2">
-                    <Settings className="w-4 h-4" /> Configurações Personalizadas
-                  </div>
-                  {dynamicConfig.visibleBlocks.map((bloco: any) => {
-                    // Ignorar blocos que já têm campos nativos complexos ou que o usuário pediu para não substituir
-                    if (['soap', 'evolucao', 'especialidade', 'prescricao', 'solicitacao_exames', 'procedimentos', 'ciclo_tratamento', 'pts_vinculado', 'queixa_principal', 'anamnese', 'sinais_sintomas', 'exame_fisico', 'hipotese', 'conduta', 'observacoes', 'indicacao_retorno'].includes(bloco.id)) return null;
-                    
-                    const value = (form as any).custom_data?.[bloco.id] || "";
-                    const setVal = (val: any) => setForm(p => ({
-                      ...p,
-                      custom_data: { ...(p as any).custom_data, [bloco.id]: val }
-                    }));
-
-                    return (
-                      <div key={bloco.id} className="space-y-1.5">
-                        <Label className="text-xs font-semibold uppercase tracking-wider">
-                          {bloco.label}
-                          {(bloco.obrigatorio || bloco.admin_obrigatorio) && <span className="text-destructive ml-0.5">*</span>}
-                        </Label>
-                        {bloco.tipo === 'textarea' ? (
-                          <DebouncedTextarea
-                            rows={3}
-                            value={value}
-                            onChange={(e) => setVal(e.target.value)}
-                            placeholder={`${bloco.label}...`}
-                            className="text-sm"
-                          />
-                        ) : bloco.tipo === 'select' ? (
-                          <Select value={value} onValueChange={setVal}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                            <SelectContent>
-                              {bloco.opcoes?.map((opt: string) => (
-                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : bloco.tipo === 'checkbox' ? (
-                          <div className="flex items-center gap-2">
-                            <Checkbox checked={!!value} onCheckedChange={setVal} />
-                            <span className="text-sm">{bloco.label}</span>
-                          </div>
-                        ) : (
-                          <DebouncedInput
-                            value={value}
-                            onChange={(e) => setVal(e.target.value)}
-                            placeholder={`${bloco.label}...`}
-                            className="text-sm"
-                          />
-                        )}
-                        {bloco.ajuda && <p className="text-[10px] text-muted-foreground italic">💡 {bloco.ajuda}</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
               <div className="flex items-center justify-end mt-1">
                 <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1" onClick={() => navigate('/painel/meu-prontuario')}>
                   <Settings className="w-3 h-3" /> Personalizar meu prontuário
@@ -2754,7 +2756,7 @@ const ProntuarioPage: React.FC = () => {
 
             {/* SOAP Evolution — ALL 5 types */}
             <SoapFieldsAdaptive
-              profissao={user?.profissao}
+              profissao={effectiveProfissao}
               values={soapValues}
               onChange={handleSoapChange}
               soapErrors={soapErrors}
@@ -2765,7 +2767,7 @@ const ProntuarioPage: React.FC = () => {
               soapRef={soapRef as React.RefObject<HTMLDivElement>}
               customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
               customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
-              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, user?.profissao || '') : undefined}
+              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, effectiveProfissao || '') : undefined}
               onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
             />
 
@@ -2861,176 +2863,397 @@ const ProntuarioPage: React.FC = () => {
                 ) : (
                   <>
                     {/* 1. CICLO DE TRATAMENTO ATIVO */}
-                    <div className="rounded-lg border bg-card p-4 space-y-3">
-                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
-                      </h4>
-                      {sessaoCycle ? (
-                        <>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div><span className="text-muted-foreground">Tipo:</span> <strong>{sessaoCycle.treatment_type}</strong></div>
-                            <div><span className="text-muted-foreground">Status:</span>{' '}
-                              <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-xs">
-                                {sessaoCycle.status === 'em_andamento' ? 'Ativo' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
-                              </Badge>
+                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
+                        </h4>
+                        {sessaoCycle && (
+                          <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-[10px] h-5">
+                            {sessaoCycle.status === 'em_andamento' ? 'Em andamento' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="p-4 space-y-4">
+                        {sessaoCycle ? (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div className="flex items-start gap-2">
+                                <Activity className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Tratamento</span>
+                                  <strong className="text-foreground">{sessaoCycle.treatment_type}</strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <Target className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Especialidade</span>
+                                  <strong className="text-foreground">{sessaoCycle.specialty || '—'}</strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <User className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Profissional</span>
+                                  <strong className="text-foreground">
+                                    {funcionarios.find(f => f.id === sessaoCycle.professional_id)?.nome || '—'}
+                                  </strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <MapPin className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Unidade</span>
+                                  <strong className="text-foreground">
+                                    {unidades.find(u => u.id === sessaoCycle.unit_id)?.nome || '—'}
+                                  </strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <Calendar className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Início</span>
+                                  <strong className="text-foreground">{new Date(sessaoCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</strong>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <Clock className="w-3.5 h-3.5 text-muted-foreground mt-0.5" />
+                                <div>
+                                  <span className="text-muted-foreground block text-[10px] uppercase tracking-wider font-semibold">Previsão</span>
+                                  <strong className="text-foreground">{sessaoCycle.end_date_predicted ? new Date(sessaoCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</strong>
+                                </div>
+                              </div>
                             </div>
-                            <div><span className="text-muted-foreground">Início:</span> <strong>{new Date(sessaoCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</strong></div>
-                            <div><span className="text-muted-foreground">Previsão:</span> <strong>{sessaoCycle.end_date_predicted ? new Date(sessaoCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</strong></div>
-                            <div><span className="text-muted-foreground">Frequência:</span> <strong>{sessaoCycle.frequency}</strong></div>
-                          </div>
-                          {/* Progress bar */}
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>Sessão {sessaoCycle.sessions_done} de {sessaoCycle.total_sessions} realizadas</span>
-                              <span>{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</span>
+
+                             <div className="pt-2 border-t space-y-2">
+                               <div className="flex justify-between text-xs items-center">
+                                 <span className="font-medium text-muted-foreground uppercase tracking-tight">Progresso do Ciclo</span>
+                                 <Badge variant="secondary" className="h-4 text-[10px]">{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</Badge>
+                               </div>
+                               <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-1.5" />
+                               <div className="flex justify-between text-[10px] text-muted-foreground">
+                                 <span>{sessaoCycle.sessions_done} realizadas</span>
+                                 <span>Total: {sessaoCycle.total_sessions} sessões</span>
+                               </div>
+                             </div>
+
+                             <div className="pt-2 space-y-2">
+                               <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block mb-1">Sessões do ciclo</span>
+                               <div className="max-h-[300px] overflow-y-auto border rounded-lg divide-y bg-background">
+                                 {sessaoCycleSessions.map((s) => {
+                                   const isPendente = s.status === "pendente_agendamento";
+                                   const isAgendada = s.status === "agendada";
+                                   const isRealizada = s.status === "realizada";
+                                   const isFaltou = s.status === "paciente_faltou";
+                                   
+                                   const sessionStatusColors: Record<string, string> = {
+                                     pendente_agendamento: "bg-warning/10 text-warning",
+                                     agendada: "bg-info/10 text-info",
+                                     realizada: "bg-success/10 text-success",
+                                     paciente_faltou: "bg-destructive/10 text-destructive",
+                                     cancelada: "bg-muted text-muted-foreground",
+                                     remarcada: "bg-warning/10 text-warning",
+                                   };
+
+                                   return (
+                                     <div key={s.id} className="p-2.5 flex flex-col gap-1.5">
+                                       <div className="flex items-center gap-2">
+                                         <span className="text-xs font-mono font-bold text-primary w-8 shrink-0">
+                                           {s.session_number}/{s.total_sessions}
+                                         </span>
+                                         <div className="flex-1 min-w-0">
+                                           <p className="text-xs font-medium">
+                                             {s.scheduled_date ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR") : "Sem data"}
+                                             {isPendente && <span className="ml-1 text-[10px] text-warning opacity-80">· Pendente</span>}
+                                           </p>
+                                         </div>
+                                         <Badge className={cn("text-[9px] h-4 px-1.5 shrink-0", sessionStatusColors[s.status])}>
+                                           {sessionStatusLabels[s.status] || s.status}
+                                         </Badge>
+                                       </div>
+                                       
+                                       <div className="flex gap-1.5 flex-wrap">
+                                         {(isPendente || isAgendada) && sessaoCycle?.status === 'em_andamento' && (
+                                           <Button 
+                                             type="button" 
+                                             size="sm" 
+                                             variant="outline" 
+                                             className="h-6 text-[10px] px-2 border-primary text-primary hover:bg-primary/5"
+                                             onClick={() => {
+                                               setAgendarSessaoTarget(s);
+                                               setAgendarSessaoData("");
+                                               setAgendarSessaoHora("");
+                                               setAgendarSessaoSalaId("");
+                                             }}
+                                           >
+                                             <Calendar className="w-2.5 h-2.5 mr-1" /> Agendar
+                                           </Button>
+                                         )}
+                                         
+                                         {isAgendada && sessaoCycle?.status === 'em_andamento' && (
+                                           <>
+                                             <Button 
+                                               type="button" 
+                                               size="sm" 
+                                               variant="outline" 
+                                               className="h-6 text-[10px] px-2 border-warning text-warning hover:bg-warning/5"
+                                               onClick={() => setRemarcarTarget(s)}
+                                             >
+                                               <CalendarClock className="w-2.5 h-2.5 mr-1" /> Remarcar
+                                             </Button>
+                                             <Button 
+                                               type="button" 
+                                               size="sm" 
+                                               variant="outline" 
+                                               className="h-6 text-[10px] px-2 border-destructive text-destructive hover:bg-destructive/5"
+                                               onClick={() => handleDesmarcarSessao(s)}
+                                             >
+                                               <X className="w-2.5 h-2.5 mr-1" /> Desmarcar
+                                             </Button>
+                                             {s.scheduled_date === todayLocalStr() && (
+                                               <Button 
+                                                 type="button" 
+                                                 size="sm" 
+                                                 variant="default" 
+                                                 className="h-6 text-[10px] px-2 bg-success hover:bg-success/90"
+                                                 onClick={() => handleConfirmSession(s)}
+                                                 disabled={confirmingSessionId === s.id}
+                                               >
+                                                 {confirmingSessionId === s.id ? <Loader2 className="w-2.5 h-2.5 animate-spin mr-1" /> : <CheckCircle className="w-2.5 h-2.5 mr-1" />}
+                                                 Confirmar
+                                               </Button>
+                                             )}
+                                           </>
+                                         )}
+
+                                         {isRealizada && (
+                                           <Button 
+                                             type="button" 
+                                             size="sm" 
+                                             variant="outline" 
+                                             className="h-6 text-[10px] px-2"
+                                             onClick={() => handleClearRealizada(s)}
+                                           >
+                                             <Eraser className="w-2.5 h-2.5 mr-1" /> Limpar
+                                           </Button>
+                                         )}
+                                       </div>
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+                             </div>
+
+                            {(() => {
+                              const nextSession = sessaoCycleSessions.find(s => s.status === 'agendada' && s.scheduled_date >= new Date().toISOString().split('T')[0]);
+                              const waitingSchedule = sessaoCycleSessions.filter(s => s.status === 'pendente_agendamento' || !s.appointment_id).length;
+                              
+                              if (!nextSession && waitingSchedule === 0) return null;
+                              
+                              return (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                                  {nextSession && (
+                                    <div className="bg-primary/5 rounded-lg p-2 border border-primary/10">
+                                      <span className="text-[9px] text-primary uppercase font-bold tracking-widest block">Próxima Sessão</span>
+                                      <div className="flex items-center justify-between mt-1">
+                                        <span className="text-xs font-semibold">{new Date(nextSession.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">#{nextSession.session_number}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {waitingSchedule > 0 && (
+                                    <div className="bg-amber-500/5 rounded-lg p-2 border border-amber-500/10">
+                                      <span className="text-[9px] text-amber-600 uppercase font-bold tracking-widest block">Aguardando Agenda</span>
+                                      <div className="flex items-center justify-between mt-1">
+                                        <span className="text-xs font-semibold">{waitingSchedule} sessões</span>
+                                        <span className="text-[10px] text-muted-foreground">Pendente</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            <div className="flex flex-wrap gap-2 pt-2 border-t">
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/tratamentos?cycleId=${sessaoCycle.id}`)}
+                              >
+                                <Eye className="w-3 h-3" /> Detalhes
+                              </Button>
+                              <Button 
+                                type="button"
+                                variant="default" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5 gradient-primary"
+                                onClick={handleRegistrarSessaoClick}
+                              >
+                                <CheckCircle className="w-3 h-3" /> Registrar sessão
+                              </Button>
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/tratamentos?cycleId=${sessaoCycle.id}&action=schedule`)}
+                              >
+                                <Calendar className="w-3 h-3" /> Agendar
+                              </Button>
+                              {!sessaoPts && (
+                                <Button 
+                                  type="button"
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="h-8 text-xs gap-1.5 border-purple-200 text-purple-600 hover:bg-purple-50"
+                                  onClick={() => setPtsOpen(true)}
+                                >
+                                  <Link2 className="w-3 h-3" /> Vincular PTS
+                                </Button>
+                              )}
                             </div>
-                            <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-2" />
-                          </div>
-                          {/* Session list */}
-                          {sessaoCycleSessions.length > 0 && (
-                            <div className="border rounded-md overflow-hidden">
-                              <table className="w-full text-xs">
-                                <thead className="bg-muted/50">
-                                  <tr>
-                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Nº</th>
-                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Data</th>
-                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Status</th>
-                                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Ação</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {sessaoCycleSessions.map(s => {
-                                    const isCurrent = currentSessionForRegistration?.id === s.id;
-                                    const isRealizada = s.status === 'realizada';
-                                    const isPending = !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(s.status);
-                                    const isConfirming = confirmingSessionId === s.id;
-                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : isPending ? '⏳' : '❌';
-                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Atual' : s.status === 'falta' || s.status === 'paciente_faltou' ? 'Falta' : s.status === 'cancelada' ? 'Cancelada' : 'Aguardando';
-                                    return (
-                                      <tr key={s.id} className={`border-t ${isCurrent ? 'bg-primary/5' : ''}`}>
-                                        <td className="px-2 py-1.5 font-mono">{s.session_number}</td>
-                                        <td className="px-2 py-1.5">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-                                        <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
-                                        <td className="px-2 py-1.5 text-right">
-                                          {isPending && !isRealizada && (
-                                            <Button
-                                              size="sm"
-                                              variant={isCurrent ? "default" : "outline"}
-                                              className="h-6 text-xs px-2"
-                                              onClick={() => handleConfirmSession(s)}
-                                              disabled={isConfirming || saving}
-                                            >
-                                              {isConfirming ? 'Confirmando...' : '✓ Confirmar'}
-                                            </Button>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-6 text-center space-y-3">
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              <Activity className="w-5 h-5 text-muted-foreground/60" />
                             </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="space-y-2">
-                          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Nenhum ciclo ativo</Badge>
-                          <div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
-                              <Activity className="w-3.5 h-3.5 mr-1" /> Criar ciclo de tratamento
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">Nenhum ciclo de tratamento ativo.</p>
+                              <p className="text-xs text-muted-foreground max-w-[280px]">Crie um ciclo para acompanhar o progresso terapêutico.</p>
+                            </div>
+                            <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setCycleOpen(true)}>
+                              <Plus className="w-3.5 h-3.5 mr-1" /> Criar ciclo
                             </Button>
                           </div>
-                        </div>
-                      )}
-                      {sessaoCycle?.status === 'concluido' && (
-                        <div className="space-y-2">
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-700 border-green-500/30">Ciclo concluído</Badge>
-                          <div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
-                              <Activity className="w-3.5 h-3.5 mr-1" /> Iniciar novo ciclo
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     {/* 2. PTS VINCULADO */}
-                    <div className="rounded-lg border bg-card p-4 space-y-3">
-                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-primary" /> PTS Vinculado
-                      </h4>
-                      {sessaoPts ? (() => {
-                        const createdAt = new Date(sessaoPts.created_at);
-                        const now = new Date();
-                        const monthsDiff = (now.getFullYear() - createdAt.getFullYear()) * 12 + (now.getMonth() - createdAt.getMonth());
-                        const isOutdated = monthsDiff >= 12;
-                        const metaPeriod = monthsDiff < 3 ? 'curto' : monthsDiff < 6 ? 'medio' : 'longo';
-                        const profName = funcionarios.find(f => f.id === sessaoPts.professional_id)?.nome || '';
-                        return (
-                          <>
-                            {isOutdated && (
-                              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
-                                <AlertTriangle className="w-3 h-3 mr-1" /> PTS desatualizado — revisar
-                              </Badge>
-                            )}
-                            <div className="text-sm space-y-2">
-                              <div><span className="text-muted-foreground">Diagnóstico Funcional:</span><p className="text-foreground">{sessaoPts.diagnostico_funcional}</p></div>
-                              <div><span className="text-muted-foreground">Objetivos Terapêuticos:</span><p className="text-foreground">{sessaoPts.objetivos_terapeuticos}</p></div>
-                              
-                              {sessaoPtsSigtap.length > 0 && (
-                                <div className="space-y-1">
-                                  <span className="text-muted-foreground">Procedimentos SIGTAP:</span>
-                                  {sessaoPtsSigtap.map(s => (
-                                    <div key={s.procedimento_codigo} className="flex items-center gap-2 text-xs">
-                                      <Badge variant="secondary" className="font-mono">{s.procedimento_codigo}</Badge>
-                                      <span>{s.procedimento_nome}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <ClipboardList className="w-4 h-4 text-primary" /> PTS Vinculado
+                        </h4>
+                        {sessaoPts && (
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] h-5",
+                            sessaoPts.status === 'ativo' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-muted text-muted-foreground border-border'
+                          )}>
+                            {sessaoPts.status === 'ativo' ? 'Ativo' : sessaoPts.status}
+                          </Badge>
+                        )}
+                      </div>
 
-                              {sessaoPtsCids.length > 0 && (
-                                <div className="space-y-1">
-                                  <span className="text-muted-foreground">CIDs:</span>
-                                  {sessaoPtsCids.map(c => (
-                                    <div key={c.cid_codigo} className="flex items-center gap-2 text-xs">
-                                      <Badge variant="secondary" className="font-mono">{c.cid_codigo}</Badge>
-                                      <span>{c.cid_descricao}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Highlighted meta based on period */}
-                              <div className={`rounded-md p-2 border ${metaPeriod === 'curto' ? 'bg-primary/5 border-primary/20' : metaPeriod === 'medio' ? 'bg-accent border-accent-foreground/10' : 'bg-muted/50 border-border'}`}>
-                                <span className="text-xs font-semibold text-muted-foreground">
-                                  {metaPeriod === 'curto' ? '🎯 Metas Curto Prazo (1-3 meses)' : metaPeriod === 'medio' ? '📋 Metas Médio Prazo (3-6 meses)' : '🔭 Metas Longo Prazo (6+ meses)'}
-                                </span>
-                                <p className="text-foreground text-sm mt-1">
-                                  {metaPeriod === 'curto' ? sessaoPts.metas_curto_prazo : metaPeriod === 'medio' ? sessaoPts.metas_medio_prazo : sessaoPts.metas_longo_prazo}
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap gap-1">
+                      <div className="p-4 space-y-4">
+                        {sessaoPts ? (
+                          <>
+                            <div className="space-y-3">
+                              <div className="flex flex-wrap gap-1.5">
                                 {sessaoPts.especialidades_envolvidas.map(e => (
-                                  <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>
+                                  <Badge key={e} variant="secondary" className="text-[10px] h-5 px-2 bg-primary/5 text-primary border-primary/10 hover:bg-primary/10">{e}</Badge>
                                 ))}
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                Criado em {new Date(sessaoPts.created_at).toLocaleDateString('pt-BR')}
-                                {profName && ` por ${profName}`}
+
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Diagnóstico Funcional</span>
+                                <p className="text-sm text-foreground leading-relaxed line-clamp-2">{sessaoPts.diagnostico_funcional}</p>
+                              </div>
+
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Objetivos Terapêuticos</span>
+                                <p className="text-sm text-foreground leading-relaxed line-clamp-2">{sessaoPts.objetivos_terapeuticos}</p>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-2">
+                                <div className="rounded-lg p-2.5 border bg-primary/5 border-primary/10">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Target className="w-3 h-3 text-primary" />
+                                    <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Metas de Curto Prazo</span>
+                                  </div>
+                                  <p className="text-xs text-foreground line-clamp-2">{sessaoPts.metas_curto_prazo || 'Não informada'}</p>
+                                </div>
+                                <div className="rounded-lg p-2.5 border bg-muted/30 border-border">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <ClipboardList className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Metas Médio/Longo Prazo</span>
+                                  </div>
+                                  <p className="text-xs text-foreground line-clamp-2">{sessaoPts.metas_medio_prazo || sessaoPts.metas_longo_prazo || 'Não informada'}</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 text-[10px] text-muted-foreground border-t">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" /> {new Date(sessaoPts.created_at).toLocaleDateString('pt-BR')}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <User className="w-3 h-3" /> {funcionarios.find(f => f.id === sessaoPts.professional_id)?.nome || '—'}
+                                </span>
                               </div>
                             </div>
+
+                            <div className="flex flex-wrap gap-2 pt-2 border-t">
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/pts?id=${sessaoPts.id}`)}
+                              >
+                                <Eye className="w-3 h-3" /> Ver PTS
+                              </Button>
+                              <Button 
+                                type="button"
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => navigate(`/painel/pts?id=${sessaoPts.id}&edit=true`)}
+                              >
+                                <Pencil className="w-3 h-3" /> Editar
+                              </Button>
+                              {!sessaoCycle?.pts_id && sessaoCycle && (
+                                <Button 
+                                  type="button"
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="h-8 text-xs gap-1.5 border-primary/20 text-primary hover:bg-primary/5"
+                                  onClick={async () => {
+                                    const { error } = await supabase
+                                      .from('treatment_cycles')
+                                      .update({ pts_id: sessaoPts.id })
+                                      .eq('id', sessaoCycle.id);
+                                    if (error) toast.error('Erro ao vincular PTS');
+                                    else {
+                                      toast.success('PTS vinculado com sucesso');
+                                      loadSessaoData(sessaoCycle.patient_id);
+                                    }
+                                  }}
+                                >
+                                  <Link2 className="w-3 h-3" /> Vincular ao Ciclo
+                                </Button>
+                              )}
+                            </div>
                           </>
-                        );
-                      })() : (
-                        <div className="space-y-2">
-                          <Badge variant="outline">PTS não cadastrado</Badge>
-                          <div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
-                              <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-6 text-center space-y-3">
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              <ClipboardList className="w-5 h-5 text-muted-foreground/60" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">PTS não cadastrado.</p>
+                              <p className="text-xs text-muted-foreground max-w-[280px]">Crie um Projeto Terapêutico Singular para registrar objetivos e metas.</p>
+                            </div>
+                            <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setPtsOpen(true)}>
+                              <Plus className="w-3.5 h-3.5 mr-1" /> Criar PTS
                             </Button>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     {/* 3-5. Sessão fields */}
@@ -3038,7 +3261,7 @@ const ProntuarioPage: React.FC = () => {
                       <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
                       {currentSessionForRegistration && sessaoHighlightSOAP && (
                         <div className="bg-primary/10 border border-primary/30 rounded-md p-2 mb-3 text-sm text-primary font-medium">
-                          Preencha a evolução para registrar esta sessão (Sessão {currentSessionForRegistration.session_number})
+                          Registre os dados da evolução para a Sessão {currentSessionForRegistration.session_number}
                         </div>
                       )}
                       <div className="space-y-3">
@@ -3794,6 +4017,169 @@ const ProntuarioPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Modal Agendar Sessão */}
+      <ModalAgendarSessao
+        open={!!agendarSessaoTarget}
+        onClose={() => setAgendarSessaoTarget(null)}
+        session={agendarSessaoTarget}
+        cycle={sessaoCycle}
+        pacienteNome={form.paciente_nome}
+        profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
+        salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
+        availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
+        getAvailableSlots={getAvailableSlots}
+        onConfirm={async (data, hora, salaId) => {
+          if (!agendarSessaoTarget || !sessaoCycle) return;
+          const pac = pacienteByIdMap.get(sessaoCycle.patient_id);
+          
+          const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+          if (!isPacienteIsentoBloqueio(pac)) {
+            const bloqueado = await isPacienteBloqueadoParaProfissional(sessaoCycle.patient_id, sessaoCycle.professional_id);
+            if (bloqueado) {
+              toast.error("Paciente bloqueado por faltas injustificadas para este profissional.");
+              return;
+            }
+          }
+
+          const agId = `ag${Date.now()}`;
+          await addAgendamento({
+            id: agId,
+            pacienteId: sessaoCycle.patient_id,
+            pacienteNome: form.paciente_nome,
+            unidadeId: sessaoCycle.unit_id,
+            salaId: salaId || "",
+            setorId: "",
+            profissionalId: sessaoCycle.professional_id,
+            profissionalNome: funcionarios.find(f => f.id === sessaoCycle.professional_id)?.nome || "",
+            data,
+            hora,
+            status: "confirmado",
+            tipo: "Sessão de Tratamento",
+            observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${sessaoCycle.treatment_type}`,
+            origem: "profissional",
+            criadoEm: new Date().toISOString(),
+            criadoPor: user?.id || "",
+          });
+
+          await supabase
+            .from("treatment_sessions")
+            .update({ appointment_id: agId, status: "agendada", scheduled_date: data })
+            .eq("id", agendarSessaoTarget.id);
+
+          toast.success("Sessão agendada com sucesso!");
+          await loadSessaoData(form.paciente_id);
+          refreshAgendamentos();
+        }}
+        mode="agendar"
+        isMaster={user?.role === 'master' || isProfissional}
+      />
+
+      <ModalAgendarSessao
+        open={!!remarcarTarget}
+        onClose={() => setRemarcarTarget(null)}
+        session={remarcarTarget}
+        cycle={sessaoCycle}
+        pacienteNome={form.paciente_nome}
+        profissionalNome={funcionarios.find(f => f.id === sessaoCycle?.professional_id)?.nome || ''}
+        salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
+        availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
+        getAvailableSlots={getAvailableSlots}
+        onConfirm={async (data, hora, salaId) => {
+          if (!remarcarTarget || !sessaoCycle) return;
+          const oldDate = remarcarTarget.scheduled_date;
+          
+          await supabase
+            .from("treatment_sessions")
+            .update({ scheduled_date: data })
+            .eq("id", remarcarTarget.id);
+
+          if (remarcarTarget.appointment_id) {
+            await supabase.from("agendamentos").update({ data, hora, sala_id: salaId }).eq("id", remarcarTarget.appointment_id);
+          }
+
+          toast.success(`Sessão remarcada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
+          await loadSessaoData(form.paciente_id);
+          refreshAgendamentos();
+        }}
+        mode="remarcar"
+        isMaster={user?.role === 'master' || isProfissional}
+      />
+
+      <Dialog open={selectSessionOpen} onOpenChange={setSelectSessionOpen}>
+        <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Selecione a sessão a registrar</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Apenas sessões agendadas para{" "}
+              <strong>
+                {funcionarios.find((f) => f.id === sessaoCycle?.professional_id)?.nome || "este profissional"}
+              </strong>{" "}
+              são listadas. Registrar não afeta sessões de outros profissionais.
+            </p>
+            {(() => {
+              const sessoesDisponiveis = sessaoCycleSessions
+                .filter(
+                  (s) =>
+                    ["agendada", "pendente_agendamento"].includes(s.status) &&
+                    s.professional_id === sessaoCycle?.professional_id,
+                )
+                .sort((a, b) => a.session_number - b.session_number);
+
+              if (sessoesDisponiveis.length === 0) {
+                return (
+                  <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/30">
+                    Nenhuma sessão disponível para registrar.
+                  </div>
+                );
+              }
+
+              return sessoesDisponiveis.map((s) => {
+                const dataFmt = s.scheduled_date
+                  ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR", {
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "2-digit",
+                    })
+                  : "Sem data";
+
+                // Check for appointment time in agendamentos
+                const ag = agendamentos.find(a => 
+                  a.pacienteId === s.patient_id && 
+                  a.profissionalId === s.professional_id && 
+                  a.data === s.scheduled_date &&
+                  !["cancelado", "falta", "remarcado"].includes(a.status)
+                );
+
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => handleSelectSessionToRegister(s)}
+                    className="w-full text-left p-3 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-between gap-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold">
+                        Sessão {s.session_number}/{sessaoCycle?.total_sessions}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {dataFmt}
+                        {ag?.hora ? ` • ${ag.hora.slice(0, 5)}` : ""}
+                      </p>
+                    </div>
+                    <Badge variant={s.status === "agendada" ? "default" : "secondary"} className="text-xs shrink-0">
+                      {sessionStatusLabels[s.status] || s.status}
+                    </Badge>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </button>
+                );
+              });
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Treatment Cycle Dialog */}
       <Dialog open={cycleOpen} onOpenChange={setCycleOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -4046,7 +4432,7 @@ const ProntuarioPage: React.FC = () => {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => { downloadProntuarioPdf(p); toast.success("PDF gerado"); }}
+                            onClick={() => { downloadProntuarioPdf(p.id); toast.success("PDF gerado"); }}
                             title="Baixar PDF"
                             aria-label="Baixar PDF"
                           >
@@ -4075,21 +4461,6 @@ const ProntuarioPage: React.FC = () => {
                                 }}
                               >
                                 <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  const custom_data = p.custom_data || {};
-                                  const sections: any[] = [];
-                                  Object.entries(custom_data).forEach(([key, val]) => {
-                                    if (val) {
-                                      const label = dynamicConfig.visibleBlocks.find((b: any) => b.id === key)?.label || key;
-                                      sections.push({ title: label, content: String(val) });
-                                    }
-                                  });
-                                  handlePrint(p, sections);
-                                }}
-                              >
-                                <Printer className="w-3.5 h-3.5 mr-2" /> Imprimir com campos extras
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
@@ -4295,7 +4666,7 @@ const ProntuarioPage: React.FC = () => {
               <Separator className="my-4" />
 
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario); toast.success("PDF gerado"); }}>
+                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario.id); toast.success("PDF gerado"); }}>
                   <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handlePrint(viewerProntuario)}>

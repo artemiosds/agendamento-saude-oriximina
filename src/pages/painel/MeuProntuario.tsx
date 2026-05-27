@@ -63,14 +63,14 @@ const MeuProntuario: React.FC = () => {
   const meuFuncionario = funcionarios.find(f => f.id === user?.id);
   const profissao = meuFuncionario?.profissao;
 
-  const { config, adminConfig, adminProntuario, adminCustomFields, loading, saving, saveConfig } = useProntuarioConfig(user?.id, tipo, profissao);
+  const { config, adminConfig, adminProntuario, loading, saving, saveConfig } = useProntuarioConfig(user?.id, tipo, profissao);
   const [localConfig, setLocalConfig] = useState<ProntuarioConfigData | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('blocos');
 
   useEffect(() => {
     if (config) {
       // Config is already merged inside the hook, but we use mergeAdminAndProfConfig for safety/re-calculating if needed
-      const merged = mergeAdminAndProfConfig(adminConfig, adminProntuario, adminCustomFields, profissao, JSON.parse(JSON.stringify(config)), tipo);
+      const merged = mergeAdminAndProfConfig(adminConfig, adminProntuario, profissao, JSON.parse(JSON.stringify(config)), tipo);
       setLocalConfig(merged);
     }
   }, [config, adminConfig, adminProntuario, profissao, tipo]);
@@ -114,7 +114,7 @@ const MeuProntuario: React.FC = () => {
 
   const resetToDefault = useCallback(() => {
     const defaults = getDefaultConfig(tipo);
-    const merged = mergeAdminAndProfConfig(adminConfig, adminProntuario, adminCustomFields, profissao, defaults, tipo);
+    const merged = mergeAdminAndProfConfig(adminConfig, adminProntuario, profissao, defaults, tipo);
     persist(merged);
     toast.success('Configuração restaurada ao padrão');
   }, [tipo, persist, adminConfig, profissao]);
