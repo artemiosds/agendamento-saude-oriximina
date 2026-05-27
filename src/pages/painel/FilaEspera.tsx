@@ -2018,7 +2018,7 @@ const FilaEspera: React.FC = () => {
                                 minute: "2-digit",
                               }),
                             });
-                            const pac = pacientes.find((p) => p.id === f.pacienteId);
+                            const pac = allPatients.find((p) => p.id === f.pacienteId);
                             const unidadeN = unidades.find((u) => u.id === f.unidadeId);
                             await notify({
                               evento: "fila_chamada",
