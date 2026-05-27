@@ -415,6 +415,8 @@ const ProntuarioPage: React.FC = () => {
     return user?.profissao;
   }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
 
+  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(user?.id, form.tipo_registro, effectiveProfissao);
+
   const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
