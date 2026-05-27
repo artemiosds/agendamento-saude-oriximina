@@ -423,6 +423,68 @@ const ProntuarioPage: React.FC = () => {
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
   // Sessão: cycle + PTS state
+  const renderDynamicBlocks = () => {
+    if (!visibleBlocks || visibleBlocks.length === 0) return null;
+
+    return visibleBlocks.map((bloco) => {
+      // Skip SOAP and Especialidade as they are rendered separately or specifically
+      if (bloco.id === 'soap' || bloco.id === 'especialidade') return null;
+      
+      // Map legacy IDs to new ones if needed
+      const fieldKey = bloco.id.replace('evolucao.', '');
+      
+      // Some blocks might be specialized (like prescricao, solicitacao_exames)
+      if (fieldKey === 'prescricao') {
+        return (
+          <div key={bloco.id} className="pt-2">
+            <PrescricaoMedicamentos 
+              pacienteId={form.paciente_id} 
+              onItemsChange={setListaPrescricao}
+              initialItems={listaPrescricao}
+            />
+          </div>
+        );
+      }
+
+      if (fieldKey === 'solicitacao_exames') {
+        return (
+          <div key={bloco.id} className="pt-2">
+            <SolicitacaoExames 
+              pacienteId={form.paciente_id} 
+              onExamesChange={setListaExames}
+              initialExames={listaExames}
+            />
+          </div>
+        );
+      }
+
+      if (fieldKey === 'procedimentos') {
+        // Procedimentos (checklist) block
+        return null; // Rendered elsewhere in the file logic
+      }
+
+      // Default textarea for other blocks
+      const isAlergia = fieldKey === 'hipotese' || fieldKey === 'alergias';
+      
+      return (
+        <div key={bloco.id} className={cn("space-y-1.5", isAlergia && "bg-destructive/5 border border-destructive/20 rounded-lg p-3")}>
+          <Label className={cn("text-xs font-semibold uppercase tracking-wider", isAlergia && "text-destructive flex items-center gap-1")}>
+            {isAlergia && "⚠️ "}
+            {bloco.label} 
+            {(bloco.obrigatorio || bloco.admin_obrigatorio) && <span className="text-destructive ml-0.5">*</span>}
+          </Label>
+          <DebouncedTextarea 
+            rows={fieldKey === 'anamnese' || fieldKey === 'evolucao' ? 4 : 2}
+            value={getFieldValue(fieldKey)} 
+            onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
+            placeholder={`${bloco.label}...`}
+            className={cn("text-sm min-h-[60px]", isAlergia && "border-destructive/30")}
+          />
+        </div>
+      );
+    });
+  };
+
   interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
   interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
   interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
