@@ -2998,15 +2998,6 @@ const ProntuarioPage: React.FC = () => {
                                      cancelada: "bg-muted text-muted-foreground",
                                      remarcada: "bg-warning/10 text-warning",
                                    };
-                                   
-                                   const sessionStatusLabels: Record<string, string> = {
-                                     pendente_agendamento: "Ag. Agendamento",
-                                     agendada: "Agendada",
-                                     realizada: "Realizada",
-                                     paciente_faltou: "Faltou",
-                                     cancelada: "Cancelada",
-                                     remarcada: "Remarcada",
-                                   };
 
                                    return (
                                      <div key={s.id} className="p-2.5 flex flex-col gap-1.5">
