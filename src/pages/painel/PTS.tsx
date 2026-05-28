@@ -309,37 +309,61 @@ const PTS: React.FC = () => {
 
   // Global SIGTAP Search
   const searchGlobalSigtap = async () => {
-    if (!procSearch.trim() || procSearch.trim().length < 3) {
-      toast.info('Digite pelo menos 3 caracteres para a pesquisa geral.');
+    if (!procSearch.trim() || procSearch.trim().length < 2) {
+      toast.info('Digite pelo menos 2 caracteres para a pesquisa geral.');
       return;
     }
     setSearchingGlobal(true);
     try {
-      const q = procSearch.trim();
+      const q = procSearch.trim().toUpperCase();
       const isCode = /^\d+$/.test(q);
+      const isCid = /^[A-Z]\d/.test(q); // Ex: A00, B10
       
-      let query = supabase.from('sigtap_procedimentos').select('*').eq('ativo', true);
-      
-      if (isCode) {
-        query = query.ilike('codigo', `%${q}%`);
+      let finalProcs: SigtapProcedimento[] = [];
+
+      if (isCid) {
+        // Search by CID
+        const { data: procCids, error: cidErr } = await supabase
+          .from('sigtap_procedimento_cids')
+          .select('procedimento_codigo')
+          .ilike('cid_codigo', `${q}%`)
+          .limit(100);
+
+        if (cidErr) throw cidErr;
+
+        if (procCids && procCids.length > 0) {
+          const codes = [...new Set(procCids.map(pc => pc.procedimento_codigo))];
+          const { data, error } = await supabase
+            .from('sigtap_procedimentos')
+            .select('*')
+            .in('codigo', codes)
+            .eq('ativo', true)
+            .limit(50);
+          if (error) throw error;
+          finalProcs = data || [];
+        }
       } else {
-        query = query.ilike('nome', `%${q}%`);
+        // Search by name or code
+        let query = supabase.from('sigtap_procedimentos').select('*').eq('ativo', true);
+        if (isCode) {
+          query = query.ilike('codigo', `%${q}%`);
+        } else {
+          query = query.ilike('nome', `%${q}%`);
+        }
+        const { data, error } = await query.limit(100);
+        if (error) throw error;
+        finalProcs = data || [];
       }
       
-      const { data, error } = await query.limit(50);
-      
-      if (error) throw error;
-      
-      if (!data || data.length === 0) {
+      if (finalProcs.length === 0) {
         toast.info('Nenhum procedimento encontrado na base geral.');
       } else {
-        // Merge results avoiding duplicates
         setSigtapProcs(prev => {
           const currentCodes = new Set(prev.map(p => p.codigo));
-          const newItems = (data as SigtapProcedimento[]).filter(p => !currentCodes.has(p.codigo));
+          const newItems = finalProcs.filter(p => !currentCodes.has(p.codigo));
           return [...prev, ...newItems];
         });
-        toast.success(`${data.length} procedimentos encontrados na base geral.`);
+        toast.success(`${finalProcs.length} procedimento(s) encontrado(s) na base geral.`);
       }
     } catch (err) {
       console.error('Erro na pesquisa geral SIGTAP:', err);
