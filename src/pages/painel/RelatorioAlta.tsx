@@ -684,10 +684,16 @@ const RelatorioAlta: React.FC = () => {
     const dataAlt = type === "multi" ? dataAlta : indDataAlta;
     
     const payload = type === "multi" ? {
-      modalidades, cid10, cifFuncoes, cifAtividades, cifFatores,
-      profissionais: profSections, motivoAlta, motivoDetalhe,
-      condicaoFuncional, nivelIndep, orientacoesUsuario, orientacoesUbs,
-      encaminhamentos, freqAps
+      modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
+      multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
+      multiBarreiras, multiPotencialidades, multiFatoresContextuais,
+      multiObjetivosGerais, multiPlanoExecutado,
+      profissionais: profSections, motivoAlta, multiTipoAlta, motivoDetalhe,
+      condicaoFuncional, nivelIndep, multiComparacaoFuncional, multiGanhosPrincipais,
+      multiLimitacoesPersistentes, multiRiscoRegressao, multiFatoresAlerta,
+      orientacoesUsuario, orientacoesUbs, multiOrientacoesEscola, multiPontosAtencao,
+      encaminhamentos, freqAps, multiContinuarTerapia, multiPrazoRetorno,
+      multiResponsavelTecnico
     } : {
       diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
       diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
