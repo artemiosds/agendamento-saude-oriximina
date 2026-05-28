@@ -464,11 +464,6 @@ const RelatorioAlta: React.FC = () => {
         setIndOrientacoes(lastPront.conduta || "");
       }
 
-        setIndDiagCid(lastPront.hipotese || "");
-        setIndIntervencoes(lastPront.procedimentos_texto || "");
-        setIndEvolucao(lastPront.evolucao || "");
-        setIndOrientacoes(lastPront.conduta || "");
-      }
 
       // Load sessions and absences
       const { data: sessions } = await supabase
