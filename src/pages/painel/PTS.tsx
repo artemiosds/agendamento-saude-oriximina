@@ -675,19 +675,19 @@ const PTS: React.FC = () => {
 
       // SIGTAP links
       if (finalSigtap.length > 0) {
-        await supabase.from('pts_sigtap').insert(
+        await (supabase as any).from('pts_sigtap').insert(
           finalSigtap.map(s => ({ pts_id: ptsId, procedimento_codigo: s.procedimento_codigo, procedimento_nome: s.procedimento_nome, especialidade: s.especialidade }))
         );
       }
       // CID links
       if (finalCids.length > 0) {
-        await supabase.from('pts_cid').insert(
+        await (supabase as any).from('pts_cid').insert(
           finalCids.map(c => ({ pts_id: ptsId, cid_codigo: c.cid_codigo, cid_descricao: c.cid_descricao }))
         );
       }
       // Metas estruturadas
       if (metas.length > 0) {
-        await supabase.from('pts_metas').insert(
+        await (supabase as any).from('pts_metas').insert(
           metas.map(m => ({
             pts_id: ptsId,
             titulo: m.titulo, descricao: m.descricao, categoria: m.categoria,
