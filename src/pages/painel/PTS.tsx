@@ -1373,6 +1373,7 @@ const PTS: React.FC = () => {
                   </div>
                 </TabsContent>
 
+                </div>
               </ScrollArea>
             </Tabs>
           </div>
