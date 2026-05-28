@@ -109,24 +109,6 @@ const NIVEIS_INDEPENDENCIA = [
 const FREQUENCIAS_APS = ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Semestral", "Anual", "Sem necessidade"];
 
 const ADESAO_TRATAMENTO = ["Excelente", "Boa", "Regular", "Baixa"];
-  const generateMultiSummary = () => {
-    const concluidores = profSections.filter(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada");
-    const areas = concluidores.map(s => s.profissao).join(", ");
-    const summary = `Relatório multiprofissional consolidado pelas áreas de: ${areas}. 
-O paciente apresentou evolução global ${nivelIndep.toLowerCase()} no período. 
-As intervenções realizadas focaram em ${multiObjetivosGerais}. 
-Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para alta" : "necessita de seguimento na rede"}.`;
-    setMultiResumoConsolidado(summary);
-  };
-
-  const [referralDetails, setReferralDetails] = useState<Record<string, { destino: string; motivo: string; prioridade: string }>>({});
-  
-  const updateReferralDetail = (type: string, field: string, value: string) => {
-    setReferralDetails(prev => ({
-      ...prev,
-      [type]: { ...(prev[type] || { destino: "", motivo: "", prioridade: "média" }), [field]: value }
-    }));
-  };
 
 const EVOLUCAO_GLOBAL = ["Excelente", "Satisfatória", "Parcial", "Discreta", "Sem evolução relevante"];
 const RESPOSTA_TERAPEUTICA = ["Inexistente", "Discreta", "Parcial", "Satisfatória", "Importante"];
