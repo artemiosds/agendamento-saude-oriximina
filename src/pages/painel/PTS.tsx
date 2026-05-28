@@ -339,7 +339,7 @@ const PTS: React.FC = () => {
       query = query.eq('professional_id', user.id);
     }
     const { data } = await query;
-    if (data) setPtsList(data as PTSRecord[]);
+    if (data) setPtsList(data as unknown as PTSRecord[]);
     setLoading(false);
   }, [isMaster, user]);
 
@@ -612,7 +612,7 @@ const PTS: React.FC = () => {
     }
     setSaving(true);
     try {
-      const payload: PTSRecord = {
+      const payload: any = {
         patient_id: form.patient_id,
         professional_id: editingPts ? editingPts.professional_id : (user?.id || ''),
         unit_id: user?.unidadeId || '',
@@ -635,20 +635,20 @@ const PTS: React.FC = () => {
         objetivo_geral: form.objetivo_geral,
         plano_conduta: form.plano_conduta,
         data_proxima_revisao: form.data_proxima_revisao || null,
-      } as any;
+      };
 
       let ptsId: string;
 
       if (editingPts) {
-        const { error: updateErr } = await supabase.from('pts').update(payload).eq('id', editingPts.id);
+        const { error: updateErr } = await (supabase as any).from('pts').update(payload).eq('id', editingPts.id);
         if (updateErr) throw updateErr;
         ptsId = editingPts.id;
         
-        await supabase.from('pts_sigtap').delete().eq('pts_id', ptsId);
-        await supabase.from('pts_cid').delete().eq('pts_id', ptsId);
-        await supabase.from('pts_metas').delete().eq('pts_id', ptsId);
+        await (supabase as any).from('pts_sigtap').delete().eq('pts_id', ptsId);
+        await (supabase as any).from('pts_cid').delete().eq('pts_id', ptsId);
+        await (supabase as any).from('pts_metas').delete().eq('pts_id', ptsId);
       } else {
-        const { data: newPts, error: insertError } = await supabase.from('pts').insert({ ...payload, status: 'ativo' }).select('id').single();
+        const { data: newPts, error: insertError } = await (supabase as any).from('pts').insert({ ...payload, status: 'ativo' }).select('id').single();
         if (insertError) throw insertError;
         if (!newPts) throw new Error('Falha ao criar PTS');
         ptsId = newPts.id;
@@ -656,7 +656,7 @@ const PTS: React.FC = () => {
         // Create prontuário record
         const procInfo = finalSigtap.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
         const cidInfo = finalCids.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
-        await supabase.from('prontuarios').insert({
+        await (supabase as any).from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
           profissional_id: user?.id || '',
