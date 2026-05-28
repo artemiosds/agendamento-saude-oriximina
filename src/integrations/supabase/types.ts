@@ -2481,6 +2481,8 @@ export type Database = {
           procedimentos_texto: string
           profissional_id: string
           profissional_nome: string
+          pts_meta_id: string | null
+          pts_meta_worked: boolean | null
           queixa_principal: string | null
           resultado_exame: string
           sala_id: string | null
@@ -2518,6 +2520,8 @@ export type Database = {
           procedimentos_texto?: string
           profissional_id: string
           profissional_nome: string
+          pts_meta_id?: string | null
+          pts_meta_worked?: boolean | null
           queixa_principal?: string | null
           resultado_exame?: string
           sala_id?: string | null
@@ -2555,6 +2559,8 @@ export type Database = {
           procedimentos_texto?: string
           profissional_id?: string
           profissional_nome?: string
+          pts_meta_id?: string | null
+          pts_meta_worked?: boolean | null
           queixa_principal?: string | null
           resultado_exame?: string
           sala_id?: string | null
@@ -2568,54 +2574,134 @@ export type Database = {
           tipo_registro?: string
           unidade_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "prontuarios_pts_meta_id_fkey"
+            columns: ["pts_meta_id"]
+            isOneToOne: false
+            referencedRelation: "pts_metas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pts: {
         Row: {
+          barreiras: string | null
+          ciencia_familia: boolean | null
+          contextos_afetados: string[] | null
           created_at: string
+          criterios_alta: string | null
           custom_data: Json
+          data_proxima_revisao: string | null
+          data_ultima_revisao: string | null
           diagnostico_funcional: string
+          encaminhamentos: string | null
           especialidades_envolvidas: string[]
+          fatores_risco: string | null
+          frequencia_planejada: string | null
           id: string
+          justificativa_clinica: string | null
           metas_curto_prazo: string
           metas_longo_prazo: string
           metas_medio_prazo: string
+          motivo_encaminhamento: string | null
+          motivo_encerramento: string | null
+          necessidade_interdisciplinar: boolean | null
+          num_sessoes_previsto: number | null
           objetivos_terapeuticos: string
+          observacao_revisao: string | null
+          orientacoes_finais: string | null
           patient_id: string
+          plano_conduta: string | null
+          potencialidades: string | null
+          prioridade: string | null
           professional_id: string
+          recursos_necessarios: string | null
+          rede_apoio: string | null
+          resumo_desfecho: string | null
+          revisao_obrigatoria: boolean | null
           status: string
+          tipo_atendimento: string | null
           unit_id: string
           updated_at: string
         }
         Insert: {
+          barreiras?: string | null
+          ciencia_familia?: boolean | null
+          contextos_afetados?: string[] | null
           created_at?: string
+          criterios_alta?: string | null
           custom_data?: Json
+          data_proxima_revisao?: string | null
+          data_ultima_revisao?: string | null
           diagnostico_funcional?: string
+          encaminhamentos?: string | null
           especialidades_envolvidas?: string[]
+          fatores_risco?: string | null
+          frequencia_planejada?: string | null
           id?: string
+          justificativa_clinica?: string | null
           metas_curto_prazo?: string
           metas_longo_prazo?: string
           metas_medio_prazo?: string
+          motivo_encaminhamento?: string | null
+          motivo_encerramento?: string | null
+          necessidade_interdisciplinar?: boolean | null
+          num_sessoes_previsto?: number | null
           objetivos_terapeuticos?: string
+          observacao_revisao?: string | null
+          orientacoes_finais?: string | null
           patient_id: string
+          plano_conduta?: string | null
+          potencialidades?: string | null
+          prioridade?: string | null
           professional_id: string
+          recursos_necessarios?: string | null
+          rede_apoio?: string | null
+          resumo_desfecho?: string | null
+          revisao_obrigatoria?: boolean | null
           status?: string
+          tipo_atendimento?: string | null
           unit_id?: string
           updated_at?: string
         }
         Update: {
+          barreiras?: string | null
+          ciencia_familia?: boolean | null
+          contextos_afetados?: string[] | null
           created_at?: string
+          criterios_alta?: string | null
           custom_data?: Json
+          data_proxima_revisao?: string | null
+          data_ultima_revisao?: string | null
           diagnostico_funcional?: string
+          encaminhamentos?: string | null
           especialidades_envolvidas?: string[]
+          fatores_risco?: string | null
+          frequencia_planejada?: string | null
           id?: string
+          justificativa_clinica?: string | null
           metas_curto_prazo?: string
           metas_longo_prazo?: string
           metas_medio_prazo?: string
+          motivo_encaminhamento?: string | null
+          motivo_encerramento?: string | null
+          necessidade_interdisciplinar?: boolean | null
+          num_sessoes_previsto?: number | null
           objetivos_terapeuticos?: string
+          observacao_revisao?: string | null
+          orientacoes_finais?: string | null
           patient_id?: string
+          plano_conduta?: string | null
+          potencialidades?: string | null
+          prioridade?: string | null
           professional_id?: string
+          recursos_necessarios?: string | null
+          rede_apoio?: string | null
+          resumo_desfecho?: string | null
+          revisao_obrigatoria?: boolean | null
           status?: string
+          tipo_atendimento?: string | null
           unit_id?: string
           updated_at?: string
         }
@@ -2685,6 +2771,65 @@ export type Database = {
           total_procedimentos?: number
         }
         Relationships: []
+      }
+      pts_metas: {
+        Row: {
+          categoria: string | null
+          created_at: string
+          descricao: string | null
+          especialidade: string | null
+          id: string
+          indicador_sucesso: string | null
+          observacao: string | null
+          prazo_estimado: string | null
+          prioridade: string | null
+          pts_id: string
+          responsavel_id: string | null
+          status: string | null
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          categoria?: string | null
+          created_at?: string
+          descricao?: string | null
+          especialidade?: string | null
+          id?: string
+          indicador_sucesso?: string | null
+          observacao?: string | null
+          prazo_estimado?: string | null
+          prioridade?: string | null
+          pts_id: string
+          responsavel_id?: string | null
+          status?: string | null
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          categoria?: string | null
+          created_at?: string
+          descricao?: string | null
+          especialidade?: string | null
+          id?: string
+          indicador_sucesso?: string | null
+          observacao?: string | null
+          prazo_estimado?: string | null
+          prioridade?: string | null
+          pts_id?: string
+          responsavel_id?: string | null
+          status?: string | null
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pts_metas_pts_id_fkey"
+            columns: ["pts_id"]
+            isOneToOne: false
+            referencedRelation: "pts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pts_sigtap: {
         Row: {
