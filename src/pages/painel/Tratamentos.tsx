@@ -3242,9 +3242,9 @@ const Tratamentos: React.FC = () => {
         />
       </div>
 
-      <div className="flex gap-3 flex-wrap">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Select value={filterProf} onValueChange={setFilterProf}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Profissional" />
           </SelectTrigger>
           <SelectContent>
@@ -3257,7 +3257,7 @@ const Tratamentos: React.FC = () => {
           </SelectContent>
         </Select>
         <Select value={filterUnit} onValueChange={setFilterUnit}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Unidade" />
           </SelectTrigger>
           <SelectContent>
@@ -3270,7 +3270,7 @@ const Tratamentos: React.FC = () => {
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -3283,6 +3283,18 @@ const Tratamentos: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            setSearchTerm("");
+            setFilterProf("all");
+            setFilterUnit("all");
+            setFilterStatus("all");
+          }}
+          className="w-full sm:w-auto"
+        >
+          Limpar Filtros
+        </Button>
       </div>
 
       {loading ? (
@@ -3332,7 +3344,7 @@ const Tratamentos: React.FC = () => {
                 >
                   <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground">{pac?.nome || cycle.paciente_nome || "Paciente não encontrado"}</p>
+                      <p className="font-semibold text-foreground truncate">{pac?.nome || cycle.paciente_nome || "Paciente não encontrado"}</p>
                       <p className="text-sm text-muted-foreground">
                         {prof?.nome || "—"} • {cycle.treatment_type}
                       </p>
@@ -3344,8 +3356,8 @@ const Tratamentos: React.FC = () => {
                       )}
                       {cycle.pts_id && <p className="text-xs text-purple-500 mt-0.5">📋 PTS vinculado</p>}
                     </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="text-center">
+                    <div className="flex items-center gap-3 flex-nowrap shrink-0">
+                      <div className="text-center min-w-[60px]">
                         <p className="text-xs text-muted-foreground">Sessões</p>
                         <p className="text-sm font-bold">
                           {cycle.sessions_done}/{cycle.total_sessions}
@@ -3354,7 +3366,7 @@ const Tratamentos: React.FC = () => {
                       <div className="w-24">
                         <Progress value={progressPct} className="h-2" />
                       </div>
-                      <div className="text-center">
+                      <div className="text-center min-w-[50px]">
                         <p className="text-xs text-muted-foreground">Início</p>
                         <p className="text-sm">
                           {new Date(cycle.start_date + "T12:00:00").toLocaleDateString("pt-BR", {
