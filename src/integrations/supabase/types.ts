@@ -2472,6 +2472,7 @@ export type Database = {
           hora_atendimento: string | null
           id: string
           indicacao_retorno: string
+          meta_pts_id: string | null
           motivo_alteracao: string
           observacoes: string | null
           outro_procedimento: string
@@ -2511,6 +2512,7 @@ export type Database = {
           hora_atendimento?: string | null
           id?: string
           indicacao_retorno?: string
+          meta_pts_id?: string | null
           motivo_alteracao?: string
           observacoes?: string | null
           outro_procedimento?: string
@@ -2550,6 +2552,7 @@ export type Database = {
           hora_atendimento?: string | null
           id?: string
           indicacao_retorno?: string
+          meta_pts_id?: string | null
           motivo_alteracao?: string
           observacoes?: string | null
           outro_procedimento?: string
