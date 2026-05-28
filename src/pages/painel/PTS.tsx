@@ -339,7 +339,7 @@ const PTS: React.FC = () => {
       query = query.eq('professional_id', user.id);
     }
     const { data } = await query;
-    if (data) setPtsList(data);
+    if (data) setPtsList(data as unknown as PTSRecord[]);
     setLoading(false);
   }, [isMaster, user]);
 
