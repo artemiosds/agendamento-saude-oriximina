@@ -380,7 +380,7 @@ const RelatorioAlta: React.FC = () => {
 
       const pat = pacientes.find(p => p.id === pid);
       if (pat?.cid && !indDiagCid) setIndDiagCid(pat.cid);
-      if (pat?.modalidade_id && !indModalidade) setIndModalidade(pat.modalidade_id);
+
 
     } catch (error) {
       console.error("Error loading individual data:", error);
