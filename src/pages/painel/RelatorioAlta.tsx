@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,11 +20,13 @@ import {
   FileText, Users, User, ArrowLeft, Printer, FileDown, CheckCircle,
   Save, Send, ClipboardList, Stethoscope, Heart, Activity,
   Clock, AlertCircle, Check, Info, LayoutDashboard, History,
-  ShieldCheck, ExternalLink, Download
+  ShieldCheck, ExternalLink, Download, Lock, Unlock, Hash,
+  ChevronRight, ListTodo, AlertTriangle
 } from "lucide-react";
 import { openPrintDocument } from "@/lib/printLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 
 /* ── types ─────────────────────────────────────────── */
 interface ProfSection {
@@ -41,13 +44,23 @@ interface ProfSection {
   metas_justificativa: string;
   tecnologia_assistiva: string;
   // Novos campos para evolução multiprofissional
-  status_contribuicao: "nao_iniciada" | "em_preenchimento" | "concluida";
+  status_contribuicao: "nao_iniciada" | "em_preenchimento" | "concluida" | "assinada";
   data_contribuicao: string;
   orientacoes_especificas?: string;
   encaminhamentos_especificos?: string;
   objetivos_especificos?: string;
   adesao?: string;
   intercorrencias?: string;
+  finalizado_em?: string;
+  finalizado_por?: string;
+}
+
+interface VersionRecord {
+  version: number;
+  data: string;
+  user_nome: string;
+  action: string;
+  reason?: string;
 }
 
 interface MetaPTS {
