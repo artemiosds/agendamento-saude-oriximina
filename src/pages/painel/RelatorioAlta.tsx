@@ -567,9 +567,10 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
       entidadeId: reportId || "",
       pacienteId: pacienteId,
       pacienteNome: paciente?.nome,
-      profissional_id: user?.id,
-      profissional_nome: user?.nome,
+      profissionalId: user?.id,
+      profissionalNome: user?.nome,
       detalhes: { motivo: reopenReason, version: newVersion }
+
     });
     
     setReopenReason("");
