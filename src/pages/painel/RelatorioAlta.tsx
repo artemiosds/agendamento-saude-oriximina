@@ -136,7 +136,16 @@ const calcIdade = (dn: string) => {
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
   const { pacientes, funcionarios } = useData();
+  const { can } = usePermissions();
   const [modo, setModo] = useState<ModoRelatorio>("selector");
+
+  /* ── common states ─── */
+  const [version, setVersion] = useState(1);
+  const [history, setHistory] = useState<VersionRecord[]>([]);
+  const [isReopening, setIsReopening] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [lastUpdatedBy, setLastUpdatedBy] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
   /* ── shared patient selection ─── */
   const [pacienteId, setPacienteId] = useState("");
