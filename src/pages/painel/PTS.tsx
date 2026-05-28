@@ -955,23 +955,22 @@ const PTS: React.FC = () => {
 
       {/* ═══ CREATE / EDIT DIALOG ═══ */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) { setDialogOpen(false); setEditingPts(null); } }}>
-        <DialogContent className="max-w-3xl w-[95vw] max-h-[92vh] flex flex-col p-0 gap-0">
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0">
-            <DialogTitle className="font-display">{editingPts ? 'Editar PTS' : 'Novo PTS'}</DialogTitle>
+            <DialogTitle className="font-display text-xl">{editingPts ? 'Editar PTS' : 'Novo PTS'}</DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
               <TabsList className="mx-6 mt-3 mb-0 grid grid-cols-5 shrink-0">
-                <TabsTrigger value="identificacao" className="text-xs">Identificação</TabsTrigger>
-                <TabsTrigger value="diagnostico" className="text-xs">Diagnóstico</TabsTrigger>
-                <TabsTrigger value="metas" className="text-xs">Metas</TabsTrigger>
-                <TabsTrigger value="procedimentos" className="text-xs">Procedimentos</TabsTrigger>
-                <TabsTrigger value="revisao" className="text-xs">Revisão</TabsTrigger>
+                <TabsTrigger value="identificacao" className="text-sm">Identificação</TabsTrigger>
+                <TabsTrigger value="diagnostico" className="text-sm">Diagnóstico</TabsTrigger>
+                <TabsTrigger value="metas" className="text-sm">Metas</TabsTrigger>
+                <TabsTrigger value="procedimentos" className="text-sm">Procedimentos</TabsTrigger>
+                <TabsTrigger value="revisao" className="text-sm">Revisão</TabsTrigger>
               </TabsList>
 
-              <ScrollArea className="flex-1 min-h-0">
-                <div className="px-6 py-4">
+              <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar">
 
                 <TabsContent value="identificacao" className="mt-0 space-y-4 outline-none">
                   <div>
