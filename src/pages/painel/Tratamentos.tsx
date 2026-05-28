@@ -335,9 +335,10 @@ const Tratamentos: React.FC = () => {
       if (ptsData) setPtsList(ptsData as PTSRecord[]);
     } catch (err) {
       console.error("Error loading treatments:", err);
-      if (!silent) toast.error("Erro ao carregar dados de tratamento.");
+      toast.error("Erro ao carregar dados de tratamento.");
+    } finally {
+      setLoading(false);
     }
-    if (!silent) setLoading(false);
   }, [user, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
@@ -495,6 +496,19 @@ const Tratamentos: React.FC = () => {
       setPtsVinculado(null);
     }
   }, [selectedCycle, ptsList]);
+
+  // Sync filters with available options (safety)
+  useEffect(() => {
+    if (filterProf !== 'all' && !profissionais.some(p => p.id === filterProf)) {
+      setFilterProf('all');
+    }
+  }, [profissionais, filterProf]);
+
+  useEffect(() => {
+    if (filterUnit !== 'all' && !unidadesVisiveis.some(u => u.id === filterUnit)) {
+      setFilterUnit('all');
+    }
+  }, [unidadesVisiveis, filterUnit]);
 
   const ptsDosPacienteCiclo = useMemo(() => {
     if (!selectedCycle) return [];
@@ -3245,7 +3259,6 @@ const Tratamentos: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Select value={filterProf} onValueChange={(v) => {
           setFilterProf(v);
-          setLoading(true);
         }}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Profissional" />
@@ -3261,7 +3274,6 @@ const Tratamentos: React.FC = () => {
         </Select>
         <Select value={filterUnit} onValueChange={(v) => {
           setFilterUnit(v);
-          setLoading(true);
         }}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Unidade" />
@@ -3277,7 +3289,6 @@ const Tratamentos: React.FC = () => {
         </Select>
         <Select value={filterStatus} onValueChange={(v) => {
           setFilterStatus(v);
-          setLoading(true);
         }}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Status" />
@@ -3295,11 +3306,11 @@ const Tratamentos: React.FC = () => {
         <Button 
           variant="outline" 
           onClick={() => {
-            setLoading(true);
             setSearchTerm("");
             setFilterProf("all");
             setFilterUnit("all");
             setFilterStatus("all");
+            setCurrentPage(1);
           }}
           className="w-full sm:w-auto"
         >
