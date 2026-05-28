@@ -307,7 +307,50 @@ const PTS: React.FC = () => {
       });
   }, [selectedProcCodigo]);
 
+  // Global SIGTAP Search
+  const searchGlobalSigtap = async () => {
+    if (!procSearch.trim() || procSearch.trim().length < 3) {
+      toast.info('Digite pelo menos 3 caracteres para a pesquisa geral.');
+      return;
+    }
+    setSearchingGlobal(true);
+    try {
+      const q = procSearch.trim();
+      const isCode = /^\d+$/.test(q);
+      
+      let query = supabase.from('sigtap_procedimentos').select('*').eq('ativo', true);
+      
+      if (isCode) {
+        query = query.ilike('codigo', `%${q}%`);
+      } else {
+        query = query.ilike('nome', `%${q}%`);
+      }
+      
+      const { data, error } = await query.limit(50);
+      
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        toast.info('Nenhum procedimento encontrado na base geral.');
+      } else {
+        // Merge results avoiding duplicates
+        setSigtapProcs(prev => {
+          const currentCodes = new Set(prev.map(p => p.codigo));
+          const newItems = (data as SigtapProcedimento[]).filter(p => !currentCodes.has(p.codigo));
+          return [...prev, ...newItems];
+        });
+        toast.success(`${data.length} procedimentos encontrados na base geral.`);
+      }
+    } catch (err) {
+      console.error('Erro na pesquisa geral SIGTAP:', err);
+      toast.error('Erro ao pesquisar na base geral.');
+    } finally {
+      setSearchingGlobal(false);
+    }
+  };
+
   // CID warning
+
   useEffect(() => {
     if (!selectedProcCodigo || !cidSearch.trim()) { setCidWarning(false); return; }
     const typed = cidSearch.trim().toUpperCase();
