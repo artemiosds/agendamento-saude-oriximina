@@ -970,11 +970,10 @@ const PTS: React.FC = () => {
                 <TabsTrigger value="revisao" className="text-xs">Revisão</TabsTrigger>
               </TabsList>
 
-              <ScrollArea className="flex-1 h-full min-h-0">
+              <ScrollArea className="flex-1 min-h-0">
                 <div className="px-6 py-4">
 
-                {/* TAB 1: Identificação e Contexto */}
-                <TabsContent value="identificacao" className="mt-0 space-y-4">
+                <TabsContent value="identificacao" className="mt-0 space-y-4 outline-none">
                   <div>
                     <Label>Paciente *</Label>
                     {editingPts ? (
@@ -1080,7 +1079,7 @@ const PTS: React.FC = () => {
                 </TabsContent>
 
                 {/* TAB 2: Diagnóstico e Objetivos */}
-                <TabsContent value="diagnostico" className="mt-0 space-y-4">
+                <TabsContent value="diagnostico" className="mt-0 space-y-4 outline-none">
                   <div>
                     <Label>Diagnóstico Funcional Global *</Label>
                     <Textarea rows={3} value={form.diagnostico_funcional}
@@ -1139,7 +1138,7 @@ const PTS: React.FC = () => {
                 </TabsContent>
 
                 {/* TAB 3: Metas Estruturadas */}
-                <TabsContent value="metas" className="mt-0 space-y-4">
+                <TabsContent value="metas" className="mt-0 space-y-4 outline-none">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-sm">Metas Estruturadas</h3>
@@ -1199,7 +1198,7 @@ const PTS: React.FC = () => {
                 </TabsContent>
 
                 {/* TAB 4: Procedimentos SIGTAP */}
-                <TabsContent value="procedimentos" className="mt-0 space-y-4">
+                <TabsContent value="procedimentos" className="mt-0 space-y-4 outline-none">
                   {(isFisioterapeuta || isMaster) ? (
                     <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                       <div className="flex items-center justify-between">
@@ -1339,7 +1338,7 @@ const PTS: React.FC = () => {
                 </TabsContent>
 
                 {/* TAB 5: Revisão e Configurações */}
-                <TabsContent value="revisao" className="mt-0 space-y-4">
+                <TabsContent value="revisao" className="mt-0 space-y-4 outline-none">
                   <div>
                     <Label>Data da Próxima Revisão</Label>
                     <Input type="date" value={form.data_proxima_revisao}
