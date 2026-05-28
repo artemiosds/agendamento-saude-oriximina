@@ -497,18 +497,8 @@ const Tratamentos: React.FC = () => {
     }
   }, [selectedCycle, ptsList]);
 
-  // Sync filters with available options (safety)
-  useEffect(() => {
-    if (filterProf !== 'all' && !profissionais.some(p => p.id === filterProf)) {
-      setFilterProf('all');
-    }
-  }, [profissionais, filterProf]);
-
-  useEffect(() => {
-    if (filterUnit !== 'all' && !unidadesVisiveis.some(u => u.id === filterUnit)) {
-      setFilterUnit('all');
-    }
-  }, [unidadesVisiveis, filterUnit]);
+  // Remove sync filters that cause auto-resetting bugs when lists load asynchronously
+  // The Select component handles missing values gracefully by showing placeholder/Todos
 
   const ptsDosPacienteCiclo = useMemo(() => {
     if (!selectedCycle) return [];
