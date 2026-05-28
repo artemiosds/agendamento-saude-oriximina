@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,11 +14,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { toast } from "sonner";
+import { auditService } from "@/services/auditService";
 import {
   FileText, Users, User, ArrowLeft, Printer, FileDown, CheckCircle,
-  Save, Send, ClipboardList, Stethoscope, Heart, Activity
+  Save, Send, ClipboardList, Stethoscope, Heart, Activity,
+  Clock, AlertCircle, Check, Info, LayoutDashboard, History,
+  ShieldCheck, ExternalLink, Download
 } from "lucide-react";
 import { openPrintDocument } from "@/lib/printLayout";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /* ── types ─────────────────────────────────────────── */
 interface ProfSection {
@@ -35,6 +40,13 @@ interface ProfSection {
   metas_status: "totalmente" | "parcialmente" | "nao_atingidas";
   metas_justificativa: string;
   tecnologia_assistiva: string;
+}
+
+interface MetaPTS {
+  id: string;
+  titulo: string;
+  status: string;
+  trabalhada?: boolean;
 }
 
 type ModoRelatorio = "selector" | "multiprofissional" | "individual";
