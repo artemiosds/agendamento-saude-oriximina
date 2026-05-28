@@ -109,10 +109,14 @@ const NIVEIS_INDEPENDENCIA = [
 const FREQUENCIAS_APS = ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Semestral", "Anual", "Sem necessidade"];
 
 const ADESAO_TRATAMENTO = ["Excelente", "Boa", "Regular", "Baixa"];
-const METAS_ATINGIDAS = ["Totalmente atingidas", "Parcialmente atingidas", "Não atingidas"];
+const METAS_ATINGIDAS = ["Não atingidas", "Parcialmente atingidas", "Majoritariamente atingidas", "Totalmente atingidas"];
 const EVOLUCAO_GLOBAL = ["Excelente", "Satisfatória", "Parcial", "Discreta", "Sem evolução relevante"];
+const RESPOSTA_TERAPEUTICA = ["Inexistente", "Discreta", "Parcial", "Satisfatória", "Importante"];
+const RISCO_POS_ALTA = ["Baixo", "Moderado", "Alto"];
+const COMPLEXIDADE_CASO = ["Baixa", "Média", "Alta"];
+
 const INTERCORRENCIAS_OPCOES = [
-  "Nenhuma", "Faltas frequentes", "Baixa adesão", "Agravamento clínico", "Barreiras familiares", "Barreiras sociais", "Intercorrências médicas"
+  "Nenhuma", "Faltas frequentes", "Baixa adesão", "Agravamento clínico", "Barreiras familiares", "Barreiras sociais", "Intercorrências médicas", "Troca de conduta", "Outro"
 ];
 
 const fmt = (d: string) => {
