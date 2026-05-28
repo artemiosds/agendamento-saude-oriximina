@@ -414,6 +414,9 @@ const RelatorioAlta: React.FC = () => {
     const errors: string[] = [];
     if (!pacienteId) errors.push("Selecione um paciente");
     if (!indMotivo) errors.push("Selecione o motivo da alta");
+    if (!indTipoAlta) errors.push("Selecione o tipo de alta");
+    if (!indEvolucao) errors.push("A evolução clínica é obrigatória");
+    if (!indOrientacoes) errors.push("Orientações de alta são obrigatórias");
     if (indMetas !== "totalmente" && !indMetasJust) errors.push("Justificativa de metas obrigatória");
     return errors;
   };
