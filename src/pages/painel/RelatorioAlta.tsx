@@ -124,6 +124,11 @@ const fmt = (d: string) => {
   try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return d; }
 };
 
+const fmtDateTime = (d: string) => {
+  if (!d) return "—";
+  try { return new Date(d).toLocaleString("pt-BR"); } catch { return d; }
+};
+
 const calcIdade = (dn: string) => {
   if (!dn) return "";
   try {
@@ -132,6 +137,7 @@ const calcIdade = (dn: string) => {
     return `${Math.floor(diff / 31557600000)} anos`;
   } catch { return ""; }
 };
+
 
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
