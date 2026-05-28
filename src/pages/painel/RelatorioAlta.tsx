@@ -216,8 +216,12 @@ const RelatorioAlta: React.FC = () => {
 
   /* ── auto-load professional data when patient selected ─── */
   useEffect(() => {
-    if (!pacienteId || modo !== "multiprofissional") return;
-    loadProfessionalsForPatient(pacienteId);
+    if (!pacienteId || (modo !== "multiprofissional" && modo !== "individual")) return;
+    if (modo === "multiprofissional") {
+      loadProfessionalsForPatient(pacienteId);
+      loadMultiData(pacienteId);
+    }
+
   }, [pacienteId, modo]);
 
   useEffect(() => {
