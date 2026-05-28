@@ -40,6 +40,14 @@ interface ProfSection {
   metas_status: "totalmente" | "parcialmente" | "nao_atingidas";
   metas_justificativa: string;
   tecnologia_assistiva: string;
+  // Novos campos para evolução multiprofissional
+  status_contribuicao: "nao_iniciada" | "em_preenchimento" | "concluida";
+  data_contribuicao: string;
+  orientacoes_especificas?: string;
+  encaminhamentos_especificos?: string;
+  objetivos_especificos?: string;
+  adesao?: string;
+  intercorrencias?: string;
 }
 
 interface MetaPTS {
