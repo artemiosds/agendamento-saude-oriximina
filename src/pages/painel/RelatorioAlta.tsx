@@ -21,7 +21,7 @@ import {
   Save, Send, ClipboardList, Stethoscope, Heart, Activity,
   Clock, AlertCircle, Check, Info, LayoutDashboard, History,
   ShieldCheck, ExternalLink, Download, Lock, Unlock, Hash,
-  ChevronRight, ListTodo, AlertTriangle
+  ChevronRight, ListTodo, AlertTriangle, RefreshCw
 } from "lucide-react";
 import { openPrintDocument } from "@/lib/printLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
