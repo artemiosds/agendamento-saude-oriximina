@@ -264,34 +264,129 @@ const RelatorioAlta: React.FC = () => {
 
   const loadIndividualData = async (pid: string) => {
     if (!user?.id) return;
-    const { data: pronts } = await supabase
-      .from("prontuarios")
-      .select("data_atendimento, hipotese, procedimentos_texto")
-      .eq("paciente_id", pid)
-      .eq("profissional_id", user.id)
-      .order("data_atendimento", { ascending: true });
+    setLoading(true);
+    try {
+      // 1. Check for existing draft
+      const { data: existingDraft } = await supabase
+        .from("prontuarios")
+        .select("*")
+        .eq("paciente_id", pid)
+        .eq("profissional_id", user.id)
+        .eq("status", "rascunho")
+        .eq("tipo_registro", "alta_individual")
+        .maybeSingle();
 
-    if (pronts && pronts.length > 0) {
-      setIndPeriodoInicio(pronts[0].data_atendimento);
-      setIndPeriodoFim(pronts[pronts.length - 1].data_atendimento);
-      
-      // Load most recent procedures and diagnosis
-      const lastPront = pronts[pronts.length - 1];
-      if (lastPront.hipotese) setIndDiagCid(lastPront.hipotese);
-      if (lastPront.procedimentos_texto) setIndIntervencoes(lastPront.procedimentos_texto);
+      if (existingDraft) {
+        setReportId(existingDraft.id);
+        setStatus("rascunho");
+        const data = JSON.parse(existingDraft.observacoes);
+        // Load all data from draft
+        setIndDiagCid(data.diagCid || "");
+        setIndCif(data.cif || "");
+        setIndDiagClinico(data.diagClinico || "");
+        setIndDiagFuncional(data.diagFuncional || "");
+        setIndNivelComprometimento(data.nivelComprometimento || "");
+        setIndObsDiagnosticas(data.obsDiagnosticas || "");
+        setIndQueixaPrincipal(data.queixaPrincipal || "");
+        setIndMotivoEncaminhamento(data.motivoEncaminhamento || "");
+        setIndContextoFamiliar(data.contextoFamiliar || "");
+        setIndComorbidades(data.comorbidades || "");
+        setIndMedicacao(data.medicacao || "");
+        setIndObjetivos(data.objetivos || "");
+        setIndIntervencoes(data.intervencoes || "");
+        setIndEvolucao(data.evolucao || "");
+        setIndMetas(data.metas || "totalmente");
+        setIndMetasJust(data.metasJust || "");
+        setIndTA(data.ta || "");
+        setIndFrequenciaAtendimento(data.frequenciaAtendimento || "");
+        setIndAdesaoTratamento(data.adesaoTratamento || "");
+        setIndEvolucaoGlobal(data.evolucaoGlobal || "");
+        setIndIntercorrencias(data.intercorrencias || "");
+        setIndIntercorrenciasObs(data.intercorrenciasObs || "");
+        setIndRespostaTerapeutica(data.respostaTerapeutica || "");
+        setIndComparacaoInicioAlta(data.comparacaoInicioAlta || "");
+        setIndMotivo(data.motivo || "");
+        setIndTipoAlta(data.tipoAlta || "");
+        setIndMotivoDet(data.motivoDet || "");
+        setIndOrientacoes(data.orientacoes || "");
+        setIndEncaminhamento(data.encaminhamento || "");
+        setIndModalidade(data.modalidade || "");
+        setIndDataAlta(existingDraft.data_atendimento || new Date().toISOString().split("T")[0]);
+        setIndSessoes(data.sessoes || 0);
+        setIndFaltas(data.faltas || 0);
+        setIndPeriodoInicio(data.periodoInicio || "");
+        setIndPeriodoFim(data.periodoFim || "");
+        setIndContinuarTerapia(data.continuarTerapia || "");
+        setIndRiscoRegressao(data.riscoRegressao || "");
+        setIndPrazoReavaliacao(data.prazoReavaliacao || "");
+        
+        toast.info("Rascunho carregado com sucesso.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Load fresh data if no draft
+      const { data: pronts } = await supabase
+        .from("prontuarios")
+        .select("data_atendimento, hipotese, procedimentos_texto, queixa_principal, evolucao, conduta")
+        .eq("paciente_id", pid)
+        .eq("profissional_id", user.id)
+        .order("data_atendimento", { ascending: true });
+
+      if (pronts && pronts.length > 0) {
+        setIndPeriodoInicio(pronts[0].data_atendimento);
+        setIndPeriodoFim(pronts[pronts.length - 1].data_atendimento);
+        setIndQueixaPrincipal(pronts[0].queixa_principal || "");
+        
+        const lastPront = pronts[pronts.length - 1];
+        setIndDiagCid(lastPront.hipotese || "");
+        setIndIntervencoes(lastPront.procedimentos_texto || "");
+        setIndEvolucao(lastPront.evolucao || "");
+        setIndOrientacoes(lastPront.conduta || "");
+      }
+
+      // Load sessions and absences
+      const { data: sessions } = await supabase
+        .from("treatment_sessions")
+        .select("status")
+        .eq("patient_id", pid)
+        .eq("professional_id", user.id);
+
+      const realizada = sessions?.filter(s => s.status === "realizada").length || 0;
+      const faltas = sessions?.filter(s => s.status === "falta").length || 0;
+      setIndSessoes(realizada);
+      setIndFaltas(faltas);
+
+      // Load PTS
+      const { data: activePts } = await supabase
+        .from("pts")
+        .select("*")
+        .eq("patient_id", pid)
+        .eq("status", "ativo")
+        .maybeSingle();
+
+      if (activePts) {
+        setIndDiagFuncional(activePts.diagnostico_funcional || "");
+        setIndObjetivos(activePts.objetivos_terapeuticos || "");
+        setIndMotivoEncaminhamento(activePts.motivo_encaminhamento || "");
+        
+        const { data: metas } = await supabase
+          .from("pts_metas")
+          .select("id, titulo, status")
+          .eq("pts_id", activePts.id);
+        
+        if (metas) setPtsMetas(metas);
+      }
+
+      const pat = pacientes.find(p => p.id === pid);
+      if (pat?.cid && !indDiagCid) setIndDiagCid(pat.cid);
+      if (pat?.modalidade_id && !indModalidade) setIndModalidade(pat.modalidade_id);
+
+    } catch (error) {
+      console.error("Error loading individual data:", error);
+    } finally {
+      setLoading(false);
     }
-
-    const { data: sessions } = await supabase
-      .from("treatment_sessions")
-      .select("id")
-      .eq("patient_id", pid)
-      .eq("professional_id", user.id)
-      .eq("status", "realizada");
-
-    setIndSessoes(sessions?.length || pronts?.length || 0);
-
-    const pat = pacientes.find(p => p.id === pid);
-    if (pat?.cid && !indDiagCid) setIndDiagCid(pat.cid);
   };
 
   const updateProfSection = (profId: string, field: keyof ProfSection, value: any) => {
