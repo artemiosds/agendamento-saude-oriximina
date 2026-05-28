@@ -961,7 +961,7 @@ const PTS: React.FC = () => {
           </DialogHeader>
 
           <div className="flex-1 overflow-hidden flex flex-col">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
               <TabsList className="mx-6 mt-3 mb-0 grid grid-cols-5 shrink-0">
                 <TabsTrigger value="identificacao" className="text-xs">Identificação</TabsTrigger>
                 <TabsTrigger value="diagnostico" className="text-xs">Diagnóstico</TabsTrigger>
@@ -970,7 +970,8 @@ const PTS: React.FC = () => {
                 <TabsTrigger value="revisao" className="text-xs">Revisão</TabsTrigger>
               </TabsList>
 
-              <ScrollArea className="flex-1 px-6 py-4">
+              <ScrollArea className="flex-1 h-full min-h-0">
+                <div className="px-6 py-4">
 
                 {/* TAB 1: Identificação e Contexto */}
                 <TabsContent value="identificacao" className="mt-0 space-y-4">
@@ -1372,6 +1373,7 @@ const PTS: React.FC = () => {
                   </div>
                 </TabsContent>
 
+                </div>
               </ScrollArea>
             </Tabs>
           </div>
