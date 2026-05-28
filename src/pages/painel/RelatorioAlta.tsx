@@ -328,15 +328,6 @@ const RelatorioAlta: React.FC = () => {
     });
 
 
-        data_contribuicao: "",
-        orientacoes_especificas: "",
-        encaminhamentos_especificos: "",
-        objetivos_especificos: "",
-        adesao: "Excelente",
-        intercorrencias: "Nenhuma"
-      });
-    });
-
     setProfSections(sections);
     if (sections.length > 0) setTabProf(sections[0].profissional_id);
 
