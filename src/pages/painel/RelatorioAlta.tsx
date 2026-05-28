@@ -529,6 +529,52 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         setIndEvolucao(lastPront.evolucao || "");
         setIndOrientacoes(lastPront.conduta || "");
       }
+  const generateIndSummary = () => {
+    const summary = `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões. 
+Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : "parcialmente"} atingidos. 
+A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}. 
+Na alta, apresenta ${indDiagFuncional || "estabilidade funcional"}. 
+Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`;
+    setIndResumoConsolidado(summary);
+  };
+
+  const handleReopen = async () => {
+    if (!reopenReason) { toast.error("Informe o motivo da reabertura"); return; }
+    
+    const newVersion = version + 1;
+    const actionDate = new Date().toISOString();
+    const newHistoryEntry: VersionRecord = {
+      version: newVersion,
+      data: actionDate,
+      user_nome: user?.nome || "Sistema",
+      action: "Reabertura de Relatório",
+      reason: reopenReason
+    };
+
+    const updatedHistory = [...history, newHistoryEntry];
+    setStatus("rascunho");
+    setVersion(newVersion);
+    setHistory(updatedHistory);
+    setIsReopening(false);
+    
+    // Save state change
+    await handleSave(modo === "individual" ? "individual" : "multi", true, "rascunho");
+
+    await auditService.log({
+      acao: "reabrir_relatorio_alta",
+      modulo: "prontuario",
+      entidade: "prontuario",
+      entidadeId: reportId || "",
+      pacienteId: pacienteId,
+      pacienteNome: paciente?.nome,
+      profissional_id: user?.id,
+      profissional_nome: user?.nome,
+      detalhes: { motivo: reopenReason, version: newVersion }
+    });
+    
+    setReopenReason("");
+    toast.success("Relatório reaberto para edição");
+  };
 
 
       // Load sessions and absences
