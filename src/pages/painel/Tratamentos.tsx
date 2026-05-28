@@ -303,7 +303,7 @@ const Tratamentos: React.FC = () => {
     if (!silent) setLoading(true);
     try {
       // Server-side paginated cycles via RPC (lightweight, with stats only)
-      const isProf = user?.role === \"profissional\";
+      const isProf = user?.role === "profissional";
       const restrictUnit = !!(user?.unidadeId && user?.usuario !== 'admin.sms');
 
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
@@ -324,8 +324,8 @@ const Tratamentos: React.FC = () => {
       setSelectedCycle((current) => (current ? cyclesData.find((cycle) => cycle.id === current.id) || current : current));
 
       // PTS list (lightweight, scoped by unit)
-      let qPts = supabase.from(\"pts\").select(\"*\").order(\"created_at\", { ascending: false });
-      if (restrictUnit) qPts = qPts.eq(\"unit_id\", user!.unidadeId!);
+      let qPts = supabase.from("pts").select("*").order("created_at", { ascending: false });
+      if (restrictUnit) qPts = qPts.eq("unit_id", user!.unidadeId!);
       const [{ data: ptsData }, procsData] = await Promise.all([
         qPts,
         procedureService.getActive(),
@@ -334,8 +334,8 @@ const Tratamentos: React.FC = () => {
       setProcedimentos(procsData);
       if (ptsData) setPtsList(ptsData as PTSRecord[]);
     } catch (err) {
-      console.error(\"Error loading treatments:\", err);
-      toast.error(\"Erro ao carregar dados de tratamento.\");
+      console.error("Error loading treatments:", err);
+      toast.error("Erro ao carregar dados de tratamento.");
     } finally {
       setLoading(false);
     }
