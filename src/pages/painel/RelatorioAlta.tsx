@@ -1204,19 +1204,44 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
           <TabsContent value="equipe" className="space-y-4 pt-4">
              {profSections.map(s => (
                <Card key={s.profissional_id}>
-                 <CardHeader className="pb-3"><CardTitle className="text-sm">{s.profissional_nome}</CardTitle></CardHeader>
+                 <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                   <CardTitle className="text-sm">{s.profissional_nome}</CardTitle>
+                   <Badge variant={s.status_contribuicao === "assinada" ? "default" : "secondary"}>
+                     {s.status_contribuicao.replace("_", " ")}
+                   </Badge>
+                 </CardHeader>
                  <CardContent className="space-y-2">
-                    <Textarea value={s.objetivos_especificos || ""} onChange={e => updateProfSection(s.profissional_id, "objetivos_especificos", e.target.value)} placeholder="Objetivos específicos da área..." rows={2} />
-                    <Textarea value={s.evolucao || ""} onChange={e => updateProfSection(s.profissional_id, "evolucao", e.target.value)} placeholder="Evolução da área..." rows={2} />
-                    <div className="flex gap-4">
-                      <Select value={s.status_contribuicao} onValueChange={(v: any) => updateProfSection(s.profissional_id, "status_contribuicao", v)}>
-                        <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
-                          <SelectItem value="em_preenchimento">Em preenchimento</SelectItem>
-                          <SelectItem value="concluida">Concluída</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Objetivos Específicos</Label>
+                        <Textarea value={s.objetivos_especificos || ""} onChange={e => updateProfSection(s.profissional_id, "objetivos_especificos", e.target.value)} rows={2} disabled={s.status_contribuicao === "assinada"} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Evolução da Área</Label>
+                        <Textarea value={s.evolucao || ""} onChange={e => updateProfSection(s.profissional_id, "evolucao", e.target.value)} rows={2} disabled={s.status_contribuicao === "assinada"} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="flex gap-4">
+                        <Select value={s.status_contribuicao} onValueChange={(v: any) => updateProfSection(s.profissional_id, "status_contribuicao", v)} disabled={s.status_contribuicao === "assinada"}>
+                          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
+                            <SelectItem value="em_preenchimento">Em preenchimento</SelectItem>
+                            <SelectItem value="concluida">Concluída</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {s.profissional_id === user?.id && s.status_contribuicao !== "assinada" && (
+                        <Button size="sm" onClick={() => updateProfSection(s.profissional_id, "status_contribuicao", "assinada")}>
+                          <ShieldCheck className="w-4 h-4 mr-2" /> Assinar Contribuição
+                        </Button>
+                      )}
+                      {s.status_contribuicao === "assinada" && (
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3 text-green-600" /> Assinado em {fmtDateTime(s.data_contribuicao)}
+                        </div>
+                      )}
                     </div>
                  </CardContent>
                </Card>
@@ -1224,17 +1249,65 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
           </TabsContent>
 
           <TabsContent value="alta" className="space-y-4 pt-4">
-            <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Alta e Plano</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <Select value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
-                   <SelectTrigger><SelectValue placeholder="Tipo de Alta" /></SelectTrigger>
-                   <SelectContent>{TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                </Select>
-                <Textarea value={condicaoFuncional} onChange={e => setCondicaoFuncional(e.target.value)} placeholder="Condição funcional na alta..." />
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-3 space-y-4">
+                <Card>
+                  <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Conclusão Multiprofissional</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Tipo de Alta *</Label>
+                        <Select value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
+                           <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                           <SelectContent>{TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Nível de Independência</Label>
+                        <Select value={nivelIndep} onValueChange={setNivelIndep}>
+                           <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                           <SelectContent>{NIVEIS_INDEPENDENCIA.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Resumo Consolidado Final (Editável)</Label>
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={generateMultiSummary}>
+                          <RefreshCw className="w-3 h-3 mr-1" /> Gerar Automático
+                        </Button>
+                      </div>
+                      <Textarea value={multiResumoConsolidado} onChange={e => setMultiResumoConsolidado(e.target.value)} rows={6} className="text-sm font-serif" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-3"><CardTitle className="text-xs font-semibold flex items-center gap-2"><ListTodo className="w-4 h-4" /> Checklist de Alta</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    {[
+                      { label: "Paciente Selecionado", ok: !!pacienteId },
+                      { label: "Tipo de Alta", ok: !!multiTipoAlta },
+                      { label: "Resumo Consolidado", ok: !!multiResumoConsolidado },
+                      { label: "Mín. 1 Contribuição", ok: profSections.some(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada") }
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-[11px]">
+                        <span className={item.ok ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
+                        {item.ok ? <CheckCircle className="w-3 h-3 text-green-600" /> : <AlertCircle className="w-3 h-3 text-amber-500" />}
+                      </div>
+                    ))}
+                    <Separator className="my-2" />
+                    <div className="text-[10px] bg-muted p-2 rounded-lg text-muted-foreground">
+                      Status: <strong className="text-foreground">{validateMulti().length === 0 ? "Pronto para Emitir" : "Incompleto"}</strong>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </TabsContent>
+
         </Tabs>
 
         {/* Footer Actions */}
