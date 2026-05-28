@@ -897,8 +897,9 @@ const PTS: React.FC = () => {
         const procName = normalize(p.nome);
         if (!procName.includes(searchTerm) && !p.codigo.includes(searchTerm)) continue;
       }
-      if (!map[p.especialidade]) map[p.especialidade] = [];
-      map[p.especialidade].push(p);
+      const esp = p.especialidade || 'outros';
+      if (!map[esp]) map[esp] = [];
+      map[esp].push(p);
     }
     return map;
   }, [sigtapProcs, procSearch, normalize]);
