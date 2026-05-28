@@ -3243,7 +3243,10 @@ const Tratamentos: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Select value={filterProf} onValueChange={setFilterProf}>
+        <Select value={filterProf} onValueChange={(v) => {
+          setFilterProf(v);
+          setLoading(true);
+        }}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Profissional" />
           </SelectTrigger>
@@ -3256,7 +3259,10 @@ const Tratamentos: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterUnit} onValueChange={setFilterUnit}>
+        <Select value={filterUnit} onValueChange={(v) => {
+          setFilterUnit(v);
+          setLoading(true);
+        }}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Unidade" />
           </SelectTrigger>
@@ -3269,7 +3275,10 @@ const Tratamentos: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
+        <Select value={filterStatus} onValueChange={(v) => {
+          setFilterStatus(v);
+          setLoading(true);
+        }}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -3286,6 +3295,7 @@ const Tratamentos: React.FC = () => {
         <Button 
           variant="outline" 
           onClick={() => {
+            setLoading(true);
             setSearchTerm("");
             setFilterProf("all");
             setFilterUnit("all");
