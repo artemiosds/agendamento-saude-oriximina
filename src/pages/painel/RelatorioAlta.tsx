@@ -138,21 +138,50 @@ const RelatorioAlta: React.FC = () => {
   /* ── individual state ─── */
   const [indDiagCid, setIndDiagCid] = useState("");
   const [indCif, setIndCif] = useState("");
+  const [indDiagClinico, setIndDiagClinico] = useState("");
+  const [indDiagFuncional, setIndDiagFuncional] = useState("");
+  const [indNivelComprometimento, setIndNivelComprometimento] = useState("");
+  const [indObsDiagnosticas, setIndObsDiagnosticas] = useState("");
+
+  const [indQueixaPrincipal, setIndQueixaPrincipal] = useState("");
+  const [indMotivoEncaminhamento, setIndMotivoEncaminhamento] = useState("");
+  const [indContextoFamiliar, setIndContextoFamiliar] = useState("");
+  const [indComorbidades, setIndComorbidades] = useState("");
+  const [indMedicacao, setIndMedicacao] = useState("");
+
   const [indObjetivos, setIndObjetivos] = useState("");
   const [indIntervencoes, setIndIntervencoes] = useState("");
   const [indEvolucao, setIndEvolucao] = useState("");
   const [indMetas, setIndMetas] = useState<"totalmente" | "parcialmente" | "nao_atingidas">("totalmente");
   const [indMetasJust, setIndMetasJust] = useState("");
   const [indTA, setIndTA] = useState("");
+  const [indFrequenciaAtendimento, setIndFrequenciaAtendimento] = useState("");
+  const [indAdesaoTratamento, setIndAdesaoTratamento] = useState("");
+  const [indEvolucaoGlobal, setIndEvolucaoGlobal] = useState("");
+  const [indIntercorrencias, setIndIntercorrencias] = useState("");
+  const [indIntercorrenciasObs, setIndIntercorrenciasObs] = useState("");
+  const [indRespostaTerapeutica, setIndRespostaTerapeutica] = useState("");
+  const [indComparacaoInicioAlta, setIndComparacaoInicioAlta] = useState("");
+
   const [indMotivo, setIndMotivo] = useState("");
+  const [indTipoAlta, setIndTipoAlta] = useState("");
   const [indMotivoDet, setIndMotivoDet] = useState("");
   const [indOrientacoes, setIndOrientacoes] = useState("");
   const [indEncaminhamento, setIndEncaminhamento] = useState("");
   const [indModalidade, setIndModalidade] = useState("");
   const [indDataAlta, setIndDataAlta] = useState(new Date().toISOString().split("T")[0]);
   const [indSessoes, setIndSessoes] = useState(0);
+  const [indFaltas, setIndFaltas] = useState(0);
   const [indPeriodoInicio, setIndPeriodoInicio] = useState("");
   const [indPeriodoFim, setIndPeriodoFim] = useState("");
+  const [indContinuarTerapia, setIndContinuarTerapia] = useState("");
+  const [indRiscoRegressao, setIndRiscoRegressao] = useState("");
+  const [indPrazoReavaliacao, setIndPrazoReavaliacao] = useState("");
+
+  const [status, setStatus] = useState<"rascunho" | "finalizado">("finalizado");
+  const [reportId, setReportId] = useState<string | null>(null);
+  const [ptsMetas, setPtsMetas] = useState<MetaPTS[]>([]);
+  const [loading, setLoading] = useState(false);
 
   /* ── auto-load professional data when patient selected ─── */
   useEffect(() => {
