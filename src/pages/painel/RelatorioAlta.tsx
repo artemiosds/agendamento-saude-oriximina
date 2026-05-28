@@ -997,151 +997,488 @@ const RelatorioAlta: React.FC = () => {
   /* ═══ INDIVIDUAL ═══ */
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setModo("selector")}><ArrowLeft className="w-5 h-5" /></Button>
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <User className="w-5 h-5 text-primary" />
-            Relatório de Alta — Individual
-          </h1>
-          <p className="text-xs text-muted-foreground">Relatório individual do profissional logado</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => setModo("selector")}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <User className="w-5 h-5 text-primary" />
+              Relatório de Alta — Individual
+            </h1>
+            <p className="text-xs text-muted-foreground">Relatório clínico completo e automatizado</p>
+          </div>
         </div>
+
+        {pacienteId && (
+          <div className="flex items-center gap-2">
+            <Badge variant={status === "rascunho" ? "secondary" : "default"} className="px-3 py-1">
+              {status === "rascunho" ? "Rascunho" : "Finalizado"}
+            </Badge>
+            {status === "rascunho" && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Editando...
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Patient + Professional info */}
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-sm">1. Identificação</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={setPacienteId} />
-          {paciente && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-muted/50 rounded-lg p-3">
-              <div><span className="text-muted-foreground text-xs block">Paciente</span><strong>{paciente.nome}</strong></div>
-              <div><span className="text-muted-foreground text-xs block">Data Nasc.</span>{fmt(paciente.dataNascimento)} ({calcIdade(paciente.dataNascimento)})</div>
-              <div><span className="text-muted-foreground text-xs block">CNS</span>{paciente.cns || "—"}</div>
-              <div><span className="text-muted-foreground text-xs block">CPF</span>{paciente.cpf || "—"}</div>
-              <div><span className="text-muted-foreground text-xs block">Profissional</span>{user?.nome}</div>
-              <div><span className="text-muted-foreground text-xs block">Profissão</span>{funcionarios.find(f => f.id === user?.id)?.profissao || "—"}</div>
-              <div><span className="text-muted-foreground text-xs block">Período</span>{fmt(indPeriodoInicio)} a {fmt(indPeriodoFim)}</div>
-              <div><span className="text-muted-foreground text-xs block">Sessões</span>{indSessoes}</div>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Main Form Content */}
+        <div className="lg:col-span-3 space-y-6">
+          <Tabs defaultValue="identificacao" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+              <TabsTrigger value="identificacao" className="py-2">Identificação</TabsTrigger>
+              <TabsTrigger value="contexto" className="py-2">Contexto Clínico</TabsTrigger>
+              <TabsTrigger value="diagnostico" className="py-2">Diagnóstico</TabsTrigger>
+              <TabsTrigger value="evolucao" className="py-2">Evolução</TabsTrigger>
+              <TabsTrigger value="alta" className="py-2">Alta e Plano</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="identificacao" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-primary" />
+                    1. Identificação do Paciente e Profissional
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={setPacienteId} />
+                  
+                  {paciente && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-xl border border-border/50 text-sm">
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Paciente</span>
+                        <strong className="text-foreground">{paciente.nome}</strong>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">CPF / CNS</span>
+                        <span className="text-foreground">{paciente.cpf || "—"} / {paciente.cns || "—"}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Nascimento / Idade</span>
+                        <span className="text-foreground">{fmt(paciente.dataNascimento)} ({calcIdade(paciente.dataNascimento)})</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Telefone</span>
+                        <span className="text-foreground">{paciente.telefone || "—"}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Profissional Logado</span>
+                        <span className="text-foreground font-semibold">{user?.nome}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Especialidade</span>
+                        <span className="text-foreground">{funcionarios.find(f => f.id === user?.id)?.profissao || "—"}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Unidade</span>
+                        <span className="text-foreground">{user?.unidadeId || "CER II"}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Sessões / Faltas</span>
+                        <Badge variant="outline" className="text-xs font-mono">{indSessoes} realizada(s) / {indFaltas} falta(s)</Badge>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Período de Acompanhamento</Label>
+                      <div className="flex items-center gap-2">
+                        <Input type="date" value={indPeriodoInicio} onChange={e => setIndPeriodoInicio(e.target.value)} className="h-9 text-sm" />
+                        <span className="text-muted-foreground">até</span>
+                        <Input type="date" value={indPeriodoFim} onChange={e => setIndPeriodoFim(e.target.value)} className="h-9 text-sm" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Data de Alta</Label>
+                      <Input type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-9 text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Modalidade</Label>
+                      <Select value={indModalidade} onValueChange={setIndModalidade}>
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MODALIDADES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="contexto" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Info className="w-4 h-4 text-primary" />
+                    2. Contexto Clínico Inicial
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Queixa Principal</Label>
+                    <Textarea value={indQueixaPrincipal} onChange={e => setIndQueixaPrincipal(e.target.value)} rows={3} className="text-sm" placeholder="Resumo da queixa inicial..." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Motivo do Encaminhamento</Label>
+                    <Textarea value={indMotivoEncaminhamento} onChange={e => setIndMotivoEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Por que o paciente foi encaminhado?" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Contexto Familiar / Social</Label>
+                    <Textarea value={indContextoFamiliar} onChange={e => setIndContextoFamiliar(e.target.value)} rows={3} className="text-sm" placeholder="Rede de apoio, barreiras sociais..." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Comorbidades / Medicamentos</Label>
+                    <div className="space-y-2">
+                      <Input value={indComorbidades} onChange={e => setIndComorbidades(e.target.value)} placeholder="Outras doenças conhecidas" className="h-9 text-sm" />
+                      <Input value={indMedicacao} onChange={e => setIndMedicacao(e.target.value)} placeholder="Medicamentos em uso" className="h-9 text-sm" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="diagnostico" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Stethoscope className="w-4 h-4 text-primary" />
+                    3. Base Diagnóstica
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">CID-10 Princial</Label>
+                      <Input value={indDiagCid} onChange={e => setIndDiagCid(e.target.value)} placeholder="Código ou descrição" className="h-9 text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Nível de Comprometimento</Label>
+                      <Select value={indNivelComprometimento} onValueChange={setIndNivelComprometimento}>
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="leve">Leve</SelectItem>
+                          <SelectItem value="moderado">Moderado</SelectItem>
+                          <SelectItem value="grave">Grave / Severo</SelectItem>
+                          <SelectItem value="profundo">Profundo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Diagnóstico Clínico / Funcional</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Textarea value={indDiagClinico} onChange={e => setIndDiagClinico(e.target.value)} placeholder="Hipótese diagnóstica clínica..." rows={3} className="text-sm" />
+                      <Textarea value={indDiagFuncional} onChange={e => setIndDiagFuncional(e.target.value)} placeholder="Descrição da funcionalidade (CIF base)..." rows={3} className="text-sm" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Observações Diagnósticas Adicionais</Label>
+                    <Textarea value={indObsDiagnosticas} onChange={e => setIndObsDiagnosticas(e.target.value)} rows={2} className="text-sm" />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="evolucao" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-primary" />
+                    4. Evolução Terapêutica Estruturada
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Adesão ao Tratamento</Label>
+                      <Select value={indAdesaoTratamento} onValueChange={setIndAdesaoTratamento}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {ADESAO_TRATAMENTO.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Evolução Global</Label>
+                      <Select value={indEvolucaoGlobal} onValueChange={setIndEvolucaoGlobal}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {EVOLUCAO_GLOBAL.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Frequência de Atendimento</Label>
+                      <Select value={indFrequenciaAtendimento} onValueChange={setIndFrequenciaAtendimento}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="semanal">Semanal</SelectItem>
+                          <SelectItem value="quinzenal">Quinzenal</SelectItem>
+                          <SelectItem value="mensal">Mensal</SelectItem>
+                          <SelectItem value="demanda">Sob demanda</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Objetivos Terapêuticos Alcançados</Label>
+                      <Textarea value={indObjetivos} onChange={e => setIndObjetivos(e.target.value)} rows={4} className="text-sm" placeholder="Liste os objetivos trabalhados..." />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Resumo das Intervenções Realizadas</Label>
+                      <Textarea value={indIntervencoes} onChange={e => setIndIntervencoes(e.target.value)} rows={4} className="text-sm" placeholder="Quais procedimentos foram mais frequentes?" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Evolução Clínica e Funcional (Texto Livre)</Label>
+                    <Textarea value={indEvolucao} onChange={e => setIndEvolucao(e.target.value)} rows={5} className="text-sm" placeholder="Descreva detalhadamente a evolução do paciente no período..." />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-primary">Status das Metas (PTS)</Label>
+                      <Select value={indMetas} onValueChange={v => setIndMetas(v as any)}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="totalmente">Totalmente atingidas</SelectItem>
+                          <SelectItem value="parcialmente">Parcialmente atingidas</SelectItem>
+                          <SelectItem value="nao_atingidas">Não atingidas</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {indMetas !== "totalmente" && (
+                        <Textarea value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa clínica para metas não atingidas..." rows={2} className="text-sm mt-2" />
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-primary">Intercorrências no Período</Label>
+                      <Select value={indIntercorrencias} onValueChange={setIndIntercorrencias}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {INTERCORRENCIAS_OPCOES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {indIntercorrencias !== "Nenhuma" && (
+                        <Input value={indIntercorrenciasObs} onChange={e => setIndIntercorrenciasObs(e.target.value)} placeholder="Detalhes da intercorrência..." className="h-9 text-sm mt-2" />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Resposta Terapêutica</Label>
+                      <Textarea value={indRespostaTerapeutica} onChange={e => setIndRespostaTerapeutica(e.target.value)} rows={3} className="text-sm" placeholder="Como o paciente respondeu às estratégias?" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Comparação Início vs Alta</Label>
+                      <Textarea value={indComparacaoInicioAlta} onChange={e => setIndComparacaoInicioAlta(e.target.value)} rows={3} className="text-sm" placeholder="Diferença clínica observada entre a admissão e agora..." />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="alta" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-primary" />
+                    5. Desfecho e Orientações de Alta
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Tipo de Alta *</Label>
+                      <Select value={indTipoAlta} onValueChange={setIndTipoAlta}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Motivo da Alta *</Label>
+                      <Select value={indMotivo} onValueChange={setIndMotivo}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {MOTIVOS_ALTA.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Necessidade de Continuidade</Label>
+                      <Select value={indContinuarTerapia} onValueChange={setIndContinuarTerapia}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="sim_mesma">Sim, na mesma área</SelectItem>
+                          <SelectItem value="sim_outra">Sim, em outra área</SelectItem>
+                          <SelectItem value="nao">Não, alta definitiva</SelectItem>
+                          <SelectItem value="vigilancia">Sim, vigilância em saúde</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Risco de Regressão</Label>
+                      <Select value={indRiscoRegressao} onValueChange={setIndRiscoRegressao}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="baixo">Baixo</SelectItem>
+                          <SelectItem value="moderado">Moderado</SelectItem>
+                          <SelectItem value="alto">Alto</SelectItem>
+                          <SelectItem value="nao_aplica">Não se aplica</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Prazo para Reavaliação</Label>
+                      <Input value={indPrazoReavaliacao} onChange={e => setIndPrazoReavaliacao(e.target.value)} placeholder="Ex: 6 meses, 1 ano..." className="h-9 text-sm" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Orientações Específicas para Paciente / Cuidador</Label>
+                    <Textarea value={indOrientacoes} onChange={e => setIndOrientacoes(e.target.value)} rows={4} className="text-sm" placeholder="Exercícios domiciliares, sinais de alerta..." />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Encaminhamentos (Internos e Externos)</Label>
+                    <Textarea value={indEncaminhamento} onChange={e => setIndEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Liste para onde o paciente está sendo encaminhado..." />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Sidebar Actions & Info */}
+        <div className="space-y-6">
+          <Card className="sticky top-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <LayoutDashboard className="w-4 h-4 text-primary" />
+                Resumo e Ações
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2 p-3 bg-muted/30 rounded-lg border border-border/50">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Paciente selecionado:</span>
+                  <span className="font-semibold">{paciente ? "Sim" : "Não"}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Status do Registro:</span>
+                  <Badge variant={status === "rascunho" ? "secondary" : "default"} className="h-4 px-1 text-[10px]">
+                    {status === "rascunho" ? "Rascunho" : "Finalizado"}
+                  </Badge>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Checklist Validação:</span>
+                  <span className={validateInd().length === 0 ? "text-green-600 font-bold" : "text-amber-600 font-bold"}>
+                    {validateInd().length === 0 ? "Pronto" : `${validateInd().length} pendente(s)`}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start h-9" 
+                  onClick={() => handleSave("individual", true)}
+                  disabled={!pacienteId || loading}
+                >
+                  <Clock className="w-4 h-4 mr-2 text-muted-foreground" />
+                  Salvar Rascunho
+                </Button>
+                
+                <Button 
+                  className="w-full justify-start h-9 bg-primary" 
+                  onClick={() => handleSave("individual", false)}
+                  disabled={!pacienteId || loading}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Finalizar Relatório
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-col gap-2">
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start h-9 text-xs" 
+                  onClick={() => handlePrint("individual")}
+                  disabled={!pacienteId || status === "rascunho"}
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Imprimir Documento
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start h-9 text-xs" 
+                  onClick={() => handlePrint("individual")}
+                  disabled={!pacienteId || status === "rascunho"}
+                >
+                  <FileDown className="w-4 h-4 mr-2" />
+                  Gerar PDF Oficial
+                </Button>
+              </div>
+
+              {validateInd().length > 0 && pacienteId && (
+                <Alert variant="destructive" className="py-2 px-3 mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle className="text-xs">Pendências</AlertTitle>
+                  <AlertDescription className="text-[10px]">
+                    <ul className="list-disc ml-4 space-y-1">
+                      {validateInd().map((err, i) => <li key={i}>{err}</li>)}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {ptsMetas.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <History className="w-3 h-3 text-primary" />
+                  Metas do PTS Ativo
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="space-y-1">
+                  {ptsMetas.map(meta => (
+                    <div key={meta.id} className="text-[10px] flex items-center justify-between p-1 hover:bg-muted/30 rounded">
+                      <span className="truncate max-w-[120px]">{meta.titulo}</span>
+                      <Badge variant="outline" className="text-[9px] h-3 px-1">
+                        {meta.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs">Data de Alta</Label>
-              <Input type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs">Modalidade</Label>
-              <Select value={indModalidade} onValueChange={setIndModalidade}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                <SelectContent>
-                  {MODALIDADES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Diagnosis */}
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-sm">2. Diagnóstico</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <Label className="text-xs">CID-10</Label>
-            <Input value={indDiagCid} onChange={e => setIndDiagCid(e.target.value)} placeholder="Código ou descrição" className="h-8 text-sm" />
-          </div>
-          <div>
-            <Label className="text-xs">CIF</Label>
-            <Textarea value={indCif} onChange={e => setIndCif(e.target.value)} rows={2} className="text-sm" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Clinical */}
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-sm">3. Evolução Clínica</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <Label className="text-xs">Objetivos Terapêuticos Iniciais</Label>
-            <Textarea value={indObjetivos} onChange={e => setIndObjetivos(e.target.value)} rows={3} className="text-sm" />
-          </div>
-          <div>
-            <Label className="text-xs">Intervenções/Procedimentos Realizados</Label>
-            <Textarea value={indIntervencoes} onChange={e => setIndIntervencoes(e.target.value)} rows={3} className="text-sm" />
-          </div>
-          <div>
-            <Label className="text-xs">Evolução Clínica e Funcional</Label>
-            <Textarea value={indEvolucao} onChange={e => setIndEvolucao(e.target.value)} rows={3} className="text-sm" />
-          </div>
-          <div>
-            <Label className="text-xs">Metas Atingidas</Label>
-            <Select value={indMetas} onValueChange={v => setIndMetas(v as any)}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="totalmente">Totalmente atingidas</SelectItem>
-                <SelectItem value="parcialmente">Parcialmente atingidas</SelectItem>
-                <SelectItem value="nao_atingidas">Não atingidas</SelectItem>
-              </SelectContent>
-            </Select>
-            {indMetas !== "totalmente" && (
-              <Textarea value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa obrigatória..." rows={2} className="text-sm mt-2" />
-            )}
-          </div>
-          <div>
-            <Label className="text-xs">Tecnologia Assistiva Concedida</Label>
-            <Input value={indTA} onChange={e => setIndTA(e.target.value)} placeholder="Órteses, próteses, AASI..." className="h-8 text-sm" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Discharge */}
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-sm">4. Alta e Orientações</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <Label className="text-xs">Motivo da Alta *</Label>
-            <Select value={indMotivo} onValueChange={setIndMotivo}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {MOTIVOS_ALTA.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {(indMotivo === "infrequencia" || indMotivo === "encaminhamento" || indMotivo === "obito") && (
-              <Input value={indMotivoDet} onChange={e => setIndMotivoDet(e.target.value)}
-                placeholder={indMotivo === "infrequencia" ? "Nº de faltas" : indMotivo === "obito" ? "Data do óbito" : "Qual serviço?"}
-                className="h-8 text-sm mt-2" />
-            )}
-          </div>
-          <div>
-            <Label className="text-xs">Orientações Específicas</Label>
-            <Textarea value={indOrientacoes} onChange={e => setIndOrientacoes(e.target.value)} rows={3} className="text-sm" />
-          </div>
-          <div>
-            <Label className="text-xs">Encaminhamentos</Label>
-            <Textarea value={indEncaminhamento} onChange={e => setIndEncaminhamento(e.target.value)} rows={2} className="text-sm" placeholder="Descreva os encaminhamentos..." />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex flex-wrap gap-3 sticky bottom-0 bg-background py-3 border-t border-border">
-        <Button variant="outline" onClick={() => {
-          const errs = validateInd();
-          if (errs.length > 0) { errs.forEach(e => toast.error(e)); return; }
-          toast.success("Todos os campos obrigatórios estão preenchidos");
-        }}>
-          <CheckCircle className="w-4 h-4 mr-1" /> Validar
-        </Button>
-        <Button variant="outline" onClick={() => handlePrint("individual")}>
-          <Printer className="w-4 h-4 mr-1" /> Imprimir
-        </Button>
-        <Button variant="outline" onClick={() => handlePrint("individual")}>
-          <FileDown className="w-4 h-4 mr-1" /> Gerar PDF
-        </Button>
-        <Button onClick={() => handleSave("individual")}>
-          <Save className="w-4 h-4 mr-1" /> Salvar no Prontuário
-        </Button>
+        </div>
       </div>
     </div>
   );
