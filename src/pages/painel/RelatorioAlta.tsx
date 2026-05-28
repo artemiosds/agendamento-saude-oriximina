@@ -242,6 +242,7 @@ const RelatorioAlta: React.FC = () => {
   const [indPrazoReavaliacao, setIndPrazoReavaliacao] = useState("");
 
   const [status, setStatus] = useState<"rascunho" | "concluido" | "validado" | "emitido">("rascunho");
+
   const [reportId, setReportId] = useState<string | null>(null);
   const [ptsMetas, setPtsMetas] = useState<MetaPTS[]>([]);
   const [loading, setLoading] = useState(false);
