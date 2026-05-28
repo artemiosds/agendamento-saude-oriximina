@@ -196,6 +196,7 @@ const PTS: React.FC = () => {
   const [cidWarning, setCidWarning] = useState(false);
   const [loadingCids, setLoadingCids] = useState(false);
   const [loadingProcs, setLoadingProcs] = useState(false);
+  const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [sigtapSelecionados, setSigtapSelecionados] = useState<SelectedSigtap[]>([]);
   const [cidsSelecionados, setCidsSelecionados] = useState<SelectedCid[]>([]);
 
@@ -306,7 +307,74 @@ const PTS: React.FC = () => {
       });
   }, [selectedProcCodigo]);
 
+  // Global SIGTAP Search
+  const searchGlobalSigtap = async () => {
+    if (!procSearch.trim() || procSearch.trim().length < 2) {
+      toast.info('Digite pelo menos 2 caracteres para a pesquisa geral.');
+      return;
+    }
+    setSearchingGlobal(true);
+    try {
+      const q = procSearch.trim().toUpperCase();
+      const isCode = /^\d+$/.test(q);
+      const isCid = /^[A-Z]\d/.test(q); // Ex: A00, B10
+      
+      let finalProcs: SigtapProcedimento[] = [];
+
+      if (isCid) {
+        // Search by CID
+        const { data: procCids, error: cidErr } = await supabase
+          .from('sigtap_procedimento_cids')
+          .select('procedimento_codigo')
+          .ilike('cid_codigo', `${q}%`)
+          .limit(100);
+
+        if (cidErr) throw cidErr;
+
+        if (procCids && procCids.length > 0) {
+          const codes = [...new Set(procCids.map(pc => pc.procedimento_codigo))];
+          const { data, error } = await supabase
+            .from('sigtap_procedimentos')
+            .select('*')
+            .in('codigo', codes)
+            .eq('ativo', true)
+            .limit(50);
+          if (error) throw error;
+          finalProcs = data || [];
+        }
+      } else {
+        // Search by name or code
+        let query = supabase.from('sigtap_procedimentos').select('*').eq('ativo', true);
+        if (isCode) {
+          query = query.ilike('codigo', `%${q}%`);
+        } else {
+          query = query.ilike('nome', `%${q}%`);
+        }
+        const { data, error } = await query.limit(100);
+        if (error) throw error;
+        finalProcs = data || [];
+      }
+      
+      if (finalProcs.length === 0) {
+        toast.info('Nenhum procedimento encontrado na base geral.');
+      } else {
+        setSigtapProcs(prev => {
+          const currentCodes = new Set(prev.map(p => p.codigo));
+          const newItems = finalProcs.filter(p => !currentCodes.has(p.codigo));
+          return [...prev, ...newItems];
+        });
+        toast.success(`${finalProcs.length} procedimento(s) encontrado(s) na base geral.`);
+      }
+    } catch (err) {
+      console.error('Erro na pesquisa geral SIGTAP:', err);
+      toast.error('Erro ao pesquisar na base geral.');
+    } finally {
+      setSearchingGlobal(false);
+    }
+  };
+
   // CID warning
+
   useEffect(() => {
     if (!selectedProcCodigo || !cidSearch.trim()) { setCidWarning(false); return; }
     const typed = cidSearch.trim().toUpperCase();
@@ -829,8 +897,9 @@ const PTS: React.FC = () => {
         const procName = normalize(p.nome);
         if (!procName.includes(searchTerm) && !p.codigo.includes(searchTerm)) continue;
       }
-      if (!map[p.especialidade]) map[p.especialidade] = [];
-      map[p.especialidade].push(p);
+      const esp = p.especialidade || 'outros';
+      if (!map[esp]) map[esp] = [];
+      map[esp].push(p);
     }
     return map;
   }, [sigtapProcs, procSearch, normalize]);
@@ -1235,10 +1304,32 @@ const PTS: React.FC = () => {
                         </Label>
                       </div>
 
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input placeholder="Pesquisar por nome ou código..." value={procSearch}
-                          onChange={e => setProcSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Pesquisar por nome ou código..." 
+                            value={procSearch}
+                            onChange={e => setProcSearch(e.target.value)} 
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                searchGlobalSigtap();
+                              }
+                            }}
+                            className="pl-9 h-9 text-sm" 
+                          />
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="h-9 gap-2" 
+                          onClick={searchGlobalSigtap}
+                          disabled={searchingGlobal || !procSearch.trim()}
+                        >
+                          {searchingGlobal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                          <span className="hidden sm:inline">Pesquisa Geral</span>
+                        </Button>
                       </div>
 
                       {sigtapProcs.length > 0 && (
