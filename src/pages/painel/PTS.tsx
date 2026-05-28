@@ -1198,7 +1198,7 @@ const PTS: React.FC = () => {
                 </TabsContent>
 
                 {/* TAB 4: Procedimentos SIGTAP */}
-                <TabsContent value="procedimentos" className="mt-0 space-y-4">
+                <TabsContent value="procedimentos" className="mt-0 space-y-4 outline-none">
                   {(isFisioterapeuta || isMaster) ? (
                     <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                       <div className="flex items-center justify-between">
@@ -1338,7 +1338,7 @@ const PTS: React.FC = () => {
                 </TabsContent>
 
                 {/* TAB 5: Revisão e Configurações */}
-                <TabsContent value="revisao" className="mt-0 space-y-4">
+                <TabsContent value="revisao" className="mt-0 space-y-4 outline-none">
                   <div>
                     <Label>Data da Próxima Revisão</Label>
                     <Input type="date" value={form.data_proxima_revisao}
