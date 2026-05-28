@@ -1279,10 +1279,32 @@ const PTS: React.FC = () => {
                         </Label>
                       </div>
 
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input placeholder="Pesquisar por nome ou código..." value={procSearch}
-                          onChange={e => setProcSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Pesquisar por nome ou código..." 
+                            value={procSearch}
+                            onChange={e => setProcSearch(e.target.value)} 
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                searchGlobalSigtap();
+                              }
+                            }}
+                            className="pl-9 h-9 text-sm" 
+                          />
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="h-9 gap-2" 
+                          onClick={searchGlobalSigtap}
+                          disabled={searchingGlobal || !procSearch.trim()}
+                        >
+                          {searchingGlobal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                          <span className="hidden sm:inline">Pesquisa Geral</span>
+                        </Button>
                       </div>
 
                       {sigtapProcs.length > 0 && (
