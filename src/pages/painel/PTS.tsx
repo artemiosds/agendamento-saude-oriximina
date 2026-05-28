@@ -339,7 +339,7 @@ const PTS: React.FC = () => {
       query = query.eq('professional_id', user.id);
     }
     const { data } = await query;
-    if (data) setPtsList(data as unknown as PTSRecord[]);
+    if (data) setPtsList(data as PTSRecord[]);
     setLoading(false);
   }, [isMaster, user]);
 
@@ -612,7 +612,7 @@ const PTS: React.FC = () => {
     }
     setSaving(true);
     try {
-      const corePayload: any = {
+      const payload: PTSRecord = {
         patient_id: form.patient_id,
         professional_id: editingPts ? editingPts.professional_id : (user?.id || ''),
         unit_id: user?.unidadeId || '',
@@ -622,10 +622,6 @@ const PTS: React.FC = () => {
         metas_medio_prazo: form.metas_medio_prazo,
         metas_longo_prazo: form.metas_longo_prazo,
         especialidades_envolvidas: form.especialidades_envolvidas,
-      };
-
-      // Extended fields (may not exist in DB schema yet — handled gracefully)
-      const extendedFields: any = {
         prioridade: form.prioridade,
         contextos_afetados: form.contextos_afetados,
         tipo_atendimento: form.tipo_atendimento,
@@ -639,40 +635,28 @@ const PTS: React.FC = () => {
         objetivo_geral: form.objetivo_geral,
         plano_conduta: form.plano_conduta,
         data_proxima_revisao: form.data_proxima_revisao || null,
-      };
+      } as any;
 
       let ptsId: string;
 
       if (editingPts) {
-        // Try with extended fields first
-        const { error: updateErr } = await (supabase as any).from('pts').update({ ...corePayload, ...extendedFields }).eq('id', editingPts.id);
-        if (updateErr) {
-          // Fallback to core only
-          const { error } = await (supabase as any).from('pts').update(corePayload).eq('id', editingPts.id);
-          if (error) throw error;
-        }
+        const { error: updateErr } = await supabase.from('pts').update(payload).eq('id', editingPts.id);
+        if (updateErr) throw updateErr;
         ptsId = editingPts.id;
-        await (supabase as any).from('pts_sigtap').delete().eq('pts_id', ptsId);
-        await (supabase as any).from('pts_cid').delete().eq('pts_id', ptsId);
-        try { await (supabase as any).from('pts_metas').delete().eq('pts_id', ptsId); } catch { /* table may not exist */ }
+        
+        await supabase.from('pts_sigtap').delete().eq('pts_id', ptsId);
+        await supabase.from('pts_cid').delete().eq('pts_id', ptsId);
+        await supabase.from('pts_metas').delete().eq('pts_id', ptsId);
       } else {
-        const insertPayload = { ...corePayload, ...extendedFields, status: 'ativo' };
-        const { data: newPts, error: insertError } = await (supabase as any).from('pts').insert(insertPayload).select('id').single();
-        if (insertError) {
-          // Fallback: try without extended fields
-          const { data: newPts2, error: err2 } = await (supabase as any).from('pts').insert({ ...corePayload, status: 'ativo' }).select('id').single();
-          if (err2) throw err2;
-          if (!newPts2) throw new Error('Falha ao criar PTS');
-          ptsId = newPts2.id;
-        } else {
-          if (!newPts) throw new Error('Falha ao criar PTS: ID não retornado');
-          ptsId = newPts.id;
-        }
+        const { data: newPts, error: insertError } = await supabase.from('pts').insert({ ...payload, status: 'ativo' }).select('id').single();
+        if (insertError) throw insertError;
+        if (!newPts) throw new Error('Falha ao criar PTS');
+        ptsId = newPts.id;
 
         // Create prontuário record
         const procInfo = finalSigtap.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
         const cidInfo = finalCids.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
-        await (supabase as any).from('prontuarios').insert({
+        await supabase.from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
           profissional_id: user?.id || '',
@@ -686,34 +670,32 @@ const PTS: React.FC = () => {
           hipotese: form.objetivos_terapeuticos,
           conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
           observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\nSIGTAP: ${procInfo}` : ''}${cidInfo ? `\nCID: ${cidInfo}` : ''}`,
-        }).catch(() => { /* non-critical */ });
+        }).catch(() => {});
       }
 
       // SIGTAP links
       if (finalSigtap.length > 0) {
-        await (supabase as any).from('pts_sigtap').insert(
+        await supabase.from('pts_sigtap').insert(
           finalSigtap.map(s => ({ pts_id: ptsId, procedimento_codigo: s.procedimento_codigo, procedimento_nome: s.procedimento_nome, especialidade: s.especialidade }))
         );
       }
       // CID links
       if (finalCids.length > 0) {
-        await (supabase as any).from('pts_cid').insert(
+        await supabase.from('pts_cid').insert(
           finalCids.map(c => ({ pts_id: ptsId, cid_codigo: c.cid_codigo, cid_descricao: c.cid_descricao }))
         );
       }
       // Metas estruturadas
       if (metas.length > 0) {
-        try {
-          await (supabase as any).from('pts_metas').insert(
-            metas.map(m => ({
-              pts_id: ptsId,
-              titulo: m.titulo, descricao: m.descricao, categoria: m.categoria,
-              especialidade: m.especialidade, responsavel: m.responsavel || '',
-              status: m.status, prazo_estimado: m.prazo_estimado || null,
-              indicador: m.indicador || '', prioridade: m.prioridade || 'Média', obs: m.obs || '',
-            }))
-          );
-        } catch { /* pts_metas table may not exist yet */ }
+        await supabase.from('pts_metas').insert(
+          metas.map(m => ({
+            pts_id: ptsId,
+            titulo: m.titulo, descricao: m.descricao, categoria: m.categoria,
+            especialidade: m.especialidade, responsavel: m.responsavel || '',
+            status: m.status, prazo_estimado: m.prazo_estimado || null,
+            indicador: m.indicador || '', prioridade: m.prioridade || 'Média', obs: m.obs || '',
+          }))
+        );
       }
 
       await logAction({
