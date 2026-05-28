@@ -388,7 +388,69 @@ const RelatorioAlta: React.FC = () => {
 
       if (pronts && pronts.length > 0) {
         setIndPeriodoInicio(pronts[0].data_atendimento);
-        setIndPeriodoFim(pronts[pronts.length - 1].data_atendimento);
+  const loadMultiData = async (pid: string) => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const { data: existingDraft } = await supabase
+        .from("prontuarios")
+        .select("*")
+        .eq("paciente_id", pid)
+        .eq("status", "rascunho")
+        .eq("tipo_registro", "alta_multiprofissional")
+        .maybeSingle();
+
+      if (existingDraft) {
+        setReportId(existingDraft.id);
+        setStatus("rascunho");
+        const data = JSON.parse(existingDraft.observacoes);
+        
+        setModalidades(data.modalidades || []);
+        setCid10(data.cid10 || "");
+        setMultiCid10Secundario(data.multiCid10Secundario || "");
+        setMultiDiagClinico(data.multiDiagClinico || "");
+        setMultiDiagFuncional(data.multiDiagFuncional || "");
+        setMultiContextoBiopsicossocial(data.multiContextoBiopsicossocial || "");
+        setCifFuncoes(data.cifFuncoes || "");
+        setCifAtividades(data.cifAtividades || "");
+        setCifFatores(data.cifFatores || "");
+        setMultiBarreiras(data.multiBarreiras || "");
+        setMultiPotencialidades(data.multiPotencialidades || "");
+        setMultiFatoresContextuais(data.multiFatoresContextuais || "");
+        setMultiObjetivosGerais(data.multiObjetivosGerais || "");
+        setMultiPlanoExecutado(data.multiPlanoExecutado || "");
+        setProfSections(data.profissionais || []);
+        setMotivoAlta(data.motivoAlta || "");
+        setMultiTipoAlta(data.multiTipoAlta || "");
+        setMultiMotivoDetalhe(data.motivoDetalhe || "");
+        setCondicaoFuncional(data.condicaoFuncional || "");
+        setNivelIndep(data.nivelIndep || "");
+        setMultiComparacaoFuncional(data.multiComparacaoFuncional || "");
+        setMultiGanhosPrincipais(data.multiGanhosPrincipais || "");
+        setMultiLimitacoesPersistentes(data.multiLimitacoesPersistentes || "");
+        setMultiRiscoRegressao(data.multiRiscoRegressao || "");
+        setMultiFatoresAlerta(data.multiFatoresAlerta || "");
+        setOrientacoesUsuario(data.orientacoesUsuario || "");
+        setOrientacoesUbs(data.orientacoesUbs || "");
+        setMultiOrientacoesEscola(data.multiOrientacoesEscola || "");
+        setMultiPontosAtencao(data.multiPontosAtencao || "");
+        setEncaminhamentos(data.encaminhamentos || []);
+        setFreqAps(data.freqAps || "");
+        setMultiContinuarTerapia(data.multiContinuarTerapia || "");
+        setMultiPrazoRetorno(data.multiPrazoRetorno || "");
+        setMultiResponsavelTecnico(data.multiResponsavelTecnico || "");
+        setDataAlta(existingDraft.data_atendimento || new Date().toISOString().split("T")[0]);
+        
+        toast.info("Rascunho multiprofissional carregado.");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
         setIndQueixaPrincipal(pronts[0].queixa_principal || "");
         
         const lastPront = pronts[pronts.length - 1];
