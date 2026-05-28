@@ -1130,7 +1130,13 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
 
           <TabsContent value="identificacao" className="space-y-4 pt-4">
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Identificação</CardTitle></CardHeader>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm">Identificação</CardTitle>
+                <div className="flex items-center gap-2">
+                   <Badge variant="outline" className="text-[10px]">v{version}</Badge>
+                   {status === "emitido" && <Badge className="bg-green-600 text-white text-[10px]">Emitido</Badge>}
+                </div>
+              </CardHeader>
               <CardContent className="space-y-4">
                 <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={setPacienteId} />
                 {paciente && (
@@ -1138,11 +1144,39 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
                     <div><span className="text-muted-foreground text-xs block">Nasc.</span>{fmt(paciente.dataNascimento)}</div>
                     <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
+                    {lastUpdatedAt && (
+                      <div><span className="text-muted-foreground text-xs block">Última atualização</span>{fmtDateTime(lastUpdatedAt)} por {lastUpdatedBy}</div>
+                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
+
+            {/* Professionalization UI components */}
+            <Dialog open={isReopening} onOpenChange={setIsReopening}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Reabertura de Relatório</DialogTitle>
+                  <DialogDescription>
+                    Este documento já foi finalizado. A reabertura criará uma nova versão e será registrada na auditoria.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <Label>Motivo da Reabertura *</Label>
+                  <Textarea 
+                    value={reopenReason} 
+                    onChange={e => setReopenReason(e.target.value)} 
+                    placeholder="Descreva o motivo pelo qual este documento precisa ser alterado..."
+                  />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsReopening(false)}>Cancelar</Button>
+                  <Button onClick={handleReopen}>Confirmar Reabertura</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
+
 
           <TabsContent value="diagnostico" className="space-y-4 pt-4">
             <Card>
