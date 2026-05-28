@@ -280,6 +280,13 @@ const RelatorioAlta: React.FC = () => {
         metas_status: "totalmente",
         metas_justificativa: "",
         tecnologia_assistiva: "",
+        status_contribuicao: "nao_iniciada",
+        data_contribuicao: "",
+        orientacoes_especificas: "",
+        encaminhamentos_especificos: "",
+        objetivos_especificos: "",
+        adesao: "Excelente",
+        intercorrencias: "Nenhuma"
       });
     });
 
@@ -291,6 +298,21 @@ const RelatorioAlta: React.FC = () => {
     const lastP = pronts[pronts.length - 1];
     if (lastP?.hipotese) setCid10(lastP.hipotese);
     else if (pat?.cid) setCid10(pat.cid);
+    
+    // Auto-fill from PTS if exists
+    const { data: activePts } = await supabase
+      .from("pts")
+      .select("*")
+      .eq("patient_id", pid)
+      .eq("status", "ativo")
+      .maybeSingle();
+
+    if (activePts) {
+      setMultiDiagFuncional(activePts.diagnostico_funcional || "");
+      setMultiObjetivosGerais(activePts.objetivos_terapeuticos || "");
+      setMultiBarreiras(activePts.barreiras || "");
+      setMultiPotencialidades(activePts.potencialidades || "");
+    }
   };
 
   const loadIndividualData = async (pid: string) => {
