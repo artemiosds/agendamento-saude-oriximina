@@ -61,18 +61,38 @@ const MOTIVOS_ALTA = [
   { value: "infrequencia", label: "Infrequência/abandono" },
   { value: "encaminhamento", label: "Encaminhamento para outro serviço" },
   { value: "agravamento", label: "Agravamento clínico" },
+  { value: "administrativa", label: "Alta Administrativa" },
+  { value: "transferencia", label: "Transferência" },
   { value: "obito", label: "Óbito" },
+  { value: "outro", label: "Outro" },
+];
+
+const TIPOS_ALTA = [
+  { value: "terapeutica", label: "Terapêutica" },
+  { value: "administrativa", label: "Administrativa" },
+  { value: "abandono", label: "Abandono/Infrequência" },
+  { value: "transferencia", label: "Transferência" },
+  { value: "encaminhamento", label: "Encaminhamento" },
+  { value: "obito", label: "Óbito" },
+  { value: "outro", label: "Outro" },
 ];
 
 const ENCAMINHAMENTOS = [
-  "APS/UBS", "CAPS", "NASF/eMulti", "Outro CER", "Hospital", "Serviço Social", "Escola", "Outro"
+  "APS/UBS", "CAPS", "NASF/eMulti", "Outro CER", "Hospital", "Serviço Social", "Escola", "Clínica Especializada", "Outro"
 ];
 
 const NIVEIS_INDEPENDENCIA = [
   "Independente", "Independente com dispositivo", "Dependente parcial", "Dependente total"
 ];
 
-const FREQUENCIAS_APS = ["Mensal", "Bimestral", "Semestral", "Anual", "Sem necessidade"];
+const FREQUENCIAS_APS = ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Semestral", "Anual", "Sem necessidade"];
+
+const ADESAO_TRATAMENTO = ["Excelente", "Boa", "Regular", "Baixa"];
+const METAS_ATINGIDAS = ["Totalmente atingidas", "Parcialmente atingidas", "Não atingidas"];
+const EVOLUCAO_GLOBAL = ["Excelente", "Satisfatória", "Parcial", "Discreta", "Sem evolução relevante"];
+const INTERCORRENCIAS_OPCOES = [
+  "Nenhuma", "Faltas frequentes", "Baixa adesão", "Agravamento clínico", "Barreiras familiares", "Barreiras sociais", "Intercorrências médicas"
+];
 
 const fmt = (d: string) => {
   if (!d) return "—";
