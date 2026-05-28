@@ -812,17 +812,25 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
-  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false) => {
+  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any) => {
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
 
-    if (!isDraft) {
+    if (!isDraft && !customStatus) {
       const errs = type === "multi" ? validateMulti() : validateInd();
       if (errs.length > 0) { toast.error(errs[0]); return; }
     }
 
-    const unidade = user?.unidadeId || "";
-    const dataAlt = type === "multi" ? dataAlta : indDataAlta;
-    
+    const newVersion = version + (isDraft ? 0 : 1);
+    const actionDate = new Date().toISOString();
+    const newHistoryEntry: VersionRecord = {
+      version: newVersion,
+      data: actionDate,
+      user_nome: user.nome || "Sistema",
+      action: customStatus === "emitido" ? "Emissão Final" : isDraft ? "Salvar Rascunho" : "Atualização",
+    };
+
+    const updatedHistory = [...history, newHistoryEntry];
+
     const payload = type === "multi" ? {
       modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
       multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
@@ -833,7 +841,8 @@ const RelatorioAlta: React.FC = () => {
       multiLimitacoesPersistentes, multiRiscoRegressao, multiFatoresAlerta,
       orientacoesUsuario, orientacoesUbs, multiOrientacoesEscola, multiPontosAtencao,
       encaminhamentos, freqAps, multiContinuarTerapia, multiPrazoRetorno,
-      multiResponsavelTecnico
+      multiResponsavelTecnico, resumoConsolidado: multiResumoConsolidado,
+      version: newVersion, history: updatedHistory
     } : {
       diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
       diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
@@ -846,28 +855,33 @@ const RelatorioAlta: React.FC = () => {
       adesaoTratamento: indAdesaoTratamento, evolucaoGlobal: indEvolucaoGlobal,
       intercorrencias: indIntercorrencias, intercorrenciasObs: indIntercorrenciasObs,
       respostaTerapeutica: indRespostaTerapeutica, comparacaoInicioAlta: indComparacaoInicioAlta,
+      resumoConsolidado: indResumoConsolidado, riscoPosAlta: indRiscoPosAlta,
+      complexidade: indComplexidade,
       motivo: indMotivo, tipoAlta: indTipoAlta, motivoDet: indMotivoDet,
       orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
       modalidade: indModalidade, sessoes: indSessoes, faltas: indFaltas,
       periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim,
       continuarTerapia: indContinuarTerapia, riscoRegressao: indRiscoRegressao,
       prazoReavaliacao: indPrazoReavaliacao,
-      ptsMetas: ptsMetas
+      ptsMetas: ptsMetas,
+      version: newVersion, history: updatedHistory
     };
+
+    const targetStatus = customStatus || (isDraft ? "rascunho" : "concluido");
 
     const record: any = {
       paciente_id: pacienteId,
       paciente_nome: paciente?.nome || "",
       profissional_id: user.id,
       profissional_nome: user.nome || "",
-      unidade_id: unidade,
-      data_atendimento: dataAlt,
+      unidade_id: user.unidadeId || "",
+      data_atendimento: type === "multi" ? dataAlta : indDataAlta,
       tipo_registro: type === "multi" ? "alta_multiprofissional" : "alta_individual",
       observacoes: JSON.stringify(payload),
-      status: isDraft ? "rascunho" : "finalizado",
+      status: targetStatus,
       evolucao: type === "multi"
-        ? `Relatório de Alta Multiprofissional — ${MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || ""}`
-        : `Relatório de Alta Individual — ${MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || ""}`,
+        ? `Relatório de Alta Multiprofissional — Versão ${newVersion}`
+        : `Relatório de Alta Individual — Versão ${newVersion}`,
     };
 
     let result;
@@ -883,7 +897,10 @@ const RelatorioAlta: React.FC = () => {
     if (result.error) {
       toast.error("Erro ao salvar: " + result.error.message);
     } else {
-      toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta finalizado e salvo no prontuário");
+      toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
+      setStatus(targetStatus as any);
+      setVersion(newVersion);
+      setHistory(updatedHistory);
       
       // Auditoria
       await auditService.log({
@@ -895,12 +912,8 @@ const RelatorioAlta: React.FC = () => {
         pacienteNome: paciente?.nome,
         profissionalId: user.id,
         profissionalNome: user.nome,
-        detalhes: { tipo: type, isDraft }
+        detalhes: { tipo: type, isDraft, version: newVersion }
       });
-
-      if (!isDraft) {
-        setStatus("finalizado");
-      }
     }
   };
 
