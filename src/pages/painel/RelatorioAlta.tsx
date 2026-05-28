@@ -436,7 +436,7 @@ const RelatorioAlta: React.FC = () => {
 
       if (existingDraft) {
         setReportId(existingDraft.id);
-        setStatus("rascunho");
+        setStatus(existingDraft.status as any || "rascunho");
         const data = JSON.parse(existingDraft.observacoes);
         // Load all data from draft
         setIndDiagCid(data.diagCid || "");
@@ -463,6 +463,9 @@ const RelatorioAlta: React.FC = () => {
         setIndIntercorrenciasObs(data.intercorrenciasObs || "");
         setIndRespostaTerapeutica(data.respostaTerapeutica || "");
         setIndComparacaoInicioAlta(data.comparacaoInicioAlta || "");
+        setIndResumoConsolidado(data.resumoConsolidado || "");
+        setIndRiscoPosAlta(data.riscoPosAlta || "");
+        setIndComplexidade(data.complexidade || "");
         setIndMotivo(data.motivo || "");
         setIndTipoAlta(data.tipoAlta || "");
         setIndMotivoDet(data.motivoDet || "");
@@ -478,7 +481,12 @@ const RelatorioAlta: React.FC = () => {
         setIndRiscoRegressao(data.riscoRegressao || "");
         setIndPrazoReavaliacao(data.prazoReavaliacao || "");
         
-        toast.info("Rascunho carregado com sucesso.");
+        setVersion(data.version || 1);
+        setHistory(data.history || []);
+        setLastUpdatedBy(existingDraft.profissional_nome);
+        setLastUpdatedAt(existingDraft.atualizado_em || existingDraft.criado_em);
+        
+        toast.info("Rascunho individual carregado.");
         setLoading(false);
         return;
       }
