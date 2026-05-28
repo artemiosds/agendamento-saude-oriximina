@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,11 +20,13 @@ import {
   FileText, Users, User, ArrowLeft, Printer, FileDown, CheckCircle,
   Save, Send, ClipboardList, Stethoscope, Heart, Activity,
   Clock, AlertCircle, Check, Info, LayoutDashboard, History,
-  ShieldCheck, ExternalLink, Download
+  ShieldCheck, ExternalLink, Download, Lock, Unlock, Hash,
+  ChevronRight, ListTodo, AlertTriangle, RefreshCw
 } from "lucide-react";
 import { openPrintDocument } from "@/lib/printLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 
 /* ── types ─────────────────────────────────────────── */
 interface ProfSection {
@@ -41,13 +44,23 @@ interface ProfSection {
   metas_justificativa: string;
   tecnologia_assistiva: string;
   // Novos campos para evolução multiprofissional
-  status_contribuicao: "nao_iniciada" | "em_preenchimento" | "concluida";
+  status_contribuicao: "nao_iniciada" | "em_preenchimento" | "concluida" | "assinada";
   data_contribuicao: string;
   orientacoes_especificas?: string;
   encaminhamentos_especificos?: string;
   objetivos_especificos?: string;
   adesao?: string;
   intercorrencias?: string;
+  finalizado_em?: string;
+  finalizado_por?: string;
+}
+
+interface VersionRecord {
+  version: number;
+  data: string;
+  user_nome: string;
+  action: string;
+  reason?: string;
 }
 
 interface MetaPTS {
@@ -96,15 +109,24 @@ const NIVEIS_INDEPENDENCIA = [
 const FREQUENCIAS_APS = ["Semanal", "Quinzenal", "Mensal", "Bimestral", "Semestral", "Anual", "Sem necessidade"];
 
 const ADESAO_TRATAMENTO = ["Excelente", "Boa", "Regular", "Baixa"];
-const METAS_ATINGIDAS = ["Totalmente atingidas", "Parcialmente atingidas", "Não atingidas"];
+
 const EVOLUCAO_GLOBAL = ["Excelente", "Satisfatória", "Parcial", "Discreta", "Sem evolução relevante"];
+const RESPOSTA_TERAPEUTICA = ["Inexistente", "Discreta", "Parcial", "Satisfatória", "Importante"];
+const RISCO_POS_ALTA = ["Baixo", "Moderado", "Alto"];
+const COMPLEXIDADE_CASO = ["Baixa", "Média", "Alta"];
+
 const INTERCORRENCIAS_OPCOES = [
-  "Nenhuma", "Faltas frequentes", "Baixa adesão", "Agravamento clínico", "Barreiras familiares", "Barreiras sociais", "Intercorrências médicas"
+  "Nenhuma", "Faltas frequentes", "Baixa adesão", "Agravamento clínico", "Barreiras familiares", "Barreiras sociais", "Intercorrências médicas", "Troca de conduta", "Outro"
 ];
 
 const fmt = (d: string) => {
   if (!d) return "—";
   try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return d; }
+};
+
+const fmtDateTime = (d: string) => {
+  if (!d) return "—";
+  try { return new Date(d).toLocaleString("pt-BR"); } catch { return d; }
 };
 
 const calcIdade = (dn: string) => {
@@ -116,10 +138,20 @@ const calcIdade = (dn: string) => {
   } catch { return ""; }
 };
 
+
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
   const { pacientes, funcionarios } = useData();
+  const { can } = usePermissions();
   const [modo, setModo] = useState<ModoRelatorio>("selector");
+
+  /* ── common states ─── */
+  const [version, setVersion] = useState(1);
+  const [history, setHistory] = useState<VersionRecord[]>([]);
+  const [isReopening, setIsReopening] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [lastUpdatedBy, setLastUpdatedBy] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
   /* ── shared patient selection ─── */
   const [pacienteId, setPacienteId] = useState("");
@@ -162,11 +194,32 @@ const RelatorioAlta: React.FC = () => {
   const [multiContinuarTerapia, setMultiContinuarTerapia] = useState("");
   const [multiPrazoRetorno, setMultiPrazoRetorno] = useState("");
   const [multiResponsavelTecnico, setMultiResponsavelTecnico] = useState("");
+  const [multiResumoConsolidado, setMultiResumoConsolidado] = useState("");
+  const [multiStatus, setMultiStatus] = useState<"rascunho" | "em_preenchimento" | "aguardando" | "validado" | "emitido">("rascunho");
+  const [multiComplexidade, setMultiStatusComplexidade] = useState("");
 
   const [dataAlta, setDataAlta] = useState(new Date().toISOString().split("T")[0]);
   const [tabProf, setTabProf] = useState("");
 
-  /* ── individual state ─── */
+  const generateMultiSummary = () => {
+    const concluidores = profSections.filter(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada");
+    const areas = concluidores.map(s => s.profissao).join(", ");
+    const summary = `Relatório multiprofissional consolidado pelas áreas de: ${areas}. 
+O paciente apresentou evolução global ${nivelIndep.toLowerCase()} no período. 
+As intervenções realizadas focaram em ${multiObjetivosGerais}. 
+Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para alta" : "necessita de seguimento na rede"}.`;
+    setMultiResumoConsolidado(summary);
+  };
+
+  const [referralDetails, setReferralDetails] = useState<Record<string, { destino: string; motivo: string; prioridade: string }>>({});
+  
+  const updateReferralDetail = (type: string, field: string, value: string) => {
+    setReferralDetails(prev => ({
+      ...prev,
+      [type]: { ...(prev[type] || { destino: "", motivo: "", prioridade: "média" }), [field]: value }
+    }));
+  };
+
   const [indDiagCid, setIndDiagCid] = useState("");
   const [indCif, setIndCif] = useState("");
   const [indDiagClinico, setIndDiagClinico] = useState("");
@@ -193,6 +246,9 @@ const RelatorioAlta: React.FC = () => {
   const [indIntercorrenciasObs, setIndIntercorrenciasObs] = useState("");
   const [indRespostaTerapeutica, setIndRespostaTerapeutica] = useState("");
   const [indComparacaoInicioAlta, setIndComparacaoInicioAlta] = useState("");
+  const [indResumoConsolidado, setIndResumoConsolidado] = useState("");
+  const [indRiscoPosAlta, setIndRiscoPosAlta] = useState("");
+  const [indComplexidade, setIndComplexidade] = useState("");
 
   const [indMotivo, setIndMotivo] = useState("");
   const [indTipoAlta, setIndTipoAlta] = useState("");
@@ -209,7 +265,8 @@ const RelatorioAlta: React.FC = () => {
   const [indRiscoRegressao, setIndRiscoRegressao] = useState("");
   const [indPrazoReavaliacao, setIndPrazoReavaliacao] = useState("");
 
-  const [status, setStatus] = useState<"rascunho" | "finalizado">("finalizado");
+  const [status, setStatus] = useState<"rascunho" | "concluido" | "validado" | "emitido">("rascunho");
+
   const [reportId, setReportId] = useState<string | null>(null);
   const [ptsMetas, setPtsMetas] = useState<MetaPTS[]>([]);
   const [loading, setLoading] = useState(false);
@@ -294,6 +351,7 @@ const RelatorioAlta: React.FC = () => {
       });
     });
 
+
     setProfSections(sections);
     if (sections.length > 0) setTabProf(sections[0].profissional_id);
 
@@ -333,7 +391,7 @@ const RelatorioAlta: React.FC = () => {
 
       if (existingDraft) {
         setReportId(existingDraft.id);
-        setStatus("rascunho");
+        setStatus(existingDraft.status as any || "rascunho");
         const data = JSON.parse(existingDraft.observacoes);
         
         setModalidades(data.modalidades || []);
@@ -370,9 +428,15 @@ const RelatorioAlta: React.FC = () => {
         setMultiContinuarTerapia(data.multiContinuarTerapia || "");
         setMultiPrazoRetorno(data.multiPrazoRetorno || "");
         setMultiResponsavelTecnico(data.multiResponsavelTecnico || "");
+        setMultiResumoConsolidado(data.resumoConsolidado || "");
         setDataAlta(existingDraft.data_atendimento || new Date().toISOString().split("T")[0]);
         
-        toast.info("Rascunho multiprofissional carregado.");
+        setVersion(data.version || 1);
+        setHistory(data.history || []);
+        setLastUpdatedBy(existingDraft.profissional_nome);
+        setLastUpdatedAt(existingDraft.atualizado_em || existingDraft.criado_em);
+        
+        toast.info("Relatório multiprofissional carregado.");
       }
     } catch (err) {
       console.error(err);
@@ -397,7 +461,7 @@ const RelatorioAlta: React.FC = () => {
 
       if (existingDraft) {
         setReportId(existingDraft.id);
-        setStatus("rascunho");
+        setStatus(existingDraft.status as any || "rascunho");
         const data = JSON.parse(existingDraft.observacoes);
         // Load all data from draft
         setIndDiagCid(data.diagCid || "");
@@ -424,6 +488,9 @@ const RelatorioAlta: React.FC = () => {
         setIndIntercorrenciasObs(data.intercorrenciasObs || "");
         setIndRespostaTerapeutica(data.respostaTerapeutica || "");
         setIndComparacaoInicioAlta(data.comparacaoInicioAlta || "");
+        setIndResumoConsolidado(data.resumoConsolidado || "");
+        setIndRiscoPosAlta(data.riscoPosAlta || "");
+        setIndComplexidade(data.complexidade || "");
         setIndMotivo(data.motivo || "");
         setIndTipoAlta(data.tipoAlta || "");
         setIndMotivoDet(data.motivoDet || "");
@@ -439,7 +506,12 @@ const RelatorioAlta: React.FC = () => {
         setIndRiscoRegressao(data.riscoRegressao || "");
         setIndPrazoReavaliacao(data.prazoReavaliacao || "");
         
-        toast.info("Rascunho carregado com sucesso.");
+        setVersion(data.version || 1);
+        setHistory(data.history || []);
+        setLastUpdatedBy(existingDraft.profissional_nome);
+        setLastUpdatedAt(existingDraft.atualizado_em || existingDraft.criado_em);
+        
+        toast.info("Rascunho individual carregado.");
         setLoading(false);
         return;
       }
@@ -463,6 +535,53 @@ const RelatorioAlta: React.FC = () => {
         setIndEvolucao(lastPront.evolucao || "");
         setIndOrientacoes(lastPront.conduta || "");
       }
+  const generateIndSummary = () => {
+    const summary = `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões. 
+Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : "parcialmente"} atingidos. 
+A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}. 
+Na alta, apresenta ${indDiagFuncional || "estabilidade funcional"}. 
+Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`;
+    setIndResumoConsolidado(summary);
+  };
+
+  const handleReopen = async () => {
+    if (!reopenReason) { toast.error("Informe o motivo da reabertura"); return; }
+    
+    const newVersion = version + 1;
+    const actionDate = new Date().toISOString();
+    const newHistoryEntry: VersionRecord = {
+      version: newVersion,
+      data: actionDate,
+      user_nome: user?.nome || "Sistema",
+      action: "Reabertura de Relatório",
+      reason: reopenReason
+    };
+
+    const updatedHistory = [...history, newHistoryEntry];
+    setStatus("rascunho");
+    setVersion(newVersion);
+    setHistory(updatedHistory);
+    setIsReopening(false);
+    
+    // Save state change
+    await handleSave(modo === "individual" ? "individual" : "multi", true, "rascunho");
+
+    await auditService.log({
+      acao: "reabrir_relatorio_alta",
+      modulo: "prontuario",
+      entidade: "prontuario",
+      entidadeId: reportId || "",
+      pacienteId: pacienteId,
+      pacienteNome: paciente?.nome,
+      profissionalId: user?.id,
+      profissionalNome: user?.nome,
+      detalhes: { motivo: reopenReason, version: newVersion }
+
+    });
+    
+    setReopenReason("");
+    toast.success("Relatório reaberto para edição");
+  };
 
 
       // Load sessions and absences
@@ -544,8 +663,57 @@ const RelatorioAlta: React.FC = () => {
     if (!indTipoAlta) errors.push("Selecione o tipo de alta");
     if (!indEvolucao) errors.push("A evolução clínica é obrigatória");
     if (!indOrientacoes) errors.push("Orientações de alta são obrigatórias");
+    if (!indDiagClinico) errors.push("Diagnóstico clínico é obrigatório");
+    if (!indResumoConsolidado) errors.push("O resumo final consolidado é obrigatório");
     if (indMetas !== "totalmente" && !indMetasJust) errors.push("Justificativa de metas obrigatória");
     return errors;
+  };
+
+  const generateIndSummary = () => {
+    const summary = `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões. 
+Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : "parcialmente"} atingidos. 
+A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}. 
+Na alta, apresenta ${indDiagFuncional || "estabilidade funcional"}. 
+Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`;
+    setIndResumoConsolidado(summary);
+  };
+
+  const handleReopen = async () => {
+    if (!reopenReason) { toast.error("Informe o motivo da reabertura"); return; }
+    
+    const newVersion = version + 1;
+    const actionDate = new Date().toISOString();
+    const newHistoryEntry: VersionRecord = {
+      version: newVersion,
+      data: actionDate,
+      user_nome: user?.nome || "Sistema",
+      action: "Reabertura de Relatório",
+      reason: reopenReason
+    };
+
+    const updatedHistory = [...history, newHistoryEntry];
+    setStatus("rascunho");
+    setVersion(newVersion);
+    setHistory(updatedHistory);
+    setIsReopening(false);
+    
+    // Save state change
+    await handleSave(modo === "individual" ? "individual" : "multi", true, "rascunho");
+
+    await auditService.log({
+      acao: "reabrir_relatorio_alta",
+      modulo: "prontuario",
+      entidade: "prontuario",
+      entidadeId: reportId || "",
+      pacienteId: pacienteId,
+      pacienteNome: paciente?.nome,
+      profissionalId: user?.id,
+      profissionalNome: user?.nome,
+      detalhes: { motivo: reopenReason, version: newVersion }
+    });
+    
+    setReopenReason("");
+    toast.success("Relatório reaberto para edição");
   };
 
   /* ── PRINT ─── */
@@ -765,17 +933,25 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
-  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false) => {
+  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any) => {
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
 
-    if (!isDraft) {
+    if (!isDraft && !customStatus) {
       const errs = type === "multi" ? validateMulti() : validateInd();
       if (errs.length > 0) { toast.error(errs[0]); return; }
     }
 
-    const unidade = user?.unidadeId || "";
-    const dataAlt = type === "multi" ? dataAlta : indDataAlta;
-    
+    const newVersion = version + (isDraft ? 0 : 1);
+    const actionDate = new Date().toISOString();
+    const newHistoryEntry: VersionRecord = {
+      version: newVersion,
+      data: actionDate,
+      user_nome: user.nome || "Sistema",
+      action: customStatus === "emitido" ? "Emissão Final" : isDraft ? "Salvar Rascunho" : "Atualização",
+    };
+
+    const updatedHistory = [...history, newHistoryEntry];
+
     const payload = type === "multi" ? {
       modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
       multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
@@ -786,7 +962,8 @@ const RelatorioAlta: React.FC = () => {
       multiLimitacoesPersistentes, multiRiscoRegressao, multiFatoresAlerta,
       orientacoesUsuario, orientacoesUbs, multiOrientacoesEscola, multiPontosAtencao,
       encaminhamentos, freqAps, multiContinuarTerapia, multiPrazoRetorno,
-      multiResponsavelTecnico
+      multiResponsavelTecnico, resumoConsolidado: multiResumoConsolidado,
+      version: newVersion, history: updatedHistory
     } : {
       diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
       diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
@@ -799,28 +976,33 @@ const RelatorioAlta: React.FC = () => {
       adesaoTratamento: indAdesaoTratamento, evolucaoGlobal: indEvolucaoGlobal,
       intercorrencias: indIntercorrencias, intercorrenciasObs: indIntercorrenciasObs,
       respostaTerapeutica: indRespostaTerapeutica, comparacaoInicioAlta: indComparacaoInicioAlta,
+      resumoConsolidado: indResumoConsolidado, riscoPosAlta: indRiscoPosAlta,
+      complexidade: indComplexidade,
       motivo: indMotivo, tipoAlta: indTipoAlta, motivoDet: indMotivoDet,
       orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
       modalidade: indModalidade, sessoes: indSessoes, faltas: indFaltas,
       periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim,
       continuarTerapia: indContinuarTerapia, riscoRegressao: indRiscoRegressao,
       prazoReavaliacao: indPrazoReavaliacao,
-      ptsMetas: ptsMetas
+      ptsMetas: ptsMetas,
+      version: newVersion, history: updatedHistory
     };
+
+    const targetStatus = customStatus || (isDraft ? "rascunho" : "concluido");
 
     const record: any = {
       paciente_id: pacienteId,
       paciente_nome: paciente?.nome || "",
       profissional_id: user.id,
       profissional_nome: user.nome || "",
-      unidade_id: unidade,
-      data_atendimento: dataAlt,
+      unidade_id: user.unidadeId || "",
+      data_atendimento: type === "multi" ? dataAlta : indDataAlta,
       tipo_registro: type === "multi" ? "alta_multiprofissional" : "alta_individual",
       observacoes: JSON.stringify(payload),
-      status: isDraft ? "rascunho" : "finalizado",
+      status: targetStatus,
       evolucao: type === "multi"
-        ? `Relatório de Alta Multiprofissional — ${MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || ""}`
-        : `Relatório de Alta Individual — ${MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || ""}`,
+        ? `Relatório de Alta Multiprofissional — Versão ${newVersion}`
+        : `Relatório de Alta Individual — Versão ${newVersion}`,
     };
 
     let result;
@@ -836,7 +1018,10 @@ const RelatorioAlta: React.FC = () => {
     if (result.error) {
       toast.error("Erro ao salvar: " + result.error.message);
     } else {
-      toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta finalizado e salvo no prontuário");
+      toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
+      setStatus(targetStatus as any);
+      setVersion(newVersion);
+      setHistory(updatedHistory);
       
       // Auditoria
       await auditService.log({
@@ -848,12 +1033,8 @@ const RelatorioAlta: React.FC = () => {
         pacienteNome: paciente?.nome,
         profissionalId: user.id,
         profissionalNome: user.nome,
-        detalhes: { tipo: type, isDraft }
+        detalhes: { tipo: type, isDraft, version: newVersion }
       });
-
-      if (!isDraft) {
-        setStatus("finalizado");
-      }
     }
   };
 
@@ -949,7 +1130,13 @@ const RelatorioAlta: React.FC = () => {
 
           <TabsContent value="identificacao" className="space-y-4 pt-4">
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Identificação</CardTitle></CardHeader>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm">Identificação</CardTitle>
+                <div className="flex items-center gap-2">
+                   <Badge variant="outline" className="text-[10px]">v{version}</Badge>
+                   {status === "emitido" && <Badge className="bg-green-600 text-white text-[10px]">Emitido</Badge>}
+                </div>
+              </CardHeader>
               <CardContent className="space-y-4">
                 <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={setPacienteId} />
                 {paciente && (
@@ -957,11 +1144,39 @@ const RelatorioAlta: React.FC = () => {
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
                     <div><span className="text-muted-foreground text-xs block">Nasc.</span>{fmt(paciente.dataNascimento)}</div>
                     <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
+                    {lastUpdatedAt && (
+                      <div><span className="text-muted-foreground text-xs block">Última atualização</span>{fmtDateTime(lastUpdatedAt)} por {lastUpdatedBy}</div>
+                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
+
+            {/* Professionalization UI components */}
+            <Dialog open={isReopening} onOpenChange={setIsReopening}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Reabertura de Relatório</DialogTitle>
+                  <DialogDescription>
+                    Este documento já foi finalizado. A reabertura criará uma nova versão e será registrada na auditoria.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <Label>Motivo da Reabertura *</Label>
+                  <Textarea 
+                    value={reopenReason} 
+                    onChange={e => setReopenReason(e.target.value)} 
+                    placeholder="Descreva o motivo pelo qual este documento precisa ser alterado..."
+                  />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsReopening(false)}>Cancelar</Button>
+                  <Button onClick={handleReopen}>Confirmar Reabertura</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
+
 
           <TabsContent value="diagnostico" className="space-y-4 pt-4">
             <Card>
@@ -989,19 +1204,44 @@ const RelatorioAlta: React.FC = () => {
           <TabsContent value="equipe" className="space-y-4 pt-4">
              {profSections.map(s => (
                <Card key={s.profissional_id}>
-                 <CardHeader className="pb-3"><CardTitle className="text-sm">{s.profissional_nome}</CardTitle></CardHeader>
+                 <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                   <CardTitle className="text-sm">{s.profissional_nome}</CardTitle>
+                   <Badge variant={s.status_contribuicao === "assinada" ? "default" : "secondary"}>
+                     {s.status_contribuicao.replace("_", " ")}
+                   </Badge>
+                 </CardHeader>
                  <CardContent className="space-y-2">
-                    <Textarea value={s.objetivos_especificos || ""} onChange={e => updateProfSection(s.profissional_id, "objetivos_especificos", e.target.value)} placeholder="Objetivos específicos da área..." rows={2} />
-                    <Textarea value={s.evolucao || ""} onChange={e => updateProfSection(s.profissional_id, "evolucao", e.target.value)} placeholder="Evolução da área..." rows={2} />
-                    <div className="flex gap-4">
-                      <Select value={s.status_contribuicao} onValueChange={(v: any) => updateProfSection(s.profissional_id, "status_contribuicao", v)}>
-                        <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
-                          <SelectItem value="em_preenchimento">Em preenchimento</SelectItem>
-                          <SelectItem value="concluida">Concluída</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Objetivos Específicos</Label>
+                        <Textarea value={s.objetivos_especificos || ""} onChange={e => updateProfSection(s.profissional_id, "objetivos_especificos", e.target.value)} rows={2} disabled={s.status_contribuicao === "assinada"} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Evolução da Área</Label>
+                        <Textarea value={s.evolucao || ""} onChange={e => updateProfSection(s.profissional_id, "evolucao", e.target.value)} rows={2} disabled={s.status_contribuicao === "assinada"} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="flex gap-4">
+                        <Select value={s.status_contribuicao} onValueChange={(v: any) => updateProfSection(s.profissional_id, "status_contribuicao", v)} disabled={s.status_contribuicao === "assinada"}>
+                          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
+                            <SelectItem value="em_preenchimento">Em preenchimento</SelectItem>
+                            <SelectItem value="concluida">Concluída</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {s.profissional_id === user?.id && s.status_contribuicao !== "assinada" && (
+                        <Button size="sm" onClick={() => updateProfSection(s.profissional_id, "status_contribuicao", "assinada")}>
+                          <ShieldCheck className="w-4 h-4 mr-2" /> Assinar Contribuição
+                        </Button>
+                      )}
+                      {s.status_contribuicao === "assinada" && (
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3 text-green-600" /> Assinado em {fmtDateTime(s.data_contribuicao)}
+                        </div>
+                      )}
                     </div>
                  </CardContent>
                </Card>
@@ -1009,17 +1249,65 @@ const RelatorioAlta: React.FC = () => {
           </TabsContent>
 
           <TabsContent value="alta" className="space-y-4 pt-4">
-            <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Alta e Plano</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <Select value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
-                   <SelectTrigger><SelectValue placeholder="Tipo de Alta" /></SelectTrigger>
-                   <SelectContent>{TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                </Select>
-                <Textarea value={condicaoFuncional} onChange={e => setCondicaoFuncional(e.target.value)} placeholder="Condição funcional na alta..." />
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-3 space-y-4">
+                <Card>
+                  <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Conclusão Multiprofissional</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Tipo de Alta *</Label>
+                        <Select value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
+                           <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                           <SelectContent>{TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Nível de Independência</Label>
+                        <Select value={nivelIndep} onValueChange={setNivelIndep}>
+                           <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                           <SelectContent>{NIVEIS_INDEPENDENCIA.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Resumo Consolidado Final (Editável)</Label>
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={generateMultiSummary}>
+                          <RefreshCw className="w-3 h-3 mr-1" /> Gerar Automático
+                        </Button>
+                      </div>
+                      <Textarea value={multiResumoConsolidado} onChange={e => setMultiResumoConsolidado(e.target.value)} rows={6} className="text-sm font-serif" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-3"><CardTitle className="text-xs font-semibold flex items-center gap-2"><ListTodo className="w-4 h-4" /> Checklist de Alta</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    {[
+                      { label: "Paciente Selecionado", ok: !!pacienteId },
+                      { label: "Tipo de Alta", ok: !!multiTipoAlta },
+                      { label: "Resumo Consolidado", ok: !!multiResumoConsolidado },
+                      { label: "Mín. 1 Contribuição", ok: profSections.some(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada") }
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-[11px]">
+                        <span className={item.ok ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
+                        {item.ok ? <CheckCircle className="w-3 h-3 text-green-600" /> : <AlertCircle className="w-3 h-3 text-amber-500" />}
+                      </div>
+                    ))}
+                    <Separator className="my-2" />
+                    <div className="text-[10px] bg-muted p-2 rounded-lg text-muted-foreground">
+                      Status: <strong className="text-foreground">{validateMulti().length === 0 ? "Pronto para Emitir" : "Incompleto"}</strong>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </TabsContent>
+
         </Tabs>
 
         {/* Footer Actions */}
