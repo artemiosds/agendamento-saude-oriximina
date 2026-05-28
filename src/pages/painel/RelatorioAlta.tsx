@@ -195,7 +195,25 @@ const RelatorioAlta: React.FC = () => {
   const [dataAlta, setDataAlta] = useState(new Date().toISOString().split("T")[0]);
   const [tabProf, setTabProf] = useState("");
 
-  /* ── individual state ─── */
+  const generateMultiSummary = () => {
+    const concluidores = profSections.filter(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada");
+    const areas = concluidores.map(s => s.profissao).join(", ");
+    const summary = `Relatório multiprofissional consolidado pelas áreas de: ${areas}. 
+O paciente apresentou evolução global ${nivelIndep.toLowerCase()} no período. 
+As intervenções realizadas focaram em ${multiObjetivosGerais}. 
+Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para alta" : "necessita de seguimento na rede"}.`;
+    setMultiResumoConsolidado(summary);
+  };
+
+  const [referralDetails, setReferralDetails] = useState<Record<string, { destino: string; motivo: string; prioridade: string }>>({});
+  
+  const updateReferralDetail = (type: string, field: string, value: string) => {
+    setReferralDetails(prev => ({
+      ...prev,
+      [type]: { ...(prev[type] || { destino: "", motivo: "", prioridade: "média" }), [field]: value }
+    }));
+  };
+
   const [indDiagCid, setIndDiagCid] = useState("");
   const [indCif, setIndCif] = useState("");
   const [indDiagClinico, setIndDiagClinico] = useState("");
