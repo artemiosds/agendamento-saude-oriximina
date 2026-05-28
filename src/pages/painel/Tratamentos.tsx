@@ -497,6 +497,19 @@ const Tratamentos: React.FC = () => {
     }
   }, [selectedCycle, ptsList]);
 
+  // Sync filters with available options (safety)
+  useEffect(() => {
+    if (filterProf !== 'all' && !profissionais.some(p => p.id === filterProf)) {
+      setFilterProf('all');
+    }
+  }, [profissionais, filterProf]);
+
+  useEffect(() => {
+    if (filterUnit !== 'all' && !unidadesVisiveis.some(u => u.id === filterUnit)) {
+      setFilterUnit('all');
+    }
+  }, [unidadesVisiveis, filterUnit]);
+
   const ptsDosPacienteCiclo = useMemo(() => {
     if (!selectedCycle) return [];
     return ptsList.filter((pts) => pts.patient_id === selectedCycle.patient_id && pts.status === "ativo");
