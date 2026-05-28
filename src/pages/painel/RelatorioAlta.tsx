@@ -366,7 +366,7 @@ const RelatorioAlta: React.FC = () => {
 
       if (existingDraft) {
         setReportId(existingDraft.id);
-        setStatus("rascunho");
+        setStatus(existingDraft.status as any || "rascunho");
         const data = JSON.parse(existingDraft.observacoes);
         
         setModalidades(data.modalidades || []);
@@ -403,9 +403,15 @@ const RelatorioAlta: React.FC = () => {
         setMultiContinuarTerapia(data.multiContinuarTerapia || "");
         setMultiPrazoRetorno(data.multiPrazoRetorno || "");
         setMultiResponsavelTecnico(data.multiResponsavelTecnico || "");
+        setMultiResumoConsolidado(data.resumoConsolidado || "");
         setDataAlta(existingDraft.data_atendimento || new Date().toISOString().split("T")[0]);
         
-        toast.info("Rascunho multiprofissional carregado.");
+        setVersion(data.version || 1);
+        setHistory(data.history || []);
+        setLastUpdatedBy(existingDraft.profissional_nome);
+        setLastUpdatedAt(existingDraft.atualizado_em || existingDraft.criado_em);
+        
+        toast.info("Relatório multiprofissional carregado.");
       }
     } catch (err) {
       console.error(err);
