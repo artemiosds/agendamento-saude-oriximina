@@ -196,6 +196,7 @@ const PTS: React.FC = () => {
   const [cidWarning, setCidWarning] = useState(false);
   const [loadingCids, setLoadingCids] = useState(false);
   const [loadingProcs, setLoadingProcs] = useState(false);
+  const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [sigtapSelecionados, setSigtapSelecionados] = useState<SelectedSigtap[]>([]);
   const [cidsSelecionados, setCidsSelecionados] = useState<SelectedCid[]>([]);
 
