@@ -955,23 +955,22 @@ const PTS: React.FC = () => {
 
       {/* ═══ CREATE / EDIT DIALOG ═══ */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) { setDialogOpen(false); setEditingPts(null); } }}>
-        <DialogContent className="max-w-3xl w-[95vw] max-h-[92vh] flex flex-col p-0 gap-0">
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0">
-            <DialogTitle className="font-display">{editingPts ? 'Editar PTS' : 'Novo PTS'}</DialogTitle>
+            <DialogTitle className="font-display text-xl">{editingPts ? 'Editar PTS' : 'Novo PTS'}</DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
               <TabsList className="mx-6 mt-3 mb-0 grid grid-cols-5 shrink-0">
-                <TabsTrigger value="identificacao" className="text-xs">Identificação</TabsTrigger>
-                <TabsTrigger value="diagnostico" className="text-xs">Diagnóstico</TabsTrigger>
-                <TabsTrigger value="metas" className="text-xs">Metas</TabsTrigger>
-                <TabsTrigger value="procedimentos" className="text-xs">Procedimentos</TabsTrigger>
-                <TabsTrigger value="revisao" className="text-xs">Revisão</TabsTrigger>
+                <TabsTrigger value="identificacao" className="text-sm">Identificação</TabsTrigger>
+                <TabsTrigger value="diagnostico" className="text-sm">Diagnóstico</TabsTrigger>
+                <TabsTrigger value="metas" className="text-sm">Metas</TabsTrigger>
+                <TabsTrigger value="procedimentos" className="text-sm">Procedimentos</TabsTrigger>
+                <TabsTrigger value="revisao" className="text-sm">Revisão</TabsTrigger>
               </TabsList>
 
-              <ScrollArea className="flex-1 min-h-0">
-                <div className="px-6 py-4">
+              <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar">
 
                 <TabsContent value="identificacao" className="mt-0 space-y-4 outline-none">
                   <div>
@@ -1079,61 +1078,89 @@ const PTS: React.FC = () => {
                 </TabsContent>
 
                 {/* TAB 2: Diagnóstico e Objetivos */}
-                <TabsContent value="diagnostico" className="mt-0 space-y-4 outline-none">
-                  <div>
-                    <Label>Diagnóstico Funcional Global *</Label>
-                    <Textarea rows={3} value={form.diagnostico_funcional}
-                      onChange={e => setForm(p => ({ ...p, diagnostico_funcional: e.target.value }))}
-                      placeholder="Diagnóstico funcional completo do paciente..." />
-                  </div>
-                  <div>
-                    <Label>Potencialidades do Paciente</Label>
-                    <Textarea rows={2} value={form.potencialidades}
-                      onChange={e => setForm(p => ({ ...p, potencialidades: e.target.value }))}
-                      placeholder="Recursos, habilidades, pontos fortes..." />
-                  </div>
-                  <div>
-                    <Label>Barreiras e Dificuldades</Label>
-                    <Textarea rows={2} value={form.barreiras}
-                      onChange={e => setForm(p => ({ ...p, barreiras: e.target.value }))}
-                      placeholder="Obstáculos para o progresso terapêutico..." />
-                  </div>
-                  <div>
-                    <Label>Objetivo Geral do Tratamento</Label>
-                    <Textarea rows={2} value={form.objetivo_geral}
-                      onChange={e => setForm(p => ({ ...p, objetivo_geral: e.target.value }))}
-                      placeholder="Objetivo terapêutico principal..." />
-                  </div>
-                  <div>
-                    <Label>Objetivos Terapêuticos Específicos *</Label>
-                    <Textarea rows={3} value={form.objetivos_terapeuticos}
-                      onChange={e => setForm(p => ({ ...p, objetivos_terapeuticos: e.target.value }))} />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <Label>Metas de Curto Prazo</Label>
-                      <Textarea rows={2} value={form.metas_curto_prazo}
-                        onChange={e => setForm(p => ({ ...p, metas_curto_prazo: e.target.value }))}
-                        placeholder="1–3 meses..." />
+                <TabsContent value="diagnostico" className="mt-0 space-y-6 outline-none pb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-semibold">Diagnóstico Funcional Global *</Label>
+                        <Textarea rows={6} value={form.diagnostico_funcional}
+                          onChange={e => setForm(p => ({ ...p, diagnostico_funcional: e.target.value }))}
+                          placeholder="Diagnóstico funcional completo do paciente contemplando aspectos físicos, cognitivos e sociais..."
+                          className="mt-1.5 resize-none focus-visible:ring-primary" />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-semibold">Potencialidades do Paciente</Label>
+                        <Textarea rows={4} value={form.potencialidades}
+                          onChange={e => setForm(p => ({ ...p, potencialidades: e.target.value }))}
+                          placeholder="Recursos, habilidades, pontos fortes e fatores de proteção..."
+                          className="mt-1.5 resize-none" />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-semibold">Barreiras e Dificuldades</Label>
+                        <Textarea rows={4} value={form.barreiras}
+                          onChange={e => setForm(p => ({ ...p, barreiras: e.target.value }))}
+                          placeholder="Obstáculos ambientais, familiares ou individuais para o progresso terapêutico..."
+                          className="mt-1.5 resize-none" />
+                      </div>
                     </div>
-                    <div>
-                      <Label>Metas de Médio Prazo</Label>
-                      <Textarea rows={2} value={form.metas_medio_prazo}
-                        onChange={e => setForm(p => ({ ...p, metas_medio_prazo: e.target.value }))}
-                        placeholder="3–6 meses..." />
-                    </div>
-                    <div>
-                      <Label>Metas de Longo Prazo</Label>
-                      <Textarea rows={2} value={form.metas_longo_prazo}
-                        onChange={e => setForm(p => ({ ...p, metas_longo_prazo: e.target.value }))}
-                        placeholder="6–12 meses..." />
+
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-semibold">Objetivo Geral do Tratamento</Label>
+                        <Textarea rows={3} value={form.objetivo_geral}
+                          onChange={e => setForm(p => ({ ...p, objetivo_geral: e.target.value }))}
+                          placeholder="O principal resultado esperado ao final do processo terapêutico..."
+                          className="mt-1.5 resize-none" />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-semibold">Objetivos Terapêuticos Específicos *</Label>
+                        <Textarea rows={5} value={form.objetivos_terapeuticos}
+                          onChange={e => setForm(p => ({ ...p, objetivos_terapeuticos: e.target.value }))}
+                          placeholder="Descreva metas claras e mensuráveis..."
+                          className="mt-1.5 resize-none" />
+                      </div>
+                      
+                      <div className="space-y-3 pt-2">
+                        <Label className="text-sm font-semibold">Metas Temporais</Label>
+                        <div className="grid grid-cols-1 gap-3">
+                          <div className="relative">
+                            <span className="absolute -left-2 top-2 w-1 h-8 bg-blue-500 rounded-full" />
+                            <div className="pl-3">
+                              <Label className="text-xs text-blue-600 font-bold uppercase tracking-wider">Curto Prazo (1-3 meses)</Label>
+                              <Textarea rows={2} value={form.metas_curto_prazo}
+                                onChange={e => setForm(p => ({ ...p, metas_curto_prazo: e.target.value }))}
+                                className="mt-1 text-sm bg-blue-50/30 border-blue-100" />
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <span className="absolute -left-2 top-2 w-1 h-8 bg-amber-500 rounded-full" />
+                            <div className="pl-3">
+                              <Label className="text-xs text-amber-600 font-bold uppercase tracking-wider">Médio Prazo (3-6 meses)</Label>
+                              <Textarea rows={2} value={form.metas_medio_prazo}
+                                onChange={e => setForm(p => ({ ...p, metas_medio_prazo: e.target.value }))}
+                                className="mt-1 text-sm bg-amber-50/30 border-amber-100" />
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <span className="absolute -left-2 top-2 w-1 h-8 bg-emerald-500 rounded-full" />
+                            <div className="pl-3">
+                              <Label className="text-xs text-emerald-600 font-bold uppercase tracking-wider">Longo Prazo (6-12 meses)</Label>
+                              <Textarea rows={2} value={form.metas_longo_prazo}
+                                onChange={e => setForm(p => ({ ...p, metas_longo_prazo: e.target.value }))}
+                                className="mt-1 text-sm bg-emerald-50/30 border-emerald-100" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <Label>Plano de Conduta Terapêutica</Label>
-                    <Textarea rows={3} value={form.plano_conduta}
+
+                  <div className="pt-2 border-t mt-4">
+                    <Label className="text-sm font-semibold">Plano de Conduta Terapêutica</Label>
+                    <Textarea rows={4} value={form.plano_conduta}
                       onChange={e => setForm(p => ({ ...p, plano_conduta: e.target.value }))}
-                      placeholder="Estratégias terapêuticas, frequência, abordagens..." />
+                      placeholder="Estratégias detalhadas, frequência de atendimentos, abordagens específicas e orientações..."
+                      className="mt-1.5 resize-none bg-muted/20" />
                   </div>
                 </TabsContent>
 
@@ -1372,8 +1399,7 @@ const PTS: React.FC = () => {
                   </div>
                 </TabsContent>
 
-                </div>
-              </ScrollArea>
+              </div>
             </Tabs>
           </div>
 
