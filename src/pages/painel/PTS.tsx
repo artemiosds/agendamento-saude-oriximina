@@ -970,9 +970,8 @@ const PTS: React.FC = () => {
                 <TabsTrigger value="revisao" className="text-xs">Revisão</TabsTrigger>
               </TabsList>
 
-              <div className="flex-1 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div className="px-6 py-4">
+              <ScrollArea className="flex-1 h-full min-h-0">
+                <div className="px-6 py-4">
 
                 {/* TAB 1: Identificação e Contexto */}
                 <TabsContent value="identificacao" className="mt-0 space-y-4">
