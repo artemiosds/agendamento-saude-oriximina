@@ -453,11 +453,18 @@ const RelatorioAlta: React.FC = () => {
     const errors: string[] = [];
     if (!pacienteId) errors.push("Selecione um paciente");
     if (!motivoAlta) errors.push("Selecione o motivo da alta");
+    if (!multiTipoAlta) errors.push("Selecione o tipo de alta");
     if (!nivelIndep) errors.push("Selecione o nível de independência");
     if (modalidades.length === 0) errors.push("Selecione pelo menos uma modalidade");
+    
+    const hasCompletedContribution = profSections.some(s => s.status_contribuicao === "concluida");
+    if (!hasCompletedContribution) {
+      errors.push("Pelo menos um profissional deve concluir sua contribuição");
+    }
+
     profSections.forEach(s => {
-      if (s.metas_status !== "totalmente" && !s.metas_justificativa) {
-        errors.push(`Justificativa obrigatória para ${s.profissional_nome}`);
+      if (s.status_contribuicao === "concluida" && s.metas_status !== "totalmente" && !s.metas_justificativa) {
+        errors.push(`Justificativa de metas obrigatória para ${s.profissional_nome}`);
       }
     });
     return errors;
