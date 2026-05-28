@@ -487,6 +487,7 @@ const RelatorioAlta: React.FC = () => {
     if (!p) return "";
 
     const motivoLabel = MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || motivoAlta;
+    const tipoAltaLabel = TIPOS_ALTA.find(t => t.value === multiTipoAlta)?.label || multiTipoAlta;
     
     let html = `
       <div class="info-grid">
@@ -501,30 +502,45 @@ const RelatorioAlta: React.FC = () => {
       </div>
 
       <div class="section">
-        <div class="section-title">Diagnóstico</div>
-        <div class="field"><span class="field-label">CID-10</span><div class="field-value">${cid10 || "—"}</div></div>
+        <div class="section-title">Quadro Diagnóstico Multiprofissional</div>
+        <div class="info-grid">
+           <div class="field"><span class="field-label">CID-10 Principal</span><div class="field-value">${cid10 || "—"}</div></div>
+           <div class="field"><span class="field-label">CID-10 Secundário</span><div class="field-value">${multiCid10Secundario || "—"}</div></div>
+        </div>
+        <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${multiDiagClinico || "—"}</div></div>
+        <div class="field"><span class="field-label">Diagnóstico Funcional Global</span><div class="field-value">${multiDiagFuncional || "—"}</div></div>
+        <div class="field"><span class="field-label">Contexto Biopsicossocial</span><div class="field-value">${multiContextoBiopsicossocial || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Funções do Corpo</span><div class="field-value">${cifFuncoes || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Atividades e Participação</span><div class="field-value">${cifAtividades || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Fatores Ambientais</span><div class="field-value">${cifFatores || "—"}</div></div>
+        <div class="field"><span class="field-label">Barreiras</span><div class="field-value">${multiBarreiras || "—"}</div></div>
+        <div class="field"><span class="field-label">Potencialidades</span><div class="field-value">${multiPotencialidades || "—"}</div></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Resumo do Percurso Terapêutico</div>
+        <div class="field"><span class="field-label">Objetivos Gerais</span><div class="field-value">${multiObjetivosGerais || "—"}</div></div>
+        <div class="field"><span class="field-label">Resumo do Plano Executado</span><div class="field-value">${multiPlanoExecutado || "—"}</div></div>
       </div>
     `;
 
-    profSections.forEach(s => {
+    profSections.filter(s => s.status_contribuicao === "concluida").forEach(s => {
       html += `
         <div class="section" style="page-break-inside: avoid;">
-          <div class="section-title">${s.profissao || "Profissional"} — ${s.profissional_nome}</div>
+          <div class="section-title">Evolução: ${s.profissao || "Área"} — ${s.profissional_nome}</div>
           <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
             <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(s.periodo_inicio)} a ${fmt(s.periodo_fim)}</span></div>
             <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${s.sessoes}</span></div>
+            <div><span class="info-label">Adesão</span><br/><span class="info-value">${s.adesao || "Excelente"}</span></div>
           </div>
-          <div class="field"><span class="field-label">Objetivos terapêuticos</span><div class="field-value">${s.objetivos || "—"}</div></div>
-          <div class="field"><span class="field-label">Intervenções/Procedimentos Realizados</span><div class="field-value">${s.intervencoes || "—"}</div></div>
-          <div class="field"><span class="field-label">Evolução clínica e funcional</span><div class="field-value">${s.evolucao || "—"}</div></div>
-          <div class="field"><span class="field-label">Metas</span><div class="field-value">${
+          <div class="field"><span class="field-label">Objetivos Específicos</span><div class="field-value">${s.objetivos_especificos || s.objetivos || "—"}</div></div>
+          <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${s.intervencoes || "—"}</div></div>
+          <div class="field"><span class="field-label">Evolução Clínica e Funcional da Área</span><div class="field-value">${s.evolucao || "—"}</div></div>
+          <div class="field"><span class="field-label">Status das Metas</span><div class="field-value">${
             s.metas_status === "totalmente" ? "Totalmente atingidas" :
             s.metas_status === "parcialmente" ? "Parcialmente atingidas" : "Não atingidas"
           }${s.metas_justificativa ? ` — ${s.metas_justificativa}` : ""}</div></div>
-          ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva</span><div class="field-value">${s.tecnologia_assistiva}</div></div>` : ""}
+          ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva Concedida</span><div class="field-value">${s.tecnologia_assistiva}</div></div>` : ""}
           <div class="signature" style="margin-top:20px; text-align: left;">
             <div class="signature-line" style="margin-left: 0; width: 250px;"></div>
             <div class="name">${s.profissional_nome}</div>
@@ -536,27 +552,37 @@ const RelatorioAlta: React.FC = () => {
 
     html += `
       <div class="section" style="page-break-inside: avoid;">
-        <div class="section-title">Motivo da Alta</div>
-        <div class="field-value">${motivoLabel}${motivoDetalhe ? ` — ${motivoDetalhe}` : ""}</div>
+        <div class="section-title">Conclusão e Condição na Alta</div>
+        <div class="info-grid">
+           <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${tipoAltaLabel}</div></div>
+           <div class="field"><span class="field-label">Nível de Independência</span><div class="field-value">${nivelIndep || "—"}</div></div>
+        </div>
+        <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${motivoLabel}${motivoDetalhe ? ` — ${motivoDetalhe}` : ""}</div></div>
+        <div class="field"><span class="field-label">Descrição da Condição Funcional</span><div class="field-value">${condicaoFuncional || "—"}</div></div>
+        <div class="field"><span class="field-label">Comparação Admissão x Alta</span><div class="field-value">${multiComparacaoFuncional || "—"}</div></div>
+        <div class="field"><span class="field-label">Ganhos Clínicos Principais</span><div class="field-value">${multiGanhosPrincipais || "—"}</div></div>
+        <div class="field"><span class="field-label">Limitações Persistentes</span><div class="field-value">${multiLimitacoesPersistentes || "—"}</div></div>
+        <div class="info-grid">
+           <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${multiRiscoRegressao || "—"}</div></div>
+           <div class="field"><span class="field-label">Fatores de Alerta</span><div class="field-value">${multiFatoresAlerta || "—"}</div></div>
+        </div>
       </div>
 
       <div class="section" style="page-break-inside: avoid;">
-        <div class="section-title">Condição Funcional na Alta</div>
-        <div class="field"><span class="field-label">Descrição</span><div class="field-value">${condicaoFuncional || "—"}</div></div>
-        <div class="field"><span class="field-label">Nível de independência</span><div class="field-value">${nivelIndep || "—"}</div></div>
-      </div>
-
-      <div class="section" style="page-break-inside: avoid;">
-        <div class="section-title">Plano Pós-Alta</div>
-        <div class="field"><span class="field-label">Orientações ao usuário/família</span><div class="field-value">${orientacoesUsuario || "—"}</div></div>
+        <div class="section-title">Plano de Transição e Pós-Alta</div>
+        <div class="field"><span class="field-label">Orientações ao Usuário</span><div class="field-value">${orientacoesUsuario || "—"}</div></div>
+        <div class="field"><span class="field-label">Orientações à Família/Cuidador</span><div class="field-value">${orientacoesUbs || "—"}</div></div>
         <div class="field"><span class="field-label">Orientações para UBS/ESF</span><div class="field-value">${orientacoesUbs || "—"}</div></div>
-        <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${encaminhamentos.join(", ") || "—"}</div></div>
-        <div class="field"><span class="field-label">Frequência recomendada na APS</span><div class="field-value">${freqAps || "—"}</div></div>
+        <div class="field"><span class="field-label">Encaminhamentos Realizados</span><div class="field-value">${encaminhamentos.join(", ") || "—"}</div></div>
+        <div class="info-grid">
+           <div class="field"><span class="field-label">Frequência Recomendada APS</span><div class="field-value">${freqAps || "—"}</div></div>
+           <div class="field"><span class="field-label">Prazo sugerido de retorno</span><div class="field-value">${multiPrazoRetorno || "—"}</div></div>
+        </div>
       </div>
 
       <div class="signature" style="margin-top:40px">
         <div class="signature-line"></div>
-        <div class="name">Responsável Técnico (RT)</div>
+        <div class="name">${multiResponsavelTecnico || "Responsável Técnico (RT)"}</div>
         <div class="role">Assinatura e Carimbo</div>
       </div>
     `;
