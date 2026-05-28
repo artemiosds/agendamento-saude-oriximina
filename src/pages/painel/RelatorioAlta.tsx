@@ -128,18 +128,41 @@ const RelatorioAlta: React.FC = () => {
   /* ── multiprofissional state ─── */
   const [modalidades, setModalidades] = useState<string[]>([]);
   const [cid10, setCid10] = useState("");
+  const [multiCid10Secundario, setMultiCid10Secundario] = useState("");
+  const [multiDiagClinico, setMultiDiagClinico] = useState("");
+  const [multiDiagFuncional, setMultiDiagFuncional] = useState("");
+  const [multiContextoBiopsicossocial, setMultiContextoBiopsicossocial] = useState("");
   const [cifFuncoes, setCifFuncoes] = useState("");
   const [cifAtividades, setCifAtividades] = useState("");
   const [cifFatores, setCifFatores] = useState("");
+  const [multiBarreiras, setMultiBarreiras] = useState("");
+  const [multiPotencialidades, setMultiPotencialidades] = useState("");
+  const [multiFatoresContextuais, setMultiFatoresContextuais] = useState("");
+
+  const [multiObjetivosGerais, setMultiObjetivosGerais] = useState("");
+  const [multiPlanoExecutado, setMultiPlanoExecutado] = useState("");
   const [profSections, setProfSections] = useState<ProfSection[]>([]);
   const [motivoAlta, setMotivoAlta] = useState("");
-  const [motivoDetalhe, setMotivoDetalhe] = useState("");
+  const [multiTipoAlta, setMultiTipoAlta] = useState("");
+  const [motivoDetalhe, setMultiMotivoDetalhe] = useState("");
   const [condicaoFuncional, setCondicaoFuncional] = useState("");
   const [nivelIndep, setNivelIndep] = useState("");
+  const [multiComparacaoFuncional, setMultiComparacaoFuncional] = useState("");
+  const [multiGanhosPrincipais, setMultiGanhosPrincipais] = useState("");
+  const [multiLimitacoesPersistentes, setMultiLimitacoesPersistentes] = useState("");
+  const [multiRiscoRegressao, setMultiRiscoRegressao] = useState("");
+  const [multiFatoresAlerta, setMultiFatoresAlerta] = useState("");
+
   const [orientacoesUsuario, setOrientacoesUsuario] = useState("");
   const [orientacoesUbs, setOrientacoesUbs] = useState("");
+  const [multiOrientacoesEscola, setMultiOrientacoesEscola] = useState("");
+  const [multiPontosAtencao, setMultiPontosAtencao] = useState("");
   const [encaminhamentos, setEncaminhamentos] = useState<string[]>([]);
   const [freqAps, setFreqAps] = useState("");
+  const [multiContinuarTerapia, setMultiContinuarTerapia] = useState("");
+  const [multiPrazoRetorno, setMultiPrazoRetorno] = useState("");
+  const [multiResponsavelTecnico, setMultiResponsavelTecnico] = useState("");
+
   const [dataAlta, setDataAlta] = useState(new Date().toISOString().split("T")[0]);
   const [tabProf, setTabProf] = useState("");
 
