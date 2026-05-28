@@ -574,6 +574,39 @@ const PTS: React.FC = () => {
     setSaving(false);
   };
 
+  const handleDelete = async (pts: PTSRecord) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o PTS de ${pacientes.find(p => p.id === pts.patient_id)?.nome || pts.patient_id}?`)) {
+      return;
+    }
+
+    try {
+      // Deletar relacionamentos primeiro
+      await (supabase as any).from('pts_sigtap').delete().eq('pts_id', pts.id);
+      await (supabase as any).from('pts_cid').delete().eq('pts_id', pts.id);
+      
+      const { error } = await supabase.from('pts').delete().eq('id', pts.id);
+      if (error) throw error;
+
+      await logAction({
+        acao: 'excluir_pts',
+        entidade: 'pts',
+        entidadeId: pts.id,
+        modulo: 'pts',
+        user,
+        detalhes: {
+          paciente_id: pts.patient_id,
+          paciente_nome: pacientes.find(p => p.id === pts.patient_id)?.nome,
+        },
+      });
+
+      toast.success('PTS excluído com sucesso!');
+      loadPts();
+    } catch (err: any) {
+      console.error('Erro ao excluir PTS:', err);
+      toast.error('Erro ao excluir: ' + (err?.message || 'Erro desconhecido'));
+    }
+  };
+
   const procsBySpecialty = useMemo(() => {
     const map: Record<string, SigtapProcedimento[]> = {};
     const searchTerm = normalize(procSearch);
@@ -653,6 +686,11 @@ const PTS: React.FC = () => {
                     <Button size="sm" variant="ghost" onClick={() => openDetailDialog(pts)} title="Visualizar">
                       <Eye className="w-4 h-4" />
                     </Button>
+                    {editable && (
+                      <Button size="sm" variant="ghost" onClick={() => handleDelete(pts)} title="Excluir PTS" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
