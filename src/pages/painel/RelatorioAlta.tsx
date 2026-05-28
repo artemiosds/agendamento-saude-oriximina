@@ -513,6 +513,7 @@ const RelatorioAlta: React.FC = () => {
     const conselho = func ? `${func.tipoConselho} ${func.numeroConselho}/${func.ufConselho}` : "";
 
     const motivoLabel = MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || indMotivo;
+    const tipoAltaLabel = TIPOS_ALTA.find(t => t.value === indTipoAlta)?.label || indTipoAlta;
 
     return `
       <div class="info-grid">
@@ -527,37 +528,61 @@ const RelatorioAlta: React.FC = () => {
       </div>
 
       <div class="section">
-        <div class="section-title">Diagnóstico</div>
-        <div class="field"><span class="field-label">CID-10</span><div class="field-value">${indDiagCid || "—"}</div></div>
-        <div class="field"><span class="field-label">CIF</span><div class="field-value">${indCif || "—"}</div></div>
+        <div class="section-title">Contexto Clínico</div>
+        <div class="field"><span class="field-label">Queixa Principal</span><div class="field-value">${indQueixaPrincipal || "—"}</div></div>
+        <div class="field"><span class="field-label">Motivo do Encaminhamento</span><div class="field-value">${indMotivoEncaminhamento || "—"}</div></div>
+        <div class="field"><span class="field-label">Contexto Familiar/Social</span><div class="field-value">${indContextoFamiliar || "—"}</div></div>
+        <div class="field"><span class="field-label">Comorbidades</span><div class="field-value">${indComorbidades || "—"}</div></div>
+        <div class="field"><span class="field-label">Medicação</span><div class="field-value">${indMedicacao || "—"}</div></div>
       </div>
 
       <div class="section">
-        <div class="section-title">Atendimento</div>
+        <div class="section-title">Diagnóstico</div>
+        <div class="field"><span class="field-label">CID-10</span><div class="field-value">${indDiagCid || "—"}</div></div>
+        <div class="field"><span class="field-label">CIF</span><div class="field-value">${indCif || "—"}</div></div>
+        <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${indDiagClinico || "—"}</div></div>
+        <div class="field"><span class="field-label">Diagnóstico Funcional</span><div class="field-value">${indDiagFuncional || "—"}</div></div>
+        <div class="field"><span class="field-label">Nível de Comprometimento</span><div class="field-value">${indNivelComprometimento || "—"}</div></div>
+        <div class="field"><span class="field-label">Observações Diagnósticas</span><div class="field-value">${indObsDiagnosticas || "—"}</div></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Acompanhamento Terapêutico</div>
         <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
           <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}</span></div>
           <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${indSessoes}</span></div>
+          <div><span class="info-label">Faltas no período</span><br/><span class="info-value">${indFaltas}</span></div>
           <div><span class="info-label">Modalidade</span><br/><span class="info-value">${indModalidade || "—"}</span></div>
         </div>
+        <div class="field"><span class="field-label">Frequência de Atendimento</span><div class="field-value">${indFrequenciaAtendimento || "—"}</div></div>
+        <div class="field"><span class="field-label">Adesão ao Tratamento</span><div class="field-value">${indAdesaoTratamento || "—"}</div></div>
       </div>
 
       <div class="section">
         <div class="section-title">Evolução Clínica e Funcional</div>
-        <div class="field"><span class="field-label">Objetivos terapêuticos</span><div class="field-value">${indObjetivos || "—"}</div></div>
+        <div class="field"><span class="field-label">Objetivos Terapêuticos Iniciais</span><div class="field-value">${indObjetivos || "—"}</div></div>
         <div class="field"><span class="field-label">Intervenções/Procedimentos Realizados</span><div class="field-value">${indIntervencoes || "—"}</div></div>
-        <div class="field"><span class="field-label">Evolução clínica e funcional</span><div class="field-value">${indEvolucao || "—"}</div></div>
-        <div class="field"><span class="field-label">Metas</span><div class="field-value">${
+        <div class="field"><span class="field-label">Evolução Clínica</span><div class="field-value">${indEvolucao || "—"}</div></div>
+        <div class="field"><span class="field-label">Evolução Global</span><div class="field-value">${indEvolucaoGlobal || "—"}</div></div>
+        <div class="field"><span class="field-label">Metas Atingidas</span><div class="field-value">${
           indMetas === "totalmente" ? "Totalmente atingidas" :
           indMetas === "parcialmente" ? "Parcialmente atingidas" : "Não atingidas"
         }${indMetasJust ? ` — ${indMetasJust}` : ""}</div></div>
+        <div class="field"><span class="field-label">Resposta Terapêutica</span><div class="field-value">${indRespostaTerapeutica || "—"}</div></div>
+        <div class="field"><span class="field-label">Comparação Início/Alta</span><div class="field-value">${indComparacaoInicioAlta || "—"}</div></div>
         ${indTA ? `<div class="field"><span class="field-label">Tecnologia Assistiva</span><div class="field-value">${indTA}</div></div>` : ""}
+        ${indIntercorrencias ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${indIntercorrencias}${indIntercorrenciasObs ? ` — ${indIntercorrenciasObs}` : ""}</div></div>` : ""}
       </div>
 
       <div class="section" style="page-break-inside: avoid;">
-        <div class="section-title">Alta e Orientações</div>
-        <div class="field"><span class="field-label">Motivo</span><div class="field-value">${motivoLabel}${indMotivoDet ? ` — ${indMotivoDet}` : ""}</div></div>
-        <div class="field"><span class="field-label">Orientações específicas</span><div class="field-value">${indOrientacoes || "—"}</div></div>
+        <div class="section-title">Conclusão e Alta</div>
+        <div class="field"><span class="field-label">Tipo de Alta</span><div class="field-value">${tipoAltaLabel}</div></div>
+        <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${motivoLabel}${indMotivoDet ? ` — ${indMotivoDet}` : ""}</div></div>
+        <div class="field"><span class="field-label">Risco de Regressão</span><div class="field-value">${indRiscoRegressao || "—"}</div></div>
+        <div class="field"><span class="field-label">Necessidade de Continuidade Terapêutica</span><div class="field-value">${indContinuarTerapia || "—"}</div></div>
+        <div class="field"><span class="field-label">Orientações Específicas</span><div class="field-value">${indOrientacoes || "—"}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${indEncaminhamento || "—"}</div></div>
+        <div class="field"><span class="field-label">Prazo sugerido para reavaliação</span><div class="field-value">${indPrazoReavaliacao || "—"}</div></div>
       </div>
 
       <div class="signature" style="margin-top:50px">
