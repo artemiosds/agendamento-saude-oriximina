@@ -964,7 +964,7 @@ const RelatorioAlta: React.FC = () => {
                   </SelectContent>
                 </Select>
                 {(motivoAlta === "infrequencia" || motivoAlta === "encaminhamento" || motivoAlta === "obito") && (
-                  <Input value={motivoDetalhe} onChange={e => setMotivoDetalhe(e.target.value)}
+                  <Input value={motivoDetalhe} onChange={e => setMultiMotivoDetalhe(e.target.value)}
                     placeholder={motivoAlta === "infrequencia" ? "Nº de faltas" : motivoAlta === "obito" ? "Data do óbito" : "Qual serviço?"}
                     className="h-8 text-sm mt-2" />
                 )}
