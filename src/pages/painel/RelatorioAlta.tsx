@@ -584,11 +584,13 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
-  const handleSave = async (type: "multi" | "individual") => {
+  const handleSave = async (type: "multi" | "individual", isDraft: boolean = false) => {
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
 
-    const errs = type === "multi" ? validateMulti() : validateInd();
-    if (errs.length > 0) { toast.error(errs[0]); return; }
+    if (!isDraft) {
+      const errs = type === "multi" ? validateMulti() : validateInd();
+      if (errs.length > 0) { toast.error(errs[0]); return; }
+    }
 
     const unidade = user?.unidadeId || "";
     const dataAlt = type === "multi" ? dataAlta : indDataAlta;
@@ -599,16 +601,27 @@ const RelatorioAlta: React.FC = () => {
       condicaoFuncional, nivelIndep, orientacoesUsuario, orientacoesUbs,
       encaminhamentos, freqAps
     } : {
-      diagCid: indDiagCid, cif: indCif, objetivos: indObjetivos,
-      intervencoes: indIntervencoes, evolucao: indEvolucao,
-      metas: indMetas, metasJust: indMetasJust, ta: indTA,
-      motivo: indMotivo, motivoDet: indMotivoDet,
+      diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
+      diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
+      obsDiagnosticas: indObsDiagnosticas, queixaPrincipal: indQueixaPrincipal,
+      motivoEncaminhamento: indMotivoEncaminhamento, contextoFamiliar: indContextoFamiliar,
+      comorbidades: indComorbidades, medicacao: indMedicacao,
+      objetivos: indObjetivos, intervencoes: indIntervencoes,
+      evolucao: indEvolucao, metas: indMetas, metasJust: indMetasJust,
+      ta: indTA, frequenciaAtendimento: indFrequenciaAtendimento,
+      adesaoTratamento: indAdesaoTratamento, evolucaoGlobal: indEvolucaoGlobal,
+      intercorrencias: indIntercorrencias, intercorrenciasObs: indIntercorrenciasObs,
+      respostaTerapeutica: indRespostaTerapeutica, comparacaoInicioAlta: indComparacaoInicioAlta,
+      motivo: indMotivo, tipoAlta: indTipoAlta, motivoDet: indMotivoDet,
       orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
-      modalidade: indModalidade, sessoes: indSessoes,
-      periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim
+      modalidade: indModalidade, sessoes: indSessoes, faltas: indFaltas,
+      periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim,
+      continuarTerapia: indContinuarTerapia, riscoRegressao: indRiscoRegressao,
+      prazoReavaliacao: indPrazoReavaliacao,
+      ptsMetas: ptsMetas
     };
 
-    const record = {
+    const record: any = {
       paciente_id: pacienteId,
       paciente_nome: paciente?.nome || "",
       profissional_id: user.id,
@@ -617,16 +630,43 @@ const RelatorioAlta: React.FC = () => {
       data_atendimento: dataAlt,
       tipo_registro: type === "multi" ? "alta_multiprofissional" : "alta_individual",
       observacoes: JSON.stringify(payload),
+      status: isDraft ? "rascunho" : "finalizado",
       evolucao: type === "multi"
         ? `Relatório de Alta Multiprofissional — ${MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || ""}`
         : `Relatório de Alta Individual — ${MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || ""}`,
     };
 
-    const { error } = await supabase.from("prontuarios").insert(record);
-    if (error) {
-      toast.error("Erro ao salvar: " + error.message);
+    let result;
+    if (reportId) {
+      result = await supabase.from("prontuarios").update(record).eq("id", reportId);
     } else {
-      toast.success("Relatório de alta salvo no prontuário");
+      result = await supabase.from("prontuarios").insert(record).select().single();
+      if (!result.error && result.data) {
+        setReportId(result.data.id);
+      }
+    }
+
+    if (result.error) {
+      toast.error("Erro ao salvar: " + result.error.message);
+    } else {
+      toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta finalizado e salvo no prontuário");
+      
+      // Auditoria
+      await auditService.log({
+        acao: isDraft ? "salvar_rascunho_alta" : "finalizar_relatorio_alta",
+        modulo: "prontuario",
+        entidade: "prontuario",
+        entidadeId: reportId || (result.data as any)?.id,
+        pacienteId: pacienteId,
+        pacienteNome: paciente?.nome,
+        profissionalId: user.id,
+        profissionalNome: user.nome,
+        detalhes: { tipo: type, isDraft }
+      });
+
+      if (!isDraft) {
+        setStatus("finalizado");
+      }
     }
   };
 
