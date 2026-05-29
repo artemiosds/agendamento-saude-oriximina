@@ -1687,6 +1687,22 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                     <Label className="text-xs font-semibold">Encaminhamentos (Internos e Externos)</Label>
                     <Textarea value={indEncaminhamento} onChange={e => setIndEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Liste para onde o paciente está sendo encaminhado..." />
                   </div>
+
+                  <div className="space-y-2 pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Resumo Final Consolidado *</Label>
+                      <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={generateIndSummary}>
+                        Gerar automaticamente
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={indResumoConsolidado}
+                      onChange={e => setIndResumoConsolidado(e.target.value)}
+                      rows={6}
+                      className="text-sm font-serif"
+                      placeholder="Síntese final do percurso terapêutico, evolução e conclusões da alta..."
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
