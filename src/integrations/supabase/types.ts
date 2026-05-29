@@ -2592,6 +2592,7 @@ export type Database = {
       }
       pts: {
         Row: {
+          acompanhamento_interdisciplinar: boolean | null
           barreiras: string | null
           ciencia_familia: boolean | null
           contextos_afetados: string[] | null
@@ -2632,6 +2633,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          acompanhamento_interdisciplinar?: boolean | null
           barreiras?: string | null
           ciencia_familia?: boolean | null
           contextos_afetados?: string[] | null
@@ -2672,6 +2674,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          acompanhamento_interdisciplinar?: boolean | null
           barreiras?: string | null
           ciencia_familia?: boolean | null
           contextos_afetados?: string[] | null
