@@ -1905,5 +1905,3 @@ const PTS: React.FC = () => {
 };
 
 export default PTS;
-
-
