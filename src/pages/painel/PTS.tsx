@@ -110,6 +110,7 @@ interface PTSRecord {
   resumo_desfecho?: string;
   orientacoes_finais?: string;
   criterio_alta_atingido?: boolean;
+  necessidade_revisao?: boolean; // ADICIONADO
 }
 
 interface PTSMeta {
@@ -315,6 +316,7 @@ const PTS: React.FC = () => {
     objetivo_geral: "",
     plano_conduta: "",
     data_proxima_revisao: suggestReviewDate(30),
+    necessidade_revisao: false, // ADICIONADO
   };
 
   const [form, setForm] = useState(emptyForm);
@@ -446,7 +448,6 @@ const PTS: React.FC = () => {
   };
 
   // CID warning
-
   useEffect(() => {
     if (!selectedProcCodigo || !cidSearch.trim()) {
       setCidWarning(false);
@@ -481,9 +482,40 @@ const PTS: React.FC = () => {
     if (!isMaster && user?.role === "profissional") {
       query = query.eq("professional_id", user.id);
     }
-    const { data } = await query;
-    if (data) setPtsList(data as unknown as PTSRecord[]);
-    setLoading(false);
+
+    try {
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Erro ao carregar PTS:", error);
+
+        // Se o erro for relacionado à coluna necessidade_revisao
+        if (error.message?.includes("necessidade_revisao")) {
+          // Tenta carregar sem a coluna problemática
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from("pts")
+            .select(
+              "id, patient_id, professional_id, unit_id, diagnostico_funcional, objetivos_terapeuticos, metas_curto_prazo, metas_medio_prazo, metas_longo_prazo, especialidades_envolvidas, status, created_at, updated_at, prioridade, contextos_afetados, tipo_atendimento, rede_apoio_presente, acompanhamento_interdisciplinar, ciencia_familia, motivo_encaminhamento, barreiras, potencialidades, objetivo_geral, plano_conduta, data_ultima_revisao, data_proxima_revisao, obs_revisao, status_final, motivo_encerramento, resumo_desfecho, orientacoes_finais, criterio_alta_atingido",
+            )
+            .order("created_at", { ascending: false });
+
+          if (!fallbackError && fallbackData) {
+            setPtsList(fallbackData as unknown as PTSRecord[]);
+          } else {
+            toast.error("Erro ao carregar lista de PTS");
+          }
+        } else {
+          toast.error("Erro ao carregar lista de PTS");
+        }
+      } else if (data) {
+        setPtsList(data as unknown as PTSRecord[]);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar PTS:", err);
+      toast.error("Erro ao carregar lista de PTS");
+    } finally {
+      setLoading(false);
+    }
   }, [isMaster, user]);
 
   useEffect(() => {
@@ -678,17 +710,22 @@ const PTS: React.FC = () => {
   };
 
   const loadPtsSigtapCid = useCallback(async (ptsId: string) => {
-    const [sigtapRes, cidRes] = await Promise.all([
-      (supabase as any)
-        .from("pts_sigtap")
-        .select("procedimento_codigo, procedimento_nome, especialidade")
-        .eq("pts_id", ptsId),
-      (supabase as any).from("pts_cid").select("cid_codigo, cid_descricao").eq("pts_id", ptsId),
-    ]);
-    return {
-      sigtap: (sigtapRes.data || []) as SelectedSigtap[],
-      cids: (cidRes.data || []) as SelectedCid[],
-    };
+    try {
+      const [sigtapRes, cidRes] = await Promise.all([
+        (supabase as any)
+          .from("pts_sigtap")
+          .select("procedimento_codigo, procedimento_nome, especialidade")
+          .eq("pts_id", ptsId),
+        (supabase as any).from("pts_cid").select("cid_codigo, cid_descricao").eq("pts_id", ptsId),
+      ]);
+      return {
+        sigtap: (sigtapRes.data || []) as SelectedSigtap[],
+        cids: (cidRes.data || []) as SelectedCid[],
+      };
+    } catch (err) {
+      console.error("Erro ao carregar SIGTAP/CID:", err);
+      return { sigtap: [], cids: [] };
+    }
   }, []);
 
   const loadPtsMetas = useCallback(async (ptsId: string): Promise<PTSMeta[]> => {
@@ -734,6 +771,7 @@ const PTS: React.FC = () => {
       objetivo_geral: pts.objetivo_geral || "",
       plano_conduta: pts.plano_conduta || "",
       data_proxima_revisao: pts.data_proxima_revisao || suggestReviewDate(30),
+      necessidade_revisao: pts.necessidade_revisao || false, // ADICIONADO
     });
     const [{ sigtap, cids }, metasData] = await Promise.all([loadPtsSigtapCid(pts.id), loadPtsMetas(pts.id)]);
     setSigtapSelecionados(sigtap);
@@ -786,6 +824,7 @@ const PTS: React.FC = () => {
     }
     setSaving(true);
     try {
+      // Construir payload apenas com campos que existem na tabela
       const payload: any = {
         patient_id: form.patient_id,
         professional_id: editingPts ? editingPts.professional_id : user?.id || "",
@@ -808,13 +847,30 @@ const PTS: React.FC = () => {
         objetivo_geral: form.objetivo_geral,
         plano_conduta: form.plano_conduta,
         data_proxima_revisao: form.data_proxima_revisao || null,
+        necessidade_revisao: form.necessidade_revisao || false, // ADICIONADO
       };
 
       let ptsId: string;
 
       if (editingPts) {
         const { error: updateErr } = await (supabase as any).from("pts").update(payload).eq("id", editingPts.id);
-        if (updateErr) throw updateErr;
+
+        if (updateErr) {
+          console.error("Erro na atualização:", updateErr);
+
+          // Se o erro for da coluna necessidade_revisao, tenta sem ela
+          if (updateErr.message?.includes("necessidade_revisao")) {
+            const { necessidade_revisao, ...payloadSemRevisao } = payload;
+            const { error: retryErr } = await (supabase as any)
+              .from("pts")
+              .update(payloadSemRevisao)
+              .eq("id", editingPts.id);
+            if (retryErr) throw retryErr;
+          } else {
+            throw updateErr;
+          }
+        }
+
         ptsId = editingPts.id;
 
         await (supabase as any).from("pts_sigtap").delete().eq("pts_id", ptsId);
@@ -826,9 +882,28 @@ const PTS: React.FC = () => {
           .insert({ ...payload, status: "ativo" })
           .select("id")
           .single();
-        if (insertError) throw insertError;
-        if (!newPts) throw new Error("Falha ao criar PTS");
-        ptsId = newPts.id;
+
+        if (insertError) {
+          console.error("Erro na inserção:", insertError);
+
+          // Se o erro for da coluna necessidade_revisao, tenta sem ela
+          if (insertError.message?.includes("necessidade_revisao")) {
+            const { necessidade_revisao, ...payloadSemRevisao } = payload;
+            const { data: retryData, error: retryErr } = await (supabase as any)
+              .from("pts")
+              .insert({ ...payloadSemRevisao, status: "ativo" })
+              .select("id")
+              .single();
+            if (retryErr) throw retryErr;
+            if (!retryData) throw new Error("Falha ao criar PTS");
+            ptsId = retryData.id;
+          } else {
+            throw insertError;
+          }
+        } else {
+          if (!newPts) throw new Error("Falha ao criar PTS");
+          ptsId = newPts.id;
+        }
 
         // Create prontuário record
         const procInfo = finalSigtap.map((s) => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join("; ");
@@ -855,22 +930,24 @@ const PTS: React.FC = () => {
 
       // SIGTAP links
       if (finalSigtap.length > 0) {
-        await (supabase as any)
-          .from("pts_sigtap")
-          .insert(
-            finalSigtap.map((s) => ({
-              pts_id: ptsId,
-              procedimento_codigo: s.procedimento_codigo,
-              procedimento_nome: s.procedimento_nome,
-              especialidade: s.especialidade,
-            })),
-          );
+        await (supabase as any).from("pts_sigtap").insert(
+          finalSigtap.map((s) => ({
+            pts_id: ptsId,
+            procedimento_codigo: s.procedimento_codigo,
+            procedimento_nome: s.procedimento_nome,
+            especialidade: s.especialidade,
+          })),
+        );
       }
       // CID links
       if (finalCids.length > 0) {
-        await (supabase as any)
-          .from("pts_cid")
-          .insert(finalCids.map((c) => ({ pts_id: ptsId, cid_codigo: c.cid_codigo, cid_descricao: c.cid_descricao })));
+        await (supabase as any).from("pts_cid").insert(
+          finalCids.map((c) => ({
+            pts_id: ptsId,
+            cid_codigo: c.cid_codigo,
+            cid_descricao: c.cid_descricao,
+          })),
+        );
       }
       // Metas estruturadas
       if (metas.length > 0) {
@@ -958,14 +1035,26 @@ const PTS: React.FC = () => {
     const ptsId = detailPts?.id;
     if (!ptsId) return;
     try {
-      await (supabase as any)
-        .from("pts")
-        .update({
-          obs_revisao: revisaoForm.obs,
-          data_ultima_revisao: new Date().toISOString().split("T")[0],
-          data_proxima_revisao: revisaoForm.data_proxima || null,
-        })
-        .eq("id", ptsId);
+      const updateData: any = {
+        obs_revisao: revisaoForm.obs,
+        data_ultima_revisao: new Date().toISOString().split("T")[0],
+        data_proxima_revisao: revisaoForm.data_proxima || null,
+        necessidade_revisao: false, // ADICIONADO
+      };
+
+      const { error } = await (supabase as any).from("pts").update(updateData).eq("id", ptsId);
+
+      if (error) {
+        // Se falhar por causa da coluna necessidade_revisao, tenta sem ela
+        if (error.message?.includes("necessidade_revisao")) {
+          const { necessidade_revisao, ...dataWithoutRevisao } = updateData;
+          const { error: retryErr } = await (supabase as any).from("pts").update(dataWithoutRevisao).eq("id", ptsId);
+          if (retryErr) throw retryErr;
+        } else {
+          throw error;
+        }
+      }
+
       await logAction({
         acao: "revisao_pts",
         entidade: "pts",
@@ -1152,6 +1241,14 @@ const PTS: React.FC = () => {
                       {overdue && (
                         <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/30">
                           <Clock className="w-3 h-3 mr-1" /> Revisão vencida
+                        </Badge>
+                      )}
+                      {pts.necessidade_revisao && ( // ADICIONADO
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-destructive/10 text-destructive border-destructive/30"
+                        >
+                          <AlertTriangle className="w-3 h-3 mr-1" /> Revisão necessária
                         </Badge>
                       )}
                     </div>
@@ -1829,9 +1926,15 @@ const PTS: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
-                        <p className="text-sm font-medium">Revisão Obrigatória</p>
-                        <p className="text-xs text-muted-foreground">Marcação prioritária de acompanhamento</p>
+                        <p className="text-sm font-medium">Necessidade de Revisão</p>
+                        <p className="text-xs text-muted-foreground">
+                          Marcar PTS como necessitando revisão prioritária
+                        </p>
                       </div>
+                      <Switch
+                        checked={form.necessidade_revisao || false}
+                        onCheckedChange={(v) => setForm((p) => ({ ...p, necessidade_revisao: v }))}
+                      />
                     </div>
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
