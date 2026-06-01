@@ -34,7 +34,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { cn } from "@/lib/utils";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SPECIALTIES = [
   "Fisioterapia",
   "Fonoaudiologia",
@@ -42,8 +42,8 @@ const SPECIALTIES = [
   "Terapia Ocupacional",
   "Neuropsicologia",
   "Psicopedagogia",
-  "Nutrição",
-  "Serviço Social",
+  "NutriÃ§Ã£o",
+  "ServiÃ§o Social",
   "Enfermagem",
 ];
 
@@ -52,30 +52,30 @@ const SPECIALTY_TO_SIGTAP: Record<string, string> = {
   Fonoaudiologia: "fonoaudiologia",
   Psicologia: "psicologia",
   "Terapia Ocupacional": "terapia_ocupacional",
-  Nutrição: "nutricao",
-  "Serviço Social": "assistencia_social",
+  "NutriÃ§Ã£o": "nutricao",
+  "ServiÃ§o Social": "assistencia_social",
   Enfermagem: "enfermagem",
 };
 
-const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"];
-const STATUS_META = ["Não iniciada", "Em andamento", "Parcialmente atingida", "Atingida", "Suspensa", "Cancelada"];
-const CATEGORIAS_META = ["Curto Prazo", "Médio Prazo", "Longo Prazo"];
+const PRIORIDADES = ["Baixa", "MÃ©dia", "Alta", "Urgente"];
+const STATUS_META = ["NÃ£o iniciada", "Em andamento", "Parcialmente atingida", "Atingida", "Suspensa", "Cancelada"];
+const CATEGORIAS_META = ["Curto Prazo", "MÃ©dio Prazo", "Longo Prazo"];
 const CONTEXTOS = [
   "Linguagem",
   "Motor",
-  "Cognição",
+  "CogniÃ§Ã£o",
   "Comportamento",
-  "Alimentação",
-  "Socialização",
+  "AlimentaÃ§Ã£o",
+  "SocializaÃ§Ã£o",
   "AVDs",
   "Escolar",
   "Familiar",
   "Emocional",
 ];
 const TIPOS_ATENDIMENTO = ["Individual", "Grupo", "Domiciliar", "Escolar", "Compartilhado/Interdisciplinar"];
-const MOTIVOS_ENCERRAMENTO = ["Alta terapêutica", "Abandono", "Transferência", "Suspensão", "Óbito", "Outro"];
+const MOTIVOS_ENCERRAMENTO = ["Alta terapÃªutica", "Abandono", "TransferÃªncia", "SuspensÃ£o", "Ã“bito", "Outro"];
 
-// ─── Interfaces ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Interfaces â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface PTSRecord {
   id: string;
   patient_id: string;
@@ -110,7 +110,6 @@ interface PTSRecord {
   resumo_desfecho?: string;
   orientacoes_finais?: string;
   criterio_alta_atingido?: boolean;
-  necessidade_revisao?: boolean; // ADICIONADO
 }
 
 interface PTSMeta {
@@ -152,7 +151,7 @@ interface SelectedCid {
   cid_descricao: string;
 }
 
-// ─── Helper ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const suggestReviewDate = (days: number = 30): string => {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -170,7 +169,7 @@ const prioridadeColor = (p: string): string => {
       return "bg-destructive/10 text-destructive border-destructive/30";
     case "Alta":
       return "bg-warning/10 text-warning border-warning/30";
-    case "Média":
+    case "MÃ©dia":
       return "bg-info/10 text-info border-info/30";
     default:
       return "bg-muted text-muted-foreground border-border";
@@ -205,7 +204,7 @@ const statusMetaColor = (s: string): string => {
   }
 };
 
-// ─── Main Component ────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const PTS: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -246,14 +245,14 @@ const PTS: React.FC = () => {
     categoria: "Curto Prazo",
     especialidade: "",
     responsavel: "",
-    status: "Não iniciada",
+    status: "NÃ£o iniciada",
     prazo_estimado: "",
     indicador: "",
-    prioridade: "Média",
+    prioridade: "MÃ©dia",
     obs: "",
   });
 
-  // Revisão modal state
+  // RevisÃ£o modal state
   const [revisaoOpen, setRevisaoOpen] = useState(false);
   const [revisaoForm, setRevisaoForm] = useState({
     obs: "",
@@ -294,7 +293,7 @@ const PTS: React.FC = () => {
     return prof.includes("fisioterap") || prof.includes("fisio");
   }, [user, normalize]);
 
-  // ─── Main form state ───
+  // â”€â”€â”€ Main form state â”€â”€â”€
   const emptyForm = {
     patient_id: "",
     patient_name: "",
@@ -304,7 +303,7 @@ const PTS: React.FC = () => {
     metas_medio_prazo: "",
     metas_longo_prazo: "",
     especialidades_envolvidas: [] as string[],
-    prioridade: "Média",
+    prioridade: "MÃ©dia",
     contextos_afetados: [] as string[],
     tipo_atendimento: [] as string[],
     rede_apoio_presente: false,
@@ -316,12 +315,11 @@ const PTS: React.FC = () => {
     objetivo_geral: "",
     plano_conduta: "",
     data_proxima_revisao: suggestReviewDate(30),
-    necessidade_revisao: false, // ADICIONADO
   };
 
   const [form, setForm] = useState(emptyForm);
 
-  // ─── SIGTAP: Load by specialty ─────────────────────────────────────────
+  // â”€â”€â”€ SIGTAP: Load by specialty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadSigtapProcsForSpecialties = useCallback(
     async (specialties: string[]) => {
       if (!user) return;
@@ -448,6 +446,7 @@ const PTS: React.FC = () => {
   };
 
   // CID warning
+
   useEffect(() => {
     if (!selectedProcCodigo || !cidSearch.trim()) {
       setCidWarning(false);
@@ -472,7 +471,7 @@ const PTS: React.FC = () => {
       .slice(0, 30);
   }, [validCids, cidSearch]);
 
-  // ─── Load PTS list ─────────────────────────────────────────────────────
+  // â”€â”€â”€ Load PTS list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadPts = useCallback(async () => {
     setLoading(true);
     let query = supabase.from("pts").select("*").order("created_at", { ascending: false });
@@ -482,40 +481,9 @@ const PTS: React.FC = () => {
     if (!isMaster && user?.role === "profissional") {
       query = query.eq("professional_id", user.id);
     }
-
-    try {
-      const { data, error } = await query;
-
-      if (error) {
-        console.error("Erro ao carregar PTS:", error);
-
-        // Se o erro for relacionado à coluna necessidade_revisao
-        if (error.message?.includes("necessidade_revisao")) {
-          // Tenta carregar sem a coluna problemática
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from("pts")
-            .select(
-              "id, patient_id, professional_id, unit_id, diagnostico_funcional, objetivos_terapeuticos, metas_curto_prazo, metas_medio_prazo, metas_longo_prazo, especialidades_envolvidas, status, created_at, updated_at, prioridade, contextos_afetados, tipo_atendimento, rede_apoio_presente, acompanhamento_interdisciplinar, ciencia_familia, motivo_encaminhamento, barreiras, potencialidades, objetivo_geral, plano_conduta, data_ultima_revisao, data_proxima_revisao, obs_revisao, status_final, motivo_encerramento, resumo_desfecho, orientacoes_finais, criterio_alta_atingido",
-            )
-            .order("created_at", { ascending: false });
-
-          if (!fallbackError && fallbackData) {
-            setPtsList(fallbackData as unknown as PTSRecord[]);
-          } else {
-            toast.error("Erro ao carregar lista de PTS");
-          }
-        } else {
-          toast.error("Erro ao carregar lista de PTS");
-        }
-      } else if (data) {
-        setPtsList(data as unknown as PTSRecord[]);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar PTS:", err);
-      toast.error("Erro ao carregar lista de PTS");
-    } finally {
-      setLoading(false);
-    }
+    const { data } = await query;
+    if (data) setPtsList(data as unknown as PTSRecord[]);
+    setLoading(false);
   }, [isMaster, user]);
 
   useEffect(() => {
@@ -539,7 +507,7 @@ const PTS: React.FC = () => {
     [isMaster, user],
   );
 
-  // ─── Form helpers ───────────────────────────────────────────────────────
+  // â”€â”€â”€ Form helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const toggleSpec = (spec: string) => {
     setForm((p) => {
       const newSpecs = p.especialidades_envolvidas.includes(spec)
@@ -569,7 +537,7 @@ const PTS: React.FC = () => {
     }));
   };
 
-  // ─── SIGTAP: Add/remove procedures & CIDs (preserved from original) ────
+  // â”€â”€â”€ SIGTAP: Add/remove procedures & CIDs (preserved from original) â”€â”€â”€â”€
   const saveImmediateFono = async (item: SelectedSigtap, cids?: SelectedCid[]) => {
     try {
       if (user?.id) {
@@ -617,7 +585,7 @@ const PTS: React.FC = () => {
     const proc = sigtapProcs.find((p) => p.codigo === selectedProcCodigo);
     if (!proc) return;
     if (sigtapSelecionados.some((s) => s.procedimento_codigo === proc.codigo)) {
-      toast.info("Procedimento já adicionado.");
+      toast.info("Procedimento jÃ¡ adicionado.");
       return;
     }
     const newItem: SelectedSigtap = {
@@ -650,7 +618,7 @@ const PTS: React.FC = () => {
 
   const handleAddCid = async (cid: SigtapCid) => {
     if (cidsSelecionados.some((c) => c.cid_codigo === cid.cid_codigo)) {
-      toast.info("CID já adicionado.");
+      toast.info("CID jÃ¡ adicionado.");
       return;
     }
     const newCid = { cid_codigo: cid.cid_codigo, cid_descricao: cid.cid_descricao };
@@ -674,7 +642,7 @@ const PTS: React.FC = () => {
     const code = cidSearch.trim().toUpperCase();
     if (!code) return;
     if (cidsSelecionados.some((c) => c.cid_codigo === code)) {
-      toast.info("CID já adicionado.");
+      toast.info("CID jÃ¡ adicionado.");
       return;
     }
     const newCid = { cid_codigo: code, cid_descricao: "CID informado manualmente" };
@@ -710,22 +678,17 @@ const PTS: React.FC = () => {
   };
 
   const loadPtsSigtapCid = useCallback(async (ptsId: string) => {
-    try {
-      const [sigtapRes, cidRes] = await Promise.all([
-        (supabase as any)
-          .from("pts_sigtap")
-          .select("procedimento_codigo, procedimento_nome, especialidade")
-          .eq("pts_id", ptsId),
-        (supabase as any).from("pts_cid").select("cid_codigo, cid_descricao").eq("pts_id", ptsId),
-      ]);
-      return {
-        sigtap: (sigtapRes.data || []) as SelectedSigtap[],
-        cids: (cidRes.data || []) as SelectedCid[],
-      };
-    } catch (err) {
-      console.error("Erro ao carregar SIGTAP/CID:", err);
-      return { sigtap: [], cids: [] };
-    }
+    const [sigtapRes, cidRes] = await Promise.all([
+      (supabase as any)
+        .from("pts_sigtap")
+        .select("procedimento_codigo, procedimento_nome, especialidade")
+        .eq("pts_id", ptsId),
+      (supabase as any).from("pts_cid").select("cid_codigo, cid_descricao").eq("pts_id", ptsId),
+    ]);
+    return {
+      sigtap: (sigtapRes.data || []) as SelectedSigtap[],
+      cids: (cidRes.data || []) as SelectedCid[],
+    };
   }, []);
 
   const loadPtsMetas = useCallback(async (ptsId: string): Promise<PTSMeta[]> => {
@@ -737,7 +700,46 @@ const PTS: React.FC = () => {
     }
   }, []);
 
-  // ─── Open dialogs ────────────────────────────────────────────────────────
+  const extractMissingPtsColumn = (error: any): string | null => {
+    const message = String(error?.message || "");
+    const match = message.match(/Could not find the '([^']+)' column of 'pts'/i);
+    return match?.[1] || null;
+  };
+
+  const removeUndefinedFields = (payload: Record<string, any>) =>
+    Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+
+  const runPtsMutation = async (mode: "insert" | "update", rawPayload: Record<string, any>, ptsId?: string) => {
+    const payload = { ...rawPayload };
+    const removedColumns: string[] = [];
+
+    while (true) {
+      const sanitizedPayload = removeUndefinedFields(payload);
+
+      if (mode === "update" && Object.keys(sanitizedPayload).length === 0) {
+        return { data: null, removedColumns, skipped: true };
+      }
+
+      const result =
+        mode === "update"
+          ? await (supabase as any).from("pts").update(sanitizedPayload).eq("id", ptsId)
+          : await (supabase as any).from("pts").insert(sanitizedPayload).select("id").single();
+
+      if (!result.error) {
+        return { data: result.data, removedColumns, skipped: false };
+      }
+
+      const missingColumn = extractMissingPtsColumn(result.error);
+      if (!missingColumn || !(missingColumn in sanitizedPayload)) {
+        throw result.error;
+      }
+
+      delete payload[missingColumn];
+      removedColumns.push(missingColumn);
+    }
+  };
+
+  // â”€â”€â”€ Open dialogs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const openNewDialog = () => {
     setEditingPts(null);
     setForm({ ...emptyForm, data_proxima_revisao: suggestReviewDate(30) });
@@ -759,7 +761,7 @@ const PTS: React.FC = () => {
       metas_medio_prazo: pts.metas_medio_prazo,
       metas_longo_prazo: pts.metas_longo_prazo,
       especialidades_envolvidas: pts.especialidades_envolvidas || [],
-      prioridade: pts.prioridade || "Média",
+      prioridade: pts.prioridade || "MÃ©dia",
       contextos_afetados: pts.contextos_afetados || [],
       tipo_atendimento: pts.tipo_atendimento || [],
       rede_apoio_presente: pts.rede_apoio_presente || false,
@@ -771,7 +773,6 @@ const PTS: React.FC = () => {
       objetivo_geral: pts.objetivo_geral || "",
       plano_conduta: pts.plano_conduta || "",
       data_proxima_revisao: pts.data_proxima_revisao || suggestReviewDate(30),
-      necessidade_revisao: pts.necessidade_revisao || false, // ADICIONADO
     });
     const [{ sigtap, cids }, metasData] = await Promise.all([loadPtsSigtapCid(pts.id), loadPtsMetas(pts.id)]);
     setSigtapSelecionados(sigtap);
@@ -791,7 +792,7 @@ const PTS: React.FC = () => {
     setDetailMetas(metasData);
   };
 
-  // ─── Save PTS ─────────────────────────────────────────────────────────
+  // â”€â”€â”€ Save PTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSave = async () => {
     let finalSigtap = [...sigtapSelecionados];
     let finalCids = [...cidsSelecionados];
@@ -819,12 +820,11 @@ const PTS: React.FC = () => {
     }
 
     if (!form.patient_id || !form.diagnostico_funcional || !form.objetivos_terapeuticos) {
-      toast.error("Preencha paciente, diagnóstico funcional e objetivos.");
+      toast.error("Preencha paciente, diagnÃ³stico funcional e objetivos.");
       return;
     }
     setSaving(true);
     try {
-      // Construir payload apenas com campos que existem na tabela
       const payload: any = {
         patient_id: form.patient_id,
         professional_id: editingPts ? editingPts.professional_id : user?.id || "",
@@ -847,65 +847,27 @@ const PTS: React.FC = () => {
         objetivo_geral: form.objetivo_geral,
         plano_conduta: form.plano_conduta,
         data_proxima_revisao: form.data_proxima_revisao || null,
-        necessidade_revisao: form.necessidade_revisao || false, // ADICIONADO
       };
 
       let ptsId: string;
+      let removedPtsColumns: string[] = [];
 
       if (editingPts) {
-        const { error: updateErr } = await (supabase as any).from("pts").update(payload).eq("id", editingPts.id);
-
-        if (updateErr) {
-          console.error("Erro na atualização:", updateErr);
-
-          // Se o erro for da coluna necessidade_revisao, tenta sem ela
-          if (updateErr.message?.includes("necessidade_revisao")) {
-            const { necessidade_revisao, ...payloadSemRevisao } = payload;
-            const { error: retryErr } = await (supabase as any)
-              .from("pts")
-              .update(payloadSemRevisao)
-              .eq("id", editingPts.id);
-            if (retryErr) throw retryErr;
-          } else {
-            throw updateErr;
-          }
-        }
-
+        const updateResult = await runPtsMutation("update", payload, editingPts.id);
+        removedPtsColumns = updateResult.removedColumns;
         ptsId = editingPts.id;
 
         await (supabase as any).from("pts_sigtap").delete().eq("pts_id", ptsId);
         await (supabase as any).from("pts_cid").delete().eq("pts_id", ptsId);
         await (supabase as any).from("pts_metas").delete().eq("pts_id", ptsId);
       } else {
-        const { data: newPts, error: insertError } = await (supabase as any)
-          .from("pts")
-          .insert({ ...payload, status: "ativo" })
-          .select("id")
-          .single();
+        const insertResult = await runPtsMutation("insert", { ...payload, status: "ativo" });
+        removedPtsColumns = insertResult.removedColumns;
+        const newPts = insertResult.data;
+        if (!newPts) throw new Error("Falha ao criar PTS");
+        ptsId = newPts.id;
 
-        if (insertError) {
-          console.error("Erro na inserção:", insertError);
-
-          // Se o erro for da coluna necessidade_revisao, tenta sem ela
-          if (insertError.message?.includes("necessidade_revisao")) {
-            const { necessidade_revisao, ...payloadSemRevisao } = payload;
-            const { data: retryData, error: retryErr } = await (supabase as any)
-              .from("pts")
-              .insert({ ...payloadSemRevisao, status: "ativo" })
-              .select("id")
-              .single();
-            if (retryErr) throw retryErr;
-            if (!retryData) throw new Error("Falha ao criar PTS");
-            ptsId = retryData.id;
-          } else {
-            throw insertError;
-          }
-        } else {
-          if (!newPts) throw new Error("Falha ao criar PTS");
-          ptsId = newPts.id;
-        }
-
-        // Create prontuário record
+        // Create prontuÃ¡rio record
         const procInfo = finalSigtap.map((s) => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join("; ");
         const cidInfo = finalCids.map((c) => `${c.cid_codigo} - ${c.cid_descricao}`).join("; ");
         await (supabase as any)
@@ -919,10 +881,10 @@ const PTS: React.FC = () => {
             data_atendimento: new Date().toISOString().split("T")[0],
             hora_atendimento: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
             tipo_registro: "pts",
-            queixa_principal: "Projeto Terapêutico Singular",
+            queixa_principal: "Projeto TerapÃªutico Singular",
             anamnese: form.diagnostico_funcional,
             hipotese: form.objetivos_terapeuticos,
-            conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
+            conduta: `Curto prazo: ${form.metas_curto_prazo}\nMÃ©dio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
             observacoes: `Especialidades: ${form.especialidades_envolvidas.join(", ")}${procInfo ? `\nSIGTAP: ${procInfo}` : ""}${cidInfo ? `\nCID: ${cidInfo}` : ""}`,
           })
           .catch(() => {});
@@ -930,24 +892,22 @@ const PTS: React.FC = () => {
 
       // SIGTAP links
       if (finalSigtap.length > 0) {
-        await (supabase as any).from("pts_sigtap").insert(
-          finalSigtap.map((s) => ({
-            pts_id: ptsId,
-            procedimento_codigo: s.procedimento_codigo,
-            procedimento_nome: s.procedimento_nome,
-            especialidade: s.especialidade,
-          })),
-        );
+        await (supabase as any)
+          .from("pts_sigtap")
+          .insert(
+            finalSigtap.map((s) => ({
+              pts_id: ptsId,
+              procedimento_codigo: s.procedimento_codigo,
+              procedimento_nome: s.procedimento_nome,
+              especialidade: s.especialidade,
+            })),
+          );
       }
       // CID links
       if (finalCids.length > 0) {
-        await (supabase as any).from("pts_cid").insert(
-          finalCids.map((c) => ({
-            pts_id: ptsId,
-            cid_codigo: c.cid_codigo,
-            cid_descricao: c.cid_descricao,
-          })),
-        );
+        await (supabase as any)
+          .from("pts_cid")
+          .insert(finalCids.map((c) => ({ pts_id: ptsId, cid_codigo: c.cid_codigo, cid_descricao: c.cid_descricao })));
       }
       // Metas estruturadas
       if (metas.length > 0) {
@@ -962,7 +922,7 @@ const PTS: React.FC = () => {
             status: m.status,
             prazo_estimado: m.prazo_estimado || null,
             indicador: m.indicador || "",
-            prioridade: m.prioridade || "Média",
+            prioridade: m.prioridade || "MÃ©dia",
             obs: m.obs || "",
           })),
         );
@@ -983,7 +943,11 @@ const PTS: React.FC = () => {
         },
       });
 
-      toast.success(editingPts ? "PTS atualizado com sucesso!" : "PTS criado e registrado no prontuário!");
+      if (removedPtsColumns.length > 0) {
+        toast.info(`PTS salvo com compatibilidade automática. Campos ignorados: ${removedPtsColumns.join(", ")}`);
+      }
+
+      toast.success(editingPts ? "PTS atualizado com sucesso!" : "PTS criado e registrado no prontuÃ¡rio!");
       setDialogOpen(false);
       setEditingPts(null);
       resetSigtapState();
@@ -996,7 +960,7 @@ const PTS: React.FC = () => {
     setSaving(false);
   };
 
-  // ─── Delete PTS ──────────────────────────────────────────────────────
+  // â”€â”€â”€ Delete PTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDelete = async (pts: PTSRecord) => {
     if (
       !window.confirm(
@@ -1022,7 +986,7 @@ const PTS: React.FC = () => {
         user,
         detalhes: { paciente_id: pts.patient_id, paciente_nome: pacientes.find((p) => p.id === pts.patient_id)?.nome },
       });
-      toast.success("PTS excluído com sucesso!");
+      toast.success("PTS excluÃ­do com sucesso!");
       loadPts();
     } catch (err: any) {
       console.error("Erro ao excluir PTS:", err);
@@ -1030,31 +994,25 @@ const PTS: React.FC = () => {
     }
   };
 
-  // ─── Revisão ──────────────────────────────────────────────────────────
+  // â”€â”€â”€ RevisÃ£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleRevisao = async () => {
     const ptsId = detailPts?.id;
     if (!ptsId) return;
     try {
-      const updateData: any = {
-        obs_revisao: revisaoForm.obs,
-        data_ultima_revisao: new Date().toISOString().split("T")[0],
-        data_proxima_revisao: revisaoForm.data_proxima || null,
-        necessidade_revisao: false, // ADICIONADO
-      };
-
-      const { error } = await (supabase as any).from("pts").update(updateData).eq("id", ptsId);
-
-      if (error) {
-        // Se falhar por causa da coluna necessidade_revisao, tenta sem ela
-        if (error.message?.includes("necessidade_revisao")) {
-          const { necessidade_revisao, ...dataWithoutRevisao } = updateData;
-          const { error: retryErr } = await (supabase as any).from("pts").update(dataWithoutRevisao).eq("id", ptsId);
-          if (retryErr) throw retryErr;
-        } else {
-          throw error;
-        }
+      const revisaoResult = await runPtsMutation(
+        "update",
+        {
+          obs_revisao: revisaoForm.obs,
+          data_ultima_revisao: new Date().toISOString().split("T")[0],
+          data_proxima_revisao: revisaoForm.data_proxima || null,
+        },
+        ptsId,
+      );
+      if (revisaoResult.removedColumns.length > 0) {
+        toast.info(
+          `Revisão salva com compatibilidade automática. Campos ignorados: ${revisaoResult.removedColumns.join(", ")}`,
+        );
       }
-
       await logAction({
         acao: "revisao_pts",
         entidade: "pts",
@@ -1063,16 +1021,16 @@ const PTS: React.FC = () => {
         user,
         detalhes: { obs: revisaoForm.obs, proxima_revisao: revisaoForm.data_proxima },
       });
-      toast.success("Revisão do PTS registrada!");
+      toast.success("RevisÃ£o do PTS registrada!");
       setRevisaoOpen(false);
       setDetailPts(null);
       loadPts();
     } catch (err: any) {
-      toast.error("Erro ao registrar revisão: " + (err?.message || ""));
+      toast.error("Erro ao registrar revisÃ£o: " + (err?.message || ""));
     }
   };
 
-  // ─── Alta/Encerramento ────────────────────────────────────────────────
+  // â”€â”€â”€ Alta/Encerramento â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleAlta = async () => {
     const ptsId = detailPts?.id;
     if (!ptsId) return;
@@ -1081,17 +1039,23 @@ const PTS: React.FC = () => {
       return;
     }
     try {
-      await (supabase as any)
-        .from("pts")
-        .update({
+      const altaResult = await runPtsMutation(
+        "update",
+        {
           status: altaForm.status_final || "encerrado",
           motivo_encerramento: altaForm.motivo_encerramento,
           resumo_desfecho: altaForm.resumo_desfecho,
           orientacoes_finais: altaForm.orientacoes_finais,
           criterio_alta_atingido: altaForm.criterio_alta_atingido,
           ciencia_familia: altaForm.ciencia_familia,
-        })
-        .eq("id", ptsId);
+        },
+        ptsId,
+      );
+      if (altaResult.removedColumns.length > 0) {
+        toast.info(
+          `Alta salva com compatibilidade automática. Campos ignorados: ${altaResult.removedColumns.join(", ")}`,
+        );
+      }
       await logAction({
         acao: "alta_pts",
         entidade: "pts",
@@ -1109,7 +1073,7 @@ const PTS: React.FC = () => {
     }
   };
 
-  // ─── Metas management ────────────────────────────────────────────────
+  // â”€â”€â”€ Metas management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleAddMeta = () => {
     setMetaForm({
       titulo: "",
@@ -1117,10 +1081,10 @@ const PTS: React.FC = () => {
       categoria: "Curto Prazo",
       especialidade: "",
       responsavel: "",
-      status: "Não iniciada",
+      status: "NÃ£o iniciada",
       prazo_estimado: "",
       indicador: "",
-      prioridade: "Média",
+      prioridade: "MÃ©dia",
       obs: "",
     });
     setEditingMetaIdx(null);
@@ -1135,7 +1099,7 @@ const PTS: React.FC = () => {
 
   const handleSaveMeta = () => {
     if (!metaForm.titulo) {
-      toast.error("Título da meta é obrigatório.");
+      toast.error("TÃ­tulo da meta Ã© obrigatÃ³rio.");
       return;
     }
     if (editingMetaIdx !== null) {
@@ -1148,7 +1112,7 @@ const PTS: React.FC = () => {
 
   const handleRemoveMeta = (idx: number) => setMetas((prev) => prev.filter((_, i) => i !== idx));
 
-  // ─── SIGTAP: filtered by specialty for dropdown ───────────────────────
+  // â”€â”€â”€ SIGTAP: filtered by specialty for dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const procsBySpecialty = useMemo(() => {
     const map: Record<string, SigtapProcedimento[]> = {};
     const searchTerm = normalize(procSearch);
@@ -1169,20 +1133,20 @@ const PTS: React.FC = () => {
     return entry ? entry[0] : key;
   }, []);
 
-  // ─── Permission check ─────────────────────────────────────────────────
+  // â”€â”€â”€ Permission check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!can("tratamento", "can_view")) {
-    return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
+    return <div className="p-6 text-muted-foreground">Sem permissÃ£o.</div>;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // RENDER
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">PTS — Projeto Terapêutico Singular</h1>
+          <h1 className="text-2xl font-bold font-display text-foreground">PTS â€” Projeto TerapÃªutico Singular</h1>
           <p className="text-muted-foreground text-sm">{ptsList.length} projeto(s) registrado(s)</p>
         </div>
         <Button onClick={openNewDialog}>
@@ -1194,7 +1158,7 @@ const PTS: React.FC = () => {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Buscar por paciente ou diagnóstico..."
+          placeholder="Buscar por paciente ou diagnÃ³stico..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
@@ -1240,25 +1204,17 @@ const PTS: React.FC = () => {
                       )}
                       {overdue && (
                         <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/30">
-                          <Clock className="w-3 h-3 mr-1" /> Revisão vencida
-                        </Badge>
-                      )}
-                      {pts.necessidade_revisao && ( // ADICIONADO
-                        <Badge
-                          variant="outline"
-                          className="text-xs bg-destructive/10 text-destructive border-destructive/30"
-                        >
-                          <AlertTriangle className="w-3 h-3 mr-1" /> Revisão necessária
+                          <Clock className="w-3 h-3 mr-1" /> RevisÃ£o vencida
                         </Badge>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Prof. {prof?.nome || "—"} • {new Date(pts.created_at).toLocaleDateString("pt-BR")}
-                      {pts.especialidades_envolvidas.length > 0 && ` • ${pts.especialidades_envolvidas.join(", ")}`}
+                      Prof. {prof?.nome || "â€”"} â€¢ {new Date(pts.created_at).toLocaleDateString("pt-BR")}
+                      {pts.especialidades_envolvidas.length > 0 && ` â€¢ ${pts.especialidades_envolvidas.join(", ")}`}
                     </p>
                     {pts.data_proxima_revisao && (
                       <p className="text-xs text-muted-foreground">
-                        Próx. revisão: {new Date(pts.data_proxima_revisao + "T12:00:00").toLocaleDateString("pt-BR")}
+                        PrÃ³x. revisÃ£o: {new Date(pts.data_proxima_revisao + "T12:00:00").toLocaleDateString("pt-BR")}
                       </p>
                     )}
                   </div>
@@ -1271,7 +1227,7 @@ const PTS: React.FC = () => {
                         <Button
                           size="sm"
                           variant="ghost"
-                          title="Registrar Revisão"
+                          title="Registrar RevisÃ£o"
                           onClick={() => {
                             setDetailPts(pts);
                             setRevisaoForm({ obs: "", data_proxima: suggestReviewDate(30) });
@@ -1323,7 +1279,7 @@ const PTS: React.FC = () => {
         </div>
       )}
 
-      {/* ═══ CREATE / EDIT DIALOG ═══ */}
+      {/* â•â•â• CREATE / EDIT DIALOG â•â•â• */}
       <Dialog
         open={dialogOpen}
         onOpenChange={(v) => {
@@ -1342,10 +1298,10 @@ const PTS: React.FC = () => {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
               <TabsList className="mx-6 mt-3 mb-0 grid grid-cols-5 shrink-0">
                 <TabsTrigger value="identificacao" className="text-sm">
-                  Identificação
+                  IdentificaÃ§Ã£o
                 </TabsTrigger>
                 <TabsTrigger value="diagnostico" className="text-sm">
-                  Diagnóstico
+                  DiagnÃ³stico
                 </TabsTrigger>
                 <TabsTrigger value="metas" className="text-sm">
                   Metas
@@ -1354,7 +1310,7 @@ const PTS: React.FC = () => {
                   Procedimentos
                 </TabsTrigger>
                 <TabsTrigger value="revisao" className="text-sm">
-                  Revisão
+                  RevisÃ£o
                 </TabsTrigger>
               </TabsList>
 
@@ -1379,7 +1335,7 @@ const PTS: React.FC = () => {
                       rows={2}
                       value={form.motivo_encaminhamento}
                       onChange={(e) => setForm((p) => ({ ...p, motivo_encaminhamento: e.target.value }))}
-                      placeholder="Descreva o motivo pelo qual o paciente está sendo encaminhado para o PTS..."
+                      placeholder="Descreva o motivo pelo qual o paciente estÃ¡ sendo encaminhado para o PTS..."
                     />
                   </div>
 
@@ -1450,7 +1406,7 @@ const PTS: React.FC = () => {
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
                         <p className="text-sm font-medium">Rede de Apoio Presente</p>
-                        <p className="text-xs text-muted-foreground">Família, comunidade, outros serviços</p>
+                        <p className="text-xs text-muted-foreground">FamÃ­lia, comunidade, outros serviÃ§os</p>
                       </div>
                       <Switch
                         checked={form.rede_apoio_presente}
@@ -1459,7 +1415,7 @@ const PTS: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
-                        <p className="text-sm font-medium">Atuação Interdisciplinar</p>
+                        <p className="text-sm font-medium">AtuaÃ§Ã£o Interdisciplinar</p>
                         <p className="text-xs text-muted-foreground">Necessita equipe multiprofissional</p>
                       </div>
                       <Switch
@@ -1485,17 +1441,17 @@ const PTS: React.FC = () => {
                   </div>
                 </TabsContent>
 
-                {/* TAB 2: Diagnóstico e Objetivos */}
+                {/* TAB 2: DiagnÃ³stico e Objetivos */}
                 <TabsContent value="diagnostico" className="mt-0 space-y-6 outline-none pb-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div>
-                        <Label className="text-sm font-semibold">Diagnóstico Funcional Global *</Label>
+                        <Label className="text-sm font-semibold">DiagnÃ³stico Funcional Global *</Label>
                         <Textarea
                           rows={6}
                           value={form.diagnostico_funcional}
                           onChange={(e) => setForm((p) => ({ ...p, diagnostico_funcional: e.target.value }))}
-                          placeholder="Diagnóstico funcional completo do paciente contemplando aspectos físicos, cognitivos e sociais..."
+                          placeholder="DiagnÃ³stico funcional completo do paciente contemplando aspectos fÃ­sicos, cognitivos e sociais..."
                           className="mt-1.5 resize-none focus-visible:ring-primary"
                         />
                       </div>
@@ -1505,7 +1461,7 @@ const PTS: React.FC = () => {
                           rows={4}
                           value={form.potencialidades}
                           onChange={(e) => setForm((p) => ({ ...p, potencialidades: e.target.value }))}
-                          placeholder="Recursos, habilidades, pontos fortes e fatores de proteção..."
+                          placeholder="Recursos, habilidades, pontos fortes e fatores de proteÃ§Ã£o..."
                           className="mt-1.5 resize-none"
                         />
                       </div>
@@ -1515,7 +1471,7 @@ const PTS: React.FC = () => {
                           rows={4}
                           value={form.barreiras}
                           onChange={(e) => setForm((p) => ({ ...p, barreiras: e.target.value }))}
-                          placeholder="Obstáculos ambientais, familiares ou individuais para o progresso terapêutico..."
+                          placeholder="ObstÃ¡culos ambientais, familiares ou individuais para o progresso terapÃªutico..."
                           className="mt-1.5 resize-none"
                         />
                       </div>
@@ -1528,17 +1484,17 @@ const PTS: React.FC = () => {
                           rows={3}
                           value={form.objetivo_geral}
                           onChange={(e) => setForm((p) => ({ ...p, objetivo_geral: e.target.value }))}
-                          placeholder="O principal resultado esperado ao final do processo terapêutico..."
+                          placeholder="O principal resultado esperado ao final do processo terapÃªutico..."
                           className="mt-1.5 resize-none"
                         />
                       </div>
                       <div>
-                        <Label className="text-sm font-semibold">Objetivos Terapêuticos Específicos *</Label>
+                        <Label className="text-sm font-semibold">Objetivos TerapÃªuticos EspecÃ­ficos *</Label>
                         <Textarea
                           rows={5}
                           value={form.objetivos_terapeuticos}
                           onChange={(e) => setForm((p) => ({ ...p, objetivos_terapeuticos: e.target.value }))}
-                          placeholder="Descreva metas claras e mensuráveis..."
+                          placeholder="Descreva metas claras e mensurÃ¡veis..."
                           className="mt-1.5 resize-none"
                         />
                       </div>
@@ -1564,7 +1520,7 @@ const PTS: React.FC = () => {
                             <span className="absolute -left-2 top-2 w-1 h-8 bg-amber-500 rounded-full" />
                             <div className="pl-3">
                               <Label className="text-xs text-amber-600 font-bold uppercase tracking-wider">
-                                Médio Prazo (3-6 meses)
+                                MÃ©dio Prazo (3-6 meses)
                               </Label>
                               <Textarea
                                 rows={2}
@@ -1594,12 +1550,12 @@ const PTS: React.FC = () => {
                   </div>
 
                   <div className="pt-2 border-t mt-4">
-                    <Label className="text-sm font-semibold">Plano de Conduta Terapêutica</Label>
+                    <Label className="text-sm font-semibold">Plano de Conduta TerapÃªutica</Label>
                     <Textarea
                       rows={4}
                       value={form.plano_conduta}
                       onChange={(e) => setForm((p) => ({ ...p, plano_conduta: e.target.value }))}
-                      placeholder="Estratégias detalhadas, frequência de atendimentos, abordagens específicas e orientações..."
+                      placeholder="EstratÃ©gias detalhadas, frequÃªncia de atendimentos, abordagens especÃ­ficas e orientaÃ§Ãµes..."
                       className="mt-1.5 resize-none bg-muted/20"
                     />
                   </div>
@@ -1621,7 +1577,7 @@ const PTS: React.FC = () => {
                   {metas.length === 0 ? (
                     <div className="border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground text-sm">
                       <Target className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                      Nenhuma meta cadastrada. Clique em "Nova Meta" para começar.
+                      Nenhuma meta cadastrada. Clique em "Nova Meta" para comeÃ§ar.
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -1644,13 +1600,13 @@ const PTS: React.FC = () => {
                               {meta.especialidade && (
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                   {meta.especialidade}
-                                  {meta.responsavel ? ` • ${meta.responsavel}` : ""}
+                                  {meta.responsavel ? ` â€¢ ${meta.responsavel}` : ""}
                                 </p>
                               )}
-                              {meta.indicador && <p className="text-xs text-muted-foreground">📊 {meta.indicador}</p>}
+                              {meta.indicador && <p className="text-xs text-muted-foreground">ðŸ“Š {meta.indicador}</p>}
                               {meta.prazo_estimado && (
                                 <p className="text-xs text-muted-foreground">
-                                  📅 Prazo: {new Date(meta.prazo_estimado + "T12:00:00").toLocaleDateString("pt-BR")}
+                                  ðŸ“… Prazo: {new Date(meta.prazo_estimado + "T12:00:00").toLocaleDateString("pt-BR")}
                                 </p>
                               )}
                               {meta.descricao && (
@@ -1688,7 +1644,7 @@ const PTS: React.FC = () => {
                     <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-semibold flex items-center gap-1.5">
-                          📋 Procedimentos SIGTAP
+                          ðŸ“‹ Procedimentos SIGTAP
                           {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
                         </Label>
                       </div>
@@ -1697,7 +1653,7 @@ const PTS: React.FC = () => {
                         <div className="relative flex-1">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <Input
-                            placeholder="Pesquisar por nome ou código..."
+                            placeholder="Pesquisar por nome ou cÃ³digo..."
                             value={procSearch}
                             onChange={(e) => setProcSearch(e.target.value)}
                             onKeyDown={(e) => {
@@ -1776,7 +1732,7 @@ const PTS: React.FC = () => {
                       {sigtapProcs.length === 0 && !loadingProcs && (
                         <p className="text-xs text-muted-foreground">
                           {form.especialidades_envolvidas.length === 0
-                            ? "Selecione especialidades na aba Identificação para carregar procedimentos SIGTAP."
+                            ? "Selecione especialidades na aba IdentificaÃ§Ã£o para carregar procedimentos SIGTAP."
                             : "Nenhum procedimento SIGTAP encontrado para as especialidades selecionadas."}
                         </p>
                       )}
@@ -1814,10 +1770,10 @@ const PTS: React.FC = () => {
                       {selectedProcCodigo && (
                         <div className="space-y-2 border-t pt-2">
                           <Label className="text-xs">
-                            Buscar CID vinculado ao procedimento ({validCids.length} CIDs válidos)
+                            Buscar CID vinculado ao procedimento ({validCids.length} CIDs vÃ¡lidos)
                           </Label>
                           <Input
-                            placeholder="Digite código ou descrição do CID..."
+                            placeholder="Digite cÃ³digo ou descriÃ§Ã£o do CID..."
                             value={cidSearch}
                             onChange={(e) => setCidSearch(e.target.value)}
                             className="text-sm"
@@ -1826,7 +1782,9 @@ const PTS: React.FC = () => {
                             <div className="flex items-start gap-2 p-2 rounded bg-warning/10 border border-warning/30 text-xs">
                               <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
                               <div>
-                                <p className="font-medium text-warning">CID não vinculado ao procedimento no SIGTAP.</p>
+                                <p className="font-medium text-warning">
+                                  CID nÃ£o vinculado ao procedimento no SIGTAP.
+                                </p>
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1891,7 +1849,7 @@ const PTS: React.FC = () => {
                     </div>
                   ) : (
                     <div className="p-6 bg-muted/30 rounded-lg text-center text-sm text-muted-foreground">
-                      A vinculação de procedimentos SIGTAP está disponível para Fisioterapeutas e administradores.
+                      A vinculaÃ§Ã£o de procedimentos SIGTAP estÃ¡ disponÃ­vel para Fisioterapeutas e administradores.
                       <br />
                       <span className="text-xs mt-1 block">
                         Selecione especialidades e configure pelo perfil adequado.
@@ -1900,10 +1858,10 @@ const PTS: React.FC = () => {
                   )}
                 </TabsContent>
 
-                {/* TAB 5: Revisão e Configurações */}
+                {/* TAB 5: RevisÃ£o e ConfiguraÃ§Ãµes */}
                 <TabsContent value="revisao" className="mt-0 space-y-4 outline-none">
                   <div>
-                    <Label>Data da Próxima Revisão</Label>
+                    <Label>Data da PrÃ³xima RevisÃ£o</Label>
                     <Input
                       type="date"
                       value={form.data_proxima_revisao}
@@ -1926,20 +1884,14 @@ const PTS: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
-                        <p className="text-sm font-medium">Necessidade de Revisão</p>
-                        <p className="text-xs text-muted-foreground">
-                          Marcar PTS como necessitando revisão prioritária
-                        </p>
+                        <p className="text-sm font-medium">RevisÃ£o ObrigatÃ³ria</p>
+                        <p className="text-xs text-muted-foreground">MarcaÃ§Ã£o prioritÃ¡ria de acompanhamento</p>
                       </div>
-                      <Switch
-                        checked={form.necessidade_revisao || false}
-                        onCheckedChange={(v) => setForm((p) => ({ ...p, necessidade_revisao: v }))}
-                      />
                     </div>
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
-                        <p className="text-sm font-medium">Ciência da Família</p>
-                        <p className="text-xs text-muted-foreground">Família/responsável ciente do plano</p>
+                        <p className="text-sm font-medium">CiÃªncia da FamÃ­lia</p>
+                        <p className="text-xs text-muted-foreground">FamÃ­lia/responsÃ¡vel ciente do plano</p>
                       </div>
                       <Switch
                         checked={form.ciencia_familia}
@@ -1958,13 +1910,13 @@ const PTS: React.FC = () => {
             </Button>
             <Button onClick={handleSave} disabled={saving} className="gradient-primary text-primary-foreground">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-              {editingPts ? "Salvar Alterações" : "Criar PTS"}
+              {editingPts ? "Salvar AlteraÃ§Ãµes" : "Criar PTS"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ═══ META DIALOG ═══ */}
+      {/* â•â•â• META DIALOG â•â•â• */}
       <Dialog open={metaDialogOpen} onOpenChange={setMetaDialogOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -1972,11 +1924,11 @@ const PTS: React.FC = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Título da Meta *</Label>
+              <Label>TÃ­tulo da Meta *</Label>
               <Input
                 value={metaForm.titulo}
                 onChange={(e) => setMetaForm((p) => ({ ...p, titulo: e.target.value }))}
-                placeholder="Ex: Melhorar compreensão de comandos simples"
+                placeholder="Ex: Melhorar compreensÃ£o de comandos simples"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -2050,11 +2002,11 @@ const PTS: React.FC = () => {
               </div>
             </div>
             <div>
-              <Label>Profissional Responsável</Label>
+              <Label>Profissional ResponsÃ¡vel</Label>
               <Input
                 value={metaForm.responsavel || ""}
                 onChange={(e) => setMetaForm((p) => ({ ...p, responsavel: e.target.value }))}
-                placeholder="Nome do profissional responsável"
+                placeholder="Nome do profissional responsÃ¡vel"
               />
             </div>
             <div>
@@ -2074,7 +2026,7 @@ const PTS: React.FC = () => {
               />
             </div>
             <div>
-              <Label>Descrição</Label>
+              <Label>DescriÃ§Ã£o</Label>
               <Textarea
                 rows={2}
                 value={metaForm.descricao}
@@ -2083,7 +2035,7 @@ const PTS: React.FC = () => {
               />
             </div>
             <div>
-              <Label>Observações</Label>
+              <Label>ObservaÃ§Ãµes</Label>
               <Textarea
                 rows={2}
                 value={metaForm.obs || ""}
@@ -2100,7 +2052,7 @@ const PTS: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ═══ REVISÃO DIALOG ═══ */}
+      {/* â•â•â• REVISÃƒO DIALOG â•â•â• */}
       <Dialog
         open={revisaoOpen}
         onOpenChange={(v) => {
@@ -2112,7 +2064,7 @@ const PTS: React.FC = () => {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RefreshCw className="w-5 h-5 text-primary" /> Registrar Revisão do PTS
+              <RefreshCw className="w-5 h-5 text-primary" /> Registrar RevisÃ£o do PTS
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -2123,22 +2075,23 @@ const PTS: React.FC = () => {
                 </p>
                 {detailPts.data_ultima_revisao && (
                   <p className="text-xs text-muted-foreground">
-                    Última revisão: {new Date(detailPts.data_ultima_revisao + "T12:00:00").toLocaleDateString("pt-BR")}
+                    Ãšltima revisÃ£o:{" "}
+                    {new Date(detailPts.data_ultima_revisao + "T12:00:00").toLocaleDateString("pt-BR")}
                   </p>
                 )}
               </div>
             )}
             <div>
-              <Label>Observações da Revisão</Label>
+              <Label>ObservaÃ§Ãµes da RevisÃ£o</Label>
               <Textarea
                 rows={3}
                 value={revisaoForm.obs}
                 onChange={(e) => setRevisaoForm((p) => ({ ...p, obs: e.target.value }))}
-                placeholder="Descreva as alterações, progresso e decisões desta revisão..."
+                placeholder="Descreva as alteraÃ§Ãµes, progresso e decisÃµes desta revisÃ£o..."
               />
             </div>
             <div>
-              <Label>Próxima Revisão Prevista</Label>
+              <Label>PrÃ³xima RevisÃ£o Prevista</Label>
               <Input
                 type="date"
                 value={revisaoForm.data_proxima}
@@ -2167,13 +2120,13 @@ const PTS: React.FC = () => {
               >
                 Cancelar
               </Button>
-              <Button onClick={handleRevisao}>Registrar Revisão</Button>
+              <Button onClick={handleRevisao}>Registrar RevisÃ£o</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ═══ ALTA / ENCERRAMENTO DIALOG ═══ */}
+      {/* â•â•â• ALTA / ENCERRAMENTO DIALOG â•â•â• */}
       <Dialog
         open={altaOpen}
         onOpenChange={(v) => {
@@ -2198,7 +2151,7 @@ const PTS: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="encerrado">Encerrado</SelectItem>
-                  <SelectItem value="alta">Alta Terapêutica</SelectItem>
+                  <SelectItem value="alta">Alta TerapÃªutica</SelectItem>
                   <SelectItem value="suspenso">Suspenso</SelectItem>
                   <SelectItem value="transferido">Transferido</SelectItem>
                 </SelectContent>
@@ -2223,33 +2176,33 @@ const PTS: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>Resumo do Desfecho Clínico</Label>
+              <Label>Resumo do Desfecho ClÃ­nico</Label>
               <Textarea
                 rows={3}
                 value={altaForm.resumo_desfecho}
                 onChange={(e) => setAltaForm((p) => ({ ...p, resumo_desfecho: e.target.value }))}
-                placeholder="Descreva os resultados alcançados e o estado do paciente ao encerrar..."
+                placeholder="Descreva os resultados alcanÃ§ados e o estado do paciente ao encerrar..."
               />
             </div>
             <div>
-              <Label>Orientações Finais</Label>
+              <Label>OrientaÃ§Ãµes Finais</Label>
               <Textarea
                 rows={2}
                 value={altaForm.orientacoes_finais}
                 onChange={(e) => setAltaForm((p) => ({ ...p, orientacoes_finais: e.target.value }))}
-                placeholder="Orientações para continuidade do cuidado..."
+                placeholder="OrientaÃ§Ãµes para continuidade do cuidado..."
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm font-medium">Critério de alta atingido</p>
+                <p className="text-sm font-medium">CritÃ©rio de alta atingido</p>
                 <Switch
                   checked={altaForm.criterio_alta_atingido}
                   onCheckedChange={(v) => setAltaForm((p) => ({ ...p, criterio_alta_atingido: v }))}
                 />
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm font-medium">Ciência da família</p>
+                <p className="text-sm font-medium">CiÃªncia da famÃ­lia</p>
                 <Switch
                   checked={altaForm.ciencia_familia}
                   onCheckedChange={(v) => setAltaForm((p) => ({ ...p, ciencia_familia: v }))}
@@ -2272,7 +2225,7 @@ const PTS: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ═══ DETAIL DIALOG ═══ */}
+      {/* â•â•â• DETAIL DIALOG â•â•â• */}
       <Dialog
         open={!!detailPts && !revisaoOpen && !altaOpen}
         onOpenChange={(v) => {
@@ -2302,7 +2255,7 @@ const PTS: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-xs text-muted-foreground uppercase font-semibold block">Profissional</span>
-                      <p>{prof?.nome || "—"}</p>
+                      <p>{prof?.nome || "â€”"}</p>
                     </div>
                     <div>
                       <span className="text-xs text-muted-foreground uppercase font-semibold block">Status</span>
@@ -2326,7 +2279,7 @@ const PTS: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Revisão alert */}
+                  {/* RevisÃ£o alert */}
                   {detailPts.data_proxima_revisao && (
                     <div
                       className={cn(
@@ -2337,9 +2290,9 @@ const PTS: React.FC = () => {
                       )}
                     >
                       <Clock className="w-3.5 h-3.5 shrink-0" />
-                      Próxima revisão:{" "}
+                      PrÃ³xima revisÃ£o:{" "}
                       {new Date(detailPts.data_proxima_revisao + "T12:00:00").toLocaleDateString("pt-BR")}
-                      {isOverdueReview(detailPts) && " — VENCIDA"}
+                      {isOverdueReview(detailPts) && " â€” VENCIDA"}
                     </div>
                   )}
 
@@ -2375,11 +2328,11 @@ const PTS: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Diagnóstico */}
+                  {/* DiagnÃ³stico */}
                   {detailPts.diagnostico_funcional && (
                     <div>
                       <span className="text-xs text-muted-foreground uppercase font-semibold">
-                        Diagnóstico Funcional
+                        DiagnÃ³stico Funcional
                       </span>
                       <p className="mt-1 bg-muted/30 rounded p-2">{detailPts.diagnostico_funcional}</p>
                     </div>
@@ -2389,7 +2342,7 @@ const PTS: React.FC = () => {
                   {detailPts.objetivos_terapeuticos && (
                     <div>
                       <span className="text-xs text-muted-foreground uppercase font-semibold">
-                        Objetivos Terapêuticos
+                        Objetivos TerapÃªuticos
                       </span>
                       <p className="mt-1 bg-muted/30 rounded p-2">{detailPts.objetivos_terapeuticos}</p>
                     </div>
@@ -2414,7 +2367,7 @@ const PTS: React.FC = () => {
                                   {m.status}
                                 </Badge>
                               </div>
-                              {m.indicador && <p className="text-[11px] text-muted-foreground">📊 {m.indicador}</p>}
+                              {m.indicador && <p className="text-[11px] text-muted-foreground">ðŸ“Š {m.indicador}</p>}
                             </div>
                           </div>
                         ))}
@@ -2431,7 +2384,7 @@ const PTS: React.FC = () => {
                       <div className="flex flex-wrap gap-1">
                         {detailSigtap.map((s) => (
                           <Badge key={s.procedimento_codigo} variant="secondary" className="text-xs font-mono">
-                            {s.procedimento_codigo} — {s.procedimento_nome.slice(0, 30)}
+                            {s.procedimento_codigo} â€” {s.procedimento_nome.slice(0, 30)}
                           </Badge>
                         ))}
                       </div>
@@ -2479,7 +2432,7 @@ const PTS: React.FC = () => {
                           setRevisaoOpen(true);
                         }}
                       >
-                        <RefreshCw className="w-3.5 h-3.5 mr-1" /> Registrar Revisão
+                        <RefreshCw className="w-3.5 h-3.5 mr-1" /> Registrar RevisÃ£o
                       </Button>
                       {(!detailPts.status || detailPts.status === "ativo") && (
                         <Button
