@@ -244,6 +244,7 @@ const PTS: React.FC = () => {
     tipo_atendimento: [] as string[],
     rede_apoio_presente: false,
     acompanhamento_interdisciplinar: false,
+    ciencia_familia: false,
     motivo_encaminhamento: '',
     barreiras: '',
     potencialidades: '',
