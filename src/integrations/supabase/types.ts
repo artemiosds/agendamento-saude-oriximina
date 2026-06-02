@@ -2597,6 +2597,7 @@ export type Database = {
           ciencia_familia: boolean | null
           contextos_afetados: string[] | null
           created_at: string
+          criterio_alta_atingido: boolean | null
           criterios_alta: string | null
           custom_data: Json
           data_proxima_revisao: string | null
@@ -2614,8 +2615,11 @@ export type Database = {
           motivo_encaminhamento: string | null
           motivo_encerramento: string | null
           necessidade_interdisciplinar: boolean | null
+          necessidade_revisao: boolean | null
           num_sessoes_previsto: number | null
+          objetivo_geral: string | null
           objetivos_terapeuticos: string
+          obs_revisao: string | null
           observacao_revisao: string | null
           orientacoes_finais: string | null
           patient_id: string
@@ -2625,9 +2629,11 @@ export type Database = {
           professional_id: string
           recursos_necessarios: string | null
           rede_apoio: string | null
+          rede_apoio_presente: boolean | null
           resumo_desfecho: string | null
           revisao_obrigatoria: boolean | null
           status: string
+          status_final: string | null
           tipo_atendimento: string | null
           unit_id: string
           updated_at: string
@@ -2638,6 +2644,7 @@ export type Database = {
           ciencia_familia?: boolean | null
           contextos_afetados?: string[] | null
           created_at?: string
+          criterio_alta_atingido?: boolean | null
           criterios_alta?: string | null
           custom_data?: Json
           data_proxima_revisao?: string | null
@@ -2655,8 +2662,11 @@ export type Database = {
           motivo_encaminhamento?: string | null
           motivo_encerramento?: string | null
           necessidade_interdisciplinar?: boolean | null
+          necessidade_revisao?: boolean | null
           num_sessoes_previsto?: number | null
+          objetivo_geral?: string | null
           objetivos_terapeuticos?: string
+          obs_revisao?: string | null
           observacao_revisao?: string | null
           orientacoes_finais?: string | null
           patient_id: string
@@ -2666,9 +2676,11 @@ export type Database = {
           professional_id: string
           recursos_necessarios?: string | null
           rede_apoio?: string | null
+          rede_apoio_presente?: boolean | null
           resumo_desfecho?: string | null
           revisao_obrigatoria?: boolean | null
           status?: string
+          status_final?: string | null
           tipo_atendimento?: string | null
           unit_id?: string
           updated_at?: string
@@ -2679,6 +2691,7 @@ export type Database = {
           ciencia_familia?: boolean | null
           contextos_afetados?: string[] | null
           created_at?: string
+          criterio_alta_atingido?: boolean | null
           criterios_alta?: string | null
           custom_data?: Json
           data_proxima_revisao?: string | null
@@ -2696,8 +2709,11 @@ export type Database = {
           motivo_encaminhamento?: string | null
           motivo_encerramento?: string | null
           necessidade_interdisciplinar?: boolean | null
+          necessidade_revisao?: boolean | null
           num_sessoes_previsto?: number | null
+          objetivo_geral?: string | null
           objetivos_terapeuticos?: string
+          obs_revisao?: string | null
           observacao_revisao?: string | null
           orientacoes_finais?: string | null
           patient_id?: string
@@ -2707,9 +2723,11 @@ export type Database = {
           professional_id?: string
           recursos_necessarios?: string | null
           rede_apoio?: string | null
+          rede_apoio_presente?: boolean | null
           resumo_desfecho?: string | null
           revisao_obrigatoria?: boolean | null
           status?: string
+          status_final?: string | null
           tipo_atendimento?: string | null
           unit_id?: string
           updated_at?: string
