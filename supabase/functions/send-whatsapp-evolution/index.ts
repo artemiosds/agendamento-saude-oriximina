@@ -598,13 +598,13 @@ serve(async (req) => {
       unidadeNome = u?.nome || "";
     }
 
-    const message = buildMessage(tipo || "confirmacao", {
+    const message = await buildMessage(supabase, tipo || "confirmacao", {
       paciente_nome: paciente.nome || ag.paciente_nome,
       data_consulta: ag.data,
       hora_consulta: ag.hora,
       profissional: ag.profissional_nome,
       unidade: unidadeNome,
-    });
+    }, ag.unidade_id);
 
     const prioridade = tipo === "lembrete_2h" ? "alta" : tipo === "lembrete_24h" ? "media" : "media";
 
