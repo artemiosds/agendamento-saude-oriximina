@@ -439,7 +439,7 @@ serve(async (req) => {
           { status: 400, headers: corsHeaders },
         );
       }
-      const message = buildMessage("teste", { paciente_nome: "Teste" });
+      const message = await buildMessage(supabase, "teste", { paciente_nome: "Teste" }, "");
       const result = await sendEvolutionMessage(config, normalized, message);
       await supabase.from("notification_logs").insert({
         evento: "teste", canal: "whatsapp_evolution",
