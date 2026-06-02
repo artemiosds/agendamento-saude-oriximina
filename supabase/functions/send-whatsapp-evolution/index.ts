@@ -496,14 +496,14 @@ serve(async (req) => {
           { status: 200, headers: corsHeaders },
         );
       }
-      const message = buildMessage(tipo || "confirmacao", {
+      const message = await buildMessage(supabase, tipo || "confirmacao", {
         paciente_nome: paciente_nome_direto,
         data_consulta: dados_direto?.data_consulta || "",
         hora_consulta: dados_direto?.hora_consulta || "",
         profissional: dados_direto?.profissional || "",
         unidade: dados_direto?.unidade || "",
         observacoes: dados_direto?.observacoes || "",
-      });
+      }, unidadeId);
       const { id, error } = await enqueue(supabase, {
         paciente_id: "",
         paciente_nome: paciente_nome_direto,
