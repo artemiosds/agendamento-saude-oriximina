@@ -850,7 +850,7 @@ const PTS: React.FC = () => {
     const ptsId = detailPts?.id;
     if (!ptsId) return;
     try {
-      toast.success('PTS excluído com sucesso!');
+      const revisaoResult = await runPtsMutation('update', {
         obs_revisao: revisaoForm.obs,
         data_ultima_revisao: new Date().toISOString().split('T')[0],
         data_proxima_revisao: revisaoForm.data_proxima || null,
