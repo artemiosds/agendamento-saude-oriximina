@@ -94,11 +94,31 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function buildMessage(tipo: string, data: any): string {
+async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: string): Promise<string> {
   const footer = `\n_Secretaria Municipal de Saúde_`;
   const greeting = pick(GREETINGS);
   const emoji = pick(EMOJIS);
 
+  // Busca template customizado se existir
+  const { data: template } = await supabase
+    .from("whatsapp_templates")
+    .select("mensagem, ativo")
+    .eq("unidade_id", unidadeId || "")
+    .eq("tipo", tipo === "agendamento_criado" ? "confirmacao" : tipo)
+    .maybeSingle();
+
+  if (template?.ativo && template.mensagem) {
+    let msg = template.mensagem;
+    // Substitui variáveis
+    msg = msg.replace(/\{\{nome\}\}/g, data.paciente_nome || "");
+    msg = msg.replace(/\{\{unidade\}\}/g, data.unidade || "");
+    msg = msg.replace(/\{\{profissional\}\}/g, data.profissional || "");
+    msg = msg.replace(/\{\{data\}\}/g, data.data_consulta || "");
+    msg = msg.replace(/\{\{hora\}\}/g, data.hora_consulta || "");
+    return msg;
+  }
+
+  // Fallback para mensagens hardcoded
   switch (tipo) {
     case "confirmacao":
     case "agendamento_criado":
