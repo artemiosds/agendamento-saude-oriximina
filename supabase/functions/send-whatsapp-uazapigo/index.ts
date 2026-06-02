@@ -77,29 +77,31 @@ async function uazFetch(url: string, init: RequestInit): Promise<{ ok: boolean; 
  */
 async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string | null; error?: string }> {
   const instanceField = cfg.uazapi_instance;
-  
-  // Heurística: se o campo de instância tem mais de 20 caracteres e parece um token, use-o diretamente.
-  if (instanceField.length > 20 && /^[a-zA-Z0-9_-]+$/.test(instanceField)) {
-    return { token: instanceField };
-  }
+  if (instanceField.length > 20) return { token: instanceField };
 
   const base = normalizeUrl(cfg.uazapi_server_url);
   if (!base || !cfg.uazapi_admin_token) return { token: null, error: "Configuração incompleta" };
 
-  // Busca todas as instâncias para encontrar o token da instância pelo nome
-  const r = await uazFetch(`${base}/instance/all`, {
-    headers: { admintoken: cfg.uazapi_admin_token, Accept: "application/json" }
+  // Tenta com cabeçalho 'apikey' (muito comum)
+  let r = await uazFetch(`${base}/instance/all`, {
+    headers: { apikey: cfg.uazapi_admin_token, Accept: "application/json" }
   });
 
+  // Se falhar, tenta 'admintoken'
   if (!r.ok) {
-    // Tenta fallback com query string caso o servidor use esse formato
-    const r2 = await uazFetch(`${base}/instance/all?admintoken=${cfg.uazapi_admin_token}`, {
-      headers: { Accept: "application/json" }
+    r = await uazFetch(`${base}/instance/all`, {
+      headers: { admintoken: cfg.uazapi_admin_token, Accept: "application/json" }
     });
-    if (!r2.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status || r2.status}` };
-    return findTokenInList(r2.data, instanceField);
+  }
+  
+  // Se ainda falhar, tenta 'AdminToken'
+  if (!r.ok) {
+    r = await uazFetch(`${base}/instance/all`, {
+      headers: { AdminToken: cfg.uazapi_admin_token, Accept: "application/json" }
+    });
   }
 
+  if (!r.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}` };
   return findTokenInList(r.data, instanceField);
 }
 
