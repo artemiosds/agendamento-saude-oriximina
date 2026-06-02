@@ -77,29 +77,38 @@ async function uazFetch(url: string, init: RequestInit): Promise<{ ok: boolean; 
  */
 async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string | null; error?: string }> {
   const instanceField = cfg.uazapi_instance;
-  
-  // Heurística: se o campo de instância tem mais de 20 caracteres e parece um token, use-o diretamente.
-  if (instanceField.length > 20 && /^[a-zA-Z0-9_-]+$/.test(instanceField)) {
-    return { token: instanceField };
-  }
+  if (instanceField.length > 20) return { token: instanceField };
 
   const base = normalizeUrl(cfg.uazapi_server_url);
   if (!base || !cfg.uazapi_admin_token) return { token: null, error: "Configuração incompleta" };
 
-  // Busca todas as instâncias para encontrar o token da instância pelo nome
-  const r = await uazFetch(`${base}/instance/all`, {
-    headers: { admintoken: cfg.uazapi_admin_token, Accept: "application/json" }
+  // Tenta com cabeçalho 'apikey' (muito comum em clones de Evolution/Uazapi)
+  let r = await uazFetch(`${base}/instance/all`, {
+    headers: { apikey: cfg.uazapi_admin_token, Accept: "application/json" }
   });
 
+  // Se falhar, tenta 'admintoken' (padrão documentado UazapiGO)
   if (!r.ok) {
-    // Tenta fallback com query string caso o servidor use esse formato
-    const r2 = await uazFetch(`${base}/instance/all?admintoken=${cfg.uazapi_admin_token}`, {
+    r = await uazFetch(`${base}/instance/all`, {
+      headers: { admintoken: cfg.uazapi_admin_token, Accept: "application/json" }
+    });
+  }
+  
+  // Se falhar, tenta passar via Query Params (alguns servidores requerem isso)
+  if (!r.ok) {
+    r = await uazFetch(`${base}/instance/all?admintoken=${cfg.uazapi_admin_token}`, {
       headers: { Accept: "application/json" }
     });
-    if (!r2.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status || r2.status}` };
-    return findTokenInList(r2.data, instanceField);
   }
 
+  // Se ainda falhar, tenta 'AdminToken' (Case sensitive)
+  if (!r.ok) {
+    r = await uazFetch(`${base}/instance/all`, {
+      headers: { AdminToken: cfg.uazapi_admin_token, Accept: "application/json" }
+    });
+  }
+
+  if (!r.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}. Verifique se o Admin Token está correto.` };
   return findTokenInList(r.data, instanceField);
 }
 
@@ -124,9 +133,25 @@ function findTokenInList(data: any, instanceName: string): { token: string | nul
 
 async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string; raw?: any; error?: string }> {
   const base = normalizeUrl(cfg.uazapi_server_url);
+  
+  // Tenta resolver token
   const { token, error: tokenError } = await resolveInstanceToken(cfg);
   
-  if (tokenError) return { status_detailed: "error", error: tokenError };
+  if (tokenError) {
+    // Se falhar com 401 no /instance/all, talvez possamos tentar o status direto com a instância se ela for um token
+    if (tokenError.includes("401")) {
+      // Tenta usar o campo uazapi_instance como token diretamente (fallback desesperado)
+      if (cfg.uazapi_instance.length > 20) {
+        let rDirect = await uazFetch(`${base}/instance/status`, {
+          headers: { token: cfg.uazapi_instance, Accept: "application/json" }
+        });
+        if (rDirect.ok) {
+          return mapStatus(rDirect.data);
+        }
+      }
+    }
+    return { status_detailed: "error", error: tokenError };
+  }
 
   // Tenta GET /instance/status primeiro (padrão UazapiGO)
   let r = await uazFetch(`${base}/instance/status`, {
@@ -142,8 +167,12 @@ async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string
 
   if (!r.ok) return { status_detailed: "error", error: `Erro status: HTTP ${r.status}`, raw: r.data };
 
+  return mapStatus(r.data);
+}
+
+function mapStatus(data: any) {
   const state = String(
-    r.data?.instance?.state || r.data?.state || r.data?.status || r.data?.connection || r.data?.state_connection || ""
+    data?.instance?.state || data?.state || data?.status || data?.connection || data?.state_connection || ""
   ).toLowerCase();
 
   let status_detailed = "disconnected";
@@ -151,7 +180,7 @@ async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string
   else if (["connecting", "syncing", "conectando"].includes(state)) status_detailed = "connecting";
   else if (["qrcode", "qr", "pairing"].includes(state)) status_detailed = "qrcode";
 
-  return { status_detailed, raw: r.data, error: status_detailed === "connected" ? undefined : `Status: ${state || "desconhecido"}` };
+  return { status_detailed, raw: data, error: status_detailed === "connected" ? undefined : `Status: ${state || "desconhecido"}` };
 }
 
 async function sendText(cfg: UazapiConfig, phone: string, message: string) {
