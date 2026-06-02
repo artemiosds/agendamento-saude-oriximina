@@ -446,7 +446,7 @@ const ConfigWhatsApp: React.FC = () => {
     setLogsLoading(true);
     try {
       let query = supabase.from('notification_logs').select('*')
-        .eq('canal', 'whatsapp_evolution')
+        .in('canal', ['whatsapp_evolution', 'whatsapp_uazapigo'])
         .order('criado_em', { ascending: false })
         .limit(100);
       if (logsFilter !== 'todos') query = query.eq('status', logsFilter);
