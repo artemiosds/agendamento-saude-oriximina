@@ -656,7 +656,7 @@ const PTS: React.FC = () => {
       barreiras: pts.barreiras || '',
       potencialidades: pts.potencialidades || '',
       objetivo_geral: pts.objetivo_geral || '',
-      prioridade: pts.prioridade || 'Média',
+      plano_conduta: pts.plano_conduta || '',
       data_proxima_revisao: pts.data_proxima_revisao || suggestReviewDate(30),
     });
     const [{ sigtap, cids }, metasData] = await Promise.all([
