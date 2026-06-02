@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Pencil, Save, X, Lock, Search, User, CreditCard, Heart, Activity,
   FileText, Stethoscope, MapPin, Users, Phone, Mail, AlertCircle, ChevronDown, ChevronUp,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -344,19 +345,30 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                     <span className="text-xs text-red-700">{paciente.total_faltas || 0} falta(s) registrada(s)</span>
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {paciente.data_nascimento
-                    ? `${new Date(paciente.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR")} · ${idade}`
-                    : "Data de nascimento não informada"}
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {paciente.data_nascimento ? (
+                    <>
+                      <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/15 px-2.5 py-0.5 h-auto text-[11px] font-semibold">
+                        <Users className="w-3 h-3 mr-1" /> {idade}
+                      </Badge>
+                      <Badge variant="outline" className="text-muted-foreground border-border/60 bg-muted/30 px-2.5 py-0.5 h-auto text-[11px] font-medium">
+                        <Calendar className="w-3 h-3 mr-1" /> Nasc: {new Date(paciente.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR")}
+                      </Badge>
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground italic">Data de nascimento não informada</span>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Compact info grid (always visible) */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <InfoField icon={<Users className="w-3.5 h-3.5 text-primary" />} label="Idade do Paciente" value={idade} highlight />
+              <InfoField icon={<Calendar className="w-3.5 h-3.5 text-primary" />} label="Data de nascimento" value={paciente.data_nascimento ? new Date(paciente.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"} highlight />
+              <InfoField icon={<Activity className="w-3.5 h-3.5" />} label="CID-10" value={cidDisplay} />
               <InfoField icon={<CreditCard className="w-3.5 h-3.5" />} label="Cartão SUS (CNS)" value={formatCNS(paciente.cns) || "—"} mono />
               <InfoField icon={<CreditCard className="w-3.5 h-3.5" />} label="CPF" value={paciente.cpf || "—"} mono />
-              <InfoField icon={<Activity className="w-3.5 h-3.5" />} label="CID-10" value={cidDisplay} />
               <InfoField icon={<Stethoscope className="w-3.5 h-3.5" />} label="Profissional responsável" value={profissionalNome || "—"} />
             </div>
 
@@ -769,12 +781,12 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
 
 /* ── Sub-components ── */
 
-const InfoField = ({ icon, label, value, mono }: { icon: React.ReactNode; label: string; value: string; mono?: boolean }) => (
-  <div className="flex items-start gap-2.5 rounded-lg bg-muted/30 px-3 py-2.5 border border-border/30">
-    <div className="text-muted-foreground mt-0.5 flex-shrink-0">{icon}</div>
+const InfoField = ({ icon, label, value, mono, highlight }: { icon: React.ReactNode; label: string; value: string; mono?: boolean; highlight?: boolean }) => (
+  <div className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 border ${highlight ? "bg-primary/5 border-primary/20 shadow-sm" : "bg-muted/30 border-border/30"}`}>
+    <div className={`${highlight ? "text-primary" : "text-muted-foreground"} mt-0.5 flex-shrink-0`}>{icon}</div>
     <div className="min-w-0 flex-1">
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium leading-none mb-1">{label}</p>
-      <p className={`text-sm text-foreground leading-tight truncate ${mono ? "font-mono" : "font-medium"}`} title={value}>{value}</p>
+      <p className={`text-[10px] uppercase tracking-wider font-bold leading-none mb-1 ${highlight ? "text-primary/80" : "text-muted-foreground"}`}>{label}</p>
+      <p className={`text-sm leading-tight truncate ${mono ? "font-mono" : "font-semibold"} ${highlight ? "text-foreground" : "text-foreground"}`} title={value}>{value}</p>
     </div>
   </div>
 );
