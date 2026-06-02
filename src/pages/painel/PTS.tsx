@@ -244,6 +244,7 @@ const PTS: React.FC = () => {
     tipo_atendimento: [] as string[],
     rede_apoio_presente: false,
     acompanhamento_interdisciplinar: false,
+    ciencia_familia: false,
     motivo_encaminhamento: '',
     barreiras: '',
     potencialidades: '',
@@ -655,7 +656,7 @@ const PTS: React.FC = () => {
       barreiras: pts.barreiras || '',
       potencialidades: pts.potencialidades || '',
       objetivo_geral: pts.objetivo_geral || '',
-      prioridade: pts.prioridade || 'Média',
+      plano_conduta: pts.plano_conduta || '',
       data_proxima_revisao: pts.data_proxima_revisao || suggestReviewDate(30),
     });
     const [{ sigtap, cids }, metasData] = await Promise.all([
@@ -804,7 +805,6 @@ const PTS: React.FC = () => {
         detalhes: {
           paciente_nome: form.patient_name,
           especialidades: form.especialidades_envolvidas,
-            indicador: m.indicador || '', prioridade: m.prioridade || 'Média', obs: m.obs || '',
           cid_count: finalCids.length,
           metas_count: metas.length,
         },
@@ -825,7 +825,7 @@ const PTS: React.FC = () => {
       toast.error('Erro ao salvar: ' + (err?.message || 'Erro desconhecido'));
     }
     setSaving(false);
-      toast.success(editingPts ? 'PTS atualizado com sucesso!' : 'PTS criado e registrado no prontuário!');
+  };
 
   const handleDelete = async (pts: PTSRecord) => {
     if (!window.confirm(`Tem certeza que deseja excluir o PTS de ${pacientes.find(p => p.id === pts.patient_id)?.nome || pts.patient_id}?`)) return;
@@ -851,7 +851,7 @@ const PTS: React.FC = () => {
     const ptsId = detailPts?.id;
     if (!ptsId) return;
     try {
-      toast.success('PTS excluído com sucesso!');
+      const revisaoResult = await runPtsMutation('update', {
         obs_revisao: revisaoForm.obs,
         data_ultima_revisao: new Date().toISOString().split('T')[0],
         data_proxima_revisao: revisaoForm.data_proxima || null,
