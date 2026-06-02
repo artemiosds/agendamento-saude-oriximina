@@ -804,7 +804,6 @@ const PTS: React.FC = () => {
         detalhes: {
           paciente_nome: form.patient_name,
           especialidades: form.especialidades_envolvidas,
-            indicador: m.indicador || '', prioridade: m.prioridade || 'Média', obs: m.obs || '',
           cid_count: finalCids.length,
           metas_count: metas.length,
         },
