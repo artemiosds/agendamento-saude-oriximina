@@ -423,13 +423,23 @@ const ConfigWhatsApp: React.FC = () => {
     if (!testPhone) { toast.error('Informe o número para teste.'); return; }
     setEvolutionTesting(true);
     try {
-      const { data, error } = await whatsappService.sendTest(testPhone);
+      const service = activeProvider === 'uazapigo' ? uazapigoService : whatsappService;
+      const { data, error } = await service.sendTest(testPhone);
       if (error) throw error;
       if (data?.success) {
         toast.success('Mensagem de teste enviada!');
-        setEvolutionStatus('connected');
-      } else { toast.error(data?.error || 'Erro ao enviar'); setEvolutionStatus('error'); }
-    } catch (err: any) { toast.error(`Erro: ${err.message}`); setEvolutionStatus('error'); }
+        if (activeProvider === 'evolution') setEvolutionStatus('connected');
+        else setUazStatus('connected');
+      } else { 
+        toast.error(data?.error || 'Erro ao enviar'); 
+        if (activeProvider === 'evolution') setEvolutionStatus('error');
+        else setUazStatus('error');
+      }
+    } catch (err: any) { 
+      toast.error(`Erro: ${err.message}`); 
+      if (activeProvider === 'evolution') setEvolutionStatus('error');
+      else setUazStatus('error');
+    }
     setEvolutionTesting(false);
   };
 
@@ -490,13 +500,12 @@ const ConfigWhatsApp: React.FC = () => {
         uazapi_admin_token: tokenToSave,
         uazapi_instance: uazConfig.uazapi_instance || '',
         uazapi_ativo: uazConfig.uazapi_ativo,
+        updated_at: new Date().toISOString()
       };
-      if (evolutionConfigId) {
-        await supabase.from('clinica_config').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', evolutionConfigId);
-      } else {
-        const { data } = await supabase.from('clinica_config').insert(payload).select('id').single();
-        if (data) setEvolutionConfigId(data.id);
-      }
+      
+      const { error } = await supabase.from('clinica_config').update(payload).eq('id', evolutionConfigId || '00000000-0000-0000-0000-000000000000');
+      if (error) throw error;
+      
       setOriginalUazToken(tokenToSave);
       setUazTokenMasked(true);
       toast.success('Configuração UazapiGO salva.');
