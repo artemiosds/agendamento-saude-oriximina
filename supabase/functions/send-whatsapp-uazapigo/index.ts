@@ -1,8 +1,9 @@
 // Edge Function: send-whatsapp-uazapigo
-// UazapiGO API (https://docs.uazapi.com):
-//   GET  {server}/instance/connectionState/{instance}   headers: apikey: <token>
-//   POST {server}/message/sendText/{instance}           headers: apikey: <token>   body: { number, text }
-//   POST {server}/instance/init                         headers: apikey: <admin>   body: { name }
+// UazapiGO API (v2.0):
+//   GET  /instance/all        headers: admintoken: <admin_token>
+//   GET  /instance/status     headers: token: <instance_token>
+//   POST /send/text           headers: token: <instance_token>   body: { number, text }
+//   POST /instance/init       headers: admintoken: <admin_token> body: { name }
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
@@ -10,7 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, token, admintoken, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Content-Type": "application/json",
 };
 
@@ -32,18 +33,11 @@ function normalizeUrl(raw: string): string {
 function normalizePhone(raw: string): string | null {
   let digits = (raw || "").replace(/\D/g, "");
   if (!digits) return null;
-  
-  // Remove zero à esquerda
   if (digits.startsWith("0")) digits = digits.slice(1);
-  
-  // Formata para padrão internacional (55 + DDD + Numero)
   if (digits.length === 10 || digits.length === 11) {
     if (!digits.startsWith("55")) digits = "55" + digits;
   }
-  
-  // Validação básica de tamanho (Brasil = 13 dígitos com 55 + DDD + 9 dígitos)
   if (digits.length < 12) return null;
-  
   return digits;
 }
 
@@ -54,7 +48,6 @@ async function getConfig(supabase: any): Promise<UazapiConfig | null> {
     .limit(1)
     .maybeSingle();
   if (!data) return null;
-  
   return {
     uazapi_server_url: (data.uazapi_server_url || "").trim(),
     uazapi_admin_token: (data.uazapi_admin_token || "").trim(),
@@ -67,73 +60,122 @@ async function uazFetch(url: string, init: RequestInit): Promise<{ ok: boolean; 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
-    
     const resp = await fetch(url, { ...init, signal: controller.signal });
     clearTimeout(timeout);
-    
     const text = await resp.text();
     let data: any = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
     return { ok: resp.ok, status: resp.status, data };
   } catch (e: any) {
-    return { ok: false, status: 0, data: null, error: e?.name === 'AbortError' ? "Tempo de resposta excedido" : (e?.message || "Erro de rede") };
+    return { ok: false, status: 0, data: null, error: e?.name === 'AbortError' ? "Timeout" : (e?.message || "Network error") };
   }
+}
+
+/** 
+ * Resolve o token da instância usando o Admin Token. 
+ * Se o campo 'instance' já parecer um token (longo e com caracteres aleatórios), retorna ele mesmo.
+ */
+async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string | null; error?: string }> {
+  const instanceField = cfg.uazapi_instance;
+  
+  // Heurística: se o campo de instância tem mais de 20 caracteres e parece um token, use-o diretamente.
+  if (instanceField.length > 20 && /^[a-zA-Z0-9_-]+$/.test(instanceField)) {
+    return { token: instanceField };
+  }
+
+  const base = normalizeUrl(cfg.uazapi_server_url);
+  if (!base || !cfg.uazapi_admin_token) return { token: null, error: "Configuração incompleta" };
+
+  // Busca todas as instâncias para encontrar o token da instância pelo nome
+  const r = await uazFetch(`${base}/instance/all`, {
+    headers: { admintoken: cfg.uazapi_admin_token, Accept: "application/json" }
+  });
+
+  if (!r.ok) {
+    // Tenta fallback com query string caso o servidor use esse formato
+    const r2 = await uazFetch(`${base}/instance/all?admintoken=${cfg.uazapi_admin_token}`, {
+      headers: { Accept: "application/json" }
+    });
+    if (!r2.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status || r2.status}` };
+    return findTokenInList(r2.data, instanceField);
+  }
+
+  return findTokenInList(r.data, instanceField);
+}
+
+function findTokenInList(data: any, instanceName: string): { token: string | null; error?: string } {
+  const list = Array.isArray(data) ? data : (data?.instances || data?.data || []);
+  if (!Array.isArray(list)) return { token: null, error: "Formato de lista de instâncias inválido" };
+
+  const found = list.find((i: any) => 
+    String(i.name || "").toLowerCase() === instanceName.toLowerCase() || 
+    String(i.instanceName || "").toLowerCase() === instanceName.toLowerCase() ||
+    String(i.id || "") === instanceName ||
+    String(i.instanceId || "") === instanceName
+  );
+
+  if (!found) return { token: null, error: `Instância "${instanceName}" não encontrada` };
+  
+  const token = found.token || found.instanceToken || found.apiKey || found.tokenInstance;
+  if (!token) return { token: null, error: "Token da instância não encontrado na resposta" };
+  
+  return { token };
 }
 
 async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string; raw?: any; error?: string }> {
   const base = normalizeUrl(cfg.uazapi_server_url);
-  if (!base) return { status_detailed: "server_url_invalida", error: "Server URL não configurado" };
-  if (!cfg.uazapi_admin_token) return { status_detailed: "admin_token_ausente", error: "Token não configurado" };
-  if (!cfg.uazapi_instance) return { status_detailed: "instancia_inexistente", error: "Instância não configurada" };
+  const { token, error: tokenError } = await resolveInstanceToken(cfg);
+  
+  if (tokenError) return { status_detailed: "error", error: tokenError };
 
-  const url = `${base}/instance/connectionState/${encodeURIComponent(cfg.uazapi_instance)}`;
-  const r = await uazFetch(url, {
-    method: "GET",
-    headers: { apikey: cfg.uazapi_admin_token, Accept: "application/json" },
+  // Tenta GET /instance/status primeiro (padrão UazapiGO)
+  let r = await uazFetch(`${base}/instance/status`, {
+    headers: { token: token!, Accept: "application/json" }
   });
 
-  if (r.error) return { status_detailed: "erro", error: r.error };
-  if (r.status === 401 || r.status === 403) return { status_detailed: "error", error: "Token inválido (401/403)", raw: r.data };
-  if (r.status === 404) return { status_detailed: "disconnected", error: "Instância não encontrada (404)", raw: r.data };
-  if (!r.ok) return { status_detailed: "error", error: `Erro na API: HTTP ${r.status}`, raw: r.data };
+  // Se der 404 ou 405, tenta o padrão Evolution (alguns clones de Uazapi usam isso)
+  if (r.status === 404 || r.status === 405) {
+    r = await uazFetch(`${base}/instance/connectionState/${encodeURIComponent(cfg.uazapi_instance)}`, {
+      headers: { apikey: cfg.uazapi_admin_token, Accept: "application/json" }
+    });
+  }
+
+  if (!r.ok) return { status_detailed: "error", error: `Erro status: HTTP ${r.status}`, raw: r.data };
 
   const state = String(
-    r.data?.instance?.state || r.data?.state || r.data?.status || r.data?.connection || ""
+    r.data?.instance?.state || r.data?.state || r.data?.status || r.data?.connection || r.data?.state_connection || ""
   ).toLowerCase();
 
   let status_detailed = "disconnected";
-  if (["open", "connected", "online", "ready"].includes(state)) status_detailed = "connected";
-  else if (["connecting", "syncing"].includes(state)) status_detailed = "connecting";
+  if (["open", "connected", "online", "ready", "conectado"].includes(state)) status_detailed = "connected";
+  else if (["connecting", "syncing", "conectando"].includes(state)) status_detailed = "connecting";
   else if (["qrcode", "qr", "pairing"].includes(state)) status_detailed = "qrcode";
-  else if (["disconnected", "close", "closed", "logged_out"].includes(state)) status_detailed = "disconnected";
 
   return { status_detailed, raw: r.data, error: status_detailed === "connected" ? undefined : `Status: ${state || "desconhecido"}` };
 }
 
-async function persistStatus(supabase: any, instance: string, status_detailed: string, error?: string, raw?: any) {
-  const now = new Date().toISOString();
-  const patch: any = {
-    instance_name: `uazapi:${instance}`,
-    status: status_detailed,
-    last_check_at: now,
-    last_error: error || "",
-    details: { provider: "uazapigo", raw: raw ?? null },
-  };
-  if (status_detailed === "connected") patch.last_connected_at = now;
-  if (status_detailed === "disconnected") patch.last_disconnected_at = now;
-  if (error) patch.last_error_at = now;
-
-  await supabase.from("whatsapp_connection_status").upsert(patch, { onConflict: "instance_name" });
-}
-
 async function sendText(cfg: UazapiConfig, phone: string, message: string) {
   const base = normalizeUrl(cfg.uazapi_server_url);
-  const url = `${base}/message/sendText/${encodeURIComponent(cfg.uazapi_instance)}`;
-  const r = await uazFetch(url, {
+  const { token, error: tokenError } = await resolveInstanceToken(cfg);
+  
+  if (tokenError) return { ok: false, status: 400, data: { error: tokenError } };
+
+  // UazapiGO v2 usa POST /send/text com header token
+  let r = await uazFetch(`${base}/send/text`, {
     method: "POST",
-    headers: { apikey: cfg.uazapi_admin_token, "Content-Type": "application/json", Accept: "application/json" },
+    headers: { token: token!, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ number: phone, text: message }),
   });
+
+  // Se der 404 ou 405, tenta o formato Evolution como fallback
+  if (r.status === 404 || r.status === 405) {
+    r = await uazFetch(`${base}/message/sendText/${encodeURIComponent(cfg.uazapi_instance)}`, {
+      method: "POST",
+      headers: { apikey: cfg.uazapi_admin_token, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ number: phone, text: message }),
+    });
+  }
+
   return r;
 }
 
@@ -150,12 +192,21 @@ serve(async (req) => {
   const action = body.action || "send";
 
   const cfg = await getConfig(supabase);
-  if (!cfg) return jsonResponse({ success: false, error: "Configuração de clínica não encontrada" }, 200);
+  if (!cfg) return jsonResponse({ success: false, error: "Configuração não encontrada" }, 200);
 
   // ─── STATUS ───
   if (action === "status") {
     const res = await checkStatus(cfg);
-    await persistStatus(supabase, cfg.uazapi_instance || "sem_instancia", res.status_detailed, res.error, res.raw);
+    // Persiste status
+    const now = new Date().toISOString();
+    await supabase.from("whatsapp_connection_status").upsert({
+      instance_name: `uazapi:${cfg.uazapi_instance}`,
+      status: res.status_detailed,
+      last_check_at: now,
+      last_error: res.error || "",
+      details: { provider: "uazapigo", raw: res.raw }
+    }, { onConflict: "instance_name" });
+
     return jsonResponse({
       success: res.status_detailed === "connected",
       connected: res.status_detailed === "connected",
@@ -168,37 +219,28 @@ serve(async (req) => {
   // ─── CREATE INSTANCE ───
   if (action === "create_instance") {
     const name = String(body.name || "").trim();
-    if (!name) return jsonResponse({ success: false, error: "Nome da instância é obrigatório" });
-    
+    if (!name) return jsonResponse({ success: false, error: "Nome obrigatório" });
     const base = normalizeUrl(cfg.uazapi_server_url);
     const r = await uazFetch(`${base}/instance/init`, {
       method: "POST",
-      headers: { apikey: cfg.uazapi_admin_token, "Content-Type": "application/json" },
+      headers: { admintoken: cfg.uazapi_admin_token, "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
-    
     if (r.ok) {
        await supabase.from("clinica_config").update({ uazapi_instance: name, updated_at: new Date().toISOString() }).neq("id", "00000000-0000-0000-0000-000000000000");
        return jsonResponse({ success: true, instance: { name } });
     }
-    return jsonResponse({ success: false, error: r.error || r.data?.message || "Erro ao criar instância" });
+    return jsonResponse({ success: false, error: r.data?.message || r.error || "Erro ao criar" });
   }
 
   // ─── SEND ───
   const phoneRaw = body.telefone_teste || body.telefone_direto || body.telefone || "";
   const phone = normalizePhone(phoneRaw);
-  if (!phone) return jsonResponse({ success: false, error: "Telefone inválido ou incompleto" });
+  if (!phone) return jsonResponse({ success: false, error: "Telefone inválido" });
 
-  const message: string = body.mensagem || `Teste de conexão WhatsApp (UazapiGO).`;
-
+  const message: string = body.mensagem || `Teste UazapiGO.`;
   const r = await sendText(cfg, phone, message);
   const success = r.ok && (r.data?.status === "success" || r.data?.success === true || !!r.data?.id || !!r.data?.key?.id);
-
-  if (success) {
-    await supabase.from("whatsapp_connection_status").update({
-      last_success_send_at: new Date().toISOString(),
-    }).eq("instance_name", `uazapi:${cfg.uazapi_instance}`);
-  }
 
   // Log
   await supabase.from("notification_logs").insert({
@@ -209,7 +251,7 @@ serve(async (req) => {
     payload: { instance: cfg.uazapi_instance, mensagem: message },
     status: success ? "enviado" : "erro",
     erro: success ? "" : (r.data?.message || r.data?.error || `HTTP ${r.status}`),
-    resposta: success ? "ok" : JSON.stringify(r.data || {}).slice(0, 500),
+    resposta: JSON.stringify(r.data || {}).slice(0, 500),
     agendamento_id: body.agendamento_id || null,
   });
 
