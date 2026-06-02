@@ -824,7 +824,7 @@ const PTS: React.FC = () => {
       toast.error('Erro ao salvar: ' + (err?.message || 'Erro desconhecido'));
     }
     setSaving(false);
-      toast.success(editingPts ? 'PTS atualizado com sucesso!' : 'PTS criado e registrado no prontuário!');
+  };
 
   const handleDelete = async (pts: PTSRecord) => {
     if (!window.confirm(`Tem certeza que deseja excluir o PTS de ${pacientes.find(p => p.id === pts.patient_id)?.nome || pts.patient_id}?`)) return;
