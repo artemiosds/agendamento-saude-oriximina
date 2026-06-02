@@ -82,26 +82,33 @@ async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string 
   const base = normalizeUrl(cfg.uazapi_server_url);
   if (!base || !cfg.uazapi_admin_token) return { token: null, error: "Configuração incompleta" };
 
-  // Tenta com cabeçalho 'apikey' (muito comum)
+  // Tenta com cabeçalho 'apikey' (muito comum em clones de Evolution/Uazapi)
   let r = await uazFetch(`${base}/instance/all`, {
     headers: { apikey: cfg.uazapi_admin_token, Accept: "application/json" }
   });
 
-  // Se falhar, tenta 'admintoken'
+  // Se falhar, tenta 'admintoken' (padrão documentado UazapiGO)
   if (!r.ok) {
     r = await uazFetch(`${base}/instance/all`, {
       headers: { admintoken: cfg.uazapi_admin_token, Accept: "application/json" }
     });
   }
   
-  // Se ainda falhar, tenta 'AdminToken'
+  // Se falhar, tenta passar via Query Params (alguns servidores requerem isso)
+  if (!r.ok) {
+    r = await uazFetch(`${base}/instance/all?admintoken=${cfg.uazapi_admin_token}`, {
+      headers: { Accept: "application/json" }
+    });
+  }
+
+  // Se ainda falhar, tenta 'AdminToken' (Case sensitive)
   if (!r.ok) {
     r = await uazFetch(`${base}/instance/all`, {
       headers: { AdminToken: cfg.uazapi_admin_token, Accept: "application/json" }
     });
   }
 
-  if (!r.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}` };
+  if (!r.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}. Verifique se o Admin Token está correto.` };
   return findTokenInList(r.data, instanceField);
 }
 
