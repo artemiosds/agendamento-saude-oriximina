@@ -142,6 +142,7 @@ function mapStatus(data: any) {
 }
 
 async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: string): Promise<string> {
+  // Busca template customizado se existir
   const { data: template } = await supabase
     .from("whatsapp_templates")
     .select("mensagem, ativo")
@@ -151,6 +152,7 @@ async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: s
 
   if (template?.ativo && template.mensagem) {
     let msg = template.mensagem;
+    // Substitui variáveis
     msg = msg.replace(/\{\{nome\}\}/g, data.paciente_nome || "");
     msg = msg.replace(/\{\{unidade\}\}/g, data.unidade || "");
     msg = msg.replace(/\{\{profissional\}\}/g, data.profissional || "");
@@ -159,6 +161,7 @@ async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: s
     return msg;
   }
 
+  // Fallback se não tiver template ativo
   return `Olá, ${data.paciente_nome}. Seu atendimento está agendado em ${data.unidade} com ${data.profissional} no dia ${data.data_consulta} às ${data.hora_consulta}.`;
 }
 
@@ -201,7 +204,6 @@ serve(async (req) => {
   // ─── STATUS ───
   if (action === "status") {
     const res = await checkStatus(cfg);
-    // Persiste status
     const now = new Date().toISOString();
     await supabase.from("whatsapp_connection_status").upsert({
       instance_name: `uazapi:${cfg.uazapi_instance}`,
@@ -242,11 +244,38 @@ serve(async (req) => {
   const phone = normalizePhone(phoneRaw);
   if (!phone) return jsonResponse({ success: false, error: "Telefone inválido" });
 
-  const message: string = body.mensagem || `Teste UazapiGO.`;
+  // Resolve agendamento se ID presente para pegar unidade_id
+  let unidadeId = "";
+  let pacienteNome = body.paciente_nome_direto || "";
+  let dataConsulta = body.dados_direto?.data_consulta || "";
+  let horaConsulta = body.dados_direto?.hora_consulta || "";
+  let profissional = body.dados_direto?.profissional || "";
+  let unidade = body.dados_direto?.unidade || "";
+
+  if (body.agendamento_id) {
+    const { data: ag } = await supabase.from("agendamentos").select("unidade_id, data, hora, profissional_nome, paciente_nome").eq("id", body.agendamento_id).maybeSingle();
+    if (ag) {
+      unidadeId = ag.unidade_id;
+      dataConsulta = ag.data;
+      horaConsulta = ag.hora;
+      profissional = ag.profissional_nome;
+      pacienteNome = ag.paciente_nome;
+      const { data: u } = await supabase.from("unidades").select("nome").eq("id", unidadeId).maybeSingle();
+      unidade = u?.nome || "";
+    }
+  }
+
+  const message = body.mensagem || await buildMessage(supabase, body.tipo || "confirmacao", {
+    paciente_nome: pacienteNome,
+    unidade,
+    profissional,
+    data_consulta: dataConsulta,
+    hora_consulta: horaConsulta
+  }, unidadeId);
+
   const r = await sendText(cfg, phone, message);
   const success = r.ok && (r.data?.status === "success" || r.data?.success === true || !!r.data?.id || !!r.data?.key?.id);
 
-  // Log
   await supabase.from("notification_logs").insert({
     canal: "whatsapp_uazapigo",
     provider: "uazapigo",
