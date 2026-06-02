@@ -7,7 +7,12 @@ interface InvokeResult<T = any> {
 
 async function invokeWhatsApp<T = any>(body: Record<string, unknown>): Promise<InvokeResult<T>> {
   try {
-    const { data, error } = await supabase.functions.invoke('send-whatsapp-evolution', { body });
+    // Verifica qual provedor está ativo no clinica_config
+    const { data: config } = await supabase.from('clinica_config').select('whatsapp_provider_active').limit(1).maybeSingle();
+    const activeProvider = (config as any)?.whatsapp_provider_active || 'evolution';
+    const functionName = activeProvider === 'uazapigo' ? 'send-whatsapp-uazapigo' : 'send-whatsapp-evolution';
+
+    const { data, error } = await supabase.functions.invoke(functionName, { body });
     if (error) console.error('[WhatsApp] Erro:', error);
     return { data: (data as T) ?? null, error };
   } catch (err) {

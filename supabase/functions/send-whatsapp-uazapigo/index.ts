@@ -162,7 +162,32 @@ async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: s
   }
 
   // Fallback se não tiver template ativo
-  return `Olá, ${data.paciente_nome}. Seu atendimento está agendado em ${data.unidade} com ${data.profissional} no dia ${data.data_consulta} às ${data.hora_consulta}.`;
+  const greeting = "Olá";
+  const footer = `\n_Secretaria Municipal de Saúde_`;
+  
+  switch (tipo) {
+    case "confirmacao":
+    case "agendamento_criado":
+      return `${greeting}, *${data.paciente_nome}*!\n\nSeu atendimento foi agendado.\n\n📍 Unidade: ${data.unidade}\n👨‍⚕️ Profissional: *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}${footer}`;
+    case "lembrete_24h":
+      return `${greeting}, *${data.paciente_nome}*!\n\nLembrete do seu atendimento:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}${footer}`;
+    case "lembrete_2h":
+      return `${greeting}, *${data.paciente_nome}*!\n\nSeu atendimento está próximo:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}${footer}`;
+    case "cancelamento":
+      return `${greeting}, *${data.paciente_nome}*.\n\nSeu atendimento foi cancelado.\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 ${data.data_consulta}${footer}`;
+    case "remarcacao":
+      return `${greeting}, *${data.paciente_nome}*!\n\nSeu atendimento foi remarcado:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 ${data.data_consulta}\n⏰ ${data.hora_consulta}${footer}`;
+    case "falta":
+      return `${greeting}, *${data.paciente_nome}*.\n\nRegistramos sua ausência em ${data.data_consulta}. Procure a unidade para reagendar.${footer}`;
+    case "lista_espera":
+      return `${greeting}, *${data.paciente_nome}*!\n\nVocê está na lista de espera para *${data.profissional}* (${data.unidade}). Entraremos em contato.${footer}`;
+    case "vaga_disponivel":
+      return `${greeting}, *${data.paciente_nome}*!\n\nTemos vaga disponível com *${data.profissional}* (${data.unidade}). Procure a unidade para confirmar.${footer}`;
+    case "teste":
+      return `🧪 *Teste de Conexão WhatsApp*\n\nIntegração funcionando! ✅\n${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}${footer}`;
+    default:
+      return `${greeting}, *${data.paciente_nome}*.${footer}`;
+  }
 }
 
 async function sendText(cfg: UazapiConfig, phone: string, message: string) {
