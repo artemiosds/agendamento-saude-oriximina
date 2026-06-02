@@ -315,25 +315,23 @@ const ConfigWhatsApp: React.FC = () => {
       const baseUrl = (evolutionConfig.evolution_base_url || '').replace(/\/+$/, '');
       if (!baseUrl) { toast.error('Base URL é obrigatória'); setEvolutionSaving(false); return; }
       if (!evolutionConfig.evolution_instance_name) { toast.error('Instância é obrigatória'); setEvolutionSaving(false); return; }
-      
       const apiKeyToSave = evolutionConfig.evolution_api_key || originalApiKey;
       if (!apiKeyToSave) { toast.error('API Key é obrigatória'); setEvolutionSaving(false); return; }
 
-      const { error } = await supabase.from('clinica_config').update({
+      const payload = {
         evolution_base_url: baseUrl,
         evolution_api_key: apiKeyToSave,
         evolution_instance_name: evolutionConfig.evolution_instance_name,
         updated_at: new Date().toISOString()
-      }).eq('id', evolutionConfigId || '00000000-0000-0000-0000-000000000000');
-
+      };
+      
+      const { error } = await supabase.from('clinica_config').update(payload).eq('id', evolutionConfigId || '00000000-0000-0000-0000-000000000000');
       if (error) throw error;
-
+      
       setOriginalApiKey(apiKeyToSave);
       setApiKeyMasked(true);
       toast.success('Configurações da Evolution API salvas!');
-    } catch (err: any) { 
-      toast.error(`Erro ao salvar: ${err.message}`); 
-    }
+    } catch (err: any) { toast.error(`Erro ao salvar: ${err.message}`); }
     setEvolutionSaving(false);
   };
 
