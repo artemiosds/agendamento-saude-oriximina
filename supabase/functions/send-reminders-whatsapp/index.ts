@@ -88,13 +88,18 @@ serve(async (req) => {
       // Skip past appointments
       if (diffHours <= 0) continue;
 
+      // Busca provedor ativo
+      const { data: config } = await supabase.from("clinica_config").select("whatsapp_provider_active").limit(1).maybeSingle();
+      const activeProvider = config?.whatsapp_provider_active || 'evolution';
+      const functionName = activeProvider === 'uazapigo' ? 'send-whatsapp-uazapigo' : 'send-whatsapp-evolution';
+
       // ── 24H WINDOW: send when remaining time is between 23h and 24.5h ──
       if (!ag.lembrete_24h_enviado_em && diffHours >= 23 && diffHours <= 24.5) {
         try {
-          const { error } = await supabase.functions.invoke("send-whatsapp-evolution", {
+          const { error } = await supabase.functions.invoke(functionName, {
             body: { agendamento_id: ag.id, tipo: "lembrete_24h" },
           });
-          console.log("[reminder][24h]", JSON.stringify({
+          console.log(`[reminder][24h][${activeProvider}]`, JSON.stringify({
             agendamento_id: ag.id,
             consulta: `${ag.data} ${ag.hora}`,
             enviado_em: now.toISOString(),
@@ -110,7 +115,7 @@ serve(async (req) => {
             results.errors++;
           }
         } catch (e) {
-          console.error("[reminder][24h][error]", e);
+          console.error(`[reminder][24h][${activeProvider}][error]`, e);
           results.errors++;
         }
         await new Promise((r) => setTimeout(r, 500));
@@ -120,10 +125,10 @@ serve(async (req) => {
       // ── 2H WINDOW: send when remaining time is between 1.5h and 2.5h ──
       if (!ag.lembrete_proximo_enviado_em && diffHours >= 1.5 && diffHours <= 2.5) {
         try {
-          const { error } = await supabase.functions.invoke("send-whatsapp-evolution", {
+          const { error } = await supabase.functions.invoke(functionName, {
             body: { agendamento_id: ag.id, tipo: "lembrete_2h" },
           });
-          console.log("[reminder][2h]", JSON.stringify({
+          console.log(`[reminder][2h][${activeProvider}]`, JSON.stringify({
             agendamento_id: ag.id,
             consulta: `${ag.data} ${ag.hora}`,
             enviado_em: now.toISOString(),
@@ -139,7 +144,7 @@ serve(async (req) => {
             results.errors++;
           }
         } catch (e) {
-          console.error("[reminder][2h][error]", e);
+          console.error(`[reminder][2h][${activeProvider}][error]`, e);
           results.errors++;
         }
         await new Promise((r) => setTimeout(r, 500));

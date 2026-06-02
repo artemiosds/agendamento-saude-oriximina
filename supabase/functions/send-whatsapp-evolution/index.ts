@@ -94,11 +94,31 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function buildMessage(tipo: string, data: any): string {
+async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: string): Promise<string> {
   const footer = `\n_Secretaria Municipal de Saúde_`;
   const greeting = pick(GREETINGS);
   const emoji = pick(EMOJIS);
 
+  // Busca template customizado se existir
+  const { data: template } = await supabase
+    .from("whatsapp_templates")
+    .select("mensagem, ativo")
+    .eq("unidade_id", unidadeId || "")
+    .eq("tipo", tipo === "agendamento_criado" ? "confirmacao" : tipo)
+    .maybeSingle();
+
+  if (template?.ativo && template.mensagem) {
+    let msg = template.mensagem;
+    // Substitui variáveis
+    msg = msg.replace(/\{\{nome\}\}/g, data.paciente_nome || "");
+    msg = msg.replace(/\{\{unidade\}\}/g, data.unidade || "");
+    msg = msg.replace(/\{\{profissional\}\}/g, data.profissional || "");
+    msg = msg.replace(/\{\{data\}\}/g, data.data_consulta || "");
+    msg = msg.replace(/\{\{hora\}\}/g, data.hora_consulta || "");
+    return msg;
+  }
+
+  // Fallback para mensagens hardcoded
   switch (tipo) {
     case "confirmacao":
     case "agendamento_criado":
@@ -419,7 +439,7 @@ serve(async (req) => {
           { status: 400, headers: corsHeaders },
         );
       }
-      const message = buildMessage("teste", { paciente_nome: "Teste" });
+      const message = await buildMessage(supabase, "teste", { paciente_nome: "Teste" }, "");
       const result = await sendEvolutionMessage(config, normalized, message);
       await supabase.from("notification_logs").insert({
         evento: "teste", canal: "whatsapp_evolution",
@@ -476,14 +496,14 @@ serve(async (req) => {
           { status: 200, headers: corsHeaders },
         );
       }
-      const message = buildMessage(tipo || "confirmacao", {
+      const message = await buildMessage(supabase, tipo || "confirmacao", {
         paciente_nome: paciente_nome_direto,
         data_consulta: dados_direto?.data_consulta || "",
         hora_consulta: dados_direto?.hora_consulta || "",
         profissional: dados_direto?.profissional || "",
         unidade: dados_direto?.unidade || "",
         observacoes: dados_direto?.observacoes || "",
-      });
+      }, unidadeId);
       const { id, error } = await enqueue(supabase, {
         paciente_id: "",
         paciente_nome: paciente_nome_direto,
@@ -578,13 +598,13 @@ serve(async (req) => {
       unidadeNome = u?.nome || "";
     }
 
-    const message = buildMessage(tipo || "confirmacao", {
+    const message = await buildMessage(supabase, tipo || "confirmacao", {
       paciente_nome: paciente.nome || ag.paciente_nome,
       data_consulta: ag.data,
       hora_consulta: ag.hora,
       profissional: ag.profissional_nome,
       unidade: unidadeNome,
-    });
+    }, ag.unidade_id);
 
     const prioridade = tipo === "lembrete_2h" ? "alta" : tipo === "lembrete_24h" ? "media" : "media";
 
