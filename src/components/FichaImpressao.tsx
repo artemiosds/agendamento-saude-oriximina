@@ -3,6 +3,8 @@ import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Button } from '@/components/ui/button';
 import { Printer, Loader2 } from 'lucide-react';
 import { loadDocumentConfig, printViaIframe, buildDocumentShell, type DocumentConfig } from '@/lib/printLayout';
+import { useAuth } from '@/contexts/AuthContext';
+
 
 
 interface FichaData {
@@ -110,9 +112,11 @@ interface FichaImpressaoProps {
 
 
 export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'completa', onPrintComplete }) => {
+  const { user } = useAuth();
   const [config, setConfig] = useState<DocumentConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const somentePessoais = mode === 'dados_pessoais';
+
 
   useEffect(() => {
     loadDocumentConfig().then(setConfig);
@@ -126,6 +130,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const idade = calcIdade(data.paciente.data_nascimento);
     const p = data.paciente;
+    const emitidoPor = user?.nome || '—';
 
     const formatBool = (val?: boolean) => val ? 'SIM' : 'NÃO';
 
@@ -139,22 +144,23 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       <div class="campo campo-full"><b>Nome da Mãe:</b> <span>${v(p.nome_mae) || '—'}</span></div>
       <div class="grid-5">
         <div class="campo"><b>CPF:</b> <span>${v(p.cpf) || '—'}</span></div>
-        <div class="campo"><b>CNS:</b> <span>${formatCNS(p.cns) || '—'}</span></div>
+        <div class="campo" style="grid-column: span 2"><b>CNS:</b> <span>${formatCNS(p.cns) || '—'}</span></div>
         <div class="campo"><b>Data Nasc.:</b> <span>${formatarData(p.data_nascimento)}</span></div>
         <div class="campo"><b>Idade:</b> <span>${idade}</span></div>
-        <div class="campo"><b>Sexo:</b> <span>${v(p.sexo) || '—'}</span></div>
       </div>
       <div class="grid-3">
+        <div class="campo"><b>Sexo:</b> <span>${v(p.sexo) || '—'}</span></div>
         <div class="campo"><b>Naturalidade:</b> <span>${v(p.naturalidade) || '—'}</span></div>
         <div class="campo"><b>Nacionalidade:</b> <span>${v(p.nacionalidade) || 'BRASILEIRA'}</span></div>
-        <div class="campo"><b>Raça/Cor:</b> <span>${v(p.raca_cor) || '—'}</span></div>
       </div>
-      <div class="grid-2">
+      <div class="grid-3">
+        <div class="campo"><b>Raça/Cor:</b> <span>${v(p.raca_cor) || '—'}</span></div>
         <div class="campo"><b>Situação de Rua:</b> <span>${formatBool(p.situacao_rua)}</span></div>
         <div class="campo"><b>Menor de Idade:</b> <span>${formatBool(p.menor_idade)}</span></div>
       </div>
     </div>
   </div>
+
 
   <!-- ENDEREÇO -->
   <div class="bloco">
@@ -162,32 +168,36 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     <div class="bloco-body">
       <div class="grid-3">
         <div class="campo"><b>CEP:</b> <span>${v(p.cep) || '—'}</span></div>
-        <div class="campo"><b>Tipo Logradouro:</b> <span>${v(p.tipo_logradouro) || '—'}</span></div>
-        <div class="campo"><b>Município/UF:</b> <span>${v(p.municipio)} / ${v(p.uf)}</span></div>
+        <div class="campo" style="grid-column: span 2"><b>Tipo Logradouro:</b> <span>${v(p.tipo_logradouro) || '—'}</span></div>
       </div>
       <div class="grid-3">
         <div class="campo" style="grid-column: span 2"><b>Logradouro:</b> <span>${v(p.logradouro) || '—'}</span></div>
         <div class="campo"><b>Número:</b> <span>${v(p.numero) || '—'}</span></div>
       </div>
-      <div class="grid-2">
-        <div class="campo"><b>Bairro:</b> <span>${v(p.bairro) || '—'}</span></div>
+      <div class="grid-3">
+        <div class="campo" style="grid-column: span 2"><b>Bairro:</b> <span>${v(p.bairro) || '—'}</span></div>
         <div class="campo"><b>Complemento:</b> <span>${v(p.complemento) || '—'}</span></div>
+      </div>
+      <div class="grid-3">
+        <div class="campo" style="grid-column: span 2"><b>Município/UF:</b> <span>${v(p.municipio)} / ${v(p.uf)}</span></div>
       </div>
       ${p.endereco ? `<div class="campo campo-full"><b>Ref./Legado:</b> <span>${p.endereco}</span></div>` : ''}
     </div>
   </div>
 
+
   <!-- CONTATO -->
   <div class="bloco">
     <div class="bloco-titulo">3. Contato</div>
     <div class="bloco-body">
-      <div class="grid-3">
+      <div class="grid-2">
         <div class="campo"><b>Telefone Principal:</b> <span>${v(p.telefone) || '—'}</span></div>
         <div class="campo"><b>Telefone Secundário:</b> <span>${v(p.telefone_secundario) || '—'}</span></div>
-        <div class="campo"><b>E-mail:</b> <span>${v(p.email) || '—'}</span></div>
       </div>
+      <div class="campo campo-full"><b>E-mail:</b> <span>${v(p.email) || '—'}</span></div>
     </div>
   </div>
+
 
   <!-- COMPLEMENTARES -->
   <div class="bloco">
@@ -303,8 +313,9 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 8px; }
       .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px 6px; }
       .campo { margin-bottom: 1px; display: flex; align-items: baseline; gap: 4px; overflow: hidden; }
-      .campo b { font-size: 8pt; text-transform: uppercase; color: #64748b; font-weight: 700; white-space: nowrap; }
-      .campo span { color: #0f172a; font-weight: 600; font-size: 10pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .campo b { font-size: 8pt; text-transform: uppercase; color: #64748b; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+      .campo span { color: #0f172a; font-weight: 600; font-size: 10pt; white-space: normal; word-break: break-word; }
+
       .campo-full { grid-column: 1 / -1; }
       .manual-area { margin-top: 4px; }
       .manual-label { font-size: 8.5pt; font-weight: 800; text-transform: uppercase; color: #475569; margin-bottom: 2px; }
@@ -320,10 +331,12 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     const title = somentePessoais ? 'FICHA CADASTRAL DO PACIENTE' : 'FICHA DE ATENDIMENTO CLÍNICO';
     const shell = buildDocumentShell(title, localStyles + bodyContent, config, {
       Emissão: `${dataAtual} ${horaAtual}`,
+      'Emitido por': emitidoPor,
       Paciente: p.nome || '—',
     });
     return shell;
-  }, [data, somentePessoais, config]);
+  }, [data, somentePessoais, config, user]);
+
 
 
   const handlePrint = useCallback(() => {
