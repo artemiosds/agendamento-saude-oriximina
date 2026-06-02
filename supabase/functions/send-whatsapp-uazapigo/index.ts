@@ -73,7 +73,6 @@ async function uazFetch(url: string, init: RequestInit): Promise<{ ok: boolean; 
 
 /** 
  * Resolve o token da instância usando o Admin Token. 
- * Se o campo 'instance' já parecer um token (longo e com caracteres aleatórios), retorna ele mesmo.
  */
 async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string | null; error?: string }> {
   const instanceField = cfg.uazapi_instance;
@@ -82,33 +81,17 @@ async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string 
   const base = normalizeUrl(cfg.uazapi_server_url);
   if (!base || !cfg.uazapi_admin_token) return { token: null, error: "Configuração incompleta" };
 
-  // Tenta com cabeçalho 'apikey' (muito comum em clones de Evolution/Uazapi)
   let r = await uazFetch(`${base}/instance/all`, {
     headers: { apikey: cfg.uazapi_admin_token, Accept: "application/json" }
   });
 
-  // Se falhar, tenta 'admintoken' (padrão documentado UazapiGO)
   if (!r.ok) {
     r = await uazFetch(`${base}/instance/all`, {
       headers: { admintoken: cfg.uazapi_admin_token, Accept: "application/json" }
     });
   }
   
-  // Se falhar, tenta passar via Query Params (alguns servidores requerem isso)
-  if (!r.ok) {
-    r = await uazFetch(`${base}/instance/all?admintoken=${cfg.uazapi_admin_token}`, {
-      headers: { Accept: "application/json" }
-    });
-  }
-
-  // Se ainda falhar, tenta 'AdminToken' (Case sensitive)
-  if (!r.ok) {
-    r = await uazFetch(`${base}/instance/all`, {
-      headers: { AdminToken: cfg.uazapi_admin_token, Accept: "application/json" }
-    });
-  }
-
-  if (!r.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}. Verifique se o Admin Token está correto.` };
+  if (!r.ok) return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}` };
   return findTokenInList(r.data, instanceField);
 }
 
@@ -119,46 +102,26 @@ function findTokenInList(data: any, instanceName: string): { token: string | nul
   const found = list.find((i: any) => 
     String(i.name || "").toLowerCase() === instanceName.toLowerCase() || 
     String(i.instanceName || "").toLowerCase() === instanceName.toLowerCase() ||
-    String(i.id || "") === instanceName ||
-    String(i.instanceId || "") === instanceName
+    String(i.id || "") === instanceName
   );
 
   if (!found) return { token: null, error: `Instância "${instanceName}" não encontrada` };
   
-  const token = found.token || found.instanceToken || found.apiKey || found.tokenInstance;
-  if (!token) return { token: null, error: "Token da instância não encontrado na resposta" };
+  const token = found.token || found.instanceToken || found.apiKey;
+  if (!token) return { token: null, error: "Token não encontrado" };
   
   return { token };
 }
 
 async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string; raw?: any; error?: string }> {
   const base = normalizeUrl(cfg.uazapi_server_url);
-  
-  // Tenta resolver token
   const { token, error: tokenError } = await resolveInstanceToken(cfg);
-  
-  if (tokenError) {
-    // Se falhar com 401 no /instance/all, talvez possamos tentar o status direto com a instância se ela for um token
-    if (tokenError.includes("401")) {
-      // Tenta usar o campo uazapi_instance como token diretamente (fallback desesperado)
-      if (cfg.uazapi_instance.length > 20) {
-        let rDirect = await uazFetch(`${base}/instance/status`, {
-          headers: { token: cfg.uazapi_instance, Accept: "application/json" }
-        });
-        if (rDirect.ok) {
-          return mapStatus(rDirect.data);
-        }
-      }
-    }
-    return { status_detailed: "error", error: tokenError };
-  }
+  if (tokenError) return { status_detailed: "error", error: tokenError };
 
-  // Tenta GET /instance/status primeiro (padrão UazapiGO)
   let r = await uazFetch(`${base}/instance/status`, {
     headers: { token: token!, Accept: "application/json" }
   });
 
-  // Se der 404 ou 405, tenta o padrão Evolution (alguns clones de Uazapi usam isso)
   if (r.status === 404 || r.status === 405) {
     r = await uazFetch(`${base}/instance/connectionState/${encodeURIComponent(cfg.uazapi_instance)}`, {
       headers: { apikey: cfg.uazapi_admin_token, Accept: "application/json" }
@@ -166,37 +129,50 @@ async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string
   }
 
   if (!r.ok) return { status_detailed: "error", error: `Erro status: HTTP ${r.status}`, raw: r.data };
-
   return mapStatus(r.data);
 }
 
 function mapStatus(data: any) {
-  const state = String(
-    data?.instance?.state || data?.state || data?.status || data?.connection || data?.state_connection || ""
-  ).toLowerCase();
-
+  const state = String(data?.instance?.state || data?.state || data?.status || "").toLowerCase();
   let status_detailed = "disconnected";
-  if (["open", "connected", "online", "ready", "conectado"].includes(state)) status_detailed = "connected";
-  else if (["connecting", "syncing", "conectando"].includes(state)) status_detailed = "connecting";
-  else if (["qrcode", "qr", "pairing"].includes(state)) status_detailed = "qrcode";
+  if (["open", "connected", "ready"].includes(state)) status_detailed = "connected";
+  else if (["connecting", "syncing"].includes(state)) status_detailed = "connecting";
+  else if (["qrcode", "qr"].includes(state)) status_detailed = "qrcode";
+  return { status_detailed, raw: data, error: status_detailed === "connected" ? undefined : `Status: ${state}` };
+}
 
-  return { status_detailed, raw: data, error: status_detailed === "connected" ? undefined : `Status: ${state || "desconhecido"}` };
+async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: string): Promise<string> {
+  const { data: template } = await supabase
+    .from("whatsapp_templates")
+    .select("mensagem, ativo")
+    .eq("unidade_id", unidadeId || "")
+    .eq("tipo", tipo === "agendamento_criado" ? "confirmacao" : tipo)
+    .maybeSingle();
+
+  if (template?.ativo && template.mensagem) {
+    let msg = template.mensagem;
+    msg = msg.replace(/\{\{nome\}\}/g, data.paciente_nome || "");
+    msg = msg.replace(/\{\{unidade\}\}/g, data.unidade || "");
+    msg = msg.replace(/\{\{profissional\}\}/g, data.profissional || "");
+    msg = msg.replace(/\{\{data\}\}/g, data.data_consulta || "");
+    msg = msg.replace(/\{\{hora\}\}/g, data.hora_consulta || "");
+    return msg;
+  }
+
+  return `Olá, ${data.paciente_nome}. Seu atendimento está agendado em ${data.unidade} com ${data.profissional} no dia ${data.data_consulta} às ${data.hora_consulta}.`;
 }
 
 async function sendText(cfg: UazapiConfig, phone: string, message: string) {
   const base = normalizeUrl(cfg.uazapi_server_url);
   const { token, error: tokenError } = await resolveInstanceToken(cfg);
-  
   if (tokenError) return { ok: false, status: 400, data: { error: tokenError } };
 
-  // UazapiGO v2 usa POST /send/text com header token
   let r = await uazFetch(`${base}/send/text`, {
     method: "POST",
     headers: { token: token!, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ number: phone, text: message }),
   });
 
-  // Se der 404 ou 405, tenta o formato Evolution como fallback
   if (r.status === 404 || r.status === 405) {
     r = await uazFetch(`${base}/message/sendText/${encodeURIComponent(cfg.uazapi_instance)}`, {
       method: "POST",
@@ -204,7 +180,6 @@ async function sendText(cfg: UazapiConfig, phone: string, message: string) {
       body: JSON.stringify({ number: phone, text: message }),
     });
   }
-
   return r;
 }
 
