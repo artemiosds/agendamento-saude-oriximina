@@ -124,9 +124,25 @@ function findTokenInList(data: any, instanceName: string): { token: string | nul
 
 async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string; raw?: any; error?: string }> {
   const base = normalizeUrl(cfg.uazapi_server_url);
+  
+  // Tenta resolver token
   const { token, error: tokenError } = await resolveInstanceToken(cfg);
   
-  if (tokenError) return { status_detailed: "error", error: tokenError };
+  if (tokenError) {
+    // Se falhar com 401 no /instance/all, talvez possamos tentar o status direto com a instância se ela for um token
+    if (tokenError.includes("401")) {
+      // Tenta usar o campo uazapi_instance como token diretamente (fallback desesperado)
+      if (cfg.uazapi_instance.length > 20) {
+        let rDirect = await uazFetch(`${base}/instance/status`, {
+          headers: { token: cfg.uazapi_instance, Accept: "application/json" }
+        });
+        if (rDirect.ok) {
+          return mapStatus(rDirect.data);
+        }
+      }
+    }
+    return { status_detailed: "error", error: tokenError };
+  }
 
   // Tenta GET /instance/status primeiro (padrão UazapiGO)
   let r = await uazFetch(`${base}/instance/status`, {
@@ -142,8 +158,12 @@ async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string
 
   if (!r.ok) return { status_detailed: "error", error: `Erro status: HTTP ${r.status}`, raw: r.data };
 
+  return mapStatus(r.data);
+}
+
+function mapStatus(data: any) {
   const state = String(
-    r.data?.instance?.state || r.data?.state || r.data?.status || r.data?.connection || r.data?.state_connection || ""
+    data?.instance?.state || data?.state || data?.status || data?.connection || data?.state_connection || ""
   ).toLowerCase();
 
   let status_detailed = "disconnected";
@@ -151,7 +171,7 @@ async function checkStatus(cfg: UazapiConfig): Promise<{ status_detailed: string
   else if (["connecting", "syncing", "conectando"].includes(state)) status_detailed = "connecting";
   else if (["qrcode", "qr", "pairing"].includes(state)) status_detailed = "qrcode";
 
-  return { status_detailed, raw: r.data, error: status_detailed === "connected" ? undefined : `Status: ${state || "desconhecido"}` };
+  return { status_detailed, raw: data, error: status_detailed === "connected" ? undefined : `Status: ${state || "desconhecido"}` };
 }
 
 async function sendText(cfg: UazapiConfig, phone: string, message: string) {
