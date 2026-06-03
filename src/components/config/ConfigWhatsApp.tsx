@@ -634,11 +634,12 @@ const ConfigWhatsApp: React.FC = () => {
       </div>
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="grid grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-1 md:grid-cols-6 w-full">
           <TabsTrigger value="conexao" className="gap-1.5"><Zap className="w-4 h-4" /> Conexão</TabsTrigger>
           <TabsTrigger value="mensagens" className="gap-1.5"><FileText className="w-4 h-4" /> Mensagens</TabsTrigger>
           <TabsTrigger value="eventos" className="gap-1.5"><Bell className="w-4 h-4" /> Eventos</TabsTrigger>
-          <TabsTrigger value="antiban" className="gap-1.5"><Shield className="w-4 h-4" /> Anti-Ban</TabsTrigger>
+          <TabsTrigger value="compliance" className="gap-1.5"><Shield className="w-4 h-4" /> Compliance</TabsTrigger>
+          <TabsTrigger value="antiban" className="gap-1.5"><RotateCcw className="w-4 h-4" /> Fila</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5"><Clock className="w-4 h-4" /> Logs</TabsTrigger>
         </TabsList>
 
