@@ -1273,44 +1273,59 @@ export type Database = {
         Row: {
           agendamento_id: string | null
           canal: string
+          category: string | null
           criado_em: string
           destinatario_email: string | null
           destinatario_telefone: string | null
           erro: string | null
           evento: string
           id: string
+          opt_in_status: string | null
           payload: Json
+          prior_interaction: boolean | null
           provider: string
           resposta: string | null
           status: string
+          template_id: string | null
+          window_24h: boolean | null
         }
         Insert: {
           agendamento_id?: string | null
           canal?: string
+          category?: string | null
           criado_em?: string
           destinatario_email?: string | null
           destinatario_telefone?: string | null
           erro?: string | null
           evento: string
           id?: string
+          opt_in_status?: string | null
           payload?: Json
+          prior_interaction?: boolean | null
           provider?: string
           resposta?: string | null
           status?: string
+          template_id?: string | null
+          window_24h?: boolean | null
         }
         Update: {
           agendamento_id?: string | null
           canal?: string
+          category?: string | null
           criado_em?: string
           destinatario_email?: string | null
           destinatario_telefone?: string | null
           erro?: string | null
           evento?: string
           id?: string
+          opt_in_status?: string | null
           payload?: Json
+          prior_interaction?: boolean | null
           provider?: string
           resposta?: string | null
           status?: string
+          template_id?: string | null
+          window_24h?: boolean | null
         }
         Relationships: []
       }
@@ -1478,6 +1493,11 @@ export type Database = {
           unidade_id: string
           usa_dispositivo: boolean
           usa_equipamentos: boolean
+          whatsapp_consent_proof: Json | null
+          whatsapp_has_prior_interaction: boolean | null
+          whatsapp_opt_in_marketing: boolean | null
+          whatsapp_opt_in_operational: boolean | null
+          whatsapp_opt_in_waiting_list: boolean | null
         }
         Insert: {
           auth_user_id?: string | null
@@ -1546,6 +1566,11 @@ export type Database = {
           unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
+          whatsapp_consent_proof?: Json | null
+          whatsapp_has_prior_interaction?: boolean | null
+          whatsapp_opt_in_marketing?: boolean | null
+          whatsapp_opt_in_operational?: boolean | null
+          whatsapp_opt_in_waiting_list?: boolean | null
         }
         Update: {
           auth_user_id?: string | null
@@ -1614,6 +1639,11 @@ export type Database = {
           unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
+          whatsapp_consent_proof?: Json | null
+          whatsapp_has_prior_interaction?: boolean | null
+          whatsapp_opt_in_marketing?: boolean | null
+          whatsapp_opt_in_operational?: boolean | null
+          whatsapp_opt_in_waiting_list?: boolean | null
         }
         Relationships: []
       }
@@ -3871,6 +3901,7 @@ export type Database = {
         Row: {
           agendado_para: string
           agendamento_id: string
+          category: string | null
           criado_em: string
           evento: string
           id: string
@@ -3892,6 +3923,7 @@ export type Database = {
         Insert: {
           agendado_para?: string
           agendamento_id?: string
+          category?: string | null
           criado_em?: string
           evento: string
           id?: string
@@ -3913,6 +3945,7 @@ export type Database = {
         Update: {
           agendado_para?: string
           agendamento_id?: string
+          category?: string | null
           criado_em?: string
           evento?: string
           id?: string

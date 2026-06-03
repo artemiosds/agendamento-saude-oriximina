@@ -308,6 +308,19 @@ const ConfigWhatsApp: React.FC = () => {
     .replace(/\{\{data\}\}/g, '20/04/2026')
     .replace(/\{\{hora\}\}/g, '14:00');
 
+  const getComplianceStatus = () => {
+    return {
+      prior_interaction: false,
+      opt_in_operational: true,
+      opt_in_marketing: false,
+      window_24h: false,
+      can_send_utility: true,
+      can_send_marketing: false
+    };
+  };
+
+  const compliance = getComplianceStatus();
+
   // Save Evolution config
   const saveEvolutionConfig = async () => {
     setEvolutionSaving(true);
@@ -621,13 +634,84 @@ const ConfigWhatsApp: React.FC = () => {
       </div>
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="grid grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-1 md:grid-cols-6 w-full">
           <TabsTrigger value="conexao" className="gap-1.5"><Zap className="w-4 h-4" /> Conexão</TabsTrigger>
           <TabsTrigger value="mensagens" className="gap-1.5"><FileText className="w-4 h-4" /> Mensagens</TabsTrigger>
           <TabsTrigger value="eventos" className="gap-1.5"><Bell className="w-4 h-4" /> Eventos</TabsTrigger>
-          <TabsTrigger value="antiban" className="gap-1.5"><Shield className="w-4 h-4" /> Anti-Ban</TabsTrigger>
+          <TabsTrigger value="compliance" className="gap-1.5"><Shield className="w-4 h-4" /> Compliance</TabsTrigger>
+          <TabsTrigger value="antiban" className="gap-1.5"><RotateCcw className="w-4 h-4" /> Fila</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5"><Clock className="w-4 h-4" /> Logs</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="compliance" className="mt-4">
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground text-lg">Regras de Opt-in & Compliance</h3>
+                  <p className="text-sm text-muted-foreground">Controle de consentimento para envios operacionais e marketing</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-muted/50 border border-border">
+                    <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-warning" /> Regra: Sem interação prévia + com Opt-in
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Permitir envios utilitários:</span>
+                        <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">Ativo</Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Fora da janela de 24h:</span>
+                        <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/20">Somente Template</Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Mensagens de Marketing:</span>
+                        <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20">Bloqueado</Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border border-border">
+                    <h4 className="font-medium text-sm mb-3">Eventos Sensíveis</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">Lista de Espera / Vaga</span>
+                          <span className="text-[10px] text-muted-foreground">Requer consentimento adicional</span>
+                        </div>
+                        <Switch defaultChecked />
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">Falta (Follow-up)</span>
+                          <span className="text-[10px] text-muted-foreground">Apenas 1 tentativa permitida</span>
+                        </div>
+                        <Switch defaultChecked />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10 flex gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-700 leading-relaxed">
+                  <strong>Compliance:</strong> Fora da janela de 24h sem resposta do paciente, o sistema utiliza apenas templates operacionais aprovados para evitar riscos de bloqueio (BAN).
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="antiban" className="mt-4">
           <ConfigWhatsAppAntiBan />

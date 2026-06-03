@@ -33,18 +33,18 @@ interface UnitConfig {
 
 const DEFAULT_UNIT_CONFIG: UnitConfig = {
   whatsapp_ativo: true,
-  max_msgs_paciente_dia: 5,
-  max_msgs_paciente_semana: 10,
-  intervalo_minimo_minutos: 10,
-  delay_aleatorio_min_seg: 5,
+  max_msgs_paciente_dia: 2,
+  max_msgs_paciente_semana: 5,
+  intervalo_minimo_minutos: 240, // 4 horas
+  delay_aleatorio_min_seg: 10,
   delay_aleatorio_max_seg: 30,
-  limite_global_por_minuto: 20,
+  limite_global_por_minuto: 10,
   horario_inicio: "08:00",
   horario_fim: "18:00",
   dias_permitidos: [1, 2, 3, 4, 5],
   modo_estrito: true,
   respeitar_opt_out: true,
-  bloquear_sem_interacao_previa: false,
+  bloquear_sem_interacao_previa: true,
 };
 
 async function getClinicaConfig(supabase: any): Promise<ClinicaConfig | null> {
@@ -189,69 +189,115 @@ async function fetchEvolutionJson(config: ClinicaConfig, path: string) {
 }
 
 // ============================================================
-// VALIDAÇÕES ANTI-BAN
+// VALIDAÇÕES ANTI-BAN E COMPLIANCE
 // ============================================================
-function isAppointmentInPast(dataStr?: string, horaStr?: string): boolean {
-  if (!dataStr) return false;
-  let iso = dataStr;
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dataStr)) {
-    const [d, m, y] = dataStr.split("/");
-    iso = `${y}-${m}-${d}`;
-  }
-  const hh = (horaStr && /^\d{2}:\d{2}/.test(horaStr)) ? horaStr.slice(0, 5) : "23:59";
-  const target = new Date(`${iso}T${hh}:00-03:00`);
-  if (isNaN(target.getTime())) return false;
-  return target.getTime() < Date.now();
-}
+
+const EVENT_CLASSIFICATION: Record<string, { category: 'utility' | 'marketing', requiresSpecificConsent?: string }> = {
+  'agendamento_criado': { category: 'utility' },
+  'confirmacao': { category: 'utility' },
+  'lembrete_24h': { category: 'utility' },
+  'lembrete_2h': { category: 'utility' },
+  'cancelamento': { category: 'utility' },
+  'remarcacao': { category: 'utility' },
+  'falta': { category: 'utility' },
+  'lista_espera': { category: 'utility', requiresSpecificConsent: 'whatsapp_opt_in_waiting_list' },
+  'vaga_disponivel': { category: 'utility', requiresSpecificConsent: 'whatsapp_opt_in_waiting_list' },
+  'marketing': { category: 'marketing' },
+  'promocao': { category: 'marketing' },
+};
 
 async function validateSend(
   supabase: any,
   cfg: UnitConfig,
   pacienteId: string,
   telefone: string,
-): Promise<{ ok: boolean; reason?: string }> {
-  if (!cfg.whatsapp_ativo) return { ok: false, reason: "whatsapp_inativo_unidade" };
+  tipo: string,
+  mensagem: string
+): Promise<{ ok: boolean; reason?: string; audit: any }> {
+  const audit: any = {
+    opt_in_status: 'unknown',
+    prior_interaction: false,
+    window_24h: false,
+    category: EVENT_CLASSIFICATION[tipo]?.category || 'utility',
+  };
+
+  if (!cfg.whatsapp_ativo) return { ok: false, reason: "whatsapp_inativo_unidade", audit };
 
   // Janela de horário/dias
   const now = new Date();
   const brTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   const dia = brTime.getDay();
   if (!cfg.dias_permitidos.includes(dia)) {
-    return { ok: false, reason: "fora_dia_permitido" };
+    return { ok: false, reason: "fora_dia_permitido", audit };
   }
   const hh = String(brTime.getHours()).padStart(2, "0") + ":" + String(brTime.getMinutes()).padStart(2, "0");
   if (hh < cfg.horario_inicio || hh > cfg.horario_fim) {
-    return { ok: false, reason: "fora_horario_permitido" };
+    return { ok: false, reason: "fora_horario_permitido", audit };
   }
 
-  // Opt-out
-  if (cfg.respeitar_opt_out && telefone) {
-    const { data: optOut } = await supabase
-      .from("whatsapp_consents")
-      .select("id")
-      .eq("telefone", telefone)
-      .eq("tipo", "opt_out")
-      .order("criado_em", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (optOut) return { ok: false, reason: "paciente_opt_out" };
+  // Dados do paciente
+  const { data: paciente } = await supabase
+    .from("pacientes")
+    .select("whatsapp_opt_in_operational, whatsapp_opt_in_marketing, whatsapp_opt_in_waiting_list, whatsapp_has_prior_interaction")
+    .eq("id", pacienteId)
+    .maybeSingle();
+
+  if (!paciente) return { ok: false, reason: "paciente_nao_encontrado", audit };
+
+  audit.prior_interaction = paciente.whatsapp_has_prior_interaction;
+  
+  // Opt-out check via consents table
+  const { data: optOut } = await supabase
+    .from("whatsapp_consents")
+    .select("id")
+    .eq("telefone", telefone)
+    .eq("tipo", "opt_out")
+    .order("criado_em", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (optOut) return { ok: false, reason: "paciente_opt_out", audit };
+
+  // Validação por Categoria
+  const classification = EVENT_CLASSIFICATION[tipo] || { category: 'utility' };
+  
+  if (classification.category === 'marketing') {
+    if (!paciente.whatsapp_opt_in_marketing) return { ok: false, reason: "sem_opt_in_marketing", audit };
+  } else {
+    // Utility
+    if (!paciente.whatsapp_opt_in_operational) return { ok: false, reason: "sem_opt_in_operacional", audit };
+    
+    // Consentimento específico
+    if (classification.requiresSpecificConsent && !paciente[classification.requiresSpecificConsent]) {
+      return { ok: false, reason: `requer_consentimento_especifico_${classification.requiresSpecificConsent}`, audit };
+    }
   }
 
-  // Interação prévia exigida
-  if (cfg.bloquear_sem_interacao_previa && telefone) {
-    const { data: hasInteraction } = await supabase
-      .from("whatsapp_consents")
-      .select("id")
-      .eq("telefone", telefone)
-      .in("tipo", ["interaction", "opt_in"])
-      .limit(1)
-      .maybeSingle();
-    if (!hasInteraction) return { ok: false, reason: "sem_interacao_previa" };
+  // Regra 24 horas
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: lastPatientMsg } = await supabase
+    .from("whatsapp_consents")
+    .select("criado_em")
+    .eq("telefone", telefone)
+    .eq("tipo", "interaction")
+    .gte("criado_em", dayAgo)
+    .order("criado_em", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  
+  audit.window_24h = !!lastPatientMsg;
+
+  // Se fora da janela de 24h e sem interação prévia, APENAS templates aprovados são permitidos.
+  if (!audit.window_24h && !audit.prior_interaction) {
+     // Trava anti-marketing em fluxo operacional
+     const lowerMsg = mensagem.toLowerCase();
+     const marketingKeywords = ["promoção", "oferta", "desconto", "aproveite", "imperdível", "compre", "venda"];
+     if (marketingKeywords.some(k => lowerMsg.includes(k))) {
+       return { ok: false, reason: "suspeita_marketing_fora_janela", audit };
+     }
   }
 
   if (telefone) {
     // Limite diário
-    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count: countDia } = await supabase
       .from("notification_logs")
       .select("id", { count: "exact", head: true })
@@ -259,7 +305,7 @@ async function validateSend(
       .eq("status", "enviado")
       .gte("criado_em", dayAgo);
     if ((countDia ?? 0) >= cfg.max_msgs_paciente_dia) {
-      return { ok: false, reason: "limite_diario_excedido" };
+      return { ok: false, reason: "limite_diario_excedido", audit };
     }
 
     // Limite semanal
@@ -271,7 +317,7 @@ async function validateSend(
       .eq("status", "enviado")
       .gte("criado_em", weekAgo);
     if ((countSem ?? 0) >= cfg.max_msgs_paciente_semana) {
-      return { ok: false, reason: "limite_semanal_excedido" };
+      return { ok: false, reason: "limite_semanal_excedido", audit };
     }
 
     // Intervalo mínimo
@@ -283,36 +329,11 @@ async function validateSend(
       .eq("status", "enviado")
       .gte("criado_em", intervalAgo);
     if ((countInt ?? 0) > 0) {
-      return { ok: false, reason: "intervalo_minimo_nao_respeitado" };
+      return { ok: false, reason: "intervalo_minimo_nao_respeitado", audit };
     }
   }
 
-  return { ok: true };
-}
-
-async function enqueue(supabase: any, payload: {
-  paciente_id: string;
-  paciente_nome: string;
-  telefone: string;
-  evento: string;
-  mensagem: string;
-  prioridade: "baixa" | "media" | "alta";
-  unidade_id: string;
-  agendamento_id?: string;
-  metadados?: any;
-}) {
-  const { data, error } = await supabase
-    .from("whatsapp_queue")
-    .insert({
-      ...payload,
-      agendamento_id: payload.agendamento_id ?? "",
-      metadados: payload.metadados ?? {},
-      status: "pendente",
-      agendado_para: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-  return { id: data?.id, error };
+  return { ok: true, audit };
 }
 
 serve(async (req) => {
@@ -325,7 +346,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { agendamento_id, tipo, telefone_teste, telefone_direto, paciente_nome_direto, dados_direto } = body;
+    const { agendamento_id, tipo, telefone_teste, telefone_direto, paciente_nome_direto, dados_direto, mensagem_custom } = body;
 
     const config = await getClinicaConfig(supabase);
     if (!config?.evolution_instance_name) {
@@ -335,299 +356,95 @@ serve(async (req) => {
       );
     }
 
+    // ─── STATUS, INSTANCES, etc ───
     if (body.action === "status") {
       const result = await fetchEvolutionJson(config, `/instance/connectionState/${config.evolution_instance_name}`);
       const state = result.json?.instance?.state || result.json?.state || "unknown";
-
-      // Mapeia status detalhado para diagnóstico claro
-      let statusDetailed: string;
-      let humanError: string | null = null;
-      if (!result.ok) {
-        if (result.status === 401 || result.status === 403) {
-          statusDetailed = "api_key_invalida";
-          humanError = "API Key inválida";
-        } else if (result.status === 404) {
-          statusDetailed = "instancia_inexistente";
-          humanError = "Instância não encontrada na Evolution API";
-        } else if (result.status === 0) {
-          statusDetailed = "base_url_inacessivel";
-          humanError = "Base URL inacessível ou erro de rede";
-        } else {
-          statusDetailed = "erro_servidor";
-          humanError = `Erro do servidor (${result.status})`;
-        }
-      } else {
-        switch (state) {
-          case "open": statusDetailed = "conectado"; break;
-          case "connecting": statusDetailed = "conectando"; break;
-          case "close":
-          case "closed": statusDetailed = "desconectado"; break;
-          case "qrcode": statusDetailed = "qrcode_necessario"; humanError = "QR Code necessário para conectar"; break;
-          default: statusDetailed = "desconhecido";
-        }
-      }
-
-      // Persiste último status conhecido
-      try {
-        const nowIso = new Date().toISOString();
-        const updateFields: any = {
-          status: statusDetailed,
-          last_check_at: nowIso,
-          last_error: humanError || "",
-          last_error_at: humanError ? nowIso : null,
-          details: { raw_state: state, http_status: result.status },
-        };
-        if (statusDetailed === "conectado") updateFields.last_connected_at = nowIso;
-        if (statusDetailed === "desconectado") updateFields.last_disconnected_at = nowIso;
-
-        const { data: existing } = await supabase
-          .from("whatsapp_connection_status")
-          .select("id")
-          .eq("instance_name", config.evolution_instance_name)
-          .maybeSingle();
-
-        if (existing?.id) {
-          await supabase.from("whatsapp_connection_status").update(updateFields).eq("id", existing.id);
-        } else {
-          await supabase.from("whatsapp_connection_status").insert({
-            instance_name: config.evolution_instance_name,
-            ...updateFields,
-          });
-        }
-      } catch (e) {
-        console.error("[status] persist error:", e);
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: result.ok,
-          connected: state === "open",
-          state,
-          status_detailed: statusDetailed,
-          error: humanError,
-        }),
-        { status: 200, headers: corsHeaders },
-      );
+      let statusDetailed = "desconectado";
+      if (["open", "connected"].includes(state)) statusDetailed = "conectado";
+      else if (state === "qrcode") statusDetailed = "qrcode";
+      else if (state === "connecting") statusDetailed = "conectando";
+      
+      return new Response(JSON.stringify({ success: result.ok, connected: state === "open", state, status_detailed: statusDetailed }), { status: 200, headers: corsHeaders });
     }
 
     if (body.action === "instances") {
       const result = await fetchEvolutionJson(config, "/instance/fetchInstances");
-      const instances = Array.isArray(result.json)
-        ? result.json
-          .map((i: any) => ({
-            instanceName: i.instance?.instanceName || i.instanceName || "",
-            state: i.instance?.state || i.state || "unknown",
-          }))
-          .filter((i: any) => i.instanceName)
-        : [];
-      return new Response(
-        JSON.stringify({
-          success: result.ok,
-          instances,
-          error: result.ok ? null : result.text || "Erro ao listar instâncias",
-        }),
-        { status: 200, headers: corsHeaders },
-      );
+      const instances = Array.isArray(result.json) ? result.json.map((i: any) => ({ instanceName: i.instance?.instanceName || i.instanceName || "", state: i.instance?.state || i.state || "unknown" })) : [];
+      return new Response(JSON.stringify({ success: result.ok, instances }), { status: 200, headers: corsHeaders });
     }
 
-    // ── TESTE: envia direto, sem fila/validação anti-ban ──
+    // ── TESTE: envia direto ──
     if (tipo === "teste" && telefone_teste) {
       const normalized = normalizePhone(telefone_teste);
-      if (!normalized || !isValidPhone(normalized)) {
-        return new Response(
-          JSON.stringify({ success: false, error: `Telefone inválido: ${telefone_teste}` }),
-          { status: 400, headers: corsHeaders },
-        );
-      }
+      if (!normalized || !isValidPhone(normalized)) return new Response(JSON.stringify({ success: false, error: "Telefone inválido" }), { status: 400, headers: corsHeaders });
       const message = await buildMessage(supabase, "teste", { paciente_nome: "Teste" }, "");
       const result = await sendEvolutionMessage(config, normalized, message);
-      await supabase.from("notification_logs").insert({
-        evento: "teste", canal: "whatsapp_evolution",
-        destinatario_telefone: telefone_teste,
-        status: result.ok ? "enviado" : "erro",
-        erro: result.ok ? "" : result.body,
-        payload: { tipo: "teste" },
-        resposta: result.body.substring(0, 500),
-      });
-      return new Response(
-        JSON.stringify({
-          success: result.ok,
-          connected: result.ok,
-          message: result.ok ? "Teste enviado!" : `Falha: ${result.body}`,
-          error: result.ok ? null : result.body,
-          status_code: result.status,
-        }),
-        { status: 200, headers: corsHeaders },
-      );
+      return new Response(JSON.stringify({ success: result.ok, message: result.ok ? "Enviado" : result.body }), { status: 200, headers: corsHeaders });
     }
 
-    // ── DIRETO (sem agendamento) → enfileira ──
-    if (telefone_direto && paciente_nome_direto) {
-      const normalized = normalizePhone(telefone_direto);
-      if (!normalized || !isValidPhone(normalized)) {
-        return new Response(
-          JSON.stringify({ success: false, error: `Telefone inválido: ${telefone_direto}` }),
-          { status: 400, headers: corsHeaders },
-        );
-      }
-      // Bloqueio retroativo: se o disparo manual referencia consulta passada, descarta
-      if (isAppointmentInPast(dados_direto?.data_consulta, dados_direto?.hora_consulta)) {
-        await supabase.from("notification_logs").insert({
-          evento: tipo || "direto", canal: "whatsapp_evolution",
-          destinatario_telefone: telefone_direto, status: "bloqueado",
-          erro: "agendamento_passado", payload: body,
-        });
-        return new Response(
-          JSON.stringify({ success: false, blocked: true, reason: "agendamento_passado" }),
-          { status: 200, headers: corsHeaders },
-        );
-      }
-      const unidadeId = dados_direto?.unidade_id || "";
-      const cfg = await getUnitConfig(supabase, unidadeId);
-      const validation = await validateSend(supabase, cfg, "", normalized);
-      if (!validation.ok) {
-        await supabase.from("notification_logs").insert({
-          evento: tipo || "direto", canal: "whatsapp_evolution",
-          destinatario_telefone: telefone_direto, status: "bloqueado",
-          erro: validation.reason, payload: body,
-        });
-        return new Response(
-          JSON.stringify({ success: false, blocked: true, reason: validation.reason }),
-          { status: 200, headers: corsHeaders },
-        );
-      }
-      const message = await buildMessage(supabase, tipo || "confirmacao", {
-        paciente_nome: paciente_nome_direto,
-        data_consulta: dados_direto?.data_consulta || "",
-        hora_consulta: dados_direto?.hora_consulta || "",
-        profissional: dados_direto?.profissional || "",
-        unidade: dados_direto?.unidade || "",
-        observacoes: dados_direto?.observacoes || "",
-      }, unidadeId);
-      const { id, error } = await enqueue(supabase, {
-        paciente_id: "",
-        paciente_nome: paciente_nome_direto,
-        telefone: normalized,
-        evento: tipo || "confirmacao",
-        mensagem: message,
-        prioridade: tipo === "vaga_disponivel" ? "alta" : "media",
-        unidade_id: unidadeId,
-        metadados: dados_direto,
-      });
-      return new Response(
-        JSON.stringify({ success: !error, queued: true, id }),
-        { status: error ? 500 : 200, headers: corsHeaders },
-      );
+    // ── FLUXO PRINCIPAL DE ENVIO ──
+    const phoneRaw = telefone_direto || telefone_teste || body.telefone || "";
+    const phone = normalizePhone(phoneRaw);
+    if (!phone) return new Response(JSON.stringify({ success: false, error: "Telefone inválido" }), { status: 400, headers: corsHeaders });
+
+    // Resolvendo dados
+    let unidadeId = body.unidade_id || "";
+    let pacienteId = body.paciente_id || "";
+    let pacienteNome = paciente_nome_direto || "Paciente";
+    let dados = dados_direto || {};
+
+    if (agendamento_id) {
+       const { data: ag } = await supabase.from("agendamentos").select("unidade_id, paciente_id, paciente_nome, data, hora, profissional_nome").eq("id", agendamento_id).maybeSingle();
+       if (ag) {
+         unidadeId = ag.unidade_id;
+         pacienteId = ag.paciente_id;
+         pacienteNome = ag.paciente_nome;
+         dados = { ...dados, data_consulta: ag.data, hora_consulta: ag.hora, profissional: ag.profissional_nome, paciente_nome: ag.paciente_nome };
+       }
     }
 
-    // ── AGENDAMENTO → enfileira ──
-    if (!agendamento_id) {
-      return new Response(
-        JSON.stringify({ success: false, error: "agendamento_id é obrigatório" }),
-        { status: 400, headers: corsHeaders },
-      );
-    }
-
-    const { data: ag } = await supabase
-      .from("agendamentos").select("*").eq("id", agendamento_id).maybeSingle();
-    if (!ag) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Agendamento não encontrado" }),
-        { status: 404, headers: corsHeaders },
-      );
-    }
-
-    // Bloqueio retroativo: lembretes de consultas passadas não são enviados
-    const tiposLembrete = ["lembrete_24h", "lembrete_2h", "lembrete_1h", "lembrete_manual", "confirmacao", "agendamento_criado", "remarcacao"];
-    if (tiposLembrete.includes(tipo) && isAppointmentInPast(ag.data, ag.hora)) {
-      await supabase.from("notification_logs").insert({
-        agendamento_id: ag.id, evento: tipo, canal: "whatsapp_evolution",
-        destinatario_telefone: "", status: "bloqueado",
-        erro: "agendamento_passado", payload: { tipo, agendamento_id },
-      });
-      return new Response(
-        JSON.stringify({ success: false, blocked: true, reason: "agendamento_passado" }),
-        { status: 200, headers: corsHeaders },
-      );
-    }
-
-    const { data: paciente } = await supabase
-      .from("pacientes").select("id, nome, telefone, email").eq("id", ag.paciente_id).maybeSingle();
-    if (!paciente?.telefone) {
-      await supabase.from("notification_logs").insert({
-        agendamento_id: ag.id, evento: tipo || "whatsapp", canal: "whatsapp_evolution",
-        destinatario_telefone: "", status: "erro",
-        erro: "Paciente sem telefone", payload: { tipo, agendamento_id },
-      });
-      return new Response(
-        JSON.stringify({ success: false, error: "Paciente sem telefone" }),
-        { status: 400, headers: corsHeaders },
-      );
-    }
-
-    const phone = normalizePhone(paciente.telefone);
-    if (!phone || !isValidPhone(phone)) {
-      await supabase.from("notification_logs").insert({
-        agendamento_id: ag.id, evento: tipo || "whatsapp", canal: "whatsapp_evolution",
-        destinatario_telefone: paciente.telefone, status: "erro",
-        erro: `Telefone inválido: ${paciente.telefone}`, payload: { tipo, agendamento_id },
-      });
-      return new Response(
-        JSON.stringify({ success: false, error: "Telefone inválido" }),
-        { status: 400, headers: corsHeaders },
-      );
-    }
-
-    const cfg = await getUnitConfig(supabase, ag.unidade_id);
-    const validation = await validateSend(supabase, cfg, paciente.id, phone);
+    const unitCfg = await getUnitConfig(supabase, unidadeId);
+    const message = mensagem_custom || await buildMessage(supabase, tipo, dados, unidadeId);
+    
+    // VALIDAÇÃO ANTI-BAN & COMPLIANCE
+    const validation = await validateSend(supabase, unitCfg, pacienteId, phone, tipo, message);
+    
     if (!validation.ok) {
-      await supabase.from("notification_logs").insert({
-        agendamento_id: ag.id, evento: tipo || "whatsapp", canal: "whatsapp_evolution",
-        destinatario_telefone: paciente.telefone, status: "bloqueado",
-        erro: validation.reason, payload: { tipo, agendamento_id },
-      });
-      return new Response(
-        JSON.stringify({ success: false, blocked: true, reason: validation.reason }),
-        { status: 200, headers: corsHeaders },
-      );
+       await supabase.from("notification_logs").insert({
+          evento: tipo,
+          canal: "whatsapp_evolution",
+          destinatario_telefone: phone,
+          status: "bloqueado",
+          erro: validation.reason,
+          prior_interaction: validation.audit.prior_interaction,
+          opt_in_status: validation.audit.opt_in_status,
+          window_24h: validation.audit.window_24h,
+          category: validation.audit.category,
+          agendamento_id
+       });
+       return new Response(JSON.stringify({ success: false, error: validation.reason, blocked: true }), { status: 200, headers: corsHeaders });
     }
 
-    let unidadeNome = "";
-    if (ag.unidade_id) {
-      const { data: u } = await supabase.from("unidades").select("nome").eq("id", ag.unidade_id).maybeSingle();
-      unidadeNome = u?.nome || "";
-    }
-
-    const message = await buildMessage(supabase, tipo || "confirmacao", {
-      paciente_nome: paciente.nome || ag.paciente_nome,
-      data_consulta: ag.data,
-      hora_consulta: ag.hora,
-      profissional: ag.profissional_nome,
-      unidade: unidadeNome,
-    }, ag.unidade_id);
-
-    const prioridade = tipo === "lembrete_2h" ? "alta" : tipo === "lembrete_24h" ? "media" : "media";
-
-    const { id, error } = await enqueue(supabase, {
-      paciente_id: paciente.id,
-      paciente_nome: paciente.nome || ag.paciente_nome,
-      telefone: phone,
-      evento: tipo || "confirmacao",
-      mensagem: message,
-      prioridade,
-      unidade_id: ag.unidade_id,
-      agendamento_id: ag.id,
+    // ENVIO REAL
+    const result = await sendEvolutionMessage(config, phone, message);
+    
+    await supabase.from("notification_logs").insert({
+      evento: tipo,
+      canal: "whatsapp_evolution",
+      destinatario_telefone: phone,
+      status: result.ok ? "enviado" : "erro",
+      erro: result.ok ? "" : result.body,
+      prior_interaction: validation.audit.prior_interaction,
+      window_24h: validation.audit.window_24h,
+      category: validation.audit.category,
+      agendamento_id,
+      resposta: result.body.substring(0, 500),
     });
 
-    return new Response(
-      JSON.stringify({ success: !error, queued: true, id }),
-      { status: error ? 500 : 200, headers: corsHeaders },
-    );
-  } catch (err) {
-    console.error("[send-whatsapp-evolution]", err);
-    return new Response(
-      JSON.stringify({ success: false, error: err instanceof Error ? err.message : "Erro", fallback: true }),
-      { status: 200, headers: corsHeaders },
-    );
+    return new Response(JSON.stringify({ success: result.ok, error: result.ok ? null : result.body }), { status: 200, headers: corsHeaders });
+
+  } catch (err: any) {
+    return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
   }
 });
