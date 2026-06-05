@@ -2959,7 +2959,8 @@ const Agenda: React.FC = () => {
                               )}
                             </TooltipContent>
                           </Tooltip>
-                          <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
+                        </TooltipProvider>
+                        <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
                           {lastAppt && isProfissional && (
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                               📋 Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
