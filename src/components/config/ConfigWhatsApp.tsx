@@ -20,6 +20,7 @@ import {
   Smartphone, FileText, Zap, Shield
 } from 'lucide-react';
 import ConfigWhatsAppAntiBan from './ConfigWhatsAppAntiBan';
+import ConfigWhatsAppEvents from './ConfigWhatsAppEvents';
 import { whatsappService, uazapigoService } from '@/services/whatsappService';
 import { toast } from 'sonner';
 
@@ -733,6 +734,10 @@ const ConfigWhatsApp: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="eventos" className="mt-4">
+          <ConfigWhatsAppEvents />
         </TabsContent>
 
         <TabsContent value="antiban" className="mt-4">

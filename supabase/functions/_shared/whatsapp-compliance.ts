@@ -82,17 +82,36 @@ export async function validateSend(
   telefone: string,
   tipo: string,
   mensagem: string,
+  unidadeId: string,
 ): Promise<{ ok: boolean; reason?: string; audit: any }> {
   const audit: any = {
     opt_in_status: "unknown",
     prior_interaction: false,
     window_24h: false,
     category: EVENT_CLASSIFICATION[tipo]?.category || "utility",
+    event_active: true,
   };
 
+  // 1. WhatsApp Ativo na Unidade (Anti-Ban/Fila)
   if (!cfg.whatsapp_ativo) return { ok: false, reason: "whatsapp_inativo_unidade", audit };
 
-  // Janela de horário/dias
+  // 2. Evento Ativo na Unidade
+  if (unidadeId) {
+    const { data: eventCfg } = await supabase
+      .from("whatsapp_event_config")
+      .select("ativo")
+      .eq("unidade_id", unidadeId)
+      .eq("evento", tipo)
+      .maybeSingle();
+    
+    // Se existir config e estiver desativado, bloqueia
+    if (eventCfg && eventCfg.ativo === false) {
+      audit.event_active = false;
+      return { ok: false, reason: "evento_desativado_unidade", audit };
+    }
+  }
+
+  // 3. Janela de horário/dias
   const now = new Date();
   const brTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   const dia = brTime.getDay();
@@ -104,7 +123,7 @@ export async function validateSend(
     return { ok: false, reason: "fora_horario_permitido", audit };
   }
 
-  // Dados do paciente
+  // 4. Dados do paciente
   let pacienteData = null;
   if (pacienteId) {
     const { data: paciente } = await supabase
@@ -121,7 +140,7 @@ export async function validateSend(
     audit.prior_interaction = pacienteData.whatsapp_has_prior_interaction;
   }
 
-  // Opt-out check via consents table
+  // 5. Opt-out check via consents table
   const { data: optOut } = await supabase
     .from("whatsapp_consents")
     .select("id")
@@ -130,33 +149,22 @@ export async function validateSend(
     .order("criado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (optOut) return { ok: false, reason: "paciente_opt_out", audit };
+  if (optOut && cfg.respeitar_opt_out) return { ok: false, reason: "paciente_opt_out", audit };
 
   // Validação por Categoria
   const classification = EVENT_CLASSIFICATION[tipo] || { category: "utility" };
-
-  // No pacienteData, opt-ins para utility (operacional) são sempre true (regra geral removida)
-  // Marketing continua exigindo opt-in específico
   const isMarketing = classification.category === "marketing";
   const hasMarketingOptIn = pacienteData?.whatsapp_opt_in_marketing === true;
-  const hasOperationalOptIn = true; // Liberado por padrão conforme solicitado
-  const hasSpecificConsent = classification.requiresSpecificConsent
-    ? pacienteData?.[classification.requiresSpecificConsent] === true
-    : true;
 
   if (isMarketing && !hasMarketingOptIn) {
     return { ok: false, reason: "sem_opt_in_marketing", audit };
-  }
-
-  if (classification.requiresSpecificConsent && !hasSpecificConsent) {
-    return { ok: false, reason: `requer_consentimento_especifico_${classification.requiresSpecificConsent}`, audit };
   }
 
   // Define o status do opt-in no log
   audit.opt_in_status = "regra_geral_unidade";
   audit.authorized_by_default_rule = true;
 
-  // Regra 24 horas
+  // 6. Regra 24 horas
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: lastPatientMsg } = await supabase
     .from("whatsapp_consents")
@@ -176,7 +184,7 @@ export async function validateSend(
   }
 
   if (telefone) {
-    // Limite diário
+    // 7. Limite diário por paciente
     const { count: countDia } = await supabase
       .from("notification_logs")
       .select("id", { count: "exact", head: true })
@@ -187,7 +195,7 @@ export async function validateSend(
       return { ok: false, reason: "limite_diario_excedido", audit };
     }
 
-    // Limite semanal
+    // 8. Limite semanal por paciente
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { count: countSem } = await supabase
       .from("notification_logs")
@@ -199,7 +207,7 @@ export async function validateSend(
       return { ok: false, reason: "limite_semanal_excedido", audit };
     }
 
-    // Intervalo mínimo
+    // 9. Intervalo mínimo entre mensagens para o mesmo paciente
     const intervalAgo = new Date(Date.now() - cfg.intervalo_minimo_minutos * 60 * 1000).toISOString();
     const { count: countInt } = await supabase
       .from("notification_logs")
@@ -209,6 +217,17 @@ export async function validateSend(
       .gte("criado_em", intervalAgo);
     if ((countInt ?? 0) > 0) {
       return { ok: false, reason: "intervalo_minimo_nao_respeitado", audit };
+    }
+
+    // 10. Limite global por minuto (Anti-Spam)
+    const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    const { count: countGlobal } = await supabase
+      .from("notification_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "enviado")
+      .gte("criado_em", minuteAgo);
+    if ((countGlobal ?? 0) >= cfg.limite_global_por_minuto) {
+      return { ok: false, reason: "limite_global_por_minuto_excedido", audit };
     }
   }
 
@@ -231,10 +250,17 @@ export async function buildMessage(supabase: any, tipo: string, data: any, unida
     "novo_agendamento": "confirmacao",
     "agendamento_criado": "confirmacao",
     "reagendamento": "remarcacao",
+    "remarcacao": "remarcacao",
     "nao_compareceu": "falta",
+    "falta": "falta",
     "vaga_liberada": "vaga_disponivel",
+    "vaga_disponivel": "vaga_disponivel",
     "fila_chamada": "confirmacao",
-    "fila_entrada": "lista_espera"
+    "fila_entrada": "lista_espera",
+    "lista_espera": "lista_espera",
+    "lembrete_24h": "lembrete_24h",
+    "lembrete_2h": "lembrete_2h",
+    "lembrete_1h": "lembrete_2h"
   }[tipo] || tipo;
 
   // Busca template customizado se existir

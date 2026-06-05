@@ -192,36 +192,49 @@ serve(async (req) => {
 
     if (whatsappEvents.includes(evento)) {
       try {
-        const { data: clinicaCfg } = await supabaseAdmin.from("clinica_config").select("whatsapp_provider_active").limit(1).maybeSingle();
+        const { data: clinicaCfg } = await supabaseAdmin.from("clinica_config").select("whatsapp_provider_active, nome_clinica").limit(1).maybeSingle();
         const activeProvider = clinicaCfg?.whatsapp_provider_active || "uazapigo";
         const functionName = activeProvider === "uazapigo" ? "send-whatsapp-uazapigo" : "send-whatsapp-evolution";
         
         console.log(`[webhook-notify] Attempting WhatsApp via ${functionName} for event ${evento}`);
         
         const typeMap: Record<string, string> = {
-          "novo_agendamento": "novo_agendamento",
-          "agendamento_criado": "agendamento_criado",
-          "reagendamento": "reagendamento",
+          "novo_agendamento": "confirmacao",
+          "agendamento_criado": "confirmacao",
+          "reagendamento": "remarcacao",
           "remarcacao": "remarcacao",
-          "nao_compareceu": "nao_compareceu",
+          "nao_compareceu": "falta",
           "falta": "falta",
-          "lembrete_1h": "lembrete_1h",
+          "lembrete_1h": "lembrete_2h",
           "lembrete_2h": "lembrete_2h",
           "lembrete_24h": "lembrete_24h",
-          "vaga_liberada": "vaga_liberada",
+          "vaga_liberada": "vaga_disponivel",
           "vaga_disponivel": "vaga_disponivel",
-          "fila_chamada": "fila_chamada",
-          "fila_entrada": "fila_entrada",
-          "lista_espera": "lista_espera"
+          "fila_chamada": "confirmacao",
+          "fila_entrada": "lista_espera",
+          "lista_espera": "lista_espera",
+          "confirmacao": "confirmacao",
+          "cancelamento": "cancelamento"
         };
+
+        const eventToProcess = typeMap[evento] || evento;
 
         const { data: wsResult, error: wsError } = await supabaseAdmin.functions.invoke(functionName, {
           body: {
             agendamento_id: id_agendamento,
-            tipo: typeMap[evento] || evento,
+            tipo: eventToProcess,
             telefone: telefone,
             paciente_id: payload.paciente_id || "",
-            mensagem_custom: payload.mensagem_whatsapp || ""
+            unidade_id: payload.unidade_id || "",
+            mensagem_custom: payload.mensagem_whatsapp || "",
+            dados_direto: {
+              paciente_nome: paciente_nome,
+              unidade: unidade || clinicaCfg?.nome_clinica || "",
+              profissional: profissional || "",
+              data_consulta: data_consulta || "",
+              hora_consulta: hora_consulta || "",
+              observacoes: observacoes || ""
+            }
           }
         });
 
@@ -229,12 +242,10 @@ serve(async (req) => {
           const errorDetail = wsError?.message || wsResult?.error || "Erro desconhecido ao chamar function";
           console.warn(`[webhook-notify] WhatsApp failed:`, errorDetail);
           
-          // Log specific WhatsApp failure to notification_logs if it wasn't already logged by the provider function
-          // (The provider function usually logs its own success/failure, but if it fails to even run, we log here)
           if (wsError) {
             await logNotification(supabaseAdmin, {
               agendamento_id: id_agendamento,
-              evento: typeMap[evento] || evento,
+              evento: eventToProcess,
               canal: `whatsapp_${activeProvider}`,
               destinatario_telefone: telefone,
               payload: { ...payload, error_detail: errorDetail },

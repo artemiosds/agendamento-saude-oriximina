@@ -242,9 +242,10 @@ serve(async (req) => {
     const message = mensagem_custom || await buildMessage(supabase, tipo, dados, unidadeId);
     
     // VALIDAÇÃO ANTI-BAN & COMPLIANCE
-    const validation = await validateSend(supabase, unitCfg, pacienteId, phone, tipo, message);
+    const validation = await validateSend(supabase, unitCfg, pacienteId, phone, tipo, message, unidadeId);
     
     if (!validation.ok) {
+       console.log(`[UazapiGO] Send blocked for ${phone}. Reason: ${validation.reason}`);
        await supabase.from("notification_logs").insert({
           evento: tipo,
           canal: "whatsapp_uazapigo",
@@ -255,14 +256,23 @@ serve(async (req) => {
           opt_in_status: validation.audit.opt_in_status,
           window_24h: validation.audit.window_24h,
           category: validation.audit.category,
-          agendamento_id
+          agendamento_id,
+          unidade_id: unidadeId
        });
 
        return new Response(JSON.stringify({ 
          success: false, 
-         error: `Bloqueado por Compliance: ${validation.reason}`,
+         error: `Bloqueado: ${validation.reason}`,
          audit: validation.audit
        }), { headers: corsHeaders });
+    }
+
+    // Delay anti-ban adicional se for lote (opcional, aqui estamos em function individual)
+    // Respeita o delay configurado na unidade como um delay aleatório antes do envio
+    if (unitCfg.delay_aleatorio_max_seg > 0) {
+      const delay = Math.floor(Math.random() * (unitCfg.delay_aleatorio_max_seg - unitCfg.delay_aleatorio_min_seg + 1) + unitCfg.delay_aleatorio_min_seg) * 1000;
+      console.log(`[UazapiGO] Delaying send by ${delay}ms (Anti-Ban)`);
+      await new Promise(r => setTimeout(r, delay));
     }
 
     // Envio real
