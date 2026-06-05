@@ -233,6 +233,7 @@ const Agenda: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState(isProfissional ? (user?.id || "all") : "all");
+  const [searchProf, setSearchProf] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
@@ -537,6 +538,33 @@ const Agenda: React.FC = () => {
   const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
 
+  const normalizeString = (str: string) => {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  };
+
+  const profissionaisFiltradosBusca = React.useMemo(() => {
+    let list = profissionaisVisiveis.filter((p) => {
+      if (filterUnit !== "all" && p.unidadeId !== filterUnit) return false;
+      return true;
+    });
+
+    if (searchProf && searchProf.trim() !== "") {
+      const search = normalizeString(searchProf);
+      list = list.filter((p) => {
+        const nome = normalizeString(p.nome);
+        const espec = normalizeString(p.profissao || p.cargo || "");
+        return nome.includes(search) || espec.includes(search);
+      });
+    }
+
+    return list.sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [profissionaisVisiveis, filterUnit, searchProf]);
+
+  const filteredProfissionais = profissionaisFiltradosBusca;
+
   // NOVO: agendamentos online pendentes de aprovação
   const agendamentosPendentesOnline = React.useMemo(() => {
     return agendamentos
@@ -598,12 +626,6 @@ const Agenda: React.FC = () => {
     return getAvailableSlots(user.id, user.unidadeId, retornoForm.data);
   }, [user, retornoForm.data, getAvailableSlots]);
 
-  const filteredProfissionais = React.useMemo(() => {
-    // Garantir que a lista venha de profissionaisVisiveis (fonte correta e filtrada por unidade)
-    const baseList = profissionaisVisiveis || [];
-    if (filterUnit === "all") return baseList;
-    return baseList.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
-  }, [profissionaisVisiveis, filterUnit]);
 
   const filtered = useMemo(() => {
     // Peso da classificação de risco (Manchester) — menor = mais urgente
@@ -2623,27 +2645,36 @@ const Agenda: React.FC = () => {
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
-                            <Command className="w-full">
-                              <CommandInput placeholder="Buscar profissional ou especialidade..." className="h-9" />
+                            <Command className="w-full" shouldFilter={false}>
+                              <CommandInput 
+                                placeholder="Buscar profissional ou especialidade..." 
+                                className="h-9"
+                                onValueChange={(v) => setSearchProf(v)}
+                              />
                               <CommandList className="max-h-[350px]">
                                 <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
-                                <CommandGroup>
-                                  <CommandItem
-                                    value="all"
-                                    onSelect={() => setFilterProf("all")}
-                                    className="flex items-center justify-between cursor-pointer py-3 border-b border-muted/50"
-                                  >
-                                    <div className="flex flex-col">
-                                      <span className="font-semibold">Todos Profissionais</span>
-                                      <span className="text-[10px] text-muted-foreground">Exibir agenda global</span>
-                                    </div>
-                                    {filterProf === "all" && <Check className="h-4 w-4 text-primary" />}
-                                  </CommandItem>
-                                </CommandGroup>
+                                
+                                {(!searchProf || searchProf.trim() === "") && (
+                                  <CommandGroup>
+                                    <CommandItem
+                                      value="all"
+                                      onSelect={() => {
+                                        setFilterProf("all");
+                                        setSearchProf("");
+                                      }}
+                                      className="flex items-center justify-between cursor-pointer py-3 border-b border-muted/50"
+                                    >
+                                      <div className="flex flex-col">
+                                        <span className="font-semibold">Todos Profissionais</span>
+                                        <span className="text-[10px] text-muted-foreground">Exibir agenda global</span>
+                                      </div>
+                                      {filterProf === "all" && <Check className="h-4 w-4 text-primary" />}
+                                    </CommandItem>
+                                  </CommandGroup>
+                                )}
 
                                 {Object.entries(
-                                  filteredProfissionais
-                                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                                  profissionaisFiltradosBusca
                                     .reduce((acc, p) => {
                                       const cat = p.profissao || p.cargo || "Outros";
                                       if (!acc[cat]) acc[cat] = [];
@@ -2655,8 +2686,11 @@ const Agenda: React.FC = () => {
                                     {lista.map((p) => (
                                       <CommandItem
                                         key={p.id}
-                                        value={`${p.id} ${p.nome} ${p.profissao || ''} ${p.cargo || ''}`}
-                                        onSelect={() => setFilterProf(p.id)}
+                                        value={p.id}
+                                        onSelect={() => {
+                                          setFilterProf(p.id);
+                                          setSearchProf("");
+                                        }}
                                         className="flex items-center justify-between cursor-pointer py-2.5"
                                       >
                                         <div className="flex flex-col min-w-0 pr-4 flex-1">
