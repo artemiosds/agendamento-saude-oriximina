@@ -56,16 +56,11 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    const lowerText = text.trim().toLowerCase();
-    const isOptOut = OPT_OUT_KEYWORDS.some((kw) => lowerText.includes(kw));
-
-    await supabase.from("whatsapp_consents").insert({
-      paciente_id: paciente?.id || "",
-      telefone: phone,
-      tipo: isOptOut ? "opt_out" : "interaction",
-      origem: "webhook",
-      detalhes: { event: evt, message_preview: text.substring(0, 200), paciente_nome: paciente?.nome || "" },
-    });
+    // Compliance logic removed per user request (whatsapp_consents table is no longer used for sending logic)
+    return new Response(
+      JSON.stringify({ ok: true, ignored: "compliance_disabled" }),
+      { headers: corsHeaders },
+    );
 
     return new Response(
       JSON.stringify({ ok: true, registered: isOptOut ? "opt_out" : "interaction" }),
