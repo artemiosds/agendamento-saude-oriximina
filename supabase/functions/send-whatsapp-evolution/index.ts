@@ -1,5 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
+import { 
+  validateSend, 
+  buildMessage, 
+  normalizePhone, 
+  isValidPhone, 
+  UnitConfig, 
+  DEFAULT_UNIT_CONFIG 
+} from "../_shared/whatsapp-compliance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,38 +22,6 @@ interface ClinicaConfig {
   evolution_instance_name: string;
   nome_clinica: string;
 }
-
-interface UnitConfig {
-  whatsapp_ativo: boolean;
-  max_msgs_paciente_dia: number;
-  max_msgs_paciente_semana: number;
-  intervalo_minimo_minutos: number;
-  delay_aleatorio_min_seg: number;
-  delay_aleatorio_max_seg: number;
-  limite_global_por_minuto: number;
-  horario_inicio: string;
-  horario_fim: string;
-  dias_permitidos: number[];
-  modo_estrito: boolean;
-  respeitar_opt_out: boolean;
-  bloquear_sem_interacao_previa: boolean;
-}
-
-const DEFAULT_UNIT_CONFIG: UnitConfig = {
-  whatsapp_ativo: true,
-  max_msgs_paciente_dia: 2,
-  max_msgs_paciente_semana: 5,
-  intervalo_minimo_minutos: 240, // 4 horas
-  delay_aleatorio_min_seg: 10,
-  delay_aleatorio_max_seg: 30,
-  limite_global_por_minuto: 10,
-  horario_inicio: "08:00",
-  horario_fim: "18:00",
-  dias_permitidos: [1, 2, 3, 4, 5],
-  modo_estrito: true,
-  respeitar_opt_out: true,
-  bloquear_sem_interacao_previa: true,
-};
 
 async function getClinicaConfig(supabase: any): Promise<ClinicaConfig | null> {
   const { data } = await supabase
@@ -66,83 +42,6 @@ async function getUnitConfig(supabase: any, unidadeId: string): Promise<UnitConf
   return (data as UnitConfig) ?? DEFAULT_UNIT_CONFIG;
 }
 
-function normalizePhone(raw: string): string | null {
-  let digits = raw.replace(/\D/g, "");
-  if (digits.length === 0) return null;
-  if (digits.startsWith("0")) digits = digits.slice(1);
-  if (digits.length === 10 && !digits.startsWith("55")) {
-    digits = digits.slice(0, 2) + "9" + digits.slice(2);
-  }
-  if (digits.length === 11 && !digits.startsWith("55")) {
-    digits = "55" + digits;
-  }
-  if (digits.length === 12 && digits.startsWith("55")) {
-    digits = digits.slice(0, 4) + "9" + digits.slice(4);
-  }
-  if (digits.length === 13 && digits.startsWith("55")) return digits;
-  return null;
-}
-
-function isValidPhone(phone: string): boolean {
-  return phone.length === 13 && phone.startsWith("55") && /^\d+$/.test(phone);
-}
-
-// Variação automática de saudação para evitar mensagens 100% idênticas
-const GREETINGS = ["Olá", "Oi", "Bom dia", "Boa tarde"];
-const EMOJIS = ["👋", "😊", "🙂", "✨"];
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: string): Promise<string> {
-  const footer = `\n_Secretaria Municipal de Saúde_`;
-  const greeting = pick(GREETINGS);
-  const emoji = pick(EMOJIS);
-
-  // Busca template customizado se existir
-  const { data: template } = await supabase
-    .from("whatsapp_templates")
-    .select("mensagem, ativo")
-    .eq("unidade_id", unidadeId || "")
-    .eq("tipo", tipo === "agendamento_criado" ? "confirmacao" : tipo)
-    .maybeSingle();
-
-  if (template?.ativo && template.mensagem) {
-    let msg = template.mensagem;
-    // Substitui variáveis
-    msg = msg.replace(/\{\{nome\}\}/g, data.paciente_nome || "");
-    msg = msg.replace(/\{\{unidade\}\}/g, data.unidade || "");
-    msg = msg.replace(/\{\{profissional\}\}/g, data.profissional || "");
-    msg = msg.replace(/\{\{data\}\}/g, data.data_consulta || "");
-    msg = msg.replace(/\{\{hora\}\}/g, data.hora_consulta || "");
-    return msg;
-  }
-
-  // Fallback para mensagens hardcoded
-  switch (tipo) {
-    case "confirmacao":
-    case "agendamento_criado":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento foi agendado.\n\n📍 Unidade: ${data.unidade}\n👨‍⚕️ Profissional: *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}\n${data.observacoes ? `📝 ${data.observacoes}\n` : ""}\nChegue com antecedência.${footer}`;
-    case "lembrete_24h":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nLembrete do seu atendimento:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}\n\nContamos com sua presença.${footer}`;
-    case "lembrete_2h":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento está próximo:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}${footer}`;
-    case "cancelamento":
-      return `${greeting}, *${data.paciente_nome}*.\n\nSeu atendimento foi cancelado.\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 ${data.data_consulta}${data.observacoes ? `\n📝 ${data.observacoes}` : ""}${footer}`;
-    case "remarcacao":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento foi remarcado:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 ${data.data_consulta}\n⏰ ${data.hora_consulta}${footer}`;
-    case "falta":
-      return `${greeting}, *${data.paciente_nome}*.\n\nRegistramos sua ausência em ${data.data_consulta}. Procure a unidade para reagendar.${footer}`;
-    case "lista_espera":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nVocê está na lista de espera para *${data.profissional}* (${data.unidade}). Entraremos em contato.${footer}`;
-    case "vaga_disponivel":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nTemos vaga disponível com *${data.profissional}* (${data.unidade}). Procure a unidade para confirmar.${footer}`;
-    case "teste":
-      return `🧪 *Teste de Conexão WhatsApp*\n\nIntegração funcionando! ✅\n${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}${footer}`;
-    default:
-      return `${greeting}, *${data.paciente_nome}*.${footer}`;
-  }
-}
 
 async function sendEvolutionMessage(config: ClinicaConfig, phone: string, message: string) {
   try {
