@@ -3089,34 +3089,38 @@ const Agenda: React.FC = () => {
                         {isProfissional && (
                           <>
                             {(ag.status === "pendente" || ag.status === "confirmado") && ehHoje && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 px-3 text-xs cursor-not-allowed opacity-50"
-                                    disabled
-                                  >
-                                    ⏳ Aguardando chegada
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
-                              </Tooltip>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 px-3 text-xs cursor-not-allowed opacity-50"
+                                      disabled
+                                    >
+                                      ⏳ Aguardando chegada
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                             {ag.status === "aguardando_triagem" && ehHoje && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning"
-                                    disabled
-                                  >
-                                    🩺 Em triagem
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
-                              </Tooltip>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning"
+                                      disabled
+                                    >
+                                      🩺 Em triagem
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                             {canStart && (
                               <ActionButton
