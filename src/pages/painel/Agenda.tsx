@@ -2907,35 +2907,36 @@ const Agenda: React.FC = () => {
                       <div className="flex items-start gap-3">
                         <span className="text-lg font-mono font-bold text-primary w-14 shrink-0">{ag.hora}</span>
                         <div className="flex-1 min-w-0">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <p className="font-semibold text-foreground cursor-default">
-                                {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                                {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
-                              </p>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-xs">
-                              <p className="text-xs">
-                                <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                              </p>
-                              {paciente?.telefone && (
-                                <p className="text-xs">
-                                  <strong>Tel:</strong> {paciente.telefone}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <p className="font-semibold text-foreground cursor-default truncate">
+                                  {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
+                                  {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                                 </p>
-                              )}
-                              {paciente?.cpf && (
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
                                 <p className="text-xs">
-                                  <strong>CPF:</strong> {paciente.cpf}
+                                  <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                                 </p>
-                              )}
-                              {paciente?.cns && (
+                                {paciente?.telefone && (
+                                  <p className="text-xs">
+                                    <strong>Tel:</strong> {paciente.telefone}
+                                  </p>
+                                )}
+                                {paciente?.cpf && (
+                                  <p className="text-xs">
+                                    <strong>CPF:</strong> {paciente.cpf}
+                                  </p>
+                                )}
+                                {paciente?.cns && (
+                                  <p className="text-xs">
+                                    <strong>CNS:</strong> {formatCNS(paciente.cns)}
+                                  </p>
+                                )}
                                 <p className="text-xs">
-                                  <strong>CNS:</strong> {formatCNS(paciente.cns)}
+                                  <strong>Tipo:</strong> {tipoInfo.label}
                                 </p>
-                              )}
-                              <p className="text-xs">
-                                <strong>Tipo:</strong> {tipoInfo.label}
-                              </p>
                               <p className="text-xs">
                                 <strong>Origem:</strong> {(ag.origem as string) === 'externo' ? '🔗 Externo' : ag.origem}
                               </p>
