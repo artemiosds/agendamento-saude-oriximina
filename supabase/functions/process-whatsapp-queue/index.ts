@@ -52,8 +52,10 @@ serve(async (req) => {
       .select("*")
       .eq("status", "pendente")
       .lte("agendado_para", nowIso)
+      .order("prioridade", { ascending: false })
       .order("criado_em", { ascending: true })
       .limit(NORMAL_BATCH);
+
 
     if (fetchError) {
       console.error("[Queue] Error fetching pending messages:", fetchError);
@@ -89,8 +91,10 @@ serve(async (req) => {
           status: tentativas >= 3 ? "erro" : "pendente",
           tentativas,
           motivo_erro: error?.message || result?.error || "Erro desconhecido",
-          processado_em: new Date().toISOString()
+          processado_em: new Date().toISOString(),
+          provider: activeProvider
         }).eq("id", msg.id);
+
       } else {
         await supabase.from("whatsapp_queue").update({
           status: "enviado",
