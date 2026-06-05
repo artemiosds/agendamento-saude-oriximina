@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { JSZip } from "https://deno.land/x/jszip@0.11.0/mod.ts";
+import { JSZip } from "jszip";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,7 +46,7 @@ serve(async (req) => {
       exports: {
         database: { total_tables: 0, total_records: 0, tables: [] },
         auth: { status: "pending" },
-        storage: { total_files: 0, files: [] },
+        storage: { total_files: 0, files: [], downloaded_files: 0 },
         edge_functions: { total: 0 },
         configs: { items: [] }
       },
@@ -93,14 +93,14 @@ serve(async (req) => {
           zip.addFile(`database/json/${table}.json`, "[]");
         }
         logEntries.push(`Exported table: ${table} (${rowCount} rows)`);
-      } catch (err) {
+      } catch (err: any) {
         const msg = `Failed to export table ${table}: ${err.message}`;
         logEntries.push(msg);
-        manifest.failures.push({ table, error: err.message });
+        manifest.failures.push({ type: 'table', name: table, error: err.message });
       }
     }
 
-    // 2. Auth Export (Admin User List)
+    // 2. Auth Export
     try {
       const { data: { users: authUsers }, error: authError } = await supabaseAdmin.auth.admin.listUsers();
       if (authError) throw authError;
@@ -119,33 +119,59 @@ serve(async (req) => {
       manifest.exports.auth.status = "success";
       manifest.exports.auth.total_users = safeUsers.length;
       logEntries.push(`Exported auth users: ${safeUsers.length} records`);
-    } catch (err) {
+    } catch (err: any) {
       manifest.exports.auth.status = "failed";
       manifest.exports.auth.error = err.message;
       logEntries.push(`Auth export failed: ${err.message}`);
     }
 
-    // 3. Storage Export
+    // 3. Storage Export (FILES INCLUDED)
     try {
       const { data: buckets, error: bucketError } = await supabaseAdmin.storage.listBuckets();
       if (bucketError) throw bucketError;
 
       for (const bucket of buckets) {
-        const { data: files, error: fileError } = await supabaseAdmin.storage.from(bucket.name).list("", { limit: 100 });
-        if (fileError) continue;
+        // Recursive list function for folders
+        const listAllFiles = async (path: string = "") => {
+          const { data: files, error: fileError } = await supabaseAdmin.storage.from(bucket.name).list(path, { limit: 1000 });
+          if (fileError) return;
 
-        for (const file of files) {
-          manifest.exports.storage.total_files++;
-          manifest.exports.storage.files.push({ bucket: bucket.name, name: file.name, size: file.metadata?.size });
-          logEntries.push(`Registered file in storage: ${bucket.name}/${file.name}`);
-        }
+          for (const file of files) {
+            const fullPath = path ? `${path}/${file.name}` : file.name;
+            if (file.metadata) {
+              // It's a file
+              manifest.exports.storage.total_files++;
+              manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata.size });
+              
+              try {
+                const { data: fileData, error: downloadError } = await supabaseAdmin.storage.from(bucket.name).download(fullPath);
+                if (downloadError) throw downloadError;
+                
+                const arrayBuffer = await fileData.arrayBuffer();
+                zip.addFile(`storage/${bucket.name}/${fullPath}`, new Uint8Array(arrayBuffer));
+                manifest.exports.storage.downloaded_files++;
+                logEntries.push(`Downloaded storage file: ${bucket.name}/${fullPath}`);
+              } catch (err: any) {
+                const msg = `Failed to download storage file ${bucket.name}/${fullPath}: ${err.message}`;
+                logEntries.push(msg);
+                manifest.failures.push({ type: 'storage_file', bucket: bucket.name, path: fullPath, error: err.message });
+              }
+            } else {
+              // It's a folder, recurse
+              await listAllFiles(fullPath);
+            }
+          }
+        };
+
+        await listAllFiles();
       }
       zip.addFile("storage/storage-manifest.json", JSON.stringify(manifest.exports.storage, null, 2));
-    } catch (err) {
-      logEntries.push(`Storage listing failed: ${err.message}`);
+    } catch (err: any) {
+      logEntries.push(`Storage export failed: ${err.message}`);
+      manifest.failures.push({ type: 'storage_root', error: err.message });
     }
 
-    // 4. Configs & Special Items
+    // 4. Configs
     const configsToZip = [
       { table: "prontuario_config", name: "prontuario-config.json" },
       { table: "whatsapp_templates", name: "whatsapp-templates.json" },
@@ -154,10 +180,14 @@ serve(async (req) => {
     ];
 
     for (const cfg of configsToZip) {
-      const { data } = await supabaseAdmin.from(cfg.table).select("*");
-      if (data) {
-        zip.addFile(`configs/${cfg.name}`, JSON.stringify(data, null, 2));
-        manifest.exports.configs.items.push(cfg.name);
+      try {
+        const { data } = await supabaseAdmin.from(cfg.table).select("*");
+        if (data) {
+          zip.addFile(`configs/${cfg.name}`, JSON.stringify(data, null, 2));
+          manifest.exports.configs.items.push(cfg.name);
+        }
+      } catch (e: any) {
+        logEntries.push(`Config export failed for ${cfg.name}: ${e.message}`);
       }
     }
 
@@ -178,33 +208,30 @@ LOVABLE_API_KEY=
 `;
     zip.addFile("secrets/secrets-template.env", secretsTemplate);
 
-    // 6. README and Final Manifest
+    // 6. Final items
     const readme = `
-# README DE RESTAURAÇÃO - BACKUP COMPLETO
+# README DE RESTAURAÇÃO - BACKUP COMPLETO (INCLUINDO ARQUIVOS)
 
 ## Conteúdo
-- **database/**: Dados exportados em JSON e CSV de todas as tabelas.
+- **database/**: Dados exportados em JSON e CSV.
 - **auth/**: Lista de usuários (sem senhas).
-- **configs/**: Configurações específicas de prontuário, WhatsApp e clínica.
-- **storage/**: Manifesto de arquivos no Storage (download binário parcial dependendo do tamanho).
-- **secrets/**: Template de variáveis de ambiente necessárias.
-- **logs/**: Log detalhado da execução.
+- **storage/**: ARQUIVOS REAIS preservando a estrutura de buckets/pastas.
+- **configs/**: Configurações do sistema.
+- **secrets/**: Template de variáveis de ambiente.
+- **logs/**: Log detalhado e errors.json para falhas.
 
 ## Procedimento de Restauração
-1. **Banco de Dados**: Crie o schema base e utilize as ferramentas de importação do Supabase/psql para carregar os arquivos CSV ou JSON.
-2. **Auth**: Os usuários devem ser recriados via API Admin ou importação de CSV no portal Supabase. Senhas devem ser resetadas pelos usuários.
-3. **Secrets**: Utilize o arquivo \`secrets/secrets-template.env\` para configurar o novo ambiente.
-4. **Storage**: Utilize o \`storage-manifest.json\` para verificar e subir os arquivos necessários.
-
-## Metadados
-- Gerado em: ${timestamp}
-- Pelo usuário: ${user.id}
+1. **Banco de Dados**: Importe os CSVs/JSONs.
+2. **Auth**: Recrie usuários via API Admin.
+3. **Storage**: Suba as pastas de cada bucket para os respectivos buckets no novo ambiente.
+4. **Secrets**: Configure o novo .env com base no template.
 `;
     zip.addFile("README_RESTAURACAO.md", readme);
     
     manifest.duration_ms = new Date().getTime() - startTime.getTime();
     zip.addFile("manifest.json", JSON.stringify(manifest, null, 2));
     zip.addFile("logs/backup-log.txt", logEntries.join("\n"));
+    zip.addFile("logs/errors.json", JSON.stringify(manifest.failures, null, 2));
 
     const content = await zip.generateAsync({ type: "uint8array" });
 
@@ -216,7 +243,7 @@ LOVABLE_API_KEY=
       },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 });
