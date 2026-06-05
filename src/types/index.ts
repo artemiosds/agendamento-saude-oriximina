@@ -152,7 +152,6 @@ export interface Paciente {
   especialidade_destino?: string;
   custom_data?: Record<string, any>;
   whatsappOptInMarketing?: boolean;
-  whatsappOptInMarketing?: boolean;
   whatsappOptInWaitingList?: boolean;
 }
 
