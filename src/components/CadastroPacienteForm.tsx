@@ -152,9 +152,13 @@ export const emptyPacienteForm: PacienteFormData = {
   observacaoEquipamentos: "", outroServicoSus: false, transporte: "", turnoPreferido: "",
   email: "", endereco: "", nomeMae: "", descricaoClinica: "",
   isGestante: false, isPne: false, isAutista: false,
+  whatsappOptInOperational: true,
+  whatsappOptInMarketing: false,
+  whatsappOptInWaitingList: false,
   patientProcedures: [],
   customData: {},
 };
+
 
 interface Props {
   pacienteId?: string | null;
