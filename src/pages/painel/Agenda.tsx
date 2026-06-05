@@ -810,6 +810,7 @@ const Agenda: React.FC = () => {
     
     // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
     return { total: activeBase.length, byGroup };
+
   }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
 
 
