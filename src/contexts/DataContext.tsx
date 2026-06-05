@@ -1218,7 +1218,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cid: p.cid,
         criado_em: p.criadoEm || new Date().toISOString(),
         unidade_id: unidadeIdToUse,
+        whatsapp_opt_in_operational: p.whatsappOptInOperational ?? true,
+        whatsapp_opt_in_marketing: p.whatsappOptInMarketing ?? false,
+        whatsapp_opt_in_waiting_list: p.whatsappOptInWaitingList ?? false,
       } as any);
+
       if (!error) {
         setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
@@ -1245,6 +1249,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
       if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
       if (data.cid !== undefined) dbData.cid = data.cid;
+      if (data.whatsappOptInOperational !== undefined) dbData.whatsapp_opt_in_operational = data.whatsappOptInOperational;
+      if (data.whatsappOptInMarketing !== undefined) dbData.whatsapp_opt_in_marketing = data.whatsappOptInMarketing;
+      if (data.whatsappOptInWaitingList !== undefined) dbData.whatsapp_opt_in_waiting_list = data.whatsappOptInWaitingList;
+
       if (authUser?.role === "recepcao") {
         if (!scopedUnidadeId) {
           throw new Error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do funcionário.");

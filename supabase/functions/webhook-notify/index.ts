@@ -183,6 +183,51 @@ serve(async (req) => {
 
     console.log("Sending webhook:", JSON.stringify(webhookPayload));
 
+    // Try to send via WhatsApp Edge Function first if it's a patient event
+    const whatsappEvents = [
+      "novo_agendamento", "confirmacao", "lembrete_24h", "lembrete_1h", 
+      "cancelamento", "reagendamento", "nao_compareceu", "vaga_liberada", "fila_chamada"
+    ];
+
+    if (whatsappEvents.includes(evento)) {
+      try {
+        const { data: clinicaCfg } = await supabaseAdmin.from("clinica_config").select("whatsapp_provider_active").limit(1).maybeSingle();
+        const activeProvider = clinicaCfg?.whatsapp_provider_active || "evolution";
+        const functionName = activeProvider === "uazapigo" ? "send-whatsapp-uazapigo" : "send-whatsapp-evolution";
+        
+        console.log(`[webhook-notify] Attempting WhatsApp via ${functionName} for event ${evento}`);
+        
+        // Map webhook events to WhatsApp categories
+        const typeMap: Record<string, string> = {
+          "novo_agendamento": "confirmacao",
+          "reagendamento": "remarcacao",
+          "nao_compareceu": "falta",
+          "lembrete_1h": "lembrete_2h", // Use 2h template for 1h reminder if not exists
+          "vaga_liberada": "vaga_disponivel",
+          "fila_chamada": "confirmacao"
+        };
+
+        const { data: wsResult, error: wsError } = await supabaseAdmin.functions.invoke(functionName, {
+          body: {
+            agendamento_id: id_agendamento,
+            tipo: typeMap[evento] || evento,
+            telefone: telefone,
+            paciente_id: payload.paciente_id || "",
+            mensagem_custom: payload.mensagem_whatsapp || ""
+          }
+        });
+
+        if (!wsError && wsResult?.success) {
+          console.log(`[webhook-notify] WhatsApp sent successfully via ${functionName}`);
+        } else {
+          console.warn(`[webhook-notify] WhatsApp failed or was blocked:`, wsError || wsResult?.error);
+        }
+      } catch (wsCatch) {
+        console.error(`[webhook-notify] Error invoking WhatsApp function:`, wsCatch);
+      }
+    }
+
+
     const webhookUrl = await getWebhookUrl(supabaseAdmin);
     const result = await sendWithRetry(webhookUrl, webhookPayload);
 

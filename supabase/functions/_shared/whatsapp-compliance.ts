@@ -17,18 +17,18 @@ export interface UnitConfig {
 
 export const DEFAULT_UNIT_CONFIG: UnitConfig = {
   whatsapp_ativo: true,
-  max_msgs_paciente_dia: 2,
-  max_msgs_paciente_semana: 5,
-  intervalo_minimo_minutos: 240, // 4 horas
-  delay_aleatorio_min_seg: 10,
-  delay_aleatorio_max_seg: 30,
-  limite_global_por_minuto: 10,
+  max_msgs_paciente_dia: 10,
+  max_msgs_paciente_semana: 30,
+  intervalo_minimo_minutos: 30, // 30 minutos
+  delay_aleatorio_min_seg: 5,
+  delay_aleatorio_max_seg: 15,
+  limite_global_por_minuto: 20,
   horario_inicio: "08:00",
   horario_fim: "18:00",
-  dias_permitidos: [1, 2, 3, 4, 5],
+  dias_permitidos: [0, 1, 2, 3, 4, 5, 6], // Todos os dias
   modo_estrito: true,
   respeitar_opt_out: true,
-  bloquear_sem_interacao_previa: true,
+  bloquear_sem_interacao_previa: false, // Permitir envio sem interação prévia se tiver opt-in
 };
 
 export const EVENT_CLASSIFICATION: Record<string, { category: 'utility' | 'marketing', requiresSpecificConsent?: string }> = {
@@ -36,6 +36,7 @@ export const EVENT_CLASSIFICATION: Record<string, { category: 'utility' | 'marke
   'confirmacao': { category: 'utility' },
   'lembrete_24h': { category: 'utility' },
   'lembrete_2h': { category: 'utility' },
+  'lembrete_1h': { category: 'utility' },
   'cancelamento': { category: 'utility' },
   'remarcacao': { category: 'utility' },
   'falta': { category: 'utility' },
@@ -128,8 +129,9 @@ export async function validateSend(
     if (classification.category === 'marketing') {
       if (!pacienteData.whatsapp_opt_in_marketing) return { ok: false, reason: "sem_opt_in_marketing", audit };
     } else {
-      // Utility
-      if (!pacienteData.whatsapp_opt_in_operational) return { ok: false, reason: "sem_opt_in_operacional", audit };
+      // Utility - Se não tiver o campo definido, assume true como fallback seguro para notificações críticas
+      const hasOperationalOptIn = pacienteData.whatsapp_opt_in_operational !== false;
+      if (!hasOperationalOptIn) return { ok: false, reason: "sem_opt_in_operacional", audit };
       
       // Consentimento específico
       if (classification.requiresSpecificConsent && !pacienteData[classification.requiresSpecificConsent]) {
@@ -153,13 +155,8 @@ export async function validateSend(
   audit.window_24h = !!lastPatientMsg;
 
   // Se fora da janela de 24h e sem interação prévia, APENAS templates aprovados são permitidos.
-  if (!audit.window_24h && !audit.prior_interaction) {
-     // Trava anti-marketing em fluxo operacional
-     const lowerMsg = mensagem.toLowerCase();
-     const marketingKeywords = ["promoção", "oferta", "desconto", "aproveite", "imperdível", "compre", "venda"];
-     if (marketingKeywords.some(k => lowerMsg.includes(k))) {
-       return { ok: false, reason: "suspeita_marketing_fora_janela", audit };
-     }
+  if (!audit.window_24h && !audit.prior_interaction && cfg.bloquear_sem_interacao_previa) {
+     return { ok: false, reason: "bloqueio_sem_interacao_previa", audit };
   }
 
   if (telefone) {
@@ -241,6 +238,8 @@ export async function buildMessage(supabase: any, tipo: string, data: any, unida
       return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nLembrete do seu atendimento:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}\n\nContamos com sua presença.${footer}`;
     case "lembrete_2h":
       return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento está próximo:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}${footer}`;
+    case "lembrete_1h":
+      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento é em aproximadamente 1 hora:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n⏰ Horário: ${data.hora_consulta}${footer}`;
     case "cancelamento":
       return `${greeting}, *${data.paciente_nome}*.\n\nSeu atendimento foi cancelado.\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 ${data.data_consulta}${data.observacoes ? `\n📝 ${data.observacoes}` : ""}${footer}`;
     case "remarcacao":
