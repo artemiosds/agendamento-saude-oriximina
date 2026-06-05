@@ -84,9 +84,9 @@ async function sendNotification(
 async function sendNotification(
   supabase: any,
   config: any,
-  evolutionConfig: EvolutionConfig | null,
   payload: any
 ) {
+
   const canal = config.canalNotificacao || "webhook";
   const gmailConfig: GmailConfig | null = config.gmail?.ativo ? config.gmail : null;
   const webhookUrl = config.webhook?.url;
