@@ -1496,7 +1496,6 @@ export type Database = {
           whatsapp_consent_proof: Json | null
           whatsapp_has_prior_interaction: boolean | null
           whatsapp_opt_in_marketing: boolean | null
-          whatsapp_opt_in_operational: boolean | null
           whatsapp_opt_in_waiting_list: boolean | null
         }
         Insert: {
@@ -1569,7 +1568,6 @@ export type Database = {
           whatsapp_consent_proof?: Json | null
           whatsapp_has_prior_interaction?: boolean | null
           whatsapp_opt_in_marketing?: boolean | null
-          whatsapp_opt_in_operational?: boolean | null
           whatsapp_opt_in_waiting_list?: boolean | null
         }
         Update: {
@@ -1642,7 +1640,6 @@ export type Database = {
           whatsapp_consent_proof?: Json | null
           whatsapp_has_prior_interaction?: boolean | null
           whatsapp_opt_in_marketing?: boolean | null
-          whatsapp_opt_in_operational?: boolean | null
           whatsapp_opt_in_waiting_list?: boolean | null
         }
         Relationships: []
