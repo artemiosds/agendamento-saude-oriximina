@@ -346,7 +346,7 @@ serve(async (req) => {
       }
     }
 
-    const message = `Lembretes processados: ${sent24h} de 24h, ${sent1h} de 1h${evolutionConfig ? " (WhatsApp Evolution ativo)" : ""}`;
+    const message = `Lembretes processados: ${sent24h} de 24h, ${sent1h} de 1h`;
     console.log(`[reminders] ${message}`);
 
     return new Response(
