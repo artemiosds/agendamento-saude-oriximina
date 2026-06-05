@@ -638,52 +638,10 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               )}
             </div>
 
-            <div className="mt-6 space-y-4 rounded-xl border-2 border-primary/10 bg-primary/5 p-4">
-              <div className="flex items-center gap-2 font-semibold text-primary mb-2">
-                <Shield className="w-4 h-4" /> Consentimento WhatsApp & Compliance
-              </div>
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-medium">Mensagens Operacionais</Label>
-                    <p className="text-xs text-muted-foreground">Lembretes, agendamentos e cancelamentos</p>
-                  </div>
-                  <Switch 
-                    checked={form.whatsappOptInOperational} 
-                    onCheckedChange={(v) => set("whatsappOptInOperational", v)} 
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-medium">Lista de Espera / Vagas</Label>
-                    <p className="text-xs text-muted-foreground">Notificações sobre posição na fila e disponibilidade</p>
-                  </div>
-                  <Switch 
-                    checked={form.whatsappOptInWaitingList} 
-                    onCheckedChange={(v) => set("whatsappOptInWaitingList", v)} 
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-medium">Mensagens de Marketing</Label>
-                    <p className="text-xs text-muted-foreground">Informativos, campanhas de saúde e novidades</p>
-                  </div>
-                  <Switch 
-                    checked={form.whatsappOptInMarketing} 
-                    onCheckedChange={(v) => set("whatsappOptInMarketing", v)} 
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 bg-muted/50 rounded-lg flex gap-2">
-                <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Ao ativar estes campos, você confirma que o paciente deu consentimento verbal ou assinado para receber comunicações via WhatsApp.
-                </p>
-              </div>
+            <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/10">
+              <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                Nota: Mensagens operacionais (agendamentos e lembretes) são autorizadas por padrão para todos os pacientes da unidade, conforme as Regras de Opt-in & Compliance.
+              </p>
             </div>
           </TabsContent>
 
