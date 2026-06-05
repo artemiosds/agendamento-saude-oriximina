@@ -293,17 +293,17 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-xl border border-border/50">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navDate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
-          <div className="text-center min-w-[120px]">
-            <h2 className="text-sm font-bold capitalize">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/10 p-2.5 rounded-lg border border-border/40">
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-muted" onClick={() => navDate(-1)}><ChevronLeft className="h-5 w-5" /></Button>
+          <div className="text-center min-w-[140px]">
+            <h2 className="text-base font-bold capitalize tracking-tight">
               {format(currentDate, "MMMM", { locale: ptBR })}
               <span className="text-primary ml-1">{format(currentDate, "yyyy")}</span>
             </h2>
           </div>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navDate(1)}><ChevronRight className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="sm" className="h-8 text-xs font-bold text-primary" onClick={() => {
+          <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-muted" onClick={() => navDate(1)}><ChevronRight className="h-5 w-5" /></Button>
+          <Button variant="outline" size="sm" className="h-8 text-[11px] font-bold uppercase tracking-wider ml-1 px-3 border-primary/20 text-primary hover:bg-primary/5" onClick={() => {
             const today = todayLocalStr();
             onDateChange(today);
             setCurrentDate(dateStrToUtcDate(today));
@@ -311,13 +311,14 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
         </div>
         
         <Tabs value={view} onValueChange={(v) => setView(v as AgendaView)} className="w-auto">
-          <TabsList className="h-9 p-1 rounded-lg">
-            <TabsTrigger value="day" className="h-7 text-xs px-3"><Calendar className="w-3 h-3 mr-1" />Dia</TabsTrigger>
-            <TabsTrigger value="week" className="h-7 text-xs px-3"><CalendarRange className="w-3 h-3 mr-1" />Sem.</TabsTrigger>
-            <TabsTrigger value="month" className="h-7 text-xs px-3"><CalendarDays className="w-3 h-3 mr-1" />Mês</TabsTrigger>
+          <TabsList className="h-9 p-1 bg-muted/40 rounded-lg">
+            <TabsTrigger value="day" className="h-7 text-[11px] font-bold uppercase tracking-wider px-4 data-[state=active]:shadow-sm"><Calendar className="w-3.5 h-3.5 mr-1.5" />Dia</TabsTrigger>
+            <TabsTrigger value="week" className="h-7 text-[11px] font-bold uppercase tracking-wider px-4 data-[state=active]:shadow-sm"><CalendarRange className="w-3.5 h-3.5 mr-1.5" />Semana</TabsTrigger>
+            <TabsTrigger value="month" className="h-7 text-[11px] font-bold uppercase tracking-wider px-4 data-[state=active]:shadow-sm"><CalendarDays className="w-3.5 h-3.5 mr-1.5" />Mês</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
+
 
       <div className="mx-auto">
         {view === "month" && renderMonth()}
