@@ -100,15 +100,16 @@ function BuscaPacienteComponent({ pacientes, value, onChange }: BuscaPacientePro
     const searchPatients = async () => {
       setLoading(true);
 
-      const ilikeTerm = escapeIlikeTerm(term);
-      const { data, error } = await supabase
-        .from('pacientes')
-        .select(
-          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
-        )
-        .or(`nome.ilike.%${ilikeTerm}%,cpf.ilike.%${ilikeTerm}%,telefone.ilike.%${ilikeTerm}%`)
-        .order('nome', { ascending: true })
-        .limit(10);
+      const { data, error } = await supabase.rpc('search_patients', {
+        p_search: term,
+        p_limit: 10
+      });
+
+      if (!cancelled) {
+        setResultados(error || !data ? [] : (data as any[]).map(mapPaciente));
+        setLoading(false);
+      }
+    };
 
       if (!cancelled) {
         setResultados(error || !data ? [] : data.map(mapPaciente));
