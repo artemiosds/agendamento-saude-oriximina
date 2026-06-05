@@ -509,16 +509,18 @@ const DadosSection: React.FC = () => {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup e Dados</CardTitle>
-          <Button 
-            variant="default" 
-            className="bg-primary hover:bg-primary/90" 
-            onClick={generateBackup}
-            disabled={!!exporting}
-          >
-            <FileDown className="h-4 w-4 mr-2" />
-            {exporting === "full_backup" ? "Gerando Backup..." : "Gerar Backup Completo (.zip)"}
-          </Button>
+          <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup e Exportação do Sistema</CardTitle>
+          <div className="flex gap-2">
+            <Button 
+              variant="default" 
+              className="bg-primary hover:bg-primary/90" 
+              onClick={generateBackup}
+              disabled={!!exporting}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              {exporting === "full_backup" ? "Processando Backup..." : "Gerar Backup Completo (.zip)"}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -536,25 +538,42 @@ const DadosSection: React.FC = () => {
           ))}
         </div>
         
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Exportação Individual (CSV)</Label>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="outline" size="sm" onClick={() => exportCSV("pacientes", "pacientes.csv")} disabled={!!exporting}>
-              <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "pacientes" ? "Exportando..." : "Pacientes"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => exportCSV("agendamentos", "agendamentos.csv")} disabled={!!exporting}>
-              <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "agendamentos" ? "Exportando..." : "Agendamentos"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => exportCSV("notification_logs", "notificacoes.csv")} disabled={!!exporting}>
-              <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "notification_logs" ? "Exportando..." : "Notificações"}
-            </Button>
+        <div className="space-y-4">
+          <div className="p-4 bg-muted rounded-lg border border-dashed">
+            <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
+              <ClipboardList className="h-4 w-4" /> O que está incluído no Backup Completo:
+            </h4>
+            <ul className="text-xs space-y-1 text-muted-foreground grid grid-cols-1 sm:grid-cols-2">
+              <li>• Todas as tabelas do banco de dados (JSON/CSV)</li>
+              <li>• Estrutura e metadados das tabelas</li>
+              <li>• Lista de usuários e permissões (Auth)</li>
+              <li>• Manifesto de arquivos e documentos (Storage)</li>
+              <li>• Configurações de prontuário e WhatsApp</li>
+              <li>• Template de variáveis de ambiente (Secrets)</li>
+              <li>• Guia de restauração passo-a-passo</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Exportações Rápidas (CSV)</Label>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" size="sm" onClick={() => exportCSV("pacientes", "pacientes.csv")} disabled={!!exporting}>
+                <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "pacientes" ? "Exportando..." : "Pacientes"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => exportCSV("agendamentos", "agendamentos.csv")} disabled={!!exporting}>
+                <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "agendamentos" ? "Exportando..." : "Agendamentos"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => exportCSV("notification_logs", "notificacoes.csv")} disabled={!!exporting}>
+                <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "notification_logs" ? "Exportando..." : "Notificações"}
+              </Button>
+            </div>
           </div>
         </div>
 
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-          <Info className="h-4 w-4 text-amber-600 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
           <div className="text-xs text-amber-800">
-            <strong>Dica de Segurança:</strong> O backup completo inclui configurações sensíveis (sem chaves) e dados clínicos. Mantenha este arquivo em local seguro.
+            <strong>Segurança Máxima:</strong> O backup contém informações sensíveis de pacientes e clínica. Apenas perfis Master podem gerar este arquivo. Mantenha o arquivo gerado em local seguro e criptografado.
           </div>
         </div>
       </CardContent>
