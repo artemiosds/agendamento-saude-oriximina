@@ -599,9 +599,11 @@ const Agenda: React.FC = () => {
   }, [user, retornoForm.data, getAvailableSlots]);
 
   const filteredProfissionais = React.useMemo(() => {
-    if (filterUnit === "all") return profissionais;
-    return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
-  }, [profissionais, filterUnit]);
+    // Garantir que a lista venha de profissionaisVisiveis (fonte correta e filtrada por unidade)
+    const baseList = profissionaisVisiveis || [];
+    if (filterUnit === "all") return baseList;
+    return baseList.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
+  }, [profissionaisVisiveis, filterUnit]);
 
   const filtered = useMemo(() => {
     // Peso da classificação de risco (Manchester) — menor = mais urgente
