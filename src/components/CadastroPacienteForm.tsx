@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2, FileIcon, Eye, Download, Trash2, Loader2 as Spinner, AlertCircle, History } from "lucide-react";
+import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2, FileIcon, Eye, Download, Trash2, Loader2 as Spinner, AlertCircle, History, Shield } from "lucide-react";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import PatientReferralHistory, { type PatientReferralHistoryHandle } from "@/components/Pacientes/PatientReferralHistory";
 import { toast } from "sonner";
@@ -132,8 +132,12 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
+  whatsappOptInOperational: boolean;
+  whatsappOptInMarketing: boolean;
+  whatsappOptInWaitingList: boolean;
   patientProcedures?: any[];
   customData?: Record<string, any>;
+
 }
 
 export const emptyPacienteForm: PacienteFormData = {
@@ -148,9 +152,13 @@ export const emptyPacienteForm: PacienteFormData = {
   observacaoEquipamentos: "", outroServicoSus: false, transporte: "", turnoPreferido: "",
   email: "", endereco: "", nomeMae: "", descricaoClinica: "",
   isGestante: false, isPne: false, isAutista: false,
+  whatsappOptInOperational: true,
+  whatsappOptInMarketing: false,
+  whatsappOptInWaitingList: false,
   patientProcedures: [],
   customData: {},
 };
+
 
 interface Props {
   pacienteId?: string | null;
@@ -629,7 +637,56 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 </div>
               )}
             </div>
+
+            <div className="mt-6 space-y-4 rounded-xl border-2 border-primary/10 bg-primary/5 p-4">
+              <div className="flex items-center gap-2 font-semibold text-primary mb-2">
+                <Shield className="w-4 h-4" /> Consentimento WhatsApp & Compliance
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Mensagens Operacionais</Label>
+                    <p className="text-xs text-muted-foreground">Lembretes, agendamentos e cancelamentos</p>
+                  </div>
+                  <Switch 
+                    checked={form.whatsappOptInOperational} 
+                    onCheckedChange={(v) => set("whatsappOptInOperational", v)} 
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Lista de Espera / Vagas</Label>
+                    <p className="text-xs text-muted-foreground">Notificações sobre posição na fila e disponibilidade</p>
+                  </div>
+                  <Switch 
+                    checked={form.whatsappOptInWaitingList} 
+                    onCheckedChange={(v) => set("whatsappOptInWaitingList", v)} 
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Mensagens de Marketing</Label>
+                    <p className="text-xs text-muted-foreground">Informativos, campanhas de saúde e novidades</p>
+                  </div>
+                  <Switch 
+                    checked={form.whatsappOptInMarketing} 
+                    onCheckedChange={(v) => set("whatsappOptInMarketing", v)} 
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-muted/50 rounded-lg flex gap-2">
+                <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Ao ativar estes campos, você confirma que o paciente deu consentimento verbal ou assinado para receber comunicações via WhatsApp.
+                </p>
+              </div>
+            </div>
           </TabsContent>
+
 
           {/* ═══ ABA 4 — DADOS COMPLEMENTARES E CLÍNICOS ═══ */}
           <TabsContent value="complementares" className="space-y-4 mt-2">

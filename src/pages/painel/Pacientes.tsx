@@ -108,7 +108,7 @@ interface FichaDados {
 }
 
 const PACIENTE_COLUMNS =
-  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
+  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data,whatsapp_opt_in_operational,whatsapp_opt_in_marketing,whatsapp_opt_in_waiting_list";
 
 const mapPacienteRow = (p: any) => ({
   id: p.id,
@@ -155,7 +155,11 @@ const mapPacienteRow = (p: any) => ({
   turno_preferido: p.turno_preferido || "",
   especialidade_destino: p.especialidade_destino || "",
   custom_data: p.custom_data || {},
+  whatsappOptInOperational: !!p.whatsapp_opt_in_operational,
+  whatsappOptInMarketing: !!p.whatsapp_opt_in_marketing,
+  whatsappOptInWaitingList: !!p.whatsapp_opt_in_waiting_list,
 });
+
 
 const normalizeUnitId = (value?: string | null) => (value || "").trim();
 
@@ -550,8 +554,12 @@ const Pacientes: React.FC = () => {
       isGestante: (p as any).isGestante || (p as any).is_gestante || false,
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
+      whatsappOptInOperational: !!((p as any).whatsappOptInOperational || (p as any).whatsapp_opt_in_operational),
+      whatsappOptInMarketing: !!((p as any).whatsappOptInMarketing || (p as any).whatsapp_opt_in_marketing),
+      whatsappOptInWaitingList: !!((p as any).whatsappOptInWaitingList || (p as any).whatsapp_opt_in_waiting_list),
       customData: (p as any).custom_data || {},
     });
+
     setErrors({});
     setDialogOpen(true);
   };
@@ -633,7 +641,11 @@ const Pacientes: React.FC = () => {
         atualizado_por_usuario: user?.usuario || "",
         motivo_alteracao: "Atualização cadastral pela página Pacientes",
       },
+      whatsapp_opt_in_operational: form.whatsappOptInOperational,
+      whatsapp_opt_in_marketing: form.whatsappOptInMarketing,
+      whatsapp_opt_in_waiting_list: form.whatsappOptInWaitingList,
     };
+
 
     if (user?.role === "recepcao") {
       if (!unidadeIdFuncionario) {
@@ -1545,6 +1557,22 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
               <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
+
+            <PSecao titulo="Consentimento WhatsApp">
+              <PCampo 
+                label="Operacional" 
+                valor={detalhePaciente.whatsappOptInOperational ? <Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge> : <Badge variant="outline" className="text-[10px]">NÃO AUTORIZADO</Badge>} 
+              />
+              <PCampo 
+                label="Lista de Espera" 
+                valor={detalhePaciente.whatsappOptInWaitingList ? <Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge> : <Badge variant="outline" className="text-[10px]">NÃO AUTORIZADO</Badge>} 
+              />
+              <PCampo 
+                label="Marketing" 
+                valor={detalhePaciente.whatsappOptInMarketing ? <Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge> : <Badge variant="outline" className="text-[10px]">NÃO AUTORIZADO</Badge>} 
+              />
+            </PSecao>
+
 
             <PSecao titulo="Histórico">
               <PCampo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarDataBR(detalhePaciente.criadoEm) : ''} />
