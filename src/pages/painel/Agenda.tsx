@@ -2655,7 +2655,7 @@ const Agenda: React.FC = () => {
                                     {lista.map((p) => (
                                       <CommandItem
                                         key={p.id}
-                                        value={`${p.nome} ${p.profissao || ''} ${p.cargo || ''}`}
+                                        value={`${p.id} ${p.nome} ${p.profissao || ''} ${p.cargo || ''}`}
                                         onSelect={() => setFilterProf(p.id)}
                                         className="flex items-center justify-between cursor-pointer py-2.5"
                                       >
