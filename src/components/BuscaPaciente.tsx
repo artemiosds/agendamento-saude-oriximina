@@ -111,12 +111,6 @@ function BuscaPacienteComponent({ pacientes, value, onChange }: BuscaPacientePro
       }
     };
 
-      if (!cancelled) {
-        setResultados(error || !data ? [] : data.map(mapPaciente));
-        setLoading(false);
-      }
-    };
-
     searchPatients();
 
     return () => {
