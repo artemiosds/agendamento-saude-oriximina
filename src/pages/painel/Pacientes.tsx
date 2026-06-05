@@ -155,8 +155,6 @@ const mapPacienteRow = (p: any) => ({
   turno_preferido: p.turno_preferido || "",
   especialidade_destino: p.especialidade_destino || "",
   custom_data: p.custom_data || {},
-  whatsappOptInMarketing: !!p.whatsapp_opt_in_marketing,
-  whatsappOptInWaitingList: !!p.whatsapp_opt_in_waiting_list,
 });
 
 
