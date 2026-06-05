@@ -608,7 +608,7 @@ const Triagem: React.FC = () => {
         modulo: "triagem",
         user,
         detalhes: { paciente: selectedItem.pacienteNome, status: novoStatus, classificacaoRisco: form.classificacaoRisco },
-      }).catch(e => console.warn('Silent log error:', e));
+      });
 
       toast.success(encaminharEnfermagem ? "Encaminhado para enfermagem!" : "Encaminhado diretamente!");
       setDialogOpen(false);
