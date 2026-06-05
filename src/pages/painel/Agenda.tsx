@@ -2151,7 +2151,9 @@ const Agenda: React.FC = () => {
                       pacientes={pacientes}
                       value={newAg.pacienteId}
                       onChange={(id) => handlePacienteSelecionadoNovoAg(id)}
+                      unidadeId={user?.unidadeId}
                     />
+
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="flex-1 h-px bg-border" />
                       <span>ou selecione pela lista</span>
