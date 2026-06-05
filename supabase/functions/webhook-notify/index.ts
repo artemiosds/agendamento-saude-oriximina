@@ -202,8 +202,10 @@ serve(async (req) => {
           "reagendamento": "remarcacao",
           "nao_compareceu": "falta",
           "lembrete_1h": "lembrete_1h",
+          "lembrete_2h": "lembrete_2h",
           "vaga_liberada": "vaga_disponivel",
-          "fila_chamada": "confirmacao"
+          "fila_chamada": "confirmacao",
+          "fila_entrada": "lista_espera"
         };
 
         const { data: wsResult, error: wsError } = await supabaseAdmin.functions.invoke(functionName, {
