@@ -2007,6 +2007,7 @@ const Agenda: React.FC = () => {
       data: ag.data,
       hora: ag.hora,
       profissionalId: ag.profissionalId,
+      unidadeId: ag.unidadeId,
       observacoes: ag.observacoes || "",
     });
     setEditDialogOpen(true);
