@@ -45,7 +45,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
       a => a.profissionalId === profissionalId &&
         a.unidadeId === unidadeId &&
         a.data === date &&
-        !STATUS_INATIVOS.includes(a.status),
+        !STATUS_NAO_OCUPA_VAGA.has(a.status),
     );
 
     const dayOccupied = active.length;
