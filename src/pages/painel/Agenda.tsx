@@ -2465,7 +2465,7 @@ const Agenda: React.FC = () => {
       {/* Agenda normal */}
       {abaAtiva === "agenda" && (
         <>
-          <div className="space-y-6">
+          <div className="space-y-6 max-w-[1100px] mx-auto">
             <Card className="p-4 shadow-sm overflow-hidden border-0 bg-card">
               <CalendarioAgenda
                 selectedDate={selectedDate}
