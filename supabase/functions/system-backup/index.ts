@@ -19,12 +19,12 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Use environment variable for bypass check
+    // Simplified bypass: if token length > 100 it's likely a JWT, if it matches service key it's internal
     const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
     if (!isServiceRole) {
-      // Use admin client with explicit token to get user
+      // Use admin client to verify the token and get the user
       const { data: { user: authUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
       if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
       user = authUser;
