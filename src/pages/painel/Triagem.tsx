@@ -125,8 +125,90 @@ const STATUS_AGENDAMENTO_TRIAGEM = [
   "aguardando_enfermagem",
 ];
 
+const TriagemItem = React.memo(({ 
+  item, 
+  onOpen, 
+  onRelease, 
+  onRemove,
+  isOpening,
+  resolvePaciente 
+}: { 
+  item: Agendamento, 
+  onOpen: (ag: Agendamento) => void,
+  onRelease: (ag: Agendamento) => void,
+  onRemove: (ag: Agendamento) => void,
+  isOpening: boolean,
+  resolvePaciente: (id: string, nome: string) => string
+}) => {
+  const waitMinutes = item.filaCriadoEm ? differenceInMinutes(new Date(), new Date(item.filaCriadoEm)) : 0;
+  const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
+  const espBadge = item.profissionalId
+    ? ESPECIALIDADE_LABELS[item.profissionalNome] || item.profissionalNome.toUpperCase()
+    : null;
+
+  return (
+    <Card className="border-0 shadow-card">
+      <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
+        <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
+          <div className="mt-0.5 flex flex-wrap gap-1">
+            {espBadge && (
+              <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
+                {espBadge}
+              </Badge>
+            )}
+            {item.cid && (
+              <Badge variant="outline" className="text-[10px]">
+                CID: {item.cid}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px]">
+              {item.filaStatus === "chegada_confirmada" ? "Chegada confirmada" : "Triagem em andamento"}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            <Clock className="mr-1 h-3 w-3" /> {waitLabel}
+          </Badge>
+          <Button 
+            size="sm" 
+            className="gradient-primary text-primary-foreground" 
+            onClick={() => onOpen(item)}
+            disabled={isOpening}
+          >
+            {isOpening ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Play className="mr-1 h-3.5 w-3.5" />
+            )}
+            {isOpening ? "Abrindo..." : "Iniciar triagem"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-success/40 text-success hover:bg-success/10"
+            onClick={() => onRelease(item)}
+          >
+            <FastForward className="mr-1 h-3.5 w-3.5" /> Liberar sem triagem
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            onClick={() => onRemove(item)}
+          >
+            <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
 const Triagem: React.FC = () => {
-  const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
+  const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction } = useData();
   const { user, isGlobalAdmin } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
   const { resolved: customConfig } = useCustomFields('triagem', user?.unidadeId);
