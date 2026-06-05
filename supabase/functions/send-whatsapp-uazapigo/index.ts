@@ -58,16 +58,6 @@ async function getConfig(supabase: any): Promise<UazapiConfig | null> {
   };
 }
 
-async function getUnitConfig(supabase: any, unidadeId: string): Promise<UnitConfig> {
-  if (!unidadeId) return DEFAULT_UNIT_CONFIG;
-  const { data } = await supabase
-    .from("whatsapp_config")
-    .select("*")
-    .eq("unidade_id", unidadeId)
-    .maybeSingle();
-  return (data as UnitConfig) ?? DEFAULT_UNIT_CONFIG;
-}
-
 async function uazFetch(url: string, init: RequestInit): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
   try {
     console.log(`[UazapiGO] Fetching: ${url}`, { method: init.method, headers: init.headers });
@@ -98,9 +88,8 @@ async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string 
   
   if (!r.ok) {
     // If it fails, maybe the instance field itself IS the token?
-    // Let's check if the instance name looks like a token (long hash)
     if (cfg.uazapi_instance.length > 20) {
-      console.log("[UazapiGO] Using instance name as token directly.");
+      console.log("[UazapiGO] Using instance name as token directly (fallback).");
       return { token: cfg.uazapi_instance };
     }
     return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}` };
@@ -108,19 +97,19 @@ async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string 
 
   const list = r.data?.instances || r.data || [];
   if (!Array.isArray(list)) {
-     console.error("[UazapiGO] Invalid instances list format:", r.data);
+     // If not array, maybe it's a single instance or something else
+     if (cfg.uazapi_instance.length > 20) return { token: cfg.uazapi_instance };
      return { token: null, error: "Formato de lista de instâncias inválido" };
   }
 
   const found = list.find((i: any) => 
-    i.name === cfg.uazapi_instance || 
-    i.instanceName === cfg.uazapi_instance ||
-    i.id === cfg.uazapi_instance
+    String(i.name) === cfg.uazapi_instance || 
+    String(i.instanceName) === cfg.uazapi_instance ||
+    String(i.id) === cfg.uazapi_instance
   );
 
   const token = found?.token || found?.instanceToken || null;
   if (!token && cfg.uazapi_instance.length > 20) {
-      console.log("[UazapiGO] Instance not found in list, but name looks like a token. Using it.");
       return { token: cfg.uazapi_instance };
   }
 
@@ -135,10 +124,7 @@ async function sendText(cfg: UazapiConfig, phone: string, message: string) {
     return { ok: false, status: 401, error: resolveError || "Token da instância não encontrado" };
   }
 
-  // Try standard v2 endpoint first
   const body = JSON.stringify({ number: phone, text: message, instance: cfg.uazapi_instance });
-  
-  // Some versions use /message/text, others /send/text
   const endpoints = [`${base}/message/text`, `${base}/send/text`];
   let lastResult: any = null;
 
@@ -162,37 +148,47 @@ serve(async (req) => {
   
   try {
     const body = await req.json();
-    console.log("[UazapiGO] Request body:", JSON.stringify(body));
+    console.log("[UazapiGO] Action Request:", body.action || "send_message");
     
     const cfg = await getConfig(supabase);
     if (!cfg) {
-      console.error("[UazapiGO] Config not found in clinica_config");
       return new Response(JSON.stringify({ success: false, error: "Configuração clínica não encontrada" }), { headers: corsHeaders });
     }
 
-    // Check instance state
-    const base = normalizeUrl(cfg.uazapi_server_url);
-    const r = await uazFetch(`${base}/instance/status`, { headers: { token } });
-    
-    const stateObj = r.data?.status || r.data?.state || r.data || {};
-    let connected = false;
-    let stateStr = "DISCONNECTED";
+    // --- Action: status ---
+    if (body.action === "status") {
+      const { token, error } = await resolveInstanceToken(cfg);
+      if (!token) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          connected: false, 
+          status_detailed: error?.includes("401") ? "admin_token_invalido" : "instancia_inexistente",
+          error: error || "Instância não encontrada"
+        }), { headers: corsHeaders });
+      }
 
-    if (typeof stateObj === 'string') {
-      stateStr = stateObj;
-      connected = stateStr.toUpperCase() === "CONNECTED" || stateStr.toLowerCase() === "open";
-    } else {
-      connected = !!(stateObj.connected || stateObj.loggedIn || stateObj.open);
-      stateStr = connected ? "CONNECTED" : (stateObj.status || "DISCONNECTED");
+      const base = normalizeUrl(cfg.uazapi_server_url);
+      const r = await uazFetch(`${base}/instance/status`, { headers: { token } });
+      
+      const stateObj = r.data?.status || r.data?.state || r.data || {};
+      let connected = false;
+      let stateStr = "DISCONNECTED";
+
+      if (typeof stateObj === 'string') {
+        stateStr = stateObj;
+        connected = stateStr.toUpperCase() === "CONNECTED" || stateStr.toLowerCase() === "open";
+      } else {
+        connected = !!(stateObj.connected || stateObj.loggedIn || stateObj.open);
+        stateStr = connected ? "CONNECTED" : (stateObj.status || "DISCONNECTED");
+      }
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        connected, 
+        state: stateStr,
+        status_detailed: connected ? "conectado" : "qrcode_necessario"
+      }), { headers: corsHeaders });
     }
-    
-    return new Response(JSON.stringify({ 
-      success: true, 
-      connected, 
-      state: stateStr,
-      status_detailed: connected ? "conectado" : "qrcode_necessario"
-    }), { headers: corsHeaders });
-  }
 
     // --- Action: create_instance ---
     if (body.action === "create_instance") {
@@ -216,7 +212,7 @@ serve(async (req) => {
       }), { headers: corsHeaders });
     }
 
-    // --- Action: Send Message ---
+    // --- Action: Send Message (Default) ---
     const phone = normalizePhone(body.telefone || body.telefone_teste || body.telefone_direto || "");
     if (!phone) {
       return new Response(JSON.stringify({ success: false, error: "Telefone inválido" }), { headers: corsHeaders });
