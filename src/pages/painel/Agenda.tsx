@@ -599,9 +599,11 @@ const Agenda: React.FC = () => {
   }, [user, retornoForm.data, getAvailableSlots]);
 
   const filteredProfissionais = React.useMemo(() => {
-    if (filterUnit === "all") return profissionais;
-    return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
-  }, [profissionais, filterUnit]);
+    // Garantir que a lista venha de profissionaisVisiveis (fonte correta e filtrada por unidade)
+    const baseList = profissionaisVisiveis || [];
+    if (filterUnit === "all") return baseList;
+    return baseList.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
+  }, [profissionaisVisiveis, filterUnit]);
 
   const filtered = useMemo(() => {
     // Peso da classificação de risco (Manchester) — menor = mais urgente
@@ -2225,7 +2227,7 @@ const Agenda: React.FC = () => {
                                   {lista.map((p) => (
                                     <CommandItem
                                       key={p.id}
-                                      value={`${p.nome} ${p.profissao || ''}`}
+                                      value={`${p.id} ${p.nome} ${p.profissao || ''}`}
                                       onSelect={() => {
                                         setNewAg((prev) => ({ ...prev, profissionalId: p.id }));
                                       }}
@@ -2653,7 +2655,7 @@ const Agenda: React.FC = () => {
                                     {lista.map((p) => (
                                       <CommandItem
                                         key={p.id}
-                                        value={`${p.nome} ${p.profissao || ''} ${p.cargo || ''}`}
+                                        value={`${p.id} ${p.nome} ${p.profissao || ''} ${p.cargo || ''}`}
                                         onSelect={() => setFilterProf(p.id)}
                                         className="flex items-center justify-between cursor-pointer py-2.5"
                                       >
