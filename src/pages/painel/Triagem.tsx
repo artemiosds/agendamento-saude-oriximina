@@ -588,6 +588,7 @@ const Triagem: React.FC = () => {
         confirmado_em: new Date().toISOString(),
       };
 
+      // 🚀 Salvamento otimizado: apenas as queries essenciais
       if (existing?.id) {
         await supabase.from("triage_records").update(triagePayload).eq("id", existing.id);
       } else {
@@ -595,12 +596,12 @@ const Triagem: React.FC = () => {
       }
 
       await Promise.all([
-        updateFila(selectedItem.filaId, { status: novoStatus as any }),
-        updateAgendamento(selectedItem.id, { status: novoStatus as any }),
+        supabase.from('fila_espera').update({ status: novoStatus as any }).eq('id', selectedItem.filaId),
+        supabase.from('agendamentos').update({ status: novoStatus as any }).eq('id', selectedItem.id),
       ]);
-      await Promise.all([refreshFila(), refreshAgendamentos()]);
 
-      await logAction({
+      // Log silent para não bloquear o encerramento do modal
+      logAction({
         acao: "finalizar_triagem",
         entidade: "agendamento",
         entidadeId: selectedItem.id,
@@ -609,12 +610,15 @@ const Triagem: React.FC = () => {
         detalhes: { paciente: selectedItem.pacienteNome, status: novoStatus, classificacaoRisco: form.classificacaoRisco },
       });
 
-      toast.success("Triagem finalizada e paciente encaminhado!");
+      toast.success(encaminharEnfermagem ? "Encaminhado para enfermagem!" : "Encaminhado diretamente!");
       setDialogOpen(false);
       setSelectedItem(null);
+
+      // Atualiza caches ao final
+      await Promise.all([refreshFila(), refreshAgendamentos()]);
     } catch (error) {
       console.error("Erro ao finalizar triagem:", error);
-      toast.error("Erro ao finalizar triagem.");
+      toast.error("Erro ao processar triagem.");
     } finally {
       setSaving(false);
     }
