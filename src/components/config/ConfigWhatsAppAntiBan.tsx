@@ -50,9 +50,6 @@ const DEFAULT: UnitCfg = {
   horario_inicio: '08:00',
   horario_fim: '18:00',
   dias_permitidos: [1, 2, 3, 4, 5],
-  modo_estrito: true,
-  respeitar_opt_out: true,
-  bloquear_sem_interacao_previa: false,
 };
 
 interface QueueRow {
