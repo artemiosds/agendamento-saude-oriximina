@@ -1037,7 +1037,7 @@ const Agenda: React.FC = () => {
     
     if (turnoAlvo) {
       const isExterno = false; // Agendamento pela recepção
-      const excessoInterno = !isExterno && turnoAlvo.vagasLivresInternas <= 0 && statusOcupaVaga(agData.status);
+      const excessoInterno = !isExterno && turnoAlvo.vagasLivresInternas <= 0;
       
       if (excessoInterno) {
         const msg = `⚠️ Vagas internas esgotadas. Existem ${turnoAlvo.vagasReservadasExterno} vagas reservadas para externos que não podem ser usadas pela recepção sem autorização.`;
