@@ -1558,6 +1558,22 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
 
+            <PSecao titulo="Consentimento WhatsApp">
+              <PCampo 
+                label="Operacional" 
+                valor={detalhePaciente.whatsappOptInOperational ? <Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge> : <Badge variant="outline" className="text-[10px]">NÃO AUTORIZADO</Badge>} 
+              />
+              <PCampo 
+                label="Lista de Espera" 
+                valor={detalhePaciente.whatsappOptInWaitingList ? <Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge> : <Badge variant="outline" className="text-[10px]">NÃO AUTORIZADO</Badge>} 
+              />
+              <PCampo 
+                label="Marketing" 
+                valor={detalhePaciente.whatsappOptInMarketing ? <Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge> : <Badge variant="outline" className="text-[10px]">NÃO AUTORIZADO</Badge>} 
+              />
+            </PSecao>
+
+
             <PSecao titulo="Histórico">
               <PCampo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarDataBR(detalhePaciente.criadoEm) : ''} />
               <PCampo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : ''} />
