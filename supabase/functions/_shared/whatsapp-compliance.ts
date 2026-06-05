@@ -104,7 +104,7 @@ export async function validateSend(
     const { data: paciente } = await supabase
       .from("pacientes")
       .select(
-        "whatsapp_opt_in_operational, whatsapp_opt_in_marketing, whatsapp_opt_in_waiting_list, whatsapp_has_prior_interaction",
+        "whatsapp_opt_in_marketing, whatsapp_opt_in_waiting_list, whatsapp_has_prior_interaction",
       )
       .eq("id", pacienteId)
       .maybeSingle();
@@ -129,11 +129,11 @@ export async function validateSend(
   // Validação por Categoria
   const classification = EVENT_CLASSIFICATION[tipo] || { category: "utility" };
 
-  // No pacienteData, opt-ins para utility (operacional) são true por padrão (null = true)
+  // No pacienteData, opt-ins para utility (operacional) são sempre true (regra geral removida)
   // Marketing continua exigindo opt-in específico
   const isMarketing = classification.category === "marketing";
   const hasMarketingOptIn = pacienteData?.whatsapp_opt_in_marketing === true;
-  const hasOperationalOptIn = pacienteData ? pacienteData.whatsapp_opt_in_operational !== false : true;
+  const hasOperationalOptIn = true; // Liberado por padrão conforme solicitado
   const hasSpecificConsent = classification.requiresSpecificConsent
     ? pacienteData?.[classification.requiresSpecificConsent] === true
     : true;
@@ -142,26 +142,13 @@ export async function validateSend(
     return { ok: false, reason: "sem_opt_in_marketing", audit };
   }
 
-  if (!isMarketing && !hasOperationalOptIn) {
-    return { ok: false, reason: "sem_opt_in_operacional", audit };
-  }
-
   if (classification.requiresSpecificConsent && !hasSpecificConsent) {
     return { ok: false, reason: `requer_consentimento_especifico_${classification.requiresSpecificConsent}`, audit };
   }
 
   // Define o status do opt-in no log
-  if (pacienteData) {
-    if (pacienteData.whatsapp_opt_in_operational === null || pacienteData.whatsapp_opt_in_operational === undefined) {
-      audit.opt_in_status = "regra_padrao_unidade";
-      audit.authorized_by_default_rule = true;
-    } else {
-      audit.opt_in_status = "manual_opt_in";
-    }
-  } else {
-    audit.opt_in_status = "paciente_nao_encontrado_regra_padrao";
-    audit.authorized_by_default_rule = true;
-  }
+  audit.opt_in_status = "regra_geral_unidade";
+  audit.authorized_by_default_rule = true;
 
   // Regra 24 horas
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
