@@ -1218,8 +1218,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cid: p.cid,
         criado_em: p.criadoEm || new Date().toISOString(),
         unidade_id: unidadeIdToUse,
-        whatsapp_opt_in_marketing: p.whatsappOptInMarketing ?? false,
-        whatsapp_opt_in_waiting_list: p.whatsappOptInWaitingList ?? false,
       } as any);
 
       if (!error) {
