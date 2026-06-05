@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, History, ListChecks } from "lucide-react";
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Plus,
   ChevronLeft,
@@ -53,7 +53,11 @@ import {
   Bell,
   Search,
   Pencil,
+  ChevronDown,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
 import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
@@ -443,6 +447,7 @@ const Agenda: React.FC = () => {
     data: string;
     hora: string;
     profissionalId: string;
+    unidadeId: string;
     observacoes: string;
   } | null>(null);
   const canEdit = can('agenda', 'can_edit');
@@ -2003,6 +2008,7 @@ const Agenda: React.FC = () => {
       data: ag.data,
       hora: ag.hora,
       profissionalId: ag.profissionalId,
+      unidadeId: ag.unidadeId,
       observacoes: ag.observacoes || "",
     });
     setEditDialogOpen(true);
@@ -2185,21 +2191,59 @@ const Agenda: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Profissional</Label>
-                      <Select
-                        value={newAg.profissionalId}
-                        onValueChange={(v) => setNewAg((p) => ({ ...p, profissionalId: v }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {profissionais.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between h-10 px-3 text-sm font-normal bg-background border-input"
+                          >
+                            <span className="truncate">
+                              {newAg.profissionalId 
+                                ? profissionais.find(p => p.id === newAg.profissionalId)?.nome || "Selecionar"
+                                : "Selecionar"}
+                            </span>
+                            <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                          <Command>
+                            <CommandInput placeholder="Buscar profissional..." className="h-9" />
+                            <CommandList className="max-h-[300px]">
+                              <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                              {Object.entries(
+                                profissionais
+                                  .sort((a, b) => a.nome.localeCompare(b.nome))
+                                  .reduce((acc, p) => {
+                                    const cat = p.profissao || p.cargo || "Outros";
+                                    if (!acc[cat]) acc[cat] = [];
+                                    acc[cat].push(p);
+                                    return acc;
+                                  }, {} as Record<string, typeof profissionais>)
+                              ).map(([categoria, lista]) => (
+                                <CommandGroup key={categoria} heading={categoria}>
+                                  {lista.map((p) => (
+                                    <CommandItem
+                                      key={p.id}
+                                      value={`${p.nome} ${p.profissao || ''}`}
+                                      onSelect={() => {
+                                        setNewAg((prev) => ({ ...prev, profissionalId: p.id }));
+                                      }}
+                                      className="flex items-center justify-between cursor-pointer py-2"
+                                    >
+                                      <div className="flex flex-col min-w-0">
+                                        <span className="font-medium truncate block max-w-[180px]">{p.nome}</span>
+                                        <span className="text-[10px] text-muted-foreground">{p.profissao || p.cargo}</span>
+                                      </div>
+                                      {newAg.profissionalId === p.id && <Check className="h-4 w-4 text-primary" />}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              ))}
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div>
                       <Label>Sala</Label>
@@ -2555,23 +2599,86 @@ const Agenda: React.FC = () => {
                     )}
                     
                     {!isProfissional && (
-                      <div className="w-full md:w-64 space-y-1.5">
+                      <div className="w-full md:w-72 space-y-1.5">
                         <Label className="text-xs font-semibold text-muted-foreground ml-1">Profissional</Label>
-                        <Select value={filterProf} onValueChange={setFilterProf}>
-                          <SelectTrigger className="h-11 text-sm font-medium">
-                            <div className="truncate text-left pr-2">
-                              <SelectValue placeholder="Profissional" />
-                            </div>
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            <SelectItem value="all">Todos Profissionais</SelectItem>
-                            {filteredProfissionais.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="h-11 w-full justify-between text-sm font-medium bg-background border-input hover:bg-accent hover:text-accent-foreground"
+                            >
+                              <div className="truncate text-left flex-1 mr-2">
+                                {filterProf === "all" 
+                                  ? "Todos Profissionais" 
+                                  : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"}
+                              </div>
+                              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                            <Command className="w-full">
+                              <CommandInput placeholder="Buscar profissional ou especialidade..." className="h-9" />
+                              <CommandList className="max-h-[350px]">
+                                <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="all"
+                                    onSelect={() => setFilterProf("all")}
+                                    className="flex items-center justify-between cursor-pointer py-3 border-b border-muted/50"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-semibold">Todos Profissionais</span>
+                                      <span className="text-[10px] text-muted-foreground">Exibir agenda global</span>
+                                    </div>
+                                    {filterProf === "all" && <Check className="h-4 w-4 text-primary" />}
+                                  </CommandItem>
+                                </CommandGroup>
+
+                                {Object.entries(
+                                  filteredProfissionais
+                                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                                    .reduce((acc, p) => {
+                                      const cat = p.profissao || p.cargo || "Outros";
+                                      if (!acc[cat]) acc[cat] = [];
+                                      acc[cat].push(p);
+                                      return acc;
+                                    }, {} as Record<string, typeof filteredProfissionais>)
+                                ).map(([categoria, lista]) => (
+                                  <CommandGroup key={categoria} heading={categoria}>
+                                    {lista.map((p) => (
+                                      <CommandItem
+                                        key={p.id}
+                                        value={`${p.nome} ${p.profissao || ''} ${p.cargo || ''}`}
+                                        onSelect={() => setFilterProf(p.id)}
+                                        className="flex items-center justify-between cursor-pointer py-2.5"
+                                      >
+                                        <div className="flex flex-col min-w-0 pr-4">
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <span className="font-medium truncate block max-w-[200px]">
+                                                  {p.nome}
+                                                </span>
+                                              </TooltipTrigger>
+                                              <TooltipContent side="right">
+                                                <p>{p.nome}</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
+                                          <span className="text-[10px] text-muted-foreground truncate">
+                                            {p.profissao || p.cargo || "—"}
+                                          </span>
+                                        </div>
+                                        {filterProf === p.id && <Check className="h-4 w-4 text-primary shrink-0" />}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                ))}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     )}
 
@@ -2800,35 +2907,36 @@ const Agenda: React.FC = () => {
                       <div className="flex items-start gap-3">
                         <span className="text-lg font-mono font-bold text-primary w-14 shrink-0">{ag.hora}</span>
                         <div className="flex-1 min-w-0">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <p className="font-semibold text-foreground cursor-default">
-                                {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                                {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
-                              </p>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-xs">
-                              <p className="text-xs">
-                                <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                              </p>
-                              {paciente?.telefone && (
-                                <p className="text-xs">
-                                  <strong>Tel:</strong> {paciente.telefone}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <p className="font-semibold text-foreground cursor-default truncate">
+                                  {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
+                                  {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                                 </p>
-                              )}
-                              {paciente?.cpf && (
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
                                 <p className="text-xs">
-                                  <strong>CPF:</strong> {paciente.cpf}
+                                  <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                                 </p>
-                              )}
-                              {paciente?.cns && (
+                                {paciente?.telefone && (
+                                  <p className="text-xs">
+                                    <strong>Tel:</strong> {paciente.telefone}
+                                  </p>
+                                )}
+                                {paciente?.cpf && (
+                                  <p className="text-xs">
+                                    <strong>CPF:</strong> {paciente.cpf}
+                                  </p>
+                                )}
+                                {paciente?.cns && (
+                                  <p className="text-xs">
+                                    <strong>CNS:</strong> {formatCNS(paciente.cns)}
+                                  </p>
+                                )}
                                 <p className="text-xs">
-                                  <strong>CNS:</strong> {formatCNS(paciente.cns)}
+                                  <strong>Tipo:</strong> {tipoInfo.label}
                                 </p>
-                              )}
-                              <p className="text-xs">
-                                <strong>Tipo:</strong> {tipoInfo.label}
-                              </p>
                               <p className="text-xs">
                                 <strong>Origem:</strong> {(ag.origem as string) === 'externo' ? '🔗 Externo' : ag.origem}
                               </p>
@@ -2851,7 +2959,8 @@ const Agenda: React.FC = () => {
                               )}
                             </TooltipContent>
                           </Tooltip>
-                          <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
+                        </TooltipProvider>
+                        <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
                           {lastAppt && isProfissional && (
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                               📋 Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
@@ -2980,34 +3089,38 @@ const Agenda: React.FC = () => {
                         {isProfissional && (
                           <>
                             {(ag.status === "pendente" || ag.status === "confirmado") && ehHoje && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 px-3 text-xs cursor-not-allowed opacity-50"
-                                    disabled
-                                  >
-                                    ⏳ Aguardando chegada
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
-                              </Tooltip>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 px-3 text-xs cursor-not-allowed opacity-50"
+                                      disabled
+                                    >
+                                      ⏳ Aguardando chegada
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                             {ag.status === "aguardando_triagem" && ehHoje && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning"
-                                    disabled
-                                  >
-                                    🩺 Em triagem
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
-                              </Tooltip>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning"
+                                      disabled
+                                    >
+                                      🩺 Em triagem
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                             {canStart && (
                               <ActionButton
@@ -3390,14 +3503,59 @@ const Agenda: React.FC = () => {
               </div>
               <div>
                 <Label>Profissional</Label>
-                <Select value={editAg.profissionalId} onValueChange={(v) => setEditAg((p) => p ? { ...p, profissionalId: v, hora: "" } : p)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {profissionais.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between h-10 px-3 text-sm font-normal bg-background border-input"
+                    >
+                      <span className="truncate">
+                        {editAg.profissionalId 
+                          ? profissionais.find(p => p.id === editAg.profissionalId)?.nome || "Selecionar"
+                          : "Selecionar"}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar profissional..." className="h-9" />
+                      <CommandList className="max-h-[300px]">
+                        <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                        {Object.entries(
+                          profissionais
+                            .sort((a, b) => a.nome.localeCompare(b.nome))
+                            .reduce((acc, p) => {
+                              const cat = p.profissao || p.cargo || "Outros";
+                              if (!acc[cat]) acc[cat] = [];
+                              acc[cat].push(p);
+                              return acc;
+                            }, {} as Record<string, typeof profissionais>)
+                        ).map(([categoria, lista]) => (
+                          <CommandGroup key={categoria} heading={categoria}>
+                            {lista.map((p) => (
+                              <CommandItem
+                                key={p.id}
+                                value={`${p.nome} ${p.profissao || ''}`}
+                                onSelect={() => {
+                                  setEditAg((prev) => prev ? ({ ...prev, profissionalId: p.id, hora: "" }) : null);
+                                }}
+                                className="flex items-center justify-between cursor-pointer py-2"
+                              >
+                                <div className="flex flex-col min-w-0">
+                                  <span className="font-medium truncate block max-w-[180px]">{p.nome}</span>
+                                  <span className="text-[10px] text-muted-foreground">{p.profissao || p.cargo}</span>
+                                </div>
+                                {editAg.profissionalId === p.id && <Check className="h-4 w-4 text-primary" />}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <Label>Horário</Label>
