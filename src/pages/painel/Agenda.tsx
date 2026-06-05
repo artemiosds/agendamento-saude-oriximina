@@ -538,6 +538,33 @@ const Agenda: React.FC = () => {
   const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
 
+  const normalizeString = (str: string) => {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  };
+
+  const profissionaisFiltradosBusca = React.useMemo(() => {
+    let list = profissionaisVisiveis.filter((p) => {
+      if (filterUnit !== "all" && p.unidadeId !== filterUnit) return false;
+      return true;
+    });
+
+    if (searchProf && searchProf.trim() !== "") {
+      const search = normalizeString(searchProf);
+      list = list.filter((p) => {
+        const nome = normalizeString(p.nome);
+        const espec = normalizeString(p.profissao || p.cargo || "");
+        return nome.includes(search) || espec.includes(search);
+      });
+    }
+
+    return list.sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [profissionaisVisiveis, filterUnit, searchProf]);
+
+  const filteredProfissionais = profissionaisFiltradosBusca;
+
   // NOVO: agendamentos online pendentes de aprovação
   const agendamentosPendentesOnline = React.useMemo(() => {
     return agendamentos
