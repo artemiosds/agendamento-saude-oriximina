@@ -447,6 +447,7 @@ const Agenda: React.FC = () => {
     data: string;
     hora: string;
     profissionalId: string;
+    unidadeId: string;
     observacoes: string;
   } | null>(null);
   const canEdit = can('agenda', 'can_edit');
