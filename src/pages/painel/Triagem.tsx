@@ -636,72 +636,17 @@ const Triagem: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-2">
-          {filaFiltrada.map((item) => {
-            const waitMinutes = item.filaCriadoEm ? differenceInMinutes(now, new Date(item.filaCriadoEm)) : 0;
-            const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
-            const espBadge = item.profissionalId
-              ? ESPECIALIDADE_LABELS[item.profissionalNome] || item.profissionalNome.toUpperCase()
-              : null;
-            return (
-              <Card key={item.filaId} className="border-0 shadow-card">
-                <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
-                  <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
-                    <div className="mt-0.5 flex flex-wrap gap-1">
-                      {espBadge && (
-                        <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
-                          {espBadge}
-                        </Badge>
-                      )}
-                      {item.cid && (
-                        <Badge variant="outline" className="text-[10px]">
-                          CID: {item.cid}
-                        </Badge>
-                      )}
-                      <Badge variant="outline" className="text-[10px]">
-                        {item.filaStatus === "chegada_confirmada" ? "Chegada confirmada" : "Triagem em andamento"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      <Clock className="mr-1 h-3 w-3" /> {waitLabel}
-                    </Badge>
-                    <Button 
-                      size="sm" 
-                      className="gradient-primary text-primary-foreground" 
-                      onClick={() => openTriagem(item)}
-                      disabled={openingTriagemId === item.filaId}
-                    >
-                      {openingTriagemId === item.filaId ? (
-                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Play className="mr-1 h-3.5 w-3.5" />
-                      )}
-                      {openingTriagemId === item.filaId ? "Abrindo..." : "Iniciar triagem"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-success/40 text-success hover:bg-success/10"
-                      onClick={() => setConfirmAction({ type: 'release', item })}
-                    >
-                      <FastForward className="mr-1 h-3.5 w-3.5" /> Liberar sem triagem
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                      onClick={() => setConfirmAction({ type: 'remove', item })}
-                    >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {filaFiltrada.map((item) => (
+            <TriagemItem
+              key={item.filaId}
+              item={item}
+              onOpen={openTriagem}
+              onRelease={(item) => setConfirmAction({ type: 'release', item })}
+              onRemove={(item) => setConfirmAction({ type: 'remove', item })}
+              isOpening={openingTriagemId === item.filaId}
+              resolvePaciente={resolvePaciente}
+            />
+          ))}
         </div>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
