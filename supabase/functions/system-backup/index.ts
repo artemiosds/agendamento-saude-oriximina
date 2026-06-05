@@ -18,22 +18,32 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify if user is Master
-    const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
-      global: { headers: { Authorization: authHeader } }
-    });
-    const { data: { user } } = await supabaseUser.auth.getUser();
-    if (!user) return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: corsHeaders });
+    // Bypass check if using Service Role for validation
+    const isServiceRole = authHeader === `Bearer ${supabaseServiceKey}`;
+    let user = null;
 
-    const { data: func } = await supabaseAdmin
-      .from("funcionarios")
-      .select("role")
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
+    if (!isServiceRole) {
+      // Verify if user is Master
+      const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user: authUser } } = await supabaseUser.auth.getUser();
+      if (!authUser) return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: corsHeaders });
+      user = authUser;
 
-    if (func?.role !== "master") {
-      return new Response(JSON.stringify({ error: "Forbidden: Master only" }), { status: 403, headers: corsHeaders });
+      const { data: func } = await supabaseAdmin
+        .from("funcionarios")
+        .select("role")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (func?.role !== "master") {
+        return new Response(JSON.stringify({ error: "Forbidden: Master only" }), { status: 403, headers: corsHeaders });
+      }
+    } else {
+      user = { id: "service_role_system" };
     }
+
 
     const zip = new JSZip();
     const startTime = new Date();
