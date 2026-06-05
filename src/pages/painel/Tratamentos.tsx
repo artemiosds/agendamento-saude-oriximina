@@ -1142,8 +1142,9 @@ const Tratamentos: React.FC = () => {
         profissionalNome: prof.nome,
         data: agendarSessaoData,
         hora: agendarSessaoHora,
-        status: "confirmado",
-        tipo: "Sessão de Tratamento",
+        status: "confirmado" as const,
+        tipo: "Sessão de Tratamento" as const,
+
         observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${selectedCycle.treatment_type}`,
         origem: "recepcao",
         criadoEm: new Date().toISOString(),
