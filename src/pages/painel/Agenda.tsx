@@ -2227,7 +2227,7 @@ const Agenda: React.FC = () => {
                                   {lista.map((p) => (
                                     <CommandItem
                                       key={p.id}
-                                      value={`${p.nome} ${p.profissao || ''}`}
+                                      value={`${p.id} ${p.nome} ${p.profissao || ''}`}
                                       onSelect={() => {
                                         setNewAg((prev) => ({ ...prev, profissionalId: p.id }));
                                       }}
