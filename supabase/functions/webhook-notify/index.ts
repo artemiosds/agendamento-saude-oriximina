@@ -199,19 +199,19 @@ serve(async (req) => {
         console.log(`[webhook-notify] Attempting WhatsApp via ${functionName} for event ${evento}`);
         
         const typeMap: Record<string, string> = {
-          "novo_agendamento": "confirmacao",
-          "agendamento_criado": "confirmacao",
-          "reagendamento": "remarcacao",
+          "novo_agendamento": "novo_agendamento",
+          "agendamento_criado": "agendamento_criado",
+          "reagendamento": "reagendamento",
           "remarcacao": "remarcacao",
-          "nao_compareceu": "falta",
+          "nao_compareceu": "nao_compareceu",
           "falta": "falta",
           "lembrete_1h": "lembrete_1h",
           "lembrete_2h": "lembrete_2h",
           "lembrete_24h": "lembrete_24h",
-          "vaga_liberada": "vaga_disponivel",
+          "vaga_liberada": "vaga_liberada",
           "vaga_disponivel": "vaga_disponivel",
-          "fila_chamada": "confirmacao",
-          "fila_entrada": "lista_espera",
+          "fila_chamada": "fila_chamada",
+          "fila_entrada": "fila_entrada",
           "lista_espera": "lista_espera"
         };
 

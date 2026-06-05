@@ -193,7 +193,9 @@ serve(async (req) => {
       window_24h: validation.audit.window_24h,
       category: validation.audit.category,
       agendamento_id,
-      resposta: result.body.substring(0, 500),
+      provider: "evolution",
+      resposta: result.body.substring(0, 1000),
+      mensagem: message,
     });
 
     return new Response(JSON.stringify({ success: result.ok, error: result.ok ? null : result.body }), { status: 200, headers: corsHeaders });
