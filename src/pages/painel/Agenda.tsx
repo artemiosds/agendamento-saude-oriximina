@@ -2465,104 +2465,107 @@ const Agenda: React.FC = () => {
       {/* Agenda normal */}
       {abaAtiva === "agenda" && (
         <>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
-            {/* NOVO: componente de calendário no lugar dos botões e input de data */}
-            <CalendarioAgenda
-              selectedDate={selectedDate}
-              onDateChange={(date) => setSelectedDate(date)}
-              agendamentos={agendamentos}
-              bloqueios={bloqueios}
-              disponibilidades={disponibilidades}
-              filterProf={filterProf}
-              filterUnit={filterUnit}
-              profissionais={profissionais}
-              getAvailableSlots={getAvailableSlots}
-              getAvailableDates={getAvailableDates}
-              unidades={unidades}
-            />
-
-            {!isProfissional && showUnitSelector && (
-              <Select
-                value={filterUnit}
-                onValueChange={(v) => {
-                  setFilterUnit(v);
-                  setFilterProf("all");
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Unidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas Unidades</SelectItem>
-                  {unidadesVisiveis.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {!isProfissional && (
-              <Select value={filterProf} onValueChange={setFilterProf}>
-                <SelectTrigger className="w-full sm:w-52">
-                  <SelectValue placeholder="Profissional" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos Profissionais</SelectItem>
-                  {filteredProfissionais.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {/* BUSCA na agenda */}
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar paciente, CPF, CNS..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 h-9"
+          <div className="space-y-6">
+            <Card className="p-4 shadow-sm overflow-hidden border-0 bg-card">
+              <CalendarioAgenda
+                selectedDate={selectedDate}
+                onDateChange={(date) => setSelectedDate(date)}
+                agendamentos={agendamentos}
+                bloqueios={bloqueios}
+                disponibilidades={disponibilidades}
+                filterProf={filterProf}
+                filterUnit={filterUnit}
+                profissionais={profissionais}
+                getAvailableSlots={getAvailableSlots}
+                getAvailableDates={getAvailableDates}
+                unidades={unidades}
               />
+            </Card>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+              {!isProfissional && showUnitSelector && (
+                <Select
+                  value={filterUnit}
+                  onValueChange={(v) => {
+                    setFilterUnit(v);
+                    setFilterProf("all");
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue placeholder="Unidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas Unidades</SelectItem>
+                    {unidadesVisiveis.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {!isProfissional && (
+                <Select value={filterProf} onValueChange={setFilterProf}>
+                  <SelectTrigger className="w-full sm:w-52">
+                    <SelectValue placeholder="Profissional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Profissionais</SelectItem>
+                    {filteredProfissionais.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {/* BUSCA na agenda */}
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar paciente, CPF, CNS..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+              {/* Filtro de Status */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-52">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_FILTER_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Filtro de Tipo de atendimento */}
+              <Select value={tipoFilter} onValueChange={setTipoFilter}>
+                <SelectTrigger className="w-full sm:w-56">
+                  <SelectValue placeholder="Tipo de atendimento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                  <SelectItem value="Retorno">Retorno</SelectItem>
+                  <SelectItem value="Exame">Exame</SelectItem>
+                  <SelectItem value="Procedimento">Procedimento</SelectItem>
+                  <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                  <SelectItem value="Urgência">Urgência</SelectItem>
+                </SelectContent>
+              </Select>
+              {(statusFilter !== "all" || tipoFilter !== "all" || debouncedSearch) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setStatusFilter("all"); setTipoFilter("all"); setSearchTerm(""); }}
+                  className="h-9"
+                >
+                  Limpar filtros
+                </Button>
+              )}
             </div>
-            {/* Filtro de Status */}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-52">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_FILTER_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {/* Filtro de Tipo de atendimento */}
-            <Select value={tipoFilter} onValueChange={setTipoFilter}>
-              <SelectTrigger className="w-full sm:w-56">
-                <SelectValue placeholder="Tipo de atendimento" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os tipos</SelectItem>
-                <SelectItem value="Consulta">Primeira Consulta</SelectItem>
-                <SelectItem value="Retorno">Retorno</SelectItem>
-                <SelectItem value="Exame">Exame</SelectItem>
-                <SelectItem value="Procedimento">Procedimento</SelectItem>
-                <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
-                <SelectItem value="Urgência">Urgência</SelectItem>
-              </SelectContent>
-            </Select>
-            {(statusFilter !== "all" || tipoFilter !== "all" || debouncedSearch) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { setStatusFilter("all"); setTipoFilter("all"); setSearchTerm(""); }}
-                className="h-9"
-              >
-                Limpar filtros
-              </Button>
-            )}
           </div>
 
           {/* Chips rápidos de status */}
