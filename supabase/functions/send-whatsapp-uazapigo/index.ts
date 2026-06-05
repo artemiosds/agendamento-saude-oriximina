@@ -1,6 +1,14 @@
 // Edge Function: send-whatsapp-uazapigo
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
+import { 
+  validateSend, 
+  buildMessage, 
+  normalizePhone as complianceNormalizePhone, 
+  isValidPhone, 
+  UnitConfig, 
+  DEFAULT_UNIT_CONFIG 
+} from "../_shared/whatsapp-compliance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,31 +24,8 @@ interface UazapiConfig {
   nome_clinica: string;
 }
 
-interface UnitConfig {
-  whatsapp_ativo: boolean;
-  respeitar_opt_out: boolean;
-  bloquear_sem_interacao_previa: boolean;
-}
-
-const DEFAULT_UNIT_CONFIG: UnitConfig = {
-  whatsapp_ativo: true,
-  respeitar_opt_out: true,
-  bloquear_sem_interacao_previa: true,
-};
-
 function normalizeUrl(raw: string): string {
   return (raw || "").trim().replace(/\/+$/, "");
-}
-
-function normalizePhone(raw: string): string | null {
-  let digits = (raw || "").replace(/\D/g, "");
-  if (!digits) return null;
-  if (digits.startsWith("0")) digits = digits.slice(1);
-  if (digits.length === 10 || digits.length === 11) {
-    if (!digits.startsWith("55")) digits = "55" + digits;
-  }
-  if (digits.length < 12) return null;
-  return digits;
 }
 
 async function getConfig(supabase: any): Promise<UazapiConfig | null> {
@@ -56,6 +41,16 @@ async function getConfig(supabase: any): Promise<UazapiConfig | null> {
     uazapi_instance: (data.uazapi_instance || "").trim(),
     nome_clinica: data.nome_clinica || "",
   };
+}
+
+async function getUnitConfig(supabase: any, unidadeId: string): Promise<UnitConfig> {
+  if (!unidadeId) return DEFAULT_UNIT_CONFIG;
+  const { data } = await supabase
+    .from("whatsapp_config")
+    .select("*")
+    .eq("unidade_id", unidadeId)
+    .maybeSingle();
+  return (data as UnitConfig) ?? DEFAULT_UNIT_CONFIG;
 }
 
 async function uazFetch(url: string, init: RequestInit): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
@@ -77,7 +72,6 @@ async function uazFetch(url: string, init: RequestInit): Promise<{ ok: boolean; 
 async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string | null; error?: string }> {
   const base = normalizeUrl(cfg.uazapi_server_url);
   
-  // Try multiple header variants for admin token
   const headers = { 
     "admintoken": cfg.uazapi_admin_token,
     "admin-token": cfg.uazapi_admin_token,
@@ -87,9 +81,7 @@ async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string 
   const r = await uazFetch(`${base}/instance/all`, { headers });
   
   if (!r.ok) {
-    // If it fails, maybe the instance field itself IS the token?
     if (cfg.uazapi_instance.length > 20) {
-      console.log("[UazapiGO] Using instance name as token directly (fallback).");
       return { token: cfg.uazapi_instance };
     }
     return { token: null, error: `Falha ao listar instâncias: HTTP ${r.status}` };
@@ -97,7 +89,6 @@ async function resolveInstanceToken(cfg: UazapiConfig): Promise<{ token: string 
 
   const list = r.data?.instances || r.data || [];
   if (!Array.isArray(list)) {
-     // If not array, maybe it's a single instance or something else
      if (cfg.uazapi_instance.length > 20) return { token: cfg.uazapi_instance };
      return { token: null, error: "Formato de lista de instâncias inválido" };
   }
@@ -148,7 +139,7 @@ serve(async (req) => {
   
   try {
     const body = await req.json();
-    console.log("[UazapiGO] Action Request:", body.action || "send_message");
+    const { agendamento_id, tipo, telefone_teste, telefone_direto, paciente_nome_direto, dados_direto, mensagem_custom } = body;
     
     const cfg = await getConfig(supabase);
     if (!cfg) {
@@ -212,15 +203,82 @@ serve(async (req) => {
       }), { headers: corsHeaders });
     }
 
-    // --- Action: Send Message (Default) ---
-    const phone = normalizePhone(body.telefone || body.telefone_teste || body.telefone_direto || "");
+    // --- FLUXO PRINCIPAL DE ENVIO ---
+    const phoneRaw = telefone_direto || telefone_teste || body.telefone || "";
+    const phone = complianceNormalizePhone(phoneRaw);
     if (!phone) {
       return new Response(JSON.stringify({ success: false, error: "Telefone inválido" }), { headers: corsHeaders });
     }
 
-    const msg = body.mensagem || "Olá!";
-    const r = await sendText(cfg, phone, msg);
+    // ── TESTE: envia direto ──
+    if (tipo === "teste" && telefone_teste) {
+      if (!isValidPhone(phone)) return new Response(JSON.stringify({ success: false, error: "Telefone inválido" }), { status: 400, headers: corsHeaders });
+      const message = await buildMessage(supabase, "teste", { paciente_nome: "Teste" }, "");
+      const r = await sendText(cfg, phone, message);
+      return new Response(JSON.stringify({ success: r.ok, error: r.error || (r.ok ? null : `Erro ${r.status}`) }), { headers: corsHeaders });
+    }
+
+    // Resolvendo dados
+    let unidadeId = body.unidade_id || "";
+    let pacienteId = body.paciente_id || "";
+    let pacienteNome = paciente_nome_direto || "Paciente";
+    let dados = dados_direto || {};
+
+    if (agendamento_id) {
+       const { data: ag } = await supabase.from("agendamentos").select("unidade_id, paciente_id, paciente_nome, data, hora, profissional_nome").eq("id", agendamento_id).maybeSingle();
+       if (ag) {
+         unidadeId = ag.unidade_id;
+         pacienteId = ag.paciente_id;
+         pacienteNome = ag.paciente_nome;
+         dados = { ...dados, data_consulta: ag.data, hora_consulta: ag.hora, profissional: ag.profissional_nome, paciente_nome: ag.paciente_nome };
+       }
+    }
+
+    const unitCfg = await getUnitConfig(supabase, unidadeId);
+    const message = mensagem_custom || await buildMessage(supabase, tipo, dados, unidadeId);
     
+    // VALIDAÇÃO ANTI-BAN & COMPLIANCE
+    const validation = await validateSend(supabase, unitCfg, pacienteId, phone, tipo, message);
+    
+    if (!validation.ok) {
+       await supabase.from("notification_logs").insert({
+          evento: tipo,
+          canal: "whatsapp_uazapigo",
+          destinatario_telefone: phone,
+          status: "bloqueado",
+          erro: validation.reason,
+          prior_interaction: validation.audit.prior_interaction,
+          opt_in_status: validation.audit.opt_in_status,
+          window_24h: validation.audit.window_24h,
+          category: validation.audit.category,
+          agendamento_id
+       });
+
+       return new Response(JSON.stringify({ 
+         success: false, 
+         error: `Bloqueado por Compliance: ${validation.reason}`,
+         audit: validation.audit
+       }), { headers: corsHeaders });
+    }
+
+    // Envio real
+    const r = await sendText(cfg, phone, message);
+    
+    // Log final
+    await supabase.from("notification_logs").insert({
+      evento: tipo,
+      canal: "whatsapp_uazapigo",
+      destinatario_telefone: phone,
+      status: r.ok ? "enviado" : "erro",
+      mensagem: message,
+      erro: r.ok ? null : (r.error || JSON.stringify(r.data)),
+      prior_interaction: validation.audit.prior_interaction,
+      opt_in_status: validation.audit.opt_in_status,
+      window_24h: validation.audit.window_24h,
+      category: validation.audit.category,
+      agendamento_id
+    });
+
     return new Response(JSON.stringify({ 
       success: r.ok, 
       error: r.error || (r.ok ? null : `Erro ${r.status}: ${JSON.stringify(r.data)}`) 
