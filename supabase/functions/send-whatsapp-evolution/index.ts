@@ -172,9 +172,6 @@ serve(async (req) => {
           destinatario_telefone: phone,
           status: "bloqueado",
           erro: validation.reason,
-          prior_interaction: validation.audit.prior_interaction,
-          opt_in_status: validation.audit.opt_in_status,
-          window_24h: validation.audit.window_24h,
           category: validation.audit.category,
           agendamento_id,
           unidade_id: unidadeId
