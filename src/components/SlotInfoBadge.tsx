@@ -42,11 +42,12 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     ]);
 
     const active = agendamentos.filter(
-      a => (a.profissionalId === profissionalId || filterProf === "all") &&
-        (a.unidadeId === unidadeId || filterUnit === "all") &&
+      a => a.profissionalId === profissionalId &&
+        a.unidadeId === unidadeId &&
         a.data === date &&
         !STATUS_NAO_OCUPA_VAGA.has(a.status),
     );
+
 
 
     const dayOccupied = active.length;
