@@ -736,6 +736,10 @@ const ConfigWhatsApp: React.FC = () => {
           </Card>
         </TabsContent>
 
+        <TabsContent value="eventos" className="mt-4">
+          <ConfigWhatsAppEvents />
+        </TabsContent>
+
         <TabsContent value="antiban" className="mt-4">
           <ConfigWhatsAppAntiBan />
         </TabsContent>
