@@ -185,8 +185,8 @@ serve(async (req) => {
 
     // Try to send via WhatsApp Edge Function first if it's a patient event
     const whatsappEvents = [
-      "novo_agendamento", "confirmacao", "lembrete_24h", "lembrete_1h", 
-      "cancelamento", "reagendamento", "nao_compareceu", "vaga_liberada", "fila_chamada"
+      "novo_agendamento", "confirmacao", "lembrete_24h", "lembrete_1h", "lembrete_2h",
+      "cancelamento", "reagendamento", "nao_compareceu", "vaga_liberada", "fila_chamada", "fila_entrada"
     ];
 
     if (whatsappEvents.includes(evento)) {
@@ -202,8 +202,10 @@ serve(async (req) => {
           "reagendamento": "remarcacao",
           "nao_compareceu": "falta",
           "lembrete_1h": "lembrete_1h",
+          "lembrete_2h": "lembrete_2h",
           "vaga_liberada": "vaga_disponivel",
-          "fila_chamada": "confirmacao"
+          "fila_chamada": "confirmacao",
+          "fila_entrada": "lista_espera"
         };
 
         const { data: wsResult, error: wsError } = await supabaseAdmin.functions.invoke(functionName, {
