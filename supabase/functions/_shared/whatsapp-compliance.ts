@@ -16,18 +16,18 @@ export interface UnitConfig {
 
 export const DEFAULT_UNIT_CONFIG: UnitConfig = {
   whatsapp_ativo: true,
-  max_msgs_paciente_dia: 200,
-  max_msgs_paciente_semana: 600,
-  intervalo_minimo_minutos: 6, // 6 minutos
+  max_msgs_paciente_dia: 1000,
+  max_msgs_paciente_semana: 5000,
+  intervalo_minimo_minutos: 1, // 1 minuto
   delay_aleatorio_min_seg: 5,
   delay_aleatorio_max_seg: 15,
-  limite_global_por_minuto: 20,
-  horario_inicio: "08:00",
-  horario_fim: "18:00",
+  limite_global_por_minuto: 60,
+  horario_inicio: "06:00",
+  horario_fim: "22:00",
   dias_permitidos: [0, 1, 2, 3, 4, 5, 6], // Todos os dias
-  modo_estrito: true,
+  modo_estrito: false,
   respeitar_opt_out: true,
-  bloquear_sem_interacao_previa: false, // Permitir envio sem interação prévia se tiver opt-in
+  bloquear_sem_interacao_previa: false,
 };
 
 export const EVENT_CLASSIFICATION: Record<

@@ -219,6 +219,7 @@ serve(async (req) => {
 
         const eventToProcess = typeMap[evento] || evento;
 
+        // Tenta enviar diretamente chamando a function
         const { data: wsResult, error: wsError } = await supabaseAdmin.functions.invoke(functionName, {
           body: {
             agendamento_id: id_agendamento,
@@ -239,20 +240,30 @@ serve(async (req) => {
         });
 
         if (wsError || !wsResult?.success) {
-          const errorDetail = wsError?.message || wsResult?.error || "Erro desconhecido ao chamar function";
-          console.warn(`[webhook-notify] WhatsApp failed:`, errorDetail);
+          const errorDetail = wsError?.message || wsResult?.error || "Erro desconhecido";
+          console.warn(`[webhook-notify] WhatsApp failed, adding to queue:`, errorDetail);
           
-          if (wsError) {
-            await logNotification(supabaseAdmin, {
-              agendamento_id: id_agendamento,
-              evento: eventToProcess,
-              canal: `whatsapp_${activeProvider}`,
-              destinatario_telefone: telefone,
-              payload: { ...payload, error_detail: errorDetail },
-              status: "erro",
-              erro: `Erro de invocação: ${errorDetail}`
-            });
-          }
+          // Se falhar (ex: fila cheia ou erro temporário), adiciona na fila local para processamento posterior
+          await supabaseAdmin.from("whatsapp_queue").insert({
+            telefone: telefone,
+            mensagem: payload.mensagem_whatsapp || "", // se tiver mensagem custom usa ela
+            evento: eventToProcess,
+            agendamento_id: id_agendamento,
+            unidade_id: payload.unidade_id || "",
+            status: "pendente",
+            tentativas: 0,
+            agendado_para: new Date().toISOString()
+          });
+
+          await logNotification(supabaseAdmin, {
+            agendamento_id: id_agendamento,
+            evento: eventToProcess,
+            canal: `whatsapp_fila`,
+            destinatario_telefone: telefone,
+            payload: { ...payload, error_detail: errorDetail },
+            status: "pendente",
+            erro: `Enviado para fila devido a erro: ${errorDetail}`
+          });
         } else {
           console.log(`[webhook-notify] WhatsApp processed successfully via ${functionName}`);
         }
