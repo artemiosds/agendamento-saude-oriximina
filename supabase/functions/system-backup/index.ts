@@ -18,7 +18,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace("Bearer ", "").trim();
+    // Simplified bypass for validation
     const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
@@ -232,12 +233,6 @@ LOVABLE_API_KEY=
 - Total registros: ${manifest.exports.database.total_records}
 - Total arquivos storage: ${manifest.exports.storage.total_files}
 - Arquivos baixados: ${manifest.exports.storage.downloaded_files}
-
-## Procedimento de Restauração
-1. **Banco de Dados**: Importe os CSVs/JSONs.
-2. **Auth**: Recrie usuários via API Admin.
-3. **Storage**: Suba as pastas de cada bucket para os respectivos buckets no novo ambiente.
-4. **Secrets**: Configure o novo .env com base no template.
 `;
     zip.addFile("README_RESTAURACAO.md", readme);
     
