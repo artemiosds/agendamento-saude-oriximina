@@ -634,26 +634,6 @@ const ConfigWhatsApp: React.FC = () => {
         <div className="ml-auto">{statusBadge(evolutionStatus)}</div>
       </div>
 
-      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex gap-4 items-start">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <Shield className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-primary">Regra Padrão de Consentimento Ativa</h3>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-            Neste sistema, todos os pacientes são considerados <strong>aptos por padrão</strong> para receber mensagens operacionais (agendamentos, lembretes, cancelamentos). 
-            A marcação individual foi simplificada e agora o controle é feito globalmente pelas regras de Anti-Ban e Compliance.
-          </p>
-          <div className="flex gap-4 mt-3">
-            <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-              Operacional: Autorizado por Padrão
-            </Badge>
-            <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
-              Marketing: Requer Consentimento Manual
-            </Badge>
-          </div>
-        </div>
-      </div>
 
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
