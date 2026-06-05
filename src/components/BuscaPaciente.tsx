@@ -106,6 +106,7 @@ function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }
         .from('pacientes')
         .select('id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em')
         .or(`nome.ilike.%${term}%,cpf.ilike.%${term}%,cns.ilike.%${term}%,telefone.ilike.%${term}%`)
+        .order('nome', { ascending: true })
         .limit(10);
 
       if (!cancelled) {
@@ -113,6 +114,7 @@ function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }
         setLoading(false);
       }
     };
+
 
 
     searchPatients();
