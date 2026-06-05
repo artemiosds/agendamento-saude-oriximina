@@ -1129,6 +1129,7 @@ const Tratamentos: React.FC = () => {
         }
       }
 
+
       const agId = `ag${Date.now()}`;
       await addAgendamento({
         id: agId,
