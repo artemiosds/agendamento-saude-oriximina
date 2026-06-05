@@ -1443,16 +1443,8 @@ const Agenda: React.FC = () => {
         id_agendamento: agId,
       });
     }
-    // WhatsApp: enviar notificação por status
-    const statusToWhatsapp: Record<string, string> = {
-      cancelado: "cancelamento",
-      remarcado: "remarcacao",
-      falta: "falta",
-    };
-    const whatsappTipo = statusToWhatsapp[newStatus];
-    if (whatsappTipo) {
-      whatsappService.sendByAgendamento(agId, whatsappTipo).catch(() => {});
-    }
+    // WhatsApp: handled via notify webhook hook
+
 
     // Log the status change
     await logAction({
