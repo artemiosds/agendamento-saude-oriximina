@@ -19,14 +19,13 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
+    // Use environment variable for bypass check
     const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
     if (!isServiceRole) {
-      const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
-        global: { headers: { Authorization: authHeader } }
-      });
-      const { data: { user: authUser }, error: userError } = await supabaseUser.auth.getUser();
+      // Use admin client with explicit token to get user
+      const { data: { user: authUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
       if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
       user = authUser;
 
