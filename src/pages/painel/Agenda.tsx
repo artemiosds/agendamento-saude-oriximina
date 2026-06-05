@@ -2592,6 +2592,7 @@ const Agenda: React.FC = () => {
             {STATUS_QUICK_CHIPS.map((chip) => {
               const count = chip.value === "all"
                 ? statusCounts.total
+
                 : (statusCounts.byGroup[chip.value] || 0);
               const active = statusFilter === chip.value;
               return (
