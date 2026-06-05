@@ -586,8 +586,18 @@ const Triagem: React.FC = () => {
                     <Badge variant="outline" className="text-xs">
                       <Clock className="mr-1 h-3 w-3" /> {waitLabel}
                     </Badge>
-                    <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openTriagem(item)}>
-                      <Play className="mr-1 h-3.5 w-3.5" /> Iniciar triagem
+                    <Button 
+                      size="sm" 
+                      className="gradient-primary text-primary-foreground" 
+                      onClick={() => openTriagem(item)}
+                      disabled={openingTriagemId === item.filaId}
+                    >
+                      {openingTriagemId === item.filaId ? (
+                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Play className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      {openingTriagemId === item.filaId ? "Abrindo..." : "Iniciar triagem"}
                     </Button>
                     <Button
                       size="sm"
