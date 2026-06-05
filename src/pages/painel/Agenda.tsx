@@ -2509,106 +2509,138 @@ const Agenda: React.FC = () => {
       {abaAtiva === "agenda" && (
         <>
           <div className="space-y-6 max-w-[1100px] mx-auto">
-            <Card className="p-4 shadow-sm overflow-hidden border-0 bg-card">
-              <CalendarioAgenda
-                selectedDate={selectedDate}
-                onDateChange={(date) => setSelectedDate(date)}
-                agendamentos={agendamentos}
-                bloqueios={bloqueios}
-                disponibilidades={disponibilidades}
-                filterProf={isProfissional ? (user?.id || "all") : filterProf}
-                filterUnit={filterUnit}
-                profissionais={profissionais}
-                getAvailableSlots={getAvailableSlots}
-                getAvailableDates={getAvailableDates}
-                unidades={unidades}
-              />
-            </Card>
-
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
-              {!isProfissional && showUnitSelector && (
-                <Select
-                  value={filterUnit}
-                  onValueChange={(v) => {
-                    setFilterUnit(v);
-                    setFilterProf("all");
-                  }}
-                >
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Unidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas Unidades</SelectItem>
-                    {unidadesVisiveis.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {!isProfissional && (
-                <Select value={filterProf} onValueChange={setFilterProf}>
-                  <SelectTrigger className="w-full sm:w-52">
-                    <SelectValue placeholder="Profissional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos Profissionais</SelectItem>
-                    {filteredProfissionais.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {/* BUSCA na agenda */}
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar paciente, CPF, CNS..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 h-9"
+            <Card className="shadow-md border-0 bg-card overflow-hidden">
+              <div className="p-4 border-b bg-muted/5">
+                <CalendarioAgenda
+                  selectedDate={selectedDate}
+                  onDateChange={(date) => setSelectedDate(date)}
+                  agendamentos={agendamentos}
+                  bloqueios={bloqueios}
+                  disponibilidades={disponibilidades}
+                  filterProf={isProfissional ? (user?.id || "all") : filterProf}
+                  filterUnit={filterUnit}
+                  profissionais={profissionais}
+                  getAvailableSlots={getAvailableSlots}
+                  getAvailableDates={getAvailableDates}
+                  unidades={unidades}
                 />
               </div>
-              {/* Filtro de Status */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-52">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_FILTER_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {/* Filtro de Tipo de atendimento */}
-              <Select value={tipoFilter} onValueChange={setTipoFilter}>
-                <SelectTrigger className="w-full sm:w-56">
-                  <SelectValue placeholder="Tipo de atendimento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="Consulta">Primeira Consulta</SelectItem>
-                  <SelectItem value="Retorno">Retorno</SelectItem>
-                  <SelectItem value="Exame">Exame</SelectItem>
-                  <SelectItem value="Procedimento">Procedimento</SelectItem>
-                  <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
-                  <SelectItem value="Urgência">Urgência</SelectItem>
-                </SelectContent>
-              </Select>
-              {(statusFilter !== "all" || tipoFilter !== "all" || debouncedSearch) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => { setStatusFilter("all"); setTipoFilter("all"); setSearchTerm(""); }}
-                  className="h-9"
-                >
-                  Limpar filtros
-                </Button>
-              )}
-            </div>
+
+              <div className="p-4 bg-card">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col md:flex-row md:items-end gap-3">
+                    {!isProfissional && showUnitSelector && (
+                      <div className="w-full md:w-48 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground ml-1">Unidade</Label>
+                        <Select
+                          value={filterUnit}
+                          onValueChange={(v) => {
+                            setFilterUnit(v);
+                            setFilterProf("all");
+                          }}
+                        >
+                          <SelectTrigger className="h-11 text-sm font-medium">
+                            <SelectValue placeholder="Unidade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas Unidades</SelectItem>
+                            {unidadesVisiveis.map((u) => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    
+                    {!isProfissional && (
+                      <div className="w-full md:w-64 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground ml-1">Profissional</Label>
+                        <Select value={filterProf} onValueChange={setFilterProf}>
+                          <SelectTrigger className="h-11 text-sm font-medium">
+                            <div className="truncate text-left pr-2">
+                              <SelectValue placeholder="Profissional" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            <SelectItem value="all">Todos Profissionais</SelectItem>
+                            {filteredProfissionais.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground ml-1">Paciente</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar paciente, CPF, CNS..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10 h-11 text-sm font-medium bg-muted/20 border-muted focus:bg-background transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="w-full md:w-44 space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground ml-1">Status</Label>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="h-11 text-sm font-medium">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_FILTER_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="w-full md:w-48 space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground ml-1">Tipo</Label>
+                      <Select value={tipoFilter} onValueChange={setTipoFilter}>
+                        <SelectTrigger className="h-11 text-sm font-medium">
+                          <SelectValue placeholder="Tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os tipos</SelectItem>
+                          <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                          <SelectItem value="Retorno">Retorno</SelectItem>
+                          <SelectItem value="Exame">Exame</SelectItem>
+                          <SelectItem value="Procedimento">Procedimento</SelectItem>
+                          <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                          <SelectItem value="Urgência">Urgência</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {(statusFilter !== "all" || tipoFilter !== "all" || searchTerm || (filterProf !== "all" && !isProfissional)) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { 
+                          setStatusFilter("all"); 
+                          setTipoFilter("all"); 
+                          setSearchTerm("");
+                          if (!isProfissional) setFilterProf("all");
+                        }}
+                        className="h-11 px-3 text-muted-foreground hover:text-destructive flex items-center gap-1.5"
+                      >
+                        <X className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-tight">Limpar</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+
           </div>
 
           {/* Chips rápidos de status */}
