@@ -333,9 +333,9 @@ const Tratamentos: React.FC = () => {
 
       setProcedimentos(procsData);
       if (ptsData) setPtsList(ptsData as PTSRecord[]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error loading treatments:", err);
-      toast.error("Erro ao carregar dados de tratamento.");
+      toast.error(`Erro ao carregar dados de tratamento: ${err.message || 'Erro desconhecido'}`);
     } finally {
       setLoading(false);
     }
