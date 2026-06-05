@@ -641,7 +641,7 @@ const ConfigWhatsApp: React.FC = () => {
           <TabsTrigger value="conexao" className="gap-1.5"><Zap className="w-4 h-4" /> Conexão</TabsTrigger>
           <TabsTrigger value="mensagens" className="gap-1.5"><FileText className="w-4 h-4" /> Mensagens</TabsTrigger>
           <TabsTrigger value="eventos" className="gap-1.5"><Bell className="w-4 h-4" /> Eventos</TabsTrigger>
-          <TabsTrigger value="compliance" className="gap-1.5"><Shield className="w-4 h-4" /> Compliance</TabsTrigger>
+          
           <TabsTrigger value="antiban" className="gap-1.5"><RotateCcw className="w-4 h-4" /> Fila</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5"><Clock className="w-4 h-4" /> Logs</TabsTrigger>
         </TabsList>
