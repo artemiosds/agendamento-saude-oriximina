@@ -455,35 +455,6 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
                 </div>
               </div>
 
-              <Separator />
-
-              <div>
-                <h4 className="font-medium text-foreground mb-3">Compliance</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Modo estrito anti-spam</Label>
-                      <p className="text-xs text-muted-foreground">Aplica todas as validações de forma rígida</p>
-                    </div>
-                    <Switch checked={cfg.modo_estrito} onCheckedChange={v => setCfg(p => ({ ...p, modo_estrito: v }))} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Respeitar opt-out de pacientes</Label>
-                      <p className="text-xs text-muted-foreground">Bloqueia envio para quem solicitou descadastro</p>
-                    </div>
-                    <Switch checked={cfg.respeitar_opt_out} onCheckedChange={v => setCfg(p => ({ ...p, respeitar_opt_out: v }))} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Exigir interação prévia do paciente</Label>
-                      <p className="text-xs text-muted-foreground">Só envia para quem já respondeu/iniciou contato</p>
-                    </div>
-                    <Switch checked={cfg.bloquear_sem_interacao_previa}
-                      onCheckedChange={v => setCfg(p => ({ ...p, bloquear_sem_interacao_previa: v }))} />
-                  </div>
-                </div>
-              </div>
 
               <div className="flex justify-end pt-2">
                 <Button onClick={save} disabled={saving} className="gap-2">
