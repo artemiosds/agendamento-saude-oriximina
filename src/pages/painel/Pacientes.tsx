@@ -554,8 +554,12 @@ const Pacientes: React.FC = () => {
       isGestante: (p as any).isGestante || (p as any).is_gestante || false,
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
+      whatsappOptInOperational: !!((p as any).whatsappOptInOperational || (p as any).whatsapp_opt_in_operational),
+      whatsappOptInMarketing: !!((p as any).whatsappOptInMarketing || (p as any).whatsapp_opt_in_marketing),
+      whatsappOptInWaitingList: !!((p as any).whatsappOptInWaitingList || (p as any).whatsapp_opt_in_waiting_list),
       customData: (p as any).custom_data || {},
     });
+
     setErrors({});
     setDialogOpen(true);
   };
