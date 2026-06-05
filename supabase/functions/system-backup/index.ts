@@ -18,12 +18,14 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
+    const token = authHeader.replace("Bearer ", "").trim();
     // Verify if user is Master
     const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
       global: { headers: { Authorization: authHeader } }
     });
-    const { data: { user } } = await supabaseUser.auth.getUser();
-    if (!user) return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: corsHeaders });
+    const { data: { user: authUser }, error: userError } = await supabaseUser.auth.getUser();
+    if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
+    const user = authUser;
 
     const { data: func } = await supabaseAdmin
       .from("funcionarios")
@@ -131,17 +133,15 @@ serve(async (req) => {
       if (bucketError) throw bucketError;
 
       for (const bucket of buckets) {
-        // Recursive list function for folders
         const listAllFiles = async (path: string = "") => {
-          const { data: files, error: fileError } = await supabaseAdmin.storage.from(bucket.name).list(path, { limit: 1000 });
+          const { data: files, error: fileError } = await supabaseAdmin.storage.from(bucket.name).list(path, { limit: 100 });
           if (fileError) return;
 
           for (const file of files) {
             const fullPath = path ? `${path}/${file.name}` : file.name;
-            if (file.metadata) {
-              // It's a file
+            if (file.id || (file.metadata && !file.metadata.mimetype.includes('directory'))) {
               manifest.exports.storage.total_files++;
-              manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata.size });
+              manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata?.size });
               
               try {
                 const { data: fileData, error: downloadError } = await supabaseAdmin.storage.from(bucket.name).download(fullPath);
@@ -156,8 +156,7 @@ serve(async (req) => {
                 logEntries.push(msg);
                 manifest.failures.push({ type: 'storage_file', bucket: bucket.name, path: fullPath, error: err.message });
               }
-            } else {
-              // It's a folder, recurse
+            } else if (file.name !== '.emptyFolderPlaceholder') {
               await listAllFiles(fullPath);
             }
           }
@@ -220,11 +219,13 @@ LOVABLE_API_KEY=
 - **secrets/**: Template de variáveis de ambiente.
 - **logs/**: Log detalhado e errors.json para falhas.
 
-## Procedimento de Restauração
-1. **Banco de Dados**: Importe os CSVs/JSONs.
-2. **Auth**: Recrie usuários via API Admin.
-3. **Storage**: Suba as pastas de cada bucket para os respectivos buckets no novo ambiente.
-4. **Secrets**: Configure o novo .env com base no template.
+## Metadados
+- Gerado em: ${timestamp}
+- Pelo usuário: ${user.id}
+- Total tabelas: ${manifest.exports.database.total_tables}
+- Total registros: ${manifest.exports.database.total_records}
+- Total arquivos storage: ${manifest.exports.storage.total_files}
+- Arquivos baixados: ${manifest.exports.storage.downloaded_files}
 `;
     zip.addFile("README_RESTAURACAO.md", readme);
     
