@@ -195,8 +195,6 @@ serve(async (req) => {
       destinatario_telefone: phone,
       status: result.ok ? "enviado" : "erro",
       erro: result.ok ? "" : result.body,
-      prior_interaction: validation.audit.prior_interaction,
-      window_24h: validation.audit.window_24h,
       category: validation.audit.category,
       agendamento_id,
       provider: "evolution",
