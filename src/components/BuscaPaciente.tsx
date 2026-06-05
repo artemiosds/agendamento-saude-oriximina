@@ -9,7 +9,9 @@ interface BuscaPacienteProps {
   pacientes: Paciente[];
   value: string;
   onChange: (pacienteId: string, pacienteNome: string) => void;
+  unidadeId?: string | null;
 }
+
 
 const mapPaciente = (row: any): Paciente => ({
   id: row.id,
