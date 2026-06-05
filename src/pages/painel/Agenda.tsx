@@ -2599,7 +2599,7 @@ const Agenda: React.FC = () => {
                     )}
                     
                     {!isProfissional && (
-                      <div className="w-full md:w-72 space-y-1.5">
+                      <div className="w-full md:w-80 space-y-1.5">
                         <Label className="text-xs font-semibold text-muted-foreground ml-1">Profissional</Label>
                         <Popover>
                           <PopoverTrigger asChild>
@@ -2608,7 +2608,11 @@ const Agenda: React.FC = () => {
                               role="combobox"
                               className="h-11 w-full justify-between text-sm font-medium bg-background border-input hover:bg-accent hover:text-accent-foreground"
                             >
-                              <div className="truncate text-left flex-1 mr-2">
+                              <div className="truncate text-left flex-1 mr-2" title={
+                                filterProf === "all" 
+                                  ? "Todos Profissionais" 
+                                  : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"
+                              }>
                                 {filterProf === "all" 
                                   ? "Todos Profissionais" 
                                   : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"}
