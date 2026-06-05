@@ -751,6 +751,16 @@ const Agenda: React.FC = () => {
 
   // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
   const statusCounts = React.useMemo(() => {
+    // Regra centralizada de ocupação de vaga
+    const STATUS_NAO_OCUPA_VAGA = new Set([
+      "cancelado",
+      "falta",
+      "excluido",
+      "removido",
+      "inativo",
+    ]);
+    const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
+
     const base = agendamentos.filter((a) => {
       if (a.data !== selectedDate) return false;
       if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
@@ -766,13 +776,19 @@ const Agenda: React.FC = () => {
       }
       return true;
     });
+
+    const activeBase = base.filter(a => statusOcupaVaga(a.status));
+
     const byGroup: Record<string, number> = {};
     for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
       const allowed = STATUS_FILTER_GROUPS[key];
       byGroup[key] = base.filter((a) => allowed.includes(a.status)).length;
     }
-    return { total: base.length, byGroup };
+    
+    // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
+    return { total: activeBase.length, byGroup };
   }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
+
 
   // (primeiro item da manhã que ainda não foi concluído).
   const idxPendentesManha = React.useMemo(() => {
