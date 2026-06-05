@@ -309,18 +309,6 @@ const ConfigWhatsApp: React.FC = () => {
     .replace(/\{\{data\}\}/g, '20/04/2026')
     .replace(/\{\{hora\}\}/g, '14:00');
 
-  const getComplianceStatus = () => {
-    return {
-      prior_interaction: false,
-      opt_in_operational: true,
-      opt_in_marketing: false,
-      window_24h: false,
-      can_send_utility: true,
-      can_send_marketing: false
-    };
-  };
-
-  const compliance = getComplianceStatus();
 
   // Save Evolution config
   const saveEvolutionConfig = async () => {
