@@ -19,26 +19,22 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Trust service role key directly for internal sandbox validation
-    // If it's our test call from curl, it uses the service key.
-    let user = null;
+    // Verify if user is Master
+    const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+      global: { headers: { Authorization: authHeader } }
+    });
+    const { data: { user: authUser }, error: userError } = await supabaseUser.auth.getUser();
+    if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
+    const user = authUser;
 
-    if (token !== supabaseServiceKey) {
-      const { data: { user: authUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
-      if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
-      user = authUser;
+    const { data: func } = await supabaseAdmin
+      .from("funcionarios")
+      .select("role")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
 
-      const { data: func } = await supabaseAdmin
-        .from("funcionarios")
-        .select("role")
-        .eq("auth_user_id", user.id)
-        .maybeSingle();
-
-      if (func?.role !== "master") {
-        return new Response(JSON.stringify({ error: "Forbidden: Master only" }), { status: 403, headers: corsHeaders });
-      }
-    } else {
-      user = { id: "service_role_system" };
+    if (func?.role !== "master") {
+      return new Response(JSON.stringify({ error: "Forbidden: Master only" }), { status: 403, headers: corsHeaders });
     }
 
     const zip = new JSZip();
