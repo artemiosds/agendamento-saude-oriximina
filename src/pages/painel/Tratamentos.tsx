@@ -1208,10 +1208,10 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
-    const pendentes = cycleSessions.filter((s) => {
-      if (s.status !== "pendente_agendamento") return false;
-      return !!s.scheduled_date;
-    });
+    const pendentes = cycleSessions
+      .filter((s) => s.status === "pendente_agendamento" && !!s.scheduled_date)
+      .sort((a, b) => a.session_number - b.session_number);
+
 
     if (pendentes.length === 0) {
       toast.info("Não há sessões pendentes para agendar.");
