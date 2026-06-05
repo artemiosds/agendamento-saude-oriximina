@@ -208,7 +208,7 @@ const TriagemItem = React.memo(({
 });
 
 const Triagem: React.FC = () => {
-  const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction } = useData();
+  const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
   const { user, isGlobalAdmin } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
   const { resolved: customConfig } = useCustomFields('triagem', user?.unidadeId);
