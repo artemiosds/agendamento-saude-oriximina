@@ -326,30 +326,22 @@ const Triagem: React.FC = () => {
     return { value: value.toFixed(2), label };
   }, [form.peso, form.altura]);
 
+  const [openingTriagemId, setOpeningTriagemId] = useState<string | null>(null);
+
   const openTriagem = useCallback(
     async (ag: Agendamento) => {
+      if (openingTriagemId) return;
+      setOpeningTriagemId(ag.filaId);
+      
       let itemSelecionado = ag;
 
-      if (ag.filaStatus === "chegada_confirmada") {
-        try {
-          await Promise.all([
-            updateFila(ag.filaId, { status: "aguardando_triagem" as any }),
-            updateAgendamento(ag.id, { status: "aguardando_triagem" as any }),
-          ]);
-          await Promise.all([refreshFila(), refreshAgendamentos()]);
-          itemSelecionado = { ...ag, filaStatus: "aguardando_triagem", status: "aguardando_triagem" };
-        } catch (error) {
-          console.error("Erro ao iniciar triagem:", error);
-          toast.error("Erro ao iniciar triagem.");
-          return;
-        }
-      }
-
-      setSelectedItem(itemSelecionado);
+      // Abrir o modal imediatamente com os dados que já temos
+      setSelectedItem(ag);
       setDialogOpen(true);
 
-      const pac = pacientes.find((p) => p.id === itemSelecionado.pacienteId);
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
       setPacienteInfo(pac || null);
+      
       setForm({
         peso: "",
         altura: "",
@@ -360,7 +352,7 @@ const Triagem: React.FC = () => {
         glicemia: "",
         dor: 0,
         classificacaoRisco: "",
-        queixaPrincipal: pac?.descricaoClinica || itemSelecionado.observacoes || "",
+        queixaPrincipal: pac?.descricaoClinica || ag.observacoes || "",
         historicoQueixa: "",
         alergias: [],
         medicamentos: [],
@@ -371,8 +363,27 @@ const Triagem: React.FC = () => {
       setCustomData({});
       setNewAlergia("");
       setNewMedicamento("");
+
+      // Se for chegada confirmada, atualiza o status no background
+      if (ag.filaStatus === "chegada_confirmada") {
+        try {
+          await Promise.all([
+            updateFila(ag.filaId, { status: "aguardando_triagem" as any }),
+            updateAgendamento(ag.id, { status: "aguardando_triagem" as any }),
+          ]);
+          // Não precisamos dar refresh em tudo agora, o usuário já está com o modal aberto
+          // O updateFila/updateAgendamento já atualiza o estado local no DataContext
+          itemSelecionado = { ...ag, filaStatus: "aguardando_triagem", status: "aguardando_triagem" };
+          setSelectedItem(itemSelecionado);
+        } catch (error) {
+          console.error("Erro ao iniciar triagem no background:", error);
+          // Se falhar o background update, o usuário ainda pode preencher a triagem
+        }
+      }
+      
+      setOpeningTriagemId(null);
     },
-    [pacientes, refreshAgendamentos, refreshFila, updateAgendamento, updateFila],
+    [pacientes, updateAgendamento, updateFila, openingTriagemId],
   );
 
   const addAlergia = () => {
