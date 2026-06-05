@@ -151,8 +151,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
           const isCurrMonth = isSameMonth(d, currentDate);
           
           return (
-            <TooltipProvider key={ds}>
-              <Tooltip>
+            <Tooltip key={ds}>
                 <TooltipTrigger asChild>
                   <button 
                     onClick={() => onDateChange(ds)} 
