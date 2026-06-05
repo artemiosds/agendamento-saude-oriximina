@@ -186,26 +186,33 @@ serve(async (req) => {
     // Try to send via WhatsApp Edge Function first if it's a patient event
     const whatsappEvents = [
       "novo_agendamento", "confirmacao", "lembrete_24h", "lembrete_1h", "lembrete_2h",
-      "cancelamento", "reagendamento", "nao_compareceu", "vaga_liberada", "fila_chamada", "fila_entrada"
+      "cancelamento", "reagendamento", "nao_compareceu", "vaga_liberada", "fila_chamada", "fila_entrada",
+      "agendamento_criado", "remarcacao", "falta", "lista_espera", "vaga_disponivel"
     ];
 
     if (whatsappEvents.includes(evento)) {
       try {
         const { data: clinicaCfg } = await supabaseAdmin.from("clinica_config").select("whatsapp_provider_active").limit(1).maybeSingle();
-        const activeProvider = clinicaCfg?.whatsapp_provider_active || "uazapigo"; // Default to uazapigo as per user preference
+        const activeProvider = clinicaCfg?.whatsapp_provider_active || "uazapigo";
         const functionName = activeProvider === "uazapigo" ? "send-whatsapp-uazapigo" : "send-whatsapp-evolution";
         
         console.log(`[webhook-notify] Attempting WhatsApp via ${functionName} for event ${evento}`);
         
         const typeMap: Record<string, string> = {
           "novo_agendamento": "confirmacao",
+          "agendamento_criado": "confirmacao",
           "reagendamento": "remarcacao",
+          "remarcacao": "remarcacao",
           "nao_compareceu": "falta",
+          "falta": "falta",
           "lembrete_1h": "lembrete_1h",
           "lembrete_2h": "lembrete_2h",
+          "lembrete_24h": "lembrete_24h",
           "vaga_liberada": "vaga_disponivel",
+          "vaga_disponivel": "vaga_disponivel",
           "fila_chamada": "confirmacao",
-          "fila_entrada": "lista_espera"
+          "fila_entrada": "lista_espera",
+          "lista_espera": "lista_espera"
         };
 
         const { data: wsResult, error: wsError } = await supabaseAdmin.functions.invoke(functionName, {

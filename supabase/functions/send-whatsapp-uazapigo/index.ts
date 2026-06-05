@@ -122,7 +122,11 @@ async function sendText(cfg: UazapiConfig, phone: string, message: string) {
   for (const url of endpoints) {
     const r = await uazFetch(url, {
       method: "POST",
-      headers: { token, "Content-Type": "application/json" },
+      headers: { 
+        "token": token,
+        "apikey": token, // Some versions use apikey
+        "Content-Type": "application/json" 
+      },
       body,
     });
     if (r.ok) return r;
