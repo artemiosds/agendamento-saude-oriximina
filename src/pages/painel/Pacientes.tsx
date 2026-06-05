@@ -641,7 +641,11 @@ const Pacientes: React.FC = () => {
         atualizado_por_usuario: user?.usuario || "",
         motivo_alteracao: "Atualização cadastral pela página Pacientes",
       },
+      whatsapp_opt_in_operational: form.whatsappOptInOperational,
+      whatsapp_opt_in_marketing: form.whatsappOptInMarketing,
+      whatsapp_opt_in_waiting_list: form.whatsappOptInWaitingList,
     };
+
 
     if (user?.role === "recepcao") {
       if (!unidadeIdFuncionario) {
