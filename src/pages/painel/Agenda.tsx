@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, History, ListChecks } from "lucide-react";
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Plus,
   ChevronLeft,
@@ -53,7 +53,11 @@ import {
   Bell,
   Search,
   Pencil,
+  ChevronDown,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
 import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
