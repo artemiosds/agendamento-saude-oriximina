@@ -19,16 +19,12 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Use an environment variable to check for service role or just use the admin client directly
-    // For validation, we'll check if the token matches the service key
+    // Trust service role key directly for internal sandbox validation
     const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
     if (!isServiceRole) {
-      const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
-        global: { headers: { Authorization: authHeader } }
-      });
-      const { data: { user: authUser }, error: userError } = await supabaseUser.auth.getUser();
+      const { data: { user: authUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
       if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
       user = authUser;
 
@@ -147,7 +143,7 @@ serve(async (req) => {
 
           for (const file of files) {
             const fullPath = path ? `${path}/${file.name}` : file.name;
-            if (file.id) { // Files have IDs, folders don't
+            if (file.id) {
               manifest.exports.storage.total_files++;
               manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata?.size });
               
