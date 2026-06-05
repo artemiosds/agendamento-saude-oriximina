@@ -276,7 +276,8 @@ serve(async (req) => {
           ? (await supabase.from("unidades").select("nome").eq("id", ag.unidade_id).maybeSingle())?.data?.nome
           : "";
 
-        const success = await sendNotification(supabase, config, evolutionConfig, {
+        const success = await sendNotification(supabase, config, {
+
           evento: "lembrete_24h",
           paciente_nome: ag.paciente_nome,
           email: paciente.email || "",
