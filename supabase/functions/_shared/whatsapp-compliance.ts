@@ -129,12 +129,16 @@ export async function validateSend(
     if (classification.category === 'marketing') {
       if (!pacienteData.whatsapp_opt_in_marketing) return { ok: false, reason: "sem_opt_in_marketing", audit };
     } else {
-      // Utility - Se não tiver o campo definido, assume true como padrão (Regra Padrão da Unidade)
+      // Utility - Se não tiver o campo definido ou for true, assume como autorizado
       const hasOperationalOptIn = pacienteData.whatsapp_opt_in_operational !== false;
       if (!hasOperationalOptIn) return { ok: false, reason: "sem_opt_in_operacional", audit };
       
+      // Define o status do opt-in no log
       if (pacienteData.whatsapp_opt_in_operational === null || pacienteData.whatsapp_opt_in_operational === true) {
+        audit.opt_in_status = 'regra_padrao_unidade';
         audit.authorized_by_default_rule = true;
+      } else {
+        audit.opt_in_status = 'manual_opt_in';
       }
       
       // Consentimento específico
