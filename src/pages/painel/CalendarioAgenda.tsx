@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar, CalendarDays, CalendarRange } from "lucide-react";
 import { cn, dateStrToUtcDate, localDateStr, todayLocalStr } from "@/lib/utils";
@@ -53,6 +54,9 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   filterUnit,
   profissionais,
 }) => {
+  const { user } = useAuth();
+  const isProfissional = user?.role === "profissional";
+  const effectiveProfFilter = isProfissional ? (user?.id || "all") : filterProf;
   const [view, setView] = useState<AgendaView>("month");
   const [currentDate, setCurrentDate] = useState(() => dateStrToUtcDate(selectedDate));
 
@@ -77,7 +81,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     
     // Filtro por profissional e unidade
     const relevantAgs = dayAgendamentos.filter(a => {
-      const matchProf = filterProf === "all" || a.profissionalId === filterProf;
+      const matchProf = effectiveProfFilter === "all" || a.profissionalId === effectiveProfFilter;
       const matchUnit = filterUnit === "all" || a.unidadeId === filterUnit;
       return matchProf && matchUnit;
     });
@@ -123,7 +127,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     return { date: dateStr, dayNumber: date.getUTCDate(), isToday, isSelected: dateStr === selectedDate, status, agendamentosCount, totalVagas, counts };
   };
 
-  const profsFiltrados = useMemo(() => filterProf !== "all" ? profissionais.filter(p => p.id === filterProf) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [filterProf, filterUnit, profissionais]);
+  const profsFiltrados = useMemo(() => effectiveProfFilter !== "all" ? profissionais.filter(p => p.id === effectiveProfFilter) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [effectiveProfFilter, filterUnit, profissionais]);
 
   const navDate = (delta: number) => {
     const next = new Date(currentDate);

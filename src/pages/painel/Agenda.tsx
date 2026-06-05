@@ -177,6 +177,9 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
 };
 
 const Agenda: React.FC = () => {
+  const { user } = useAuth();
+  const isProfissional = user?.role === "profissional";
+
   const {
     agendamentos,
     updateAgendamento,
@@ -202,7 +205,7 @@ const Agenda: React.FC = () => {
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
-  const { user } = useAuth();
+  
   const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -212,7 +215,7 @@ const Agenda: React.FC = () => {
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
-  const [filterProf, setFilterProf] = useState("all");
+  const [filterProf, setFilterProf] = useState(isProfissional ? (user?.id || "all") : "all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
@@ -477,7 +480,7 @@ const Agenda: React.FC = () => {
   };
 
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
-  const isProfissional = user?.role === "profissional";
+  // isProfissional já definido no topo
 
   // Memo para agendamentos pendentes (Requirement 5-10)
   const agendamentosPendentesRevisao = React.useMemo(() => {
@@ -2473,7 +2476,7 @@ const Agenda: React.FC = () => {
                 agendamentos={agendamentos}
                 bloqueios={bloqueios}
                 disponibilidades={disponibilidades}
-                filterProf={filterProf}
+                filterProf={isProfissional ? (user?.id || "all") : filterProf}
                 filterUnit={filterUnit}
                 profissionais={profissionais}
                 getAvailableSlots={getAvailableSlots}
@@ -2594,11 +2597,11 @@ const Agenda: React.FC = () => {
           </div>
 
           {/* Slot availability summary for selected professional */}
-          {filterProf !== "all" && (
+          {(isProfissional || filterProf !== "all") && (
             <SlotInfoBadge
-              profissionalId={filterProf}
+              profissionalId={isProfissional ? (user?.id || "all") : filterProf}
               unidadeId={
-                filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === filterProf)?.unidadeId || ""
+                filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === (isProfissional ? (user?.id || "all") : filterProf))?.unidadeId || ""
               }
               date={selectedDate}
             />
