@@ -4085,18 +4085,31 @@ export type Database = {
         Args: { lim?: number; p_cid: string }
         Returns: Json
       }
-      get_treatment_cycles_paginated: {
-        Args: {
-          p_only_own_professional?: boolean
-          p_page?: number
-          p_page_size?: number
-          p_professional_id?: string
-          p_search?: string
-          p_status?: string
-          p_unit_id?: string
-        }
-        Returns: Json
-      }
+      get_treatment_cycles_paginated:
+        | {
+            Args: {
+              p_only_own_professional?: boolean
+              p_page?: number
+              p_page_size?: number
+              p_professional_id?: string
+              p_search?: string
+              p_status?: string
+              p_unit_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_only_own_professional?: boolean
+              p_page: number
+              p_page_size: number
+              p_professional_id?: string
+              p_search?: string
+              p_status?: string
+              p_unit_id?: string
+            }
+            Returns: Json
+          }
       has_staff_role: { Args: { _role: string }; Returns: boolean }
       iniciar_atendimento: {
         Args: { p_agendamento_id: string; p_profissional_id: string }
@@ -4151,6 +4164,87 @@ export type Database = {
           p_unidade_id?: string
         }
         Returns: Json
+      }
+      search_patients: {
+        Args: { p_limit?: number; p_search: string; p_unit_id?: string }
+        Returns: {
+          auth_user_id: string | null
+          bairro: string | null
+          cep: string | null
+          cid: string
+          cns: string
+          complemento: string | null
+          comportamento: string
+          comunicacao: string
+          cpf: string
+          cpf_responsavel: string
+          criado_em: string | null
+          custom_data: Json
+          data_encaminhamento: string
+          data_marcacao_excecao: string | null
+          data_nascimento: string
+          descricao_clinica: string
+          diagnostico_resumido: string
+          documento_url: string
+          email: string
+          endereco: string
+          equipamentos: string[]
+          especialidade_destino: string
+          faltas_consecutivas: number
+          id: string
+          is_autista: boolean
+          is_gestante: boolean
+          is_pne: boolean
+          is_tfd: boolean
+          justificativa: string
+          logradouro: string | null
+          marcado_por: string | null
+          menor_idade: boolean
+          mobilidade: string
+          motivo_excecao_bloqueio: string | null
+          municipio: string
+          nacionalidade: string | null
+          naturalidade: string
+          naturalidade_uf: string
+          nome: string
+          nome_mae: string
+          nome_responsavel: string
+          numero: string | null
+          observacao_equipamentos: string
+          observacao_tfd_ordem_judicial: string | null
+          observacoes: string
+          outro_servico_sus: boolean
+          possui_ordem_judicial: boolean
+          profissional_solicitante: string
+          raca_cor: string | null
+          sexo: string | null
+          situacao_rua: boolean | null
+          status_falta: string
+          telefone: string
+          telefone_secundario: string | null
+          tipo_condicao: string
+          tipo_dispositivo: string
+          tipo_encaminhamento: string
+          tipo_logradouro: string | null
+          total_faltas: number
+          transporte: string
+          turno_preferido: string
+          ubs_origem: string
+          uf: string | null
+          unidade_id: string
+          usa_dispositivo: boolean
+          usa_equipamentos: boolean
+          whatsapp_consent_proof: Json | null
+          whatsapp_has_prior_interaction: boolean | null
+          whatsapp_opt_in_marketing: boolean | null
+          whatsapp_opt_in_waiting_list: boolean | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "pacientes"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       search_sigtap_and_cid: {
         Args: { lim?: number; q: string }
