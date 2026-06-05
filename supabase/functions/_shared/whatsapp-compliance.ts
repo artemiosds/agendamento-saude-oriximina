@@ -129,9 +129,13 @@ export async function validateSend(
     if (classification.category === 'marketing') {
       if (!pacienteData.whatsapp_opt_in_marketing) return { ok: false, reason: "sem_opt_in_marketing", audit };
     } else {
-      // Utility - Se não tiver o campo definido, assume true como fallback seguro para notificações críticas
+      // Utility - Se não tiver o campo definido, assume true como padrão (Regra Padrão da Unidade)
       const hasOperationalOptIn = pacienteData.whatsapp_opt_in_operational !== false;
       if (!hasOperationalOptIn) return { ok: false, reason: "sem_opt_in_operacional", audit };
+      
+      if (pacienteData.whatsapp_opt_in_operational === null || pacienteData.whatsapp_opt_in_operational === true) {
+        audit.authorized_by_default_rule = true;
+      }
       
       // Consentimento específico
       if (classification.requiresSpecificConsent && !pacienteData[classification.requiresSpecificConsent]) {
