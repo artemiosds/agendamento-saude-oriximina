@@ -64,12 +64,14 @@ export async function validateSend(
 
   // 2. Evento Ativo na Unidade
   if (unidadeId) {
+    const tipoNormalizado = normalizeEventType(tipo);
     const { data: eventCfg } = await supabase
       .from("whatsapp_event_config")
       .select("ativo")
       .eq("unidade_id", unidadeId)
-      .eq("evento", tipo)
+      .eq("evento", tipoNormalizado)
       .maybeSingle();
+
     
     // Se existir config e estiver desativado, bloqueia
     if (eventCfg && eventCfg.ativo === false) {
@@ -148,13 +150,12 @@ export function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-export async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: string): Promise<string> {
-  const footer = `\n_Secretaria Municipal de Saúde_`;
-  const greeting = pick(GREETINGS);
-  const emoji = pick(EMOJIS);
-
-  // Mapeamento de normalização de tipos para templates
-  const tipoNormalizado = {
+/**
+ * Normaliza os tipos de eventos vindos do backend para os tipos usados na interface
+ * e na configuração de eventos/templates.
+ */
+export function normalizeEventType(tipo: string): string {
+  const map: Record<string, string> = {
     "novo_agendamento": "confirmacao",
     "agendamento_criado": "confirmacao",
     "reagendamento": "remarcacao",
@@ -169,7 +170,17 @@ export async function buildMessage(supabase: any, tipo: string, data: any, unida
     "lembrete_24h": "lembrete_24h",
     "lembrete_2h": "lembrete_2h",
     "lembrete_1h": "lembrete_2h"
-  }[tipo] || tipo;
+  };
+  return map[tipo] || tipo;
+}
+
+export async function buildMessage(supabase: any, tipo: string, data: any, unidadeId: string): Promise<string> {
+  const footer = `\n_Secretaria Municipal de Saúde_`;
+  const greeting = pick(GREETINGS);
+  const emoji = pick(EMOJIS);
+
+  const tipoNormalizado = normalizeEventType(tipo);
+
 
   // Busca template customizado se existir
   const { data: template } = await supabase
