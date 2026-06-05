@@ -542,7 +542,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const PAGE = 1000;
       const columns =
-        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data,whatsapp_opt_in_marketing,whatsapp_opt_in_waiting_list";
+        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
       let allData: any[] = [];
       let from = 0;
       while (true) {
@@ -618,8 +618,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     turno_preferido: p.turno_preferido || "",
     especialidade_destino: p.especialidade_destino || "",
     custom_data: p.custom_data || {},
-    whatsappOptInMarketing: !!p.whatsapp_opt_in_marketing,
-    whatsappOptInWaitingList: !!p.whatsapp_opt_in_waiting_list,
   });
 
   const loadAgendamentos = useCallback(async () => {
@@ -1220,8 +1218,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cid: p.cid,
         criado_em: p.criadoEm || new Date().toISOString(),
         unidade_id: unidadeIdToUse,
-        whatsapp_opt_in_marketing: p.whatsappOptInMarketing ?? false,
-        whatsapp_opt_in_waiting_list: p.whatsappOptInWaitingList ?? false,
       } as any);
 
       if (!error) {
@@ -1250,8 +1246,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
       if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
       if (data.cid !== undefined) dbData.cid = data.cid;
-      if (data.whatsappOptInMarketing !== undefined) dbData.whatsapp_opt_in_marketing = data.whatsappOptInMarketing;
-      if (data.whatsappOptInWaitingList !== undefined) dbData.whatsapp_opt_in_waiting_list = data.whatsappOptInWaitingList;
 
 
       if (authUser?.role === "recepcao") {

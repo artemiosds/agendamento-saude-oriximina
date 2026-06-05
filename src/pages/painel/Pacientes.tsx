@@ -108,7 +108,7 @@ interface FichaDados {
 }
 
 const PACIENTE_COLUMNS =
-  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data,whatsapp_opt_in_marketing,whatsapp_opt_in_waiting_list";
+  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
 
 const mapPacienteRow = (p: any) => ({
   id: p.id,
@@ -155,8 +155,6 @@ const mapPacienteRow = (p: any) => ({
   turno_preferido: p.turno_preferido || "",
   especialidade_destino: p.especialidade_destino || "",
   custom_data: p.custom_data || {},
-  whatsappOptInMarketing: !!p.whatsapp_opt_in_marketing,
-  whatsappOptInWaitingList: !!p.whatsapp_opt_in_waiting_list,
 });
 
 
@@ -553,8 +551,6 @@ const Pacientes: React.FC = () => {
       isGestante: (p as any).isGestante || (p as any).is_gestante || false,
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
-      whatsappOptInMarketing: !!((p as any).whatsappOptInMarketing || (p as any).whatsapp_opt_in_marketing),
-      whatsappOptInWaitingList: !!((p as any).whatsappOptInWaitingList || (p as any).whatsapp_opt_in_waiting_list),
       customData: (p as any).custom_data || {},
     });
 
@@ -639,8 +635,6 @@ const Pacientes: React.FC = () => {
         atualizado_por_usuario: user?.usuario || "",
         motivo_alteracao: "Atualização cadastral pela página Pacientes",
       },
-      whatsapp_opt_in_marketing: form.whatsappOptInMarketing,
-      whatsapp_opt_in_waiting_list: form.whatsappOptInWaitingList,
     };
 
 
@@ -1553,12 +1547,6 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
               <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
-              {detalhePaciente.whatsappOptInMarketing && (
-                <PCampo label="Marketing" valor={<Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge>} />
-              )}
-              {detalhePaciente.whatsappOptInWaitingList && (
-                <PCampo label="Lista de Espera" valor={<Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge>} />
-              )}
             </PSecao>
 
 
