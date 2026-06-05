@@ -250,10 +250,17 @@ export async function buildMessage(supabase: any, tipo: string, data: any, unida
     "novo_agendamento": "confirmacao",
     "agendamento_criado": "confirmacao",
     "reagendamento": "remarcacao",
+    "remarcacao": "remarcacao",
     "nao_compareceu": "falta",
+    "falta": "falta",
     "vaga_liberada": "vaga_disponivel",
+    "vaga_disponivel": "vaga_disponivel",
     "fila_chamada": "confirmacao",
-    "fila_entrada": "lista_espera"
+    "fila_entrada": "lista_espera",
+    "lista_espera": "lista_espera",
+    "lembrete_24h": "lembrete_24h",
+    "lembrete_2h": "lembrete_2h",
+    "lembrete_1h": "lembrete_2h"
   }[tipo] || tipo;
 
   // Busca template customizado se existir
