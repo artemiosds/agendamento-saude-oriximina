@@ -132,8 +132,12 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
+  whatsappOptInOperational: boolean;
+  whatsappOptInMarketing: boolean;
+  whatsappOptInWaitingList: boolean;
   patientProcedures?: any[];
   customData?: Record<string, any>;
+
 }
 
 export const emptyPacienteForm: PacienteFormData = {
