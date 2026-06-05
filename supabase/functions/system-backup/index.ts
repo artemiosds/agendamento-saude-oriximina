@@ -19,12 +19,10 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Use an environment variable logic for bypass - testing via service role key
-    const isServiceRole = token === supabaseServiceKey;
+    // Reverting to token check
     let user = null;
 
-    if (!isServiceRole) {
-      // Create a specific client for the user to get user info if possible
+    if (token !== supabaseServiceKey) {
       const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
         global: { headers: { Authorization: authHeader } }
       });
@@ -149,6 +147,7 @@ serve(async (req) => {
 
           for (const file of files) {
             const fullPath = path ? `${path}/${file.name}` : file.name;
+            // Differentiate between file and directory by id or presence of metadata
             if (file.id || (file.metadata && !file.metadata.mimetype.includes('directory'))) {
               manifest.exports.storage.total_files++;
               manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata?.size });
