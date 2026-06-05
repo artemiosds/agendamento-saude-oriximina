@@ -19,17 +19,13 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Reverting to token check
+    // Simplified bypass for validation - if token matches service key, it's allowed
+    const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
-    if (token !== supabaseServiceKey) {
-      const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
-        global: { headers: { Authorization: authHeader } }
-      });
-      const { data: { user: authUser }, error: userError } = await supabaseUser.auth.getUser();
-      if (userError || !authUser) {
-        return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
-      }
+    if (!isServiceRole) {
+      const { data: { user: authUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
+      if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
       user = authUser;
 
       const { data: func } = await supabaseAdmin
@@ -147,7 +143,6 @@ serve(async (req) => {
 
           for (const file of files) {
             const fullPath = path ? `${path}/${file.name}` : file.name;
-            // Differentiate between file and directory by id or presence of metadata
             if (file.id || (file.metadata && !file.metadata.mimetype.includes('directory'))) {
               manifest.exports.storage.total_files++;
               manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata?.size });
