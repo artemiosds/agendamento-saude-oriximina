@@ -1,4 +1,3 @@
-
 export interface UnitConfig {
   whatsapp_ativo: boolean;
   max_msgs_paciente_dia: number;
@@ -17,9 +16,9 @@ export interface UnitConfig {
 
 export const DEFAULT_UNIT_CONFIG: UnitConfig = {
   whatsapp_ativo: true,
-  max_msgs_paciente_dia: 10,
-  max_msgs_paciente_semana: 30,
-  intervalo_minimo_minutos: 30, // 30 minutos
+  max_msgs_paciente_dia: 200,
+  max_msgs_paciente_semana: 600,
+  intervalo_minimo_minutos: 6, // 6 minutos
   delay_aleatorio_min_seg: 5,
   delay_aleatorio_max_seg: 15,
   limite_global_por_minuto: 20,
@@ -31,19 +30,22 @@ export const DEFAULT_UNIT_CONFIG: UnitConfig = {
   bloquear_sem_interacao_previa: false, // Permitir envio sem interação prévia se tiver opt-in
 };
 
-export const EVENT_CLASSIFICATION: Record<string, { category: 'utility' | 'marketing', requiresSpecificConsent?: string }> = {
-  'agendamento_criado': { category: 'utility' },
-  'confirmacao': { category: 'utility' },
-  'lembrete_24h': { category: 'utility' },
-  'lembrete_2h': { category: 'utility' },
-  'lembrete_1h': { category: 'utility' },
-  'cancelamento': { category: 'utility' },
-  'remarcacao': { category: 'utility' },
-  'falta': { category: 'utility' },
-  'lista_espera': { category: 'utility', requiresSpecificConsent: 'whatsapp_opt_in_waiting_list' },
-  'vaga_disponivel': { category: 'utility', requiresSpecificConsent: 'whatsapp_opt_in_waiting_list' },
-  'marketing': { category: 'marketing' },
-  'promocao': { category: 'marketing' },
+export const EVENT_CLASSIFICATION: Record<
+  string,
+  { category: "utility" | "marketing"; requiresSpecificConsent?: string }
+> = {
+  agendamento_criado: { category: "utility" },
+  confirmacao: { category: "utility" },
+  lembrete_24h: { category: "utility" },
+  lembrete_2h: { category: "utility" },
+  lembrete_1h: { category: "utility" },
+  cancelamento: { category: "utility" },
+  remarcacao: { category: "utility" },
+  falta: { category: "utility" },
+  lista_espera: { category: "utility", requiresSpecificConsent: "whatsapp_opt_in_waiting_list" },
+  vaga_disponivel: { category: "utility", requiresSpecificConsent: "whatsapp_opt_in_waiting_list" },
+  marketing: { category: "marketing" },
+  promocao: { category: "marketing" },
 };
 
 export function normalizePhone(raw: string): string | null {
@@ -73,13 +75,13 @@ export async function validateSend(
   pacienteId: string,
   telefone: string,
   tipo: string,
-  mensagem: string
+  mensagem: string,
 ): Promise<{ ok: boolean; reason?: string; audit: any }> {
   const audit: any = {
-    opt_in_status: 'unknown',
+    opt_in_status: "unknown",
     prior_interaction: false,
     window_24h: false,
-    category: EVENT_CLASSIFICATION[tipo]?.category || 'utility',
+    category: EVENT_CLASSIFICATION[tipo]?.category || "utility",
   };
 
   if (!cfg.whatsapp_ativo) return { ok: false, reason: "whatsapp_inativo_unidade", audit };
@@ -101,7 +103,9 @@ export async function validateSend(
   if (pacienteId) {
     const { data: paciente } = await supabase
       .from("pacientes")
-      .select("whatsapp_opt_in_operational, whatsapp_opt_in_marketing, whatsapp_opt_in_waiting_list, whatsapp_has_prior_interaction")
+      .select(
+        "whatsapp_opt_in_operational, whatsapp_opt_in_marketing, whatsapp_opt_in_waiting_list, whatsapp_has_prior_interaction",
+      )
       .eq("id", pacienteId)
       .maybeSingle();
     pacienteData = paciente;
@@ -110,7 +114,7 @@ export async function validateSend(
   if (pacienteData) {
     audit.prior_interaction = pacienteData.whatsapp_has_prior_interaction;
   }
-  
+
   // Opt-out check via consents table
   const { data: optOut } = await supabase
     .from("whatsapp_consents")
@@ -123,21 +127,21 @@ export async function validateSend(
   if (optOut) return { ok: false, reason: "paciente_opt_out", audit };
 
   // Validação por Categoria
-  const classification = EVENT_CLASSIFICATION[tipo] || { category: 'utility' };
-  
+  const classification = EVENT_CLASSIFICATION[tipo] || { category: "utility" };
+
   // No pacienteData, opt-ins para utility (operacional) são true por padrão (null = true)
   // Marketing continua exigindo opt-in específico
-  const isMarketing = classification.category === 'marketing';
+  const isMarketing = classification.category === "marketing";
   const hasMarketingOptIn = pacienteData?.whatsapp_opt_in_marketing === true;
-  const hasOperationalOptIn = pacienteData ? (pacienteData.whatsapp_opt_in_operational !== false) : true;
-  const hasSpecificConsent = classification.requiresSpecificConsent 
-    ? (pacienteData?.[classification.requiresSpecificConsent] === true)
+  const hasOperationalOptIn = pacienteData ? pacienteData.whatsapp_opt_in_operational !== false : true;
+  const hasSpecificConsent = classification.requiresSpecificConsent
+    ? pacienteData?.[classification.requiresSpecificConsent] === true
     : true;
 
   if (isMarketing && !hasMarketingOptIn) {
     return { ok: false, reason: "sem_opt_in_marketing", audit };
   }
-  
+
   if (!isMarketing && !hasOperationalOptIn) {
     return { ok: false, reason: "sem_opt_in_operacional", audit };
   }
@@ -149,13 +153,13 @@ export async function validateSend(
   // Define o status do opt-in no log
   if (pacienteData) {
     if (pacienteData.whatsapp_opt_in_operational === null || pacienteData.whatsapp_opt_in_operational === undefined) {
-      audit.opt_in_status = 'regra_padrao_unidade';
+      audit.opt_in_status = "regra_padrao_unidade";
       audit.authorized_by_default_rule = true;
     } else {
-      audit.opt_in_status = 'manual_opt_in';
+      audit.opt_in_status = "manual_opt_in";
     }
   } else {
-    audit.opt_in_status = 'paciente_nao_encontrado_regra_padrao';
+    audit.opt_in_status = "paciente_nao_encontrado_regra_padrao";
     audit.authorized_by_default_rule = true;
   }
 
@@ -170,12 +174,12 @@ export async function validateSend(
     .order("criado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
-  
+
   audit.window_24h = !!lastPatientMsg;
 
   // Se fora da janela de 24h e sem interação prévia, APENAS templates aprovados são permitidos.
   if (!audit.window_24h && !audit.prior_interaction && cfg.bloquear_sem_interacao_previa) {
-     return { ok: false, reason: "bloqueio_sem_interacao_previa", audit };
+    return { ok: false, reason: "bloqueio_sem_interacao_previa", audit };
   }
 
   if (telefone) {
