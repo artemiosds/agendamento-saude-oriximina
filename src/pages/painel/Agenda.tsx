@@ -2599,7 +2599,7 @@ const Agenda: React.FC = () => {
                     )}
                     
                     {!isProfissional && (
-                      <div className="w-full md:w-72 space-y-1.5">
+                      <div className="w-full md:w-80 space-y-1.5">
                         <Label className="text-xs font-semibold text-muted-foreground ml-1">Profissional</Label>
                         <Popover>
                           <PopoverTrigger asChild>
@@ -2608,7 +2608,11 @@ const Agenda: React.FC = () => {
                               role="combobox"
                               className="h-11 w-full justify-between text-sm font-medium bg-background border-input hover:bg-accent hover:text-accent-foreground"
                             >
-                              <div className="truncate text-left flex-1 mr-2">
+                              <div className="truncate text-left flex-1 mr-2" title={
+                                filterProf === "all" 
+                                  ? "Todos Profissionais" 
+                                  : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"
+                              }>
                                 {filterProf === "all" 
                                   ? "Todos Profissionais" 
                                   : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"}
@@ -2653,20 +2657,11 @@ const Agenda: React.FC = () => {
                                         onSelect={() => setFilterProf(p.id)}
                                         className="flex items-center justify-between cursor-pointer py-2.5"
                                       >
-                                        <div className="flex flex-col min-w-0 pr-4">
-                                          <TooltipProvider>
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <span className="font-medium truncate block max-w-[200px]">
-                                                  {p.nome}
-                                                </span>
-                                              </TooltipTrigger>
-                                              <TooltipContent side="right">
-                                                <p>{p.nome}</p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          </TooltipProvider>
-                                          <span className="text-[10px] text-muted-foreground truncate">
+                                        <div className="flex flex-col min-w-0 pr-4 flex-1">
+                                          <span className="font-medium whitespace-normal leading-tight">
+                                            {p.nome}
+                                          </span>
+                                          <span className="text-[10px] text-muted-foreground whitespace-normal">
                                             {p.profissao || p.cargo || "—"}
                                           </span>
                                         </div>
