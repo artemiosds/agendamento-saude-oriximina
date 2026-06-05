@@ -638,10 +638,40 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               )}
             </div>
 
-            <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/10">
-              <p className="text-[10px] text-muted-foreground leading-relaxed italic">
-                Nota: Mensagens operacionais (agendamentos e lembretes) são autorizadas por padrão para todos os pacientes da unidade, conforme as Regras de Opt-in & Compliance.
-              </p>
+            <div className="mt-6 space-y-4">
+              <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider">
+                <Shield className="w-3.5 h-3.5" /> Outros Consentimentos
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-lg p-3 bg-muted/30">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-medium">Lista de Espera / Vagas</Label>
+                    <p className="text-[10px] text-muted-foreground">Notificações de disponibilidade</p>
+                  </div>
+                  <Switch 
+                    checked={form.whatsappOptInWaitingList} 
+                    onCheckedChange={(v) => set("whatsappOptInWaitingList", v)} 
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-medium">Mensagens de Marketing</Label>
+                    <p className="text-[10px] text-muted-foreground">Informativos e campanhas</p>
+                  </div>
+                  <Switch 
+                    checked={form.whatsappOptInMarketing} 
+                    onCheckedChange={(v) => set("whatsappOptInMarketing", v)} 
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/10">
+                <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                  Nota: Mensagens operacionais (agendamentos e lembretes) são autorizadas por padrão para todos os pacientes da unidade, conforme as Regras de Opt-in & Compliance.
+                </p>
+              </div>
             </div>
           </TabsContent>
 
