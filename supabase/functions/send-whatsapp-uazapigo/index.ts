@@ -280,7 +280,9 @@ serve(async (req) => {
       opt_in_status: validation.audit.opt_in_status,
       window_24h: validation.audit.window_24h,
       category: validation.audit.category,
-      agendamento_id
+      agendamento_id,
+      provider: "uazapigo",
+      resposta: r.data ? JSON.stringify(r.data).substring(0, 1000) : null
     });
 
     return new Response(JSON.stringify({ 

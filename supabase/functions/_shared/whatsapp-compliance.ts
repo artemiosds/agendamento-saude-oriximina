@@ -35,15 +35,21 @@ export const EVENT_CLASSIFICATION: Record<
   { category: "utility" | "marketing"; requiresSpecificConsent?: string }
 > = {
   agendamento_criado: { category: "utility" },
+  novo_agendamento: { category: "utility" },
   confirmacao: { category: "utility" },
   lembrete_24h: { category: "utility" },
   lembrete_2h: { category: "utility" },
   lembrete_1h: { category: "utility" },
   cancelamento: { category: "utility" },
   remarcacao: { category: "utility" },
+  reagendamento: { category: "utility" },
   falta: { category: "utility" },
-  lista_espera: { category: "utility", requiresSpecificConsent: "whatsapp_opt_in_waiting_list" },
-  vaga_disponivel: { category: "utility", requiresSpecificConsent: "whatsapp_opt_in_waiting_list" },
+  nao_compareceu: { category: "utility" },
+  lista_espera: { category: "utility" },
+  fila_entrada: { category: "utility" },
+  fila_chamada: { category: "utility" },
+  vaga_disponivel: { category: "utility" },
+  vaga_liberada: { category: "utility" },
   marketing: { category: "marketing" },
   promocao: { category: "marketing" },
 };
@@ -220,12 +226,23 @@ export async function buildMessage(supabase: any, tipo: string, data: any, unida
   const greeting = pick(GREETINGS);
   const emoji = pick(EMOJIS);
 
+  // Mapeamento de normalização de tipos para templates
+  const tipoNormalizado = {
+    "novo_agendamento": "confirmacao",
+    "agendamento_criado": "confirmacao",
+    "reagendamento": "remarcacao",
+    "nao_compareceu": "falta",
+    "vaga_liberada": "vaga_disponivel",
+    "fila_chamada": "confirmacao",
+    "fila_entrada": "lista_espera"
+  }[tipo] || tipo;
+
   // Busca template customizado se existir
   const { data: template } = await supabase
     .from("whatsapp_templates")
     .select("mensagem, ativo")
     .eq("unidade_id", unidadeId || "")
-    .eq("tipo", tipo === "agendamento_criado" ? "confirmacao" : tipo)
+    .eq("tipo", tipoNormalizado)
     .maybeSingle();
 
   if (template?.ativo && template.mensagem) {
@@ -240,9 +257,8 @@ export async function buildMessage(supabase: any, tipo: string, data: any, unida
   }
 
   // Fallback para mensagens hardcoded
-  switch (tipo) {
+  switch (tipoNormalizado) {
     case "confirmacao":
-    case "agendamento_criado":
       return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento foi agendado.\n\n📍 Unidade: ${data.unidade}\n👨‍⚕️ Profissional: *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}\n${data.observacoes ? `📝 ${data.observacoes}\n` : ""}\nChegue com antecedência.${footer}`;
     case "lembrete_24h":
       return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nLembrete do seu atendimento:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}\n\nContamos com sua presença.${footer}`;
