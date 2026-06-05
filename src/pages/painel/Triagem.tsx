@@ -311,7 +311,6 @@ const Triagem: React.FC = () => {
 
       if (updAgendErr) throw updAgendErr;
 
-      // Log em background para não travar a UI
       logAction({
         acao: 'liberar_sem_triagem',
         entidade: 'agendamento',
@@ -319,7 +318,7 @@ const Triagem: React.FC = () => {
         modulo: 'triagem',
         user,
         detalhes: { paciente: item.pacienteNome, profissional: item.profissionalNome },
-      }).catch(e => console.warn('Falha no log silent:', e));
+      });
 
       toast.success('Paciente liberado para atendimento.');
       setConfirmAction(null);
@@ -668,6 +667,7 @@ const Triagem: React.FC = () => {
               onRelease={(item) => setConfirmAction({ type: 'release', item })}
               onRemove={(item) => setConfirmAction({ type: 'remove', item })}
               isOpening={openingTriagemId === item.filaId}
+              isActioning={actionLoading && confirmAction?.item.filaId === item.filaId}
               resolvePaciente={resolvePaciente}
             />
           ))}
