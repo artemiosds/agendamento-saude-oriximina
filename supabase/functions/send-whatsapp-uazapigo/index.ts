@@ -170,32 +170,29 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: "Configuração clínica não encontrada" }), { headers: corsHeaders });
     }
 
-    // --- Action: status ---
-    if (body.action === "status") {
-      const { token, error } = await resolveInstanceToken(cfg);
-      if (!token) {
-        return new Response(JSON.stringify({ 
-          success: false, 
-          connected: false, 
-          status_detailed: error?.includes("401") ? "admin_token_invalido" : "instancia_inexistente",
-          error: error || "Instância não encontrada"
-        }), { headers: corsHeaders });
-      }
+    // Check instance state
+    const base = normalizeUrl(cfg.uazapi_server_url);
+    const r = await uazFetch(`${base}/instance/status`, { headers: { token } });
+    
+    const stateObj = r.data?.status || r.data?.state || r.data || {};
+    let connected = false;
+    let stateStr = "DISCONNECTED";
 
-      // Check instance state
-      const base = normalizeUrl(cfg.uazapi_server_url);
-      const r = await uazFetch(`${base}/instance/status`, { headers: { token } });
-      
-      const state = r.data?.status || r.data?.state || (r.ok ? "CONNECTED" : "DISCONNECTED");
-      const connected = state === "CONNECTED" || state === "connected" || state === "open";
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        connected, 
-        state,
-        status_detailed: connected ? "conectado" : "qrcode_necessario"
-      }), { headers: corsHeaders });
+    if (typeof stateObj === 'string') {
+      stateStr = stateObj;
+      connected = stateStr.toUpperCase() === "CONNECTED" || stateStr.toLowerCase() === "open";
+    } else {
+      connected = !!(stateObj.connected || stateObj.loggedIn || stateObj.open);
+      stateStr = connected ? "CONNECTED" : (stateObj.status || "DISCONNECTED");
     }
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      connected, 
+      state: stateStr,
+      status_detailed: connected ? "conectado" : "qrcode_necessario"
+    }), { headers: corsHeaders });
+  }
 
     // --- Action: create_instance ---
     if (body.action === "create_instance") {
