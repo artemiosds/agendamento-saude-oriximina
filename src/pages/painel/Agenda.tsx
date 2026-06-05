@@ -133,6 +133,8 @@ const STATUS_FILTER_GROUPS: Record<string, string[]> = {
   cancelado: ["cancelado", "cancelada"],
   pendente: ["pendente"],
 };
+
+// Lista única de status que NÃO ocupam vaga na agenda.
 const STATUS_NAO_OCUPA_VAGA = new Set([
   "cancelado",
   "falta",
@@ -140,7 +142,9 @@ const STATUS_NAO_OCUPA_VAGA = new Set([
   "removido",
   "inativo",
 ]);
+
 const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
+
 
 
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
