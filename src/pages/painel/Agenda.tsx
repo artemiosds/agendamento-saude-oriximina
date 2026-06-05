@@ -177,6 +177,9 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
 };
 
 const Agenda: React.FC = () => {
+  const { user } = useAuth();
+  const isProfissional = user?.role === "profissional";
+
   const {
     agendamentos,
     updateAgendamento,
@@ -202,7 +205,7 @@ const Agenda: React.FC = () => {
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
-  const { user } = useAuth();
+  
   const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -212,7 +215,7 @@ const Agenda: React.FC = () => {
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
-  const [filterProf, setFilterProf] = useState("all");
+  const [filterProf, setFilterProf] = useState(isProfissional ? (user?.id || "all") : "all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
