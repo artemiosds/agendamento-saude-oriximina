@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Calendar, CalendarDays, CalendarRange, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, CalendarDays, CalendarRange } from "lucide-react";
 import { cn, dateStrToUtcDate, localDateStr, todayLocalStr } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { startOfWeek, endOfWeek, eachDayOfInterval, format, startOfMonth, endOfMonth, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type AgendaView = "month" | "week" | "day";
 
@@ -152,69 +152,68 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
           
           return (
             <Tooltip key={ds}>
-                <TooltipTrigger asChild>
-                  <button 
-                    onClick={() => onDateChange(ds)} 
-                    className={cn(
-                      "group relative h-24 sm:h-32 p-2 rounded-xl border-2 transition-all text-left flex flex-col justify-between overflow-hidden",
-                      info.isSelected ? "border-primary bg-primary/5 shadow-md scale-[1.02] z-10" : "border-border hover:border-primary/40 bg-card",
-                      !isCurrMonth && "opacity-40",
-                      info.status === "blocked" && "bg-muted/30 cursor-not-allowed opacity-60"
+              <TooltipTrigger asChild>
+                <button 
+                  onClick={() => onDateChange(ds)} 
+                  className={cn(
+                    "group relative h-24 sm:h-32 p-2 rounded-xl border-2 transition-all text-left flex flex-col justify-between overflow-hidden",
+                    info.isSelected ? "border-primary bg-primary/5 shadow-md scale-[1.02] z-10" : "border-border hover:border-primary/40 bg-card",
+                    !isCurrMonth && "opacity-40",
+                    info.status === "blocked" && "bg-muted/30 cursor-not-allowed opacity-60"
+                  )}
+                >
+                  <div className="flex justify-between items-start">
+                    <span className={cn(
+                      "text-lg sm:text-2xl font-black leading-none", 
+                      info.isSelected ? "text-primary" : "text-foreground",
+                      info.isToday && !info.isSelected && "text-primary/70"
+                    )}>
+                      {info.dayNumber}
+                    </span>
+                    {info.agendamentosCount > 0 && (
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">
+                          {info.agendamentosCount}
+                        </span>
+                      </div>
                     )}
-                  >
-                    <div className="flex justify-between items-start">
-                      <span className={cn(
-                        "text-lg sm:text-2xl font-black leading-none", 
-                        info.isSelected ? "text-primary" : "text-foreground",
-                        info.isToday && !info.isSelected && "text-primary/70"
-                      )}>
-                        {info.dayNumber}
-                      </span>
-                      {info.agendamentosCount > 0 && (
-                        <div className="flex flex-col items-end">
-                          <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">
-                            {info.agendamentosCount}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-1">
-                      {info.totalVagas > 0 && (
-                        <>
-                          <div className="flex justify-between items-center text-[10px] font-medium opacity-70">
-                            <span>{Math.round((info.agendamentosCount / info.totalVagas) * 100)}%</span>
-                            <span>{info.totalVagas} vagas</span>
-                          </div>
-                          <Progress 
-                            value={(info.agendamentosCount / info.totalVagas) * 100} 
-                            className={cn(
-                              "h-1.5",
-                              info.status === "full" ? "bg-primary/20 [&>div]:bg-primary" :
-                              info.status === "almostFull" ? "bg-warning/20 [&>div]:bg-warning" :
-                              "[&>div]:bg-success"
-                            )} 
-                          />
-                        </>
-                      )}
-                      {info.status === "blocked" && (
-                        <span className="text-[10px] font-bold text-destructive uppercase">Bloqueado</span>
-                      )}
-                    </div>
-                    {info.isToday && <div className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-bl-lg" />}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="p-3 w-48 space-y-2">
-                  <p className="font-bold border-bottom pb-1 mb-1">{format(d, "d 'de' MMMM", { locale: ptBR })}</p>
-                  <div className="grid grid-cols-2 gap-1 text-xs">
-                    <span>Atendimentos:</span> <span className="font-bold">{info.agendamentosCount}</span>
-                    <span>Vagas totais:</span> <span className="font-bold">{info.totalVagas}</span>
-                    <span>Confirmados:</span> <span className="font-bold">{info.counts.confirmados}</span>
-                    <span>Pendentes:</span> <span className="font-bold">{info.counts.pendentes}</span>
                   </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+                  
+                  <div className="space-y-1">
+                    {info.totalVagas > 0 && (
+                      <>
+                        <div className="flex justify-between items-center text-[10px] font-medium opacity-70">
+                          <span>{Math.round((info.agendamentosCount / info.totalVagas) * 100)}%</span>
+                          <span>{info.totalVagas} vagas</span>
+                        </div>
+                        <Progress 
+                          value={(info.agendamentosCount / info.totalVagas) * 100} 
+                          className={cn(
+                            "h-1.5",
+                            info.status === "full" ? "bg-primary/20 [&>div]:bg-primary" :
+                            info.status === "almostFull" ? "bg-warning/20 [&>div]:bg-warning" :
+                            "[&>div]:bg-success"
+                          )} 
+                        />
+                      </>
+                    )}
+                    {info.status === "blocked" && (
+                      <span className="text-[10px] font-bold text-destructive uppercase">Bloqueado</span>
+                    )}
+                  </div>
+                  {info.isToday && <div className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-bl-lg" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="p-3 w-48 space-y-2">
+                <p className="font-bold border-bottom pb-1 mb-1">{format(d, "d 'de' MMMM", { locale: ptBR })}</p>
+                <div className="grid grid-cols-2 gap-1 text-xs">
+                  <span>Atendimentos:</span> <span className="font-bold">{info.agendamentosCount}</span>
+                  <span>Vagas totais:</span> <span className="font-bold">{info.totalVagas}</span>
+                  <span>Confirmados:</span> <span className="font-bold">{info.counts.confirmados}</span>
+                  <span>Pendentes:</span> <span className="font-bold">{info.counts.pendentes}</span>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           );
         })}
       </div>
