@@ -1213,13 +1213,23 @@ const Tratamentos: React.FC = () => {
       .filter((s) => s.status === "pendente_agendamento" && !!s.scheduled_date)
       .sort((a, b) => a.session_number - b.session_number);
 
-
     if (pendentes.length === 0) {
       toast.info("Não há sessões pendentes para agendar.");
       return;
     }
 
+    // 1) Verificar se o paciente está bloqueado por faltas para este profissional
+    try {
+      const { isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+      const bloqueado = await isPacienteBloqueadoParaProfissional(selectedCycle.patient_id, selectedCycle.professional_id);
+      if (bloqueado) {
+        toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Agendamento em lote cancelado.");
+        return;
+      }
+    } catch {}
+
     setAgendandoCiclo(true);
+
     const resumo: ResumoSessaoItem[] = [];
 
     // Track horários já usados nesta execução em lote (evita conflito entre as próprias sessões do lote)
