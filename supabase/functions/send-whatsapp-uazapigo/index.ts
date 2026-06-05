@@ -154,6 +154,7 @@ serve(async (req) => {
     if (body.action === "status") {
       const { token, error } = await resolveInstanceToken(cfg);
       if (!token) {
+        console.error(`[UazapiGO][Status] No token found: ${error}`);
         return new Response(JSON.stringify({ 
           success: false, 
           connected: false, 
@@ -163,20 +164,22 @@ serve(async (req) => {
       }
 
       const base = normalizeUrl(cfg.uazapi_server_url);
-      const r = await uazFetch(`${base}/instance/status`, { headers: { token } });
+      const r = await uazFetch(`${base}/instance/status`, { headers: { token, "apikey": token } });
       
-      const stateObj = r.data?.status || r.data?.state || r.data || {};
+      const stateObj = r.data?.status || r.data?.state || r.data?.instance?.status || r.data?.instance?.state || r.data || {};
       let connected = false;
       let stateStr = "DISCONNECTED";
 
       if (typeof stateObj === 'string') {
         stateStr = stateObj;
-        connected = stateStr.toUpperCase() === "CONNECTED" || stateStr.toLowerCase() === "open";
+        connected = ["CONNECTED", "OPEN", "OPENING", "CONNECTED"].some(s => stateStr.toUpperCase().includes(s));
       } else {
-        connected = !!(stateObj.connected || stateObj.loggedIn || stateObj.open);
-        stateStr = connected ? "CONNECTED" : (stateObj.status || "DISCONNECTED");
+        connected = !!(stateObj.connected || stateObj.loggedIn || stateObj.open || stateObj.state === "open");
+        stateStr = connected ? "CONNECTED" : (stateObj.status || stateObj.state || "DISCONNECTED");
       }
       
+      console.log(`[UazapiGO][Status] Final check: connected=${connected}, state=${stateStr}`);
+
       return new Response(JSON.stringify({ 
         success: true, 
         connected, 

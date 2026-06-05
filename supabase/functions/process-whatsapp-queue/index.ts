@@ -47,7 +47,7 @@ serve(async (req) => {
 
     // Busca lote de mensagens pendentes
     const nowIso = new Date().toISOString();
-    const { data: pending } = await supabase
+    const { data: pending, error: fetchError } = await supabase
       .from("whatsapp_queue")
       .select("*")
       .eq("status", "pendente")
@@ -55,7 +55,13 @@ serve(async (req) => {
       .order("criado_em", { ascending: true })
       .limit(NORMAL_BATCH);
 
+    if (fetchError) {
+      console.error("[Queue] Error fetching pending messages:", fetchError);
+      return new Response(JSON.stringify({ success: false, error: fetchError.message }), { headers: corsHeaders });
+    }
+
     if (!pending || pending.length === 0) {
+      console.log("[Queue] No pending messages to process.");
       return new Response(JSON.stringify({ success: true, processed: 0 }), { headers: corsHeaders });
     }
 

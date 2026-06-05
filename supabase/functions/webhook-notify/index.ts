@@ -241,29 +241,44 @@ serve(async (req) => {
 
         if (wsError || !wsResult?.success) {
           const errorDetail = wsError?.message || wsResult?.error || "Erro desconhecido";
-          console.warn(`[webhook-notify] WhatsApp failed, adding to queue:`, errorDetail);
+          const isBlocked = wsResult?.blocked || errorDetail.toLowerCase().includes("bloqueado") || errorDetail.toLowerCase().includes("desativado");
           
-          // Se falhar (ex: fila cheia ou erro temporário), adiciona na fila local para processamento posterior
-          await supabaseAdmin.from("whatsapp_queue").insert({
-            telefone: telefone,
-            mensagem: payload.mensagem_whatsapp || "", // se tiver mensagem custom usa ela
-            evento: eventToProcess,
-            agendamento_id: id_agendamento,
-            unidade_id: payload.unidade_id || "",
-            status: "pendente",
-            tentativas: 0,
-            agendado_para: new Date().toISOString()
-          });
+          if (isBlocked) {
+             console.log(`[webhook-notify] Message blocked by Anti-Ban/Compliance: ${errorDetail}. Not adding to queue.`);
+             await logNotification(supabaseAdmin, {
+                agendamento_id: id_agendamento,
+                evento: eventToProcess,
+                canal: `whatsapp_${activeProvider}`,
+                destinatario_telefone: telefone,
+                payload: { ...payload, error_detail: errorDetail },
+                status: "bloqueado",
+                erro: errorDetail
+             });
+          } else {
+            console.warn(`[webhook-notify] WhatsApp failed, adding to queue:`, errorDetail);
+            
+            // Se falhar (ex: erro temporário de rede ou timeout), adiciona na fila local para processamento posterior
+            await supabaseAdmin.from("whatsapp_queue").insert({
+              telefone: telefone,
+              mensagem: payload.mensagem_whatsapp || "", 
+              evento: eventToProcess,
+              agendamento_id: id_agendamento,
+              unidade_id: payload.unidade_id || "",
+              status: "pendente",
+              tentativas: 0,
+              agendado_para: new Date().toISOString()
+            });
 
-          await logNotification(supabaseAdmin, {
-            agendamento_id: id_agendamento,
-            evento: eventToProcess,
-            canal: `whatsapp_fila`,
-            destinatario_telefone: telefone,
-            payload: { ...payload, error_detail: errorDetail },
-            status: "pendente",
-            erro: `Enviado para fila devido a erro: ${errorDetail}`
-          });
+            await logNotification(supabaseAdmin, {
+              agendamento_id: id_agendamento,
+              evento: eventToProcess,
+              canal: `whatsapp_fila`,
+              destinatario_telefone: telefone,
+              payload: { ...payload, error_detail: errorDetail },
+              status: "pendente",
+              erro: `Enviado para fila devido a erro: ${errorDetail}`
+            });
+          }
         } else {
           console.log(`[webhook-notify] WhatsApp processed successfully via ${functionName}`);
         }
