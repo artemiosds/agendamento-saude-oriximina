@@ -2559,23 +2559,86 @@ const Agenda: React.FC = () => {
                     )}
                     
                     {!isProfissional && (
-                      <div className="w-full md:w-64 space-y-1.5">
+                      <div className="w-full md:w-72 space-y-1.5">
                         <Label className="text-xs font-semibold text-muted-foreground ml-1">Profissional</Label>
-                        <Select value={filterProf} onValueChange={setFilterProf}>
-                          <SelectTrigger className="h-11 text-sm font-medium">
-                            <div className="truncate text-left pr-2">
-                              <SelectValue placeholder="Profissional" />
-                            </div>
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            <SelectItem value="all">Todos Profissionais</SelectItem>
-                            {filteredProfissionais.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="h-11 w-full justify-between text-sm font-medium bg-background border-input hover:bg-accent hover:text-accent-foreground"
+                            >
+                              <div className="truncate text-left flex-1 mr-2">
+                                {filterProf === "all" 
+                                  ? "Todos Profissionais" 
+                                  : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"}
+                              </div>
+                              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                            <Command className="w-full">
+                              <CommandInput placeholder="Buscar profissional ou especialidade..." className="h-9" />
+                              <CommandList className="max-h-[350px]">
+                                <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="all"
+                                    onSelect={() => setFilterProf("all")}
+                                    className="flex items-center justify-between cursor-pointer py-3 border-b border-muted/50"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-semibold">Todos Profissionais</span>
+                                      <span className="text-[10px] text-muted-foreground">Exibir agenda global</span>
+                                    </div>
+                                    {filterProf === "all" && <Check className="h-4 w-4 text-primary" />}
+                                  </CommandItem>
+                                </CommandGroup>
+
+                                {Object.entries(
+                                  filteredProfissionais
+                                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                                    .reduce((acc, p) => {
+                                      const cat = p.profissao || p.cargo || "Outros";
+                                      if (!acc[cat]) acc[cat] = [];
+                                      acc[cat].push(p);
+                                      return acc;
+                                    }, {} as Record<string, typeof filteredProfissionais>)
+                                ).map(([categoria, lista]) => (
+                                  <CommandGroup key={categoria} heading={categoria}>
+                                    {lista.map((p) => (
+                                      <CommandItem
+                                        key={p.id}
+                                        value={`${p.nome} ${p.profissao || ''} ${p.cargo || ''}`}
+                                        onSelect={() => setFilterProf(p.id)}
+                                        className="flex items-center justify-between cursor-pointer py-2.5"
+                                      >
+                                        <div className="flex flex-col min-w-0 pr-4">
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <span className="font-medium truncate block max-w-[200px]">
+                                                  {p.nome}
+                                                </span>
+                                              </TooltipTrigger>
+                                              <TooltipContent side="right">
+                                                <p>{p.nome}</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
+                                          <span className="text-[10px] text-muted-foreground truncate">
+                                            {p.profissao || p.cargo || "—"}
+                                          </span>
+                                        </div>
+                                        {filterProf === p.id && <Check className="h-4 w-4 text-primary shrink-0" />}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                ))}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     )}
 
