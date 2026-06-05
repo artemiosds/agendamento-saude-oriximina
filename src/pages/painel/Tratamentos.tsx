@@ -393,22 +393,22 @@ const Tratamentos: React.FC = () => {
   const firstLoadRef = React.useRef(true);
   // Re-load data when pagination or search/filters change
   useEffect(() => {
-    // If we're not on page 1 and the search/filter changes, we reset to page 1.
-    // Setting currentPage to 1 will trigger THIS effect again because currentPage is a dependency.
-    const resetPaginationIfNeeded = () => {
+    // Ao mudar qualquer filtro ou termo de busca, voltamos para a página 1
+    // Isso evita ficar em uma página inexistente para o novo filtro
+    const isFirstRender = firstLoadRef.current;
+    
+    if (!isFirstRender) {
+      // Se algum filtro mudou e não estamos na página 1, resetamos
+      // O reset da página disparará este useEffect novamente via dependência currentPage
       if (currentPage !== 1) {
         setCurrentPage(1);
-        return true; // Pagination was reset, let the next effect run handle the load
+        return; 
       }
-      return false;
-    };
-
-    // This logic handles the loading state more cleanly
-    const isSearchChange = debouncedSearchTerm !== "";
+    }
     
-    // On search or filter change, we always show loading (not silent)
+    firstLoadRef.current = false;
     loadData(false);
-  }, [currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm, loadData]);
+  }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm, currentPage, loadData]);
 
   // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
   // (sábado, domingo, feriado, bloqueio manual) e devolve para "pendente_agendamento".
