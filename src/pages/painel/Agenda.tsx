@@ -753,17 +753,11 @@ const Agenda: React.FC = () => {
     // Regra centralizada: Se não estiver buscando por nome/CPF/CNS nem filtrando por status específico,
     // a lista principal deve omitir agendamentos que não ocupam vaga (cancelados/faltas).
     if (!debouncedSearch && statusFilter === "all") {
-      const STATUS_NAO_OCUPA_VAGA = new Set([
-        "cancelado",
-        "falta",
-        "excluido",
-        "removido",
-        "inativo",
-      ]);
-      result = result.filter((a) => !STATUS_NAO_OCUPA_VAGA.has(a.status));
+      result = result.filter((a) => statusOcupaVaga(a.status));
     }
 
     return result;
+
 
   }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
 
