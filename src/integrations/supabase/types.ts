@@ -4085,18 +4085,31 @@ export type Database = {
         Args: { lim?: number; p_cid: string }
         Returns: Json
       }
-      get_treatment_cycles_paginated: {
-        Args: {
-          p_only_own_professional?: boolean
-          p_page?: number
-          p_page_size?: number
-          p_professional_id?: string
-          p_search?: string
-          p_status?: string
-          p_unit_id?: string
-        }
-        Returns: Json
-      }
+      get_treatment_cycles_paginated:
+        | {
+            Args: {
+              p_only_own_professional?: boolean
+              p_page?: number
+              p_page_size?: number
+              p_professional_id?: string
+              p_search?: string
+              p_status?: string
+              p_unit_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_only_own_professional?: boolean
+              p_page: number
+              p_page_size: number
+              p_professional_id?: string
+              p_search?: string
+              p_status?: string
+              p_unit_id?: string
+            }
+            Returns: Json
+          }
       has_staff_role: { Args: { _role: string }; Returns: boolean }
       iniciar_atendimento: {
         Args: { p_agendamento_id: string; p_profissional_id: string }
