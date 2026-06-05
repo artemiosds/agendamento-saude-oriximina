@@ -1,7 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn, dateStrToUtcDate, isoDayOfWeek, localDateStr, todayLocalStr } from "@/lib/utils";
+import { ChevronLeft, ChevronRight, Calendar, CalendarDays, CalendarRange } from "lucide-react";
+import { cn, dateStrToUtcDate, localDateStr, todayLocalStr } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { startOfWeek, endOfWeek, eachDayOfInterval, format, isSameDay, startOfMonth, endOfMonth, isToday as isTodayDate } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Progress } from "@/components/ui/progress";
+
+type AgendaView = "month" | "week" | "day";
 
 interface DiaInfo {
   date: string;
@@ -38,43 +44,15 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   profissionais,
   getAvailableSlots,
 }) => {
-  const [currentMonth, setCurrentMonth] = useState(() => dateStrToUtcDate(selectedDate));
+  const [view, setView] = useState<AgendaView>("month");
+  const [currentDate, setCurrentDate] = useState(() => dateStrToUtcDate(selectedDate));
 
   useEffect(() => {
-    setCurrentMonth(dateStrToUtcDate(selectedDate));
+    setCurrentDate(dateStrToUtcDate(selectedDate));
   }, [selectedDate]);
 
-  const daysInMonth = useMemo(() => {
-    const year = currentMonth.getUTCFullYear();
-    const month = currentMonth.getUTCMonth();
-    const firstDay = new Date(Date.UTC(year, month, 1, 12, 0, 0));
-    const lastDay = new Date(Date.UTC(year, month + 1, 0, 12, 0, 0));
-
-    const days: Date[] = [];
-    for (let day = 1; day <= lastDay.getUTCDate(); day++) {
-      days.push(new Date(Date.UTC(year, month, day, 12, 0, 0)));
-    }
-
-    const startWeekday = firstDay.getUTCDay();
-    const prevDays: Date[] = [];
-    for (let i = startWeekday; i > 0; i--) {
-      prevDays.push(new Date(Date.UTC(year, month, 1 - i, 12, 0, 0)));
-    }
-
-    const endWeekday = lastDay.getUTCDay();
-    const nextDays: Date[] = [];
-    for (let i = 1; i < 7 - endWeekday; i++) {
-      nextDays.push(new Date(Date.UTC(year, month + 1, i, 12, 0, 0)));
-    }
-
-    return [...prevDays, ...days, ...nextDays];
-  }, [currentMonth]);
-
-  // Pre-index agendamentos by date for O(1) lookup instead of filtering per day.
-  // CRITICAL: chave inclui unidadeId para alinhar com SlotInfoBadge / getTurnoInfo,
-  // evitando divergência (ex.: calendário mostrar 17, mas resumo do dia 11 da unidade).
-  // Lista de status alinhada com STATUS_NAO_OCUPA_VAGA do DataContext.
   const STATUS_NAO_OCUPA = new Set(["cancelado", "falta", "excluido", "removido", "inativo"]);
+
   const agendamentosByDate = useMemo(() => {
     const map = new Map<string, Map<string, number>>();
     for (const a of agendamentos) {
@@ -90,9 +68,8 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     return map;
   }, [agendamentos]);
 
-  // Pre-index disponibilidades for fast lookup
   const dispIndex = useMemo(() => {
-    const arr = disponibilidades.map((d: any) => ({
+    return disponibilidades.map((d: any) => ({
       profissionalId: d.profissionalId,
       unidadeId: d.unidadeId,
       dataInicio: d.dataInicio,
@@ -100,279 +77,150 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       diasSemana: d.diasSemana || [],
       vagasPorDia: d.vagasPorDia || 25,
     }));
-    return arr;
   }, [disponibilidades]);
 
-  const dayInfoMap = useMemo(() => {
-    const map = new Map<string, DiaInfo>();
-    const todayStr = todayLocalStr();
+  const getDayStatus = (dateStr: string, profs: any[]): DiaInfo => {
+    const date = dateStrToUtcDate(dateStr);
+    const dayOfWeek = date.getUTCDay();
+    const isToday = dateStr === todayLocalStr();
+    const isPast = dateStr < todayLocalStr();
 
-    const profissionaisFiltrados = filterProf !== "all"
-      ? profissionais.filter((prof) => prof.id === filterProf)
-      : profissionais.filter((prof) => {
-          if (filterUnit !== "all" && prof.unidadeId !== filterUnit) return false;
-          return true;
-        });
+    let agendamentosCount = 0;
+    let totalVagas = 0;
+    let hasDisponibilidade = false;
+    let allBlocked = profs.length > 0;
 
-    const matchesBlock = (bloqueio: any, profissionalId: string, unidadeId: string) => {
-      if (!bloqueio.diaInteiro) return false;
-      const isGlobal = (!bloqueio.unidadeId || bloqueio.unidadeId === "") && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
-      const isUnitLevel = unidadeId && bloqueio.unidadeId === unidadeId && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
-      const isProfLevel = profissionalId && bloqueio.profissionalId === profissionalId;
-      return isGlobal || isUnitLevel || isProfLevel;
-    };
+    const dateAgMap = agendamentosByDate.get(dateStr);
 
-    // Only call getAvailableSlots when a specific professional is selected
-    // For "all" mode, use a fast heuristic based on availability counts
-    const useDetailedSlots = filterProf !== "all" && profissionaisFiltrados.length === 1;
-
-    for (const day of daysInMonth) {
-      const dateStr = localDateStr(day);
-      const dayOfWeek = day.getUTCDay();
-      const isToday = dateStr === todayStr;
-      const isSelected = dateStr === selectedDate;
-      const isPast = dateStr < todayStr;
-
-      let agendamentosConfirmados = 0;
-      let totalVagas = 0;
-      let hasDisponibilidade = false;
-      let allBlocked = profissionaisFiltrados.length > 0;
-
-      const dateAgMap = agendamentosByDate.get(dateStr);
-
-      if (useDetailedSlots) {
-        // Single professional — use detailed slot calculation (fast for 1 prof)
-        const prof = profissionaisFiltrados[0];
-        if (prof) {
-          const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-          const isBlocked = bloqueios.some((bloqueio: any) => {
-            if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
-            return matchesBlock(bloqueio, prof.id, profUnit);
-          });
-          allBlocked = isBlocked;
-          hasDisponibilidade = dispIndex.some((disp) => (
-            disp.profissionalId === prof.id &&
-            disp.unidadeId === profUnit &&
-            dateStr >= disp.dataInicio &&
-            dateStr <= disp.dataFim &&
-            disp.diasSemana.includes(dayOfWeek)
-          ));
-
-          if (!isBlocked && profUnit) {
-            agendamentosConfirmados = dateAgMap?.get(`${prof.id}|${profUnit}`) || 0;
-            // Use o limite REAL configurado (soma de vagasPorDia das disponibilidades aplicáveis)
-            // para que o status do calendário (lotado/excedido) bata com o resumo do dia/turno.
-            const limiteDia = dispIndex
-              .filter((disp) => (
-                disp.profissionalId === prof.id &&
-                disp.unidadeId === profUnit &&
-                dateStr >= disp.dataInicio &&
-                dateStr <= disp.dataFim &&
-                disp.diasSemana.includes(dayOfWeek)
-              ))
-              .reduce((sum, d) => sum + d.vagasPorDia, 0);
-            if (limiteDia > 0) {
-              totalVagas = limiteDia;
-            } else if (!isPast) {
-              const slots = getAvailableSlots(prof.id, profUnit, dateStr);
-              totalVagas = slots.length + agendamentosConfirmados;
-            } else {
-              totalVagas = agendamentosConfirmados || 1;
-            }
-          }
-        }
-      } else {
-        // Multiple professionals — use fast heuristic (no getAvailableSlots per prof)
-        for (const prof of profissionaisFiltrados) {
-          const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-          const isBlocked = bloqueios.some((bloqueio: any) => {
-            if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
-            return matchesBlock(bloqueio, prof.id, profUnit);
-          });
-          allBlocked = allBlocked && isBlocked;
-
-          const profHasDisponibilidade = dispIndex.some((disp) => (
-            disp.profissionalId === prof.id &&
-            disp.unidadeId === profUnit &&
-            dateStr >= disp.dataInicio &&
-            dateStr <= disp.dataFim &&
-            disp.diasSemana.includes(dayOfWeek)
-          ));
-          hasDisponibilidade = hasDisponibilidade || profHasDisponibilidade;
-
-          if (isBlocked || !profUnit) continue;
-
-          const profAgCount = dateAgMap?.get(`${prof.id}|${profUnit}`) || 0;
-          agendamentosConfirmados += profAgCount;
-
-          // Use vagasPorDia from disponibilidade as totalVagas estimate
-          const profDisp = dispIndex.find((disp) => (
-            disp.profissionalId === prof.id &&
-            disp.unidadeId === profUnit &&
-            dateStr >= disp.dataInicio &&
-            dateStr <= disp.dataFim &&
-            disp.diasSemana.includes(dayOfWeek)
-          ));
-          if (profDisp) {
-            totalVagas += profDisp.vagasPorDia;
-          }
-        }
-      }
-
-      let status: DiaInfo["status"] = "empty";
-      if (allBlocked) {
-        status = "blocked";
-      } else if (isPast) {
-        // Past dates: show as "past" but still clickable with appointment counts
-        status = agendamentosConfirmados > 0 ? "past" : "past";
-      } else if (totalVagas > 0) {
-        const percent = (agendamentosConfirmados / totalVagas) * 100;
-        if (agendamentosConfirmados >= totalVagas) status = "full";
-        else if (percent >= 70) status = "almostFull";
-        else status = "available";
-      } else if (hasDisponibilidade) {
-        status = "full";
-      }
-
-      map.set(dateStr, {
-        date: dateStr,
-        dayNumber: day.getUTCDate(),
-        isToday,
-        isSelected,
-        status,
-        agendamentosCount: agendamentosConfirmados,
-        totalVagas,
+    for (const prof of profs) {
+      const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
+      const isBlocked = bloqueios.some((b: any) => {
+        if (dateStr < b.dataInicio || dateStr > b.dataFim) return false;
+        return (b.diaInteiro && ((!b.unidadeId || b.unidadeId === profUnit) && (!b.profissionalId || b.profissionalId === prof.id)));
       });
+      allBlocked = allBlocked && isBlocked;
+      const profHasDisp = dispIndex.some((d) => (d.profissionalId === prof.id && d.unidadeId === profUnit && dateStr >= d.dataInicio && dateStr <= d.dataFim && d.diasSemana.includes(dayOfWeek)));
+      hasDisponibilidade = hasDisponibilidade || profHasDisp;
+
+      if (!isBlocked && profUnit) {
+        agendamentosCount += dateAgMap?.get(`${prof.id}|${profUnit}`) || 0;
+        const disp = dispIndex.find((d) => (d.profissionalId === prof.id && d.unidadeId === profUnit && dateStr >= d.dataInicio && dateStr <= d.dataFim && d.diasSemana.includes(dayOfWeek)));
+        if (disp) totalVagas += disp.vagasPorDia;
+      }
     }
 
-    return map;
-  }, [
-    agendamentosByDate,
-    bloqueios,
-    daysInMonth,
-    dispIndex,
-    filterProf,
-    filterUnit,
-    getAvailableSlots,
-    profissionais,
-    selectedDate,
-  ]);
+    let status: DiaInfo["status"] = "empty";
+    if (allBlocked) status = "blocked";
+    else if (isPast) status = "past";
+    else if (totalVagas > 0) {
+      const percent = (agendamentosCount / totalVagas) * 100;
+      if (agendamentosCount >= totalVagas) status = "full";
+      else if (percent >= 70) status = "almostFull";
+      else status = "available";
+    } else if (hasDisponibilidade) status = "full";
 
-  const monthNames = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-  ];
-  const weekDays = ["D", "S", "T", "Q", "Q", "S", "S"];
-
-  const goToPrevMonth = () => {
-    const newDate = new Date(currentMonth);
-    newDate.setUTCMonth(newDate.getUTCMonth() - 1);
-    setCurrentMonth(newDate);
+    return { date: dateStr, dayNumber: date.getUTCDate(), isToday, isSelected: dateStr === selectedDate, status, agendamentosCount, totalVagas };
   };
 
-  const goToNextMonth = () => {
-    const newDate = new Date(currentMonth);
-    newDate.setUTCMonth(newDate.getUTCMonth() + 1);
-    setCurrentMonth(newDate);
-  };
+  const profsFiltrados = useMemo(() => filterProf !== "all" ? profissionais.filter(p => p.id === filterProf) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [filterProf, filterUnit, profissionais]);
 
-  const getDotClass = (status: DiaInfo["status"]) => {
-    switch (status) {
-      case "past":
-      case "blocked":
-        return "bg-muted-foreground/60";
-      case "full":
-        return "bg-primary";
-      case "almostFull":
-        return "bg-warning";
-      case "available":
-        return "bg-success";
-      default:
-        return "bg-muted-foreground/30";
-    }
-  };
+  // View contents
+  const renderMonth = () => {
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
+    const days = eachDayOfInterval({ start: startOfWeek(start), end: endOfWeek(end) });
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Button variant="outline" size="icon" onClick={goToPrevMonth}>
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-        <h3 className="text-base font-medium">
-          {monthNames[currentMonth.getUTCMonth()]} {currentMonth.getUTCFullYear()}
-        </h3>
-        <Button variant="outline" size="icon" onClick={goToNextMonth}>
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
-        {weekDays.map((day, index) => (
-          <div key={index} className="py-1">{day}</div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {daysInMonth.map((day, index) => {
-          const dateStr = localDateStr(day);
-          const info = dayInfoMap.get(dateStr);
-          if (!info) return null;
-
-          const isCurrentMonth =
-            day.getUTCMonth() === currentMonth.getUTCMonth() &&
-            day.getUTCFullYear() === currentMonth.getUTCFullYear();
-
-          const isDisabled = info.status === "blocked";
-
+    return (
+      <div className="grid grid-cols-7 gap-2">
+        {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => <div key={d} className="text-center text-xs font-medium text-muted-foreground">{d}</div>)}
+        {days.map(d => {
+          const ds = localDateStr(d);
+          const info = getDayStatus(ds, profsFiltrados);
           return (
-            <button
-              key={index}
-              type="button"
-              disabled={isDisabled}
-              onClick={() => !isDisabled && onDateChange(info.date)}
-              className={cn(
-                'relative flex flex-col items-center justify-center py-2 rounded-md transition-colors',
-                !isCurrentMonth && 'opacity-40',
-                info.isSelected && 'bg-primary text-primary-foreground shadow-sm',
-                !info.isSelected && !isDisabled && 'hover:bg-muted/50',
-                isDisabled && 'cursor-not-allowed'
-              )}
-            >
-              <span className="text-sm font-medium">{info.dayNumber}</span>
-              {info.agendamentosCount > 0 && (
-                <span
-                  className={cn(
-                    'absolute top-1 right-1 text-[10px] font-semibold',
-                    info.isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
-                  )}
-                >
-                  {info.agendamentosCount}
-                </span>
-              )}
-              <div className={cn('w-1.5 h-1.5 rounded-full mt-1', getDotClass(info.status))} />
+            <button key={ds} onClick={() => onDateChange(ds)} className={cn("h-20 p-2 rounded-lg border transition-all text-left flex flex-col justify-between", info.isSelected ? "border-primary bg-primary/5" : "hover:border-primary/50", info.status === "blocked" && "opacity-50 cursor-not-allowed")}>
+              <span className={cn("text-sm font-semibold", info.isSelected && "text-primary")}>{info.dayNumber}</span>
+              {info.agendamentosCount > 0 && <span className="text-[10px] text-muted-foreground">{info.agendamentosCount} agend.</span>}
+              {info.totalVagas > 0 && <Progress value={(info.agendamentosCount / info.totalVagas) * 100} className="h-1" />}
             </button>
           );
         })}
       </div>
+    );
+  };
 
-      <div className="flex flex-wrap gap-4 justify-center text-xs text-muted-foreground pt-2 border-t">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-success" />
-          <span>Com vagas</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-warning" />
-          <span>Quase cheio</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-primary" />
-          <span>Lotado</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-muted-foreground/60" />
-          <span>Bloqueado / passado</span>
+  const renderWeek = () => {
+    const days = eachDayOfInterval({ start: startOfWeek(currentDate), end: endOfWeek(currentDate) });
+    return (
+      <div className="grid grid-cols-7 gap-2">
+        {days.map(d => {
+          const ds = localDateStr(d);
+          const info = getDayStatus(ds, profsFiltrados);
+          return (
+            <div key={ds} onClick={() => onDateChange(ds)} className={cn("p-3 rounded-lg border cursor-pointer transition-all", info.isSelected ? "border-primary bg-primary/5" : "hover:border-primary/50")}>
+              <div className="text-xs text-muted-foreground uppercase">{format(d, "EEE", { locale: ptBR })}</div>
+              <div className="text-xl font-bold">{info.dayNumber}</div>
+              <div className="mt-2 text-xs text-muted-foreground">{info.agendamentosCount} atend.</div>
+              {info.totalVagas > 0 && <Progress value={(info.agendamentosCount / info.totalVagas) * 100} className="h-1.5 mt-2" />}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderDay = () => {
+    const info = getDayStatus(selectedDate, profsFiltrados);
+    return (
+      <div className="p-4 border rounded-xl bg-card">
+        <div className="text-lg font-semibold capitalize">{format(dateStrToUtcDate(selectedDate), "EEEE, d 'de' MMMM", { locale: ptBR })}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <div className="text-xs text-muted-foreground">Total Agendamentos</div>
+            <div className="text-2xl font-bold">{info.agendamentosCount}</div>
+          </div>
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <div className="text-xs text-muted-foreground">Vagas Disponíveis</div>
+            <div className="text-2xl font-bold">{Math.max(0, info.totalVagas - info.agendamentosCount)}</div>
+          </div>
+          <div className="col-span-2">
+            <div className="text-xs text-muted-foreground mb-1">Ocupação</div>
+            <Progress value={info.totalVagas > 0 ? (info.agendamentosCount / info.totalVagas) * 100 : 0} />
+          </div>
         </div>
       </div>
+    );
+  };
+
+  const navDate = (delta: number) => {
+    const next = new Date(currentDate);
+    if (view === "month") next.setUTCMonth(next.getUTCMonth() + delta);
+    else if (view === "week") next.setUTCDate(next.getUTCDate() + delta * 7);
+    else next.setUTCDate(next.getUTCDate() + delta);
+    setCurrentDate(next);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => navDate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+          <h2 className="text-lg font-semibold min-w-[140px] text-center capitalize">
+            {format(currentDate, view === "day" ? "MMMM yyyy" : "MMMM yyyy", { locale: ptBR })}
+          </h2>
+          <Button variant="outline" size="icon" onClick={() => navDate(1)}><ChevronRight className="h-4 w-4" /></Button>
+        </div>
+        <Tabs value={view} onValueChange={(v) => setView(v as AgendaView)}>
+          <TabsList>
+            <TabsTrigger value="day"><Calendar className="w-4 h-4 mr-2" />Dia</TabsTrigger>
+            <TabsTrigger value="week"><CalendarRange className="w-4 h-4 mr-2" />Semana</TabsTrigger>
+            <TabsTrigger value="month"><CalendarDays className="w-4 h-4 mr-2" />Mês</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {view === "month" && renderMonth()}
+      {view === "week" && renderWeek()}
+      {view === "day" && renderDay()}
     </div>
   );
 };
