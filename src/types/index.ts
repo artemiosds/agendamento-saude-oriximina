@@ -151,7 +151,7 @@ export interface Paciente {
   turno_preferido?: string;
   especialidade_destino?: string;
   custom_data?: Record<string, any>;
-  whatsappOptInOperational?: boolean;
+  whatsappOptInMarketing?: boolean;
   whatsappOptInMarketing?: boolean;
   whatsappOptInWaitingList?: boolean;
 }
