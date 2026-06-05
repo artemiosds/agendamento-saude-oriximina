@@ -125,6 +125,88 @@ const STATUS_AGENDAMENTO_TRIAGEM = [
   "aguardando_enfermagem",
 ];
 
+const TriagemItem = React.memo(({ 
+  item, 
+  onOpen, 
+  onRelease, 
+  onRemove,
+  isOpening,
+  resolvePaciente 
+}: { 
+  item: Agendamento, 
+  onOpen: (ag: Agendamento) => void,
+  onRelease: (ag: Agendamento) => void,
+  onRemove: (ag: Agendamento) => void,
+  isOpening: boolean,
+  resolvePaciente: (id: string, nome: string) => string
+}) => {
+  const waitMinutes = item.filaCriadoEm ? differenceInMinutes(new Date(), new Date(item.filaCriadoEm)) : 0;
+  const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
+  const espBadge = item.profissionalId
+    ? ESPECIALIDADE_LABELS[item.profissionalNome] || item.profissionalNome.toUpperCase()
+    : null;
+
+  return (
+    <Card className="border-0 shadow-card">
+      <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
+        <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
+          <div className="mt-0.5 flex flex-wrap gap-1">
+            {espBadge && (
+              <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
+                {espBadge}
+              </Badge>
+            )}
+            {item.cid && (
+              <Badge variant="outline" className="text-[10px]">
+                CID: {item.cid}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px]">
+              {item.filaStatus === "chegada_confirmada" ? "Chegada confirmada" : "Triagem em andamento"}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            <Clock className="mr-1 h-3 w-3" /> {waitLabel}
+          </Badge>
+          <Button 
+            size="sm" 
+            className="gradient-primary text-primary-foreground" 
+            onClick={() => onOpen(item)}
+            disabled={isOpening}
+          >
+            {isOpening ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Play className="mr-1 h-3.5 w-3.5" />
+            )}
+            {isOpening ? "Abrindo..." : "Iniciar triagem"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-success/40 text-success hover:bg-success/10"
+            onClick={() => onRelease(item)}
+          >
+            <FastForward className="mr-1 h-3.5 w-3.5" /> Liberar sem triagem
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            onClick={() => onRemove(item)}
+          >
+            <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
 const Triagem: React.FC = () => {
   const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
   const { user, isGlobalAdmin } = useAuth();
@@ -326,30 +408,22 @@ const Triagem: React.FC = () => {
     return { value: value.toFixed(2), label };
   }, [form.peso, form.altura]);
 
+  const [openingTriagemId, setOpeningTriagemId] = useState<string | null>(null);
+
   const openTriagem = useCallback(
     async (ag: Agendamento) => {
+      if (openingTriagemId) return;
+      setOpeningTriagemId(ag.filaId);
+      
       let itemSelecionado = ag;
 
-      if (ag.filaStatus === "chegada_confirmada") {
-        try {
-          await Promise.all([
-            updateFila(ag.filaId, { status: "aguardando_triagem" as any }),
-            updateAgendamento(ag.id, { status: "aguardando_triagem" as any }),
-          ]);
-          await Promise.all([refreshFila(), refreshAgendamentos()]);
-          itemSelecionado = { ...ag, filaStatus: "aguardando_triagem", status: "aguardando_triagem" };
-        } catch (error) {
-          console.error("Erro ao iniciar triagem:", error);
-          toast.error("Erro ao iniciar triagem.");
-          return;
-        }
-      }
-
-      setSelectedItem(itemSelecionado);
+      // Abrir o modal imediatamente com os dados que já temos
+      setSelectedItem(ag);
       setDialogOpen(true);
 
-      const pac = pacientes.find((p) => p.id === itemSelecionado.pacienteId);
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
       setPacienteInfo(pac || null);
+      
       setForm({
         peso: "",
         altura: "",
@@ -360,7 +434,7 @@ const Triagem: React.FC = () => {
         glicemia: "",
         dor: 0,
         classificacaoRisco: "",
-        queixaPrincipal: pac?.descricaoClinica || itemSelecionado.observacoes || "",
+        queixaPrincipal: pac?.descricaoClinica || ag.observacoes || "",
         historicoQueixa: "",
         alergias: [],
         medicamentos: [],
@@ -371,8 +445,27 @@ const Triagem: React.FC = () => {
       setCustomData({});
       setNewAlergia("");
       setNewMedicamento("");
+
+      // Se for chegada confirmada, atualiza o status no background
+      if (ag.filaStatus === "chegada_confirmada") {
+        try {
+          await Promise.all([
+            updateFila(ag.filaId, { status: "aguardando_triagem" as any }),
+            updateAgendamento(ag.id, { status: "aguardando_triagem" as any }),
+          ]);
+          // Não precisamos dar refresh em tudo agora, o usuário já está com o modal aberto
+          // O updateFila/updateAgendamento já atualiza o estado local no DataContext
+          itemSelecionado = { ...ag, filaStatus: "aguardando_triagem", status: "aguardando_triagem" };
+          setSelectedItem(itemSelecionado);
+        } catch (error) {
+          console.error("Erro ao iniciar triagem no background:", error);
+          // Se falhar o background update, o usuário ainda pode preencher a triagem
+        }
+      }
+      
+      setOpeningTriagemId(null);
     },
-    [pacientes, refreshAgendamentos, refreshFila, updateAgendamento, updateFila],
+    [pacientes, updateAgendamento, updateFila, openingTriagemId],
   );
 
   const addAlergia = () => {
@@ -543,62 +636,17 @@ const Triagem: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-2">
-          {filaFiltrada.map((item) => {
-            const waitMinutes = item.filaCriadoEm ? differenceInMinutes(now, new Date(item.filaCriadoEm)) : 0;
-            const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
-            const espBadge = item.profissionalId
-              ? ESPECIALIDADE_LABELS[item.profissionalNome] || item.profissionalNome.toUpperCase()
-              : null;
-            return (
-              <Card key={item.filaId} className="border-0 shadow-card">
-                <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
-                  <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
-                    <div className="mt-0.5 flex flex-wrap gap-1">
-                      {espBadge && (
-                        <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
-                          {espBadge}
-                        </Badge>
-                      )}
-                      {item.cid && (
-                        <Badge variant="outline" className="text-[10px]">
-                          CID: {item.cid}
-                        </Badge>
-                      )}
-                      <Badge variant="outline" className="text-[10px]">
-                        {item.filaStatus === "chegada_confirmada" ? "Chegada confirmada" : "Triagem em andamento"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      <Clock className="mr-1 h-3 w-3" /> {waitLabel}
-                    </Badge>
-                    <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openTriagem(item)}>
-                      <Play className="mr-1 h-3.5 w-3.5" /> Iniciar triagem
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-success/40 text-success hover:bg-success/10"
-                      onClick={() => setConfirmAction({ type: 'release', item })}
-                    >
-                      <FastForward className="mr-1 h-3.5 w-3.5" /> Liberar sem triagem
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                      onClick={() => setConfirmAction({ type: 'remove', item })}
-                    >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {filaFiltrada.map((item) => (
+            <TriagemItem
+              key={item.filaId}
+              item={item}
+              onOpen={openTriagem}
+              onRelease={(item) => setConfirmAction({ type: 'release', item })}
+              onRemove={(item) => setConfirmAction({ type: 'remove', item })}
+              isOpening={openingTriagemId === item.filaId}
+              resolvePaciente={resolvePaciente}
+            />
+          ))}
         </div>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
