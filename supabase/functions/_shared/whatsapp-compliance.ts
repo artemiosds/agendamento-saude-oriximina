@@ -9,9 +9,6 @@ export interface UnitConfig {
   horario_inicio: string;
   horario_fim: string;
   dias_permitidos: number[];
-  modo_estrito: boolean;
-  respeitar_opt_out: boolean;
-  bloquear_sem_interacao_previa: boolean;
 }
 
 export const DEFAULT_UNIT_CONFIG: UnitConfig = {
@@ -25,33 +22,6 @@ export const DEFAULT_UNIT_CONFIG: UnitConfig = {
   horario_inicio: "06:00",
   horario_fim: "22:00",
   dias_permitidos: [0, 1, 2, 3, 4, 5, 6], // Todos os dias
-  modo_estrito: false,
-  respeitar_opt_out: true,
-  bloquear_sem_interacao_previa: false,
-};
-
-export const EVENT_CLASSIFICATION: Record<
-  string,
-  { category: "utility" | "marketing"; requiresSpecificConsent?: string }
-> = {
-  agendamento_criado: { category: "utility" },
-  novo_agendamento: { category: "utility" },
-  confirmacao: { category: "utility" },
-  lembrete_24h: { category: "utility" },
-  lembrete_2h: { category: "utility" },
-  lembrete_1h: { category: "utility" },
-  cancelamento: { category: "utility" },
-  remarcacao: { category: "utility" },
-  reagendamento: { category: "utility" },
-  falta: { category: "utility" },
-  nao_compareceu: { category: "utility" },
-  lista_espera: { category: "utility" },
-  fila_entrada: { category: "utility" },
-  fila_chamada: { category: "utility" },
-  vaga_disponivel: { category: "utility" },
-  vaga_liberada: { category: "utility" },
-  marketing: { category: "marketing" },
-  promocao: { category: "marketing" },
 };
 
 export function normalizePhone(raw: string): string | null {
@@ -85,11 +55,8 @@ export async function validateSend(
   unidadeId: string,
 ): Promise<{ ok: boolean; reason?: string; audit: any }> {
   const audit: any = {
-    opt_in_status: "unknown",
-    prior_interaction: false,
-    window_24h: false,
-    category: EVENT_CLASSIFICATION[tipo]?.category || "utility",
     event_active: true,
+    category: "utility"
   };
 
   // 1. WhatsApp Ativo na Unidade (Anti-Ban/Fila)
@@ -123,68 +90,9 @@ export async function validateSend(
     return { ok: false, reason: "fora_horario_permitido", audit };
   }
 
-  // 4. Dados do paciente
-  let pacienteData = null;
-  if (pacienteId) {
-    const { data: paciente } = await supabase
-      .from("pacientes")
-      .select(
-        "whatsapp_opt_in_marketing, whatsapp_opt_in_waiting_list, whatsapp_has_prior_interaction",
-      )
-      .eq("id", pacienteId)
-      .maybeSingle();
-    pacienteData = paciente;
-  }
-
-  if (pacienteData) {
-    audit.prior_interaction = pacienteData.whatsapp_has_prior_interaction;
-  }
-
-  // 5. Opt-out check via consents table
-  const { data: optOut } = await supabase
-    .from("whatsapp_consents")
-    .select("id")
-    .eq("telefone", telefone)
-    .eq("tipo", "opt_out")
-    .order("criado_em", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (optOut && cfg.respeitar_opt_out) return { ok: false, reason: "paciente_opt_out", audit };
-
-  // Validação por Categoria
-  const classification = EVENT_CLASSIFICATION[tipo] || { category: "utility" };
-  const isMarketing = classification.category === "marketing";
-  const hasMarketingOptIn = pacienteData?.whatsapp_opt_in_marketing === true;
-
-  if (isMarketing && !hasMarketingOptIn) {
-    return { ok: false, reason: "sem_opt_in_marketing", audit };
-  }
-
-  // Define o status do opt-in no log
-  audit.opt_in_status = "regra_geral_unidade";
-  audit.authorized_by_default_rule = true;
-
-  // 6. Regra 24 horas
-  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: lastPatientMsg } = await supabase
-    .from("whatsapp_consents")
-    .select("criado_em")
-    .eq("telefone", telefone)
-    .eq("tipo", "interaction")
-    .gte("criado_em", dayAgo)
-    .order("criado_em", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  audit.window_24h = !!lastPatientMsg;
-
-  // Se fora da janela de 24h e sem interação prévia, APENAS templates aprovados são permitidos.
-  if (!audit.window_24h && !audit.prior_interaction && cfg.bloquear_sem_interacao_previa) {
-    return { ok: false, reason: "bloqueio_sem_interacao_previa", audit };
-  }
-
   if (telefone) {
-    // 7. Limite diário por paciente
+    // 4. Limite diário por paciente
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count: countDia } = await supabase
       .from("notification_logs")
       .select("id", { count: "exact", head: true })
@@ -195,7 +103,7 @@ export async function validateSend(
       return { ok: false, reason: "limite_diario_excedido", audit };
     }
 
-    // 8. Limite semanal por paciente
+    // 5. Limite semanal por paciente
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { count: countSem } = await supabase
       .from("notification_logs")
@@ -207,7 +115,7 @@ export async function validateSend(
       return { ok: false, reason: "limite_semanal_excedido", audit };
     }
 
-    // 9. Intervalo mínimo entre mensagens para o mesmo paciente
+    // 6. Intervalo mínimo entre mensagens para o mesmo paciente
     const intervalAgo = new Date(Date.now() - cfg.intervalo_minimo_minutos * 60 * 1000).toISOString();
     const { count: countInt } = await supabase
       .from("notification_logs")
@@ -219,7 +127,7 @@ export async function validateSend(
       return { ok: false, reason: "intervalo_minimo_nao_respeitado", audit };
     }
 
-    // 10. Limite global por minuto (Anti-Spam)
+    // 7. Limite global por minuto (Anti-Spam)
     const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
     const { count: countGlobal } = await supabase
       .from("notification_logs")
