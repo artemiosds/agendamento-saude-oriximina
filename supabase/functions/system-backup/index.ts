@@ -19,13 +19,16 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Use an internal secret for bypass validation instead of service key which auth.getUser might be failing on
+    // Use an environment variable logic for bypass - testing via service role key
     const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
     if (!isServiceRole) {
-      // Use the service client to get the user from the token
-      const { data: { user: authUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
+      // Create a specific client for the user to get user info if possible
+      const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user: authUser }, error: userError } = await supabaseUser.auth.getUser();
       if (userError || !authUser) {
         return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
       }
@@ -146,7 +149,7 @@ serve(async (req) => {
 
           for (const file of files) {
             const fullPath = path ? `${path}/${file.name}` : file.name;
-            if (file.id) {
+            if (file.id || (file.metadata && !file.metadata.mimetype.includes('directory'))) {
               manifest.exports.storage.total_files++;
               manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata?.size });
               
@@ -163,7 +166,7 @@ serve(async (req) => {
                 logEntries.push(msg);
                 manifest.failures.push({ type: 'storage_file', bucket: bucket.name, path: fullPath, error: err.message });
               }
-            } else {
+            } else if (file.name !== '.emptyFolderPlaceholder') {
               await listAllFiles(fullPath);
             }
           }
