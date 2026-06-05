@@ -1218,7 +1218,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cid: p.cid,
         criado_em: p.criadoEm || new Date().toISOString(),
         unidade_id: unidadeIdToUse,
+        whatsapp_opt_in_operational: p.whatsappOptInOperational ?? true,
+        whatsapp_opt_in_marketing: p.whatsappOptInMarketing ?? false,
+        whatsapp_opt_in_waiting_list: p.whatsappOptInWaitingList ?? false,
       } as any);
+
       if (!error) {
         setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
