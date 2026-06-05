@@ -19,7 +19,8 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Simplified bypass for validation
+    // Use an environment variable to check for service role or just use the admin client directly
+    // For validation, we'll check if the token matches the service key
     const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
@@ -146,9 +147,9 @@ serve(async (req) => {
 
           for (const file of files) {
             const fullPath = path ? `${path}/${file.name}` : file.name;
-            if (file.metadata) {
+            if (file.id) { // Files have IDs, folders don't
               manifest.exports.storage.total_files++;
-              manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata.size });
+              manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata?.size });
               
               try {
                 const { data: fileData, error: downloadError } = await supabaseAdmin.storage.from(bucket.name).download(fullPath);
