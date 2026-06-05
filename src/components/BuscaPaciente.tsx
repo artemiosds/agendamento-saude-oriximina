@@ -104,9 +104,10 @@ function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }
 
       const { data, error } = await supabase.rpc('search_patients', {
         p_search: term,
-        p_unit_id: null,
+        p_unit_id: unidadeId,
         p_limit: 10
       });
+
 
 
       if (!cancelled) {
