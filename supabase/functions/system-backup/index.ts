@@ -18,17 +18,17 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Bypass check if using Service Role for validation
-    const isServiceRole = authHeader.includes(supabaseServiceKey);
+    // Bypass check logic
+    const token = authHeader.replace("Bearer ", "");
+    const isServiceRole = token === supabaseServiceKey;
     let user = null;
 
     if (!isServiceRole) {
-      // Verify if user is Master
       const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
         global: { headers: { Authorization: authHeader } }
       });
-      const { data: { user: authUser } } = await supabaseUser.auth.getUser();
-      if (!authUser) return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: corsHeaders });
+      const { data: { user: authUser }, error: userError } = await supabaseUser.auth.getUser();
+      if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
       user = authUser;
 
       const { data: func } = await supabaseAdmin
