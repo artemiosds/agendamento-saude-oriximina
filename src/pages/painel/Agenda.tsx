@@ -2597,11 +2597,11 @@ const Agenda: React.FC = () => {
           </div>
 
           {/* Slot availability summary for selected professional */}
-          {filterProf !== "all" && (
+          {(isProfissional || filterProf !== "all") && (
             <SlotInfoBadge
-              profissionalId={filterProf}
+              profissionalId={isProfissional ? (user?.id || "all") : filterProf}
               unidadeId={
-                filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === filterProf)?.unidadeId || ""
+                filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === (isProfissional ? (user?.id || "all") : filterProf))?.unidadeId || ""
               }
               date={selectedDate}
             />
