@@ -1547,12 +1547,6 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
               <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
-              {detalhePaciente.whatsappOptInMarketing && (
-                <PCampo label="Marketing" valor={<Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge>} />
-              )}
-              {detalhePaciente.whatsappOptInWaitingList && (
-                <PCampo label="Lista de Espera" valor={<Badge className="bg-success/10 text-success border-0 text-[10px]">AUTORIZADO</Badge>} />
-              )}
             </PSecao>
 
 
