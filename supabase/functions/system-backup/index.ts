@@ -19,7 +19,7 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Bypass check if using Service Role for validation
-    const isServiceRole = authHeader === `Bearer ${supabaseServiceKey}`;
+    const isServiceRole = authHeader.includes(supabaseServiceKey);
     let user = null;
 
     if (!isServiceRole) {
@@ -43,7 +43,6 @@ serve(async (req) => {
     } else {
       user = { id: "service_role_system" };
     }
-
 
     const zip = new JSZip();
     const startTime = new Date();
@@ -141,15 +140,13 @@ serve(async (req) => {
       if (bucketError) throw bucketError;
 
       for (const bucket of buckets) {
-        // Recursive list function for folders
         const listAllFiles = async (path: string = "") => {
-          const { data: files, error: fileError } = await supabaseAdmin.storage.from(bucket.name).list(path, { limit: 1000 });
+          const { data: files, error: fileError } = await supabaseAdmin.storage.from(bucket.name).list(path, { limit: 100 });
           if (fileError) return;
 
           for (const file of files) {
             const fullPath = path ? `${path}/${file.name}` : file.name;
             if (file.metadata) {
-              // It's a file
               manifest.exports.storage.total_files++;
               manifest.exports.storage.files.push({ bucket: bucket.name, path: fullPath, size: file.metadata.size });
               
@@ -167,7 +164,6 @@ serve(async (req) => {
                 manifest.failures.push({ type: 'storage_file', bucket: bucket.name, path: fullPath, error: err.message });
               }
             } else {
-              // It's a folder, recurse
               await listAllFiles(fullPath);
             }
           }
