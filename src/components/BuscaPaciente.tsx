@@ -102,19 +102,20 @@ function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }
     const searchPatients = async () => {
       setLoading(true);
 
-      const { data, error } = await supabase.rpc('search_patients', {
-        p_search: term,
-        p_unit_id: unidadeId,
-        p_limit: 10
-      });
-
-
+      const { data, error } = await supabase
+        .from('pacientes')
+        .select('id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em')
+        .or(`nome.ilike.%${term}%,cpf.ilike.%${term}%,cns.ilike.%${term}%,telefone.ilike.%${term}%`)
+        .order('nome', { ascending: true })
+        .limit(10);
 
       if (!cancelled) {
         setResultados(error || !data ? [] : (data as any[]).map(mapPaciente));
         setLoading(false);
       }
     };
+
+
 
     searchPatients();
 
