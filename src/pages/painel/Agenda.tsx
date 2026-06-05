@@ -2637,14 +2637,17 @@ const Agenda: React.FC = () => {
 
           {/* Slot availability summary for selected professional */}
           {(isProfissional || filterProf !== "all") && (
-            <SlotInfoBadge
-              profissionalId={isProfissional ? (user?.id || "all") : filterProf}
-              unidadeId={
-                filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === (isProfissional ? (user?.id || "all") : filterProf))?.unidadeId || ""
-              }
-              date={selectedDate}
-            />
+            <div className="max-w-[1100px] mx-auto w-full">
+              <SlotInfoBadge
+                profissionalId={isProfissional ? (user?.id || "all") : filterProf}
+                unidadeId={
+                  filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === (isProfissional ? (user?.id || "all") : filterProf))?.unidadeId || ""
+                }
+                date={selectedDate}
+              />
+            </div>
           )}
+
 
           {blockedForDate.length > 0 && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
