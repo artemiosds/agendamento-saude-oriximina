@@ -81,7 +81,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     
     // Filtro por profissional e unidade
     const relevantAgs = dayAgendamentos.filter(a => {
-      const matchProf = filterProf === "all" || a.profissionalId === filterProf;
+      const matchProf = effectiveProfFilter === "all" || a.profissionalId === effectiveProfFilter;
       const matchUnit = filterUnit === "all" || a.unidadeId === filterUnit;
       return matchProf && matchUnit;
     });
