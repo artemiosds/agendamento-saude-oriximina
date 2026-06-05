@@ -3503,14 +3503,59 @@ const Agenda: React.FC = () => {
               </div>
               <div>
                 <Label>Profissional</Label>
-                <Select value={editAg.profissionalId} onValueChange={(v) => setEditAg((p) => p ? { ...p, profissionalId: v, hora: "" } : p)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {profissionais.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between h-10 px-3 text-sm font-normal bg-background border-input"
+                    >
+                      <span className="truncate">
+                        {editAg.profissionalId 
+                          ? profissionais.find(p => p.id === editAg.profissionalId)?.nome || "Selecionar"
+                          : "Selecionar"}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar profissional..." className="h-9" />
+                      <CommandList className="max-h-[300px]">
+                        <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                        {Object.entries(
+                          profissionais
+                            .sort((a, b) => a.nome.localeCompare(b.nome))
+                            .reduce((acc, p) => {
+                              const cat = p.profissao || p.cargo || "Outros";
+                              if (!acc[cat]) acc[cat] = [];
+                              acc[cat].push(p);
+                              return acc;
+                            }, {} as Record<string, typeof profissionais>)
+                        ).map(([categoria, lista]) => (
+                          <CommandGroup key={categoria} heading={categoria}>
+                            {lista.map((p) => (
+                              <CommandItem
+                                key={p.id}
+                                value={`${p.nome} ${p.profissao || ''}`}
+                                onSelect={() => {
+                                  setEditAg((prev) => prev ? ({ ...prev, profissionalId: p.id, hora: "" }) : null);
+                                }}
+                                className="flex items-center justify-between cursor-pointer py-2"
+                              >
+                                <div className="flex flex-col min-w-0">
+                                  <span className="font-medium truncate block max-w-[180px]">{p.nome}</span>
+                                  <span className="text-[10px] text-muted-foreground">{p.profissao || p.cargo}</span>
+                                </div>
+                                {editAg.profissionalId === p.id && <Check className="h-4 w-4 text-primary" />}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <Label>Horário</Label>
