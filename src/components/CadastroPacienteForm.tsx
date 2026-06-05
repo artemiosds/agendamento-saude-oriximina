@@ -132,8 +132,6 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
-  whatsappOptInMarketing: boolean;
-  whatsappOptInWaitingList: boolean;
   patientProcedures?: any[];
   customData?: Record<string, any>;
 
