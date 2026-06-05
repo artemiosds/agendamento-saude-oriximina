@@ -132,7 +132,6 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
-  whatsappOptInOperational: boolean;
   whatsappOptInMarketing: boolean;
   whatsappOptInWaitingList: boolean;
   patientProcedures?: any[];
@@ -152,7 +151,6 @@ export const emptyPacienteForm: PacienteFormData = {
   observacaoEquipamentos: "", outroServicoSus: false, transporte: "", turnoPreferido: "",
   email: "", endereco: "", nomeMae: "", descricaoClinica: "",
   isGestante: false, isPne: false, isAutista: false,
-  whatsappOptInOperational: true,
   whatsappOptInMarketing: false,
   whatsappOptInWaitingList: false,
   patientProcedures: [],
@@ -669,7 +667,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               <div className="p-3 bg-primary/5 rounded-lg border border-primary/10">
                 <p className="text-[10px] text-muted-foreground leading-relaxed italic">
-                  Nota: Mensagens operacionais (agendamentos e lembretes) são autorizadas por padrão para todos os pacientes da unidade, conforme as Regras de Opt-in & Compliance.
+                  Nota: Mensagens operacionais (agendamentos e lembretes) são autorizadas para todos os pacientes por padrão.
                 </p>
               </div>
             </div>
