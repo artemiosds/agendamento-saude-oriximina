@@ -131,6 +131,7 @@ const TriagemItem = React.memo(({
   onRelease, 
   onRemove,
   isOpening,
+  isActioning,
   resolvePaciente 
 }: { 
   item: Agendamento, 
@@ -138,6 +139,7 @@ const TriagemItem = React.memo(({
   onRelease: (ag: Agendamento) => void,
   onRemove: (ag: Agendamento) => void,
   isOpening: boolean,
+  isActioning: boolean,
   resolvePaciente: (id: string, nome: string) => string
 }) => {
   const waitMinutes = item.filaCriadoEm ? differenceInMinutes(new Date(), new Date(item.filaCriadoEm)) : 0;
@@ -176,7 +178,7 @@ const TriagemItem = React.memo(({
             size="sm" 
             className="gradient-primary text-primary-foreground" 
             onClick={() => onOpen(item)}
-            disabled={isOpening}
+            disabled={isOpening || isActioning}
           >
             {isOpening ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
@@ -190,14 +192,21 @@ const TriagemItem = React.memo(({
             variant="outline"
             className="border-success/40 text-success hover:bg-success/10"
             onClick={() => onRelease(item)}
+            disabled={isOpening || isActioning}
           >
-            <FastForward className="mr-1 h-3.5 w-3.5" /> Liberar sem triagem
+            {isActioning ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FastForward className="mr-1 h-3.5 w-3.5" />
+            )}
+            {isActioning ? "Liberando..." : "Liberar sem triagem"}
           </Button>
           <Button
             size="sm"
             variant="outline"
             className="border-destructive/40 text-destructive hover:bg-destructive/10"
             onClick={() => onRemove(item)}
+            disabled={isOpening || isActioning}
           >
             <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
           </Button>
@@ -287,24 +296,39 @@ const Triagem: React.FC = () => {
   const handleLiberarSemTriagem = async (item: Agendamento) => {
     setActionLoading(true);
     try {
-      await Promise.all([
-        updateFila(item.filaId, { status: 'apto_atendimento' as any }),
-        updateAgendamento(item.id, { status: 'apto_atendimento' as any }),
-      ]);
-      await Promise.all([refreshFila(), refreshAgendamentos()]);
-      await logAction({
+      // 🚀 Chamada otimizada: Apenas atualizamos o necessário no banco sem carregar dados extras
+      const { error: updFilaErr } = await supabase
+        .from('fila_espera')
+        .update({ status: 'apto_atendimento' as any })
+        .eq('id', item.filaId);
+
+      if (updFilaErr) throw updFilaErr;
+
+      const { error: updAgendErr } = await supabase
+        .from('agendamentos')
+        .update({ status: 'apto_atendimento' as any })
+        .eq('id', item.id);
+
+      if (updAgendErr) throw updAgendErr;
+
+      // Log em background para não travar a UI
+      logAction({
         acao: 'liberar_sem_triagem',
         entidade: 'agendamento',
         entidadeId: item.id,
         modulo: 'triagem',
         user,
         detalhes: { paciente: item.pacienteNome, profissional: item.profissionalNome },
-      });
-      toast.success('Paciente liberado para atendimento sem triagem.');
+      }).catch(e => console.warn('Falha no log silent:', e));
+
+      toast.success('Paciente liberado para atendimento.');
       setConfirmAction(null);
+
+      // Atualiza apenas os caches necessários ao final
+      await Promise.all([refreshFila(), refreshAgendamentos()]);
     } catch (err) {
       console.error('Erro ao liberar sem triagem:', err);
-      toast.error('Erro ao liberar paciente sem triagem.');
+      toast.error('Erro ao liberar paciente.');
     } finally {
       setActionLoading(false);
     }
