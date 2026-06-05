@@ -1134,8 +1134,8 @@ const Agenda: React.FC = () => {
       id_agendamento: agId,
       observacoes: newAg.obs,
     });
-    // WhatsApp: confirmação de agendamento
-    whatsappService.sendByAgendamento(agId, "confirmacao").catch(() => {});
+    // WhatsApp: confirmação de agendamento (triggered via notify webhook hook)
+
   };
 
   // NOVO: aprovar agendamento online
@@ -1575,7 +1575,7 @@ const Agenda: React.FC = () => {
                 });
               })()
             : Promise.resolve(),
-          whatsappService.sendByAgendamento(ag.id, "cancelamento").catch(() => {}),
+          // WhatsApp: handled via notify webhook hook
           cancelConfig.liberar_vaga_automaticamente
             ? handleVagaLiberada(
                 { id: ag.id, data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome, unidadeId: ag.unidadeId, salaId: ag.salaId, tipo: ag.tipo },
@@ -1709,7 +1709,7 @@ const Agenda: React.FC = () => {
       id_agendamento: ag.id,
       observacoes: dados.descricao || "",
     });
-    whatsappService.sendByAgendamento(ag.id, "falta").catch(() => {});
+    // WhatsApp: handled via notify webhook hook
 
     await handleVagaLiberada(
       {

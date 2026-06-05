@@ -75,41 +75,23 @@ export const AgendaNotificacaoIndividual: React.FC<IndividualProps> = ({ ag, pac
 
       const promises: Promise<any>[] = [];
 
-      // Send WhatsApp if phone available
-      if (telefone) {
-        promises.push(
-          whatsappService.sendDirect({
-            tipo: "lembrete_manual",
-            telefone,
-            paciente_nome: ag.pacienteNome,
-            profissional: ag.profissionalNome,
-            unidade: unidade?.nome || "",
-            unidade_id: ag.unidadeId,
-            data_consulta: ag.data,
-            hora_consulta: ag.hora,
-          })
-        );
-      }
-
-      // Send email notification
-      if (email) {
-        promises.push(
-          notify({
-            evento: "lembrete_1h",
-            paciente_nome: ag.pacienteNome,
-            telefone,
-            email,
-            data_consulta: ag.data,
-            hora_consulta: ag.hora,
-            unidade: unidade?.nome || "",
-            profissional: ag.profissionalNome,
-            tipo_atendimento: ag.tipo,
-            status_agendamento: ag.status,
-            id_agendamento: ag.id,
-            observacoes: "Lembrete enviado manualmente.",
-          })
-        );
-      }
+      // Trigger notification via webhook-notify (handles both Webhook and WhatsApp)
+      promises.push(
+        notify({
+          evento: "lembrete_1h",
+          paciente_nome: ag.pacienteNome,
+          telefone,
+          email,
+          data_consulta: ag.data,
+          hora_consulta: ag.hora,
+          unidade: unidade?.nome || "",
+          profissional: ag.profissionalNome,
+          tipo_atendimento: ag.tipo,
+          status_agendamento: ag.status,
+          id_agendamento: ag.id,
+          observacoes: "Lembrete enviado manualmente.",
+        })
+      );
 
       await Promise.allSettled(promises);
       toast.success(`📨 Aviso enfileirado para ${ag.pacienteNome} (respeitando delays anti-ban)`);
@@ -185,39 +167,23 @@ export const AgendaNotificacoesMassa: React.FC<MassaProps> = ({
       try {
         const promises: Promise<any>[] = [];
 
-        if (telefone) {
-          promises.push(
-            whatsappService.sendDirect({
-              tipo: "lembrete_manual",
-              telefone,
-              paciente_nome: ag.pacienteNome,
-              profissional: ag.profissionalNome,
-              unidade: unidade?.nome || "",
-              unidade_id: ag.unidadeId,
-              data_consulta: ag.data,
-              hora_consulta: ag.hora,
-            })
-          );
-        }
-
-        if (email) {
-          promises.push(
-            notify({
-              evento: "lembrete_1h",
-              paciente_nome: ag.pacienteNome,
-              telefone,
-              email,
-              data_consulta: ag.data,
-              hora_consulta: ag.hora,
-              unidade: unidade?.nome || "",
-              profissional: ag.profissionalNome,
-              tipo_atendimento: ag.tipo,
-              status_agendamento: ag.status,
-              id_agendamento: ag.id,
-              observacoes: `Lembrete em massa (${tipo}).`,
-            })
-          );
-        }
+        // Trigger notification via webhook-notify (handles both Webhook and WhatsApp)
+        promises.push(
+          notify({
+            evento: "lembrete_1h",
+            paciente_nome: ag.pacienteNome,
+            telefone,
+            email,
+            data_consulta: ag.data,
+            hora_consulta: ag.hora,
+            unidade: unidade?.nome || "",
+            profissional: ag.profissionalNome,
+            tipo_atendimento: ag.tipo,
+            status_agendamento: ag.status,
+            id_agendamento: ag.id,
+            observacoes: `Lembrete em massa (${tipo}).`,
+          })
+        );
 
         await Promise.allSettled(promises);
         enviados++;

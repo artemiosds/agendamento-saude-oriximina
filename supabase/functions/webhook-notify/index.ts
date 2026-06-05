@@ -185,8 +185,8 @@ serve(async (req) => {
 
     // Try to send via WhatsApp Edge Function first if it's a patient event
     const whatsappEvents = [
-      "novo_agendamento", "confirmacao", "lembrete_24h", "lembrete_1h", 
-      "cancelamento", "reagendamento", "nao_compareceu", "vaga_liberada", "fila_chamada"
+      "novo_agendamento", "confirmacao", "lembrete_24h", "lembrete_1h", "lembrete_2h",
+      "cancelamento", "reagendamento", "nao_compareceu", "vaga_liberada", "fila_chamada", "fila_entrada"
     ];
 
     if (whatsappEvents.includes(evento)) {
