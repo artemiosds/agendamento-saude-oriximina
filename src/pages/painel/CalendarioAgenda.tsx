@@ -53,6 +53,9 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   filterUnit,
   profissionais,
 }) => {
+  const { user } = useAuth();
+  const isProfissional = user?.role === "profissional";
+  const effectiveProfFilter = isProfissional ? (user?.id || "all") : filterProf;
   const [view, setView] = useState<AgendaView>("month");
   const [currentDate, setCurrentDate] = useState(() => dateStrToUtcDate(selectedDate));
 
