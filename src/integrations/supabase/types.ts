@@ -4085,6 +4085,13 @@ export type Database = {
         Args: { lim?: number; p_cid: string }
         Returns: Json
       }
+      get_tables_info: {
+        Args: never
+        Returns: {
+          record_count: number
+          table_name: string
+        }[]
+      }
       get_treatment_cycles_paginated: {
         Args: {
           p_only_own_professional?: boolean
