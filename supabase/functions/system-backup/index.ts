@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { JSZip } from "https://deno.land/x/jszip@0.11.0/mod.ts";
+import { JSZip } from "jszip";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,9 +138,6 @@ serve(async (req) => {
         for (const file of files) {
           manifest.exports.storage.total_files++;
           manifest.exports.storage.files.push({ bucket: bucket.name, name: file.name, size: file.metadata?.size });
-          
-          // Note: Full file content download might hit timeout/memory limits for large systems.
-          // For now, we export the metadata and list. Downloading binaries would require a streaming approach.
           logEntries.push(`Registered file in storage: ${bucket.name}/${file.name}`);
         }
       }
