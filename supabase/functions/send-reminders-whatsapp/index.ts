@@ -92,6 +92,8 @@ serve(async (req) => {
       const { data: config } = await supabase.from("clinica_config").select("whatsapp_provider_active").limit(1).maybeSingle();
       const activeProvider = config?.whatsapp_provider_active || 'evolution';
       const functionName = activeProvider === 'uazapigo' ? 'send-whatsapp-uazapigo' : 'send-whatsapp-evolution';
+      
+      console.log(`[send-reminders-whatsapp] Routing to ${functionName} for agendamento ${ag.id} (Event: ${diffHours >= 23 ? "lembrete_24h" : "lembrete_2h"})`);
 
       // ── 24H WINDOW: send when remaining time is between 23h and 24.5h ──
       if (!ag.lembrete_24h_enviado_em && diffHours >= 23 && diffHours <= 24.5) {
