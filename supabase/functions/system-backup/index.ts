@@ -19,13 +19,16 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "").trim();
-    // Simplified bypass for validation - if token matches service key, it's allowed
-    const isServiceRole = token === supabaseServiceKey;
     let user = null;
+
+    // Use a simpler check for internal test bypass
+    const isServiceRole = token === supabaseServiceKey;
 
     if (!isServiceRole) {
       const { data: { user: authUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
-      if (userError || !authUser) return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
+      if (userError || !authUser) {
+        return new Response(JSON.stringify({ error: "Invalid token", details: userError }), { status: 401, headers: corsHeaders });
+      }
       user = authUser;
 
       const { data: func } = await supabaseAdmin
