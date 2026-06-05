@@ -2476,7 +2476,7 @@ const Agenda: React.FC = () => {
                 agendamentos={agendamentos}
                 bloqueios={bloqueios}
                 disponibilidades={disponibilidades}
-                filterProf={filterProf}
+                filterProf={isProfissional ? (user?.id || "all") : filterProf}
                 filterUnit={filterUnit}
                 profissionais={profissionais}
                 getAvailableSlots={getAvailableSlots}
