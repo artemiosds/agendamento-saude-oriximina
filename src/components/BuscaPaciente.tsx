@@ -9,7 +9,9 @@ interface BuscaPacienteProps {
   pacientes: Paciente[];
   value: string;
   onChange: (pacienteId: string, pacienteNome: string) => void;
+  unidadeId?: string | null;
 }
+
 
 const mapPaciente = (row: any): Paciente => ({
   id: row.id,
@@ -30,7 +32,7 @@ const mapPaciente = (row: any): Paciente => ({
 const sanitizeSearchTerm = (value: string) => value.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ');
 const escapeIlikeTerm = (value: string) => sanitizeSearchTerm(value).replace(/[%_]/g, '\\$&');
 
-function BuscaPacienteComponent({ pacientes, value, onChange }: BuscaPacienteProps) {
+function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }: BuscaPacienteProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [aberto, setAberto] = useState(false);
@@ -102,9 +104,10 @@ function BuscaPacienteComponent({ pacientes, value, onChange }: BuscaPacientePro
 
       const { data, error } = await supabase.rpc('search_patients', {
         p_search: term,
-        p_unit_id: null,
+        p_unit_id: unidadeId,
         p_limit: 10
       });
+
 
 
       if (!cancelled) {
