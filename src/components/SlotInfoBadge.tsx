@@ -42,11 +42,12 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     ]);
 
     const active = agendamentos.filter(
-      a => a.profissionalId === profissionalId &&
-        a.unidadeId === unidadeId &&
+      a => (a.profissionalId === profissionalId || filterProf === "all") &&
+        (a.unidadeId === unidadeId || filterUnit === "all") &&
         a.data === date &&
         !STATUS_NAO_OCUPA_VAGA.has(a.status),
     );
+
 
     const dayOccupied = active.length;
     const dayTotal = allDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
