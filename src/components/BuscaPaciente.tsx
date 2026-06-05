@@ -102,8 +102,10 @@ function BuscaPacienteComponent({ pacientes, value, onChange }: BuscaPacientePro
 
       const { data, error } = await supabase.rpc('search_patients', {
         p_search: term,
+        p_unit_id: null,
         p_limit: 10
       });
+
 
       if (!cancelled) {
         setResultados(error || !data ? [] : (data as any[]).map(mapPaciente));
