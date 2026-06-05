@@ -232,8 +232,8 @@ serve(async (req) => {
 
   try {
     const config = await getConfig(supabase);
-    const evolutionConfig = await getEvolutionConfig(supabase);
     const now = new Date();
+
 
     // Calculate tomorrow's date (for 24h reminder)
     const tomorrow = new Date(now);
