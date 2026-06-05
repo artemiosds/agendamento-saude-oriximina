@@ -134,6 +134,19 @@ const STATUS_FILTER_GROUPS: Record<string, string[]> = {
   pendente: ["pendente"],
 };
 
+// Lista única de status que NÃO ocupam vaga na agenda.
+const STATUS_NAO_OCUPA_VAGA = new Set([
+  "cancelado",
+  "falta",
+  "excluido",
+  "removido",
+  "inativo",
+]);
+
+const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
+
+
+
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "confirmado", label: "Confirmado" },
@@ -741,7 +754,15 @@ const Agenda: React.FC = () => {
       result = result.filter((a) => (a.tipo || "") === tipoFilter);
     }
 
+    // Regra centralizada: Se não estiver buscando por nome/CPF/CNS nem filtrando por status específico,
+    // a lista principal deve omitir agendamentos que não ocupam vaga (cancelados/faltas).
+    if (!debouncedSearch && statusFilter === "all") {
+      result = result.filter((a) => statusOcupaVaga(a.status));
+    }
+
     return result;
+
+
   }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
 
   const filteredPacienteKey = React.useMemo(
@@ -751,6 +772,16 @@ const Agenda: React.FC = () => {
 
   // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
   const statusCounts = React.useMemo(() => {
+    // Regra centralizada de ocupação de vaga
+    const STATUS_NAO_OCUPA_VAGA = new Set([
+      "cancelado",
+      "falta",
+      "excluido",
+      "removido",
+      "inativo",
+    ]);
+    const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
+
     const base = agendamentos.filter((a) => {
       if (a.data !== selectedDate) return false;
       if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
@@ -766,13 +797,20 @@ const Agenda: React.FC = () => {
       }
       return true;
     });
+
+    const activeBase = base.filter(a => statusOcupaVaga(a.status));
+
     const byGroup: Record<string, number> = {};
     for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
       const allowed = STATUS_FILTER_GROUPS[key];
       byGroup[key] = base.filter((a) => allowed.includes(a.status)).length;
     }
-    return { total: base.length, byGroup };
+    
+    // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
+    return { total: activeBase.length, byGroup };
+
   }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
+
 
   // (primeiro item da manhã que ainda não foi concluído).
   const idxPendentesManha = React.useMemo(() => {
@@ -999,7 +1037,7 @@ const Agenda: React.FC = () => {
     
     if (turnoAlvo) {
       const isExterno = false; // Agendamento pela recepção
-      const excessoInterno = !isExterno && turnoAlvo.vagasLivresInternas <= 0;
+      const excessoInterno = !isExterno && turnoAlvo.vagasLivresInternas <= 0 && statusOcupaVaga("confirmado");
       
       if (excessoInterno) {
         const msg = `⚠️ Vagas internas esgotadas. Existem ${turnoAlvo.vagasReservadasExterno} vagas reservadas para externos que não podem ser usadas pela recepção sem autorização.`;
@@ -2577,6 +2615,7 @@ const Agenda: React.FC = () => {
               const count = chip.value === "all"
                 ? statusCounts.total
                 : (statusCounts.byGroup[chip.value] || 0);
+
               const active = statusFilter === chip.value;
               return (
                 <button
@@ -2598,14 +2637,17 @@ const Agenda: React.FC = () => {
 
           {/* Slot availability summary for selected professional */}
           {(isProfissional || filterProf !== "all") && (
-            <SlotInfoBadge
-              profissionalId={isProfissional ? (user?.id || "all") : filterProf}
-              unidadeId={
-                filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === (isProfissional ? (user?.id || "all") : filterProf))?.unidadeId || ""
-              }
-              date={selectedDate}
-            />
+            <div className="max-w-[1100px] mx-auto w-full">
+              <SlotInfoBadge
+                profissionalId={isProfissional ? (user?.id || "all") : filterProf}
+                unidadeId={
+                  filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === (isProfissional ? (user?.id || "all") : filterProf))?.unidadeId || ""
+                }
+                date={selectedDate}
+              />
+            </div>
           )}
+
 
           {blockedForDate.length > 0 && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">

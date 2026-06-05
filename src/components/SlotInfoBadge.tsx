@@ -33,13 +33,22 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     const isTurnoMode = allDisps.some(d => d.vagasPorHora === 0);
 
     // Status que NÃO ocupam vaga (mantém em sincronia com DataContext.statusOcupaVaga)
-    const STATUS_INATIVOS = ['cancelado', 'falta', 'excluido', 'removido', 'inativo'];
+    const STATUS_NAO_OCUPA_VAGA = new Set([
+      "cancelado",
+      "falta",
+      "excluido",
+      "removido",
+      "inativo",
+    ]);
+
     const active = agendamentos.filter(
       a => a.profissionalId === profissionalId &&
         a.unidadeId === unidadeId &&
         a.data === date &&
-        !STATUS_INATIVOS.includes(a.status),
+        !STATUS_NAO_OCUPA_VAGA.has(a.status),
     );
+
+
 
     const dayOccupied = active.length;
     const dayTotal = allDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
