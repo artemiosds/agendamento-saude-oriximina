@@ -1246,8 +1246,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
       if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
       if (data.cid !== undefined) dbData.cid = data.cid;
-      if (data.whatsappOptInMarketing !== undefined) dbData.whatsapp_opt_in_marketing = data.whatsappOptInMarketing;
-      if (data.whatsappOptInWaitingList !== undefined) dbData.whatsapp_opt_in_waiting_list = data.whatsappOptInWaitingList;
 
 
       if (authUser?.role === "recepcao") {
