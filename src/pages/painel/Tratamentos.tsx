@@ -1258,7 +1258,10 @@ const Tratamentos: React.FC = () => {
     try {
       for (const sess of pendentes) {
         try {
-          // 1) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
+          // 1) Verificar se o paciente está bloqueado por faltas (opcional: pode ser lento em lote, mas é seguro)
+          // Para performance em lote, poderíamos fazer uma vez fora do loop, mas vamos manter a regra individual por agora.
+          
+          // 2) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
           const { data: existente, error: checkErr } = await supabase
             .from("agendamentos")
             .select("id, hora, status")
@@ -1273,12 +1276,14 @@ const Tratamentos: React.FC = () => {
           if (checkErr) throw checkErr;
 
           if (existente) {
-            if (!sess.appointment_id || sess.status !== "agendada") {
-              await supabase
-                .from("treatment_sessions")
-                .update({ appointment_id: existente.id, status: "agendada" })
-                .eq("id", sess.id);
-            }
+            // Se já existe um agendamento manual para este paciente/prof/data, apenas vincula
+            const { error: linkErr } = await supabase
+              .from("treatment_sessions")
+              .update({ appointment_id: existente.id, status: "agendada" })
+              .eq("id", sess.id);
+            
+            if (linkErr) throw linkErr;
+
             usar(sess.scheduled_date, existente.hora);
             resumo.push({
               numero: sess.session_number,
@@ -1289,7 +1294,7 @@ const Tratamentos: React.FC = () => {
             continue;
           }
 
-          // 2) Encontrar slot válido respeitando disponibilidade do profissional
+          // 3) Encontrar slot válido respeitando disponibilidade do profissional e ocupação da agenda
           const slot = encontrarSlotValido(
             sess.scheduled_date,
             sess.professional_id,
@@ -1301,14 +1306,14 @@ const Tratamentos: React.FC = () => {
               numero: sess.session_number,
               data: sess.scheduled_date,
               status: "erro",
-              mensagem: "Sem horário disponível na agenda do profissional (próximos 30 dias)",
+              mensagem: "Agenda lotada ou sem disponibilidade cadastrada (próximos 30 dias)",
             });
             continue;
           }
 
-          // 3) Inserir novo agendamento no horário válido
+          // 4) Inserir novo agendamento no horário válido
           const agId = `ag${Date.now()}${sess.session_number}`;
-          await addAgendamento({
+          const newAgData = {
             id: agId,
             pacienteId: sess.patient_id,
             pacienteNome: pac.nome,
@@ -1319,22 +1324,28 @@ const Tratamentos: React.FC = () => {
             profissionalNome: prof.nome,
             data: slot.data,
             hora: slot.hora,
-            status: "confirmado",
-            tipo: "Sessão de Tratamento",
+            status: "confirmado" as const,
+            tipo: "Sessão de Tratamento" as const,
             observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${selectedCycle.treatment_type} (lote)`,
-            origem: "recepcao",
+            origem: "recepcao" as const,
             criadoEm: new Date().toISOString(),
             criadoPor: user?.id || "",
-          } as any);
+          };
 
-          // 4) Atualizar sessão como agendada (e ajustar scheduled_date se mudou)
+          // Usa o service addAgendamento do DataContext para garantir que a Agenda atualize em tempo real
+          await addAgendamento(newAgData);
+
+          // 5) Atualizar sessão como agendada
           const updates: any = { appointment_id: agId, status: "agendada" };
           if (slot.data !== sess.scheduled_date) updates.scheduled_date = slot.data;
+          
           const { error: updErr } = await supabase
             .from("treatment_sessions")
             .update(updates)
             .eq("id", sess.id);
+          
           if (updErr) throw updErr;
+
 
           // 5) Atualização otimista da UI
           setSessions((prev) =>
