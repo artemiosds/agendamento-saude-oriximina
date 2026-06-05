@@ -49,42 +49,37 @@ function formatPhone(phone: string): string {
   return "55" + digits;
 }
 
-function buildWhatsAppMessage(tipo: string, data: {
-  paciente_nome: string;
-  data_consulta: string;
-  hora_consulta: string;
-  profissional: string;
-  unidade: string;
-  nome_clinica: string;
-}): string {
-  const header = `🏥 *${data.nome_clinica || "SMS Oriximiná"}*\n`;
-  if (tipo === "lembrete_24h") {
-    return `${header}\n⏰ *Lembrete - Consulta Amanhã*\n\nOlá, *${data.paciente_nome}*!\n\n📅 *Data:* ${data.data_consulta}\n🕐 *Horário:* ${data.hora_consulta}\n👨‍⚕️ *Profissional:* ${data.profissional}\n🏥 *Unidade:* ${data.unidade}\n\nChegue com 15 min de antecedência.\n\n_Mensagem automática._`;
-  }
-  return `${header}\n⏰ *Consulta em 1 hora!*\n\nOlá, *${data.paciente_nome}*!\n\n📅 *Data:* ${data.data_consulta}\n🕐 *Horário:* ${data.hora_consulta}\n👨‍⚕️ *Profissional:* ${data.profissional}\n🏥 *Unidade:* ${data.unidade}\n\nEstamos aguardando você!\n\n_Mensagem automática._`;
-}
+async function sendNotification(
+  supabase: any,
+  config: any,
+  payload: any
+) {
+  const canal = config.canalNotificacao || "webhook";
+  const gmailConfig: GmailConfig | null = config.gmail?.ativo ? config.gmail : null;
+  const webhookUrl = config.webhook?.url;
+  const webhookAtivo = config.webhook?.ativo;
 
-async function sendEvolutionWhatsApp(
-  config: EvolutionConfig,
-  telefone: string,
-  message: string
-): Promise<boolean> {
+  let sent = false;
+  let whatsappSent = false;
+
+  // === WhatsApp & Integrations via webhook-notify ===
+  // This centralizes all rules and allows multi-channel fallback
   try {
-    const phone = formatPhone(telefone);
-    const resp = await fetch(
-      `${config.evolution_base_url}/message/sendText/${config.evolution_instance_name}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: config.evolution_api_key },
-        body: JSON.stringify({ number: phone, text: message }),
-      }
-    );
-    return resp.ok;
+    const { data: wsResult, error: wsError } = await supabase.functions.invoke("webhook-notify", {
+      body: payload
+    });
+    
+    if (!wsError && wsResult?.success) {
+      whatsappSent = true;
+      sent = true;
+      console.log(`[reminders] Notification triggered successfully via webhook-notify for ${payload.paciente_nome}`);
+    } else {
+      console.warn(`[reminders] webhook-notify reported issue:`, wsError || wsResult?.error);
+    }
   } catch (err) {
-    console.error("[reminders] Evolution API error:", err);
-    return false;
+    console.error("[reminders] Error calling webhook-notify:", err);
   }
-}
+
 
 async function sendNotification(
   supabase: any,
