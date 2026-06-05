@@ -480,7 +480,7 @@ const Agenda: React.FC = () => {
   };
 
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
-  const isProfissional = user?.role === "profissional";
+  // isProfissional já definido no topo
 
   // Memo para agendamentos pendentes (Requirement 5-10)
   const agendamentosPendentesRevisao = React.useMemo(() => {
