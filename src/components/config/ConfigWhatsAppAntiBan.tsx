@@ -36,9 +36,6 @@ interface UnitCfg {
   horario_inicio: string;
   horario_fim: string;
   dias_permitidos: number[];
-  modo_estrito: boolean;
-  respeitar_opt_out: boolean;
-  bloquear_sem_interacao_previa: boolean;
 }
 
 const DEFAULT: UnitCfg = {
