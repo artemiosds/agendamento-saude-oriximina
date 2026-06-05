@@ -125,27 +125,38 @@ export async function validateSend(
   // Validação por Categoria
   const classification = EVENT_CLASSIFICATION[tipo] || { category: 'utility' };
   
+  // No pacienteData, opt-ins para utility (operacional) são true por padrão (null = true)
+  // Marketing continua exigindo opt-in específico
+  const isMarketing = classification.category === 'marketing';
+  const hasMarketingOptIn = pacienteData?.whatsapp_opt_in_marketing === true;
+  const hasOperationalOptIn = pacienteData ? (pacienteData.whatsapp_opt_in_operational !== false) : true;
+  const hasSpecificConsent = classification.requiresSpecificConsent 
+    ? (pacienteData?.[classification.requiresSpecificConsent] === true)
+    : true;
+
+  if (isMarketing && !hasMarketingOptIn) {
+    return { ok: false, reason: "sem_opt_in_marketing", audit };
+  }
+  
+  if (!isMarketing && !hasOperationalOptIn) {
+    return { ok: false, reason: "sem_opt_in_operacional", audit };
+  }
+
+  if (classification.requiresSpecificConsent && !hasSpecificConsent) {
+    return { ok: false, reason: `requer_consentimento_especifico_${classification.requiresSpecificConsent}`, audit };
+  }
+
+  // Define o status do opt-in no log
   if (pacienteData) {
-    if (classification.category === 'marketing') {
-      if (!pacienteData.whatsapp_opt_in_marketing) return { ok: false, reason: "sem_opt_in_marketing", audit };
+    if (pacienteData.whatsapp_opt_in_operational === null || pacienteData.whatsapp_opt_in_operational === undefined) {
+      audit.opt_in_status = 'regra_padrao_unidade';
+      audit.authorized_by_default_rule = true;
     } else {
-      // Utility - Se não tiver o campo definido ou for true, assume como autorizado
-      const hasOperationalOptIn = pacienteData.whatsapp_opt_in_operational !== false;
-      if (!hasOperationalOptIn) return { ok: false, reason: "sem_opt_in_operacional", audit };
-      
-      // Define o status do opt-in no log
-      if (pacienteData.whatsapp_opt_in_operational === null || pacienteData.whatsapp_opt_in_operational === true) {
-        audit.opt_in_status = 'regra_padrao_unidade';
-        audit.authorized_by_default_rule = true;
-      } else {
-        audit.opt_in_status = 'manual_opt_in';
-      }
-      
-      // Consentimento específico
-      if (classification.requiresSpecificConsent && !pacienteData[classification.requiresSpecificConsent]) {
-        return { ok: false, reason: `requer_consentimento_especifico_${classification.requiresSpecificConsent}`, audit };
-      }
+      audit.opt_in_status = 'manual_opt_in';
     }
+  } else {
+    audit.opt_in_status = 'paciente_nao_encontrado_regra_padrao';
+    audit.authorized_by_default_rule = true;
   }
 
   // Regra 24 horas

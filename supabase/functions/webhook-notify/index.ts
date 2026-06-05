@@ -192,17 +192,16 @@ serve(async (req) => {
     if (whatsappEvents.includes(evento)) {
       try {
         const { data: clinicaCfg } = await supabaseAdmin.from("clinica_config").select("whatsapp_provider_active").limit(1).maybeSingle();
-        const activeProvider = clinicaCfg?.whatsapp_provider_active || "evolution";
+        const activeProvider = clinicaCfg?.whatsapp_provider_active || "uazapigo"; // Default to uazapigo as per user preference
         const functionName = activeProvider === "uazapigo" ? "send-whatsapp-uazapigo" : "send-whatsapp-evolution";
         
         console.log(`[webhook-notify] Attempting WhatsApp via ${functionName} for event ${evento}`);
         
-        // Map webhook events to WhatsApp categories
         const typeMap: Record<string, string> = {
           "novo_agendamento": "confirmacao",
           "reagendamento": "remarcacao",
           "nao_compareceu": "falta",
-          "lembrete_1h": "lembrete_2h", // Use 2h template for 1h reminder if not exists
+          "lembrete_1h": "lembrete_1h",
           "vaga_liberada": "vaga_disponivel",
           "fila_chamada": "confirmacao"
         };
@@ -217,10 +216,25 @@ serve(async (req) => {
           }
         });
 
-        if (!wsError && wsResult?.success) {
-          console.log(`[webhook-notify] WhatsApp sent successfully via ${functionName}`);
+        if (wsError || !wsResult?.success) {
+          const errorDetail = wsError?.message || wsResult?.error || "Erro desconhecido ao chamar function";
+          console.warn(`[webhook-notify] WhatsApp failed:`, errorDetail);
+          
+          // Log specific WhatsApp failure to notification_logs if it wasn't already logged by the provider function
+          // (The provider function usually logs its own success/failure, but if it fails to even run, we log here)
+          if (wsError) {
+            await logNotification(supabaseAdmin, {
+              agendamento_id: id_agendamento,
+              evento: typeMap[evento] || evento,
+              canal: `whatsapp_${activeProvider}`,
+              destinatario_telefone: telefone,
+              payload: { ...payload, error_detail: errorDetail },
+              status: "erro",
+              erro: `Erro de invocação: ${errorDetail}`
+            });
+          }
         } else {
-          console.warn(`[webhook-notify] WhatsApp failed or was blocked:`, wsError || wsResult?.error);
+          console.log(`[webhook-notify] WhatsApp processed successfully via ${functionName}`);
         }
       } catch (wsCatch) {
         console.error(`[webhook-notify] Error invoking WhatsApp function:`, wsCatch);
