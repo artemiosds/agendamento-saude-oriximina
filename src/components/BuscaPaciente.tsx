@@ -32,7 +32,7 @@ const mapPaciente = (row: any): Paciente => ({
 const sanitizeSearchTerm = (value: string) => value.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ');
 const escapeIlikeTerm = (value: string) => sanitizeSearchTerm(value).replace(/[%_]/g, '\\$&');
 
-function BuscaPacienteComponent({ pacientes, value, onChange }: BuscaPacienteProps) {
+function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }: BuscaPacienteProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [aberto, setAberto] = useState(false);
