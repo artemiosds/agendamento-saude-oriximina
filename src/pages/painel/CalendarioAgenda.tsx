@@ -127,7 +127,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     return { date: dateStr, dayNumber: date.getUTCDate(), isToday, isSelected: dateStr === selectedDate, status, agendamentosCount, totalVagas, counts };
   };
 
-  const profsFiltrados = useMemo(() => filterProf !== "all" ? profissionais.filter(p => p.id === filterProf) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [filterProf, filterUnit, profissionais]);
+  const profsFiltrados = useMemo(() => effectiveProfFilter !== "all" ? profissionais.filter(p => p.id === effectiveProfFilter) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [effectiveProfFilter, filterUnit, profissionais]);
 
   const navDate = (delta: number) => {
     const next = new Date(currentDate);
