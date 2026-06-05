@@ -463,9 +463,64 @@ const DadosSection: React.FC = () => {
     setExporting("");
   };
 
+  const generateBackup = async () => {
+    if (!confirm("⚠️ Você está prestes a gerar um backup completo do sistema. Isso pode demorar alguns segundos. Deseja continuar?")) {
+      return;
+    }
+
+    setExporting("full_backup");
+    const t = toast.loading("Preparando backup completo...");
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sessão não encontrada");
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/system-backup`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Falha ao gerar backup");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_sistema_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success("✅ Backup gerado e baixado com sucesso!", { id: t });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`❌ Erro: ${err.message}`, { id: t });
+    } finally {
+      setExporting("");
+    }
+  };
+
   return (
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup e Dados</CardTitle></CardHeader>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup e Dados</CardTitle>
+          <Button 
+            variant="default" 
+            className="bg-primary hover:bg-primary/90" 
+            onClick={generateBackup}
+            disabled={!!exporting}
+          >
+            <FileDown className="h-4 w-4 mr-2" />
+            {exporting === "full_backup" ? "Gerando Backup..." : "Gerar Backup Completo (.zip)"}
+          </Button>
+        </div>
+      </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
@@ -480,21 +535,33 @@ const DadosSection: React.FC = () => {
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => exportCSV("pacientes", "pacientes.csv")} disabled={!!exporting}>
-            <FileDown className="h-4 w-4 mr-2" /> {exporting === "pacientes" ? "Exportando..." : "Exportar Pacientes"}
-          </Button>
-          <Button variant="outline" onClick={() => exportCSV("agendamentos", "agendamentos.csv")} disabled={!!exporting}>
-            <FileDown className="h-4 w-4 mr-2" /> {exporting === "agendamentos" ? "Exportando..." : "Exportar Agendamentos"}
-          </Button>
-          <Button variant="outline" onClick={() => exportCSV("notification_logs", "notificacoes.csv")} disabled={!!exporting}>
-            <FileDown className="h-4 w-4 mr-2" /> {exporting === "notification_logs" ? "Exportando..." : "Exportar Notificações"}
-          </Button>
+        
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Exportação Individual (CSV)</Label>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" size="sm" onClick={() => exportCSV("pacientes", "pacientes.csv")} disabled={!!exporting}>
+              <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "pacientes" ? "Exportando..." : "Pacientes"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportCSV("agendamentos", "agendamentos.csv")} disabled={!!exporting}>
+              <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "agendamentos" ? "Exportando..." : "Agendamentos"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportCSV("notification_logs", "notificacoes.csv")} disabled={!!exporting}>
+              <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "notification_logs" ? "Exportando..." : "Notificações"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+          <Info className="h-4 w-4 text-amber-600 mt-0.5" />
+          <div className="text-xs text-amber-800">
+            <strong>Dica de Segurança:</strong> O backup completo inclui configurações sensíveis (sem chaves) e dados clínicos. Mantenha este arquivo em local seguro.
+          </div>
         </div>
       </CardContent>
     </Card>
   );
 };
+
 
 // ─── Section 9: Teste ─────────────────────────────────────────────────────────
 const TesteSection: React.FC = () => {
