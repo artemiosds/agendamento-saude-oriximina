@@ -9,10 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Eye, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Search, Eye, Pencil, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MANCHESTER_LEVELS, getManchesterConfig } from "@/lib/manchesterProtocol";
+import { ModalEdicaoTriagem } from "@/components/Triagem/ModalEdicaoTriagem";
 
 interface TriageRecord {
   id: string;
@@ -78,6 +79,7 @@ const HistoricoTriagem: React.FC = () => {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<EnrichedRecord | null>(null);
+  const [editing, setEditing] = useState<EnrichedRecord | null>(null);
 
   // Recursive pagination helper to bypass 1000-row default limit
   const fetchAll = async (table: string, columns: string): Promise<any[]> => {
@@ -286,9 +288,14 @@ const HistoricoTriagem: React.FC = () => {
                     <TableCell className="hidden md:table-cell max-w-[200px] truncate text-sm text-muted-foreground">{r.queixa || "—"}</TableCell>
                     <TableCell className="hidden lg:table-cell text-sm">{r.profissionalNome}</TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" variant="outline" onClick={() => setSelected(r)}>
-                        <Eye className="mr-1 h-3.5 w-3.5" /> Ver
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setSelected(r)}>
+                          <Eye className="mr-1 h-3.5 w-3.5" /> Ver
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>
+                          <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -429,6 +436,13 @@ const HistoricoTriagem: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      <ModalEdicaoTriagem
+        open={!!editing}
+        onOpenChange={(o) => !o && setEditing(null)}
+        record={editing}
+        onSuccess={loadData}
+      />
     </div>
   );
 };
