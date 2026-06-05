@@ -1,7 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn, dateStrToUtcDate, isoDayOfWeek, localDateStr, todayLocalStr } from "@/lib/utils";
+import { ChevronLeft, ChevronRight, Calendar, CalendarDays, CalendarRange } from "lucide-react";
+import { cn, dateStrToUtcDate, localDateStr, todayLocalStr } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { startOfWeek, endOfWeek, eachDayOfInterval, format, startOfMonth, endOfMonth, isSameMonth } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+type AgendaView = "month" | "week" | "day";
 
 interface DiaInfo {
   date: string;
@@ -11,6 +18,15 @@ interface DiaInfo {
   status: "blocked" | "past" | "full" | "almostFull" | "available" | "empty";
   agendamentosCount: number;
   totalVagas: number;
+  counts: {
+    confirmados: number;
+    aptos: number;
+    emAtendimento: number;
+    concluidos: number;
+    faltou: number;
+    cancelados: number;
+    pendentes: number;
+  };
 }
 
 interface CalendarioAgendaProps {
@@ -36,343 +52,310 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   filterProf,
   filterUnit,
   profissionais,
-  getAvailableSlots,
 }) => {
-  const [currentMonth, setCurrentMonth] = useState(() => dateStrToUtcDate(selectedDate));
+  const [view, setView] = useState<AgendaView>("month");
+  const [currentDate, setCurrentDate] = useState(() => dateStrToUtcDate(selectedDate));
 
   useEffect(() => {
-    setCurrentMonth(dateStrToUtcDate(selectedDate));
+    setCurrentDate(dateStrToUtcDate(selectedDate));
   }, [selectedDate]);
 
-  const daysInMonth = useMemo(() => {
-    const year = currentMonth.getUTCFullYear();
-    const month = currentMonth.getUTCMonth();
-    const firstDay = new Date(Date.UTC(year, month, 1, 12, 0, 0));
-    const lastDay = new Date(Date.UTC(year, month + 1, 0, 12, 0, 0));
-
-    const days: Date[] = [];
-    for (let day = 1; day <= lastDay.getUTCDate(); day++) {
-      days.push(new Date(Date.UTC(year, month, day, 12, 0, 0)));
-    }
-
-    const startWeekday = firstDay.getUTCDay();
-    const prevDays: Date[] = [];
-    for (let i = startWeekday; i > 0; i--) {
-      prevDays.push(new Date(Date.UTC(year, month, 1 - i, 12, 0, 0)));
-    }
-
-    const endWeekday = lastDay.getUTCDay();
-    const nextDays: Date[] = [];
-    for (let i = 1; i < 7 - endWeekday; i++) {
-      nextDays.push(new Date(Date.UTC(year, month + 1, i, 12, 0, 0)));
-    }
-
-    return [...prevDays, ...days, ...nextDays];
-  }, [currentMonth]);
-
-  // Pre-index agendamentos by date for O(1) lookup instead of filtering per day.
-  // CRITICAL: chave inclui unidadeId para alinhar com SlotInfoBadge / getTurnoInfo,
-  // evitando divergência (ex.: calendário mostrar 17, mas resumo do dia 11 da unidade).
-  // Lista de status alinhada com STATUS_NAO_OCUPA_VAGA do DataContext.
   const STATUS_NAO_OCUPA = new Set(["cancelado", "falta", "excluido", "removido", "inativo"]);
-  const agendamentosByDate = useMemo(() => {
-    const map = new Map<string, Map<string, number>>();
-    for (const a of agendamentos) {
-      if (STATUS_NAO_OCUPA.has(a.status)) continue;
-      const profKey = `${a.profissionalId}|${a.unidadeId}`;
-      let dateMap = map.get(a.data);
-      if (!dateMap) {
-        dateMap = new Map();
-        map.set(a.data, dateMap);
-      }
-      dateMap.set(profKey, (dateMap.get(profKey) || 0) + 1);
-    }
-    return map;
-  }, [agendamentos]);
 
-  // Pre-index disponibilidades for fast lookup
-  const dispIndex = useMemo(() => {
-    const arr = disponibilidades.map((d: any) => ({
-      profissionalId: d.profissionalId,
-      unidadeId: d.unidadeId,
-      dataInicio: d.dataInicio,
-      dataFim: d.dataFim,
-      diasSemana: d.diasSemana || [],
-      vagasPorDia: d.vagasPorDia || 25,
-    }));
-    return arr;
-  }, [disponibilidades]);
+  const getDayStatus = (dateStr: string, profs: any[]): DiaInfo => {
+    const date = dateStrToUtcDate(dateStr);
+    const dayOfWeek = date.getUTCDay();
+    const isToday = dateStr === todayLocalStr();
+    const isPast = dateStr < todayLocalStr();
 
-  const dayInfoMap = useMemo(() => {
-    const map = new Map<string, DiaInfo>();
-    const todayStr = todayLocalStr();
+    let agendamentosCount = 0;
+    let totalVagas = 0;
+    let hasDisponibilidade = false;
+    let allBlocked = profs.length > 0;
 
-    const profissionaisFiltrados = filterProf !== "all"
-      ? profissionais.filter((prof) => prof.id === filterProf)
-      : profissionais.filter((prof) => {
-          if (filterUnit !== "all" && prof.unidadeId !== filterUnit) return false;
-          return true;
-        });
+    const dayAgendamentos = agendamentos.filter(a => a.data === dateStr);
+    
+    // Filtro por profissional e unidade
+    const relevantAgs = dayAgendamentos.filter(a => {
+      const matchProf = filterProf === "all" || a.profissionalId === filterProf;
+      const matchUnit = filterUnit === "all" || a.unidadeId === filterUnit;
+      return matchProf && matchUnit;
+    });
 
-    const matchesBlock = (bloqueio: any, profissionalId: string, unidadeId: string) => {
-      if (!bloqueio.diaInteiro) return false;
-      const isGlobal = (!bloqueio.unidadeId || bloqueio.unidadeId === "") && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
-      const isUnitLevel = unidadeId && bloqueio.unidadeId === unidadeId && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
-      const isProfLevel = profissionalId && bloqueio.profissionalId === profissionalId;
-      return isGlobal || isUnitLevel || isProfLevel;
+    const counts = {
+      confirmados: relevantAgs.filter(a => a.status === "confirmado").length,
+      aptos: relevantAgs.filter(a => a.status === "apto_atendimento").length,
+      emAtendimento: relevantAgs.filter(a => a.status === "em_atendimento").length,
+      concluidos: relevantAgs.filter(a => ["concluido", "finalizado"].includes(a.status)).length,
+      faltou: relevantAgs.filter(a => a.status === "falta").length,
+      cancelados: relevantAgs.filter(a => a.status === "cancelado").length,
+      pendentes: relevantAgs.filter(a => a.status === "pendente").length,
     };
 
-    // Only call getAvailableSlots when a specific professional is selected
-    // For "all" mode, use a fast heuristic based on availability counts
-    const useDetailedSlots = filterProf !== "all" && profissionaisFiltrados.length === 1;
+    agendamentosCount = relevantAgs.filter(a => !STATUS_NAO_OCUPA.has(a.status)).length;
 
-    for (const day of daysInMonth) {
-      const dateStr = localDateStr(day);
-      const dayOfWeek = day.getUTCDay();
-      const isToday = dateStr === todayStr;
-      const isSelected = dateStr === selectedDate;
-      const isPast = dateStr < todayStr;
-
-      let agendamentosConfirmados = 0;
-      let totalVagas = 0;
-      let hasDisponibilidade = false;
-      let allBlocked = profissionaisFiltrados.length > 0;
-
-      const dateAgMap = agendamentosByDate.get(dateStr);
-
-      if (useDetailedSlots) {
-        // Single professional — use detailed slot calculation (fast for 1 prof)
-        const prof = profissionaisFiltrados[0];
-        if (prof) {
-          const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-          const isBlocked = bloqueios.some((bloqueio: any) => {
-            if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
-            return matchesBlock(bloqueio, prof.id, profUnit);
-          });
-          allBlocked = isBlocked;
-          hasDisponibilidade = dispIndex.some((disp) => (
-            disp.profissionalId === prof.id &&
-            disp.unidadeId === profUnit &&
-            dateStr >= disp.dataInicio &&
-            dateStr <= disp.dataFim &&
-            disp.diasSemana.includes(dayOfWeek)
-          ));
-
-          if (!isBlocked && profUnit) {
-            agendamentosConfirmados = dateAgMap?.get(`${prof.id}|${profUnit}`) || 0;
-            // Use o limite REAL configurado (soma de vagasPorDia das disponibilidades aplicáveis)
-            // para que o status do calendário (lotado/excedido) bata com o resumo do dia/turno.
-            const limiteDia = dispIndex
-              .filter((disp) => (
-                disp.profissionalId === prof.id &&
-                disp.unidadeId === profUnit &&
-                dateStr >= disp.dataInicio &&
-                dateStr <= disp.dataFim &&
-                disp.diasSemana.includes(dayOfWeek)
-              ))
-              .reduce((sum, d) => sum + d.vagasPorDia, 0);
-            if (limiteDia > 0) {
-              totalVagas = limiteDia;
-            } else if (!isPast) {
-              const slots = getAvailableSlots(prof.id, profUnit, dateStr);
-              totalVagas = slots.length + agendamentosConfirmados;
-            } else {
-              totalVagas = agendamentosConfirmados || 1;
-            }
-          }
-        }
-      } else {
-        // Multiple professionals — use fast heuristic (no getAvailableSlots per prof)
-        for (const prof of profissionaisFiltrados) {
-          const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-          const isBlocked = bloqueios.some((bloqueio: any) => {
-            if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
-            return matchesBlock(bloqueio, prof.id, profUnit);
-          });
-          allBlocked = allBlocked && isBlocked;
-
-          const profHasDisponibilidade = dispIndex.some((disp) => (
-            disp.profissionalId === prof.id &&
-            disp.unidadeId === profUnit &&
-            dateStr >= disp.dataInicio &&
-            dateStr <= disp.dataFim &&
-            disp.diasSemana.includes(dayOfWeek)
-          ));
-          hasDisponibilidade = hasDisponibilidade || profHasDisponibilidade;
-
-          if (isBlocked || !profUnit) continue;
-
-          const profAgCount = dateAgMap?.get(`${prof.id}|${profUnit}`) || 0;
-          agendamentosConfirmados += profAgCount;
-
-          // Use vagasPorDia from disponibilidade as totalVagas estimate
-          const profDisp = dispIndex.find((disp) => (
-            disp.profissionalId === prof.id &&
-            disp.unidadeId === profUnit &&
-            dateStr >= disp.dataInicio &&
-            dateStr <= disp.dataFim &&
-            disp.diasSemana.includes(dayOfWeek)
-          ));
-          if (profDisp) {
-            totalVagas += profDisp.vagasPorDia;
-          }
-        }
-      }
-
-      let status: DiaInfo["status"] = "empty";
-      if (allBlocked) {
-        status = "blocked";
-      } else if (isPast) {
-        // Past dates: show as "past" but still clickable with appointment counts
-        status = agendamentosConfirmados > 0 ? "past" : "past";
-      } else if (totalVagas > 0) {
-        const percent = (agendamentosConfirmados / totalVagas) * 100;
-        if (agendamentosConfirmados >= totalVagas) status = "full";
-        else if (percent >= 70) status = "almostFull";
-        else status = "available";
-      } else if (hasDisponibilidade) {
-        status = "full";
-      }
-
-      map.set(dateStr, {
-        date: dateStr,
-        dayNumber: day.getUTCDate(),
-        isToday,
-        isSelected,
-        status,
-        agendamentosCount: agendamentosConfirmados,
-        totalVagas,
+    for (const prof of profs) {
+      const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
+      const isBlocked = bloqueios.some((b: any) => {
+        if (dateStr < b.dataInicio || dateStr > b.dataFim) return false;
+        return (b.diaInteiro && ((!b.unidadeId || b.unidadeId === profUnit) && (!b.profissionalId || b.profissionalId === prof.id)));
       });
+      allBlocked = allBlocked && isBlocked;
+      const profHasDisp = disponibilidades.some((d) => (d.profissionalId === prof.id && d.unidadeId === profUnit && dateStr >= d.dataInicio && dateStr <= d.dataFim && d.diasSemana.includes(dayOfWeek)));
+      hasDisponibilidade = hasDisponibilidade || profHasDisp;
+
+      if (!isBlocked && profUnit) {
+        const disp = disponibilidades.find((d) => (d.profissionalId === prof.id && d.unidadeId === profUnit && dateStr >= d.dataInicio && dateStr <= d.dataFim && d.diasSemana.includes(dayOfWeek)));
+        if (disp) totalVagas += (disp.vagasPorDia || 25);
+      }
     }
 
-    return map;
-  }, [
-    agendamentosByDate,
-    bloqueios,
-    daysInMonth,
-    dispIndex,
-    filterProf,
-    filterUnit,
-    getAvailableSlots,
-    profissionais,
-    selectedDate,
-  ]);
+    let status: DiaInfo["status"] = "empty";
+    if (allBlocked) status = "blocked";
+    else if (isPast) status = "past";
+    else if (totalVagas > 0) {
+      const percent = (agendamentosCount / totalVagas) * 100;
+      if (agendamentosCount >= totalVagas) status = "full";
+      else if (percent >= 70) status = "almostFull";
+      else status = "available";
+    } else if (hasDisponibilidade) status = "full";
 
-  const monthNames = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-  ];
-  const weekDays = ["D", "S", "T", "Q", "Q", "S", "S"];
-
-  const goToPrevMonth = () => {
-    const newDate = new Date(currentMonth);
-    newDate.setUTCMonth(newDate.getUTCMonth() - 1);
-    setCurrentMonth(newDate);
+    return { date: dateStr, dayNumber: date.getUTCDate(), isToday, isSelected: dateStr === selectedDate, status, agendamentosCount, totalVagas, counts };
   };
 
-  const goToNextMonth = () => {
-    const newDate = new Date(currentMonth);
-    newDate.setUTCMonth(newDate.getUTCMonth() + 1);
-    setCurrentMonth(newDate);
+  const profsFiltrados = useMemo(() => filterProf !== "all" ? profissionais.filter(p => p.id === filterProf) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [filterProf, filterUnit, profissionais]);
+
+  const navDate = (delta: number) => {
+    const next = new Date(currentDate);
+    if (view === "month") next.setUTCMonth(next.getUTCMonth() + delta);
+    else if (view === "week") next.setUTCDate(next.getUTCDate() + delta * 7);
+    else next.setUTCDate(next.getUTCDate() + delta);
+    setCurrentDate(next);
   };
 
-  const getDotClass = (status: DiaInfo["status"]) => {
-    switch (status) {
-      case "past":
-      case "blocked":
-        return "bg-muted-foreground/60";
-      case "full":
-        return "bg-primary";
-      case "almostFull":
-        return "bg-warning";
-      case "available":
-        return "bg-success";
-      default:
-        return "bg-muted-foreground/30";
-    }
-  };
+  const renderMonth = () => {
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
+    const days = eachDayOfInterval({ start: startOfWeek(start), end: endOfWeek(end) });
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Button variant="outline" size="icon" onClick={goToPrevMonth}>
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-        <h3 className="text-base font-medium">
-          {monthNames[currentMonth.getUTCMonth()]} {currentMonth.getUTCFullYear()}
-        </h3>
-        <Button variant="outline" size="icon" onClick={goToNextMonth}>
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
-        {weekDays.map((day, index) => (
-          <div key={index} className="py-1">{day}</div>
+    return (
+      <div className="grid grid-cols-7 gap-2 sm:gap-4">
+        {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
+          <div key={d} className="text-center text-xs font-bold text-muted-foreground uppercase tracking-wider py-2">
+            {d}
+          </div>
         ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {daysInMonth.map((day, index) => {
-          const dateStr = localDateStr(day);
-          const info = dayInfoMap.get(dateStr);
-          if (!info) return null;
-
-          const isCurrentMonth =
-            day.getUTCMonth() === currentMonth.getUTCMonth() &&
-            day.getUTCFullYear() === currentMonth.getUTCFullYear();
-
-          const isDisabled = info.status === "blocked";
-
+        {days.map(d => {
+          const ds = localDateStr(d);
+          const info = getDayStatus(ds, profsFiltrados);
+          const isCurrMonth = isSameMonth(d, currentDate);
+          
           return (
-            <button
-              key={index}
-              type="button"
-              disabled={isDisabled}
-              onClick={() => !isDisabled && onDateChange(info.date)}
-              className={cn(
-                'relative flex flex-col items-center justify-center py-2 rounded-md transition-colors',
-                !isCurrentMonth && 'opacity-40',
-                info.isSelected && 'bg-primary text-primary-foreground shadow-sm',
-                !info.isSelected && !isDisabled && 'hover:bg-muted/50',
-                isDisabled && 'cursor-not-allowed'
-              )}
-            >
-              <span className="text-sm font-medium">{info.dayNumber}</span>
-              {info.agendamentosCount > 0 && (
-                <span
+            <Tooltip key={ds}>
+              <TooltipTrigger asChild>
+                <button 
+                  onClick={() => onDateChange(ds)} 
                   className={cn(
-                    'absolute top-1 right-1 text-[10px] font-semibold',
-                    info.isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                    "group relative h-24 sm:h-32 p-2 rounded-xl border-2 transition-all text-left flex flex-col justify-between overflow-hidden",
+                    info.isSelected ? "border-primary bg-primary/5 shadow-md scale-[1.02] z-10" : "border-border hover:border-primary/40 bg-card",
+                    !isCurrMonth && "opacity-40",
+                    info.status === "blocked" && "bg-muted/30 cursor-not-allowed opacity-60"
                   )}
                 >
-                  {info.agendamentosCount}
-                </span>
-              )}
-              <div className={cn('w-1.5 h-1.5 rounded-full mt-1', getDotClass(info.status))} />
-            </button>
+                  <div className="flex justify-between items-start">
+                    <span className={cn(
+                      "text-lg sm:text-2xl font-black leading-none", 
+                      info.isSelected ? "text-primary" : "text-foreground",
+                      info.isToday && !info.isSelected && "text-primary/70"
+                    )}>
+                      {info.dayNumber}
+                    </span>
+                    {info.agendamentosCount > 0 && (
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">
+                          {info.agendamentosCount}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-1">
+                    {info.totalVagas > 0 && (
+                      <>
+                        <div className="flex justify-between items-center text-[10px] font-medium opacity-70">
+                          <span>{Math.round((info.agendamentosCount / info.totalVagas) * 100)}%</span>
+                          <span>{info.totalVagas} vagas</span>
+                        </div>
+                        <Progress 
+                          value={(info.agendamentosCount / info.totalVagas) * 100} 
+                          className={cn(
+                            "h-1.5",
+                            info.status === "full" ? "bg-primary/20 [&>div]:bg-primary" :
+                            info.status === "almostFull" ? "bg-warning/20 [&>div]:bg-warning" :
+                            "[&>div]:bg-success"
+                          )} 
+                        />
+                      </>
+                    )}
+                    {info.status === "blocked" && (
+                      <span className="text-[10px] font-bold text-destructive uppercase">Bloqueado</span>
+                    )}
+                  </div>
+                  {info.isToday && <div className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-bl-lg" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="p-3 w-48 space-y-2">
+                <p className="font-bold border-bottom pb-1 mb-1">{format(d, "d 'de' MMMM", { locale: ptBR })}</p>
+                <div className="grid grid-cols-2 gap-1 text-xs">
+                  <span>Atendimentos:</span> <span className="font-bold">{info.agendamentosCount}</span>
+                  <span>Vagas totais:</span> <span className="font-bold">{info.totalVagas}</span>
+                  <span>Confirmados:</span> <span className="font-bold">{info.counts.confirmados}</span>
+                  <span>Pendentes:</span> <span className="font-bold">{info.counts.pendentes}</span>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           );
         })}
       </div>
+    );
+  };
 
-      <div className="flex flex-wrap gap-4 justify-center text-xs text-muted-foreground pt-2 border-t">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-success" />
-          <span>Com vagas</span>
+  const renderWeek = () => {
+    const days = eachDayOfInterval({ start: startOfWeek(currentDate), end: endOfWeek(currentDate) });
+    return (
+      <div className="grid grid-cols-7 gap-3">
+        {days.map(d => {
+          const ds = localDateStr(d);
+          const info = getDayStatus(ds, profsFiltrados);
+          return (
+            <div 
+              key={ds} 
+              onClick={() => onDateChange(ds)} 
+              className={cn(
+                "p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col items-center gap-2", 
+                info.isSelected ? "border-primary bg-primary/5 shadow-md" : "border-border hover:border-primary/40 bg-card"
+              )}
+            >
+              <div className="text-xs font-bold text-muted-foreground uppercase">{format(d, "EEEE", { locale: ptBR })}</div>
+              <div className="text-3xl font-black">{info.dayNumber}</div>
+              <div className="text-sm font-medium text-muted-foreground">{info.agendamentosCount} atendimentos</div>
+              {info.totalVagas > 0 && (
+                <div className="w-full mt-2">
+                  <div className="flex justify-between text-[10px] mb-1 font-bold">
+                    <span>Ocupação</span>
+                    <span>{Math.round((info.agendamentosCount / info.totalVagas) * 100)}%</span>
+                  </div>
+                  <Progress value={(info.agendamentosCount / info.totalVagas) * 100} className="h-2" />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderDay = () => {
+    const date = dateStrToUtcDate(selectedDate);
+    const info = getDayStatus(selectedDate, profsFiltrados);
+    return (
+      <div className="p-6 border-2 rounded-2xl bg-card shadow-sm border-primary/10">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-2xl font-black capitalize">{format(date, "EEEE, d 'de' MMMM", { locale: ptBR })}</h3>
+            <p className="text-muted-foreground font-medium">Resumo operacional do dia</p>
+          </div>
+          <div className={cn(
+            "px-4 py-2 rounded-full text-sm font-bold border",
+            info.status === "full" ? "bg-primary/10 border-primary text-primary" :
+            info.status === "almostFull" ? "bg-warning/10 border-warning text-warning" :
+            "bg-success/10 border-success text-success"
+          )}>
+            {info.status === "full" ? "Lotado" : info.status === "almostFull" ? "Quase Cheio" : "Com Vagas"}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-warning" />
-          <span>Quase cheio</span>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard label="Total Agendamentos" value={info.agendamentosCount} color="text-primary" />
+          <StatCard label="Vagas Disponíveis" value={Math.max(0, info.totalVagas - info.agendamentosCount)} color="text-success" />
+          <StatCard label="Confirmados" value={info.counts.confirmados} />
+          <StatCard label="Pendentes" value={info.counts.pendentes} />
+          <StatCard label="Em Atendimento" value={info.counts.emAtendimento} color="text-info" />
+          <StatCard label="Concluídos" value={info.counts.concluidos} color="text-success" />
+          <StatCard label="Faltas" value={info.counts.faltou} color="text-destructive" />
+          <StatCard label="Cancelados" value={info.counts.cancelados} color="text-destructive" />
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-primary" />
-          <span>Lotado</span>
+
+        <div className="mt-8">
+          <div className="flex justify-between items-end mb-2">
+            <div>
+              <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Ocupação da Agenda</span>
+              <div className="text-3xl font-black">{info.totalVagas > 0 ? Math.round((info.agendamentosCount / info.totalVagas) * 100) : 0}%</div>
+            </div>
+            <span className="text-sm font-medium text-muted-foreground">{info.agendamentosCount} de {info.totalVagas} vagas utilizadas</span>
+          </div>
+          <Progress value={info.totalVagas > 0 ? (info.agendamentosCount / info.totalVagas) * 100 : 0} className="h-4 rounded-full" />
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-muted-foreground/60" />
-          <span>Bloqueado / passado</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-muted/30 p-4 rounded-2xl border border-border/50">
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="icon" className="rounded-full h-10 w-10 border-2" onClick={() => navDate(-1)}><ChevronLeft className="h-5 w-5" /></Button>
+          <div className="text-center min-w-[180px]">
+            <h2 className="text-xl font-black capitalize tracking-tight">
+              {format(currentDate, "MMMM", { locale: ptBR })}
+              <span className="text-primary ml-1">{format(currentDate, "yyyy")}</span>
+            </h2>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{view === "month" ? "Visualização Mensal" : view === "week" ? "Visualização Semanal" : "Resumo do Dia"}</p>
+          </div>
+          <Button variant="outline" size="icon" className="rounded-full h-10 w-10 border-2" onClick={() => navDate(1)}><ChevronRight className="h-5 w-5" /></Button>
+          <Button variant="ghost" size="sm" className="font-bold text-primary hover:text-primary/80" onClick={() => {
+            const today = todayLocalStr();
+            onDateChange(today);
+            setCurrentDate(dateStrToUtcDate(today));
+          }}>Hoje</Button>
         </div>
+        
+        <Tabs value={view} onValueChange={(v) => setView(v as AgendaView)} className="w-full md:w-auto">
+          <TabsList className="grid grid-cols-3 w-full border-2 p-1 h-12 rounded-xl">
+            <TabsTrigger value="day" className="rounded-lg font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Calendar className="w-4 h-4 mr-2" />Dia</TabsTrigger>
+            <TabsTrigger value="week" className="rounded-lg font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><CalendarRange className="w-4 h-4 mr-2" />Semana</TabsTrigger>
+            <TabsTrigger value="month" className="rounded-lg font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><CalendarDays className="w-4 h-4 mr-2" />Mês</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <div className="transition-all duration-500 ease-in-out">
+        {view === "month" && renderMonth()}
+        {view === "week" && renderWeek()}
+        {view === "day" && renderDay()}
+      </div>
+
+      <div className="flex flex-wrap gap-6 justify-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground pt-4 border-t border-dashed">
+        <LegendItem color="bg-success" label="Com vagas" />
+        <LegendItem color="bg-warning" label="Quase cheio" />
+        <LegendItem color="bg-primary" label="Lotado" />
+        <LegendItem color="bg-destructive" label="Excedido" />
+        <LegendItem color="bg-muted-foreground/40" label="Bloqueado / Passado" />
       </div>
     </div>
   );
 };
+
+const StatCard = ({ label, value, color }: { label: string; value: number | string; color?: string }) => (
+  <div className="p-4 bg-muted/40 rounded-xl border border-border/40 hover:border-primary/20 transition-colors">
+    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
+    <div className={cn("text-3xl font-black", color || "text-foreground")}>{value}</div>
+  </div>
+);
+
+const LegendItem = ({ color, label }: { color: string; label: string }) => (
+  <div className="flex items-center gap-2">
+    <div className={cn("w-3 h-3 rounded-sm shadow-sm", color)} />
+    <span>{label}</span>
+  </div>
+);
