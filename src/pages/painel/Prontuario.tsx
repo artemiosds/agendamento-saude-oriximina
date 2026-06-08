@@ -3941,6 +3941,7 @@ const ProntuarioPage: React.FC = () => {
 
 
 
+
           {/* Painel direito fixo — Histórico do paciente */}
           <HistoricoPacientePanel
             paciente={pacienteForPanel}
