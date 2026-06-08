@@ -501,28 +501,8 @@ const FilaEspera: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const checkDuplicidade = (dados: typeof novoPaciente) => {
-    const cpfClean = dados.cpf.replace(/\D/g, "");
-    const cnsClean = (dados.cns || "").replace(/\D/g, "");
-    const telClean = dados.telefone.replace(/\D/g, "");
-    const emailLower = dados.email.toLowerCase().trim();
-    if (cpfClean.length >= 11) {
-      const found = pacientes.find((p) => p.cpf.replace(/\D/g, "") === cpfClean);
-      if (found) return found;
-    }
-    if (cnsClean.length >= 15) {
-      const found = pacientes.find((p) => (p.cns || "").replace(/\D/g, "") === cnsClean);
-      if (found) return found;
-    }
-    if (telClean.length >= 8) {
-      const found = pacientes.find((p) => p.telefone.replace(/\D/g, "") === telClean);
-      if (found) return found;
-    }
-    if (emailLower && emailLower.includes("@")) {
-      const found = pacientes.find((p) => p.email.toLowerCase().trim() === emailLower);
-      if (found) return found;
-    }
-    return null;
+  const checkDuplicidade = async (dados: { nome: string; dataNascimento: string; cpf?: string; cns?: string }) => {
+    return await checkPatientDuplicity(dados);
   };
 
   const handleCriarPacienteEAdicionarFila = async () => {
