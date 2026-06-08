@@ -532,9 +532,15 @@ const FilaEspera: React.FC = () => {
       return;
     }
     setPacienteErrors({});
-    const dup = checkDuplicidade(novoPaciente);
-    if (dup) {
-      setDuplicataEncontrada(dup);
+    const duplicity = await checkDuplicidade(novoPaciente);
+    if (duplicity.isDuplicate) {
+      toast.error(duplicity.message);
+      if (duplicity.existingPatient) {
+        setDuplicataEncontrada({
+          id: duplicity.existingPatient.id,
+          nome: duplicity.existingPatient.nome
+        } as any);
+      }
       return;
     }
     const pacienteId = `p${Date.now()}`;
