@@ -3932,10 +3932,11 @@ const ProntuarioPage: React.FC = () => {
               );
             })()}
 
-          </div>{/* end scroll area */}
+            </div>{/* end scroll area */}
           </>
           )}
           </div>{/* end left column */}
+
 
 
           {/* Painel direito fixo — Histórico do paciente */}
