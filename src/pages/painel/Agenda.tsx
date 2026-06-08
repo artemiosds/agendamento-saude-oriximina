@@ -2304,8 +2304,10 @@ const Agenda: React.FC = () => {
                         <SelectItem value="Exame">Exame</SelectItem>
                         <SelectItem value="Procedimento">Procedimento</SelectItem>
                         <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                        <SelectItem value="Visita Domiciliar">🏠 Visita Domiciliar</SelectItem>
                         <SelectItem value="Urgência">Urgência</SelectItem>
                       </SelectContent>
+
                     </Select>
                   </div>
                   <div>
