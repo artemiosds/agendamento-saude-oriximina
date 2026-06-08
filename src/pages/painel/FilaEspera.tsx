@@ -242,6 +242,7 @@ const FilaEspera: React.FC = () => {
     email: "",
     dataNascimento: "",
     endereco: "",
+    sexo: "",
     descricaoClinica: "",
     cid: "",
   });
@@ -257,6 +258,7 @@ const FilaEspera: React.FC = () => {
     nomeMae: "",
     email: "",
     dataNascimento: "",
+    sexo: "",
     unidadeId: "",
     profissionalId: "",
     tipo: "primeira_consulta",
@@ -470,6 +472,7 @@ const FilaEspera: React.FC = () => {
       email: "",
       dataNascimento: "",
       endereco: "",
+      sexo: "",
       descricaoClinica: "",
       cid: "",
     });
@@ -528,6 +531,7 @@ const FilaEspera: React.FC = () => {
     if (!novoPaciente.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
     if (!novoPaciente.cns?.trim()) newErrors.cns = "CNS é obrigatório";
     if (!novoPaciente.telefone?.trim()) newErrors.telefone = "Telefone é obrigatório";
+    if (!novoPaciente.sexo) newErrors.sexo = "Sexo é obrigatório";
 
     const err = validatePacienteFields({
       nome: novoPaciente.nome,
@@ -568,6 +572,7 @@ const FilaEspera: React.FC = () => {
         descricaoClinica: novoPaciente.descricaoClinica || "",
         cid: novoPaciente.cid || "",
         criadoEm: new Date().toISOString(),
+        custom_data: { sexo: novoPaciente.sexo },
       });
       await logAction({
         acao: "criar",
@@ -709,6 +714,10 @@ const FilaEspera: React.FC = () => {
       toast.error("Informe o nome do paciente.");
       return;
     }
+    if (!importForm.sexo && !existingPatient) {
+      toast.error("Sexo é obrigatório.");
+      return;
+    }
     if (!importForm.unidadeId) {
       toast.error("Selecione a unidade.");
       return;
@@ -768,6 +777,7 @@ const FilaEspera: React.FC = () => {
           descricaoClinica: importForm.descricaoClinica || "",
           cid: importForm.cid || "",
           criadoEm: new Date().toISOString(),
+          custom_data: { sexo: importForm.sexo },
         });
         await logAction({
           acao: "criar",
@@ -1064,6 +1074,7 @@ const FilaEspera: React.FC = () => {
                     nomeMae: "",
                     email: "",
                     dataNascimento: "",
+                    sexo: "",
                     unidadeId: "",
                     profissionalId: "",
                     tipo: "primeira_consulta",
@@ -1398,6 +1409,7 @@ const FilaEspera: React.FC = () => {
                         email: "",
                         dataNascimento: "",
                         endereco: "",
+                        sexo: "",
                         descricaoClinica: "",
                         cid: "",
                       });
@@ -1501,6 +1513,24 @@ const FilaEspera: React.FC = () => {
                       value={novoPaciente.dataNascimento}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, dataNascimento: e.target.value }))}
                     />
+                  </div>
+                  <div>
+                    <Label>Sexo *</Label>
+                    <Select
+                      value={novoPaciente.sexo}
+                      onValueChange={(v) => setNovoPaciente((p) => ({ ...p, sexo: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="masculino">Masculino</SelectItem>
+                        <SelectItem value="feminino">Feminino</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {pacienteErrors.sexo && (
+                      <p className="text-xs text-destructive mt-1">{pacienteErrors.sexo}</p>
+                    )}
                   </div>
                   <div>
                     <Label>Endereço</Label>
@@ -1725,6 +1755,21 @@ const FilaEspera: React.FC = () => {
                   value={importForm.dataNascimento}
                   onChange={(e) => setImportForm((p) => ({ ...p, dataNascimento: e.target.value }))}
                 />
+              </div>
+              <div>
+                <Label>Sexo *</Label>
+                <Select
+                  value={importForm.sexo}
+                  onValueChange={(v) => setImportForm((p) => ({ ...p, sexo: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="masculino">Masculino</SelectItem>
+                    <SelectItem value="feminino">Feminino</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="border-t pt-3">
