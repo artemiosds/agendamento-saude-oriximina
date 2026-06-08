@@ -2923,7 +2923,9 @@ const Agenda: React.FC = () => {
                   Exame: "border-l-[#F59E0B]",
                   Urgência: "border-l-[#EF4444]",
                   "Sessão de Tratamento": "border-l-[#F97316]",
+                  "Visita Domiciliar": "border-l-[#3B82F6]",
                 };
+
 
                 return (
                   <React.Fragment key={ag.id}>
