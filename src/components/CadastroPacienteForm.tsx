@@ -370,6 +370,17 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 </div>
               )}
 
+              {!H("nomePai") && (
+                <div className="md:col-span-2">
+                  <Label>{L("nomePai", "Nome do Pai")}</Label>
+                  <Input
+                    value={cd.nome_pai || ""}
+                    onChange={(e) => setCustom("nome_pai", sanitizeUpper(e.target.value))}
+                    placeholder="NOME DO PAI"
+                  />
+                </div>
+              )}
+
               {!H("dataNascimento") && (
                 <div>
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("dataNascimento", "Data de Nascimento")}</Label>
