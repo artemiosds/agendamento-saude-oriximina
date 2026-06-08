@@ -142,7 +142,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const text = e.target?.result as string;
       const { headers, rows } = parseCSV(text);
 
-      const requiredHeaders = ['nome', 'telefone'];
+      const requiredHeaders = ['nome', 'telefone', 'endereco'];
       const missing = requiredHeaders.filter(h => !headers.includes(h));
       if (missing.length > 0) {
         toast.error(`Cabeçalho inválido. Colunas obrigatórias ausentes: ${missing.join(', ')}`);
@@ -219,9 +219,16 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const emailClean = (row.email || '').trim().toLowerCase();
       const endereco = (row.endereco || '').trim();
 
-      // Validate required (only name is mandatory)
+      // Validate required
       if (!nome || nome.length < 3 || /^\d+$/.test(nome.replace(/\s/g, ''))) {
         errorRows.push({ linha: lineNum, nome: row.nome, telefone: row.telefone, motivo: 'Nome obrigatório não informado ou inválido (mín. 3 caracteres)' });
+        state.errors++;
+        setProgress({ ...state });
+        continue;
+      }
+
+      if (!endereco) {
+        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Endereço é obrigatório' });
         state.errors++;
         setProgress({ ...state });
         continue;
