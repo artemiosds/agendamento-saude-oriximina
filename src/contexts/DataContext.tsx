@@ -1062,19 +1062,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addAgendamento = useCallback(
     async (ag: Agendamento) => {
+      // 1. Verificação de Limite de Vagas (Bloqueio Definitivo)
+      // Recepção, Gestão e Coordenação respeitam o limite. Master pode ultrapassar.
+      const userRole = authUser?.role || "";
+      const rolesToBlock = ["recepcao", "gestao", "coordenador"];
+      
+      if (rolesToBlock.includes(userRole)) {
+        const turnos = getTurnoInfo(ag.profissionalId, ag.unidadeId, ag.data);
+        const meuTurno = turnos.find(t => ag.hora >= t.horaInicio && ag.hora < t.horaFim);
+        
+        if (meuTurno) {
+          if (meuTurno.vagasLivresInternas <= 0) {
+            toast.error(`Limite de vagas excedido para este turno (${meuTurno.nome}).`);
+            throw new Error("Limite de vagas excedido.");
+          }
+        }
+      }
+
       // SAFEGUARD: Novos agendamentos NUNCA podem herdar status de atendimentos
       // anteriores (ex.: "concluido", "em_atendimento", "apto_atendimento").
-      // Apenas status iniciais são permitidos na criação. Qualquer outro valor
-      // é forçado para "confirmado".
       const STATUS_INICIAIS_PERMITIDOS = ["confirmado", "pendente", "agendado"];
       const statusInicial = STATUS_INICIAIS_PERMITIDOS.includes(ag.status as string)
         ? ag.status
         : "confirmado";
-      if (statusInicial !== ag.status) {
-        console.warn(
-          `[addAgendamento] Status "${ag.status}" não permitido na criação. Forçado para "confirmado".`,
-        );
-      }
+      
       const { error } = await supabase.from("agendamentos" as any).insert({
         id: ag.id,
         paciente_id: ag.pacienteId,
@@ -1095,6 +1106,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         criado_por: ag.criadoPor || "",
         prioridade_perfil: "normal",
       } as any);
+
       if (!error) {
         setAgendamentos((prev) => [...prev, { ...ag, status: statusInicial as any }]);
         await logAction({
@@ -1110,7 +1122,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     },
-    [logAction, invalidateCache],
+    [logAction, invalidateCache, authUser?.role, getTurnoInfo],
   );
 
   const updateAgendamento = useCallback(
