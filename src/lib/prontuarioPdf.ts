@@ -259,60 +259,6 @@ export async function downloadProntuarioPdf(
       </div>`;
   };
 
-  // Special handling for Visita Domiciliar
-  if (tipoRegistro === 'Visita Domiciliar') {
-    clinicalContentHtml += renderSection("Evolução da Visita", prontuario.evolucao);
-    
-    // Access custom fields safely
-    const customData = (prontuario.custom_data as any) || {};
-    const procTipo = customData.procedimento_tipo;
-    const outroProc = customData.outro_procedimento;
-    const dadosProc = customData.dados_procedimento;
-
-    clinicalContentHtml += renderSection("Procedimento Realizado", procTipo === 'outro' ? outroProc : procTipo?.replace(/_/g, ' '));
-    
-    if (procTipo === 'medidas_cadeira_rodas' && dadosProc) {
-      const d = dadosProc;
-      clinicalContentHtml += `
-        <div class="section" style="margin-top: 10px; border: 1px solid #e2e8f0; padding: 10px; border-radius: 4px;">
-          <div class="section-title" style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a;">Medidas para Cadeira de Rodas</div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px;">
-            <div><strong>Peso:</strong> ${d.peso || '—'} kg</div>
-            <div><strong>Altura:</strong> ${d.altura || '—'} cm</div>
-          </div>
-          <div style="margin-top: 10px;">
-            <strong>Equipamento Solicitado:</strong><br/>
-            ${escapeHtml(d.equipamento_solicitado || '—').replace(/\n/g, '<br/>')}
-          </div>
-          <div style="margin-top: 10px;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt;">
-              <thead>
-                <tr style="background: #f8fafc;">
-                  <th style="border: 1px solid #e2e8f0; padding: 4px; text-align: left;">Ref</th>
-                  <th style="border: 1px solid #e2e8f0; padding: 4px; text-align: left;">Descrição</th>
-                  <th style="border: 1px solid #e2e8f0; padding: 4px; text-align: right;">Medida (cm)</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${Object.entries(d.medidas || {}).map(([key, val]) => `
-                  <tr>
-                    <td style="border: 1px solid #e2e8f0; padding: 3px;"><strong>${key}</strong></td>
-                    <td style="border: 1px solid #e2e8f0; padding: 3px;">${key}</td>
-                    <td style="border: 1px solid #e2e8f0; padding: 3px; text-align: right;">${val || '—'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-          <div style="margin-top: 10px;">
-            <strong>Observações:</strong><br/>
-            ${escapeHtml(d.observacoes || '—').replace(/\n/g, '<br/>')}
-          </div>
-        </div>
-      `;
-    }
-  }
-
   // Special handling for SOAP
   const soapLabels = configTipos?.soapLabels || { subjetivo: 'Subjetivo', objetivo: 'Objetivo', avaliacao: 'Avaliação', plano: 'Plano' };
   clinicalContentHtml += renderSection(`S — ${soapLabels.subjetivo}`, prontuario.soap_subjetivo);

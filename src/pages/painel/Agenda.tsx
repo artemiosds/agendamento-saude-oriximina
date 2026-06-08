@@ -191,13 +191,7 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
     class: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30",
     icon: "🟠",
   },
-  "Visita Domiciliar": {
-    label: "Visita Domiciliar",
-    class: "bg-blue-500/15 text-blue-600 border border-blue-500/30",
-    icon: "🏠",
-  },
 };
-
 
 const Agenda: React.FC = () => {
   const { user } = useAuth();
@@ -2304,10 +2298,8 @@ const Agenda: React.FC = () => {
                         <SelectItem value="Exame">Exame</SelectItem>
                         <SelectItem value="Procedimento">Procedimento</SelectItem>
                         <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
-                        <SelectItem value="Visita Domiciliar">🏠 Visita Domiciliar</SelectItem>
                         <SelectItem value="Urgência">Urgência</SelectItem>
                       </SelectContent>
-
                     </Select>
                   </div>
                   <div>
@@ -2923,9 +2915,7 @@ const Agenda: React.FC = () => {
                   Exame: "border-l-[#F59E0B]",
                   Urgência: "border-l-[#EF4444]",
                   "Sessão de Tratamento": "border-l-[#F97316]",
-                  "Visita Domiciliar": "border-l-[#3B82F6]",
                 };
-
 
                 return (
                   <React.Fragment key={ag.id}>
@@ -3168,26 +3158,12 @@ const Agenda: React.FC = () => {
                               <ActionButton
                                 size="sm"
                                 className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90"
-                                onClick={() => {
-                                  if (ag.tipo === 'Visita Domiciliar') {
-                                    const params = new URLSearchParams({
-                                      pacienteId: ag.pacienteId,
-                                      pacienteNome: ag.pacienteNome,
-                                      agendamentoId: ag.id,
-                                      data: ag.data,
-                                      tipo: ag.tipo,
-                                    });
-                                    navigate(`/painel/prontuario?${params.toString()}`);
-                                  } else {
-                                    handleIniciarAtendimento(ag);
-                                  }
-                                }}
+                                onClick={() => handleIniciarAtendimento(ag)}
                                 loadingText="Iniciando..."
                               >
                                 <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
                               </ActionButton>
                             )}
-
                             {isEmAtendimento && (
                               <Button
                                 size="sm"
