@@ -30,8 +30,8 @@ const ProntuarioVisitaDomiciliar: React.FC<ProntuarioVisitaDomiciliarProps> = ({
 
   const handleFinalizar = () => {
     const payload = {
-      tipo_atendimento: 'visita_domiciliar',
-      evolucao_texto: evolucao,
+      tipo_registro: 'Visita Domiciliar',
+      evolucao: evolucao,
       procedimento_tipo: procedimentoTipo,
       outro_procedimento: outroProcedimento,
       dados_procedimento: dadosProcedimento,
@@ -150,7 +150,7 @@ const ProntuarioVisitaDomiciliar: React.FC<ProntuarioVisitaDomiciliarProps> = ({
 
       {/* Botões de Ação Inferiores */}
       <div className="flex justify-end gap-4 pt-8 mt-12 border-t">
-        <Button variant="outline" className="flex items-center gap-2">
+        <Button variant="outline" className="flex items-center gap-2" onClick={handleFinalizar}>
           <Printer className="w-4 h-4" /> Imprimir Prontuário
         </Button>
         <Button onClick={handleFinalizar} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
