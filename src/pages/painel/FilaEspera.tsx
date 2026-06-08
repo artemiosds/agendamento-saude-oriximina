@@ -522,18 +522,28 @@ const FilaEspera: React.FC = () => {
   };
 
   const handleCriarPacienteEAdicionarFila = async () => {
+    const newErrors: Record<string, string> = {};
+    if (!novoPaciente.nome?.trim()) newErrors.nome = "Nome é obrigatório";
+    if (!novoPaciente.nomeMae?.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
+    if (!novoPaciente.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
+    if (!novoPaciente.cns?.trim()) newErrors.cns = "CNS é obrigatório";
+    if (!novoPaciente.telefone?.trim()) newErrors.telefone = "Telefone é obrigatório";
+
     const err = validatePacienteFields({
       nome: novoPaciente.nome,
       telefone: novoPaciente.telefone,
       email: novoPaciente.email,
     });
-    if (err) {
-      const newErrors: Record<string, string> = {};
-      if (err.includes("Nome")) newErrors.nome = err;
-      else if (err.includes("Telefone") || err.includes("telefone")) newErrors.telefone = err;
-      else if (err.includes("mail")) newErrors.email = err;
+    
+    if (err || Object.keys(newErrors).length > 0) {
+      if (err) {
+        if (err.includes("Nome")) newErrors.nome = err;
+        else if (err.includes("Telefone") || err.includes("telefone")) newErrors.telefone = err;
+        else if (err.includes("mail")) newErrors.email = err;
+      }
       setPacienteErrors(newErrors);
-      toast.error(err);
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
       return;
     }
     setPacienteErrors({});
