@@ -703,9 +703,12 @@ const FilaEspera: React.FC = () => {
         telefone = existingPatient.telefone;
         email = existingPatient.email;
       } else {
-        const dup = checkImportDuplicidade(importForm);
-        if (dup && !importDup) {
-          setImportDup(dup);
+        const duplicity = await checkImportDuplicidade(importForm);
+        if (duplicity.isDuplicate && !importDup) {
+          setImportDup({
+            id: duplicity.existingPatient!.id,
+            nome: duplicity.existingPatient!.nome
+          } as any);
           setImportSaving(false);
           return;
         }
