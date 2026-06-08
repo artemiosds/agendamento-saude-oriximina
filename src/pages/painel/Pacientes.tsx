@@ -707,47 +707,33 @@ const Pacientes: React.FC = () => {
         }
       } else {
         // === DUPLICATE DETECTION ===
-        const duplicateChecks: string[] = [];
+        const duplicity = await checkPatientDuplicity({
+          nome: form.nome,
+          dataNascimento: form.dataNascimento,
+          cpf: form.cpf,
+          cns: form.cns,
+          idToExclude: null
+        });
 
-        if (form.cpf.trim()) {
-          const { data: cpfMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("cpf", form.cpf.trim())
-            .limit(1);
-          if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
-        }
-
-        const cnsClean = (form.cns || "").replace(/\D/g, "").slice(0, 15);
-        if (cnsClean) {
-          const { data: cnsMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("cns", cnsClean)
-            .limit(1);
-          if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
-        }
-
-        if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
-          const { data: nameMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("nome", form.nome.trim())
-            .eq("data_nascimento", form.dataNascimento)
-            .eq("nome_mae", form.nomeMae.trim())
-            .limit(1);
-          if (nameMatch && nameMatch.length > 0)
-            duplicateChecks.push(`Nome + Data Nasc. + Mãe já cadastrado: ${nameMatch[0].nome}`);
-        }
-
-        if (duplicateChecks.length > 0) {
-          const confirmed = window.confirm(
-            `⚠️ Possível duplicidade detectada:\n\n${duplicateChecks.join("\n")}\n\nDeseja continuar com o cadastro mesmo assim?`,
-          );
-          if (!confirmed) {
-            setSaving(false);
-            return;
+        if (duplicity.isDuplicate) {
+          toast.error(duplicity.message);
+          if (duplicity.existingPatient) {
+            const openExisting = window.confirm(`${duplicity.message}\n\nDeseja abrir o cadastro existente?`);
+            if (openExisting) {
+              setDialogOpen(false);
+              const { data: fullPatient } = await supabase
+                .from("pacientes")
+                .select("*")
+                .eq("id", duplicity.existingPatient.id)
+                .single();
+              if (fullPatient) {
+                setDetalhePaciente(mapPacienteRow(fullPatient));
+                setDetalheOpen(true);
+              }
+            }
           }
+          setSaving(false);
+          return;
         }
 
         const id = `p${Date.now()}`;
