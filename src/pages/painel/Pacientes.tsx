@@ -597,7 +597,7 @@ const Pacientes: React.FC = () => {
 
     const dbFields: any = {
       nome: form.nome,
-      cpf: form.cpf,
+      cpf: (form.cpf || "").replace(/\D/g, ""),
       cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
       nome_mae: form.nomeMae,
       telefone: normalizedPhone,
