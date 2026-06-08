@@ -11,39 +11,24 @@ import { useData } from "@/contexts/DataContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Tag, Pencil as PencilIcon, Eye, Download, Send, FlaskConical, Calendar, User, MapPin, Target, Lock, FileDown } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Search, CheckCircle, Activity, ClipboardList, ChevronDown, Eye, Download, History, User, MapPin } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
 import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
 import ProntuarioVisitaDomiciliar from "@/components/ProntuarioVisitaDomiciliar";
-import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
-import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Progress } from "@/components/ui/progress";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import AtendimentoTimer from "@/components/AtendimentoTimer";
-import { openPrintDocument } from "@/lib/printLayout";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
-import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
-import DocumentosHistorico from "@/components/DocumentosHistorico";
+import DynamicProntuarioFields from "@/components/prontuario/DynamicProntuarioFields";
 import { hasDropdownSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
-import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
-
-const PTS_SPECIALTIES = [
-  'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
-  'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
-];
 
 const TIPOS_REGISTRO = [
   { value: 'avaliacao_inicial', label: '🟢 Avaliação Inicial' },
@@ -51,11 +36,6 @@ const TIPOS_REGISTRO = [
   { value: 'sessao', label: '🟡 Sessão' },
   { value: 'urgencia', label: '🔴 Urgência' },
   { value: 'procedimento', label: '🟣 Procedimento' },
-  { value: 'consulta', label: 'Consulta (legado)' },
-  { value: 'reavaliacao', label: 'Reavaliação (legado)' },
-  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
-  { value: 'pts', label: 'PTS (legado)' },
-  { value: 'triagem_inicial', label: 'Triagem Inicial (legado)' },
   { value: 'Visita Domiciliar', label: '🏠 Visita Domiciliar' },
 ];
 
@@ -65,9 +45,9 @@ const emptyForm = {
   profissional_id: "",
   profissional_nome: "",
   agendamento_id: "",
-  data_atendimento: new Date().toISOString().split("T")[0],
+  data_atendimento: todayLocalStr(),
   hora_atendimento: "",
-  tipo_registro: "consulta",
+  tipo_registro: "sessao",
   queixa_principal: "",
   anamnese: "",
   sinais_sintomas: "",
@@ -78,299 +58,270 @@ const emptyForm = {
   solicitacao_exames: "",
   evolucao: "",
   observacoes: "",
-  resultado_exame: "",
-  indicacao_retorno: "",
-  motivo_alteracao: "",
-  procedimentos_texto: "",
-  outro_procedimento: "",
-  episodio_id: "",
   soap_subjetivo: "",
   soap_objetivo: "",
   soap_avaliacao: "",
   soap_plano: "",
+  custom_data: {}
 };
-
-const classificarIMC = (imc: number): string => {
-  if (imc < 18.5) return "Abaixo do peso";
-  if (imc < 25) return "Normal";
-  if (imc < 30) return "Sobrepeso";
-  if (imc < 35) return "Obesidade grau I";
-  if (imc < 40) return "Obesidade grau II";
-  return "Obesidade grau III";
-};
-
-const retornoOptions = [
-  { value: "no_indication", label: "Sem indicação" },
-  { value: "sem_retorno", label: "Sem retorno" },
-  { value: "7_dias", label: "Retorno em 7 dias" },
-  { value: "15_dias", label: "Retorno em 15 dias" },
-  { value: "30_dias", label: "Retorno em 30 dias" },
-  { value: "60_dias", label: "Retorno em 60 dias" },
-  { value: "90_dias", label: "Retorno em 90 dias" },
-  { value: "outro", label: "Outro prazo" },
-];
 
 const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, getAvailableSlots, getAvailableDates, salas } = useData();
+  const { pacientes, unidades, agendamentos, logAction, refreshAgendamentos, funcionarios } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [prontuarios, setProntuarios] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [autosaveAt, setAutosaveAt] = useState<Date | null>(null);
   const [search, setSearch] = useState("");
-  const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
-  const [triagem, setTriagem] = useState<any | null>(null);
-  const [showHistorico, setShowHistorico] = useState(false);
-  const [ptsOpen, setPtsOpen] = useState(false);
-  const [ptsSaving, setPtsSaving] = useState(false);
-  const [ptsForm, setPtsForm] = useState({
-    diagnostico_funcional: '', objetivos_terapeuticos: '',
-    metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
-    especialidades: [] as string[],
-  });
-  const [sessaoCycle, setSessaoCycle] = useState<any | null>(null);
-  const [sessaoCycleSessions, setSessaoCycleSessions] = useState<any[]>([]);
-  const [procedimentos, setProcedimentos] = useState<any[]>([]);
-  const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
-  const [procDetails, setProcDetails] = useState<Record<string, any>>({});
-  const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
-  const [procSearch, setProcSearch] = useState("");
   const [viewerProntuario, setViewerProntuario] = useState<any | null>(null);
-  const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
-  const [historicoPacienteId, setHistoricoPacienteId] = useState<{ id: string; nome: string } | null>(null);
-  const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
-  const [agendarSessaoTarget, setAgendarSessaoTarget] = useState<any | null>(null);
-  const [remarcarTarget, setRemarcarTarget] = useState<any | null>(null);
-  const [selectSessionOpen, setSelectSessionOpen] = useState(false);
-  const [soapErrors, setSoapErrors] = useState(false);
-  const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
-
-  // Stubs for missing functions to avoid build errors
-  const loadProntuarios = useCallback(async () => { setLoading(true); /* implementation */ setLoading(false); }, []);
-  const loadEpisodios = useCallback(async (pid: string) => { /* implementation */ }, []);
-  const openNew = (pid?: string, pnome?: string) => { setEditId(null); setForm({ ...emptyForm, paciente_id: pid || "", paciente_nome: pnome || "" }); setDialogOpen(true); };
-  const openEdit = (p: any) => { 
-    setEditId(p.id); 
-    setForm({
-      ...p,
-      paciente_nome: p.paciente_nome || pacientes.find(pac => pac.id === p.paciente_id)?.nome || ""
-    }); 
-    setDialogOpen(true); 
-  };
-  const handleSave = async (extraData?: any) => { setSaving(true); /* implementation */ setSaving(false); return true; };
-  const handlePrint = (p: any) => { /* implementation */ };
-  const handlePrintFullHistory = (pid: string, pnome: string) => { /* implementation */ };
-  const handleCreatePTS = async () => { setPtsSaving(true); /* implementation */ setPtsSaving(false); setPtsOpen(false); };
-  const handleRegistrarSessaoOnly = async () => { /* implementation */ };
-  const handleFinalizarAtendimento = async () => { /* implementation */ };
-  const handleProntuarioHover = (id: string) => {};
-  const handleSelectSessionToRegister = (s: any) => {};
+  const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
 
   const queryPacienteId = searchParams.get("pacienteId");
-  const deferredSearch = search;
-  const patientHistory: any[] = []; // stub
-  const currentSessionForRegistration = null; // stub
-  const canFinalize = true; // stub
-  const tempoLimite = 30; // stub
-  const isProfissional = user?.role === "profissional";
-  const canEdit = true; // stub
+  const queryAgendamentoId = searchParams.get("agendamentoId");
+  const queryTipo = searchParams.get("tipo");
 
-  const filtered = useMemo(() => [], []); // stub
-  const pacienteByIdMap = useMemo(() => new Map(), []); // stub
-  const pacienteForPanel = null; // stub
-  const funcionariosLight = useMemo(() => [], []); // stub
-  const triagemHeaderData = null; // stub
-  const rowVirtualizer = { getTotalSize: () => 0, getVirtualItems: () => [], measureElement: (el: any) => {} };
-  const listParentRef = useRef(null);
+  const loadProntuarios = useCallback(async () => {
+    setLoading(true);
+    try {
+      let query = supabase.from("prontuarios").select("*").order("data_atendimento", { ascending: false });
+      if (queryPacienteId) query = query.eq("paciente_id", queryPacienteId);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      setProntuarios(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar prontuários:", err);
+      toast.error("Erro ao carregar registros.");
+    } finally {
+      setLoading(false);
+    }
+  }, [queryPacienteId]);
 
-  const handlePacienteChange = useCallback((id: string, nome: string) => {
-    setForm((prev) => ({ ...prev, paciente_id: id, paciente_nome: nome }));
-    if (id) loadEpisodios(id);
-  }, [loadEpisodios]);
+  useEffect(() => {
+    loadProntuarios();
+  }, [loadProntuarios]);
+
+  useEffect(() => {
+    if (queryAgendamentoId && queryPacienteId) {
+      const pac = pacientes.find(p => p.id === queryPacienteId);
+      setForm(prev => ({
+        ...prev,
+        paciente_id: queryPacienteId,
+        paciente_nome: pac?.nome || "",
+        agendamento_id: queryAgendamentoId,
+        tipo_registro: queryTipo || "sessao",
+        profissional_id: user?.id || "",
+        profissional_nome: user?.nome || ""
+      }));
+      setDialogOpen(true);
+    }
+  }, [queryAgendamentoId, queryPacienteId, queryTipo, pacientes, user]);
+
+  const handleSave = async (extraData?: any) => {
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        ...extraData,
+        profissional_id: user?.id,
+        profissional_nome: user?.nome,
+        unidade_id: user?.unidadeId
+      };
+
+      let result;
+      if (editId) {
+        result = await supabase.from("prontuarios").update(payload).eq("id", editId);
+      } else {
+        result = await supabase.from("prontuarios").insert(payload);
+      }
+
+      if (result.error) throw result.error;
+
+      toast.success(editId ? "Prontuário atualizado!" : "Prontuário registrado!");
+      setDialogOpen(false);
+      setForm(emptyForm);
+      loadProntuarios();
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao salvar: " + err.message);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = useMemo(() => {
+    if (!search) return prontuarios;
+    const s = search.toLowerCase();
+    return prontuarios.filter(p => 
+      p.paciente_nome?.toLowerCase().includes(s) || 
+      p.profissional_nome?.toLowerCase().includes(s) ||
+      p.tipo_registro?.toLowerCase().includes(s)
+    );
+  }, [prontuarios, search]);
+
+  const openNew = (pid?: string) => {
+    setEditId(null);
+    const pac = pid ? pacientes.find(p => p.id === pid) : null;
+    setForm({ ...emptyForm, paciente_id: pid || "", paciente_nome: pac?.nome || "" });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (p: any) => {
+    setEditId(p.id);
+    setForm(p);
+    setDialogOpen(true);
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">
-            {queryPacienteId ? `Prontuários — Paciente` : "Prontuários"}
+            {queryPacienteId ? "Prontuários do Paciente" : "Gestão de Prontuários"}
           </h1>
-          <p className="text-muted-foreground text-sm">{filtered.length} registro(s)</p>
+          <p className="text-muted-foreground text-sm">{filtered.length} registro(s) encontrado(s)</p>
         </div>
-        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
-          {queryPacienteId && (
-            <>
-              <Button variant="outline" onClick={() => setShowHistorico(!showHistorico)}>
-                <Activity className="w-4 h-4 mr-2" />
-                {showHistorico ? "Ocultar" : "Ver"} Histórico
-              </Button>
-              <Button variant="default" onClick={() => setHistoricoCompletoOpen(true)} className="gradient-primary text-primary-foreground">
-                <FileText className="w-4 h-4 mr-2" />
-                Histórico Completo
-              </Button>
-              <Button variant="outline" onClick={() => handlePrintFullHistory(queryPacienteId, "Paciente")}>
-                <Printer className="w-4 h-4 mr-2" />
-                Imprimir Histórico Completo
-              </Button>
-              <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
-                Ver todos
-              </Button>
-            </>
-          )}
-          {canEdit && (
-            <Button onClick={() => openNew(queryPacienteId || undefined)} className="gradient-primary text-primary-foreground">
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Prontuário
-            </Button>
-          )}
+        <div className="flex gap-2">
+          <Button onClick={() => openNew(queryPacienteId || undefined)} className="gradient-primary">
+            <Plus className="w-4 h-4 mr-2" /> Novo Registro
+          </Button>
         </div>
       </div>
 
-      {!queryPacienteId && (
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por paciente, profissional, CPF ou CNS..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      )}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por paciente, profissional ou tipo..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-10"
+        />
+      </div>
 
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
-            setActiveAtendimento(null);
-            setSessionRegistrationRequested(false);
-            setSoapErrors(false);
-          }
-        }}
-      >
-        <DialogContent className="w-screen max-w-none h-screen sm:rounded-none p-0 flex flex-col overflow-hidden gap-0" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader className="px-6 py-3 border-b border-border shrink-0">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
-              <div className="text-xs flex items-center gap-1.5" aria-live="polite">
-                {autosaveStatus === 'saving' && (
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
-                  </span>
-                )}
-                {autosaveStatus === 'saved' && autosaveAt && (
-                  <span className="text-success flex items-center gap-1.5">
-                    <CheckCircle className="w-3 h-3" /> Salvo automaticamente às {autosaveAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-              </div>
-            </div>
+      <div className="grid grid-cols-1 gap-4">
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+        ) : filtered.length === 0 ? (
+          <Card><CardContent className="py-12 text-center text-muted-foreground">Nenhum prontuário encontrado.</CardContent></Card>
+        ) : (
+          filtered.map(p => (
+            <Card key={p.id} className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => openEdit(p)}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">{p.paciente_nome}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline">{p.tipo_registro}</Badge>
+                      <span>•</span>
+                      <span>{new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}</span>
+                      <span>•</span>
+                      <span>{p.profissional_nome}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); downloadProntuarioPdf(p); }}><Printer className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon"><Eye className="w-4 h-4" /></Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle>{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
           </DialogHeader>
+          
+          <div className="flex-1 overflow-hidden flex">
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Paciente</Label>
+                    <BuscaPaciente 
+                      pacientes={pacientes} 
+                      value={form.paciente_id} 
+                      onChange={(id, nome) => setForm(f => ({ ...f, paciente_id: id, paciente_nome: nome }))} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tipo de Registro</Label>
+                    <Select value={form.tipo_registro} onValueChange={(v) => setForm(f => ({ ...f, tipo_registro: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TIPOS_REGISTRO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-[65%_35%] min-h-0 overflow-hidden">
-            <div className="flex flex-col min-h-0 overflow-hidden">
-              {form.tipo_registro === 'Visita Domiciliar' ? (
-                <div className="flex-1 overflow-y-auto p-6 bg-muted/10">
+                {form.tipo_registro === 'Visita Domiciliar' ? (
                   <ProntuarioVisitaDomiciliar 
                     paciente={pacientes.find(p => p.id === form.paciente_id)}
                     profissional={user}
                     unidade={unidades.find(u => u.id === user?.unidadeId)}
-                    onSave={async (atData) => {
-                      const success = await handleSave(atData);
-                      if (success) {
-                        setDialogOpen(false);
-                        setForm(emptyForm);
-                      }
-                    }}
+                    onSave={handleSave}
                     initialData={editId ? form : null}
                   />
-                </div>
-              ) : (
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                  {activeAtendimento && (
-                    <AtendimentoTimer
-                      horaInicio={activeAtendimento.horaInicio}
-                      tempoLimite={tempoLimite}
-                      agendamentoId={activeAtendimento.agendamentoId}
-                    />
-                  )}
-
-                  {form.paciente_id && (
-                    <FichaPacienteCabecalho
-                      pacienteId={form.paciente_id}
-                      profissionalNome={user?.nome || ""}
-                      profissionalId={user?.id || ""}
-                      agendamentoId={form.agendamento_id || undefined}
-                      triagem={triagemHeaderData}
-                      funcionarios={funcionariosLight}
-                      onPacienteUpdated={loadProntuarios}
-                    />
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <Label>Paciente *</Label>
-                      <BuscaPaciente
-                        pacientes={pacientes}
-                        value={form.paciente_id}
-                        onChange={handlePacienteChange}
-                      />
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Queixa Principal</Label>
+                      <Textarea value={form.queixa_principal} onChange={e => setForm(f => ({ ...f, queixa_principal: e.target.value }))} />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label>Data *</Label>
-                        <Input
-                          type="date"
-                          value={form.data_atendimento}
-                          onChange={(e) => setForm((p) => ({ ...p, data_atendimento: e.target.value }))}
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Subjetivo (S)</Label>
+                        <Textarea value={form.soap_subjetivo} onChange={e => setForm(f => ({ ...f, soap_subjetivo: e.target.value }))} />
                       </div>
-                      <div>
-                        <Label>Hora</Label>
-                        <Input
-                          type="time"
-                          value={form.hora_atendimento}
-                          onChange={(e) => setForm((p) => ({ ...p, hora_atendimento: e.target.value }))}
-                        />
+                      <div className="space-y-2">
+                        <Label>Objetivo (O)</Label>
+                        <Textarea value={form.soap_objetivo} onChange={e => setForm(f => ({ ...f, soap_objetivo: e.target.value }))} />
                       </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Evolução</Label>
+                      <Textarea rows={6} value={form.evolucao} onChange={e => setForm(f => ({ ...f, evolucao: e.target.value }))} />
                     </div>
                   </div>
-                  {/* Rest of the standard form fields would go here */}
-                </div>
-              )}
+                )}
+              </div>
             </div>
-
-            <HistoricoPacientePanel
-              paciente={pacienteForPanel}
-              historico={patientHistory}
-              currentId={editId || undefined}
-              onView={(p) => setViewerProntuario(p)}
-            />
+            
+            <div className="w-80 border-l bg-muted/10 hidden lg:block overflow-y-auto">
+              <HistoricoPacientePanel 
+                paciente={pacientes.find(p => p.id === form.paciente_id) || null} 
+                historico={prontuarios.filter(p => p.paciente_id === form.paciente_id)} 
+              />
+            </div>
           </div>
 
-          <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
-            <Button onClick={() => setDialogOpen(false)} variant="outline">Cancelar</Button>
-            <Button onClick={() => handleSave()} disabled={saving} className="gradient-primary text-primary-foreground">
-              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {editId ? "Salvar Alterações" : "Registrar Prontuário"}
-            </Button>
-          </div>
+          {form.tipo_registro !== 'Visita Domiciliar' && (
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={() => handleSave()} disabled={saving}>
+                {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                {editId ? "Atualizar" : "Salvar"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
-      
-      <Sheet open={!!viewerProntuario} onOpenChange={(open) => !open && setViewerProntuario(null)}>
-        <SheetContent className="sm:max-w-xl overflow-y-auto">
-          {/* Viewer content */}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 };
