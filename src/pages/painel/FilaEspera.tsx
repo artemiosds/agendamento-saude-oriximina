@@ -1409,6 +1409,7 @@ const FilaEspera: React.FC = () => {
                         email: "",
                         dataNascimento: "",
                         endereco: "",
+                        sexo: "",
                         descricaoClinica: "",
                         cid: "",
                       });
