@@ -848,8 +848,24 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
+    if (registeringSession) return;
     setRegisteringSession(true);
+    
+    // Final duplicity check for the session itself
+    const { data: freshSession, error: freshErr } = await supabase
+      .from("treatment_sessions")
+      .select("status")
+      .eq("id", nextSession.id)
+      .single();
+    
+    if (freshErr || (freshSession && freshSession.status === "realizada")) {
+      toast.error("Esta sessão já foi registrada recentemente.");
+      setRegisteringSession(false);
+      return;
+    }
+
     try {
+
       if (newSession.status === "realizada") {
         const soapPayload = normalizeSoapPayload(soapNotes);
         const result = await treatmentService.registerCompletedSession({
