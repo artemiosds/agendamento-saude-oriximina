@@ -116,10 +116,9 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
     let status: DiaInfo["status"] = "empty";
     if (allBlocked) status = "blocked";
-    else if (isPast) status = "past";
-    else if (totalVagas > 0) {
-      const percent = (agendamentosCount / totalVagas) * 100;
-      if (agendamentosCount >= totalVagas) status = "full";
+    else if (totalVagas > 0 || agendamentosCount > 0) {
+      const percent = totalVagas > 0 ? (agendamentosCount / totalVagas) * 100 : 100;
+      if (agendamentosCount >= totalVagas && totalVagas > 0) status = "full";
       else if (percent >= 70) status = "almostFull";
       else status = "available";
     } else if (hasDisponibilidade) status = "full";
@@ -163,7 +162,10 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
                     "group relative h-16 sm:h-20 p-1.5 rounded-lg border transition-all text-left flex flex-col justify-between overflow-hidden",
                     info.isSelected ? "border-primary bg-primary/5 shadow-sm z-10" : "border-border hover:border-primary/40 bg-card",
                     !isCurrMonth && "opacity-30",
-                    info.status === "blocked" && "bg-muted/30 cursor-not-allowed opacity-50"
+                    info.status === "blocked" && "bg-muted/30 cursor-not-allowed opacity-50",
+                    ds < todayLocalStr() && "bg-muted/10 opacity-80"
+
+
                   )}
                 >
                   <div className="flex justify-between items-start">
@@ -201,6 +203,9 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
                     )}
                     {info.status === "blocked" && (
                       <span className="text-[8px] font-bold text-destructive uppercase">Blq</span>
+                    )}
+                    {ds < todayLocalStr() && (
+                      <span className="text-[8px] font-bold text-muted-foreground uppercase">Passado</span>
                     )}
                   </div>
                   {info.isToday && <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-primary rounded-bl-sm" />}
@@ -267,9 +272,10 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
             "px-3 py-1 rounded-full text-[10px] font-bold border",
             info.status === "full" ? "bg-primary/10 border-primary text-primary" :
             info.status === "almostFull" ? "bg-warning/10 border-warning text-warning" :
+            selectedDate < todayLocalStr() ? "bg-muted/10 border-muted text-muted-foreground" :
             "bg-success/10 border-success text-success"
           )}>
-            {info.status === "full" ? "LOTADO" : info.status === "almostFull" ? "QUASE CHEIO" : "COM VAGAS"}
+            {info.status === "full" ? "LOTADO" : info.status === "almostFull" ? "QUASE CHEIO" : selectedDate < todayLocalStr() ? "PASSADO" : "COM VAGAS"}
           </div>
         </div>
         

@@ -784,8 +784,9 @@ const Agenda: React.FC = () => {
     }
 
     // Regra centralizada: Se não estiver buscando por nome/CPF/CNS nem filtrando por status específico,
-    // a lista principal deve omitir agendamentos que não ocupam vaga (cancelados/faltas).
-    if (!debouncedSearch && statusFilter === "all") {
+    // a lista principal deve omitir agendamentos que não ocupam vaga (cancelados/faltas)
+    // APENAS para datas futuras ou hoje. Para datas passadas, mostramos tudo o que aconteceu.
+    if (!debouncedSearch && statusFilter === "all" && selectedDate >= todayLocalStr()) {
       result = result.filter((a) => statusOcupaVaga(a.status));
     }
 
@@ -827,7 +828,7 @@ const Agenda: React.FC = () => {
       return true;
     });
 
-    const activeBase = base.filter(a => statusOcupaVaga(a.status));
+    const activeBase = base.filter(a => selectedDate < todayLocalStr() ? true : statusOcupaVaga(a.status));
 
     const byGroup: Record<string, number> = {};
     for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
