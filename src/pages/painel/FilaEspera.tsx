@@ -548,8 +548,8 @@ const FilaEspera: React.FC = () => {
       await addPaciente({
         id: pacienteId,
         nome: novoPaciente.nome,
-        cpf: novoPaciente.cpf,
-        cns: novoPaciente.cns || "",
+        cpf: (novoPaciente.cpf || "").replace(/\D/g, ""),
+        cns: (novoPaciente.cns || "").replace(/\D/g, "").slice(0, 15),
         nomeMae: novoPaciente.nomeMae || "",
         telefone: novoPaciente.telefone,
         email: novoPaciente.email,
