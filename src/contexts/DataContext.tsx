@@ -1060,21 +1060,101 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     pollIntervalMs: 60000,
   });
 
+  const getTurnoInfo = useCallback(
+    (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
+      const dayOfWeek = isoDayOfWeek(date);
+      const disps = disponibilidadesRef.current;
+      const turnoDisps = disps.filter(
+        (d) =>
+          d.profissionalId === profissionalId &&
+          d.unidadeId === unidadeId &&
+          d.diasSemana.includes(dayOfWeek) &&
+          date >= d.dataInicio &&
+          date <= d.dataFim &&
+          d.vagasPorHora === 0,
+      );
+      if (turnoDisps.length === 0) return [];
+
+      const key = `${profissionalId}|${unidadeId}|${date}`;
+      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+
+      return turnoDisps.map((td) => {
+        const turnoAppCount = dayAppointments.filter(
+          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
+        ).length;
+
+        const turnoQuotas = (window as any).__quotasExternasCached || [];
+        const quotasTurno = turnoQuotas.filter((q: any) => 
+          q.profissional_interno_id === profissionalId && 
+          q.unidade_id === unidadeId &&
+          q.ativo === true &&
+          (q.turno?.toLowerCase() === (td.horaInicio < '12:00' ? 'manha' : td.horaInicio < '18:00' ? 'tarde' : 'noite'))
+        );
+
+        const vagasReservadasExterno = quotasTurno.reduce((acc: number, curr: any) => acc + (curr.vagas_total || 0), 0);
+        const vagasOcupadasExterno = dayAppointments.filter(
+          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim && a.origem === 'externo'
+        ).length;
+        
+        const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
+        const vagasTotal = td.vagasPorDia || 0;
+        const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
+        const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
+        const periodo = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
+
+        const turnosGlobais: Array<{ id: string; nome: string }> = (window as any).__turnosGlobaisCached || [];
+        const matchedGlobal = td.salaId ? turnosGlobais.find((t) => t.id === td.salaId) : undefined;
+        const rawCustomName = td.salaId && !matchedGlobal ? String(td.salaId).trim() : '';
+        const descricao = rawCustomName && rawCustomName.toLowerCase() !== periodo.toLowerCase()
+          ? rawCustomName
+          : (matchedGlobal && matchedGlobal.nome && matchedGlobal.nome.toLowerCase() !== periodo.toLowerCase()
+              ? matchedGlobal.nome
+              : undefined);
+
+        return {
+          turnoId: td.salaId || td.id,
+          nome: periodo,
+          descricao,
+          periodo,
+          horaInicio: td.horaInicio,
+          horaFim: td.horaFim,
+          vagasTotal,
+          vagasOcupadas: turnoAppCount,
+          vagasReservadasExterno,
+          vagasOcupadasExterno,
+          vagasOcupadasInterno,
+          vagasLivresInternas,
+          vagasLivresTotal,
+          lotado: turnoAppCount >= vagasTotal,
+          excedido: turnoAppCount > vagasTotal,
+        };
+      }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+    },
+    [],
+  );
+
   const addAgendamento = useCallback(
     async (ag: Agendamento) => {
-      // SAFEGUARD: Novos agendamentos NUNCA podem herdar status de atendimentos
-      // anteriores (ex.: "concluido", "em_atendimento", "apto_atendimento").
-      // Apenas status iniciais são permitidos na criação. Qualquer outro valor
-      // é forçado para "confirmado".
+      const userRole = authUser?.role || "";
+      const rolesToBlock = ["recepcao", "gestao", "coordenador"];
+      
+      if (rolesToBlock.includes(userRole)) {
+        const turnos = getTurnoInfo(ag.profissionalId, ag.unidadeId, ag.data);
+        const meuTurno = turnos.find(t => ag.hora >= t.horaInicio && ag.hora < t.horaFim);
+        
+        if (meuTurno) {
+          if (meuTurno.vagasLivresInternas <= 0) {
+            toast.error(`Limite de vagas excedido para este turno (${meuTurno.nome}).`);
+            throw new Error("Limite de vagas excedido.");
+          }
+        }
+      }
+
       const STATUS_INICIAIS_PERMITIDOS = ["confirmado", "pendente", "agendado"];
       const statusInicial = STATUS_INICIAIS_PERMITIDOS.includes(ag.status as string)
         ? ag.status
         : "confirmado";
-      if (statusInicial !== ag.status) {
-        console.warn(
-          `[addAgendamento] Status "${ag.status}" não permitido na criação. Forçado para "confirmado".`,
-        );
-      }
+      
       const { error } = await supabase.from("agendamentos" as any).insert({
         id: ag.id,
         paciente_id: ag.pacienteId,
@@ -1095,6 +1175,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         criado_por: ag.criadoPor || "",
         prioridade_perfil: "normal",
       } as any);
+
       if (!error) {
         setAgendamentos((prev) => [...prev, { ...ag, status: statusInicial as any }]);
         await logAction({
@@ -1110,7 +1191,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     },
-    [logAction, invalidateCache],
+    [logAction, invalidateCache, authUser?.role, getTurnoInfo],
   );
 
   const updateAgendamento = useCallback(
@@ -1131,6 +1212,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
       }
+
+      // Validação de vaga se estiver remarcando (mudando data/hora) ou trocando profissional
+      const needsQuotaCheck = (data.data !== undefined || data.hora !== undefined || data.profissionalId !== undefined);
+      if (needsQuotaCheck) {
+        const agOriginal = agendamentosRef.current.find(a => a.id === id);
+        if (agOriginal) {
+          const newData = data.data || agOriginal.data;
+          const newHora = data.hora || agOriginal.hora;
+          const newProfId = data.profissionalId || agOriginal.profissionalId;
+          const newUnidId = agOriginal.unidadeId;
+
+          const userRole = authUser?.role || "";
+          const rolesToBlock = ["recepcao", "gestao", "coordenador"];
+          
+          if (rolesToBlock.includes(userRole)) {
+            const turnos = getTurnoInfo(newProfId, newUnidId, newData);
+            const meuTurno = turnos.find(t => newHora >= t.horaInicio && newHora < t.horaFim);
+            
+            if (meuTurno) {
+              const isSameTurno = agOriginal.data === newData && 
+                                agOriginal.profissionalId === newProfId &&
+                                agOriginal.hora >= meuTurno.horaInicio && 
+                                agOriginal.hora < meuTurno.horaFim;
+
+              // Se mudou de turno ou prof, precisa de vaga livre.
+              // Se manteve o mesmo turno, a vaga dele já está ocupada, então não bloqueamos.
+              if (!isSameTurno && meuTurno.vagasLivresInternas <= 0) {
+                toast.error(`Limite de vagas excedido para este turno (${meuTurno.nome}).`);
+                throw new Error("Limite de vagas excedido.");
+              }
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from("agendamentos" as any)
         .update(dbData)
@@ -1150,7 +1266,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     },
-    [logAction, invalidateCache],
+    [logAction, invalidateCache, authUser?.role, getTurnoInfo],
   );
 
   const cancelAgendamento = useCallback(
@@ -1892,92 +2008,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [isSlotBlocked],
   );
 
-  const getTurnoInfo = useCallback(
-    (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
-      const dayOfWeek = isoDayOfWeek(date);
-      const disps = disponibilidadesRef.current;
-      const turnoDisps = disps.filter(
-        (d) =>
-          d.profissionalId === profissionalId &&
-          d.unidadeId === unidadeId &&
-          d.diasSemana.includes(dayOfWeek) &&
-          date >= d.dataInicio &&
-          date <= d.dataFim &&
-          d.vagasPorHora === 0,
-      );
-      if (turnoDisps.length === 0) return [];
-
-      const key = `${profissionalId}|${unidadeId}|${date}`;
-      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
-
-      // Cálculo único e centralizado de vagas por turno.
-      // Conta TODOS os agendamentos ATIVOS (statusOcupaVaga) cujo horário pertence
-      // ao range [horaInicio, horaFim) do turno. Já temos pré-filtro por
-      // profissional+unidade+data via appointmentsByDateProfUnit (que aplica statusOcupaVaga).
-      return turnoDisps.map((td) => {
-        // Encontra agendamentos ocupando vaga neste turno
-        const turnoAppCount = dayAppointments.filter(
-          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
-        ).length;
-
-        // Recupera quotas externas ativas para este turno
-        const turnoQuotas = (window as any).__quotasExternasCached || [];
-        const quotasTurno = turnoQuotas.filter((q: any) => 
-          q.profissional_interno_id === profissionalId && 
-          q.unidade_id === unidadeId &&
-          q.ativo === true &&
-          (q.turno?.toLowerCase() === (td.horaInicio < '12:00' ? 'manha' : td.horaInicio < '18:00' ? 'tarde' : 'noite'))
-        );
-
-        const vagasReservadasExterno = quotasTurno.reduce((acc: number, curr: any) => acc + (curr.vagas_total || 0), 0);
-        const vagasOcupadasExterno = dayAppointments.filter(
-          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim && a.origem === 'externo'
-        ).length;
-        
-        const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
-        const vagasTotal = td.vagasPorDia || 0;
-        
-        // Vagas LIVRES INTERNAS (vagas totais - reserva externa - ocupadas internas)
-        const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
-        const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
-
-        const periodo = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
-
-        // Resolve custom block name (descricao):
-        // - In turno mode, td.salaId holds either a globalTurno id (padrão) or a free-text name (custom, e.g. "Eco").
-        // - We cache global turnos via window.__turnosGlobaisCached (loaded by the Agenda/Disponibilidade pages).
-        const turnosGlobais: Array<{ id: string; nome: string }> =
-          (window as any).__turnosGlobaisCached || [];
-        const matchedGlobal = td.salaId ? turnosGlobais.find((t) => t.id === td.salaId) : undefined;
-        const rawCustomName = td.salaId && !matchedGlobal ? String(td.salaId).trim() : '';
-        // If the salaId equals the period label itself, treat as no custom descricao.
-        const descricao = rawCustomName && rawCustomName.toLowerCase() !== periodo.toLowerCase()
-          ? rawCustomName
-          : (matchedGlobal && matchedGlobal.nome && matchedGlobal.nome.toLowerCase() !== periodo.toLowerCase()
-              ? matchedGlobal.nome
-              : undefined);
-
-        return {
-          turnoId: td.salaId || td.id,
-          nome: periodo,
-          descricao,
-          periodo,
-          horaInicio: td.horaInicio,
-          horaFim: td.horaFim,
-          vagasTotal,
-          vagasOcupadas: turnoAppCount,
-          vagasReservadasExterno,
-          vagasOcupadasExterno,
-          vagasOcupadasInterno,
-          vagasLivresInternas,
-          vagasLivresTotal,
-          lotado: turnoAppCount >= vagasTotal,
-          excedido: turnoAppCount > vagasTotal,
-        };
-      }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
-    },
-    [],
-  );
 
   const getAvailableDatesInternal = useCallback(
     (profissionalId: string, unidadeId: string): string[] => {
