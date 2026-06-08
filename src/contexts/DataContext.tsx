@@ -1060,10 +1060,81 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     pollIntervalMs: 60000,
   });
 
+  const getTurnoInfo = useCallback(
+    (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
+      const dayOfWeek = isoDayOfWeek(date);
+      const disps = disponibilidadesRef.current;
+      const turnoDisps = disps.filter(
+        (d) =>
+          d.profissionalId === profissionalId &&
+          d.unidadeId === unidadeId &&
+          d.diasSemana.includes(dayOfWeek) &&
+          date >= d.dataInicio &&
+          date <= d.dataFim &&
+          d.vagasPorHora === 0,
+      );
+      if (turnoDisps.length === 0) return [];
+
+      const key = `${profissionalId}|${unidadeId}|${date}`;
+      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+
+      return turnoDisps.map((td) => {
+        const turnoAppCount = dayAppointments.filter(
+          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
+        ).length;
+
+        const turnoQuotas = (window as any).__quotasExternasCached || [];
+        const quotasTurno = turnoQuotas.filter((q: any) => 
+          q.profissional_interno_id === profissionalId && 
+          q.unidade_id === unidadeId &&
+          q.ativo === true &&
+          (q.turno?.toLowerCase() === (td.horaInicio < '12:00' ? 'manha' : td.horaInicio < '18:00' ? 'tarde' : 'noite'))
+        );
+
+        const vagasReservadasExterno = quotasTurno.reduce((acc: number, curr: any) => acc + (curr.vagas_total || 0), 0);
+        const vagasOcupadasExterno = dayAppointments.filter(
+          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim && a.origem === 'externo'
+        ).length;
+        
+        const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
+        const vagasTotal = td.vagasPorDia || 0;
+        const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
+        const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
+        const periodo = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
+
+        const turnosGlobais: Array<{ id: string; nome: string }> = (window as any).__turnosGlobaisCached || [];
+        const matchedGlobal = td.salaId ? turnosGlobais.find((t) => t.id === td.salaId) : undefined;
+        const rawCustomName = td.salaId && !matchedGlobal ? String(td.salaId).trim() : '';
+        const descricao = rawCustomName && rawCustomName.toLowerCase() !== periodo.toLowerCase()
+          ? rawCustomName
+          : (matchedGlobal && matchedGlobal.nome && matchedGlobal.nome.toLowerCase() !== periodo.toLowerCase()
+              ? matchedGlobal.nome
+              : undefined);
+
+        return {
+          turnoId: td.salaId || td.id,
+          nome: periodo,
+          descricao,
+          periodo,
+          horaInicio: td.horaInicio,
+          horaFim: td.horaFim,
+          vagasTotal,
+          vagasOcupadas: turnoAppCount,
+          vagasReservadasExterno,
+          vagasOcupadasExterno,
+          vagasOcupadasInterno,
+          vagasLivresInternas,
+          vagasLivresTotal,
+          lotado: turnoAppCount >= vagasTotal,
+          excedido: turnoAppCount > vagasTotal,
+        };
+      }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+    },
+    [],
+  );
+
   const addAgendamento = useCallback(
     async (ag: Agendamento) => {
-      // 1. Verificação de Limite de Vagas (Bloqueio Definitivo)
-      // Recepção, Gestão e Coordenação respeitam o limite. Master pode ultrapassar.
       const userRole = authUser?.role || "";
       const rolesToBlock = ["recepcao", "gestao", "coordenador"];
       
@@ -1079,8 +1150,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // SAFEGUARD: Novos agendamentos NUNCA podem herdar status de atendimentos
-      // anteriores (ex.: "concluido", "em_atendimento", "apto_atendimento").
       const STATUS_INICIAIS_PERMITIDOS = ["confirmado", "pendente", "agendado"];
       const statusInicial = STATUS_INICIAIS_PERMITIDOS.includes(ag.status as string)
         ? ag.status
