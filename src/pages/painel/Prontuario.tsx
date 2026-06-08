@@ -2645,7 +2645,26 @@ const ProntuarioPage: React.FC = () => {
           {/* Histórico central removido — exibido apenas no painel lateral direito */}
 
           {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
+          {form.tipo_registro === 'Visita Domiciliar' ? (
+            <div className="flex-1 overflow-y-auto p-6 bg-muted/10">
+              <ProntuarioVisitaDomiciliar 
+                paciente={pacientes.find(p => p.id === form.paciente_id)}
+                profissional={user}
+                unidade={unidades.find(u => u.id === user?.unidadeId)}
+                onSave={async (atData) => {
+                  const success = await handleSave(atData);
+                  if (success) {
+                    setDialogOpen(false);
+                    setForm(emptyForm);
+                  }
+                }}
+                initialData={editId ? form : null}
+              />
+            </div>
+          ) : (
+            <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
               <div>
                 <Label>Paciente *</Label>
                 <BuscaPaciente
