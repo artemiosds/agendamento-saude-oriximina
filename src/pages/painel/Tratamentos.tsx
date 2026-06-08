@@ -1123,8 +1123,27 @@ const Tratamentos: React.FC = () => {
       toast.error("Selecione data e horário.");
       return;
     }
+    if (agendandoSessao) return; // Idempotency
     setAgendandoSessao(true);
     try {
+      // Duplicity check: is there already an appointment for this patient/professional on this date/time?
+      const { data: existingAg, error: checkAgError } = await supabase
+        .from("agendamentos")
+        .select("id")
+        .eq("paciente_id", selectedCycle.patient_id)
+        .eq("profissional_id", selectedCycle.professional_id)
+        .eq("data", agendarSessaoData)
+        .eq("hora", agendarSessaoHora)
+        .not("status", "in", '("cancelado","falta","remarcado")')
+        .maybeSingle();
+
+      if (checkAgError) throw checkAgError;
+      if (existingAg) {
+        toast.error("Já existe um agendamento para este paciente, profissional e horário.");
+        setAgendandoSessao(false);
+        return;
+      }
+
       const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
       const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
       if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
@@ -1141,6 +1160,7 @@ const Tratamentos: React.FC = () => {
           return;
         }
       }
+
 
 
       const agId = `ag${Date.now()}`;
