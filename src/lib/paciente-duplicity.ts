@@ -47,14 +47,14 @@ export async function checkPatientDuplicity(data: {
     const { data: cpfMatch, error: cpfError } = await supabase
       .from("pacientes")
       .select("id, nome")
-      .eq("cpf", cpfClean)
-      .maybeSingle();
+      .eq("cpf", cpfClean);
 
-    if (cpfMatch && cpfMatch.id !== data.idToExclude) {
+    const duplicate = cpfMatch?.find(m => m.id !== data.idToExclude);
+    if (duplicate) {
       return {
         isDuplicate: true,
-        message: `Paciente já cadastrado com este CPF: ${cpfMatch.nome}. Verifique o cadastro existente.`,
-        existingPatient: cpfMatch,
+        message: `Paciente já cadastrado com este CPF: ${duplicate.nome}. Verifique o cadastro existente.`,
+        existingPatient: duplicate,
       };
     }
   }
@@ -64,14 +64,14 @@ export async function checkPatientDuplicity(data: {
     const { data: cnsMatch, error: cnsError } = await supabase
       .from("pacientes")
       .select("id, nome")
-      .eq("cns", cnsClean)
-      .maybeSingle();
+      .eq("cns", cnsClean);
 
-    if (cnsMatch && cnsMatch.id !== data.idToExclude) {
+    const duplicate = cnsMatch?.find(m => m.id !== data.idToExclude);
+    if (duplicate) {
       return {
         isDuplicate: true,
-        message: `Paciente já cadastrado com este CNS: ${cnsMatch.nome}. Verifique o cadastro existente.`,
-        existingPatient: cnsMatch,
+        message: `Paciente já cadastrado com este CNS: ${duplicate.nome}. Verifique o cadastro existente.`,
+        existingPatient: duplicate,
       };
     }
   }
