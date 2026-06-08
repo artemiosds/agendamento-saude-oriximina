@@ -1756,6 +1756,21 @@ const FilaEspera: React.FC = () => {
                   onChange={(e) => setImportForm((p) => ({ ...p, dataNascimento: e.target.value }))}
                 />
               </div>
+              <div>
+                <Label>Sexo *</Label>
+                <Select
+                  value={importForm.sexo}
+                  onValueChange={(v) => setImportForm((p) => ({ ...p, sexo: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="masculino">Masculino</SelectItem>
+                    <SelectItem value="feminino">Feminino</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="border-t pt-3">
               <p className="text-sm font-semibold text-foreground mb-2">📋 Dados da Fila</p>
