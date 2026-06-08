@@ -114,8 +114,8 @@ const PACIENTE_COLUMNS =
 const mapPacienteRow = (p: any) => ({
   id: p.id,
   nome: p.nome,
-  cpf: p.cpf || "",
-  cns: p.cns || "",
+  cpf: (p.cpf || "").replace(/\D/g, ""),
+  cns: (p.cns || "").replace(/\D/g, "").slice(0, 15),
   nomeMae: p.nome_mae || "",
   telefone: p.telefone || "",
   dataNascimento: p.data_nascimento || "",
