@@ -38,7 +38,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Separator } from "@/components/ui/separator";
 import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
 import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
+import ProntuarioVisitaDomiciliar from "@/components/ProntuarioVisitaDomiciliar";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
+
 import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
