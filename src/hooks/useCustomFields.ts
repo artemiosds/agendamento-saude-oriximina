@@ -102,6 +102,7 @@ export const NATIVE_FIELDS: Record<ScreenKey, { nome: string; rotulo: string }[]
     // Aba Identificação
     { nome: 'nome', rotulo: 'Nome completo' },
     { nome: 'nomeMae', rotulo: 'Nome da Mãe' },
+    { nome: 'nomePai', rotulo: 'Nome do Pai' },
     { nome: 'dataNascimento', rotulo: 'Data de Nascimento' },
     { nome: 'sexo', rotulo: 'Sexo' },
     { nome: 'cpf', rotulo: 'CPF' },

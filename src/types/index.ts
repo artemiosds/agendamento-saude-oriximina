@@ -112,6 +112,7 @@ export interface Paciente {
   cpf: string;
   cns: string;
   nomeMae: string;
+  nomePai?: string;
   telefone: string;
   dataNascimento: string;
   email: string;
