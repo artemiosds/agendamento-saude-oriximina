@@ -683,19 +683,32 @@ const Tratamentos: React.FC = () => {
       toast.error(`Selecione exatamente ${getMaxWeekdays(newCycle.frequency)} dia(s) da semana.`);
       return;
     }
+
+    if (loading) return; // Guard
+    
+    // Check for duplicates before creating
+    const { data: existingCycles, error: checkError } = await supabase
+      .from("treatment_cycles")
+      .select("id, treatment_type, status")
+      .eq("patient_id", newCycle.patient_id)
+      .eq("professional_id", newCycle.professional_id)
+      .eq("specialty", newCycle.specialty || "")
+      .eq("unit_id", newCycle.unit_id || "")
+      .in("status", ["em_andamento", "aguardando_vaga", "em_fila"]);
+
+    if (checkError) {
+      console.error("Erro ao verificar duplicidade:", checkError);
+    } else if (existingCycles && existingCycles.length > 0) {
+      const sameType = existingCycles.find(c => c.treatment_type === newCycle.treatment_type);
+      if (sameType) {
+        toast.error("Já existe um ciclo de tratamento ativo para este paciente com este profissional/especialidade.");
+        return;
+      }
+    }
+
     const prof = profissionais.find((p) => p.id === newCycle.professional_id);
     const pac = pacientes.find((p) => p.id === newCycle.patient_id);
 
-    const existingActive = cycles.find(
-      (c) =>
-        c.patient_id === newCycle.patient_id &&
-        c.status === "em_andamento" &&
-        c.treatment_type === newCycle.treatment_type,
-    );
-    if (existingActive) {
-      toast.error("Paciente já possui tratamento ativo deste tipo.");
-      return;
-    }
 
     const totalSessions = newCycle.frequency === 'manual'
       ? newCycle.total_sessions
@@ -835,8 +848,24 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
+    if (registeringSession) return;
     setRegisteringSession(true);
+    
+    // Final duplicity check for the session itself
+    const { data: freshSession, error: freshErr } = await supabase
+      .from("treatment_sessions")
+      .select("status")
+      .eq("id", nextSession.id)
+      .single();
+    
+    if (freshErr || (freshSession && freshSession.status === "realizada")) {
+      toast.error("Esta sessão já foi registrada recentemente.");
+      setRegisteringSession(false);
+      return;
+    }
+
     try {
+
       if (newSession.status === "realizada") {
         const soapPayload = normalizeSoapPayload(soapNotes);
         const result = await treatmentService.registerCompletedSession({
@@ -1110,8 +1139,27 @@ const Tratamentos: React.FC = () => {
       toast.error("Selecione data e horário.");
       return;
     }
+    if (agendandoSessao) return; // Idempotency
     setAgendandoSessao(true);
     try {
+      // Duplicity check: is there already an appointment for this patient/professional on this date/time?
+      const { data: existingAg, error: checkAgError } = await supabase
+        .from("agendamentos")
+        .select("id")
+        .eq("paciente_id", selectedCycle.patient_id)
+        .eq("profissional_id", selectedCycle.professional_id)
+        .eq("data", agendarSessaoData)
+        .eq("hora", agendarSessaoHora)
+        .not("status", "in", '("cancelado","falta","remarcado")')
+        .maybeSingle();
+
+      if (checkAgError) throw checkAgError;
+      if (existingAg) {
+        toast.error("Já existe um agendamento para este paciente, profissional e horário.");
+        setAgendandoSessao(false);
+        return;
+      }
+
       const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
       const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
       if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
@@ -1128,6 +1176,7 @@ const Tratamentos: React.FC = () => {
           return;
         }
       }
+
 
 
       const agId = `ag${Date.now()}`;
@@ -1268,10 +1317,10 @@ const Tratamentos: React.FC = () => {
 
     try {
       for (const sess of pendentes) {
+        // Prevent duplicity if clicking button multiple times rapidly (though setAgendandoCiclo handles most cases)
+        if (!agendandoCiclo && resumo.length > 0) break; 
+
         try {
-          // 1) Verificar se o paciente está bloqueado por faltas (opcional: pode ser lento em lote, mas é seguro)
-          // Para performance em lote, poderíamos fazer uma vez fora do loop, mas vamos manter a regra individual por agora.
-          
           // 2) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
           const { data: existente, error: checkErr } = await supabase
             .from("agendamentos")
@@ -1283,6 +1332,7 @@ const Tratamentos: React.FC = () => {
             .order("criado_em", { ascending: false })
             .limit(1)
             .maybeSingle();
+
 
           if (checkErr) throw checkErr;
 
