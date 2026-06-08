@@ -1223,6 +1223,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
       } else {
         console.error("Error adding paciente:", error);
         throw error;
