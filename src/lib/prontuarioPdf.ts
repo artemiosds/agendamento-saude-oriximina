@@ -262,10 +262,17 @@ export async function downloadProntuarioPdf(
   // Special handling for Visita Domiciliar
   if (tipoRegistro === 'Visita Domiciliar') {
     clinicalContentHtml += renderSection("Evolução da Visita", prontuario.evolucao);
-    clinicalContentHtml += renderSection("Procedimento Realizado", prontuario.procedimento_tipo === 'outro' ? prontuario.outro_procedimento : prontuario.procedimento_tipo?.replace(/_/g, ' '));
     
-    if (prontuario.procedimento_tipo === 'medidas_cadeira_rodas' && prontuario.dados_procedimento) {
-      const d = prontuario.dados_procedimento;
+    // Access custom fields safely
+    const customData = (prontuario.custom_data as any) || {};
+    const procTipo = customData.procedimento_tipo;
+    const outroProc = customData.outro_procedimento;
+    const dadosProc = customData.dados_procedimento;
+
+    clinicalContentHtml += renderSection("Procedimento Realizado", procTipo === 'outro' ? outroProc : procTipo?.replace(/_/g, ' '));
+    
+    if (procTipo === 'medidas_cadeira_rodas' && dadosProc) {
+      const d = dadosProc;
       clinicalContentHtml += `
         <div class="section" style="margin-top: 10px; border: 1px solid #e2e8f0; padding: 10px; border-radius: 4px;">
           <div class="section-title" style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a;">Medidas para Cadeira de Rodas</div>

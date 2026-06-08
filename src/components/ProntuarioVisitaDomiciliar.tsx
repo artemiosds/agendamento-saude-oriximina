@@ -23,19 +23,22 @@ const ProntuarioVisitaDomiciliar: React.FC<ProntuarioVisitaDomiciliarProps> = ({
   onSave,
   initialData
 }) => {
-  const [evolucao, setEvolucao] = useState(initialData?.evolucao_texto || '');
-  const [procedimentoTipo, setProcedimentoTipo] = useState(initialData?.procedimento_tipo || '');
-  const [outroProcedimento, setOutroProcedimento] = useState(initialData?.outro_procedimento || '');
-  const [dadosProcedimento, setDadosProcedimento] = useState(initialData?.dados_procedimento || null);
+  const customData = initialData?.custom_data || {};
+  const [evolucao, setEvolucao] = useState(initialData?.evolucao || '');
+  const [procedimentoTipo, setProcedimentoTipo] = useState(customData.procedimento_tipo || '');
+  const [outroProcedimento, setOutroProcedimento] = useState(customData.outro_procedimento || '');
+  const [dadosProcedimento, setDadosProcedimento] = useState(customData.dados_procedimento || null);
 
   const handleFinalizar = () => {
     const payload = {
       tipo_registro: 'Visita Domiciliar',
       evolucao: evolucao,
-      procedimento_tipo: procedimentoTipo,
-      outro_procedimento: outroProcedimento,
-      dados_procedimento: dadosProcedimento,
-      data_atendimento: new Date().toISOString().split('T')[0]
+      data_atendimento: new Date().toISOString().split('T')[0],
+      custom_data: {
+        procedimento_tipo: procedimentoTipo,
+        outro_procedimento: outroProcedimento,
+        dados_procedimento: dadosProcedimento,
+      }
     };
     onSave(payload);
   };
