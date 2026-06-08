@@ -1301,10 +1301,10 @@ const Tratamentos: React.FC = () => {
 
     try {
       for (const sess of pendentes) {
+        // Prevent duplicity if clicking button multiple times rapidly (though setAgendandoCiclo handles most cases)
+        if (!agendandoCiclo && resumo.length > 0) break; 
+
         try {
-          // 1) Verificar se o paciente está bloqueado por faltas (opcional: pode ser lento em lote, mas é seguro)
-          // Para performance em lote, poderíamos fazer uma vez fora do loop, mas vamos manter a regra individual por agora.
-          
           // 2) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
           const { data: existente, error: checkErr } = await supabase
             .from("agendamentos")
@@ -1316,6 +1316,7 @@ const Tratamentos: React.FC = () => {
             .order("criado_em", { ascending: false })
             .limit(1)
             .maybeSingle();
+
 
           if (checkErr) throw checkErr;
 
