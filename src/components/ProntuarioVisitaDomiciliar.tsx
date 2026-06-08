@@ -23,19 +23,22 @@ const ProntuarioVisitaDomiciliar: React.FC<ProntuarioVisitaDomiciliarProps> = ({
   onSave,
   initialData
 }) => {
-  const [evolucao, setEvolucao] = useState(initialData?.evolucao_texto || '');
-  const [procedimentoTipo, setProcedimentoTipo] = useState(initialData?.procedimento_tipo || '');
-  const [outroProcedimento, setOutroProcedimento] = useState(initialData?.outro_procedimento || '');
-  const [dadosProcedimento, setDadosProcedimento] = useState(initialData?.dados_procedimento || null);
+  const customData = initialData?.custom_data || {};
+  const [evolucao, setEvolucao] = useState(initialData?.evolucao || '');
+  const [procedimentoTipo, setProcedimentoTipo] = useState(customData.procedimento_tipo || '');
+  const [outroProcedimento, setOutroProcedimento] = useState(customData.outro_procedimento || '');
+  const [dadosProcedimento, setDadosProcedimento] = useState(customData.dados_procedimento || null);
 
   const handleFinalizar = () => {
     const payload = {
-      tipo_atendimento: 'visita_domiciliar',
-      evolucao_texto: evolucao,
-      procedimento_tipo: procedimentoTipo,
-      outro_procedimento: outroProcedimento,
-      dados_procedimento: dadosProcedimento,
-      data_atendimento: new Date().toISOString().split('T')[0]
+      tipo_registro: 'Visita Domiciliar',
+      evolucao: evolucao,
+      data_atendimento: new Date().toISOString().split('T')[0],
+      custom_data: {
+        procedimento_tipo: procedimentoTipo,
+        outro_procedimento: outroProcedimento,
+        dados_procedimento: dadosProcedimento,
+      }
     };
     onSave(payload);
   };
@@ -150,7 +153,7 @@ const ProntuarioVisitaDomiciliar: React.FC<ProntuarioVisitaDomiciliarProps> = ({
 
       {/* Botões de Ação Inferiores */}
       <div className="flex justify-end gap-4 pt-8 mt-12 border-t">
-        <Button variant="outline" className="flex items-center gap-2">
+        <Button variant="outline" className="flex items-center gap-2" onClick={handleFinalizar}>
           <Printer className="w-4 h-4" /> Imprimir Prontuário
         </Button>
         <Button onClick={handleFinalizar} className="flex items-center gap-2 bg-primary hover:bg-primary/90">

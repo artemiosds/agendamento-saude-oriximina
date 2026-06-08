@@ -156,7 +156,14 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarios = useCallback(async () => { setLoading(true); /* implementation */ setLoading(false); }, []);
   const loadEpisodios = useCallback(async (pid: string) => { /* implementation */ }, []);
   const openNew = (pid?: string, pnome?: string) => { setEditId(null); setForm({ ...emptyForm, paciente_id: pid || "", paciente_nome: pnome || "" }); setDialogOpen(true); };
-  const openEdit = (p: any) => { setEditId(p.id); setForm(p); setDialogOpen(true); };
+  const openEdit = (p: any) => { 
+    setEditId(p.id); 
+    setForm({
+      ...p,
+      paciente_nome: p.paciente_nome || pacientes.find(pac => pac.id === p.paciente_id)?.nome || ""
+    }); 
+    setDialogOpen(true); 
+  };
   const handleSave = async (extraData?: any) => { setSaving(true); /* implementation */ setSaving(false); return true; };
   const handlePrint = (p: any) => { /* implementation */ };
   const handlePrintFullHistory = (pid: string, pnome: string) => { /* implementation */ };
