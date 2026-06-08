@@ -128,7 +128,9 @@ const TIPOS_REGISTRO = [
   { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
   { value: 'pts', label: 'PTS (legado)' },
   { value: 'triagem_inicial', label: 'Triagem Inicial (legado)' },
+  { value: 'Visita Domiciliar', label: '🏠 Visita Domiciliar' },
 ];
+
 
 const emptyForm = {
   paciente_id: "",
