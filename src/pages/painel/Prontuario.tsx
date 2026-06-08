@@ -29,6 +29,8 @@ import { BuscaPaciente } from "@/components/BuscaPaciente";
 import DynamicProntuarioFields from "@/components/prontuario/DynamicProntuarioFields";
 import { hasDropdownSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
+import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
+import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
 
 const TIPOS_REGISTRO = [
   { value: 'avaliacao_inicial', label: '🟢 Avaliação Inicial' },
@@ -87,6 +89,9 @@ const ProntuarioPage: React.FC = () => {
   const queryAgendamentoId = searchParams.get("agendamentoId");
   const queryTipo = searchParams.get("tipo");
 
+  const { enabledFields, loading: loadingStructure } = useProntuarioStructure(form.tipo_registro);
+  const { visibleBlocks, isBlocoVisible, isBlocoRequired } = useProntuarioConfig(user?.id, form.tipo_registro, user?.profissao);
+
   const loadProntuarios = useCallback(async () => {
     setLoading(true);
     try {
@@ -125,6 +130,11 @@ const ProntuarioPage: React.FC = () => {
   }, [queryAgendamentoId, queryPacienteId, queryTipo, pacientes, user]);
 
   const handleSave = async (extraData?: any) => {
+    if (!form.paciente_id) {
+      toast.error("Selecione um paciente.");
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -143,6 +153,12 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (result.error) throw result.error;
+
+      // Finalizar agendamento se existir
+      if (form.agendamento_id) {
+        await supabase.from("agendamentos").update({ status: "concluido" }).eq("id", form.agendamento_id);
+        refreshAgendamentos();
+      }
 
       toast.success(editId ? "Prontuário atualizado!" : "Prontuário registrado!");
       setDialogOpen(false);
@@ -179,6 +195,14 @@ const ProntuarioPage: React.FC = () => {
     setEditId(p.id);
     setForm(p);
     setDialogOpen(true);
+  };
+
+  const currentPatientHistory = useMemo(() => {
+    return prontuarios.filter(p => p.paciente_id === form.paciente_id && p.id !== editId);
+  }, [prontuarios, form.paciente_id, editId]);
+
+  const handleFieldChange = (key: string, value: any) => {
+    setForm(prev => ({ ...prev, [key]: value }));
   };
 
   return (
@@ -279,25 +303,86 @@ const ProntuarioPage: React.FC = () => {
                     initialData={editId ? form : null}
                   />
                 ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Queixa Principal</Label>
-                      <Textarea value={form.queixa_principal} onChange={e => setForm(f => ({ ...f, queixa_principal: e.target.value }))} />
+                  <div className="space-y-6">
+                    {/* Campos Dinâmicos (Estrutura do Sistema) */}
+                    <DynamicProntuarioFields 
+                      fields={enabledFields} 
+                      values={form} 
+                      onChange={handleFieldChange} 
+                    />
+
+                    {/* Blocos SOAP se visíveis na config */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {isBlocoVisible('soap_subjetivo') && (
+                        <div className="space-y-2">
+                          <Label>S — Subjetivo {isBlocoRequired('soap_subjetivo') && "*"}</Label>
+                          <DebouncedTextarea 
+                            value={form.soap_subjetivo} 
+                            onChange={e => handleFieldChange('soap_subjetivo', e.target.value)} 
+                            placeholder="Queixas, sintomas relatados pelo paciente..."
+                          />
+                        </div>
+                      )}
+                      {isBlocoVisible('soap_objetivo') && (
+                        <div className="space-y-2">
+                          <Label>O — Objetivo {isBlocoRequired('soap_objetivo') && "*"}</Label>
+                          <DebouncedTextarea 
+                            value={form.soap_objetivo} 
+                            onChange={e => handleFieldChange('soap_objetivo', e.target.value)} 
+                            placeholder="Exame físico, sinais vitais, observações clínicas..."
+                          />
+                        </div>
+                      )}
+                      {isBlocoVisible('soap_avaliacao') && (
+                        <div className="space-y-2">
+                          <Label>A — Avaliação {isBlocoRequired('soap_avaliacao') && "*"}</Label>
+                          <DebouncedTextarea 
+                            value={form.soap_avaliacao} 
+                            onChange={e => handleFieldChange('soap_avaliacao', e.target.value)} 
+                            placeholder="Diagnóstico, hipóteses, progresso..."
+                          />
+                        </div>
+                      )}
+                      {isBlocoVisible('soap_plano') && (
+                        <div className="space-y-2">
+                          <Label>P — Plano {isBlocoRequired('soap_plano') && "*"}</Label>
+                          <DebouncedTextarea 
+                            value={form.soap_plano} 
+                            onChange={e => handleFieldChange('soap_plano', e.target.value)} 
+                            placeholder="Condutas, prescrições, encaminhamentos..."
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+
+                    {/* Outros blocos legados/base se visíveis */}
+                    {isBlocoVisible('queixa_principal') && (
                       <div className="space-y-2">
-                        <Label>Subjetivo (S)</Label>
-                        <Textarea value={form.soap_subjetivo} onChange={e => setForm(f => ({ ...f, soap_subjetivo: e.target.value }))} />
+                        <Label>Queixa Principal {isBlocoRequired('queixa_principal') && "*"}</Label>
+                        <DebouncedTextarea value={form.queixa_principal} onChange={e => handleFieldChange('queixa_principal', e.target.value)} />
                       </div>
+                    )}
+
+                    {isBlocoVisible('anamnese') && (
                       <div className="space-y-2">
-                        <Label>Objetivo (O)</Label>
-                        <Textarea value={form.soap_objetivo} onChange={e => setForm(f => ({ ...f, soap_objetivo: e.target.value }))} />
+                        <Label>Anamnese {isBlocoRequired('anamnese') && "*"}</Label>
+                        <DebouncedTextarea value={form.anamnese} onChange={e => handleFieldChange('anamnese', e.target.value)} />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Evolução</Label>
-                      <Textarea rows={6} value={form.evolucao} onChange={e => setForm(f => ({ ...f, evolucao: e.target.value }))} />
-                    </div>
+                    )}
+
+                    {isBlocoVisible('evolucao') && (
+                      <div className="space-y-2">
+                        <Label>Evolução {isBlocoRequired('evolucao') && "*"}</Label>
+                        <DebouncedTextarea rows={6} value={form.evolucao} onChange={e => handleFieldChange('evolucao', e.target.value)} />
+                      </div>
+                    )}
+
+                    {/* Histórico Central (se houver paciente selecionado) */}
+                    {form.paciente_id && currentPatientHistory.length > 0 && (
+                      <div className="mt-8 border-t pt-6">
+                        <HistoricoCentralList items={currentPatientHistory} onView={openEdit} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -327,3 +412,4 @@ const ProntuarioPage: React.FC = () => {
 };
 
 export default ProntuarioPage;
+
