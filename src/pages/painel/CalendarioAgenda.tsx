@@ -163,7 +163,8 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
                     info.isSelected ? "border-primary bg-primary/5 shadow-sm z-10" : "border-border hover:border-primary/40 bg-card",
                     !isCurrMonth && "opacity-30",
                     info.status === "blocked" && "bg-muted/30 cursor-not-allowed opacity-50",
-                    isPast && "bg-muted/10 opacity-80"
+                    ds < todayLocalStr() && "bg-muted/10 opacity-80"
+
 
                   )}
                 >
