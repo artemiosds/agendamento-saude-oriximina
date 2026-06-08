@@ -60,6 +60,7 @@ import { CalendarioDisponibilidade } from "@/components/CalendarioDisponibilidad
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { validatePacienteFields } from "@/lib/validation";
+import { checkPatientDuplicity, normalizeString } from "@/lib/paciente-duplicity";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { getManchesterConfig, getManchesterBadgeStyle } from "@/lib/manchesterProtocol";
@@ -500,28 +501,8 @@ const FilaEspera: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const checkDuplicidade = (dados: typeof novoPaciente) => {
-    const cpfClean = dados.cpf.replace(/\D/g, "");
-    const cnsClean = (dados.cns || "").replace(/\D/g, "");
-    const telClean = dados.telefone.replace(/\D/g, "");
-    const emailLower = dados.email.toLowerCase().trim();
-    if (cpfClean.length >= 11) {
-      const found = pacientes.find((p) => p.cpf.replace(/\D/g, "") === cpfClean);
-      if (found) return found;
-    }
-    if (cnsClean.length >= 15) {
-      const found = pacientes.find((p) => (p.cns || "").replace(/\D/g, "") === cnsClean);
-      if (found) return found;
-    }
-    if (telClean.length >= 8) {
-      const found = pacientes.find((p) => p.telefone.replace(/\D/g, "") === telClean);
-      if (found) return found;
-    }
-    if (emailLower && emailLower.includes("@")) {
-      const found = pacientes.find((p) => p.email.toLowerCase().trim() === emailLower);
-      if (found) return found;
-    }
-    return null;
+  const checkDuplicidade = async (dados: { nome: string; dataNascimento: string; cpf?: string; cns?: string }) => {
+    return await checkPatientDuplicity(dados);
   };
 
   const handleCriarPacienteEAdicionarFila = async () => {
@@ -551,9 +532,15 @@ const FilaEspera: React.FC = () => {
       return;
     }
     setPacienteErrors({});
-    const dup = checkDuplicidade(novoPaciente);
-    if (dup) {
-      setDuplicataEncontrada(dup);
+    const duplicity = await checkDuplicidade(novoPaciente);
+    if (duplicity.isDuplicate) {
+      toast.error(duplicity.message);
+      if (duplicity.existingPatient) {
+        setDuplicataEncontrada({
+          id: duplicity.existingPatient.id,
+          nome: duplicity.existingPatient.nome
+        } as any);
+      }
       return;
     }
     const pacienteId = `p${Date.now()}`;
@@ -561,8 +548,8 @@ const FilaEspera: React.FC = () => {
       await addPaciente({
         id: pacienteId,
         nome: novoPaciente.nome,
-        cpf: novoPaciente.cpf,
-        cns: novoPaciente.cns || "",
+        cpf: (novoPaciente.cpf || "").replace(/\D/g, ""),
+        cns: (novoPaciente.cns || "").replace(/\D/g, "").slice(0, 15),
         nomeMae: novoPaciente.nomeMae || "",
         telefone: novoPaciente.telefone,
         email: novoPaciente.email,
@@ -678,35 +665,13 @@ const FilaEspera: React.FC = () => {
     }
   };
 
-  const checkImportDuplicidade = (dados: typeof importForm) => {
-    const cpfClean = dados.cpf.replace(/\D/g, "");
-    const cnsClean = (dados.cns || "").replace(/\D/g, "");
-    const telClean = dados.telefone.replace(/\D/g, "");
-    const emailLower = dados.email.toLowerCase().trim();
-    if (cpfClean.length >= 11) {
-      const found = pacientes.find((p) => p.cpf.replace(/\D/g, "") === cpfClean);
-      if (found) return found;
-    }
-    if (cnsClean.length >= 15) {
-      const found = pacientes.find((p) => (p.cns || "").replace(/\D/g, "") === cnsClean);
-      if (found) return found;
-    }
-    if (telClean.length >= 8) {
-      const found = pacientes.find((p) => p.telefone.replace(/\D/g, "") === telClean);
-      if (found) return found;
-    }
-    if (emailLower && emailLower.includes("@")) {
-      const found = pacientes.find((p) => p.email.toLowerCase().trim() === emailLower);
-      if (found) return found;
-    }
-    if (dados.nome.trim() && dados.dataNascimento) {
-      const found = pacientes.find(
-        (p) =>
-          p.nome.toLowerCase().trim() === dados.nome.toLowerCase().trim() && p.dataNascimento === dados.dataNascimento,
-      );
-      if (found) return found;
-    }
-    return null;
+  const checkImportDuplicidade = async (dados: typeof importForm) => {
+    return await checkPatientDuplicity({
+      nome: dados.nome,
+      dataNascimento: dados.dataNascimento,
+      cpf: dados.cpf,
+      cns: dados.cns
+    });
   };
 
   const handleImportSave = async (existingPatient?: (typeof pacientes)[0]) => {
@@ -738,9 +703,12 @@ const FilaEspera: React.FC = () => {
         telefone = existingPatient.telefone;
         email = existingPatient.email;
       } else {
-        const dup = checkImportDuplicidade(importForm);
-        if (dup && !importDup) {
-          setImportDup(dup);
+        const duplicity = await checkImportDuplicidade(importForm);
+        if (duplicity.isDuplicate && !importDup) {
+          setImportDup({
+            id: duplicity.existingPatient!.id,
+            nome: duplicity.existingPatient!.nome
+          } as any);
           setImportSaving(false);
           return;
         }
@@ -766,8 +734,8 @@ const FilaEspera: React.FC = () => {
         await addPaciente({
           id: pacienteId,
           nome: importForm.nome,
-          cpf: importForm.cpf,
-          cns: importForm.cns || "",
+          cpf: (importForm.cpf || "").replace(/\D/g, ""),
+          cns: (importForm.cns || "").replace(/\D/g, "").slice(0, 15),
           nomeMae: (importForm as any).nomeMae || "",
           telefone: importForm.telefone,
           email: importForm.email,
