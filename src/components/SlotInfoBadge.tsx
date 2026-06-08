@@ -48,10 +48,14 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
         !STATUS_NAO_OCUPA_VAGA.has(a.status),
     );
 
+    const activeInAnyTurno = active.filter(a => {
+      return turnoData.some(t => a.hora >= t.horaInicio && a.hora < t.horaFim);
+    });
 
 
-    const dayOccupied = active.length;
-    const dayTotal = allDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
+
+    const dayOccupied = activeInAnyTurno.length;
+    const dayTotal = turnoData.reduce((sum, t) => sum + t.vagasTotal, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
     const dayExcedido = dayOccupied > dayTotal;
     const availableSlotOptions = getAvailableSlots(profissionalId, unidadeId, date).length;
@@ -87,7 +91,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
           "text-xs font-medium",
           totalExcedido ? "text-destructive font-semibold" : "text-muted-foreground",
         )}>
-          📊 {totalOcupadas} de {totalVagas} vagas ocupadas no dia
+          📊 {totalOcupadas} pacientes agendados no dia
           {totalExcedido && ' • LIMITE EXCEDIDO'}
         </span>
         <div className="flex flex-col gap-1.5">
@@ -145,7 +149,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
                 </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-muted-foreground">
                   <span>Capacidade: <strong className="text-foreground">{t.vagasTotal} vagas</strong></span>
-                  <span>Agendados: <strong className="text-foreground">{t.vagasOcupadas} paciente{t.vagasOcupadas !== 1 ? 's' : ''}</strong></span>
+                  <span>Agendados neste bloco: <strong className="text-foreground">{t.vagasOcupadas} paciente{t.vagasOcupadas !== 1 ? 's' : ''}</strong></span>
                   <span>Disponíveis: <strong className="text-foreground">{disponiveis} vaga{disponiveis !== 1 ? 's' : ''}</strong></span>
                 </div>
                 {mensagem && (
@@ -219,7 +223,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
             ? `🔴 Dia lotado (${info.dayOccupied} de ${info.dayTotal})`
             : hasNoRemainingSlotOptions
               ? (isToday ? '⏰ Sem horários restantes hoje' : '⏰ Sem horários livres nesta data')
-              : `📊 ${info.dayOccupied} de ${info.dayTotal} vagas ocupadas`
+              : `📊 ${info.dayOccupied} pacientes agendados no dia`
         }
       </span>
       {!isFull && (
