@@ -572,7 +572,7 @@ const FilaEspera: React.FC = () => {
         descricaoClinica: novoPaciente.descricaoClinica || "",
         cid: novoPaciente.cid || "",
         criadoEm: new Date().toISOString(),
-        customData: { sexo: novoPaciente.sexo },
+        custom_data: { sexo: novoPaciente.sexo },
       });
       await logAction({
         acao: "criar",
@@ -777,7 +777,7 @@ const FilaEspera: React.FC = () => {
           descricaoClinica: importForm.descricaoClinica || "",
           cid: importForm.cid || "",
           criadoEm: new Date().toISOString(),
-          customData: { sexo: importForm.sexo },
+          custom_data: { sexo: importForm.sexo },
         });
         await logAction({
           acao: "criar",
