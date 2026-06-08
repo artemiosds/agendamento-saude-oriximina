@@ -563,7 +563,12 @@ const Pacientes: React.FC = () => {
     const newErrors: Record<string, string> = {};
     const cd: any = form.customData || {};
 
-    if (!form.nome.trim()) newErrors.nome = "Nome completo é obrigatório";
+    if (!form.nome?.trim()) newErrors.nome = "Nome completo é obrigatório";
+    if (!form.nomeMae?.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
+    if (!form.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
+    if (!form.cns?.trim()) newErrors.cns = "CNS é obrigatório";
+    if (!form.naturalidade?.trim()) newErrors.naturalidade = "Naturalidade é obrigatória";
+    if (!form.telefone?.trim()) newErrors.telefone = "Telefone é obrigatório";
 
     const rawPhone = form.telefone?.trim();
     if (rawPhone) {
@@ -575,7 +580,8 @@ const Pacientes: React.FC = () => {
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      toast.error(Object.values(newErrors)[0]);
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
       return;
     }
     if (!editId && user?.role === "recepcao" && !unidadeIdFuncionario) {
