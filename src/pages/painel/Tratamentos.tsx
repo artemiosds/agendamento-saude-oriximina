@@ -683,19 +683,32 @@ const Tratamentos: React.FC = () => {
       toast.error(`Selecione exatamente ${getMaxWeekdays(newCycle.frequency)} dia(s) da semana.`);
       return;
     }
+
+    if (loading) return; // Guard
+    
+    // Check for duplicates before creating
+    const { data: existingCycles, error: checkError } = await supabase
+      .from("treatment_cycles")
+      .select("id, treatment_type, status")
+      .eq("patient_id", newCycle.patient_id)
+      .eq("professional_id", newCycle.professional_id)
+      .eq("specialty", newCycle.specialty || "")
+      .eq("unit_id", newCycle.unit_id || "")
+      .in("status", ["em_andamento", "aguardando_vaga", "em_fila"]);
+
+    if (checkError) {
+      console.error("Erro ao verificar duplicidade:", checkError);
+    } else if (existingCycles && existingCycles.length > 0) {
+      const sameType = existingCycles.find(c => c.treatment_type === newCycle.treatment_type);
+      if (sameType) {
+        toast.error("Já existe um ciclo de tratamento ativo para este paciente com este profissional/especialidade.");
+        return;
+      }
+    }
+
     const prof = profissionais.find((p) => p.id === newCycle.professional_id);
     const pac = pacientes.find((p) => p.id === newCycle.patient_id);
 
-    const existingActive = cycles.find(
-      (c) =>
-        c.patient_id === newCycle.patient_id &&
-        c.status === "em_andamento" &&
-        c.treatment_type === newCycle.treatment_type,
-    );
-    if (existingActive) {
-      toast.error("Paciente já possui tratamento ativo deste tipo.");
-      return;
-    }
 
     const totalSessions = newCycle.frequency === 'manual'
       ? newCycle.total_sessions
