@@ -1078,10 +1078,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const key = `${profissionalId}|${unidadeId}|${date}`;
       const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
 
-      return turnoDisps.map((td) => {
-        const turnoAppCount = dayAppointments.filter(
-          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
-        ).length;
+      const sortedTurnos = [...turnoDisps].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+      
+      return sortedTurnos.map((td, index) => {
+        // Atribui agendamentos ao turno. 
+        // Se o agendamento estiver fora de qualquer turno definido, ele é atribuído ao turno mais próximo
+        // para garantir que o total de "Agendados" bata com a lista da agenda.
+        const turnoAppCount = dayAppointments.filter((a) => {
+          const aHora = a.hora;
+          // Se está dentro do intervalo do turno (inclusive o fim se for o último turno do dia)
+          const isLast = index === sortedTurnos.length - 1;
+          const isInRange = isLast 
+            ? (aHora >= td.horaInicio) // Último turno pega tudo o que resta do dia
+            : (aHora >= td.horaInicio && aHora < sortedTurnos[index + 1].horaInicio); // Pega até o início do próximo
+          
+          // Se for o primeiro turno, pega também qualquer coisa que esteja antes dele
+          const isFirst = index === 0;
+          if (isFirst && aHora < td.horaInicio) return true;
+
+          return isInRange;
+        }).length;
 
         const turnoQuotas = (window as any).__quotasExternasCached || [];
         const quotasTurno = turnoQuotas.filter((q: any) => 
@@ -1092,9 +1108,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
 
         const vagasReservadasExterno = quotasTurno.reduce((acc: number, curr: any) => acc + (curr.vagas_total || 0), 0);
-        const vagasOcupadasExterno = dayAppointments.filter(
-          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim && a.origem === 'externo'
-        ).length;
+        const vagasOcupadasExterno = dayAppointments.filter((a) => {
+          if (a.origem !== 'externo') return false;
+          const aHora = a.hora;
+          const isLast = index === sortedTurnos.length - 1;
+          const isInRange = isLast 
+            ? (aHora >= td.horaInicio)
+            : (aHora >= td.horaInicio && aHora < sortedTurnos[index + 1].horaInicio);
+          const isFirst = index === 0;
+          if (isFirst && aHora < td.horaInicio) return true;
+          return isInRange;
+        }).length;
         
         const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
         const vagasTotal = td.vagasPorDia || 0;
@@ -1128,7 +1152,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lotado: turnoAppCount >= vagasTotal,
           excedido: turnoAppCount > vagasTotal,
         };
-      }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+      });
     },
     [],
   );

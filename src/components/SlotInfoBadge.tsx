@@ -48,13 +48,8 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
         !STATUS_NAO_OCUPA_VAGA.has(a.status),
     );
 
-    const activeInAnyTurno = active.filter(a => {
-      return turnoData.some(t => a.hora >= t.horaInicio && a.hora < t.horaFim);
-    });
-
-
-
-    const dayOccupied = activeInAnyTurno.length;
+    // Contagem real de pacientes ativos no dia para este profissional/unidade
+    const dayOccupied = active.length;
     const dayTotal = turnoData.reduce((sum, t) => sum + t.vagasTotal, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
     const dayExcedido = dayOccupied > dayTotal;
