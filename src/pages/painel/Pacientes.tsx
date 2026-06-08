@@ -33,6 +33,7 @@ import { useCustomFields } from "@/hooks/useCustomFields";
 import { toast } from "sonner";
 import { calculatePatientPendingFields } from "@/lib/paciente-validation";
 import { validatePacienteFields } from "@/lib/validation";
+import { checkPatientDuplicity } from "@/lib/paciente-duplicity";
 import { supabase } from "@/integrations/supabase/client";
 import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
