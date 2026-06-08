@@ -734,8 +734,8 @@ const FilaEspera: React.FC = () => {
         await addPaciente({
           id: pacienteId,
           nome: importForm.nome,
-          cpf: importForm.cpf,
-          cns: importForm.cns || "",
+          cpf: (importForm.cpf || "").replace(/\D/g, ""),
+          cns: (importForm.cns || "").replace(/\D/g, "").slice(0, 15),
           nomeMae: (importForm as any).nomeMae || "",
           telefone: importForm.telefone,
           email: importForm.email,
