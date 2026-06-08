@@ -380,7 +380,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("sexo") && (
                 <div>
-                  <Label>{L("sexo", "Sexo")}</Label>
+                  <Label>{L("sexo", "Sexo")} *</Label>
                   <Select value={cd.sexo || ""} onValueChange={(v) => setCustom("sexo", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
@@ -388,6 +388,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       <SelectItem value="feminino">Feminino</SelectItem>
                     </SelectContent>
                   </Select>
+                  {errors.sexo && <p className="text-xs text-destructive mt-1">{errors.sexo}</p>}
                 </div>
               )}
 
