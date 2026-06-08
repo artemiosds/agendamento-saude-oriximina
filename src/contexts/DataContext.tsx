@@ -1212,6 +1212,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
       }
+
+      // Validação de vaga se estiver remarcando (mudando data/hora) ou trocando profissional
+      const needsQuotaCheck = (data.data !== undefined || data.hora !== undefined || data.profissionalId !== undefined);
+      if (needsQuotaCheck) {
+        const agOriginal = agendamentosRef.current.find(a => a.id === id);
+        if (agOriginal) {
+          const newData = data.data || agOriginal.data;
+          const newHora = data.hora || agOriginal.hora;
+          const newProfId = data.profissionalId || agOriginal.profissionalId;
+          const newUnidId = agOriginal.unidadeId;
+
+          const userRole = authUser?.role || "";
+          const rolesToBlock = ["recepcao", "gestao", "coordenador"];
+          
+          if (rolesToBlock.includes(userRole)) {
+            const turnos = getTurnoInfo(newProfId, newUnidId, newData);
+            const meuTurno = turnos.find(t => newHora >= t.horaInicio && newHora < t.horaFim);
+            
+            if (meuTurno) {
+              const isSameTurno = agOriginal.data === newData && 
+                                agOriginal.profissionalId === newProfId &&
+                                agOriginal.hora >= meuTurno.horaInicio && 
+                                agOriginal.hora < meuTurno.horaFim;
+
+              // Se mudou de turno ou prof, precisa de vaga livre.
+              // Se manteve o mesmo turno, a vaga dele já está ocupada, então não bloqueamos.
+              if (!isSameTurno && meuTurno.vagasLivresInternas <= 0) {
+                toast.error(`Limite de vagas excedido para este turno (${meuTurno.nome}).`);
+                throw new Error("Limite de vagas excedido.");
+              }
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from("agendamentos" as any)
         .update(dbData)
@@ -1231,7 +1266,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     },
-    [logAction, invalidateCache],
+    [logAction, invalidateCache, authUser?.role, getTurnoInfo],
   );
 
   const cancelAgendamento = useCallback(
