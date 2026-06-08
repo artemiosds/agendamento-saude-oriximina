@@ -348,7 +348,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {!H("nome") && (
                 <div className="md:col-span-2">
-                  <Label>{L("nome", "Nome completo")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("nome", "Nome completo")}</Label>
                   <Input
                     value={form.nome}
                     onChange={(e) => set("nome", sanitizeUpper(e.target.value))}
@@ -360,7 +360,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("nomeMae") && (
                 <div className="md:col-span-2">
-                  <Label>{L("nomeMae", "Nome da Mãe")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("nomeMae", "Nome da Mãe")}</Label>
                   <Input
                     value={form.nomeMae}
                     onChange={(e) => set("nomeMae", sanitizeUpper(e.target.value))}
@@ -372,7 +372,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("dataNascimento") && (
                 <div>
-                  <Label>{L("dataNascimento", "Data de Nascimento")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("dataNascimento", "Data de Nascimento")}</Label>
                   <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
                   {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
                 </div>
@@ -380,7 +380,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("sexo") && (
                 <div>
-                  <Label>{L("sexo", "Sexo")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("sexo", "Sexo")}</Label>
                   <Select value={cd.sexo || ""} onValueChange={(v) => setCustom("sexo", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
@@ -407,7 +407,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("cns") && (
                 <div>
-                  <Label>{L("cns", "CNS")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("cns", "CNS")}</Label>
                   <Input
                     value={maskCNS(form.cns)}
                     onChange={(e) => set("cns", maskCNS(e.target.value))}
@@ -421,7 +421,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("naturalidade") && (
                 <div className="md:col-span-2">
-                  <Label>{L("naturalidade", "Naturalidade")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("naturalidade", "Naturalidade")}</Label>
                   <MunicipioCombobox
                     value={form.naturalidade}
                     uf={form.naturalidadeUf}
@@ -476,7 +476,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
           <TabsContent value="endereco" className="space-y-4 mt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <Label>CEP *</Label>
+                <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">CEP</Label>
                 <div className="relative">
                   <Input
                     value={cd.cep || ""}
@@ -516,7 +516,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div className="md:col-span-2">
-                <Label>Logradouro *</Label>
+                <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Logradouro</Label>
                 <Input
                   value={cd.logradouro || ""}
                   onChange={(e) => setCustom("logradouro", sanitizeUpper(e.target.value))}
@@ -526,7 +526,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div>
-                <Label>Número *</Label>
+                <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Número</Label>
                 <Input
                   value={cd.numero || ""}
                   onChange={(e) => setCustom("numero", e.target.value.replace(/[^\dA-Za-z\/\-]/g, "").toUpperCase())}
@@ -546,7 +546,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div>
-                <Label>Bairro *</Label>
+                <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Bairro</Label>
                 <Input
                   value={cd.bairro || ""}
                   onChange={(e) => setCustom("bairro", sanitizeUpper(e.target.value))}
@@ -557,7 +557,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("municipio") && (
                 <div>
-                  <Label>{L("municipio", "Município")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("municipio", "Município")}</Label>
                   <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
@@ -569,7 +569,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               )}
 
               <div>
-                <Label>UF *</Label>
+                <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">UF</Label>
                 <Select value={cd.uf || ""} onValueChange={(v) => setCustom("uf", v)}>
                   <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
                   <SelectContent>
@@ -598,7 +598,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {!H("telefone") && (
                 <div>
-                  <Label>{L("telefone", "Telefone Principal")} *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("telefone", "Telefone Principal")}</Label>
                   <Input
                     value={form.telefone.length > 0 && !/[()-]/.test(form.telefone) ? formatPhoneForDisplay(form.telefone) : form.telefone}
                     onChange={(e) => set("telefone", applyPhoneMask(e.target.value))}
@@ -646,7 +646,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <Label>Nacionalidade *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Nacionalidade</Label>
                   <Select
                     value={cd.nacionalidade || "brasileiro"}
                     onValueChange={(v) => setCustom("nacionalidade", v)}
@@ -662,7 +662,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 </div>
 
                 <div>
-                  <Label>Raça/Cor (IBGE) *</Label>
+                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Raça/Cor (IBGE)</Label>
                   <Select
                     value={cd.racaCor || cd.raca_cor || ""}
                     onValueChange={(v) => {
