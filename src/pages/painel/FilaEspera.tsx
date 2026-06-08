@@ -60,6 +60,7 @@ import { CalendarioDisponibilidade } from "@/components/CalendarioDisponibilidad
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { validatePacienteFields } from "@/lib/validation";
+import { checkPatientDuplicity, normalizeString } from "@/lib/paciente-duplicity";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { getManchesterConfig, getManchesterBadgeStyle } from "@/lib/manchesterProtocol";
