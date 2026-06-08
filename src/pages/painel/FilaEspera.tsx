@@ -665,35 +665,13 @@ const FilaEspera: React.FC = () => {
     }
   };
 
-  const checkImportDuplicidade = (dados: typeof importForm) => {
-    const cpfClean = dados.cpf.replace(/\D/g, "");
-    const cnsClean = (dados.cns || "").replace(/\D/g, "");
-    const telClean = dados.telefone.replace(/\D/g, "");
-    const emailLower = dados.email.toLowerCase().trim();
-    if (cpfClean.length >= 11) {
-      const found = pacientes.find((p) => p.cpf.replace(/\D/g, "") === cpfClean);
-      if (found) return found;
-    }
-    if (cnsClean.length >= 15) {
-      const found = pacientes.find((p) => (p.cns || "").replace(/\D/g, "") === cnsClean);
-      if (found) return found;
-    }
-    if (telClean.length >= 8) {
-      const found = pacientes.find((p) => p.telefone.replace(/\D/g, "") === telClean);
-      if (found) return found;
-    }
-    if (emailLower && emailLower.includes("@")) {
-      const found = pacientes.find((p) => p.email.toLowerCase().trim() === emailLower);
-      if (found) return found;
-    }
-    if (dados.nome.trim() && dados.dataNascimento) {
-      const found = pacientes.find(
-        (p) =>
-          p.nome.toLowerCase().trim() === dados.nome.toLowerCase().trim() && p.dataNascimento === dados.dataNascimento,
-      );
-      if (found) return found;
-    }
-    return null;
+  const checkImportDuplicidade = async (dados: typeof importForm) => {
+    return await checkPatientDuplicity({
+      nome: dados.nome,
+      dataNascimento: dados.dataNascimento,
+      cpf: dados.cpf,
+      cns: dados.cns
+    });
   };
 
   const handleImportSave = async (existingPatient?: (typeof pacientes)[0]) => {
