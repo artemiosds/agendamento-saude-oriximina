@@ -16,8 +16,8 @@ interface BuscaPacienteProps {
 const mapPaciente = (row: any): Paciente => ({
   id: row.id,
   nome: row.nome,
-  cpf: row.cpf || '',
-  cns: row.cns || '',
+  cpf: (row.cpf || '').replace(/\D/g, ""),
+  cns: (row.cns || '').replace(/\D/g, "").slice(0, 15),
   nomeMae: row.nome_mae || '',
   telefone: row.telefone || '',
   dataNascimento: row.data_nascimento || '',
