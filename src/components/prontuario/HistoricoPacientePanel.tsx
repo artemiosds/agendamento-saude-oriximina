@@ -70,19 +70,44 @@ function fmtDate(s?: string): string {
 export function buildEvolucaoText(h: ProntuarioHistEntry): string {
   const parts: string[] = [];
   const add = (label: string, val?: string) => {
-    if (val && val.trim()) parts.push(`${label}:\n${val.trim()}`);
+    if (val && typeof val === 'string' && val.trim()) {
+      parts.push(`${label}:\n${val.trim()}`);
+    } else if (val && typeof val === 'object') {
+      // Handle JSON objects like observacoes if they contain a 'texto' field
+      if ('texto' in val && val.texto && typeof val.texto === 'string' && val.texto.trim()) {
+        parts.push(`${label}:\n${val.texto.trim()}`);
+      }
+    }
   };
+  
   add("Queixa principal", h.queixa_principal);
   add("S — Subjetivo", h.soap_subjetivo);
   add("O — Objetivo", h.soap_objetivo);
   add("A — Avaliação", h.soap_avaliacao);
   add("P — Plano", h.soap_plano);
   add("Anamnese", h.anamnese);
+  add("Sinais e Sintomas", h.sinais_sintomas);
   add("Exame físico", h.exame_fisico);
   add("Hipótese diagnóstica", h.hipotese);
   add("Conduta", h.conduta);
   add("Evolução", h.evolucao);
   add("Observações", h.observacoes);
+  add("Procedimentos", h.procedimentos_texto);
+  add("Prescrição", h.prescricao);
+  add("Solicitação de Exames", h.solicitacao_exames);
+  add("Resultado de Exame", h.resultado_exame);
+  add("Indicação de Retorno", h.indicacao_retorno);
+
+  // Add custom data if present
+  if (h.custom_data && typeof h.custom_data === 'object') {
+    Object.entries(h.custom_data).forEach(([key, val]) => {
+      if (val && !key.startsWith('esp_')) {
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        add(label, String(val));
+      }
+    });
+  }
+
   return parts.join("\n\n");
 }
 
