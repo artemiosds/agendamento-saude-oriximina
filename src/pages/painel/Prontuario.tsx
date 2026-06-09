@@ -830,6 +830,22 @@ const ProntuarioPage: React.FC = () => {
     });
   }, [queryClient]);
 
+  const loadFullProntuario = useCallback(async (id: string): Promise<ProntuarioDB> => {
+    const cached = queryClient.getQueryData<ProntuarioDB>(['prontuario', id]);
+    if (cached && (cached as any).soap_subjetivo !== undefined) return cached;
+
+    const { data, error } = await (supabase as any)
+      .from("prontuarios")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error("Prontuário não encontrado no banco.");
+    queryClient.setQueryData(['prontuario', id], data);
+    return data as ProntuarioDB;
+  }, [queryClient]);
+
   const loadTriagem = async (agendamentoId: string) => {
     try {
       // Try to find triage by agendamento_id first
