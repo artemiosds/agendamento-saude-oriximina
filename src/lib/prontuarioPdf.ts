@@ -319,8 +319,16 @@ export async function downloadProntuarioPdf(
           }
         }
         clinicalContentHtml += renderSection(label, val);
+      } else if (!key.startsWith('esp_') && val) {
+        // Generic dynamic fields not prefixed with esp_
+        let label = key.replace(/_/g, ' ');
+        // Check if this key was already rendered as a static field
+        if (!legacyFields.some(lf => lf.k === key) && !['soap_subjetivo', 'soap_objetivo', 'soap_avaliacao', 'soap_plano'].includes(key)) {
+          clinicalContentHtml += renderSection(label, val);
+        }
       }
     });
+
   }
 
   // Fallback for some hardcoded essential fields if they have value but weren't in config
