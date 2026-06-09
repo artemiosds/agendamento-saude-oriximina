@@ -3213,7 +3213,7 @@ const Agenda: React.FC = () => {
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
                               >
-                                ✅ Ver prontuário
+                                ✅ Ver registro
                               </Button>
                             )}
                             {(ag.status === "falta" || ag.status === "cancelado") && (
