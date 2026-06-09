@@ -405,6 +405,21 @@ const ProntuarioPage: React.FC = () => {
   const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
+  const especialidadeFieldsRef = useRef(especialidadeFields);
+  const listaExamesRef = useRef(listaExames);
+  const listaPrescricaoRef = useRef(listaPrescricao);
+  const selectedProcIdsRef = useRef(selectedProcIds);
+  const procDetailsRef = useRef(procDetails);
+  const selectedCidsByProcRef = useRef(selectedCidsByProc);
+
+  useEffect(() => { especialidadeFieldsRef.current = especialidadeFields; }, [especialidadeFields]);
+  useEffect(() => { listaExamesRef.current = listaExames; }, [listaExames]);
+  useEffect(() => { listaPrescricaoRef.current = listaPrescricao; }, [listaPrescricao]);
+  useEffect(() => { selectedProcIdsRef.current = selectedProcIds; }, [selectedProcIds]);
+  useEffect(() => { procDetailsRef.current = procDetails; }, [procDetails]);
+  useEffect(() => { selectedCidsByProcRef.current = selectedCidsByProc; }, [selectedCidsByProc]);
+
+
   // Sessão: cycle + PTS state
   interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
   interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
