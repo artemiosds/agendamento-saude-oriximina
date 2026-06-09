@@ -1167,11 +1167,23 @@ const ProntuarioPage: React.FC = () => {
       if (parsed?.medicamentos && Array.isArray(parsed.medicamentos)) setListaPrescricao(parsed.medicamentos);
       else setListaPrescricao([]);
     } catch { setListaPrescricao([]); }
-    // Load specialty fields from observacoes JSON
+    // Load specialty fields and dynamic fields from observacoes JSON
     try {
       const parsed = p.observacoes ? JSON.parse(p.observacoes) : null;
-      if (parsed?.especialidade_fields && typeof parsed.especialidade_fields === 'object') {
-        setEspecialidadeFields(parsed.especialidade_fields);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.especialidade_fields) {
+          setEspecialidadeFields(parsed.especialidade_fields);
+        } else {
+          setEspecialidadeFields({});
+        }
+
+        // Carrega campos dinâmicos de volta para o form
+        if (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object') {
+          setForm(prev => ({
+            ...prev,
+            ...parsed.dynamic_fields
+          }));
+        }
       } else {
         setEspecialidadeFields({});
       }
