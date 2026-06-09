@@ -54,7 +54,6 @@ import {
   Search,
   Pencil,
   ChevronDown,
-  Home,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -191,11 +190,6 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
     label: "Sessão",
     class: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30",
     icon: "🟠",
-  },
-  "Visita Domiciliar": {
-    label: "Visita Domiciliar",
-    class: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30",
-    icon: "🏠",
   },
 };
 
@@ -2305,7 +2299,6 @@ const Agenda: React.FC = () => {
                         <SelectItem value="Procedimento">Procedimento</SelectItem>
                         <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                         <SelectItem value="Urgência">Urgência</SelectItem>
-                        <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -3168,11 +3161,7 @@ const Agenda: React.FC = () => {
                                 onClick={() => handleIniciarAtendimento(ag)}
                                 loadingText="Iniciando..."
                               >
-                                {ag.tipo === "Visita Domiciliar" ? (
-                                  <><Home className="w-3.5 h-3.5 mr-1" /> Registrar visita</>
-                                ) : (
-                                  <><Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento</>
-                                )}
+                                <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
                               </ActionButton>
                             )}
                             {isEmAtendimento && (
@@ -3214,13 +3203,11 @@ const Agenda: React.FC = () => {
                                     agendamentoId: ag.id,
                                     data: ag.data,
                                     tipo: ag.tipo || '',
-                                    mode: 'view',
-                                    id: ag.id // This is a fallback for some components that look for 'id' as prontuario_id
                                   });
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
                               >
-                                ✅ Ver registro
+                                ✅ Ver prontuário
                               </Button>
                             )}
                             {(ag.status === "falta" || ag.status === "cancelado") && (
@@ -3534,7 +3521,6 @@ const Agenda: React.FC = () => {
                     <SelectItem value="Procedimento">Procedimento</SelectItem>
                     <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                     <SelectItem value="Urgência">Urgência</SelectItem>
-                    <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

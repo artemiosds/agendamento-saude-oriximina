@@ -65,7 +65,6 @@ import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import VisitaDomiciliarProntuario from "@/components/visita-domiciliar/VisitaDomiciliarProntuario";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -101,6 +100,7 @@ interface ProntuarioDB {
   procedimentos_texto: string;
   outro_procedimento: string;
   episodio_id: string | null;
+  custom_data?: any;
   criado_em: string;
   atualizado_em: string;
 }
@@ -122,7 +122,6 @@ const TIPOS_REGISTRO = [
   { value: 'sessao', label: '🟡 Sessão' },
   { value: 'urgencia', label: '🔴 Urgência' },
   { value: 'procedimento', label: '🟣 Procedimento' },
-  { value: 'visita_domiciliar', label: '🏠 Visita Domiciliar' },
   { value: 'consulta', label: 'Consulta (legado)' },
   { value: 'reavaliacao', label: 'Reavaliação (legado)' },
   { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
@@ -199,6 +198,43 @@ const retornoOptions = [
   { value: "outro", label: "Outro prazo" },
 ];
 
+const getObservacoesTexto = (value?: any): string => {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") {
+          if ("texto" in parsed) return parsed.texto || "";
+          if ("medicamentos" in parsed && Array.isArray(parsed.medicamentos)) {
+            return parsed.medicamentos.map((m: any) => `• ${m.nome || ""} ${m.dosagem || ""}`).join("\n");
+          }
+          if ("exames" in parsed && Array.isArray(parsed.exames)) {
+            return parsed.exames.map((e: any) => `• ${e.nome || ""}`).join("\n");
+          }
+        }
+      } catch {}
+    }
+    return trimmed;
+  }
+  if (typeof value === "object") {
+    if ("texto" in value) return value.texto || "";
+    return JSON.stringify(value);
+  }
+  return String(value);
+};
+
+const getDynamicFieldsPayload = (data: Record<string, any>) => Object.keys(data).reduce((acc: Record<string, any>, key) => {
+  if (!(key in emptyForm) && data[key] !== undefined && data[key] !== null) acc[key] = data[key];
+  return acc;
+}, {});
+
+const buildCustomDataPayload = (dynamicFields: Record<string, any>, specialtyFields: Record<string, string>) => ({
+  ...dynamicFields,
+  ...Object.fromEntries(Object.entries(specialtyFields || {}).map(([key, value]) => [`esp_${key}`, value])),
+});
+
 const sessionStatusLabels: Record<string, string> = {
   pendente_agendamento: "Ag. Agendamento",
   agendada: "Agendada",
@@ -231,6 +267,8 @@ const ProntuarioPage: React.FC = () => {
   const autosaveInFlightRef = useRef(false);
   useEffect(() => { editIdRef.current = editId; }, [editId]);
   useEffect(() => { formRef.current = form; }, [form]);
+
+
   const [search, setSearch] = useState("");
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
     null,
@@ -391,6 +429,9 @@ const ProntuarioPage: React.FC = () => {
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
+
+
+
   const soapCustom = useSoapCustomOptions(user?.id);
 
   const [docModalOpen, setDocModalOpen] = useState(false);
@@ -401,6 +442,21 @@ const ProntuarioPage: React.FC = () => {
   const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
   const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
+
+  const especialidadeFieldsRef = useRef(especialidadeFields);
+  const listaExamesRef = useRef(listaExames);
+  const listaPrescricaoRef = useRef(listaPrescricao);
+  const selectedProcIdsRef = useRef(selectedProcIds);
+  const procDetailsRef = useRef(procDetails);
+  const selectedCidsByProcRef = useRef(selectedCidsByProc);
+
+  useEffect(() => { especialidadeFieldsRef.current = especialidadeFields; }, [especialidadeFields]);
+  useEffect(() => { listaExamesRef.current = listaExames; }, [listaExames]);
+  useEffect(() => { listaPrescricaoRef.current = listaPrescricao; }, [listaPrescricao]);
+  useEffect(() => { selectedProcIdsRef.current = selectedProcIds; }, [selectedProcIds]);
+  useEffect(() => { procDetailsRef.current = procDetails; }, [procDetails]);
+  useEffect(() => { selectedCidsByProcRef.current = selectedCidsByProc; }, [selectedCidsByProc]);
+
 
   // Sessão: cycle + PTS state
   interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
@@ -570,12 +626,15 @@ const ProntuarioPage: React.FC = () => {
 
     setSessionRegistrationRequested(true);
     setSoapErrors(false);
-    setForm((prev) => ({
-      ...prev,
-      tipo_registro: 'sessao',
-      data_atendimento: session.scheduled_date || prev.data_atendimento || registrationReferenceDate,
-      agendamento_id: prev.agendamento_id || session.appointment_id || '',
-    }));
+    
+    const nextForm = {
+      ...form,
+      tipo_registro: 'sessao' as const,
+      data_atendimento: session.scheduled_date || form.data_atendimento || registrationReferenceDate,
+      agendamento_id: form.agendamento_id || session.appointment_id || '',
+    };
+    
+    setForm(nextForm);
 
     if (shouldSubmitSession) {
       const effectiveError = null;
@@ -590,9 +649,10 @@ const ProntuarioPage: React.FC = () => {
         return;
       }
 
-      void handleSave();
+      void handleSave(nextForm);
       return;
     }
+
 
     setSessaoHighlightSOAP(true);
     setTimeout(() => {
@@ -806,6 +866,22 @@ const ProntuarioPage: React.FC = () => {
       },
       staleTime: 2 * 60 * 1000,
     });
+  }, [queryClient]);
+
+  const loadFullProntuario = useCallback(async (id: string): Promise<ProntuarioDB> => {
+    const cached = queryClient.getQueryData<ProntuarioDB>(['prontuario', id]);
+    if (cached && (cached as any).soap_subjetivo !== undefined) return cached;
+
+    const { data, error } = await (supabase as any)
+      .from("prontuarios")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error("Prontuário não encontrado no banco.");
+    queryClient.setQueryData(['prontuario', id], data);
+    return data as ProntuarioDB;
   }, [queryClient]);
 
   const loadTriagem = async (agendamentoId: string) => {
@@ -1113,7 +1189,9 @@ const ProntuarioPage: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const openEdit = (p: ProntuarioDB) => {
+  const openEdit = async (item: ProntuarioDB) => {
+    const p = await loadFullProntuario(item.id);
+
     setEditId(p.id);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
@@ -1143,7 +1221,7 @@ const ProntuarioPage: React.FC = () => {
       prescricao: p.prescricao || "",
       solicitacao_exames: p.solicitacao_exames || "",
       evolucao: p.evolucao || "",
-      observacoes: p.observacoes || "",
+      observacoes: getObservacoesTexto(p.observacoes),
       resultado_exame: (p as any).resultado_exame || "",
       indicacao_retorno: p.indicacao_retorno || "",
       motivo_alteracao: "",
@@ -1169,11 +1247,27 @@ const ProntuarioPage: React.FC = () => {
       if (parsed?.medicamentos && Array.isArray(parsed.medicamentos)) setListaPrescricao(parsed.medicamentos);
       else setListaPrescricao([]);
     } catch { setListaPrescricao([]); }
-    // Load specialty fields from observacoes JSON
+    // Load specialty fields and dynamic fields from observacoes JSON
     try {
       const parsed = p.observacoes ? JSON.parse(p.observacoes) : null;
-      if (parsed?.especialidade_fields && typeof parsed.especialidade_fields === 'object') {
-        setEspecialidadeFields(parsed.especialidade_fields);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.especialidade_fields) {
+          setEspecialidadeFields(parsed.especialidade_fields);
+        } else {
+          setEspecialidadeFields({});
+        }
+
+        // Carrega campos dinâmicos de volta para o form
+        const dynamicFromCustomData = p.custom_data && typeof p.custom_data === 'object'
+          ? Object.fromEntries(Object.entries(p.custom_data).filter(([key]) => !key.startsWith('esp_')))
+          : {};
+        if (Object.keys(dynamicFromCustomData).length > 0 || (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object')) {
+          setForm(prev => ({
+            ...prev,
+            ...dynamicFromCustomData,
+            ...(parsed.dynamic_fields || {})
+          }));
+        }
       } else {
         setEspecialidadeFields({});
       }
@@ -1190,14 +1284,23 @@ const ProntuarioPage: React.FC = () => {
     });
   };
 
-  const handleSave = async (): Promise<boolean> => {
-    if (!form.paciente_nome || !form.data_atendimento) {
+  const handleSave = async (formOverride?: any): Promise<boolean> => {
+    console.log("[handleSave] Iniciando salvamento...", { hasEditId: !!editId, editId });
+    const f = formOverride || formRef.current;
+    const ef = especialidadeFieldsRef.current;
+    const le = listaExamesRef.current;
+    const lp = listaPrescricaoRef.current;
+    const spi = selectedProcIdsRef.current;
+    const pd = procDetailsRef.current;
+    const scbp = selectedCidsByProcRef.current;
+
+    if (!f.paciente_nome || !f.data_atendimento) {
       toast.error("Paciente e data são obrigatórios.");
       return false;
     }
     // Prevent creating/editing prontuários for future dates
     const today = new Date().toISOString().split("T")[0];
-    if (form.data_atendimento > today && !editId) {
+    if (f.data_atendimento > today && !editId) {
       toast.error("Não é possível registrar prontuário para data futura. O atendimento precisa ocorrer primeiro.");
       return false;
     }
@@ -1206,7 +1309,15 @@ const ProntuarioPage: React.FC = () => {
       toast.error(sessionRegistrationError);
       return false;
     }
-    const soapPayload = sessionSoapPayload;
+    
+    // Normalize SOAP values
+    const soapPayload = normalizeSoapPayload({
+      subjetivo: f.soap_subjetivo,
+      objetivo: f.soap_objetivo,
+      avaliacao: f.soap_avaliacao,
+      plano: f.soap_plano,
+    });
+    
     const soapValidationError = null;
     setSoapErrors(false);
     setSaving(true);
@@ -1226,10 +1337,10 @@ const ProntuarioPage: React.FC = () => {
     let insertedNewProntuario = false;
     let prontuarioId: string | null = effectiveEditId;
     try {
-      const procTexto = selectedProcIds
+      const procTexto = spi
         .map((id) => {
           const p = procedimentos.find((pr) => pr.id === id);
-          const detail = procDetails[id];
+          const detail = pd[id];
           const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
           return p ? `${p.nome}${qtdStr}` : '';
         })
@@ -1238,44 +1349,69 @@ const ProntuarioPage: React.FC = () => {
 
       // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
       // ao criar, usa o usuário logado.
-      const profIdToSave = effectiveEditId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profIdToSave = effectiveEditId ? (f.profissional_id || user?.id || "") : (user?.id || "");
       const profNomeToSave = effectiveEditId
-        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdToSave)?.nome || user?.nome || "")
+        ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || user?.nome || "")
         : (user?.nome || "");
+      const dynamicFields = getDynamicFieldsPayload(f);
+      const allDynamicData = {
+        ...dynamicFields,
+        ...ef,
+      };
+      // Adiciona prefixo esp_ para campos de especialidade apenas se não existirem
+      Object.entries(ef || {}).forEach(([key, value]) => {
+        if (!key.startsWith('esp_')) {
+          allDynamicData[`esp_${key}`] = value;
+        }
+      });
 
       const record: any = {
-        paciente_id: form.paciente_id || `manual_${Date.now()}`,
-        paciente_nome: form.paciente_nome,
+        paciente_id: f.paciente_id || `manual_${Date.now()}`,
+        paciente_nome: f.paciente_nome,
         profissional_id: profIdToSave,
         profissional_nome: profNomeToSave,
         ...(effectiveEditId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
-        agendamento_id: form.agendamento_id,
-        data_atendimento: form.data_atendimento,
-        hora_atendimento: form.hora_atendimento,
-        queixa_principal: form.queixa_principal,
-        anamnese: form.anamnese,
-        sinais_sintomas: form.sinais_sintomas,
-        exame_fisico: form.exame_fisico,
-        hipotese: form.hipotese,
-        conduta: form.conduta,
-        prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
-        solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
-        evolucao: form.evolucao,
-        observacoes: Object.keys(especialidadeFields).length > 0
-          ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes })
-          : form.observacoes,
-        resultado_exame: form.resultado_exame || "",
+        agendamento_id: f.agendamento_id,
+        data_atendimento: f.data_atendimento,
+        hora_atendimento: f.hora_atendimento,
+        queixa_principal: f.queixa_principal,
+        anamnese: f.anamnese,
+        sinais_sintomas: f.sinais_sintomas,
+        exame_fisico: f.exame_fisico,
+        hipotese: f.hipotese,
+        conduta: f.conduta,
+        prescricao: lp.length > 0 ? JSON.stringify({ medicamentos: lp }) : (f.prescricao?.includes('"medicamentos":') ? JSON.stringify({ medicamentos: [] }) : f.prescricao),
+        solicitacao_exames: le.length > 0 ? JSON.stringify({ exames: le }) : (f.solicitacao_exames?.includes('"exames":') ? JSON.stringify({ exames: [] }) : f.solicitacao_exames),
+
+        evolucao: f.evolucao,
+        observacoes: JSON.stringify({ 
+          especialidade_fields: ef, 
+          texto: f.observacoes,
+          dynamic_fields: dynamicFields
+        }),
+        custom_data: allDynamicData,
+
+        resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
-        indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
-        motivo_alteracao: effectiveEditId ? form.motivo_alteracao : "",
-        procedimentos_texto: procTexto || form.procedimentos_texto || "",
-        outro_procedimento: form.outro_procedimento || "",
-        tipo_registro: form.tipo_registro || "consulta",
+        indicacao_retorno: f.indicacao_retorno === "no_indication" ? "" : f.indicacao_retorno || "",
+        motivo_alteracao: effectiveEditId ? f.motivo_alteracao : "",
+        procedimentos_texto: procTexto || f.procedimentos_texto || "",
+        outro_procedimento: f.outro_procedimento || "",
+        tipo_registro: f.tipo_registro || "consulta",
         soap_subjetivo: soapPayload.subjetivo,
         soap_objetivo: soapPayload.objetivo,
         soap_avaliacao: soapPayload.avaliacao,
         soap_plano: soapPayload.plano,
       };
+
+      console.log("[handleSave] Payload final a ser enviado ao banco:", {
+        id: effectiveEditId,
+        paciente: record.paciente_nome,
+        queixa: record.queixa_principal,
+        hasCustomData: Object.keys(record.custom_data || {}).length > 0,
+        customData: record.custom_data
+      });
+
 
       // CORRIGIDO: não salva 'no_episode' no banco
       if (form.episodio_id && form.episodio_id !== "no_episode") {
@@ -1284,8 +1420,10 @@ const ProntuarioPage: React.FC = () => {
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
       if (effectiveEditId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id, criado_em, atualizado_em").maybeSingle();
         if (error) throw error;
+        if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
+        console.log("[handleSave] Prontuário atualizado com sucesso:", updated.id);
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
@@ -1346,15 +1484,17 @@ const ProntuarioPage: React.FC = () => {
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
           .insert(record)
-          .select("id")
+          .select("id, criado_em, atualizado_em")
           .single();
         if (error) throw error;
+        console.log("[handleSave] Prontuário inserido com sucesso:", inserted?.id);
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
         if (prontuarioId) {
           editIdRef.current = prontuarioId;
           setEditId(prontuarioId);
+          console.log("[handleSave] Novo ID setado no estado:", prontuarioId);
         }
       }
 
@@ -1533,8 +1673,26 @@ const ProntuarioPage: React.FC = () => {
   const performAutosave = useCallback(async () => {
     if (autosaveInFlightRef.current) return;
     const f = formRef.current;
-    // Skip when no patient selected, no date, future date (new), or in session-registration flow
+    const ef = especialidadeFieldsRef.current;
+    const lp = listaPrescricaoRef.current;
+    const le = listaExamesRef.current;
+    const spi = selectedProcIdsRef.current;
+    const pd = procDetailsRef.current;
+    const scbp = selectedCidsByProcRef.current;
+
+    // Skip when no patient selected, no date, or in session-registration flow
     if (!f.paciente_nome || !f.paciente_id || !f.data_atendimento) return;
+    
+    // Check if there is actual content to save (at least one field should be non-empty)
+    const hasContent = 
+      f.queixa_principal?.trim() || f.anamnese?.trim() || f.sinais_sintomas?.trim() || 
+      f.exame_fisico?.trim() || f.hipotese?.trim() || f.conduta?.trim() || 
+      f.evolucao?.trim() || f.observacoes?.trim() || 
+      f.soap_subjetivo?.trim() || f.soap_objetivo?.trim() || f.soap_avaliacao?.trim() || f.soap_plano?.trim() ||
+      spi.length > 0 || Object.keys(ef).length > 0;
+
+    if (!hasContent) return;
+
     if (f.tipo_registro === 'sessao' && !editIdRef.current) return; // require explicit "Registrar Sessão"
     const today = new Date().toISOString().split('T')[0];
     if (!editIdRef.current && f.data_atendimento > today) return;
@@ -1542,10 +1700,10 @@ const ProntuarioPage: React.FC = () => {
     autosaveInFlightRef.current = true;
     setAutosaveStatus('saving');
     try {
-      const procTexto = selectedProcIds
+      const procTexto = spi
         .map((id) => {
           const p = procedimentos.find((pr) => pr.id === id);
-          const detail = procDetails[id];
+          const detail = pd[id];
           const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
           return p ? `${p.nome}${qtdStr}` : '';
         })
@@ -1555,6 +1713,7 @@ const ProntuarioPage: React.FC = () => {
       const isEditing = Boolean(editIdRef.current);
       const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
       const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
+      const dynamicFields = getDynamicFieldsPayload(f);
       const record: any = {
         paciente_id: f.paciente_id,
         paciente_nome: f.paciente_nome,
@@ -1570,22 +1729,43 @@ const ProntuarioPage: React.FC = () => {
         exame_fisico: f.exame_fisico,
         hipotese: f.hipotese,
         conduta: f.conduta,
-        prescricao: f.prescricao,
-        solicitacao_exames: f.solicitacao_exames,
+        prescricao: lp.length > 0 ? JSON.stringify({ medicamentos: lp }) : (f.prescricao?.includes('"medicamentos":') ? JSON.stringify({ medicamentos: [] }) : f.prescricao),
+        solicitacao_exames: le.length > 0 ? JSON.stringify({ exames: le }) : (f.solicitacao_exames?.includes('"exames":') ? JSON.stringify({ exames: [] }) : f.solicitacao_exames),
+
         evolucao: f.evolucao,
-        observacoes: f.observacoes,
+        observacoes: JSON.stringify({ 
+          especialidade_fields: ef, 
+          texto: f.observacoes,
+          dynamic_fields: dynamicFields
+        }),
+        custom_data: {
+          ...dynamicFields,
+          ...ef,
+          ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => {
+            const finalKey = key.startsWith('esp_') ? key : `esp_${key}`;
+            return [finalKey, value];
+          })),
+        },
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
         outro_procedimento: f.outro_procedimento || '',
         tipo_registro: f.tipo_registro || 'consulta',
+        soap_subjetivo: f.soap_subjetivo,
+        soap_objetivo: f.soap_objetivo,
+        soap_avaliacao: f.soap_avaliacao,
+        soap_plano: f.soap_plano,
+        resultado_exame: f.resultado_exame || "",
       };
       if (f.episodio_id && f.episodio_id !== 'no_episode') record.episodio_id = f.episodio_id;
+
+
 
       let prontId = editIdRef.current;
       if (prontId) {
         const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
         if (error) throw error;
+        console.log("[performAutosave] Draft atualizado:", prontId);
       } else {
         const { data: inserted, error } = await (supabase as any)
           .from('prontuarios')
@@ -1595,6 +1775,7 @@ const ProntuarioPage: React.FC = () => {
         if (error) throw error;
         if (inserted?.id) {
           prontId = inserted.id;
+          console.log("[performAutosave] Novo draft criado:", prontId);
           setEditId(prontId);
           editIdRef.current = prontId;
           // Reset status de faltas ao registrar novo atendimento
@@ -1604,16 +1785,17 @@ const ProntuarioPage: React.FC = () => {
 
       // Autosave procedures to junction table
       if (prontId) {
-        const links = selectedProcIds.map((pid) => {
+        const links = spi.map((pid) => {
           const proc = procedimentos.find(p => p.id === pid);
           return {
             prontuario_id: prontId,
             procedimento_id: proc?.uuid || pid,
-            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-            quantidade: procDetails[pid]?.quantidade || 1,
-            observacao: procDetails[pid]?.observacao || "",
+            cids_selecionados: Array.from(new Set(scbp[pid] || [])),
+            quantidade: pd[pid]?.quantidade || 1,
+            observacao: pd[pid]?.observacao || "",
           };
         }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+
         
         // Use a single transaction (delete + insert)
         const validLinks = links.filter(l => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id));
@@ -1826,6 +2008,7 @@ const ProntuarioPage: React.FC = () => {
       const profNomeSess = editId
         ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
         : (user?.nome || "");
+      const dynamicFields = getDynamicFieldsPayload(form);
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
@@ -1844,7 +2027,13 @@ const ProntuarioPage: React.FC = () => {
         prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
-        observacoes: Object.keys(especialidadeFields).length > 0 ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes }) : form.observacoes,
+        observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
+        custom_data: {
+          ...dynamicFields,
+          ...especialidadeFields,
+          ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
+        },
+
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
@@ -1858,8 +2047,9 @@ const ProntuarioPage: React.FC = () => {
       if (form.episodio_id && form.episodio_id !== "no_episode") record.episodio_id = form.episodio_id;
 
       if (editId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("id").maybeSingle();
         if (error) throw error;
+        if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
       } else {
         const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("id").single();
         if (error) throw error;
@@ -2312,8 +2502,13 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const handleViewProntuarioFromHistory = useCallback((p: any) => {
-    setViewerProntuario(p);
-  }, []);
+    loadFullProntuario(p.id)
+      .then(setViewerProntuario)
+      .catch((err) => {
+        console.error("Erro ao carregar prontuário completo:", err);
+        toast.error("Não foi possível carregar o prontuário completo.");
+      });
+  }, [loadFullProntuario]);
 
   const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
   const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
@@ -2813,20 +3008,6 @@ const ProntuarioPage: React.FC = () => {
                   </div>
                 )}
               </div>
-            )}
-
-            {/* 🏠 VISITA DOMICILIAR */}
-            {form.tipo_registro === 'visita_domiciliar' && (
-              <VisitaDomiciliarProntuario 
-                atendimento_id={form.agendamento_id}
-                prontuario_id={editId || undefined}
-                paciente={pacientes.find(p => p.id === form.paciente_id)}
-                profissional={user}
-                unidade={unidades.find(u => u.id === user?.unidadeId)}
-                onSaveSuccess={() => {
-                  queryClient.invalidateQueries({ queryKey: ["prontuarios"] });
-                }}
-              />
             )}
 
             {/* 🔵 PRONTUÁRIO 2 — RETORNO */}
@@ -4427,7 +4608,7 @@ const ProntuarioPage: React.FC = () => {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => setViewerProntuario(p)}
+                            onClick={() => handleViewProntuarioFromHistory(p)}
                             title="Visualizar prontuário"
                             aria-label="Visualizar prontuário"
                           >
@@ -4618,74 +4799,108 @@ const ProntuarioPage: React.FC = () => {
               </SheetHeader>
 
               <div className="mt-4 space-y-4 text-sm">
-                {viewerProntuario.queixa_principal && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Queixa Principal</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.queixa_principal}</p>
+                <div className="flex justify-between items-center bg-muted/20 p-3 rounded-lg border border-border/40">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="bg-background font-semibold capitalize">
+                      {viewerProntuario.tipo_registro?.replace(/_/g, ' ') || 'Consulta'}
+                    </Badge>
+                    {viewerProntuario.setor && (
+                      <Badge variant="secondary" className="text-[10px] uppercase">
+                        {viewerProntuario.setor}
+                      </Badge>
+                    )}
                   </div>
-                )}
-                {viewerProntuario.soap_subjetivo && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">S — Subjetivo</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_subjetivo}</p>
+                  <div className="text-[11px] text-muted-foreground font-mono bg-background px-2 py-0.5 rounded border">
+                    ID: {viewerProntuario.id.slice(0, 8)}
                   </div>
-                )}
-                {viewerProntuario.soap_objetivo && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">O — Objetivo</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_objetivo}</p>
-                  </div>
-                )}
-                {viewerProntuario.soap_avaliacao && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">A — Avaliação</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_avaliacao}</p>
-                  </div>
-                )}
-                {viewerProntuario.soap_plano && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">P — Plano</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_plano}</p>
-                  </div>
-                )}
-                {viewerProntuario.evolucao && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Evolução</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.evolucao}</p>
-                  </div>
-                )}
-                {viewerProntuario.conduta && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Conduta</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.conduta}</p>
-                  </div>
-                )}
-                {viewerProntuario.procedimentos_texto && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Procedimentos</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.procedimentos_texto}</p>
-                  </div>
-                )}
-                {viewerProntuario.prescricao && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Prescrição</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.prescricao}</p>
-                  </div>
-                )}
-                {viewerProntuario.solicitacao_exames && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Exames Solicitados</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.solicitacao_exames}</p>
-                  </div>
-                )}
-                {viewerProntuario.resultado_exame && (
-                  <div className="bg-muted/30 rounded-lg p-3 border">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
-                      <FlaskConical className="w-3.5 h-3.5" /> Resultado de Exame
-                    </p>
-                    <p className="text-foreground whitespace-pre-wrap leading-relaxed">{viewerProntuario.resultado_exame}</p>
-                  </div>
-                )}
+                </div>
+
+                {(() => {
+                  const renderSection = (label: string, value: any, options: { icon?: React.ReactNode, isWide?: boolean } = {}) => {
+                    const text = getObservacoesTexto(value);
+                    if (!text || !text.trim()) return null;
+                    return (
+                      <div key={label} className={cn(
+                        "border-b border-border/20 pb-4 last:border-0",
+                        options.isWide ? "col-span-full" : ""
+                      )}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {options.icon}
+                          <p className="text-[11px] font-bold text-primary/80 uppercase tracking-widest">{label}</p>
+                        </div>
+                        <div className="text-foreground whitespace-pre-wrap leading-relaxed bg-muted/5 p-3 rounded-md border border-border/10">
+                          {text}
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  const dynamicContent = [];
+                  if (viewerProntuario.custom_data && typeof viewerProntuario.custom_data === 'object') {
+                    Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
+                      if (key.startsWith('esp_')) return; // skip esp_ prefix duplicates
+                      
+                      // Check if it's already rendered by a static section
+                      const staticKeys = ['queixa_principal', 'anamnese', 'soap_subjetivo', 'soap_objetivo', 'soap_avaliacao', 'soap_plano', 'sinais_sintomas', 'exame_fisico', 'hipotese', 'conduta', 'evolucao', 'observacoes', 'procedimentos_texto', 'prescricao', 'solicitacao_exames', 'resultado_exame'];
+                      if (staticKeys.includes(key)) return;
+
+                      let label = key.replace(/_/g, ' ');
+                      // Try to find label in system_config if possible (optional enhancement)
+                      
+                      const section = renderSection(label, val, { icon: <Tag className="w-3.5 h-3.5 text-primary" /> });
+                      if (section) dynamicContent.push(section);
+                    });
+                  }
+
+
+                  const sections = [
+                    { key: 'queixa_principal', label: 'Queixa Principal', icon: <Activity className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'anamnese', label: 'Anamnese / Histórico', icon: <ClipboardList className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_subjetivo', label: 'S — Subjetivo', icon: <User className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_objetivo', label: 'O — Objetivo', icon: <Eye className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_avaliacao', label: 'A — Avaliação', icon: <Target className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_plano', label: 'P — Plano', icon: <Calendar className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'sinais_sintomas', label: 'Sinais e Sintomas' },
+                    { key: 'exame_fisico', label: 'Exame Físico' },
+                    { key: 'hipotese', label: 'Hipótese / Avaliação' },
+                    { key: 'conduta', label: 'Conduta', icon: <CheckCircle className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'evolucao', label: 'Evolução', icon: <History className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'observacoes', label: 'Observações Gerais' },
+                    { key: 'procedimentos_texto', label: 'Procedimentos Realizados', icon: <Activity className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'prescricao', label: 'Prescrição Médica', icon: <FileText className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'solicitacao_exames', label: 'Solicitação de Exames', icon: <FlaskConical className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'resultado_exame', label: 'Resultados de Exames' },
+                    { key: 'indicacao_retorno', label: 'Indicação de Retorno', icon: <CalendarClock className="w-3.5 h-3.5 text-primary" /> },
+                  ];
+
+                  const rendered = sections.map(s => renderSection(s.label, (viewerProntuario as any)[s.key], { icon: s.icon }));
+                  
+                  // Handle custom_data (Dynamic Fields)
+                  if (viewerProntuario.custom_data && typeof viewerProntuario.custom_data === 'object') {
+                    Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
+                      if (val && !key.startsWith('esp_') && !sections.some(s => s.key === key)) {
+                        const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        rendered.push(renderSection(label, val, { icon: <Tag className="w-3.5 h-3.5 text-primary" /> }));
+                      }
+                    });
+
+                    // Specialty fields (esp_ prefix)
+                    Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
+                      if (key.startsWith('esp_') && val) {
+                        const label = key.replace('esp_', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        rendered.push(renderSection(`Especialidade: ${label}`, val, { icon: <Heart className="w-3.5 h-3.5 text-primary" /> }));
+                      }
+                    });
+                  }
+
+                  const filtered = rendered.filter(Boolean);
+                  return filtered.length > 0 
+                    ? <div className="grid grid-cols-1 gap-4">{filtered}</div>
+                    : <div className="text-center py-12 bg-muted/10 rounded-xl border border-dashed border-border/60 mt-4">
+                        <AlertTriangle className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
+                        <p className="text-muted-foreground font-medium italic">Nenhum dado clínico registrado neste prontuário.</p>
+                      </div>;
+                })()}
               </div>
 
               <Separator className="my-4" />

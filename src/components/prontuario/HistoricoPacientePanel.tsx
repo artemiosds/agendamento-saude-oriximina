@@ -1,9 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, Home } from "lucide-react";
+import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
 
@@ -35,7 +34,6 @@ type ProntuarioHistEntry = {
 
 export interface HistoricoPacientePanelProps {
   paciente: {
-    id?: string;
     nome?: string;
     data_nascimento?: string;
     cpf?: string;
@@ -108,17 +106,6 @@ export function buildEvolucaoText(h: ProntuarioHistEntry): string {
     }
   };
   
-  if (h.tipo_registro === 'visita_domiciliar' && h.custom_data?.visita_domiciliar) {
-    const vd = h.custom_data.visita_domiciliar;
-    add("Evolução da Visita", vd.evolucao_visita);
-    add("Conduta / Orientações", vd.conduta_orientacoes);
-    add("Observações", vd.observacoes);
-    if (vd.tipo_visita === 'medidas_cadeira_rodas' && vd.medidas) {
-        add("Medidas", "Registro de medidas para cadeira de rodas realizado.");
-    }
-    return parts.join("\n\n");
-  }
-
   add("Queixa principal", h.queixa_principal);
   add("S — Subjetivo", h.soap_subjetivo);
   add("O — Objetivo", h.soap_objetivo);
@@ -140,7 +127,7 @@ export function buildEvolucaoText(h: ProntuarioHistEntry): string {
   // Add custom data if present
   if (h.custom_data && typeof h.custom_data === 'object') {
     Object.entries(h.custom_data).forEach(([key, val]) => {
-      if (val && !key.startsWith('esp_') && key !== 'visita_domiciliar') {
+      if (val && !key.startsWith('esp_')) {
         const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         add(label, String(val));
       }
@@ -239,16 +226,11 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
           )}
           {sorted.map((h) => {
             const isExpanded = expandedId === h.id;
-            const isVD = h.tipo_registro === 'visita_domiciliar';
-            const queixa = isVD ? (h.custom_data?.visita_domiciliar?.evolucao_visita || "") : (h.queixa_principal || "").trim();
-            
+            const queixa = (h.queixa_principal || "").trim();
             return (
               <div
                 key={h.id}
-                className={cn(
-                    "rounded-lg border border-border bg-card hover:border-primary/40 transition-colors",
-                    isVD && "border-blue-200 bg-blue-50/30"
-                )}
+                className="rounded-lg border border-border bg-card hover:border-primary/40 transition-colors"
               >
                 <button
                   type="button"
@@ -266,102 +248,72 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
                         {h.hora_atendimento ? ` · ${h.hora_atendimento}` : ""}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-1.5 mt-0.5">
-                      <p className="text-[12px] text-foreground truncate">
-                        {isVD ? (
-                          <Home className="w-3 h-3 inline mr-1 text-blue-500" />
-                        ) : (
-                          <Stethoscope className="w-3 h-3 inline mr-1 text-muted-foreground" />
-                        )}
-                        {h.profissional_nome || "—"}
-                      </p>
-                      {isVD && (
-                        <Badge variant="outline" className="h-4 text-[9px] bg-blue-500/10 text-blue-600 border-blue-500/20 px-1">
-                          Visita Domiciliar
-                        </Badge>
-                      )}
-                    </div>
+                    <p className="text-[12px] text-foreground mt-0.5 truncate">
+                      <Stethoscope className="w-3 h-3 inline mr-1 text-muted-foreground" />
+                      {h.profissional_nome || "—"}
+                    </p>
                     <p className="text-[12px] text-muted-foreground mt-0.5 line-clamp-2">
-                      {queixa || <em className="opacity-60">Sem resumo registrado</em>}
+                      {queixa || <em className="opacity-60">Sem queixa registrada</em>}
                     </p>
                   </div>
                 </button>
                 {isExpanded && (
                   <div className="px-3 pb-3 pt-1 border-t border-border/40 space-y-2 text-[12px]">
-                    {isVD ? (
-                        <>
-                            {h.custom_data?.visita_domiciliar?.evolucao_visita && (
-                                <div>
-                                    <p className="text-[10px] uppercase font-semibold text-blue-600">Evolução da Visita</p>
-                                    <p className="text-foreground whitespace-pre-wrap">{h.custom_data.visita_domiciliar.evolucao_visita}</p>
-                                </div>
-                            )}
-                            {h.custom_data?.visita_domiciliar?.conduta_orientacoes && (
-                                <div>
-                                    <p className="text-[10px] uppercase font-semibold text-blue-600">Conduta / Orientações</p>
-                                    <p className="text-foreground whitespace-pre-wrap">{h.custom_data.visita_domiciliar.conduta_orientacoes}</p>
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        <>
-                            {(h.cid_codigo || h.cid_descricao) && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">CID</p>
-                                <p className="text-foreground">
-                                {[h.cid_codigo, h.cid_descricao].filter(Boolean).join(" — ")}
-                                </p>
-                            </div>
-                            )}
-                            {queixa && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Queixa</p>
-                                <p className="text-foreground whitespace-pre-wrap">{queixa}</p>
-                            </div>
-                            )}
-                            {h.soap_subjetivo && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Subjetivo (S)</p>
-                                <p className="text-foreground whitespace-pre-wrap">{h.soap_subjetivo}</p>
-                            </div>
-                            )}
-                            {h.soap_objetivo && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Objetivo (O)</p>
-                                <p className="text-foreground whitespace-pre-wrap">{h.soap_objetivo}</p>
-                            </div>
-                            )}
-                            {h.soap_avaliacao && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Avaliação (A)</p>
-                                <p className="text-foreground whitespace-pre-wrap">{h.soap_avaliacao}</p>
-                            </div>
-                            )}
-                            {h.soap_plano && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Plano (P)</p>
-                                <p className="text-foreground whitespace-pre-wrap">{h.soap_plano}</p>
-                            </div>
-                            )}
-                            {h.anamnese && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Anamnese</p>
-                                <p className="text-foreground whitespace-pre-wrap">{h.anamnese}</p>
-                            </div>
-                            )}
-                            {h.conduta && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Conduta</p>
-                                <p className="text-foreground whitespace-pre-wrap">{h.conduta}</p>
-                            </div>
-                            )}
-                            {h.evolucao && (
-                            <div>
-                                <p className="text-[10px] uppercase font-semibold text-muted-foreground">Evolução</p>
-                                <p className="text-foreground whitespace-pre-wrap">{h.evolucao}</p>
-                            </div>
-                            )}
-                        </>
+                    {(h.cid_codigo || h.cid_descricao) && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">CID</p>
+                        <p className="text-foreground">
+                          {[h.cid_codigo, h.cid_descricao].filter(Boolean).join(" — ")}
+                        </p>
+                      </div>
+                    )}
+                    {queixa && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Queixa</p>
+                        <p className="text-foreground whitespace-pre-wrap">{queixa}</p>
+                      </div>
+                    )}
+                    {h.soap_subjetivo && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Subjetivo (S)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_subjetivo}</p>
+                      </div>
+                    )}
+                    {h.soap_objetivo && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Objetivo (O)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_objetivo}</p>
+                      </div>
+                    )}
+                    {h.soap_avaliacao && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Avaliação (A)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_avaliacao}</p>
+                      </div>
+                    )}
+                    {h.soap_plano && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Plano (P)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_plano}</p>
+                      </div>
+                    )}
+                    {h.anamnese && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Anamnese</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.anamnese}</p>
+                      </div>
+                    )}
+                    {h.conduta && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Conduta</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.conduta}</p>
+                      </div>
+                    )}
+                    {h.evolucao && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Evolução</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.evolucao}</p>
+                      </div>
                     )}
                     <div className="flex flex-wrap gap-1.5 pt-2 border-t border-border/40">
                       {onView && (
