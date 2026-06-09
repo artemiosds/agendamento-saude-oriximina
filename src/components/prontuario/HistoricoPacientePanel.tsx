@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
 
