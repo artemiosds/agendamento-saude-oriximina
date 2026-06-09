@@ -1354,6 +1354,11 @@ const ProntuarioPage: React.FC = () => {
         ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || user?.nome || "")
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(f);
+      const allDynamicData = {
+        ...dynamicFields,
+        ...ef,
+        ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => [`esp_${key}`, value])),
+      };
 
       const record: any = {
         paciente_id: f.paciente_id || `manual_${Date.now()}`,
@@ -1379,7 +1384,8 @@ const ProntuarioPage: React.FC = () => {
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: buildCustomDataPayload(dynamicFields, ef),
+        custom_data: allDynamicData,
+
         resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: f.indicacao_retorno === "no_indication" ? "" : f.indicacao_retorno || "",
@@ -2010,7 +2016,12 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
-        custom_data: buildCustomDataPayload(dynamicFields, especialidadeFields),
+        custom_data: {
+          ...dynamicFields,
+          ...especialidadeFields,
+          ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
+        },
+
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
@@ -4811,6 +4822,24 @@ const ProntuarioPage: React.FC = () => {
                       </div>
                     );
                   };
+
+                  const dynamicContent = [];
+                  if (viewerProntuario.custom_data && typeof viewerProntuario.custom_data === 'object') {
+                    Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
+                      if (key.startsWith('esp_')) return; // skip esp_ prefix duplicates
+                      
+                      // Check if it's already rendered by a static section
+                      const staticKeys = ['queixa_principal', 'anamnese', 'soap_subjetivo', 'soap_objetivo', 'soap_avaliacao', 'soap_plano', 'sinais_sintomas', 'exame_fisico', 'hipotese', 'conduta', 'evolucao', 'observacoes', 'procedimentos_texto', 'prescricao', 'solicitacao_exames', 'resultado_exame'];
+                      if (staticKeys.includes(key)) return;
+
+                      let label = key.replace(/_/g, ' ');
+                      // Try to find label in system_config if possible (optional enhancement)
+                      
+                      const section = renderSection(label, val, { icon: <Tag className="w-3.5 h-3.5 text-primary" /> });
+                      if (section) dynamicContent.push(section);
+                    });
+                  }
+
 
                   const sections = [
                     { key: 'queixa_principal', label: 'Queixa Principal', icon: <Activity className="w-3.5 h-3.5 text-primary" /> },
