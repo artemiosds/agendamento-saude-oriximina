@@ -29,7 +29,7 @@ const somenteNumeros = (str: any): string => {
 
 const zfill = (valor: any, tamanho: number): string => {
   const s = somenteNumeros(valor);
-  if (s.length > tamanho) return s.slice(0, tamanho); // Regra do layout pode variar, mas zfill geralmente corta
+  if (s.length > tamanho) return s.slice(0, tamanho);
   return s.padStart(tamanho, '0');
 };
 
@@ -111,7 +111,6 @@ const BpaExportar: React.FC = () => {
   const handleGerar = async () => {
     setResults(null);
     
-    // Validação básica
     if (formData.competencia.length !== 6 || isNaN(Number(formData.competencia))) {
       toast.error('Competência deve ter 6 dígitos (AAAAMM)');
       return;
@@ -133,23 +132,12 @@ const BpaExportar: React.FC = () => {
       const endDate = new Date(parseInt(ano), parseInt(mes), 0).toISOString().split('T')[0];
 
       // Buscar atendimentos no mês
-      const { data: atendimentos, error: attError } = await supabase
+      const { data: atendimentos, error: attError } = await (supabase as any)
         .from('atendimentos')
-        .select(`
-          *,
-          pacientes (
-            cns,
-            nome,
-            sexo,
-            data_nascimento,
-            endereco,
-            municipio,
-            cid
-          )
-        `)
+        .select('*')
         .gte('data', startDate)
         .lte('data', endDate)
-        .eq('status', 'finalizado'); // Assumindo que queremos atendimentos finalizados
+        .eq('status', 'finalizado');
 
       if (attError) throw attError;
 
@@ -166,10 +154,22 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
+      // Buscar dados dos pacientes relacionados
+      const pacienteIds = [...new Set(atendimentos.map((a: any) => a.paciente_id).filter(Boolean))];
+      const { data: pacientes, error: pacError } = await (supabase as any)
+        .from('pacientes')
+        .select('id, cns, nome, sexo, data_nascimento, endereco, municipio, cid, custom_data')
+        .in('id', pacienteIds);
+
+      if (pacError) throw pacError;
+
+      const pacMap = new Map();
+      (pacientes || []).forEach((p: any) => pacMap.set(p.id, p));
+
       let exportedCount = 0;
       const linhas: string[] = [];
 
-      // Montar Cabeçalho
+      // Cabeçalho (Line 1)
       const totalRegistrosZfill6 = zfill(atendimentos.length, 6);
       let header = `01BPAAMBULATCOMPET${competencia}${totalRegistrosZfill6}`;
       header = rpad(header, 205);
@@ -179,9 +179,9 @@ const BpaExportar: React.FC = () => {
       }
       linhas.push(header);
 
-      // Processar Atendimentos
-      atendimentos.forEach((att, index) => {
-        const pac = att.pacientes;
+      // Linhas de Atendimento
+      atendimentos.forEach((att: any, index: number) => {
+        const pac = pacMap.get(att.paciente_id);
         
         if (!att.data) {
           warnings.push(`Registro ${index + 1}: Atendimento ignorado (data ausente).`);
@@ -189,62 +189,81 @@ const BpaExportar: React.FC = () => {
         }
 
         if (!pac) {
-          warnings.push(`Registro ${index + 1}: Paciente não encontrado para o atendimento.`);
+          warnings.push(`Registro ${index + 1}: Paciente ID ${att.paciente_id} não encontrado.`);
           return;
         }
 
-        const cns_paciente = zfill(pac.cns || '0', 15);
-        if (!pac.cns) warnings.push(`Registro ${index + 1} (${pac.nome || 'Sem Nome'}): CNS ausente, preenchido com zeros.`);
+        const cd = pac.custom_data || {};
         
-        const nome_paciente = limparTexto(pac.nome || '');
-        if (!pac.nome) warnings.push(`Registro ${index + 1}: Nome do paciente ausente.`);
+        // CNS Paciente
+        const rawCns = pac.cns || cd.cns || '';
+        const cns_paciente = zfill(rawCns, 15);
+        if (!rawCns) warnings.push(`Registro ${index + 1} (${pac.nome || 'Sem Nome'}): CNS ausente, preenchido com zeros.`);
+        
+        // Nome Paciente
+        const nome_paciente = limparTexto(pac.nome || att.paciente_nome || '');
+        if (!pac.nome && !att.paciente_nome) warnings.push(`Registro ${index + 1}: Nome do paciente ausente.`);
 
+        // Sexo
         let sexo = ' ';
-        const s = (pac.sexo || '').toUpperCase();
+        const s = (pac.sexo || cd.sexo || '').toUpperCase();
         if (s.startsWith('M')) sexo = 'M';
         else if (s.startsWith('F')) sexo = 'F';
 
-        const data_nasc = formatarData(pac.data_nascimento);
-        const idade = calcularIdade(pac.data_nascimento, att.data);
+        // Data Nascimento e Idade
+        const rawNasc = pac.data_nascimento || cd.data_nascimento || '';
+        const data_nasc = formatarData(rawNasc);
+        const idade = calcularIdade(rawNasc, att.data);
         if (data_nasc === "00000000") warnings.push(`Registro ${index + 1} (${pac.nome}): Data de nascimento inválida/ausente.`);
 
-        const cid = (att.cid || pac.cid || "0000").substring(0, 4);
-        const proc = zfill(att.procedimento_sigtap || att.procedimento || formData.procedimento_padrao, 10);
+        // CID
+        // Em atendimentos reais, o CID costuma vir do prontuário vinculado, mas os requisitos pedem das tabelas existentes.
+        // Verificamos no atendimento, depois no paciente.
+        const attCd = att.custom_data || {};
+        const cid = (attCd.cid || att.cid || pac.cid || cd.cid || "0000").substring(0, 4);
+        
+        // Procedimento
+        const procRaw = attCd.procedimento_sigtap || att.procedimento_sigtap || att.procedimento || formData.procedimento_padrao;
+        const proc = zfill(procRaw, 10);
+        
         const data_atendimento = formatarData(att.data);
-        const municipio = zfill(pac.municipio || formData.municipio_residencia, 6);
-        const endereco = limparTexto(pac.endereco || '');
+        
+        const municipioRaw = pac.municipio || cd.municipio || cd.municipio_ibge || formData.municipio_residencia;
+        const municipio = zfill(municipioRaw, 6);
+        
+        const endereco = limparTexto(pac.endereco || cd.endereco || '');
 
-        // Layout BPA-I (205 chars)
+        // Montagem do Layout BPA-I (205 chars fixos)
         let l = "";
-        l += "03";                                      // 001-002 (2)
-        l += zfill(formData.cnes, 7);                   // 003-009 (7)
-        l += zfill(formData.competencia, 6);            // 010-015 (6)
-        l += zfill(formData.cns_profissional, 15);      // 016-030 (15)
-        l += zfill(formData.cbo, 6);                    // 031-036 (6)
-        l += zfill(proc, 10);                           // 037-046 (10)
-        l += zfill(cns_paciente, 15);                   // 047-061 (15)
-        l += sexo;                                      // 062 (1)
-        l += " ";                                       // 063 (1)
-        l += rpad(cid, 4);                              // 064-067 (4)
-        l += zfill(idade, 3);                           // 068-070 (3)
-        l += " ".repeat(6);                             // 071-076 (6)
-        l += zfill(municipio, 6);                       // 077-082 (6)
-        l += "000001";                                  // 083-088 (6)
-        l += "001";                                     // 089-091 (3)
-        l += " ".repeat(10);                            // 092-101 (10)
-        l += zfill(data_atendimento, 8);                // 102-109 (8)
-        l += rpad(nome_paciente, 40);                   // 110-149 (40)
-        l += zfill(data_nasc, 8);                       // 150-157 (8)
-        l += "99";                                      // 158-159 (2)
-        l += " ".repeat(4);                             // 160-163 (4)
-        l += "010";                                     // 164-166 (3)
-        l += rpad(endereco, 30);                        // 167-196 (30)
-        l += "00000";                                   // 197-201 (5)
-        l += " ".repeat(3);                             // 202-204 (3)
-        l += " ";                                       // 205 (1)
+        l += "03";                                      // 001-002 (2) - Tipo Registro
+        l += zfill(formData.cnes, 7);                   // 003-009 (7) - CNES
+        l += zfill(formData.competencia, 6);            // 010-015 (6) - Competência
+        l += zfill(formData.cns_profissional, 15);      // 016-030 (15) - CNS Profissional
+        l += zfill(formData.cbo, 6);                    // 031-036 (6) - CBO
+        l += zfill(proc, 10);                           // 037-046 (10) - Procedimento
+        l += zfill(cns_paciente, 15);                   // 047-061 (15) - CNS Paciente
+        l += sexo;                                      // 062 (1) - Sexo
+        l += " ";                                       // 063 (1) - Espaço fixo
+        l += rpad(cid, 4);                              // 064-067 (4) - CID
+        l += zfill(idade, 3);                           // 068-070 (3) - Idade
+        l += " ".repeat(6);                             // 071-076 (6) - Espaços
+        l += zfill(municipio, 6);                       // 077-082 (6) - Município
+        l += "000001";                                  // 083-088 (6) - Quantidade (Fixo 1)
+        l += "001";                                     // 089-091 (3) - Incremento? (Fixo 001)
+        l += " ".repeat(10);                            // 092-101 (10) - Espaços
+        l += zfill(data_atendimento, 8);                // 102-109 (8) - Data Atendimento
+        l += rpad(nome_paciente, 40);                   // 110-149 (40) - Nome Paciente
+        l += zfill(data_nasc, 8);                       // 150-157 (8) - Data Nascimento
+        l += "99";                                      // 158-159 (2) - Origem? (Fixo 99)
+        l += " ".repeat(4);                             // 160-163 (4) - Espaços
+        l += "010";                                     // 164-166 (3) - Serviço/Classificação (Fixo 010)
+        l += rpad(endereco, 30);                        // 167-196 (30) - Endereço
+        l += "00000";                                   // 197-201 (5) - Espaços
+        l += " ".repeat(3);                             // 202-204 (3) - Espaços
+        l += " ";                                       // 205 (1) - Espaço final
 
         if (l.length !== 205) {
-          throw new Error(`Linha ${index + 1} gerada com tamanho ${l.length} em vez de 205.`);
+          throw new Error(`Linha ${index + 1} (${pac.nome}) gerada com tamanho ${l.length} em vez de 205.`);
         }
 
         linhas.push(l);
@@ -253,10 +272,7 @@ const BpaExportar: React.FC = () => {
 
       const content = linhas.join('\r\n');
       
-      // Encoding ISO-8859-1 (latin1)
-      const encoder = new TextEncoder(); // TextEncoder defaults to utf-8, but we need latin1
-      // Browser hack for latin1: using a manual mapping or just standard blob if it's mostly ASCII
-      // Since requirements ask specifically for latin1 encoding:
+      // Conversão manual para Latin1 (ISO-8859-1)
       const bytes = new Uint8Array(content.length);
       for (let i = 0; i < content.length; i++) {
         const code = content.charCodeAt(i);
@@ -284,7 +300,7 @@ const BpaExportar: React.FC = () => {
         totalFound: 0,
         exportedCount: 0,
         warnings: [],
-        error: err.message || 'Erro ao consultar banco de dados.',
+        error: err.message || 'Erro ao processar dados.',
         fileName: '',
         blobUrl: null
       });
@@ -378,7 +394,7 @@ const BpaExportar: React.FC = () => {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Buscando atendimentos...
+                  Processando...
                 </>
               ) : (
                 'Gerar BPA-I'
@@ -406,7 +422,7 @@ const BpaExportar: React.FC = () => {
                 <AlertTitle className="text-green-700">Geração Concluída</AlertTitle>
                 <AlertDescription className="text-green-600">
                   Foram encontrados <strong>{results.totalFound}</strong> atendimentos. 
-                  <strong> {results.exportedCount}</strong> registros foram exportados com sucesso.
+                  <strong> {results.exportedCount}</strong> registros foram exportados.
                 </AlertDescription>
               </Alert>
 
