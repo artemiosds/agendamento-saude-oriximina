@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy } from "lucide-react";
+import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
@@ -248,10 +248,21 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
                         {h.hora_atendimento ? ` · ${h.hora_atendimento}` : ""}
                       </span>
                     </div>
-                    <p className="text-[12px] text-foreground mt-0.5 truncate">
-                      <Stethoscope className="w-3 h-3 inline mr-1 text-muted-foreground" />
-                      {h.profissional_nome || "—"}
-                    </p>
+                    <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                      <p className="text-[12px] text-foreground truncate">
+                        {h.tipo_registro === 'visita_domiciliar' ? (
+                          <Home className="w-3 h-3 inline mr-1 text-blue-500" />
+                        ) : (
+                          <Stethoscope className="w-3 h-3 inline mr-1 text-muted-foreground" />
+                        )}
+                        {h.profissional_nome || "—"}
+                      </p>
+                      {h.tipo_registro === 'visita_domiciliar' && (
+                        <Badge variant="outline" className="h-4 text-[9px] bg-blue-500/10 text-blue-600 border-blue-500/20 px-1">
+                          Visita Domiciliar
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-[12px] text-muted-foreground mt-0.5 line-clamp-2">
                       {queixa || <em className="opacity-60">Sem queixa registrada</em>}
                     </p>

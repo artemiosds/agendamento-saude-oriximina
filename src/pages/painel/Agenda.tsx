@@ -191,6 +191,11 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
     class: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30",
     icon: "🟠",
   },
+  "Visita Domiciliar": {
+    label: "Visita Domiciliar",
+    class: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30",
+    icon: "🏠",
+  },
 };
 
 const Agenda: React.FC = () => {
