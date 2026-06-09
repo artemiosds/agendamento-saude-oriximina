@@ -100,6 +100,7 @@ interface ProntuarioDB {
   procedimentos_texto: string;
   outro_procedimento: string;
   episodio_id: string | null;
+  custom_data?: any;
   criado_em: string;
   atualizado_em: string;
 }
@@ -1333,6 +1334,7 @@ const ProntuarioPage: React.FC = () => {
       const profNomeToSave = effectiveEditId
         ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || user?.nome || "")
         : (user?.nome || "");
+      const dynamicFields = getDynamicFieldsPayload(f);
 
       const record: any = {
         paciente_id: f.paciente_id || `manual_${Date.now()}`,
@@ -1356,14 +1358,9 @@ const ProntuarioPage: React.FC = () => {
         observacoes: JSON.stringify({ 
           especialidade_fields: ef, 
           texto: f.observacoes,
-          dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
-            // Salva campos que não são as colunas fixas da tabela
-            if (!(key in emptyForm)) {
-              acc[key] = (f as any)[key];
-            }
-            return acc;
-          }, {})
+          dynamic_fields: dynamicFields
         }),
+        custom_data: buildCustomDataPayload(dynamicFields, ef),
         resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: f.indicacao_retorno === "no_indication" ? "" : f.indicacao_retorno || "",
