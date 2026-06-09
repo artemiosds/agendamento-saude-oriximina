@@ -331,7 +331,9 @@ export async function downloadProntuarioPdf(
     { k: 'hipotese', l: 'Hipótese' },
     { k: 'conduta', l: 'Conduta' },
     { k: 'evolucao', l: 'Evolução' },
-    { k: 'observacoes', l: 'Observações Gerais' }
+    { k: 'observacoes', l: 'Observações Gerais' },
+    { k: 'resultado_exame', l: 'Resultado de Exame' },
+    { k: 'indicacao_retorno', l: 'Indicação de Retorno' }
   ];
   legacyFields.forEach(f => {
     if (!activeFieldsForType.some(af => af.key === f.k) && prontuario[f.k]) {
