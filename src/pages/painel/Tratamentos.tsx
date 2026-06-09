@@ -1305,6 +1305,7 @@ const Tratamentos: React.FC = () => {
       let dataAtual = dataSugerida;
       for (let tentativa = 0; tentativa < 30; tentativa++) {
         const slots = getAvailableSlots(profId, unidadeId, dataAtual);
+        // Filtrar slots que já foram pegos por outras sessões NESTE lote
         const slotLivre = slots.find((s) => estaLivreNoLote(dataAtual, s));
         if (slotLivre) return { data: dataAtual, hora: slotLivre };
         // Avança 1 dia
@@ -1317,11 +1318,20 @@ const Tratamentos: React.FC = () => {
 
     try {
       for (const sess of pendentes) {
-        // Prevent duplicity if clicking button multiple times rapidly (though setAgendandoCiclo handles most cases)
-        if (!agendandoCiclo && resumo.length > 0) break; 
+        // Sessões pendentes sem agendamento devem ser processadas
+        // Se a sessão já tiver um appointment_id (mesmo se vindo do cycleSessions), pulamos do lote mas reportamos no resumo
+        if (sess.appointment_id) {
+          resumo.push({
+            numero: sess.session_number,
+            data: sess.scheduled_date,
+            status: "ja_agendada",
+          });
+          continue;
+        }
 
         try {
           // 2) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
+          // Isso garante que se o usuário agendou manualmente na agenda mas não vinculou aqui, a gente vincule em vez de duplicar.
           const { data: existente, error: checkErr } = await supabase
             .from("agendamentos")
             .select("id, hora, status")
@@ -1333,7 +1343,6 @@ const Tratamentos: React.FC = () => {
             .limit(1)
             .maybeSingle();
 
-
           if (checkErr) throw checkErr;
 
           if (existente) {
@@ -1344,6 +1353,13 @@ const Tratamentos: React.FC = () => {
               .eq("id", sess.id);
             
             if (linkErr) throw linkErr;
+
+            // Atualização local imediata para o resumo
+            setSessions((prev) =>
+              prev.map((x) =>
+                x.id === sess.id ? { ...x, appointment_id: existente.id, status: "agendada" } : x
+              )
+            );
 
             usar(sess.scheduled_date, existente.hora);
             resumo.push({
