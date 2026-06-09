@@ -1318,8 +1318,16 @@ const Tratamentos: React.FC = () => {
 
     try {
       for (const sess of pendentes) {
-        // Prevent duplicity if clicking button multiple times rapidly (though setAgendandoCiclo handles most cases)
-        if (!agendandoCiclo && resumo.length > 0) break; 
+        // Sessões pendentes sem agendamento devem ser processadas
+        // Se a sessão já tiver um appointment_id (mesmo se vindo do cycleSessions), pulamos do lote mas reportamos no resumo
+        if (sess.appointment_id) {
+          resumo.push({
+            numero: sess.session_number,
+            data: sess.scheduled_date,
+            status: "ja_agendada",
+          });
+          continue;
+        }
 
         try {
           // 2) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
