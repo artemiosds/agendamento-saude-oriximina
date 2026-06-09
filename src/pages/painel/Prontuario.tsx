@@ -391,12 +391,12 @@ const ProntuarioPage: React.FC = () => {
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
-  const especialidadeFieldsRef = useRef(especialidadeFields);
-  const listaExamesRef = useRef(listaExames);
-  const listaPrescricaoRef = useRef(listaPrescricao);
-  const selectedProcIdsRef = useRef(selectedProcIds);
-  const procDetailsRef = useRef(procDetails);
-  const selectedCidsByProcRef = useRef(selectedCidsByProc);
+  const especialidadeFieldsRef = useRef<Record<string, string>>({});
+  const listaExamesRef = useRef<any[]>([]);
+  const listaPrescricaoRef = useRef<any[]>([]);
+  const selectedProcIdsRef = useRef<string[]>([]);
+  const procDetailsRef = useRef<Record<string, { quantidade: number; observacao: string }>>({});
+  const selectedCidsByProcRef = useRef<Record<string, string[]>>({});
 
   useEffect(() => { especialidadeFieldsRef.current = especialidadeFields; }, [especialidadeFields]);
   useEffect(() => { listaExamesRef.current = listaExames; }, [listaExames]);
@@ -404,6 +404,7 @@ const ProntuarioPage: React.FC = () => {
   useEffect(() => { selectedProcIdsRef.current = selectedProcIds; }, [selectedProcIds]);
   useEffect(() => { procDetailsRef.current = procDetails; }, [procDetails]);
   useEffect(() => { selectedCidsByProcRef.current = selectedCidsByProc; }, [selectedCidsByProc]);
+
 
 
   const soapCustom = useSoapCustomOptions(user?.id);
