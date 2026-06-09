@@ -1382,9 +1382,10 @@ const ProntuarioPage: React.FC = () => {
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
       if (effectiveEditId) {
-        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id").maybeSingle();
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id, criado_em, atualizado_em").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
+        console.log("[handleSave] Prontuário atualizado com sucesso:", updated.id);
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
@@ -1445,9 +1446,10 @@ const ProntuarioPage: React.FC = () => {
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
           .insert(record)
-          .select("id")
+          .select("id, criado_em, atualizado_em")
           .single();
         if (error) throw error;
+        console.log("[handleSave] Prontuário inserido com sucesso:", inserted?.id);
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
@@ -1639,8 +1641,19 @@ const ProntuarioPage: React.FC = () => {
     const pd = procDetailsRef.current;
     const scbp = selectedCidsByProcRef.current;
 
-    // Skip when no patient selected, no date, future date (new), or in session-registration flow
+    // Skip when no patient selected, no date, or in session-registration flow
     if (!f.paciente_nome || !f.paciente_id || !f.data_atendimento) return;
+    
+    // Check if there is actual content to save (at least one field should be non-empty)
+    const hasContent = 
+      f.queixa_principal?.trim() || f.anamnese?.trim() || f.sinais_sintomas?.trim() || 
+      f.exame_fisico?.trim() || f.hipotese?.trim() || f.conduta?.trim() || 
+      f.evolucao?.trim() || f.observacoes?.trim() || 
+      f.soap_subjetivo?.trim() || f.soap_objetivo?.trim() || f.soap_avaliacao?.trim() || f.soap_plano?.trim() ||
+      spi.length > 0 || Object.keys(ef).length > 0;
+
+    if (!hasContent) return;
+
     if (f.tipo_registro === 'sessao' && !editIdRef.current) return; // require explicit "Registrar Sessão"
     const today = new Date().toISOString().split('T')[0];
     if (!editIdRef.current && f.data_atendimento > today) return;
