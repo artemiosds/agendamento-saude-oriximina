@@ -65,6 +65,7 @@ import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import VisitaDomiciliarProntuario from "@/components/visita-domiciliar/VisitaDomiciliarProntuario";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -121,6 +122,7 @@ const TIPOS_REGISTRO = [
   { value: 'sessao', label: '🟡 Sessão' },
   { value: 'urgencia', label: '🔴 Urgência' },
   { value: 'procedimento', label: '🟣 Procedimento' },
+  { value: 'visita_domiciliar', label: '🏠 Visita Domiciliar' },
   { value: 'consulta', label: 'Consulta (legado)' },
   { value: 'reavaliacao', label: 'Reavaliação (legado)' },
   { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
