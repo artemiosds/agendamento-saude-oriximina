@@ -1588,6 +1588,13 @@ const ProntuarioPage: React.FC = () => {
   const performAutosave = useCallback(async () => {
     if (autosaveInFlightRef.current) return;
     const f = formRef.current;
+    const ef = especialidadeFieldsRef.current;
+    const lp = listaPrescricaoRef.current;
+    const le = listaExamesRef.current;
+    const spi = selectedProcIdsRef.current;
+    const pd = procDetailsRef.current;
+    const scbp = selectedCidsByProcRef.current;
+
     // Skip when no patient selected, no date, future date (new), or in session-registration flow
     if (!f.paciente_nome || !f.paciente_id || !f.data_atendimento) return;
     if (f.tipo_registro === 'sessao' && !editIdRef.current) return; // require explicit "Registrar Sessão"
@@ -1597,10 +1604,10 @@ const ProntuarioPage: React.FC = () => {
     autosaveInFlightRef.current = true;
     setAutosaveStatus('saving');
     try {
-      const procTexto = selectedProcIds
+      const procTexto = spi
         .map((id) => {
           const p = procedimentos.find((pr) => pr.id === id);
-          const detail = procDetails[id];
+          const detail = pd[id];
           const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
           return p ? `${p.nome}${qtdStr}` : '';
         })
@@ -1625,11 +1632,11 @@ const ProntuarioPage: React.FC = () => {
         exame_fisico: f.exame_fisico,
         hipotese: f.hipotese,
         conduta: f.conduta,
-        prescricao: f.prescricao,
-        solicitacao_exames: f.solicitacao_exames,
+        prescricao: lp.length > 0 ? JSON.stringify({ medicamentos: lp }) : f.prescricao,
+        solicitacao_exames: le.length > 0 ? JSON.stringify({ exames: le }) : f.solicitacao_exames,
         evolucao: f.evolucao,
         observacoes: JSON.stringify({ 
-          especialidade_fields: especialidadeFields, 
+          especialidade_fields: ef, 
           texto: f.observacoes,
           dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
             if (!(key in emptyForm)) {
@@ -1643,8 +1650,13 @@ const ProntuarioPage: React.FC = () => {
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
         outro_procedimento: f.outro_procedimento || '',
         tipo_registro: f.tipo_registro || 'consulta',
+        soap_subjetivo: f.soap_subjetivo,
+        soap_objetivo: f.soap_objetivo,
+        soap_avaliacao: f.soap_avaliacao,
+        soap_plano: f.soap_plano,
       };
       if (f.episodio_id && f.episodio_id !== 'no_episode') record.episodio_id = f.episodio_id;
+
 
       let prontId = editIdRef.current;
       if (prontId) {
