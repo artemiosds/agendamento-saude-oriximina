@@ -226,21 +226,10 @@ const ProntuarioPage: React.FC = () => {
   const lastAutosaveHashRef = useRef<string>('');
   const editIdRef = useRef<string | null>(null);
   const formRef = useRef(emptyForm);
-  const especialidadeFieldsRef = useRef(especialidadeFields);
-  const listaExamesRef = useRef(listaExames);
-  const listaPrescricaoRef = useRef(listaPrescricao);
-  const selectedProcIdsRef = useRef(selectedProcIds);
-  const procDetailsRef = useRef(procDetails);
-  const selectedCidsByProcRef = useRef(selectedCidsByProc);
-
   const autosaveInFlightRef = useRef(false);
+  useEffect(() => { editIdRef.current = editId; }, [editId]);
   useEffect(() => { formRef.current = form; }, [form]);
-  useEffect(() => { especialidadeFieldsRef.current = especialidadeFields; }, [especialidadeFields]);
-  useEffect(() => { listaExamesRef.current = listaExames; }, [listaExames]);
-  useEffect(() => { listaPrescricaoRef.current = listaPrescricao; }, [listaPrescricao]);
-  useEffect(() => { selectedProcIdsRef.current = selectedProcIds; }, [selectedProcIds]);
-  useEffect(() => { procDetailsRef.current = procDetails; }, [procDetails]);
-  useEffect(() => { selectedCidsByProcRef.current = selectedCidsByProc; }, [selectedCidsByProc]);
+
 
   const [search, setSearch] = useState("");
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
