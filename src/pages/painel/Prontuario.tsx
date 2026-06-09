@@ -4585,7 +4585,7 @@ const ProntuarioPage: React.FC = () => {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => setViewerProntuario(p)}
+                            onClick={() => handleViewProntuarioFromHistory(p)}
                             title="Visualizar prontuário"
                             aria-label="Visualizar prontuário"
                           >
@@ -4776,71 +4776,89 @@ const ProntuarioPage: React.FC = () => {
               </SheetHeader>
 
               <div className="mt-4 space-y-4 text-sm">
+                <div className="flex justify-between items-center bg-muted/20 p-3 rounded-lg border border-border/40">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="bg-background font-semibold capitalize">
+                      {viewerProntuario.tipo_registro?.replace(/_/g, ' ') || 'Consulta'}
+                    </Badge>
+                    {viewerProntuario.setor && (
+                      <Badge variant="secondary" className="text-[10px] uppercase">
+                        {viewerProntuario.setor}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-mono bg-background px-2 py-0.5 rounded border">
+                    ID: {viewerProntuario.id.slice(0, 8)}
+                  </div>
+                </div>
+
                 {(() => {
-                  const renderSection = (label: string, value: any) => {
+                  const renderSection = (label: string, value: any, options: { icon?: React.ReactNode, isWide?: boolean } = {}) => {
                     const text = getObservacoesTexto(value);
                     if (!text || !text.trim()) return null;
                     return (
-                      <div key={label} className="border-b border-border/40 pb-3 last:border-0">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{label}</p>
-                        <p className="text-foreground whitespace-pre-wrap leading-relaxed">{text}</p>
+                      <div key={label} className={cn(
+                        "border-b border-border/20 pb-4 last:border-0",
+                        options.isWide ? "col-span-full" : ""
+                      )}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {options.icon}
+                          <p className="text-[11px] font-bold text-primary/80 uppercase tracking-widest">{label}</p>
+                        </div>
+                        <div className="text-foreground whitespace-pre-wrap leading-relaxed bg-muted/5 p-3 rounded-md border border-border/10">
+                          {text}
+                        </div>
                       </div>
                     );
                   };
 
-                  const standardFields = [
-                    { key: 'queixa_principal', label: 'Queixa Principal' },
-                    { key: 'soap_subjetivo', label: 'S — Subjetivo' },
-                    { key: 'soap_objetivo', label: 'O — Objetivo' },
-                    { key: 'soap_avaliacao', label: 'A — Avaliação' },
-                    { key: 'soap_plano', label: 'P — Plano' },
-                    { key: 'anamnese', label: 'Anamnese / Histórico' },
+                  const sections = [
+                    { key: 'queixa_principal', label: 'Queixa Principal', icon: <Activity className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'anamnese', label: 'Anamnese / Histórico', icon: <ClipboardList className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_subjetivo', label: 'S — Subjetivo', icon: <User className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_objetivo', label: 'O — Objetivo', icon: <Eye className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_avaliacao', label: 'A — Avaliação', icon: <Target className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'soap_plano', label: 'P — Plano', icon: <Calendar className="w-3.5 h-3.5 text-primary" /> },
                     { key: 'sinais_sintomas', label: 'Sinais e Sintomas' },
                     { key: 'exame_fisico', label: 'Exame Físico' },
                     { key: 'hipotese', label: 'Hipótese / Avaliação' },
-                    { key: 'conduta', label: 'Conduta' },
-                    { key: 'evolucao', label: 'Evolução' },
+                    { key: 'conduta', label: 'Conduta', icon: <CheckCircle className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'evolucao', label: 'Evolução', icon: <History className="w-3.5 h-3.5 text-primary" /> },
                     { key: 'observacoes', label: 'Observações Gerais' },
-                    { key: 'procedimentos_texto', label: 'Procedimentos' },
-                    { key: 'prescricao', label: 'Prescrição' },
-                    { key: 'solicitacao_exames', label: 'Solicitação de Exames' },
-                    { key: 'indicacao_retorno', label: 'Indicação de Retorno' },
+                    { key: 'procedimentos_texto', label: 'Procedimentos Realizados', icon: <Activity className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'prescricao', label: 'Prescrição Médica', icon: <FileText className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'solicitacao_exames', label: 'Solicitação de Exames', icon: <FlaskConical className="w-3.5 h-3.5 text-primary" /> },
+                    { key: 'resultado_exame', label: 'Resultados de Exames' },
+                    { key: 'indicacao_retorno', label: 'Indicação de Retorno', icon: <CalendarClock className="w-3.5 h-3.5 text-primary" /> },
                   ];
 
-                  const rendered = standardFields.map(f => renderSection(f.label, (viewerProntuario as any)[f.key]));
+                  const rendered = sections.map(s => renderSection(s.label, (viewerProntuario as any)[s.key], { icon: s.icon }));
                   
-                  // Handle custom_data
+                  // Handle custom_data (Dynamic Fields)
                   if (viewerProntuario.custom_data && typeof viewerProntuario.custom_data === 'object') {
                     Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
-                      if (val && !key.startsWith('esp_') && !standardFields.some(f => f.key === key)) {
+                      if (val && !key.startsWith('esp_') && !sections.some(s => s.key === key)) {
                         const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        rendered.push(renderSection(label, val));
+                        rendered.push(renderSection(label, val, { icon: <Tag className="w-3.5 h-3.5 text-primary" /> }));
                       }
                     });
 
-                    // Specialty fields
+                    // Specialty fields (esp_ prefix)
                     Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
                       if (key.startsWith('esp_') && val) {
-                        const label = `Campo Especialidade: ${key.replace('esp_', '').replace(/_/g, ' ')}`;
-                        rendered.push(renderSection(label, val));
+                        const label = key.replace('esp_', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        rendered.push(renderSection(`Especialidade: ${label}`, val, { icon: <Heart className="w-3.5 h-3.5 text-primary" /> }));
                       }
                     });
                   }
 
-                  if (viewerProntuario.resultado_exame) {
-                    rendered.push(
-                      <div key="resultado_exame" className="bg-muted/30 rounded-lg p-3 border mt-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                          <FlaskConical className="w-3.5 h-3.5" /> Resultado de Exame
-                        </p>
-                        <p className="text-foreground whitespace-pre-wrap leading-relaxed">{viewerProntuario.resultado_exame}</p>
-                      </div>
-                    );
-                  }
-
-                  return rendered.filter(Boolean).length > 0 
-                    ? rendered 
-                    : <p className="text-muted-foreground italic py-4">Nenhum dado clínico registrado neste prontuário.</p>;
+                  const filtered = rendered.filter(Boolean);
+                  return filtered.length > 0 
+                    ? <div className="grid grid-cols-1 gap-4">{filtered}</div>
+                    : <div className="text-center py-12 bg-muted/10 rounded-xl border border-dashed border-border/60 mt-4">
+                        <AlertTriangle className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
+                        <p className="text-muted-foreground font-medium italic">Nenhum dado clínico registrado neste prontuário.</p>
+                      </div>;
                 })()}
               </div>
 
