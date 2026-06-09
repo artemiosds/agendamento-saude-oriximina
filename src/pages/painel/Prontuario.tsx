@@ -1167,11 +1167,23 @@ const ProntuarioPage: React.FC = () => {
       if (parsed?.medicamentos && Array.isArray(parsed.medicamentos)) setListaPrescricao(parsed.medicamentos);
       else setListaPrescricao([]);
     } catch { setListaPrescricao([]); }
-    // Load specialty fields from observacoes JSON
+    // Load specialty fields and dynamic fields from observacoes JSON
     try {
       const parsed = p.observacoes ? JSON.parse(p.observacoes) : null;
-      if (parsed?.especialidade_fields && typeof parsed.especialidade_fields === 'object') {
-        setEspecialidadeFields(parsed.especialidade_fields);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.especialidade_fields) {
+          setEspecialidadeFields(parsed.especialidade_fields);
+        } else {
+          setEspecialidadeFields({});
+        }
+
+        // Carrega campos dinâmicos de volta para o form
+        if (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object') {
+          setForm(prev => ({
+            ...prev,
+            ...parsed.dynamic_fields
+          }));
+        }
       } else {
         setEspecialidadeFields({});
       }
@@ -1259,9 +1271,17 @@ const ProntuarioPage: React.FC = () => {
         prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
-        observacoes: Object.keys(especialidadeFields).length > 0
-          ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes })
-          : form.observacoes,
+        observacoes: JSON.stringify({ 
+          especialidade_fields: especialidadeFields, 
+          texto: form.observacoes,
+          dynamic_fields: Object.keys(form).reduce((acc: any, key) => {
+            // Salva campos que não são as colunas fixas da tabela
+            if (!(key in emptyForm)) {
+              acc[key] = (form as any)[key];
+            }
+            return acc;
+          }, {})
+        }),
         resultado_exame: form.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
@@ -1571,7 +1591,16 @@ const ProntuarioPage: React.FC = () => {
         prescricao: f.prescricao,
         solicitacao_exames: f.solicitacao_exames,
         evolucao: f.evolucao,
-        observacoes: f.observacoes,
+        observacoes: JSON.stringify({ 
+          especialidade_fields: especialidadeFields, 
+          texto: f.observacoes,
+          dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
+            if (!(key in emptyForm)) {
+              acc[key] = (f as any)[key];
+            }
+            return acc;
+          }, {})
+        }),
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
