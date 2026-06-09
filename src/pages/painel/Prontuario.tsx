@@ -2433,8 +2433,13 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const handleViewProntuarioFromHistory = useCallback((p: any) => {
-    setViewerProntuario(p);
-  }, []);
+    loadFullProntuario(p.id)
+      .then(setViewerProntuario)
+      .catch((err) => {
+        console.error("Erro ao carregar prontuário completo:", err);
+        toast.error("Não foi possível carregar o prontuário completo.");
+      });
+  }, [loadFullProntuario]);
 
   const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
   const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
