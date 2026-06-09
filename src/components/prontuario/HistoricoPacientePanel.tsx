@@ -69,10 +69,10 @@ function fmtDate(s?: string): string {
 
 export function buildEvolucaoText(h: ProntuarioHistEntry): string {
   const parts: string[] = [];
-  const add = (label: string, val?: string) => {
+  const add = (label: string, val?: string | any) => {
     if (val && typeof val === 'string' && val.trim()) {
       parts.push(`${label}:\n${val.trim()}`);
-    } else if (val && typeof val === 'object') {
+    } else if (val && typeof val === 'object' && val !== null) {
       // Handle JSON objects like observacoes if they contain a 'texto' field
       if ('texto' in val && val.texto && typeof val.texto === 'string' && val.texto.trim()) {
         parts.push(`${label}:\n${val.texto.trim()}`);
