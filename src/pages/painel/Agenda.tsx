@@ -2304,6 +2304,7 @@ const Agenda: React.FC = () => {
                         <SelectItem value="Procedimento">Procedimento</SelectItem>
                         <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                         <SelectItem value="Urgência">Urgência</SelectItem>
+                        <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -3526,6 +3527,7 @@ const Agenda: React.FC = () => {
                     <SelectItem value="Procedimento">Procedimento</SelectItem>
                     <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                     <SelectItem value="Urgência">Urgência</SelectItem>
+                    <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
