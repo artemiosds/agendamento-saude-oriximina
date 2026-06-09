@@ -66,6 +66,8 @@ import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
+import VisitaDomiciliarProntuario from "@/components/visita-domiciliar/VisitaDomiciliarProntuario";
+
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
   'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
@@ -4118,7 +4120,9 @@ const ProntuarioPage: React.FC = () => {
           />
           </div>{/* end grid split */}
 
+          {form.tipo_registro !== 'visita_domiciliar' && (
             <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
+
               {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
               {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
                 <Button
@@ -4159,6 +4163,8 @@ const ProntuarioPage: React.FC = () => {
                 </Button>
               )}
             </div>
+          )}
+
         </DialogContent>
       </Dialog>
 
