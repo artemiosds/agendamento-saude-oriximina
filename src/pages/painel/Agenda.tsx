@@ -3214,6 +3214,8 @@ const Agenda: React.FC = () => {
                                     agendamentoId: ag.id,
                                     data: ag.data,
                                     tipo: ag.tipo || '',
+                                    mode: 'view',
+                                    id: ag.id // This is a fallback for some components that look for 'id' as prontuario_id
                                   });
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
