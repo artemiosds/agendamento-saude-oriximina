@@ -1375,6 +1375,14 @@ const ProntuarioPage: React.FC = () => {
         soap_plano: soapPayload.plano,
       };
 
+      console.log("[handleSave] Payload final a ser enviado ao banco:", {
+        id: effectiveEditId,
+        paciente: record.paciente_nome,
+        queixa: record.queixa_principal,
+        hasCustomData: Object.keys(record.custom_data || {}).length > 0,
+        customData: record.custom_data
+      });
+
 
       // CORRIGIDO: não salva 'no_episode' no banco
       if (form.episodio_id && form.episodio_id !== "no_episode") {
