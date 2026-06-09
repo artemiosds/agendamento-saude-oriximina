@@ -197,6 +197,25 @@ const retornoOptions = [
   { value: "outro", label: "Outro prazo" },
 ];
 
+const getObservacoesTexto = (value?: string | null): string => {
+  if (!value) return "";
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && "texto" in parsed) return parsed.texto || "";
+  } catch {}
+  return value;
+};
+
+const getDynamicFieldsPayload = (data: Record<string, any>) => Object.keys(data).reduce((acc: Record<string, any>, key) => {
+  if (!(key in emptyForm) && data[key] !== undefined && data[key] !== null) acc[key] = data[key];
+  return acc;
+}, {});
+
+const buildCustomDataPayload = (dynamicFields: Record<string, any>, specialtyFields: Record<string, string>) => ({
+  ...dynamicFields,
+  ...Object.fromEntries(Object.entries(specialtyFields || {}).map(([key, value]) => [`esp_${key}`, value])),
+});
+
 const sessionStatusLabels: Record<string, string> = {
   pendente_agendamento: "Ag. Agendamento",
   agendada: "Agendada",
