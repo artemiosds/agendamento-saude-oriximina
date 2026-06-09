@@ -1947,6 +1947,7 @@ const ProntuarioPage: React.FC = () => {
       const profNomeSess = editId
         ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
         : (user?.nome || "");
+      const dynamicFields = getDynamicFieldsPayload(form);
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
@@ -1965,7 +1966,8 @@ const ProntuarioPage: React.FC = () => {
         prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
-        observacoes: Object.keys(especialidadeFields).length > 0 ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes }) : form.observacoes,
+        observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
+        custom_data: buildCustomDataPayload(dynamicFields, especialidadeFields),
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
@@ -1979,8 +1981,9 @@ const ProntuarioPage: React.FC = () => {
       if (form.episodio_id && form.episodio_id !== "no_episode") record.episodio_id = form.episodio_id;
 
       if (editId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("id").maybeSingle();
         if (error) throw error;
+        if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
       } else {
         const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("id").single();
         if (error) throw error;

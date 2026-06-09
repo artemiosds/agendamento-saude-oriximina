@@ -105,6 +105,9 @@ function safe(str: string | undefined | null): string {
           )
           .join("\n");
       }
+      if (parsed && typeof parsed === "object" && "texto" in parsed) {
+        return parsed.texto || "";
+      }
     } catch {
       /* not JSON */
     }
