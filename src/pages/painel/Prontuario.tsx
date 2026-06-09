@@ -1382,8 +1382,9 @@ const ProntuarioPage: React.FC = () => {
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
       if (effectiveEditId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id").maybeSingle();
         if (error) throw error;
+        if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
@@ -1660,6 +1661,7 @@ const ProntuarioPage: React.FC = () => {
       const isEditing = Boolean(editIdRef.current);
       const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
       const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
+      const dynamicFields = getDynamicFieldsPayload(f);
       const record: any = {
         paciente_id: f.paciente_id,
         paciente_nome: f.paciente_nome,
@@ -1682,13 +1684,9 @@ const ProntuarioPage: React.FC = () => {
         observacoes: JSON.stringify({ 
           especialidade_fields: ef, 
           texto: f.observacoes,
-          dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
-            if (!(key in emptyForm)) {
-              acc[key] = (f as any)[key];
-            }
-            return acc;
-          }, {})
+          dynamic_fields: dynamicFields
         }),
+        custom_data: buildCustomDataPayload(dynamicFields, ef),
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
