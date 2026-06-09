@@ -2815,6 +2815,20 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {/* 🏠 VISITA DOMICILIAR */}
+            {form.tipo_registro === 'visita_domiciliar' && (
+              <VisitaDomiciliarProntuario 
+                atendimento_id={form.agendamento_id}
+                prontuario_id={editId || undefined}
+                paciente={pacientes.find(p => p.id === form.paciente_id)}
+                profissional={user}
+                unidade={unidades.find(u => u.id === user?.unidadeId)}
+                onSaveSuccess={() => {
+                  queryClient.invalidateQueries({ queryKey: ["prontuarios"] });
+                }}
+              />
+            )}
+
             {/* 🔵 PRONTUÁRIO 2 — RETORNO */}
             {form.tipo_registro === 'retorno' && (
               <div className="space-y-4">
