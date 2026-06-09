@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 /**
- * Funções Obrigatórias conforme Requisitos
+ * Funções de Formatação e Utilitários
  */
 
 const limparTexto = (str: string): string => {
@@ -74,14 +75,19 @@ const calcularIdade = (dataNasc: any, dataAtendimento: any): string => {
 const BpaExportar: React.FC = () => {
   const [formData, setFormData] = useState({
     competencia: '',
-    cnes: '4485890',
+    unidade_id: 'all',
+    cnes: '',
+    profissional_id: 'all',
     cns_profissional: '',
     cbo: '',
     procedimento_padrao: '0301010072',
-    municipio_residencia: '150530'
+    municipio_padrao: '150530'
   });
 
+  const [unidades, setUnidades] = useState<any[]>([]);
+  const [profissionais, setProfissionais] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
   const [results, setResults] = useState<{
     totalFound: number;
     exportedCount: number;
@@ -91,6 +97,49 @@ const BpaExportar: React.FC = () => {
     blobUrl: string | null;
   } | null>(null);
 
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const fetchInitialData = async () => {
+    try {
+      setLoadingData(true);
+      const [unidadesRes, profissionaisRes] = await Promise.all([
+        supabase.from('unidades').select('*').eq('ativo', true),
+        supabase.from('funcionarios').select('*').eq('ativo', true)
+      ]);
+
+      if (unidadesRes.error) throw unidadesRes.error;
+      if (profissionaisRes.error) throw profissionaisRes.error;
+
+      setUnidades(unidadesRes.data || []);
+      setProfissionais(profissionaisRes.data || []);
+    } catch (err: any) {
+      console.error('Erro ao carregar dados iniciais:', err);
+      toast.error('Erro ao carregar unidades e profissionais');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const handleUnidadeChange = (unidadeId: string) => {
+    const unidade = unidades.find(u => u.id === unidadeId);
+    const cnes = unidade?.custom_data?.cnes || '';
+    setFormData(prev => ({ ...prev, unidade_id: unidadeId, cnes }));
+  };
+
+  const handleProfissionalChange = (profId: string) => {
+    const prof = profissionais.find(p => p.id === profId);
+    const cns = prof?.cns || prof?.custom_data?.cns || '';
+    const cbo = prof?.profissao || prof?.custom_data?.cbo || '';
+    setFormData(prev => ({ 
+      ...prev, 
+      profissional_id: profId, 
+      cns_profissional: cns,
+      cbo: cbo
+    }));
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -99,11 +148,13 @@ const BpaExportar: React.FC = () => {
   const handleLimpar = () => {
     setFormData({
       competencia: '',
-      cnes: '4485890',
+      unidade_id: 'all',
+      cnes: '',
+      profissional_id: 'all',
       cns_profissional: '',
       cbo: '',
       procedimento_padrao: '0301010072',
-      municipio_residencia: '150530'
+      municipio_padrao: '150530'
     });
     setResults(null);
   };
@@ -115,37 +166,42 @@ const BpaExportar: React.FC = () => {
       toast.error('Competência deve ter 6 dígitos (AAAAMM)');
       return;
     }
-    if (!formData.cnes || !formData.cns_profissional || !formData.cbo || !formData.procedimento_padrao || !formData.municipio_residencia) {
-      toast.error('Preencha todos os campos obrigatórios');
-      return;
-    }
 
     setLoading(true);
     const warnings: string[] = [];
     
     try {
-      const competencia = formData.competencia;
+      const { competencia } = formData;
       const ano = competencia.substring(0, 4);
       const mes = competencia.substring(4, 6);
       
       const startDate = `${ano}-${mes}-01`;
       const endDate = new Date(parseInt(ano), parseInt(mes), 0).toISOString().split('T')[0];
 
-      // Buscar atendimentos no mês
-      const { data: atendimentos, error: attError } = await (supabase as any)
-        .from('atendimentos')
+      // Buscar prontuários no mês
+      let query = (supabase as any)
+        .from('prontuarios')
         .select('*')
-        .gte('data', startDate)
-        .lte('data', endDate)
+        .gte('data_atendimento', startDate)
+        .lte('data_atendimento', endDate)
         .eq('status', 'finalizado');
 
-      if (attError) throw attError;
+      if (formData.unidade_id !== 'all') {
+        query = query.eq('unidade_id', formData.unidade_id);
+      }
+      if (formData.profissional_id !== 'all') {
+        query = query.eq('profissional_id', formData.profissional_id);
+      }
 
-      if (!atendimentos || atendimentos.length === 0) {
+      const { data: prontuarios, error: pError } = await query;
+
+      if (pError) throw pError;
+
+      if (!prontuarios || prontuarios.length === 0) {
         setResults({
           totalFound: 0,
           exportedCount: 0,
-          warnings: ["Nenhum atendimento encontrado para esta competência."],
+          warnings: ["Nenhum prontuário finalizado encontrado para esta competência e filtros."],
           error: null,
           fileName: '',
           blobUrl: null
@@ -154,129 +210,119 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Buscar dados dos pacientes relacionados
-      const pacienteIds = [...new Set(atendimentos.map((a: any) => a.paciente_id).filter(Boolean))];
-      const { data: pacientes, error: pacError } = await (supabase as any)
-        .from('pacientes')
-        .select('id, cns, nome, sexo, data_nascimento, endereco, municipio, cid, custom_data')
-        .in('id', pacienteIds);
+      // Buscar dados complementares (Pacientes, Profissionais, Unidades)
+      const pacienteIds = [...new Set(prontuarios.map((p: any) => p.paciente_id).filter(Boolean))];
+      const profIds = [...new Set(prontuarios.map((p: any) => p.profissional_id).filter(Boolean))];
+      const unidadeIds = [...new Set(prontuarios.map((p: any) => p.unidade_id).filter(Boolean))];
 
-      if (pacError) throw pacError;
+      const [pacientesRes, funcionariosRes, unidadesRes] = await Promise.all([
+        supabase.from('pacientes').select('*').in('id', pacienteIds),
+        supabase.from('funcionarios').select('*').in('id', profIds),
+        supabase.from('unidades').select('*').in('id', unidadeIds)
+      ]);
 
-      const pacMap = new Map();
-      (pacientes || []).forEach((p: any) => pacMap.set(p.id, p));
+      const pacMap = new Map(pacientesRes.data?.map(p => [p.id, p]));
+      const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
+      const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
 
       let exportedCount = 0;
       const linhas: string[] = [];
 
       // Cabeçalho (Line 1)
-      const totalRegistrosZfill6 = zfill(atendimentos.length, 6);
+      const totalRegistrosZfill6 = zfill(prontuarios.length, 6);
       let header = `01BPAAMBULATCOMPET${competencia}${totalRegistrosZfill6}`;
       header = rpad(header, 205);
-      
-      if (header.length !== 205) {
-        throw new Error(`Erro na geração do cabeçalho: tamanho ${header.length} em vez de 205.`);
-      }
       linhas.push(header);
 
-      // Linhas de Atendimento
-      atendimentos.forEach((att: any, index: number) => {
-        const pac = pacMap.get(att.paciente_id);
+      // Linhas de Produção
+      prontuarios.forEach((pront: any, index: number) => {
+        const pac = pacMap.get(pront.paciente_id);
+        const prof = funcMap.get(pront.profissional_id);
+        const unit = unitMap.get(pront.unidade_id);
         
-        if (!att.data) {
-          warnings.push(`Registro ${index + 1}: Atendimento ignorado (data ausente).`);
-          return;
-        }
+        const ident = pac?.nome || pront.paciente_nome || `Registro ${index + 1}`;
 
-        if (!pac) {
-          warnings.push(`Registro ${index + 1}: Paciente ID ${att.paciente_id} não encontrado.`);
-          return;
-        }
+        // 1. CNES
+        const cnes = zfill(unit?.custom_data?.cnes || formData.cnes, 7);
+        if (!cnes || cnes === '0000000') warnings.push(`${ident}: CNES da unidade ausente.`);
 
-        const cd = pac.custom_data || {};
+        // 2. CNS Profissional
+        const cns_prof = zfill(prof?.cns || prof?.custom_data?.cns || formData.cns_profissional, 15);
+        if (!cns_prof || cns_prof === '000000000000000') warnings.push(`${ident}: CNS do profissional ausente.`);
+
+        // 3. CBO
+        const cbo = zfill(prof?.profissao || prof?.custom_data?.cbo || formData.cbo, 6);
+        if (!cbo || cbo === '000000') warnings.push(`${ident}: CBO do profissional ausente.`);
+
+        // 4. Procedimento
+        const procRaw = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento || formData.procedimento_padrao;
+        const proc = zfill(procRaw, 10);
+
+        // 5. Paciente
+        const cns_pac = zfill(pac?.cns || pac?.custom_data?.cns || '', 15);
+        if (!cns_pac || cns_pac === '000000000000000') warnings.push(`${ident}: CNS do paciente ausente.`);
+
+        const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
         
-        // CNS Paciente
-        const rawCns = pac.cns || cd.cns || '';
-        const cns_paciente = zfill(rawCns, 15);
-        if (!rawCns) warnings.push(`Registro ${index + 1} (${pac.nome || 'Sem Nome'}): CNS ausente, preenchido com zeros.`);
-        
-        // Nome Paciente
-        const nome_paciente = limparTexto(pac.nome || att.paciente_nome || '');
-        if (!pac.nome && !att.paciente_nome) warnings.push(`Registro ${index + 1}: Nome do paciente ausente.`);
-
-        // Sexo
         let sexo = ' ';
-        const s = (pac.sexo || cd.sexo || '').toUpperCase();
+        const s = (pac?.sexo || pac?.custom_data?.sexo || '').toUpperCase();
         if (s.startsWith('M')) sexo = 'M';
         else if (s.startsWith('F')) sexo = 'F';
 
-        // Data Nascimento e Idade
-        const rawNasc = pac.data_nascimento || cd.data_nascimento || '';
-        const data_nasc = formatarData(rawNasc);
-        const idade = calcularIdade(rawNasc, att.data);
-        if (data_nasc === "00000000") warnings.push(`Registro ${index + 1} (${pac.nome}): Data de nascimento inválida/ausente.`);
+        const data_nasc = formatarData(pac?.data_nascimento || pac?.custom_data?.data_nascimento);
+        const data_atend = formatarData(pront.data_atendimento);
+        const idade = calcularIdade(pac?.data_nascimento || pac?.custom_data?.data_nascimento, pront.data_atendimento);
+
+        // 6. Município
+        const municipio = zfill(pac?.municipio || pac?.custom_data?.municipio_ibge || formData.municipio_padrao, 6);
 
         // CID
-        // Em atendimentos reais, o CID costuma vir do prontuário vinculado, mas os requisitos pedem das tabelas existentes.
-        // Verificamos no atendimento, depois no paciente.
-        const attCd = att.custom_data || {};
-        const cid = (attCd.cid || att.cid || pac.cid || cd.cid || "0000").substring(0, 4);
-        
-        // Procedimento
-        const procRaw = attCd.procedimento_sigtap || att.procedimento_sigtap || att.procedimento || formData.procedimento_padrao;
-        const proc = zfill(procRaw, 10);
-        
-        const data_atendimento = formatarData(att.data);
-        
-        const municipioRaw = pac.municipio || cd.municipio || cd.municipio_ibge || formData.municipio_residencia;
-        const municipio = zfill(municipioRaw, 6);
-        
-        const endereco = limparTexto(pac.endereco || cd.endereco || '');
+        const cid = (pront.custom_data?.cid || pac?.cid || '0000').substring(0, 4);
+
+        const endereco = limparTexto(pac?.endereco || pac?.custom_data?.endereco || '');
 
         // Montagem do Layout BPA-I (205 chars fixos)
         let l = "";
         l += "03";                                      // 001-002 (2) - Tipo Registro
-        l += zfill(formData.cnes, 7);                   // 003-009 (7) - CNES
-        l += zfill(formData.competencia, 6);            // 010-015 (6) - Competência
-        l += zfill(formData.cns_profissional, 15);      // 016-030 (15) - CNS Profissional
-        l += zfill(formData.cbo, 6);                    // 031-036 (6) - CBO
-        l += zfill(proc, 10);                           // 037-046 (10) - Procedimento
-        l += zfill(cns_paciente, 15);                   // 047-061 (15) - CNS Paciente
+        l += cnes;                                      // 003-009 (7) - CNES
+        l += zfill(competencia, 6);                     // 010-015 (6) - Competência
+        l += cns_prof;                                  // 016-030 (15) - CNS Profissional
+        l += cbo;                                       // 031-036 (6) - CBO
+        l += proc;                                      // 037-046 (10) - Procedimento
+        l += cns_pac;                                   // 047-061 (15) - CNS Paciente
         l += sexo;                                      // 062 (1) - Sexo
         l += " ";                                       // 063 (1) - Espaço fixo
         l += rpad(cid, 4);                              // 064-067 (4) - CID
-        l += zfill(idade, 3);                           // 068-070 (3) - Idade
+        l += idade;                                     // 068-070 (3) - Idade
         l += " ".repeat(6);                             // 071-076 (6) - Espaços
-        l += zfill(municipio, 6);                       // 077-082 (6) - Município
-        l += "000001";                                  // 083-088 (6) - Quantidade (Fixo 1)
-        l += "001";                                     // 089-091 (3) - Incremento? (Fixo 001)
+        l += municipio;                                 // 077-082 (6) - Município
+        l += "000001";                                  // 083-088 (6) - Quantidade
+        l += "001";                                     // 089-091 (3) - Incremento
         l += " ".repeat(10);                            // 092-101 (10) - Espaços
-        l += zfill(data_atendimento, 8);                // 102-109 (8) - Data Atendimento
-        l += rpad(nome_paciente, 40);                   // 110-149 (40) - Nome Paciente
-        l += zfill(data_nasc, 8);                       // 150-157 (8) - Data Nascimento
-        l += "99";                                      // 158-159 (2) - Origem? (Fixo 99)
+        l += data_atend;                                // 102-109 (8) - Data Atendimento
+        l += rpad(nome_pac, 40);                        // 110-149 (40) - Nome Paciente
+        l += data_nasc;                                 // 150-157 (8) - Data Nascimento
+        l += "99";                                      // 158-159 (2) - Origem (Fixo 99)
         l += " ".repeat(4);                             // 160-163 (4) - Espaços
-        l += "010";                                     // 164-166 (3) - Serviço/Classificação (Fixo 010)
+        l += "010";                                     // 164-166 (3) - Serviço/Classificação
         l += rpad(endereco, 30);                        // 167-196 (30) - Endereço
         l += "00000";                                   // 197-201 (5) - Espaços
         l += " ".repeat(3);                             // 202-204 (3) - Espaços
         l += " ";                                       // 205 (1) - Espaço final
 
-        if (l.length !== 205) {
-          throw new Error(`Linha ${index + 1} (${pac.nome}) gerada com tamanho ${l.length} em vez de 205.`);
+        if (l.length === 205) {
+          linhas.push(l);
+          exportedCount++;
+        } else {
+          warnings.push(`${ident}: Erro de tamanho na linha (${l.length}/205)`);
         }
-
-        linhas.push(l);
-        exportedCount++;
       });
 
       const content = linhas.join('\r\n');
-      
-      // Conversão manual para Latin1 (ISO-8859-1)
       const bytes = new Uint8Array(content.length);
       for (let i = 0; i < content.length; i++) {
         const code = content.charCodeAt(i);
-        bytes[i] = code < 256 ? code : 63; // 63 is '?' fallback
+        bytes[i] = code < 256 ? code : 63;
       }
       
       const blob = new Blob([bytes], { type: 'text/plain;charset=ISO-8859-1' });
@@ -284,7 +330,7 @@ const BpaExportar: React.FC = () => {
       const fileName = `producao_bpa_${competencia}.txt`;
 
       setResults({
-        totalFound: atendimentos.length,
+        totalFound: prontuarios.length,
         exportedCount,
         warnings,
         error: null,
@@ -292,7 +338,7 @@ const BpaExportar: React.FC = () => {
         blobUrl: url
       });
 
-      toast.success('Arquivo gerado com sucesso!');
+      toast.success('Exportação concluída!');
 
     } catch (err: any) {
       console.error(err);
@@ -312,126 +358,127 @@ const BpaExportar: React.FC = () => {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Exportar BPA-I</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Exportar BPA-I Real</h1>
         <p className="text-muted-foreground">
-          Gere arquivo BPA-I do DATASUS a partir dos atendimentos do mês selecionado.
+          Gere arquivo BPA-I utilizando atendimentos realizados e dados cadastrais do sistema.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Configurações da Exportação</CardTitle>
+          <CardTitle>Filtros e Configurações</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="space-y-2">
               <Label htmlFor="competencia">Competência (AAAAMM) *</Label>
               <Input 
                 id="competencia" 
                 name="competencia" 
-                placeholder="Ex: 202605" 
+                placeholder="202605" 
                 value={formData.competencia} 
                 onChange={handleChange}
                 maxLength={6}
               />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="cnes">CNES *</Label>
-              <Input 
-                id="cnes" 
-                name="cnes" 
-                value={formData.cnes} 
-                onChange={handleChange}
-                maxLength={7}
-              />
+              <Label>Unidade</Label>
+              <Select onValueChange={handleUnidadeChange} value={formData.unidade_id}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a unidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Unidades</SelectItem>
+                  {unidades.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="cns_profissional">CNS Profissional *</Label>
-              <Input 
-                id="cns_profissional" 
-                name="cns_profissional" 
-                placeholder="15 dígitos" 
-                value={formData.cns_profissional} 
-                onChange={handleChange}
-                maxLength={15}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cbo">CBO *</Label>
-              <Input 
-                id="cbo" 
-                name="cbo" 
-                placeholder="6 dígitos" 
-                value={formData.cbo} 
-                onChange={handleChange}
-                maxLength={6}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="procedimento_padrao">Procedimento Padrão *</Label>
-              <Input 
-                id="procedimento_padrao" 
-                name="procedimento_padrao" 
-                value={formData.procedimento_padrao} 
-                onChange={handleChange}
-                maxLength={10}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="municipio_residencia">Município Residência *</Label>
-              <Input 
-                id="municipio_residencia" 
-                name="municipio_residencia" 
-                value={formData.municipio_residencia} 
-                onChange={handleChange}
-                maxLength={6}
-              />
+              <Label>Profissional</Label>
+              <Select onValueChange={handleProfissionalChange} value={formData.profissional_id}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o profissional" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Profissionais</SelectItem>
+                  {profissionais.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          <div className="flex gap-4 mt-6">
-            <Button onClick={handleGerar} disabled={loading} className="w-full md:w-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4 border-t">
+            <div className="space-y-2">
+              <Label htmlFor="cnes">CNES (Fallback)</Label>
+              <Input id="cnes" name="cnes" value={formData.cnes} onChange={handleChange} maxLength={7} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cns_profissional">CNS Profissional (Fallback)</Label>
+              <Input id="cns_profissional" name="cns_profissional" value={formData.cns_profissional} onChange={handleChange} maxLength={15} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cbo">CBO (Fallback)</Label>
+              <Input id="cbo" name="cbo" value={formData.cbo} onChange={handleChange} maxLength={6} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="procedimento_padrao">Procedimento Padrão</Label>
+              <Input id="procedimento_padrao" name="procedimento_padrao" value={formData.procedimento_padrao} onChange={handleChange} maxLength={10} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="municipio_padrao">Município Padrão (IBGE)</Label>
+              <Input id="municipio_padrao" name="municipio_padrao" value={formData.municipio_padrao} onChange={handleChange} maxLength={6} />
+            </div>
+          </div>
+
+          <div className="flex gap-4 mt-8">
+            <Button onClick={handleGerar} disabled={loading || loadingData} className="px-8">
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processando...
+                  Gerando...
                 </>
               ) : (
-                'Gerar BPA-I'
+                'Gerar Arquivo BPA-I'
               )}
             </Button>
-            <Button variant="outline" onClick={handleLimpar} disabled={loading} className="w-full md:w-auto">
-              Limpar
+            <Button variant="outline" onClick={handleLimpar} disabled={loading}>
+              Limpar Filtros
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {results && (
-        <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+        <div className="space-y-4">
           {results.error ? (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erro</AlertTitle>
+              <AlertTitle>Erro na Geração</AlertTitle>
               <AlertDescription>{results.error}</AlertDescription>
             </Alert>
           ) : (
             <>
               <Alert className="border-green-500 bg-green-50">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <AlertTitle className="text-green-700">Geração Concluída</AlertTitle>
+                <AlertTitle className="text-green-700 font-bold">Pronto para Download</AlertTitle>
                 <AlertDescription className="text-green-600">
-                  Foram encontrados <strong>{results.totalFound}</strong> atendimentos. 
-                  <strong> {results.exportedCount}</strong> registros foram exportados.
+                  Encontrados: {results.totalFound} prontuários.
+                  Exportados: {results.exportedCount} linhas.
                 </AlertDescription>
               </Alert>
 
               {results.blobUrl && (
-                <div className="flex justify-center">
+                <div className="flex justify-start">
                   <Button asChild size="lg" className="bg-green-600 hover:bg-green-700">
                     <a href={results.blobUrl} download={results.fileName}>
                       <Download className="mr-2 h-5 w-5" />
-                      Baixar Arquivo ({results.fileName})
+                      Baixar TXT ({results.fileName})
                     </a>
                   </Button>
                 </div>
@@ -440,12 +487,13 @@ const BpaExportar: React.FC = () => {
               {results.warnings.length > 0 && (
                 <Card className="border-yellow-200">
                   <CardHeader className="py-3 bg-yellow-50">
-                    <CardTitle className="text-sm font-medium text-yellow-800">
-                      Avisos e Observações ({results.warnings.length})
+                    <CardTitle className="text-sm font-semibold text-yellow-800 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      Inconsistências Identificadas ({results.warnings.length})
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="py-3">
-                    <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1 max-h-48 overflow-y-auto">
+                  <CardContent className="py-4">
+                    <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1 max-h-64 overflow-y-auto">
                       {results.warnings.map((w, i) => (
                         <li key={i}>{w}</li>
                       ))}
