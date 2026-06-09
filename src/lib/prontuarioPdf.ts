@@ -325,6 +325,7 @@ export async function downloadProntuarioPdf(
 
   // Fallback for some hardcoded essential fields if they have value but weren't in config
   const legacyFields = [
+    { k: 'queixa_principal', l: 'Queixa Principal' },
     { k: 'anamnese', l: 'Anamnese / Histórico' },
     { k: 'sinais_sintomas', l: 'Sinais e Sintomas' },
     { k: 'exame_fisico', l: 'Exame Físico' },
@@ -332,6 +333,9 @@ export async function downloadProntuarioPdf(
     { k: 'conduta', l: 'Conduta' },
     { k: 'evolucao', l: 'Evolução' },
     { k: 'observacoes', l: 'Observações Gerais' },
+    { k: 'procedimentos_texto', l: 'Procedimentos' },
+    { k: 'prescricao', l: 'Prescrição' },
+    { k: 'solicitacao_exames', l: 'Solicitação de Exames' },
     { k: 'resultado_exame', l: 'Resultado de Exame' },
     { k: 'indicacao_retorno', l: 'Indicação de Retorno' }
   ];
