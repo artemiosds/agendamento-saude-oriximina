@@ -54,6 +54,7 @@ import {
   Search,
   Pencil,
   ChevronDown,
+  Home,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -2304,6 +2305,7 @@ const Agenda: React.FC = () => {
                         <SelectItem value="Procedimento">Procedimento</SelectItem>
                         <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                         <SelectItem value="Urgência">Urgência</SelectItem>
+                        <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -3166,7 +3168,11 @@ const Agenda: React.FC = () => {
                                 onClick={() => handleIniciarAtendimento(ag)}
                                 loadingText="Iniciando..."
                               >
-                                <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
+                                {ag.tipo === "Visita Domiciliar" ? (
+                                  <><Home className="w-3.5 h-3.5 mr-1" /> Registrar visita</>
+                                ) : (
+                                  <><Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento</>
+                                )}
                               </ActionButton>
                             )}
                             {isEmAtendimento && (
@@ -3212,7 +3218,7 @@ const Agenda: React.FC = () => {
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
                               >
-                                ✅ Ver prontuário
+                                ✅ Ver registro
                               </Button>
                             )}
                             {(ag.status === "falta" || ag.status === "cancelado") && (
@@ -3526,6 +3532,7 @@ const Agenda: React.FC = () => {
                     <SelectItem value="Procedimento">Procedimento</SelectItem>
                     <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                     <SelectItem value="Urgência">Urgência</SelectItem>
+                    <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

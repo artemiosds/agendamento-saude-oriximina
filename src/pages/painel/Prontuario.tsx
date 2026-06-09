@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, Printer, Home, User, Calendar, MapPin, ClipboardList } from "lucide-react";
+import { Loader2, Save, Printer, Home, User, Calendar, MapPin, ClipboardList, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSearchParams } from "react-router-dom";
@@ -95,10 +95,22 @@ const ProntuarioPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center border-2 border-dashed rounded-lg bg-muted/20">
-               <p className="text-muted-foreground">O módulo de prontuário padrão está sendo restaurado. Utilize a Visita Domiciliar para novos registros no momento.</p>
+            <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-muted/20 p-12 text-center">
+               <div className="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center mb-4">
+                 <AlertTriangle className="w-8 h-8 text-warning" />
+               </div>
+               <h3 className="text-xl font-bold text-foreground mb-2">Módulo em Manutenção</h3>
+               <p className="text-muted-foreground max-w-md">O módulo de prontuário padrão está sendo restaurado para garantir a persistência total dos campos. Utilize a <strong>Visita Domiciliar</strong> para novos registros no momento.</p>
+               <Button 
+                variant="outline" 
+                className="mt-6"
+                onClick={() => setDialogOpen(false)}
+               >
+                 Voltar para Agenda
+               </Button>
             </div>
           )}
+
         </DialogContent>
       </Dialog>
     </div>

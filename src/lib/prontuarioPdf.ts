@@ -236,6 +236,31 @@ export async function downloadProntuarioPdf(
   const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades, allConfigs } = data;
   const config = await loadDocumentConfig();
   const tipoRegistro = prontuario.tipo_registro || 'sessao';
+  
+  if (tipoRegistro === 'visita_domiciliar') {
+    const { generateVisitaDomiciliarHtml } = await import('@/components/visita-domiciliar/VisitaDomiciliarPdf');
+    const customData: any = prontuario.custom_data;
+    const dataForPdf = {
+      ...(customData?.visita_domiciliar || {}),
+      paciente_nome: paciente?.nome || prontuario.paciente_nome,
+      paciente_cpf: paciente?.cpf,
+      paciente_cns: paciente?.cns,
+      paciente_data_nascimento: paciente?.data_nascimento,
+      paciente_sexo: paciente?.sexo,
+      profissional_id: profissional?.id || prontuario.profissional_id,
+      profissional_nome: profissional?.nome || prontuario.profissional_nome,
+      profissional_conselho: profissional?.numero_conselho,
+      profissional_tipo_conselho: profissional?.tipo_conselho,
+      profissional_uf_conselho: profissional?.uf_conselho,
+      profissional_profissao: profissional?.profissao || profissional?.cargo,
+      unidade_nome: unidade?.nome || "CER II",
+      data_atendimento: prontuario.data_atendimento
+    };
+    const html = await generateVisitaDomiciliarHtml(dataForPdf);
+    printViaIframe(html);
+    return;
+  }
+
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${tipoRegistro.toUpperCase().replace(/_/g, ' ')}`;
 
   // 1. Determine which sections to show based on system_config
