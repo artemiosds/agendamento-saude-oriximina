@@ -588,12 +588,15 @@ const ProntuarioPage: React.FC = () => {
 
     setSessionRegistrationRequested(true);
     setSoapErrors(false);
-    setForm((prev) => ({
-      ...prev,
-      tipo_registro: 'sessao',
-      data_atendimento: session.scheduled_date || prev.data_atendimento || registrationReferenceDate,
-      agendamento_id: prev.agendamento_id || session.appointment_id || '',
-    }));
+    
+    const nextForm = {
+      ...form,
+      tipo_registro: 'sessao' as const,
+      data_atendimento: session.scheduled_date || form.data_atendimento || registrationReferenceDate,
+      agendamento_id: form.agendamento_id || session.appointment_id || '',
+    };
+    
+    setForm(nextForm);
 
     if (shouldSubmitSession) {
       const effectiveError = null;
@@ -608,9 +611,10 @@ const ProntuarioPage: React.FC = () => {
         return;
       }
 
-      void handleSave();
+      void handleSave(nextForm);
       return;
     }
+
 
     setSessaoHighlightSOAP(true);
     setTimeout(() => {
