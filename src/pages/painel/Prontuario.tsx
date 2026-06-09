@@ -67,4 +67,97 @@ import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import VisitaDomiciliarProntuario from "@/components/visita-domiciliar/VisitaDomiciliarProntuario";
 
-// ... (remaining of TIPOS_REGISTRO and emptyForm, etc)
+const PTS_SPECIALTIES = [
+  'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
+  'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
+];
+
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges } from '@/lib/treatmentSessionGenerator';
+
+interface ProntuarioDB {
+  id: string;
+  paciente_id: string;
+  paciente_nome: string;
+  profissional_id: string;
+  profissional_nome: string;
+  unidade_id: string;
+  sala_id: string;
+  setor: string;
+  agendamento_id: string;
+  data_atendimento: string;
+  hora_atendimento: string;
+  queixa_principal: string;
+  anamnese: string;
+  sinais_sintomas: string;
+  exame_fisico: string;
+  hipotese: string;
+  conduta: string;
+  prescricao: string;
+  solicitacao_exames: string;
+  evolucao: string;
+  observacoes: string;
+  indicacao_retorno: string;
+  motivo_alteracao: string;
+  procedimentos_texto: string;
+  outro_procedimento: string;
+  episodio_id: string | null;
+  custom_data?: any;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+interface ProcedimentoDB {
+  uuid: string;
+  id: string;
+  nome: string;
+  profissao: string;
+  especialidade: string;
+  profissionais_ids: string[] | null;
+  ativo: boolean;
+  origem?: 'SIGTAP' | 'PERSONALIZADO';
+}
+
+const TIPOS_REGISTRO = [
+  { value: 'avaliacao_inicial', label: '🟢 Avaliação Inicial' },
+  { value: 'retorno', label: '🔵 Retorno' },
+  { value: 'sessao', label: '🟡 Sessão' },
+  { value: 'urgencia', label: '🔴 Urgência' },
+  { value: 'procedimento', label: '🟣 Procedimento' },
+  { value: 'visita_domiciliar', label: '🏠 Visita Domiciliar' },
+  { value: 'consulta', label: 'Consulta (legado)' },
+  { value: 'reavaliacao', label: 'Reavaliação (legado)' },
+  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
+  { value: 'pts', label: 'PTS (legado)' },
+  { value: 'triagem_inicial', label: 'Triagem Inicial (legado)' },
+];
+
+const emptyForm = {
+  paciente_id: "",
+  paciente_nome: "",
+  profissional_id: "",
+  profissional_nome: "",
+  agendamento_id: "",
+  data_atendimento: new Date().toISOString().split("T")[0],
+  hora_atendimento: "",
+  tipo_registro: "consulta",
+  queixa_principal: "",
+  anamnese: "",
+  sinais_sintomas: "",
+  exame_fisico: "",
+  hipotese: "",
+  conduta: "",
+  prescricao: "",
+  solicitacao_exames: "",
+  evolucao: "",
+  observacoes: "",
+  resultado_exame: "",
+  indicacao_retorno: "",
+  motivo_alteracao: "",
+  procedimentos_texto: "",
+  outro_procedimento: "",
+  episodio_id: "",
+  soap_subjetivo: "",
+  soap_objetivo: "",
+  soap_avaliacao: "",
+  soap_plano: "",
+};
