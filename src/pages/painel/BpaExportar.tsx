@@ -92,6 +92,13 @@ const BpaExportar: React.FC = () => {
     totalFound: number;
     exportedCount: number;
     warnings: string[];
+    stats: {
+      missingCns: number;
+      missingSexo: number;
+      missingMunicipio: number;
+      missingCbo: number;
+      defaultProc: number;
+    };
     error: string | null;
     fileName: string;
     blobUrl: string | null;
@@ -171,6 +178,13 @@ const BpaExportar: React.FC = () => {
 
     setLoading(true);
     const warnings: string[] = [];
+    const stats = {
+      missingCns: 0,
+      missingSexo: 0,
+      missingMunicipio: 0,
+      missingCbo: 0,
+      defaultProc: 0
+    };
     
     try {
       const { competencia } = formData;
@@ -180,7 +194,6 @@ const BpaExportar: React.FC = () => {
       const startDate = `${ano}-${mes}-01`;
       const endDate = new Date(parseInt(ano), parseInt(mes), 0).toISOString().split('T')[0];
 
-      // Buscar prontuários no mês
       let query = (supabase as any)
         .from('prontuarios')
         .select('*')
@@ -204,6 +217,7 @@ const BpaExportar: React.FC = () => {
           totalFound: 0,
           exportedCount: 0,
           warnings: ["Nenhum prontuário finalizado encontrado para esta competência e filtros."],
+          stats,
           error: null,
           fileName: '',
           blobUrl: null
@@ -212,7 +226,6 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Buscar dados complementares
       const pacienteIds = [...new Set(prontuarios.map((p: any) => p.paciente_id).filter(Boolean))] as string[];
       const profIds = [...new Set(prontuarios.map((p: any) => p.profissional_id).filter(Boolean))] as string[];
       const unidadeIds = [...new Set(prontuarios.map((p: any) => p.unidade_id).filter(Boolean))] as string[];
@@ -246,26 +259,38 @@ const BpaExportar: React.FC = () => {
 
         // CNES
         const unitCd = unit?.custom_data as any;
-        const cnes = zfill(unitCd?.cnes || formData.cnes, 7);
+        const cnesValue = unitCd?.cnes || unit?.cnes || formData.cnes;
+        const cnes = zfill(cnesValue, 7);
         if (!cnes || cnes === '0000000') warnings.push(`${ident}: CNES da unidade ausente.`);
 
         // CNS Profissional
         const profCd = prof?.custom_data as any;
-        const cns_prof = zfill(prof?.cns || profCd?.cns || formData.cns_profissional, 15);
+        const cns_prof_value = prof?.cns || profCd?.cns || formData.cns_profissional;
+        const cns_prof = zfill(cns_prof_value, 15);
         if (!cns_prof || cns_prof === '000000000000000') warnings.push(`${ident}: CNS do profissional ausente.`);
 
         // CBO
-        const cbo = zfill(prof?.profissao || profCd?.cbo || formData.cbo, 6);
-        if (!cbo || cbo === '000000') warnings.push(`${ident}: CBO do profissional ausente.`);
+        const cbo_raw = prof?.profissao || profCd?.cbo || formData.cbo;
+        const cbo = zfill(cbo_raw, 6);
+        if (!cbo || cbo === '000000') {
+          stats.missingCbo++;
+          warnings.push(`${ident}: CBO do profissional ausente.`);
+        }
 
         // Procedimento
-        const procRaw = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento || formData.procedimento_padrao;
+        const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
+        const procRaw = proc_real || formData.procedimento_padrao;
+        if (!proc_real) stats.defaultProc++;
         const proc = zfill(procRaw, 10);
 
         // Paciente
         const pacCd = pac?.custom_data as any;
-        const cns_pac = zfill(pac?.cns || pacCd?.cns || '', 15);
-        if (!cns_pac || cns_pac === '000000000000000') warnings.push(`${ident}: CNS do paciente ausente.`);
+        const cns_pac_value = pac?.cns || pacCd?.cns;
+        const cns_pac = zfill(cns_pac_value || '', 15);
+        if (!cns_pac || cns_pac === '000000000000000') {
+          stats.missingCns++;
+          warnings.push(`${ident}: CNS do paciente ausente.`);
+        }
 
         const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
         
@@ -273,13 +298,23 @@ const BpaExportar: React.FC = () => {
         const s = (pac?.sexo || pacCd?.sexo || '').toUpperCase();
         if (s.startsWith('M')) sexo = 'M';
         else if (s.startsWith('F')) sexo = 'F';
+        
+        if (sexo === ' ') {
+          stats.missingSexo++;
+          warnings.push(`${ident}: Sexo do paciente ausente.`);
+        }
 
         const data_nasc = formatarData(pac?.data_nascimento || pacCd?.data_nascimento);
         const data_atend = formatarData(pront.data_atendimento);
         const idade = calcularIdade(pac?.data_nascimento || pacCd?.data_nascimento, pront.data_atendimento);
 
         // Município
-        const municipio = zfill(pac?.municipio || pacCd?.municipio_ibge || formData.municipio_padrao, 6);
+        const mun_real = pac?.municipio || pacCd?.municipio_ibge;
+        const municipio = zfill(mun_real || formData.municipio_padrao, 6);
+        if (!mun_real) {
+          stats.missingMunicipio++;
+          warnings.push(`${ident}: Município do paciente usando padrão.`);
+        }
 
         // CID
         const cid = (pront.custom_data?.cid || pac?.cid || '0000').substring(0, 4);
@@ -338,12 +373,13 @@ const BpaExportar: React.FC = () => {
         totalFound: prontuarios.length,
         exportedCount,
         warnings,
+        stats,
         error: null,
         fileName,
         blobUrl: url
       });
 
-      toast.success('Exportação concluída!');
+      toast.success('Exportação processada!');
 
     } catch (err: any) {
       console.error(err);
@@ -351,6 +387,7 @@ const BpaExportar: React.FC = () => {
         totalFound: 0,
         exportedCount: 0,
         warnings: [],
+        stats,
         error: err.message || 'Erro ao processar dados.',
         fileName: '',
         blobUrl: null
@@ -460,7 +497,40 @@ const BpaExportar: React.FC = () => {
       </Card>
 
       {results && (
-        <div className="space-y-4">
+        <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Card className="bg-blue-50">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.totalFound}</div>
+                <div className="text-sm text-blue-600">Registros Encontrados</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.missingCns > 0 ? "bg-amber-50" : "bg-green-50"}>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.missingCns}</div>
+                <div className="text-sm text-amber-700">Sem CNS Paciente</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.missingSexo > 0 ? "bg-amber-50" : "bg-green-50"}>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.missingSexo}</div>
+                <div className="text-sm text-amber-700">Sem Sexo Definido</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.missingCbo > 0 ? "bg-amber-50" : "bg-green-50"}>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.missingCbo}</div>
+                <div className="text-sm text-amber-700">Sem CBO Profissional</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-50">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.defaultProc}</div>
+                <div className="text-sm text-slate-600">Usando Proc. Padrão</div>
+              </CardContent>
+            </Card>
+          </div>
+
           {results.error ? (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -469,40 +539,43 @@ const BpaExportar: React.FC = () => {
             </Alert>
           ) : (
             <>
-              <Alert className="border-green-500 bg-green-50">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <AlertTitle className="text-green-700 font-bold">Pronto para Download</AlertTitle>
-                <AlertDescription className="text-green-600">
-                  Encontrados: {results.totalFound} prontuários.
-                  Exportados: {results.exportedCount} linhas.
+              <Alert className="bg-green-50 border-green-200">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <AlertTitle className="text-green-800">Processamento Concluído</AlertTitle>
+                <AlertDescription className="text-green-700">
+                  {results.exportedCount} linhas geradas com sucesso. Verifique os avisos abaixo antes de baixar.
                 </AlertDescription>
               </Alert>
 
               {results.blobUrl && (
-                <div className="flex justify-start">
-                  <Button asChild size="lg" className="bg-green-600 hover:bg-green-700">
-                    <a href={results.blobUrl} download={results.fileName}>
-                      <Download className="mr-2 h-5 w-5" />
-                      Baixar TXT ({results.fileName})
-                    </a>
-                  </Button>
+                <div className="flex justify-center p-4 bg-white border rounded-lg shadow-sm">
+                  <a 
+                    href={results.blobUrl} 
+                    download={results.fileName}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8"
+                  >
+                    <Download className="mr-2 h-5 w-5" />
+                    Baixar Arquivo {results.fileName}
+                  </a>
                 </div>
               )}
 
               {results.warnings.length > 0 && (
-                <Card className="border-yellow-200">
-                  <CardHeader className="py-3 bg-yellow-50">
-                    <CardTitle className="text-sm font-semibold text-yellow-800 flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      Inconsistências Identificadas ({results.warnings.length})
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-amber-700 flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5" />
+                      Avisos e Pendências ({results.warnings.length})
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="py-4">
-                    <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1 max-h-64 overflow-y-auto">
+                  <CardContent>
+                    <div className="max-h-60 overflow-y-auto space-y-1 text-sm text-muted-foreground font-mono bg-slate-50 p-4 rounded border">
                       {results.warnings.map((w, i) => (
-                        <li key={i}>{w}</li>
+                        <div key={i} className="border-b border-slate-200 last:border-0 py-1">
+                          {w}
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </CardContent>
                 </Card>
               )}
