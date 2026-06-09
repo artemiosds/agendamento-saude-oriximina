@@ -1259,9 +1259,17 @@ const ProntuarioPage: React.FC = () => {
         prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
-        observacoes: Object.keys(especialidadeFields).length > 0
-          ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes })
-          : form.observacoes,
+        observacoes: JSON.stringify({ 
+          especialidade_fields: especialidadeFields, 
+          texto: form.observacoes,
+          dynamic_fields: Object.keys(form).reduce((acc: any, key) => {
+            // Salva campos que não são as colunas fixas da tabela
+            if (!(key in emptyForm)) {
+              acc[key] = (form as any)[key];
+            }
+            return acc;
+          }, {})
+        }),
         resultado_exame: form.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
