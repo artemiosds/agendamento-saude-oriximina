@@ -1658,8 +1658,10 @@ const ProntuarioPage: React.FC = () => {
         soap_objetivo: f.soap_objetivo,
         soap_avaliacao: f.soap_avaliacao,
         soap_plano: f.soap_plano,
+        resultado_exame: f.resultado_exame || "",
       };
       if (f.episodio_id && f.episodio_id !== 'no_episode') record.episodio_id = f.episodio_id;
+
 
 
       let prontId = editIdRef.current;
