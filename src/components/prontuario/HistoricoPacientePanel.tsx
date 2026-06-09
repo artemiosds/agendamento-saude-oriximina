@@ -69,14 +69,40 @@ function fmtDate(s?: string): string {
 
 export function buildEvolucaoText(h: ProntuarioHistEntry): string {
   const parts: string[] = [];
-  const add = (label: string, val?: string | any) => {
-    if (val && typeof val === 'string' && val.trim()) {
-      parts.push(`${label}:\n${val.trim()}`);
-    } else if (val && typeof val === 'object' && val !== null) {
-      // Handle JSON objects like observacoes if they contain a 'texto' field
-      if ('texto' in val && val.texto && typeof val.texto === 'string' && val.texto.trim()) {
-        parts.push(`${label}:\n${val.texto.trim()}`);
+  const add = (label: string, val?: any) => {
+    if (!val) return;
+    
+    let text = "";
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed && typeof parsed === 'object' && 'texto' in parsed) {
+            text = String(parsed.texto || "").trim();
+          } else if (parsed && typeof parsed === 'object' && 'medicamentos' in parsed) {
+            text = (parsed.medicamentos as any[]).map(m => `• ${m.nome || ''} ${m.dosagem || ''}`).join('\n');
+          } else if (parsed && typeof parsed === 'object' && 'exames' in parsed) {
+            text = (parsed.exames as any[]).map(e => `• ${e.nome || ''}`).join('\n');
+          } else {
+            text = trimmed;
+          }
+        } catch {
+          text = trimmed;
+        }
+      } else {
+        text = trimmed;
       }
+    } else if (typeof val === 'object') {
+      if ('texto' in val) {
+        text = String(val.texto || "").trim();
+      } else {
+        text = JSON.stringify(val);
+      }
+    }
+
+    if (text) {
+      parts.push(`${label}:\n${text}`);
     }
   };
   
