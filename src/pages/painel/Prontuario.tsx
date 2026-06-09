@@ -1637,8 +1637,9 @@ const ProntuarioPage: React.FC = () => {
         exame_fisico: f.exame_fisico,
         hipotese: f.hipotese,
         conduta: f.conduta,
-        prescricao: lp.length > 0 ? JSON.stringify({ medicamentos: lp }) : f.prescricao,
-        solicitacao_exames: le.length > 0 ? JSON.stringify({ exames: le }) : f.solicitacao_exames,
+        prescricao: lp.length > 0 ? JSON.stringify({ medicamentos: lp }) : (f.prescricao?.includes('"medicamentos":') ? JSON.stringify({ medicamentos: [] }) : f.prescricao),
+        solicitacao_exames: le.length > 0 ? JSON.stringify({ exames: le }) : (f.solicitacao_exames?.includes('"exames":') ? JSON.stringify({ exames: [] }) : f.solicitacao_exames),
+
         evolucao: f.evolucao,
         observacoes: JSON.stringify({ 
           especialidade_fields: ef, 
