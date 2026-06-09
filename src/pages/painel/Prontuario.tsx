@@ -24,6 +24,11 @@ const TIPOS_REGISTRO = [
   { value: 'urgencia', label: '🔴 Urgência' },
   { value: 'procedimento', label: '🟣 Procedimento' },
   { value: 'visita_domiciliar', label: '🏠 Visita Domiciliar' },
+  { value: 'consulta', label: 'Consulta (legado)' },
+  { value: 'reavaliacao', label: 'Reavaliação (legado)' },
+  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
+  { value: 'pts', label: 'PTS (legado)' },
+  { value: 'triagem_inicial', label: 'Triagem Inicial (legado)' },
 ];
 
 const ProntuarioPage: React.FC = () => {
@@ -41,13 +46,15 @@ const ProntuarioPage: React.FC = () => {
     const pId = searchParams.get("pacienteId");
     const aId = searchParams.get("agendamentoId");
     const tipo = searchParams.get("tipo");
+    const mode = searchParams.get("mode");
+    const id = searchParams.get("id");
     
     if (pId) {
       setPacienteId(pId);
       setAgendamentoId(aId || "");
       setTipoRegistro(tipo === "Visita Domiciliar" ? "visita_domiciliar" : "sessao");
       setDialogOpen(true);
-      setEditId(null);
+      setEditId(mode === "view" ? id : null);
     }
   }, [searchParams]);
 
