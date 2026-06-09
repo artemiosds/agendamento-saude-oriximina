@@ -198,13 +198,31 @@ const retornoOptions = [
   { value: "outro", label: "Outro prazo" },
 ];
 
-const getObservacoesTexto = (value?: string | null): string => {
+const getObservacoesTexto = (value?: any): string => {
   if (!value) return "";
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && "texto" in parsed) return parsed.texto || "";
-  } catch {}
-  return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") {
+          if ("texto" in parsed) return parsed.texto || "";
+          if ("medicamentos" in parsed && Array.isArray(parsed.medicamentos)) {
+            return parsed.medicamentos.map((m: any) => `• ${m.nome || ""} ${m.dosagem || ""}`).join("\n");
+          }
+          if ("exames" in parsed && Array.isArray(parsed.exames)) {
+            return parsed.exames.map((e: any) => `• ${e.nome || ""}`).join("\n");
+          }
+        }
+      } catch {}
+    }
+    return trimmed;
+  }
+  if (typeof value === "object") {
+    if ("texto" in value) return value.texto || "";
+    return JSON.stringify(value);
+  }
+  return String(value);
 };
 
 const getDynamicFieldsPayload = (data: Record<string, any>) => Object.keys(data).reduce((acc: Record<string, any>, key) => {
@@ -1374,6 +1392,14 @@ const ProntuarioPage: React.FC = () => {
         soap_avaliacao: soapPayload.avaliacao,
         soap_plano: soapPayload.plano,
       };
+
+      console.log("[handleSave] Payload final a ser enviado ao banco:", {
+        id: effectiveEditId,
+        paciente: record.paciente_nome,
+        queixa: record.queixa_principal,
+        hasCustomData: Object.keys(record.custom_data || {}).length > 0,
+        customData: record.custom_data
+      });
 
 
       // CORRIGIDO: não salva 'no_episode' no banco
@@ -4750,74 +4776,72 @@ const ProntuarioPage: React.FC = () => {
               </SheetHeader>
 
               <div className="mt-4 space-y-4 text-sm">
-                {viewerProntuario.queixa_principal && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Queixa Principal</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.queixa_principal}</p>
-                  </div>
-                )}
-                {viewerProntuario.soap_subjetivo && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">S — Subjetivo</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_subjetivo}</p>
-                  </div>
-                )}
-                {viewerProntuario.soap_objetivo && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">O — Objetivo</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_objetivo}</p>
-                  </div>
-                )}
-                {viewerProntuario.soap_avaliacao && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">A — Avaliação</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_avaliacao}</p>
-                  </div>
-                )}
-                {viewerProntuario.soap_plano && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">P — Plano</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_plano}</p>
-                  </div>
-                )}
-                {viewerProntuario.evolucao && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Evolução</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.evolucao}</p>
-                  </div>
-                )}
-                {viewerProntuario.conduta && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Conduta</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.conduta}</p>
-                  </div>
-                )}
-                {viewerProntuario.procedimentos_texto && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Procedimentos</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.procedimentos_texto}</p>
-                  </div>
-                )}
-                {viewerProntuario.prescricao && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Prescrição</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.prescricao}</p>
-                  </div>
-                )}
-                {viewerProntuario.solicitacao_exames && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Exames Solicitados</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.solicitacao_exames}</p>
-                  </div>
-                )}
-                {viewerProntuario.resultado_exame && (
-                  <div className="bg-muted/30 rounded-lg p-3 border">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
-                      <FlaskConical className="w-3.5 h-3.5" /> Resultado de Exame
-                    </p>
-                    <p className="text-foreground whitespace-pre-wrap leading-relaxed">{viewerProntuario.resultado_exame}</p>
-                  </div>
-                )}
+                {(() => {
+                  const renderSection = (label: string, value: any) => {
+                    const text = getObservacoesTexto(value);
+                    if (!text || !text.trim()) return null;
+                    return (
+                      <div key={label} className="border-b border-border/40 pb-3 last:border-0">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{label}</p>
+                        <p className="text-foreground whitespace-pre-wrap leading-relaxed">{text}</p>
+                      </div>
+                    );
+                  };
+
+                  const standardFields = [
+                    { key: 'queixa_principal', label: 'Queixa Principal' },
+                    { key: 'soap_subjetivo', label: 'S — Subjetivo' },
+                    { key: 'soap_objetivo', label: 'O — Objetivo' },
+                    { key: 'soap_avaliacao', label: 'A — Avaliação' },
+                    { key: 'soap_plano', label: 'P — Plano' },
+                    { key: 'anamnese', label: 'Anamnese / Histórico' },
+                    { key: 'sinais_sintomas', label: 'Sinais e Sintomas' },
+                    { key: 'exame_fisico', label: 'Exame Físico' },
+                    { key: 'hipotese', label: 'Hipótese / Avaliação' },
+                    { key: 'conduta', label: 'Conduta' },
+                    { key: 'evolucao', label: 'Evolução' },
+                    { key: 'observacoes', label: 'Observações Gerais' },
+                    { key: 'procedimentos_texto', label: 'Procedimentos' },
+                    { key: 'prescricao', label: 'Prescrição' },
+                    { key: 'solicitacao_exames', label: 'Solicitação de Exames' },
+                    { key: 'indicacao_retorno', label: 'Indicação de Retorno' },
+                  ];
+
+                  const rendered = standardFields.map(f => renderSection(f.label, (viewerProntuario as any)[f.key]));
+                  
+                  // Handle custom_data
+                  if (viewerProntuario.custom_data && typeof viewerProntuario.custom_data === 'object') {
+                    Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
+                      if (val && !key.startsWith('esp_') && !standardFields.some(f => f.key === key)) {
+                        const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        rendered.push(renderSection(label, val));
+                      }
+                    });
+
+                    // Specialty fields
+                    Object.entries(viewerProntuario.custom_data).forEach(([key, val]) => {
+                      if (key.startsWith('esp_') && val) {
+                        const label = `Campo Especialidade: ${key.replace('esp_', '').replace(/_/g, ' ')}`;
+                        rendered.push(renderSection(label, val));
+                      }
+                    });
+                  }
+
+                  if (viewerProntuario.resultado_exame) {
+                    rendered.push(
+                      <div key="resultado_exame" className="bg-muted/30 rounded-lg p-3 border mt-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                          <FlaskConical className="w-3.5 h-3.5" /> Resultado de Exame
+                        </p>
+                        <p className="text-foreground whitespace-pre-wrap leading-relaxed">{viewerProntuario.resultado_exame}</p>
+                      </div>
+                    );
+                  }
+
+                  return rendered.filter(Boolean).length > 0 
+                    ? rendered 
+                    : <p className="text-muted-foreground italic py-4">Nenhum dado clínico registrado neste prontuário.</p>;
+                })()}
               </div>
 
               <Separator className="my-4" />

@@ -69,20 +69,71 @@ function fmtDate(s?: string): string {
 
 export function buildEvolucaoText(h: ProntuarioHistEntry): string {
   const parts: string[] = [];
-  const add = (label: string, val?: string) => {
-    if (val && val.trim()) parts.push(`${label}:\n${val.trim()}`);
+  const add = (label: string, val?: any) => {
+    if (!val) return;
+    
+    let text = "";
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed && typeof parsed === 'object' && 'texto' in parsed) {
+            text = String(parsed.texto || "").trim();
+          } else if (parsed && typeof parsed === 'object' && 'medicamentos' in parsed) {
+            text = (parsed.medicamentos as any[]).map(m => `• ${m.nome || ''} ${m.dosagem || ''}`).join('\n');
+          } else if (parsed && typeof parsed === 'object' && 'exames' in parsed) {
+            text = (parsed.exames as any[]).map(e => `• ${e.nome || ''}`).join('\n');
+          } else {
+            text = trimmed;
+          }
+        } catch {
+          text = trimmed;
+        }
+      } else {
+        text = trimmed;
+      }
+    } else if (typeof val === 'object') {
+      if ('texto' in val) {
+        text = String(val.texto || "").trim();
+      } else {
+        text = JSON.stringify(val);
+      }
+    }
+
+    if (text) {
+      parts.push(`${label}:\n${text}`);
+    }
   };
+  
   add("Queixa principal", h.queixa_principal);
   add("S — Subjetivo", h.soap_subjetivo);
   add("O — Objetivo", h.soap_objetivo);
   add("A — Avaliação", h.soap_avaliacao);
   add("P — Plano", h.soap_plano);
   add("Anamnese", h.anamnese);
+  add("Sinais e Sintomas", h.sinais_sintomas);
   add("Exame físico", h.exame_fisico);
   add("Hipótese diagnóstica", h.hipotese);
   add("Conduta", h.conduta);
   add("Evolução", h.evolucao);
   add("Observações", h.observacoes);
+  add("Procedimentos", h.procedimentos_texto);
+  add("Prescrição", h.prescricao);
+  add("Solicitação de Exames", h.solicitacao_exames);
+  add("Resultado de Exame", h.resultado_exame);
+  add("Indicação de Retorno", h.indicacao_retorno);
+
+  // Add custom data if present
+  if (h.custom_data && typeof h.custom_data === 'object') {
+    Object.entries(h.custom_data).forEach(([key, val]) => {
+      if (val && !key.startsWith('esp_')) {
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        add(label, String(val));
+      }
+    });
+  }
+
   return parts.join("\n\n");
 }
 
