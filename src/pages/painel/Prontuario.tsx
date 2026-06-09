@@ -198,13 +198,31 @@ const retornoOptions = [
   { value: "outro", label: "Outro prazo" },
 ];
 
-const getObservacoesTexto = (value?: string | null): string => {
+const getObservacoesTexto = (value?: any): string => {
   if (!value) return "";
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && "texto" in parsed) return parsed.texto || "";
-  } catch {}
-  return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") {
+          if ("texto" in parsed) return parsed.texto || "";
+          if ("medicamentos" in parsed && Array.isArray(parsed.medicamentos)) {
+            return parsed.medicamentos.map((m: any) => `• ${m.nome || ""} ${m.dosagem || ""}`).join("\n");
+          }
+          if ("exames" in parsed && Array.isArray(parsed.exames)) {
+            return parsed.exames.map((e: any) => `• ${e.nome || ""}`).join("\n");
+          }
+        }
+      } catch {}
+    }
+    return trimmed;
+  }
+  if (typeof value === "object") {
+    if ("texto" in value) return value.texto || "";
+    return JSON.stringify(value);
+  }
+  return String(value);
 };
 
 const getDynamicFieldsPayload = (data: Record<string, any>) => Object.keys(data).reduce((acc: Record<string, any>, key) => {
