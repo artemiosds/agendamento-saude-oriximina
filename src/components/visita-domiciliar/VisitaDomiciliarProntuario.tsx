@@ -37,7 +37,7 @@ const VisitaDomiciliarProntuario: React.FC<VisitaDomiciliarProntuarioProps> = ({
     evolucao_visita: "",
     conduta_orientacoes: "",
     observacoes: "",
-    tipo_visita: "geral", // geral | medidas_cadeira_rodas
+    tipo_visita: "geral", 
     medidas: {
       diagnostico_condicao: "",
       motivo_solicitacao: "",
@@ -71,16 +71,24 @@ const VisitaDomiciliarProntuario: React.FC<VisitaDomiciliarProntuarioProps> = ({
       if (!atendimento_id && !prontuario_id) return;
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        const query = supabase
           .from("prontuarios")
-          .select("custom_data, evolucao, conduta, observacoes")
-          .or(`agendamento_id.eq.${atendimento_id},id.eq.${prontuario_id}`)
-          .maybeSingle();
+          .select("custom_data, evolucao, conduta, observacoes");
+        
+        if (prontuario_id) {
+          query.eq("id", prontuario_id);
+        } else {
+          query.eq("agendamento_id", atendimento_id as string);
+        }
 
-        if (data?.custom_data?.visita_domiciliar) {
-          setFormData(data.custom_data.visita_domiciliar);
+        const { data, error } = await query.maybeSingle();
+
+        if (data?.custom_data && typeof data.custom_data === 'object') {
+          const custom = data.custom_data as any;
+          if (custom.visita_domiciliar) {
+            setFormData(custom.visita_domiciliar);
+          }
         } else if (data) {
-          // Fallback if partially saved in standard columns
           setFormData(prev => ({
             ...prev,
             evolucao_visita: data.evolucao || "",
@@ -101,7 +109,7 @@ const VisitaDomiciliarProntuario: React.FC<VisitaDomiciliarProntuarioProps> = ({
     if (!atendimento_id && !prontuario_id) return;
     setSaving(true);
     try {
-      const payload = {
+      const payload: any = {
         evolucao: formData.evolucao_visita,
         conduta: formData.conduta_orientacoes,
         observacoes: formData.observacoes,
@@ -118,11 +126,10 @@ const VisitaDomiciliarProntuario: React.FC<VisitaDomiciliarProntuarioProps> = ({
           .update(payload)
           .eq("id", prontuario_id);
       } else {
-        // Find existing or insert
         const { data: existing } = await supabase
           .from("prontuarios")
           .select("id")
-          .eq("agendamento_id", atendimento_id)
+          .eq("agendamento_id", atendimento_id as string)
           .maybeSingle();
 
         if (existing) {
