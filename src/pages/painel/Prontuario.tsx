@@ -1591,7 +1591,16 @@ const ProntuarioPage: React.FC = () => {
         prescricao: f.prescricao,
         solicitacao_exames: f.solicitacao_exames,
         evolucao: f.evolucao,
-        observacoes: f.observacoes,
+        observacoes: JSON.stringify({ 
+          especialidade_fields: especialidadeFields, 
+          texto: f.observacoes,
+          dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
+            if (!(key in emptyForm)) {
+              acc[key] = (f as any)[key];
+            }
+            return acc;
+          }, {})
+        }),
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
