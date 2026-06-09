@@ -124,14 +124,16 @@ const BpaExportar: React.FC = () => {
 
   const handleUnidadeChange = (unidadeId: string) => {
     const unidade = unidades.find(u => u.id === unidadeId);
-    const cnes = unidade?.custom_data?.cnes || '';
+    const customData = unidade?.custom_data as any;
+    const cnes = customData?.cnes || '';
     setFormData(prev => ({ ...prev, unidade_id: unidadeId, cnes }));
   };
 
   const handleProfissionalChange = (profId: string) => {
     const prof = profissionais.find(p => p.id === profId);
-    const cns = prof?.cns || prof?.custom_data?.cns || '';
-    const cbo = prof?.profissao || prof?.custom_data?.cbo || '';
+    const customData = prof?.custom_data as any;
+    const cns = prof?.cns || customData?.cns || '';
+    const cbo = prof?.profissao || customData?.cbo || '';
     setFormData(prev => ({ 
       ...prev, 
       profissional_id: profId, 
@@ -210,10 +212,10 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Buscar dados complementares (Pacientes, Profissionais, Unidades)
-      const pacienteIds = [...new Set(prontuarios.map((p: any) => p.paciente_id).filter(Boolean))];
-      const profIds = [...new Set(prontuarios.map((p: any) => p.profissional_id).filter(Boolean))];
-      const unidadeIds = [...new Set(prontuarios.map((p: any) => p.unidade_id).filter(Boolean))];
+      // Buscar dados complementares
+      const pacienteIds = [...new Set(prontuarios.map((p: any) => p.paciente_id).filter(Boolean))] as string[];
+      const profIds = [...new Set(prontuarios.map((p: any) => p.profissional_id).filter(Boolean))] as string[];
+      const unidadeIds = [...new Set(prontuarios.map((p: any) => p.unidade_id).filter(Boolean))] as string[];
 
       const [pacientesRes, funcionariosRes, unidadesRes] = await Promise.all([
         supabase.from('pacientes').select('*').in('id', pacienteIds),
@@ -236,50 +238,53 @@ const BpaExportar: React.FC = () => {
 
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
-        const pac = pacMap.get(pront.paciente_id);
-        const prof = funcMap.get(pront.profissional_id);
-        const unit = unitMap.get(pront.unidade_id);
+        const pac = pacMap.get(pront.paciente_id) as any;
+        const prof = funcMap.get(pront.profissional_id) as any;
+        const unit = unitMap.get(pront.unidade_id) as any;
         
         const ident = pac?.nome || pront.paciente_nome || `Registro ${index + 1}`;
 
-        // 1. CNES
-        const cnes = zfill(unit?.custom_data?.cnes || formData.cnes, 7);
+        // CNES
+        const unitCd = unit?.custom_data as any;
+        const cnes = zfill(unitCd?.cnes || formData.cnes, 7);
         if (!cnes || cnes === '0000000') warnings.push(`${ident}: CNES da unidade ausente.`);
 
-        // 2. CNS Profissional
-        const cns_prof = zfill(prof?.cns || prof?.custom_data?.cns || formData.cns_profissional, 15);
+        // CNS Profissional
+        const profCd = prof?.custom_data as any;
+        const cns_prof = zfill(prof?.cns || profCd?.cns || formData.cns_profissional, 15);
         if (!cns_prof || cns_prof === '000000000000000') warnings.push(`${ident}: CNS do profissional ausente.`);
 
-        // 3. CBO
-        const cbo = zfill(prof?.profissao || prof?.custom_data?.cbo || formData.cbo, 6);
+        // CBO
+        const cbo = zfill(prof?.profissao || profCd?.cbo || formData.cbo, 6);
         if (!cbo || cbo === '000000') warnings.push(`${ident}: CBO do profissional ausente.`);
 
-        // 4. Procedimento
+        // Procedimento
         const procRaw = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento || formData.procedimento_padrao;
         const proc = zfill(procRaw, 10);
 
-        // 5. Paciente
-        const cns_pac = zfill(pac?.cns || pac?.custom_data?.cns || '', 15);
+        // Paciente
+        const pacCd = pac?.custom_data as any;
+        const cns_pac = zfill(pac?.cns || pacCd?.cns || '', 15);
         if (!cns_pac || cns_pac === '000000000000000') warnings.push(`${ident}: CNS do paciente ausente.`);
 
         const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
         
         let sexo = ' ';
-        const s = (pac?.sexo || pac?.custom_data?.sexo || '').toUpperCase();
+        const s = (pac?.sexo || pacCd?.sexo || '').toUpperCase();
         if (s.startsWith('M')) sexo = 'M';
         else if (s.startsWith('F')) sexo = 'F';
 
-        const data_nasc = formatarData(pac?.data_nascimento || pac?.custom_data?.data_nascimento);
+        const data_nasc = formatarData(pac?.data_nascimento || pacCd?.data_nascimento);
         const data_atend = formatarData(pront.data_atendimento);
-        const idade = calcularIdade(pac?.data_nascimento || pac?.custom_data?.data_nascimento, pront.data_atendimento);
+        const idade = calcularIdade(pac?.data_nascimento || pacCd?.data_nascimento, pront.data_atendimento);
 
-        // 6. Município
-        const municipio = zfill(pac?.municipio || pac?.custom_data?.municipio_ibge || formData.municipio_padrao, 6);
+        // Município
+        const municipio = zfill(pac?.municipio || pacCd?.municipio_ibge || formData.municipio_padrao, 6);
 
         // CID
         const cid = (pront.custom_data?.cid || pac?.cid || '0000').substring(0, 4);
 
-        const endereco = limparTexto(pac?.endereco || pac?.custom_data?.endereco || '');
+        const endereco = limparTexto(pac?.endereco || pacCd?.endereco || '');
 
         // Montagem do Layout BPA-I (205 chars fixos)
         let l = "";
