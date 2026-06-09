@@ -497,7 +497,40 @@ const BpaExportar: React.FC = () => {
       </Card>
 
       {results && (
-        <div className="space-y-4">
+        <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Card className="bg-blue-50">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.totalFound}</div>
+                <div className="text-sm text-blue-600">Registros Encontrados</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.missingCns > 0 ? "bg-amber-50" : "bg-green-50"}>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.missingCns}</div>
+                <div className="text-sm text-amber-700">Sem CNS Paciente</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.missingSexo > 0 ? "bg-amber-50" : "bg-green-50"}>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.missingSexo}</div>
+                <div className="text-sm text-amber-700">Sem Sexo Definido</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.missingCbo > 0 ? "bg-amber-50" : "bg-green-50"}>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.missingCbo}</div>
+                <div className="text-sm text-amber-700">Sem CBO Profissional</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-50">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{results.stats.defaultProc}</div>
+                <div className="text-sm text-slate-600">Usando Proc. Padrão</div>
+              </CardContent>
+            </Card>
+          </div>
+
           {results.error ? (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -506,40 +539,43 @@ const BpaExportar: React.FC = () => {
             </Alert>
           ) : (
             <>
-              <Alert className="border-green-500 bg-green-50">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <AlertTitle className="text-green-700 font-bold">Pronto para Download</AlertTitle>
-                <AlertDescription className="text-green-600">
-                  Encontrados: {results.totalFound} prontuários.
-                  Exportados: {results.exportedCount} linhas.
+              <Alert className="bg-green-50 border-green-200">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <AlertTitle className="text-green-800">Processamento Concluído</AlertTitle>
+                <AlertDescription className="text-green-700">
+                  {results.exportedCount} linhas geradas com sucesso. Verifique os avisos abaixo antes de baixar.
                 </AlertDescription>
               </Alert>
 
               {results.blobUrl && (
-                <div className="flex justify-start">
-                  <Button asChild size="lg" className="bg-green-600 hover:bg-green-700">
-                    <a href={results.blobUrl} download={results.fileName}>
-                      <Download className="mr-2 h-5 w-5" />
-                      Baixar TXT ({results.fileName})
-                    </a>
-                  </Button>
+                <div className="flex justify-center p-4 bg-white border rounded-lg shadow-sm">
+                  <a 
+                    href={results.blobUrl} 
+                    download={results.fileName}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8"
+                  >
+                    <Download className="mr-2 h-5 w-5" />
+                    Baixar Arquivo {results.fileName}
+                  </a>
                 </div>
               )}
 
               {results.warnings.length > 0 && (
-                <Card className="border-yellow-200">
-                  <CardHeader className="py-3 bg-yellow-50">
-                    <CardTitle className="text-sm font-semibold text-yellow-800 flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      Inconsistências Identificadas ({results.warnings.length})
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-amber-700 flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5" />
+                      Avisos e Pendências ({results.warnings.length})
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="py-4">
-                    <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1 max-h-64 overflow-y-auto">
+                  <CardContent>
+                    <div className="max-h-60 overflow-y-auto space-y-1 text-sm text-muted-foreground font-mono bg-slate-50 p-4 rounded border">
                       {results.warnings.map((w, i) => (
-                        <li key={i}>{w}</li>
+                        <div key={i} className="border-b border-slate-200 last:border-0 py-1">
+                          {w}
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </CardContent>
                 </Card>
               )}
