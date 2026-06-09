@@ -1202,7 +1202,7 @@ const ProntuarioPage: React.FC = () => {
       prescricao: p.prescricao || "",
       solicitacao_exames: p.solicitacao_exames || "",
       evolucao: p.evolucao || "",
-      observacoes: p.observacoes || "",
+      observacoes: getObservacoesTexto(p.observacoes),
       resultado_exame: (p as any).resultado_exame || "",
       indicacao_retorno: p.indicacao_retorno || "",
       motivo_alteracao: "",
@@ -1239,10 +1239,14 @@ const ProntuarioPage: React.FC = () => {
         }
 
         // Carrega campos dinâmicos de volta para o form
-        if (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object') {
+        const dynamicFromCustomData = p.custom_data && typeof p.custom_data === 'object'
+          ? Object.fromEntries(Object.entries(p.custom_data).filter(([key]) => !key.startsWith('esp_')))
+          : {};
+        if (Object.keys(dynamicFromCustomData).length > 0 || (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object')) {
           setForm(prev => ({
             ...prev,
-            ...parsed.dynamic_fields
+            ...dynamicFromCustomData,
+            ...(parsed.dynamic_fields || {})
           }));
         }
       } else {
