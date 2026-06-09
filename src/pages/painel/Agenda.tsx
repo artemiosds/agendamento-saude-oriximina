@@ -3167,7 +3167,11 @@ const Agenda: React.FC = () => {
                                 onClick={() => handleIniciarAtendimento(ag)}
                                 loadingText="Iniciando..."
                               >
-                                <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
+                                {ag.tipo === "Visita Domiciliar" ? (
+                                  <><Home className="w-3.5 h-3.5 mr-1" /> Registrar visita</>
+                                ) : (
+                                  <><Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento</>
+                                )}
                               </ActionButton>
                             )}
                             {isEmAtendimento && (
