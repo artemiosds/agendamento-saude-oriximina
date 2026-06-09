@@ -239,18 +239,19 @@ export async function downloadProntuarioPdf(
   
   if (tipoRegistro === 'visita_domiciliar') {
     const { generateVisitaDomiciliarHtml } = await import('@/components/visita-domiciliar/VisitaDomiciliarPdf');
+    const customData: any = prontuario.custom_data;
     const dataForPdf = {
-      ...(prontuario.custom_data?.visita_domiciliar || {}),
+      ...(customData?.visita_domiciliar || {}),
       paciente_nome: paciente?.nome || prontuario.paciente_nome,
       paciente_cpf: paciente?.cpf,
       paciente_cns: paciente?.cns,
-      paciente_data_nascimento: paciente?.data_nascimento || paciente?.dataNascimento,
+      paciente_data_nascimento: paciente?.data_nascimento,
       paciente_sexo: paciente?.sexo,
       profissional_id: profissional?.id || prontuario.profissional_id,
       profissional_nome: profissional?.nome || prontuario.profissional_nome,
-      profissional_conselho: profissional?.numero_conselho || profissional?.numeroConselho,
-      profissional_tipo_conselho: profissional?.tipo_conselho || profissional?.tipoConselho,
-      profissional_uf_conselho: profissional?.uf_conselho || profissional?.ufConselho,
+      profissional_conselho: profissional?.numero_conselho,
+      profissional_tipo_conselho: profissional?.tipo_conselho,
+      profissional_uf_conselho: profissional?.uf_conselho,
       profissional_profissao: profissional?.profissao || profissional?.cargo,
       unidade_nome: unidade?.nome || "CER II",
       data_atendimento: prontuario.data_atendimento
