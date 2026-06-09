@@ -44,7 +44,7 @@ const DynamicProntuarioFields: React.FC<DynamicProntuarioFieldsProps> = ({
               />
             )}
 
-            {field.tipo === 'text' || field.tipo === 'texto' && (
+            {(field.tipo === 'text' || field.tipo === 'texto') && (
               <Input
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}
@@ -53,7 +53,7 @@ const DynamicProntuarioFields: React.FC<DynamicProntuarioFieldsProps> = ({
               />
             )}
 
-            {field.tipo === 'number' || field.tipo === 'numero' && (
+            {(field.tipo === 'number' || field.tipo === 'numero') && (
               <Input
                 type="number"
                 value={value}

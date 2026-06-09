@@ -100,6 +100,7 @@ interface ProntuarioDB {
   procedimentos_texto: string;
   outro_procedimento: string;
   episodio_id: string | null;
+  custom_data?: any;
   criado_em: string;
   atualizado_em: string;
 }
@@ -196,6 +197,25 @@ const retornoOptions = [
   { value: "90_dias", label: "Retorno em 90 dias" },
   { value: "outro", label: "Outro prazo" },
 ];
+
+const getObservacoesTexto = (value?: string | null): string => {
+  if (!value) return "";
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && "texto" in parsed) return parsed.texto || "";
+  } catch {}
+  return value;
+};
+
+const getDynamicFieldsPayload = (data: Record<string, any>) => Object.keys(data).reduce((acc: Record<string, any>, key) => {
+  if (!(key in emptyForm) && data[key] !== undefined && data[key] !== null) acc[key] = data[key];
+  return acc;
+}, {});
+
+const buildCustomDataPayload = (dynamicFields: Record<string, any>, specialtyFields: Record<string, string>) => ({
+  ...dynamicFields,
+  ...Object.fromEntries(Object.entries(specialtyFields || {}).map(([key, value]) => [`esp_${key}`, value])),
+});
 
 const sessionStatusLabels: Record<string, string> = {
   pendente_agendamento: "Ag. Agendamento",
@@ -830,6 +850,22 @@ const ProntuarioPage: React.FC = () => {
     });
   }, [queryClient]);
 
+  const loadFullProntuario = useCallback(async (id: string): Promise<ProntuarioDB> => {
+    const cached = queryClient.getQueryData<ProntuarioDB>(['prontuario', id]);
+    if (cached && (cached as any).soap_subjetivo !== undefined) return cached;
+
+    const { data, error } = await (supabase as any)
+      .from("prontuarios")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error("Prontuário não encontrado no banco.");
+    queryClient.setQueryData(['prontuario', id], data);
+    return data as ProntuarioDB;
+  }, [queryClient]);
+
   const loadTriagem = async (agendamentoId: string) => {
     try {
       // Try to find triage by agendamento_id first
@@ -1135,7 +1171,9 @@ const ProntuarioPage: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const openEdit = (p: ProntuarioDB) => {
+  const openEdit = async (item: ProntuarioDB) => {
+    const p = await loadFullProntuario(item.id);
+
     setEditId(p.id);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
@@ -1165,7 +1203,7 @@ const ProntuarioPage: React.FC = () => {
       prescricao: p.prescricao || "",
       solicitacao_exames: p.solicitacao_exames || "",
       evolucao: p.evolucao || "",
-      observacoes: p.observacoes || "",
+      observacoes: getObservacoesTexto(p.observacoes),
       resultado_exame: (p as any).resultado_exame || "",
       indicacao_retorno: p.indicacao_retorno || "",
       motivo_alteracao: "",
@@ -1202,10 +1240,14 @@ const ProntuarioPage: React.FC = () => {
         }
 
         // Carrega campos dinâmicos de volta para o form
-        if (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object') {
+        const dynamicFromCustomData = p.custom_data && typeof p.custom_data === 'object'
+          ? Object.fromEntries(Object.entries(p.custom_data).filter(([key]) => !key.startsWith('esp_')))
+          : {};
+        if (Object.keys(dynamicFromCustomData).length > 0 || (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object')) {
           setForm(prev => ({
             ...prev,
-            ...parsed.dynamic_fields
+            ...dynamicFromCustomData,
+            ...(parsed.dynamic_fields || {})
           }));
         }
       } else {
@@ -1292,6 +1334,7 @@ const ProntuarioPage: React.FC = () => {
       const profNomeToSave = effectiveEditId
         ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || user?.nome || "")
         : (user?.nome || "");
+      const dynamicFields = getDynamicFieldsPayload(f);
 
       const record: any = {
         paciente_id: f.paciente_id || `manual_${Date.now()}`,
@@ -1315,14 +1358,9 @@ const ProntuarioPage: React.FC = () => {
         observacoes: JSON.stringify({ 
           especialidade_fields: ef, 
           texto: f.observacoes,
-          dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
-            // Salva campos que não são as colunas fixas da tabela
-            if (!(key in emptyForm)) {
-              acc[key] = (f as any)[key];
-            }
-            return acc;
-          }, {})
+          dynamic_fields: dynamicFields
         }),
+        custom_data: buildCustomDataPayload(dynamicFields, ef),
         resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: f.indicacao_retorno === "no_indication" ? "" : f.indicacao_retorno || "",
@@ -1344,8 +1382,9 @@ const ProntuarioPage: React.FC = () => {
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
       if (effectiveEditId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id").maybeSingle();
         if (error) throw error;
+        if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
@@ -1622,6 +1661,7 @@ const ProntuarioPage: React.FC = () => {
       const isEditing = Boolean(editIdRef.current);
       const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
       const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
+      const dynamicFields = getDynamicFieldsPayload(f);
       const record: any = {
         paciente_id: f.paciente_id,
         paciente_nome: f.paciente_nome,
@@ -1644,13 +1684,9 @@ const ProntuarioPage: React.FC = () => {
         observacoes: JSON.stringify({ 
           especialidade_fields: ef, 
           texto: f.observacoes,
-          dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
-            if (!(key in emptyForm)) {
-              acc[key] = (f as any)[key];
-            }
-            return acc;
-          }, {})
+          dynamic_fields: dynamicFields
         }),
+        custom_data: buildCustomDataPayload(dynamicFields, ef),
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
@@ -1911,6 +1947,7 @@ const ProntuarioPage: React.FC = () => {
       const profNomeSess = editId
         ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
         : (user?.nome || "");
+      const dynamicFields = getDynamicFieldsPayload(form);
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
@@ -1929,7 +1966,8 @@ const ProntuarioPage: React.FC = () => {
         prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
-        observacoes: Object.keys(especialidadeFields).length > 0 ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes }) : form.observacoes,
+        observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
+        custom_data: buildCustomDataPayload(dynamicFields, especialidadeFields),
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
@@ -1943,8 +1981,9 @@ const ProntuarioPage: React.FC = () => {
       if (form.episodio_id && form.episodio_id !== "no_episode") record.episodio_id = form.episodio_id;
 
       if (editId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("id").maybeSingle();
         if (error) throw error;
+        if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
       } else {
         const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("id").single();
         if (error) throw error;
@@ -2397,8 +2436,13 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const handleViewProntuarioFromHistory = useCallback((p: any) => {
-    setViewerProntuario(p);
-  }, []);
+    loadFullProntuario(p.id)
+      .then(setViewerProntuario)
+      .catch((err) => {
+        console.error("Erro ao carregar prontuário completo:", err);
+        toast.error("Não foi possível carregar o prontuário completo.");
+      });
+  }, [loadFullProntuario]);
 
   const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
   const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
