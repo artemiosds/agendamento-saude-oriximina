@@ -1,4 +1,5 @@
 import * as React from "react";
+import { flushSync } from "react-dom";
 import { Textarea, type TextareaProps } from "./textarea";
 
 interface DebouncedTextareaProps extends Omit<TextareaProps, "onChange"> {
@@ -71,8 +72,9 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        emitChange(localValue, e.target.name);
+        flushSync(() => emitChange(localValue, e.target.name));
         lastPropValue.current = localValue;
+        dirtyRef.current = false;
       }
       onBlur?.(e);
     }, [emitChange, localValue, onBlur]);
@@ -81,11 +83,11 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
       return () => {
         if (timerRef.current) {
           // flush pendente ao desmontar
-          emitChange(lastPropValue.current ?? "", undefined);
+          emitChange(localValue ?? "", undefined);
           clearTimeout(timerRef.current);
         }
       };
-    }, [emitChange]);
+    }, [emitChange, localValue]);
 
     return <Textarea ref={ref} {...props} value={localValue} onChange={handleChange} onBlur={handleBlur} />;
   },
