@@ -391,19 +391,6 @@ const ProntuarioPage: React.FC = () => {
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
-  const especialidadeFieldsRef = useRef<Record<string, string>>({});
-  const listaExamesRef = useRef<any[]>([]);
-  const listaPrescricaoRef = useRef<any[]>([]);
-  const selectedProcIdsRef = useRef<string[]>([]);
-  const procDetailsRef = useRef<Record<string, { quantidade: number; observacao: string }>>({});
-  const selectedCidsByProcRef = useRef<Record<string, string[]>>({});
-
-  useEffect(() => { especialidadeFieldsRef.current = especialidadeFields; }, [especialidadeFields]);
-  useEffect(() => { listaExamesRef.current = listaExames; }, [listaExames]);
-  useEffect(() => { listaPrescricaoRef.current = listaPrescricao; }, [listaPrescricao]);
-  useEffect(() => { selectedProcIdsRef.current = selectedProcIds; }, [selectedProcIds]);
-  useEffect(() => { procDetailsRef.current = procDetails; }, [procDetails]);
-  useEffect(() => { selectedCidsByProcRef.current = selectedCidsByProc; }, [selectedCidsByProc]);
 
 
 
