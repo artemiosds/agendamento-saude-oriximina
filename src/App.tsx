@@ -232,6 +232,7 @@ const App = () => (
                     <Route path="meu-prontuario" element={<ModuleRoute modulo="prontuario"><MeuProntuario /></ModuleRoute>} />
                     <Route path="bpa-producao" element={<ModuleRoute modulo="relatorios"><BpaProducao /></ModuleRoute>} />
                     <Route path="faltosos" element={<ModuleRoute modulo="pacientes"><Faltosos /></ModuleRoute>} />
+                    <Route path="bpa-exportar" element={<ModuleRoute modulo="relatorios"><BpaExportar /></ModuleRoute>} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />
