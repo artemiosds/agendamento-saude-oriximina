@@ -1,4 +1,5 @@
 import * as React from "react";
+import { flushSync } from "react-dom";
 import { Input } from "./input";
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
@@ -66,8 +67,9 @@ const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInput
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        emitChange(localValue, e.target.name);
+        flushSync(() => emitChange(localValue, e.target.name));
         lastPropValue.current = localValue;
+        dirtyRef.current = false;
       }
       onBlur?.(e);
     }, [emitChange, localValue, onBlur]);
@@ -75,11 +77,11 @@ const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInput
     React.useEffect(() => {
       return () => {
         if (timerRef.current) {
-          emitChange(lastPropValue.current ?? "", undefined);
+          emitChange(localValue ?? "", undefined);
           clearTimeout(timerRef.current);
         }
       };
-    }, [emitChange]);
+    }, [emitChange, localValue]);
 
     return <Input ref={ref} {...props} value={localValue} onChange={handleChange} onBlur={handleBlur} />;
   },
