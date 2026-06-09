@@ -1267,6 +1267,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleSave = async (formOverride?: any): Promise<boolean> => {
+    console.log("[handleSave] Iniciando salvamento...", { hasEditId: !!editId, editId });
     const f = formOverride || formRef.current;
     const ef = especialidadeFieldsRef.current;
     const le = listaExamesRef.current;
@@ -1456,6 +1457,7 @@ const ProntuarioPage: React.FC = () => {
         if (prontuarioId) {
           editIdRef.current = prontuarioId;
           setEditId(prontuarioId);
+          console.log("[handleSave] Novo ID setado no estado:", prontuarioId);
         }
       }
 
@@ -1719,6 +1721,7 @@ const ProntuarioPage: React.FC = () => {
       if (prontId) {
         const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
         if (error) throw error;
+        console.log("[performAutosave] Draft atualizado:", prontId);
       } else {
         const { data: inserted, error } = await (supabase as any)
           .from('prontuarios')
@@ -1728,6 +1731,7 @@ const ProntuarioPage: React.FC = () => {
         if (error) throw error;
         if (inserted?.id) {
           prontId = inserted.id;
+          console.log("[performAutosave] Novo draft criado:", prontId);
           setEditId(prontId);
           editIdRef.current = prontId;
           // Reset status de faltas ao registrar novo atendimento
