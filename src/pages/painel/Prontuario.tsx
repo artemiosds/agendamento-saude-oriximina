@@ -1151,9 +1151,8 @@ const ProntuarioPage: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const openEdit = async (p: ProntuarioDB) => {
-    const pFull = await loadFullProntuario(p.id);
-    const p = pFull;
+  const openEdit = async (item: ProntuarioDB) => {
+    const p = await loadFullProntuario(item.id);
 
     setEditId(p.id);
     setActiveAtendimento(null);
