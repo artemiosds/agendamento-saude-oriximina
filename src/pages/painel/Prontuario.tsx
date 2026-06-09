@@ -1357,8 +1357,13 @@ const ProntuarioPage: React.FC = () => {
       const allDynamicData = {
         ...dynamicFields,
         ...ef,
-        ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => [`esp_${key}`, value])),
       };
+      // Adiciona prefixo esp_ para campos de especialidade apenas se não existirem
+      Object.entries(ef || {}).forEach(([key, value]) => {
+        if (!key.startsWith('esp_')) {
+          allDynamicData[`esp_${key}`] = value;
+        }
+      });
 
       const record: any = {
         paciente_id: f.paciente_id || `manual_${Date.now()}`,
@@ -1733,7 +1738,14 @@ const ProntuarioPage: React.FC = () => {
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: buildCustomDataPayload(dynamicFields, ef),
+        custom_data: {
+          ...dynamicFields,
+          ...ef,
+          ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => {
+            const finalKey = key.startsWith('esp_') ? key : `esp_${key}`;
+            return [finalKey, value];
+          })),
+        },
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
