@@ -1220,14 +1220,22 @@ const ProntuarioPage: React.FC = () => {
     });
   };
 
-  const handleSave = async (): Promise<boolean> => {
-    if (!form.paciente_nome || !form.data_atendimento) {
+  const handleSave = async (formOverride?: any): Promise<boolean> => {
+    const f = formOverride || formRef.current;
+    const ef = especialidadeFieldsRef.current;
+    const le = listaExamesRef.current;
+    const lp = listaPrescricaoRef.current;
+    const spi = selectedProcIdsRef.current;
+    const pd = procDetailsRef.current;
+    const scbp = selectedCidsByProcRef.current;
+
+    if (!f.paciente_nome || !f.data_atendimento) {
       toast.error("Paciente e data são obrigatórios.");
       return false;
     }
     // Prevent creating/editing prontuários for future dates
     const today = new Date().toISOString().split("T")[0];
-    if (form.data_atendimento > today && !editId) {
+    if (f.data_atendimento > today && !editId) {
       toast.error("Não é possível registrar prontuário para data futura. O atendimento precisa ocorrer primeiro.");
       return false;
     }
@@ -1236,7 +1244,15 @@ const ProntuarioPage: React.FC = () => {
       toast.error(sessionRegistrationError);
       return false;
     }
-    const soapPayload = sessionSoapPayload;
+    
+    // Normalize SOAP values
+    const soapPayload = normalizeSoapPayload({
+      subjetivo: f.soap_subjetivo,
+      objetivo: f.soap_objetivo,
+      avaliacao: f.soap_avaliacao,
+      plano: f.soap_plano,
+    });
+    
     const soapValidationError = null;
     setSoapErrors(false);
     setSaving(true);
@@ -1256,10 +1272,10 @@ const ProntuarioPage: React.FC = () => {
     let insertedNewProntuario = false;
     let prontuarioId: string | null = effectiveEditId;
     try {
-      const procTexto = selectedProcIds
+      const procTexto = spi
         .map((id) => {
           const p = procedimentos.find((pr) => pr.id === id);
-          const detail = procDetails[id];
+          const detail = pd[id];
           const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
           return p ? `${p.nome}${qtdStr}` : '';
         })
@@ -1268,52 +1284,53 @@ const ProntuarioPage: React.FC = () => {
 
       // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
       // ao criar, usa o usuário logado.
-      const profIdToSave = effectiveEditId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profIdToSave = effectiveEditId ? (f.profissional_id || user?.id || "") : (user?.id || "");
       const profNomeToSave = effectiveEditId
-        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdToSave)?.nome || user?.nome || "")
+        ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || user?.nome || "")
         : (user?.nome || "");
 
       const record: any = {
-        paciente_id: form.paciente_id || `manual_${Date.now()}`,
-        paciente_nome: form.paciente_nome,
+        paciente_id: f.paciente_id || `manual_${Date.now()}`,
+        paciente_nome: f.paciente_nome,
         profissional_id: profIdToSave,
         profissional_nome: profNomeToSave,
         ...(effectiveEditId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
-        agendamento_id: form.agendamento_id,
-        data_atendimento: form.data_atendimento,
-        hora_atendimento: form.hora_atendimento,
-        queixa_principal: form.queixa_principal,
-        anamnese: form.anamnese,
-        sinais_sintomas: form.sinais_sintomas,
-        exame_fisico: form.exame_fisico,
-        hipotese: form.hipotese,
-        conduta: form.conduta,
-        prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
-        solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
-        evolucao: form.evolucao,
+        agendamento_id: f.agendamento_id,
+        data_atendimento: f.data_atendimento,
+        hora_atendimento: f.hora_atendimento,
+        queixa_principal: f.queixa_principal,
+        anamnese: f.anamnese,
+        sinais_sintomas: f.sinais_sintomas,
+        exame_fisico: f.exame_fisico,
+        hipotese: f.hipotese,
+        conduta: f.conduta,
+        prescricao: lp.length > 0 ? JSON.stringify({ medicamentos: lp }) : f.prescricao,
+        solicitacao_exames: le.length > 0 ? JSON.stringify({ exames: le }) : f.solicitacao_exames,
+        evolucao: f.evolucao,
         observacoes: JSON.stringify({ 
-          especialidade_fields: especialidadeFields, 
-          texto: form.observacoes,
-          dynamic_fields: Object.keys(form).reduce((acc: any, key) => {
+          especialidade_fields: ef, 
+          texto: f.observacoes,
+          dynamic_fields: Object.keys(f).reduce((acc: any, key) => {
             // Salva campos que não são as colunas fixas da tabela
             if (!(key in emptyForm)) {
-              acc[key] = (form as any)[key];
+              acc[key] = (f as any)[key];
             }
             return acc;
           }, {})
         }),
-        resultado_exame: form.resultado_exame || "",
+        resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
-        indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
-        motivo_alteracao: effectiveEditId ? form.motivo_alteracao : "",
-        procedimentos_texto: procTexto || form.procedimentos_texto || "",
-        outro_procedimento: form.outro_procedimento || "",
-        tipo_registro: form.tipo_registro || "consulta",
+        indicacao_retorno: f.indicacao_retorno === "no_indication" ? "" : f.indicacao_retorno || "",
+        motivo_alteracao: effectiveEditId ? f.motivo_alteracao : "",
+        procedimentos_texto: procTexto || f.procedimentos_texto || "",
+        outro_procedimento: f.outro_procedimento || "",
+        tipo_registro: f.tipo_registro || "consulta",
         soap_subjetivo: soapPayload.subjetivo,
         soap_objetivo: soapPayload.objetivo,
         soap_avaliacao: soapPayload.avaliacao,
         soap_plano: soapPayload.plano,
       };
+
 
       // CORRIGIDO: não salva 'no_episode' no banco
       if (form.episodio_id && form.episodio_id !== "no_episode") {
