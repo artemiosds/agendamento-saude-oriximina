@@ -1305,6 +1305,7 @@ const Tratamentos: React.FC = () => {
       let dataAtual = dataSugerida;
       for (let tentativa = 0; tentativa < 30; tentativa++) {
         const slots = getAvailableSlots(profId, unidadeId, dataAtual);
+        // Filtrar slots que já foram pegos por outras sessões NESTE lote
         const slotLivre = slots.find((s) => estaLivreNoLote(dataAtual, s));
         if (slotLivre) return { data: dataAtual, hora: slotLivre };
         // Avança 1 dia
