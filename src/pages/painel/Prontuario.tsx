@@ -1940,14 +1940,22 @@ const ProntuarioPage: React.FC = () => {
     }
     const pac = pacientes.find((px) => px.id === form.paciente_id);
 
-    // Fire-and-forget: side-effects rodam em background, navegação é instantânea
+    // Confirma no banco a finalização do atendimento antes de navegar
+    const { error: finalizeError } = await (supabase as any)
+      .from("atendimentos")
+      .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
+      .eq("agendamento_id", agendamentoId);
+
+    if (finalizeError) {
+      console.error("[Prontuario] Falha ao finalizar atendimento no banco:", finalizeError);
+      toast.error("❌ Não foi possível finalizar o atendimento. Tente novamente.");
+      return;
+    }
+
+    // Side-effects secundários em background (log e alta automática)
     void (async () => {
       try {
         const tasks: Promise<any>[] = [
-          (supabase as any)
-            .from("atendimentos")
-            .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
-            .eq("agendamento_id", agendamentoId),
           logAction({
             acao: "atendimento_finalizado",
             entidade: "atendimento",
