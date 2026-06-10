@@ -36,8 +36,8 @@ const zfill = (valor: any, tamanho: number): string => {
   return s.padStart(tamanho, '0');
 };
 
-const rpad = (valor: string, tamanho: number): string => {
-  const s = valor || '';
+const rpad = (valor: any, tamanho: number): string => {
+  const s = String(valor || '');
   if (s.length > tamanho) return s.slice(0, tamanho);
   return s.padEnd(tamanho, ' ');
 };
@@ -339,11 +339,13 @@ const BpaExportar: React.FC = () => {
       let exportedCount = 0;
       const linhas: string[] = [];
 
-      // Cabeçalho (Line 1)
+      // Cabeçalho (Line 1 - Tipo 01)
       const totalRegistrosZfill6 = zfill(prontuarios.length, 6);
       let header = `01BPAAMBULATCOMPET${competencia}${totalRegistrosZfill6}`;
-      header = rpad(header, 205);
+      header = header.padEnd(205, " ").slice(0, 205);
       linhas.push(header);
+      
+      let hasError = false;
 
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
@@ -502,13 +504,32 @@ const BpaExportar: React.FC = () => {
         l += " ".repeat(3);                             // 202-204 (3) - Espaços
         l += " ";                                       // 205 (1) - Espaço final
 
-        if (l.length === 205) {
-          linhas.push(l);
-          exportedCount++;
-        } else {
-          warnings.push(`${ident}: Erro de tamanho na linha (${l.length}/205)`);
+        // Validação rigorosa de 205 caracteres
+        if (l.length !== 205) {
+          hasError = true;
+          warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/205).`);
         }
+        
+        // Aplica padEnd/slice como última garantia de segurança
+        l = l.padEnd(205, " ").slice(0, 205);
+        linhas.push(l);
+        exportedCount++;
       });
+
+      if (hasError) {
+        setResults({
+          totalFound: prontuarios.length,
+          exportedCount: 0,
+          warnings,
+          stats,
+          details,
+          error: "O arquivo não foi gerado porque alguns registros possuem tamanho inválido. Verifique os avisos acima para identificar os pacientes e corrija seus dados (Nome, Endereço, etc).",
+          fileName: '',
+          blobUrl: null
+        });
+        setLoading(false);
+        return;
+      }
 
       const content = linhas.join('\r\n');
       const bytes = new Uint8Array(content.length);
