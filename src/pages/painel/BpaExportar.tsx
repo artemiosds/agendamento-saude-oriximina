@@ -504,14 +504,15 @@ const BpaExportar: React.FC = () => {
         l += " ".repeat(3);                             // 202-204 (3) - Espaços
         l += " ";                                       // 205 (1) - Espaço final
 
-        // Validação rigorosa de 205 caracteres
+        // Aplica padEnd/slice como última garantia de segurança antes da validação final
+        l = l.padEnd(205, " ").slice(0, 205);
+
+        // Validação final rigorosa de 205 caracteres
         if (l.length !== 205) {
           hasError = true;
-          warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/205).`);
+          warnings.push(`${ident} (${data_atend}): Erro crítico de tamanho na linha (${l.length}/205) mesmo após normalização.`);
         }
         
-        // Aplica padEnd/slice como última garantia de segurança
-        l = l.padEnd(205, " ").slice(0, 205);
         linhas.push(l);
         exportedCount++;
       });
