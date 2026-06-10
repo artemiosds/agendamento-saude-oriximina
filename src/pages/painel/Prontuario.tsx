@@ -1955,7 +1955,7 @@ const ProntuarioPage: React.FC = () => {
     // Side-effects secundários em background (log e alta automática)
     void (async () => {
       try {
-        const tasks: Promise<any>[] = [
+        const tasks: Array<Promise<any> | any> = [
           logAction({
             acao: "atendimento_finalizado",
             entidade: "atendimento",
