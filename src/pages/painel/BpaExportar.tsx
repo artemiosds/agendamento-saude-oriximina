@@ -72,6 +72,56 @@ const calcularIdade = (dataNasc: any, dataAtendimento: any): string => {
   }
 };
 
+const obterCboValido = (prof: any): string => {
+  if (!prof) return '';
+  const cd = prof.custom_data || {};
+  
+  // Lista de campos possíveis para CBO
+  const candidatos = [
+    cd.cbo_codigo,
+    cd.cbo,
+    cd.codigo_cbo,
+    cd.cbo_sus,
+    prof.cbo,
+    prof.cbo_codigo,
+    prof.profissao,
+    prof.cargo
+  ];
+
+  for (const c of candidatos) {
+    const limpo = somenteNumeros(c);
+    if (limpo.length === 6) return limpo;
+  }
+  
+  return '';
+};
+
+const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
+  if (!nome) return null;
+  const primeiroNome = limparTexto(nome).split(' ')[0];
+  
+  const femininos = [
+    'MARIA', 'ANA', 'FRANCISCA', 'JOSEFA', 'ANTONIA', 'JULIA', 'LUCIANA', 'PATRICIA', 
+    'DAMARIS', 'JESSICA', 'ADRIANA', 'ALINE', 'AMANDA', 'BEATRIZ', 'CAMILA', 'CARLA', 
+    'CRISTINA', 'DANIELA', 'DEBORA', 'ELIANE', 'FERNANDA', 'GABRIELA', 'ISABELA', 
+    'JULIANA', 'LETICIA', 'MARCELA', 'NATALIA', 'PAULA', 'RAFAELA', 'RENATA', 'SIMONE', 
+    'TATIANE', 'VANESSA', 'VITORIA'
+  ];
+  
+  const masculinos = [
+    'JOSE', 'JOAO', 'FRANCISCO', 'ANTONIO', 'MARCOS', 'CARLOS', 'LUCAS', 'MARCO', 
+    'LUIZ', 'ALEXANDRE', 'ANDRE', 'BRUNO', 'DANIEL', 'DIEGO', 'EDUARDO', 'FELIPE', 
+    'FERNANDO', 'GABRIEL', 'GUILHERME', 'GUSTAVO', 'IGOR', 'LEANDRO', 'LEONARDO', 
+    'MARCELO', 'MATEUS', 'PAULO', 'RAFAEL', 'RICARDO', 'RODRIGO', 'SAMUEL', 'TIAGO', 
+    'VINICIUS', 'VITOR'
+  ];
+
+  if (femininos.includes(primeiroNome)) return 'F';
+  if (masculinos.includes(primeiroNome)) return 'M';
+  
+  return null;
+};
+
 const BpaExportar: React.FC = () => {
   const [formData, setFormData] = useState({
     competencia: '',
@@ -95,8 +145,11 @@ const BpaExportar: React.FC = () => {
     stats: {
       missingCns: number;
       missingSexo: number;
+      inferredSexo: number;
       missingMunicipio: number;
       missingCbo: number;
+      fallbackCbo: number;
+      invalidCbo: number;
       defaultProc: number;
     };
     error: string | null;
@@ -140,17 +193,28 @@ const BpaExportar: React.FC = () => {
     const prof = profissionais.find(p => p.id === profId);
     const customData = prof?.custom_data as any;
     const cns = prof?.cns || customData?.cns || '';
-    const cbo = prof?.profissao || customData?.cbo || '';
+    const cbo = obterCboValido(prof);
+    
     setFormData(prev => ({ 
       ...prev, 
       profissional_id: profId, 
       cns_profissional: cns,
       cbo: cbo
     }));
+
+    if (profId !== 'all' && !cbo) {
+      toast.warning('Este profissional não possui CBO numérico de 6 dígitos cadastrado.');
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    if (name === 'cbo') {
+      const numeric = somenteNumeros(value);
+      if (numeric.length > 6) return;
+      setFormData(prev => ({ ...prev, [name]: numeric }));
+      return;
+    }
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -181,8 +245,11 @@ const BpaExportar: React.FC = () => {
     const stats = {
       missingCns: 0,
       missingSexo: 0,
+      inferredSexo: 0,
       missingMunicipio: 0,
       missingCbo: 0,
+      fallbackCbo: 0,
+      invalidCbo: 0,
       defaultProc: 0
     };
     
@@ -270,11 +337,28 @@ const BpaExportar: React.FC = () => {
         if (!cns_prof || cns_prof === '000000000000000') warnings.push(`${ident}: CNS do profissional ausente.`);
 
         // CBO
-        const cbo_raw = prof?.profissao || profCd?.cbo || formData.cbo;
+        let cbo_raw = obterCboValido(prof);
+        let usando_fallback_cbo = false;
+
+        if (!cbo_raw) {
+          const fallback_limpo = somenteNumeros(formData.cbo);
+          if (fallback_limpo.length === 6) {
+            cbo_raw = fallback_limpo;
+            usando_fallback_cbo = true;
+            stats.fallbackCbo++;
+          }
+        }
+
         const cbo = zfill(cbo_raw, 6);
-        if (!cbo || cbo === '000000') {
+        if (!cbo_raw || cbo === '000000') {
           stats.missingCbo++;
-          warnings.push(`${ident}: CBO do profissional ausente.`);
+          warnings.push(`${ident}: CBO do profissional ausente ou inválido (deve ter 6 dígitos).`);
+        } else if (usando_fallback_cbo) {
+          warnings.push(`${ident}: CBO usando fallback informado manualmente.`);
+        }
+
+        if (formData.cbo && somenteNumeros(formData.cbo).length !== 6 && !obterCboValido(prof)) {
+          stats.invalidCbo++;
         }
 
         // Procedimento
@@ -295,13 +379,25 @@ const BpaExportar: React.FC = () => {
         const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
         
         let sexo = ' ';
-        const s = (pac?.sexo || pacCd?.sexo || '').toUpperCase();
-        if (s.startsWith('M')) sexo = 'M';
-        else if (s.startsWith('F')) sexo = 'F';
+        const raw_sexo = (pac?.sexo || pacCd?.sexo || '').toUpperCase();
+        
+        if (raw_sexo.startsWith('M') || raw_sexo === 'MASCULINO' || raw_sexo === 'MALE') {
+          sexo = 'M';
+        } else if (raw_sexo.startsWith('F') || raw_sexo === 'FEMININO' || raw_sexo === 'FEMALE') {
+          sexo = 'F';
+        } else {
+          // Tenta inferir pelo nome
+          const inferred = inferirSexoPorNome(pac?.nome || pront.paciente_nome || '');
+          if (inferred) {
+            sexo = inferred;
+            stats.inferredSexo++;
+            warnings.push(`${ident}: Sexo inferido pelo nome (${inferred}).`);
+          }
+        }
         
         if (sexo === ' ') {
           stats.missingSexo++;
-          warnings.push(`${ident}: Sexo do paciente ausente.`);
+          warnings.push(`${ident}: Sexo do paciente ausente e não foi possível inferir.`);
         }
 
         const data_nasc = formatarData(pac?.data_nascimento || pacCd?.data_nascimento);
@@ -498,35 +594,53 @@ const BpaExportar: React.FC = () => {
 
       {results && (
         <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
             <Card className="bg-blue-50">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{results.totalFound}</div>
-                <div className="text-sm text-blue-600">Registros Encontrados</div>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.totalFound}</div>
+                <div className="text-xs text-blue-600">Registros</div>
               </CardContent>
             </Card>
             <Card className={results.stats.missingCns > 0 ? "bg-amber-50" : "bg-green-50"}>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{results.stats.missingCns}</div>
-                <div className="text-sm text-amber-700">Sem CNS Paciente</div>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.stats.missingCns}</div>
+                <div className="text-xs text-amber-700">Sem CNS Pac.</div>
               </CardContent>
             </Card>
             <Card className={results.stats.missingSexo > 0 ? "bg-amber-50" : "bg-green-50"}>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{results.stats.missingSexo}</div>
-                <div className="text-sm text-amber-700">Sem Sexo Definido</div>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.stats.missingSexo}</div>
+                <div className="text-xs text-amber-700">Sexo Indef.</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.inferredSexo > 0 ? "bg-blue-50" : "bg-slate-50"}>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.stats.inferredSexo}</div>
+                <div className="text-xs text-blue-600">Sexo Inferido</div>
               </CardContent>
             </Card>
             <Card className={results.stats.missingCbo > 0 ? "bg-amber-50" : "bg-green-50"}>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{results.stats.missingCbo}</div>
-                <div className="text-sm text-amber-700">Sem CBO Profissional</div>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.stats.missingCbo}</div>
+                <div className="text-xs text-amber-700">Sem CBO Prof.</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.fallbackCbo > 0 ? "bg-blue-50" : "bg-slate-50"}>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.stats.fallbackCbo}</div>
+                <div className="text-xs text-blue-600">CBO Fallback</div>
+              </CardContent>
+            </Card>
+            <Card className={results.stats.invalidCbo > 0 ? "bg-red-50" : "bg-slate-50"}>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.stats.invalidCbo}</div>
+                <div className="text-xs text-red-600">CBO Inválido</div>
               </CardContent>
             </Card>
             <Card className="bg-slate-50">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{results.stats.defaultProc}</div>
-                <div className="text-sm text-slate-600">Usando Proc. Padrão</div>
+              <CardContent className="p-4 text-center">
+                <div className="text-xl font-bold">{results.stats.defaultProc}</div>
+                <div className="text-xs text-slate-600">Proc. Padrão</div>
               </CardContent>
             </Card>
           </div>
