@@ -36,8 +36,8 @@ const zfill = (valor: any, tamanho: number): string => {
   return s.padStart(tamanho, '0');
 };
 
-const rpad = (valor: string, tamanho: number): string => {
-  const s = valor || '';
+const rpad = (valor: any, tamanho: number): string => {
+  const s = String(valor || '');
   if (s.length > tamanho) return s.slice(0, tamanho);
   return s.padEnd(tamanho, ' ');
 };
@@ -339,10 +339,10 @@ const BpaExportar: React.FC = () => {
       let exportedCount = 0;
       const linhas: string[] = [];
 
-      // Cabeçalho (Line 1)
+      // Cabeçalho (Line 1 - Tipo 01)
       const totalRegistrosZfill6 = zfill(prontuarios.length, 6);
       let header = `01BPAAMBULATCOMPET${competencia}${totalRegistrosZfill6}`;
-      header = rpad(header, 205);
+      header = header.padEnd(205, " ").slice(0, 205);
       linhas.push(header);
 
       // Linhas de Produção
@@ -502,13 +502,22 @@ const BpaExportar: React.FC = () => {
         l += " ".repeat(3);                             // 202-204 (3) - Espaços
         l += " ";                                       // 205 (1) - Espaço final
 
+        // Garantia final de 205 caracteres conforme regra do BPA-I
+        l = l.padEnd(205, " ").slice(0, 205);
+
         if (l.length === 205) {
           linhas.push(l);
           exportedCount++;
         } else {
-          warnings.push(`${ident}: Erro de tamanho na linha (${l.length}/205)`);
+          warnings.push(`${ident}: Erro crítico de tamanho na linha (${l.length}/205)`);
         }
       });
+
+      // Validação de segurança antes de liberar download
+      const linhasInvalidas = linhas.filter(lin => lin.length !== 205);
+      if (linhasInvalidas.length > 0) {
+        throw new Error(`Erro de consistência: ${linhasInvalidas.length} linhas geradas com tamanho incorreto (diferente de 205).`);
+      }
 
       const content = linhas.join('\r\n');
       const bytes = new Uint8Array(content.length);
