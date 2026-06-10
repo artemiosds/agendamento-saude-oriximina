@@ -2007,6 +2007,10 @@ const ProntuarioPage: React.FC = () => {
 
   // Dedicated handler: register session only (no close)
   const handleRegistrarSessaoOnly = async () => {
+    if (registeringSessionRef.current) {
+      console.warn("[handleRegistrarSessaoOnly] Registro já em curso — clique duplo ignorado.");
+      return;
+    }
     if (!currentSessionForRegistration || !sessaoCycle) {
       toast.error("Nenhuma sessão disponível para registro.");
       return;
@@ -2015,6 +2019,7 @@ const ProntuarioPage: React.FC = () => {
       toast.error(sessionRegistrationError);
       return;
     }
+    registeringSessionRef.current = true;
     const soapPayload = sessionSoapPayload;
     const soapError = null;
     setSoapErrors(false);
