@@ -701,6 +701,7 @@ const Pacientes: React.FC = () => {
       is_gestante: form.isGestante,
       is_pne: form.isPne,
       is_autista: form.isAutista,
+      sexo: form.sexo,
       custom_data: {
         ...(form.customData || {}),
         atualizado_em: new Date().toISOString(),
