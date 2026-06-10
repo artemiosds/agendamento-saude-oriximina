@@ -267,6 +267,7 @@ const ProntuarioPage: React.FC = () => {
   const autosaveInFlightRef = useRef(false);
   const savingRef = useRef(false);
   const finalizingRef = useRef(false);
+  const registeringSessionRef = useRef(false);
   useEffect(() => { editIdRef.current = editId; }, [editId]);
   useEffect(() => { formRef.current = form; }, [form]);
 
