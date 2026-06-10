@@ -1672,6 +1672,7 @@ const ProntuarioPage: React.FC = () => {
       return false;
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   };
 
