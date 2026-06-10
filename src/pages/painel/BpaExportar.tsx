@@ -250,6 +250,7 @@ const BpaExportar: React.FC = () => {
 
   const handleGerar = async () => {
     setResults(null);
+    setSelectedCategory(null);
     
     if (formData.competencia.length !== 6 || isNaN(Number(formData.competencia))) {
       toast.error('Competência deve ter 6 dígitos (AAAAMM)');
@@ -267,6 +268,17 @@ const BpaExportar: React.FC = () => {
       fallbackCbo: 0,
       invalidCbo: 0,
       defaultProc: 0
+    };
+
+    const details = {
+      missingCns: [] as any[],
+      missingSexo: [] as any[],
+      inferredSexo: [] as any[],
+      missingMunicipio: [] as any[],
+      missingCbo: [] as any[],
+      fallbackCbo: [] as any[],
+      invalidCbo: [] as any[],
+      defaultProc: [] as any[]
     };
     
     try {
