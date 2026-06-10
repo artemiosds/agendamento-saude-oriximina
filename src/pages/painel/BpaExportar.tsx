@@ -344,6 +344,8 @@ const BpaExportar: React.FC = () => {
       let header = `01BPAAMBULATCOMPET${competencia}${totalRegistrosZfill6}`;
       header = header.padEnd(205, " ").slice(0, 205);
       linhas.push(header);
+      
+      let hasError = false;
 
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
@@ -502,21 +504,31 @@ const BpaExportar: React.FC = () => {
         l += " ".repeat(3);                             // 202-204 (3) - Espaços
         l += " ";                                       // 205 (1) - Espaço final
 
-        // Garantia final de 205 caracteres conforme regra do BPA-I
-        l = l.padEnd(205, " ").slice(0, 205);
-
-        if (l.length === 205) {
-          linhas.push(l);
-          exportedCount++;
-        } else {
-          warnings.push(`${ident}: Erro crítico de tamanho na linha (${l.length}/205)`);
+        // Validação rigorosa de 205 caracteres
+        if (l.length !== 205) {
+          hasError = true;
+          warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/205).`);
         }
+        
+        // Aplica padEnd/slice como última garantia de segurança
+        l = l.padEnd(205, " ").slice(0, 205);
+        linhas.push(l);
+        exportedCount++;
       });
 
-      // Validação de segurança antes de liberar download
-      const linhasInvalidas = linhas.filter(lin => lin.length !== 205);
-      if (linhasInvalidas.length > 0) {
-        throw new Error(`Erro de consistência: ${linhasInvalidas.length} linhas geradas com tamanho incorreto (diferente de 205).`);
+      if (hasError) {
+        setResults({
+          totalFound: prontuarios.length,
+          exportedCount: 0,
+          warnings,
+          stats,
+          details,
+          error: "O arquivo não foi gerado porque alguns registros possuem tamanho inválido. Verifique os avisos acima para identificar os pacientes e corrija seus dados (Nome, Endereço, etc).",
+          fileName: '',
+          blobUrl: null
+        });
+        setLoading(false);
+        return;
       }
 
       const content = linhas.join('\r\n');
