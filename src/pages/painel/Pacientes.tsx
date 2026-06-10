@@ -630,7 +630,7 @@ const Pacientes: React.FC = () => {
     if (!form.cns?.trim()) newErrors.cns = "CNS é obrigatório";
     if (!form.naturalidade?.trim()) newErrors.naturalidade = "Naturalidade é obrigatória";
     if (!form.telefone?.trim()) newErrors.telefone = "Telefone é obrigatório";
-    if (!cd.sexo) newErrors.sexo = "Sexo é obrigatório";
+    if (!form.sexo) newErrors.sexo = "Sexo é obrigatório";
     if (!cd.cep?.trim()) newErrors.cep = "CEP é obrigatório";
     if (!cd.logradouro?.trim()) newErrors.logradouro = "Logradouro é obrigatório";
     if (!cd.numero?.trim()) newErrors.numero = "Número é obrigatório";
