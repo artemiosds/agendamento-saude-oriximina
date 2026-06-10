@@ -612,6 +612,7 @@ const Pacientes: React.FC = () => {
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
       customData: (p as any).custom_data || {},
+      sexo: (p as any).sexo || (p as any).custom_data?.sexo || "",
     });
 
     setErrors({});
