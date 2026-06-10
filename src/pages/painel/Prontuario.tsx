@@ -1999,6 +1999,9 @@ const ProntuarioPage: React.FC = () => {
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
     navigate("/painel/agenda");
+    } finally {
+      finalizingRef.current = false;
+    }
   };
 
   // Dedicated handler: register session only (no close)
