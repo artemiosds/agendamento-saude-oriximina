@@ -46,7 +46,7 @@ const DynamicProntuarioFields: React.FC<DynamicProntuarioFieldsProps> = ({
             )}
 
             {(field.tipo === 'text' || field.tipo === 'texto') && (
-              <Input
+              <DebouncedInput
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 placeholder={`Informe ${field.label.toLowerCase()}...`}
@@ -55,7 +55,7 @@ const DynamicProntuarioFields: React.FC<DynamicProntuarioFieldsProps> = ({
             )}
 
             {(field.tipo === 'number' || field.tipo === 'numero') && (
-              <Input
+              <DebouncedInput
                 type="number"
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}
