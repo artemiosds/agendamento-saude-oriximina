@@ -797,7 +797,7 @@ const BpaExportar: React.FC = () => {
                                   size="icon" 
                                   className="h-8 w-8" 
                                   title="Ver Paciente"
-                                  onClick={() => navigate(`/pacientes/${item.paciente_id}`)}
+                                  onClick={() => navigate(`/painel/pacientes?id=${item.paciente_id}`)}
                                 >
                                   <User className="h-4 w-4" />
                                 </Button>
@@ -808,7 +808,7 @@ const BpaExportar: React.FC = () => {
                                   size="icon" 
                                   className="h-8 w-8" 
                                   title="Ver Profissional"
-                                  onClick={() => navigate(`/configuracoes/funcionarios`)} // Rota geral de funcionários
+                                  onClick={() => navigate(`/painel/funcionarios?id=${item.profissional_id}`)}
                                 >
                                   <UserCog className="h-4 w-4" />
                                 </Button>

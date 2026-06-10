@@ -111,6 +111,21 @@ const Funcionarios: React.FC = () => {
     loadFuncionarios();
   }, []);
 
+  useEffect(() => {
+    // Check for ID in URL to automatically open edit modal
+    const params = new URLSearchParams(window.location.search);
+    const idFromUrl = params.get('id');
+    
+    if (idFromUrl && funcionarios.length > 0) {
+      const target = funcionarios.find(f => f.id === idFromUrl);
+      if (target) {
+        openEdit(target);
+        // Clean URL after opening
+        window.history.replaceState({}, '', '/painel/funcionarios');
+      }
+    }
+  }, [funcionarios]);
+
   const conselhoMap: Record<string, string> = {
     'Médico': 'CRM', 'Médica': 'CRM', 'Enfermeiro': 'COREN', 'Enfermeira': 'COREN',
     'Odontólogo': 'CRO', 'Odontóloga': 'CRO', 'Dentista': 'CRO',

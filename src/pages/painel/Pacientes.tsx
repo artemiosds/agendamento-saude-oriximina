@@ -228,12 +228,69 @@ const Pacientes: React.FC = () => {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
+    // Check for ID in URL to automatically open edit modal
+    const params = new URLSearchParams(window.location.search);
+    const idFromUrl = params.get('id');
+    
+    if (idFromUrl && pacientes.length > 0) {
+      const target = pacientes.find(p => p.id === idFromUrl);
+      if (target) {
+        setEditId(target.id);
+        setForm({
+          nome: target.nome,
+          cpf: target.cpf,
+          cns: target.cns,
+          nomeMae: target.nomeMae,
+          telefone: target.telefone,
+          dataNascimento: target.dataNascimento,
+          email: target.email,
+          endereco: target.endereco,
+          naturalidade: target.naturalidade,
+          naturalidadeUf: target.naturalidade_uf,
+          municipio: target.municipio,
+          menorIdade: target.menor_idade,
+          nomeResponsavel: target.nome_responsavel,
+          cpfResponsavel: target.cpf_responsavel,
+          ubsOrigem: target.ubs_origem,
+          profissionalSolicitante: target.profissional_solicitante,
+          tipoEncaminhamento: target.tipo_encaminhamento,
+          diagnosticoResumido: target.diagnostico_resumido,
+          justificativa: target.justificativa,
+          dataEncaminhamento: target.data_encaminhamento,
+          tipoCondicao: target.tipo_condicao,
+          mobilidade: target.mobilidade,
+          usaDispositivo: target.usa_dispositivo,
+          tipoDispositivo: target.tipo_dispositivo,
+          comunicacao: target.comunicacao,
+          comportamento: target.comportamento,
+          usaEquipamentos: target.usa_equipamentos,
+          equipamentos: target.equipamentos,
+          observacaoEquipamentos: target.observacao_equipamentos,
+          outroServicoSus: target.outro_servico_sus,
+          transporte: target.transporte,
+          turnoPreferido: target.turno_preferido,
+          especialidadeDestino: target.especialidade_destino,
+          customData: target.custom_data,
+          cid: target.cid,
+          descricaoClinica: target.descricaoClinica,
+          isGestante: target.isGestante,
+          isPne: target.isPne,
+          isAutista: target.isAutista,
+          documentoUrl: target.documento_url || ""
+        });
+        setDialogOpen(true);
+        
+        // Clean URL after opening
+        window.history.replaceState({}, '', '/painel/pacientes');
+      }
+    }
+
     const t = window.setTimeout(() => {
       setDebouncedSearch(search);
       setVisibleCount(PAGE_SIZE); // reset pagination on search
     }, 300);
     return () => window.clearTimeout(t);
-  }, [search]);
+  }, [search, pacientes]);
   const [importOpen, setImportOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<PacienteFormData>(emptyPacienteForm);
