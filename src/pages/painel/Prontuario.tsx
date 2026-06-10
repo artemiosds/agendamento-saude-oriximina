@@ -265,6 +265,8 @@ const ProntuarioPage: React.FC = () => {
   const editIdRef = useRef<string | null>(null);
   const formRef = useRef(emptyForm);
   const autosaveInFlightRef = useRef(false);
+  const savingRef = useRef(false);
+  const finalizingRef = useRef(false);
   useEffect(() => { editIdRef.current = editId; }, [editId]);
   useEffect(() => { formRef.current = form; }, [form]);
 
