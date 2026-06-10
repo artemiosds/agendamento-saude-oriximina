@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
-import { cn, todayLocalStr } from "@/lib/utils";
+import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
