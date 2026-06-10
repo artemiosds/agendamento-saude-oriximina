@@ -659,49 +659,170 @@ const BpaExportar: React.FC = () => {
                 <div className="text-xs text-blue-600">Registros</div>
               </CardContent>
             </Card>
-            <Card className={results.stats.missingCns > 0 ? "bg-amber-50" : "bg-green-50"}>
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.stats.missingCns}</div>
-                <div className="text-xs text-amber-700">Sem CNS Pac.</div>
-              </CardContent>
-            </Card>
-            <Card className={results.stats.missingSexo > 0 ? "bg-amber-50" : "bg-green-50"}>
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.stats.missingSexo}</div>
-                <div className="text-xs text-amber-700">Sexo Indef.</div>
-              </CardContent>
-            </Card>
-            <Card className={results.stats.inferredSexo > 0 ? "bg-blue-50" : "bg-slate-50"}>
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.stats.inferredSexo}</div>
-                <div className="text-xs text-blue-600">Sexo Inferido</div>
-              </CardContent>
-            </Card>
-            <Card className={results.stats.missingCbo > 0 ? "bg-amber-50" : "bg-green-50"}>
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.stats.missingCbo}</div>
-                <div className="text-xs text-amber-700">Sem CBO Prof.</div>
-              </CardContent>
-            </Card>
-            <Card className={results.stats.fallbackCbo > 0 ? "bg-blue-50" : "bg-slate-50"}>
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.stats.fallbackCbo}</div>
-                <div className="text-xs text-blue-600">CBO Fallback</div>
-              </CardContent>
-            </Card>
-            <Card className={results.stats.invalidCbo > 0 ? "bg-red-50" : "bg-slate-50"}>
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.stats.invalidCbo}</div>
-                <div className="text-xs text-red-600">CBO Inválido</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-slate-50">
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.stats.defaultProc}</div>
-                <div className="text-xs text-slate-600">Proc. Padrão</div>
-              </CardContent>
-            </Card>
+
+            {[
+              { id: 'missingCns', label: 'Sem CNS Pac.', count: results.stats.missingCns, color: 'amber' },
+              { id: 'missingSexo', label: 'Sexo Indef.', count: results.stats.missingSexo, color: 'amber' },
+              { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
+              { id: 'missingCbo', label: 'Sem CBO Prof.', count: results.stats.missingCbo, color: 'amber' },
+              { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' },
+              { id: 'invalidCbo', label: 'CBO Inválido', count: results.stats.invalidCbo, color: 'red' },
+              { id: 'defaultProc', label: 'Proc. Padrão', count: results.stats.defaultProc, color: 'slate' },
+              { id: 'missingMunicipio', label: 'Sem Município', count: results.stats.missingMunicipio, color: 'amber' }
+            ].map((stat) => (
+              <Card 
+                key={stat.id}
+                className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary/50 ${
+                  selectedCategory === stat.id ? 'ring-2 ring-primary bg-white shadow-md' : 
+                  stat.count > 0 ? `bg-${stat.color}-50` : 'bg-green-50'
+                }`}
+                onClick={() => setSelectedCategory(selectedCategory === stat.id ? null : stat.id)}
+              >
+                <CardContent className="p-4 text-center">
+                  <div className="text-xl font-bold">{stat.count}</div>
+                  <div className={`text-xs text-${stat.color === 'slate' ? 'slate-600' : stat.color + '-700'}`}>{stat.label}</div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
+
+          {selectedCategory && results.details[selectedCategory as keyof typeof results.details] && (
+            <Card className="animate-in slide-in-from-top-2 duration-200 border-primary/20">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    Detalhes da pendência: {
+                      selectedCategory === 'missingCns' ? 'Sem CNS Paciente' :
+                      selectedCategory === 'missingSexo' ? 'Sexo Indefinido' :
+                      selectedCategory === 'inferredSexo' ? 'Sexo Inferido pelo Nome' :
+                      selectedCategory === 'missingCbo' ? 'Sem CBO Profissional' :
+                      selectedCategory === 'fallbackCbo' ? 'CBO Fallback Informado' :
+                      selectedCategory === 'invalidCbo' ? 'CBO Inválido' :
+                      selectedCategory === 'defaultProc' ? 'Procedimento Padrão Utilizado' :
+                      selectedCategory === 'missingMunicipio' ? 'Sem Município (Usando Padrão)' : ''
+                    }
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Mostrando {results.details[selectedCategory as keyof typeof results.details].length} registros afetados.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-8"
+                    onClick={() => {
+                      const data = results.details[selectedCategory as keyof typeof results.details];
+                      const headers = ["Paciente", "CPF", "Nascimento", "Data Atendimento", "Profissional", "Unidade", "Procedimento", "Pendência", "Valor Atual"];
+                      const csvContent = [
+                        headers.join(","),
+                        ...data.map(item => [
+                          `"${item.paciente_nome}"`,
+                          `"${item.paciente_cpf || ''}"`,
+                          `"${item.paciente_nascimento || ''}"`,
+                          `"${item.data_atendimento}"`,
+                          `"${item.profissional_nome}"`,
+                          `"${item.unidade_nome}"`,
+                          `"${item.procedimento || ''}"`,
+                          `"${item.pendencia}"`,
+                          `"${item.valor_atual || ''}"`
+                        ].join(","))
+                      ].join("\n");
+                      
+                      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.setAttribute("href", url);
+                      link.setAttribute("download", `pendencias_${selectedCategory}_${formData.competencia}.csv`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar CSV
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="h-8 w-8 p-0"
+                    onClick={() => setSelectedCategory(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead>Paciente</TableHead>
+                        <TableHead>Data Atendimento</TableHead>
+                        <TableHead>Profissional</TableHead>
+                        <TableHead>Unidade</TableHead>
+                        <TableHead>Pendência / Valor</TableHead>
+                        <TableHead className="text-right">Ação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {results.details[selectedCategory as keyof typeof results.details].map((item, idx) => (
+                        <TableRow key={`${item.id}-${idx}`}>
+                          <TableCell>
+                            <div className="font-medium">{item.paciente_nome}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {item.paciente_cpf ? `CPF: ${item.paciente_cpf}` : 'Sem CPF'} | {item.paciente_nascimento ? `Nasc: ${new Date(item.paciente_nascimento).toLocaleDateString()}` : 'Sem Nasc.'}
+                            </div>
+                          </TableCell>
+                          <TableCell>{new Date(item.data_atendimento).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span>{item.profissional_nome}</span>
+                              <span className="text-xs text-muted-foreground">CBO: {item.cbo || '---'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{item.unidade_nome}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-semibold uppercase">{item.pendencia}</span>
+                              <span className="text-xs text-muted-foreground">{item.valor_atual}</span>
+                              {item.sugestao && <span className="text-xs text-blue-600 italic">Sugestão: {item.sugestao}</span>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {item.paciente_id && (
+                                <Button 
+                                  variant="outline" 
+                                  size="icon" 
+                                  className="h-8 w-8" 
+                                  title="Ver Paciente"
+                                  onClick={() => navigate(`/pacientes/${item.paciente_id}`)}
+                                >
+                                  <User className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {item.profissional_id && (
+                                <Button 
+                                  variant="outline" 
+                                  size="icon" 
+                                  className="h-8 w-8" 
+                                  title="Ver Profissional"
+                                  onClick={() => navigate(`/configuracoes/funcionarios`)} // Rota geral de funcionários
+                                >
+                                  <UserCog className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {results.error ? (
             <Alert variant="destructive">
@@ -715,7 +836,7 @@ const BpaExportar: React.FC = () => {
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
                 <AlertTitle className="text-green-800">Processamento Concluído</AlertTitle>
                 <AlertDescription className="text-green-700">
-                  {results.exportedCount} linhas geradas com sucesso. Verifique os avisos abaixo antes de baixar.
+                  {results.exportedCount} linhas geradas com sucesso. Verifique os avisos acima antes de baixar.
                 </AlertDescription>
               </Alert>
 
@@ -732,7 +853,7 @@ const BpaExportar: React.FC = () => {
                 </div>
               )}
 
-              {results.warnings.length > 0 && (
+              {results.warnings.length > 0 && !selectedCategory && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-amber-700 flex items-center gap-2">
