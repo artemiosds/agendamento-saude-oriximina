@@ -245,7 +245,6 @@ const Pacientes: React.FC = () => {
           dataNascimento: target.dataNascimento,
           email: target.email,
           endereco: target.endereco,
-          unidadeId: target.unidadeId,
           naturalidade: target.naturalidade,
           naturalidadeUf: target.naturalidade_uf,
           municipio: target.municipio,
