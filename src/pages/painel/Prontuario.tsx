@@ -2147,6 +2147,7 @@ const ProntuarioPage: React.FC = () => {
       toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
     } finally {
       setSaving(false);
+      registeringSessionRef.current = false;
     }
   };
 
