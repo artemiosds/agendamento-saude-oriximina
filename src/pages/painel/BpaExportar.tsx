@@ -351,6 +351,23 @@ const BpaExportar: React.FC = () => {
         const unit = unitMap.get(pront.unidade_id) as any;
         
         const ident = pac?.nome || pront.paciente_nome || `Registro ${index + 1}`;
+        const itemDetail = {
+          id: pront.id,
+          paciente_id: pront.paciente_id,
+          paciente_nome: ident,
+          paciente_cpf: pac?.cpf,
+          paciente_nascimento: pac?.data_nascimento,
+          data_atendimento: pront.data_atendimento,
+          profissional_id: pront.profissional_id,
+          profissional_nome: prof?.nome || 'Profissional não encontrado',
+          unidade_id: pront.unidade_id,
+          unidade_nome: unit?.nome || 'Unidade não encontrada',
+          procedimento: pront.custom_data?.procedimento_sigtap || pront.outro_procedimento,
+          cns_paciente: pac?.cns,
+          sexo: pac?.sexo,
+          municipio: pac?.municipio || (pac?.custom_data as any)?.municipio_ibge,
+          cbo: obterCboValido(prof)
+        };
 
         // CNES
         const unitCd = unit?.custom_data as any;
@@ -374,12 +391,14 @@ const BpaExportar: React.FC = () => {
             cbo_raw = fallback_limpo;
             usando_fallback_cbo = true;
             stats.fallbackCbo++;
+            details.fallbackCbo.push({ ...itemDetail, pendencia: 'CBO Fallback', valor_atual: 'Usando padrão informado' });
           }
         }
 
         const cbo = zfill(cbo_raw, 6);
         if (!cbo_raw || cbo === '000000') {
           stats.missingCbo++;
+          details.missingCbo.push({ ...itemDetail, pendencia: 'Sem CBO Prof.', valor_atual: 'Ausente' });
           warnings.push(`${ident}: CBO do profissional ausente ou inválido (deve ter 6 dígitos).`);
         } else if (usando_fallback_cbo) {
           warnings.push(`${ident}: CBO usando fallback informado manualmente.`);
@@ -387,12 +406,16 @@ const BpaExportar: React.FC = () => {
 
         if (formData.cbo && somenteNumeros(formData.cbo).length !== 6 && !obterCboValido(prof)) {
           stats.invalidCbo++;
+          details.invalidCbo.push({ ...itemDetail, pendencia: 'CBO Inválido', valor_atual: formData.cbo });
         }
 
         // Procedimento
         const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
         const procRaw = proc_real || formData.procedimento_padrao;
-        if (!proc_real) stats.defaultProc++;
+        if (!proc_real) {
+          stats.defaultProc++;
+          details.defaultProc.push({ ...itemDetail, pendencia: 'Proc. Padrão', valor_atual: 'Usando padrão informado' });
+        }
         const proc = zfill(procRaw, 10);
 
         // Paciente
@@ -401,6 +424,7 @@ const BpaExportar: React.FC = () => {
         const cns_pac = zfill(cns_pac_value || '', 15);
         if (!cns_pac || cns_pac === '000000000000000') {
           stats.missingCns++;
+          details.missingCns.push({ ...itemDetail, pendencia: 'Sem CNS Pac.', valor_atual: 'Ausente' });
           warnings.push(`${ident}: CNS do paciente ausente.`);
         }
 
@@ -419,12 +443,14 @@ const BpaExportar: React.FC = () => {
           if (inferred) {
             sexo = inferred;
             stats.inferredSexo++;
+            details.inferredSexo.push({ ...itemDetail, pendencia: 'Sexo Inferido', valor_atual: 'Indefinido', sugestao: inferred });
             warnings.push(`${ident}: Sexo inferido pelo nome (${inferred}).`);
           }
         }
         
         if (sexo === ' ') {
           stats.missingSexo++;
+          details.missingSexo.push({ ...itemDetail, pendencia: 'Sexo Indef.', valor_atual: 'Indefinido' });
           warnings.push(`${ident}: Sexo do paciente ausente e não foi possível inferir.`);
         }
 
@@ -437,6 +463,7 @@ const BpaExportar: React.FC = () => {
         const municipio = zfill(mun_real || formData.municipio_padrao, 6);
         if (!mun_real) {
           stats.missingMunicipio++;
+          details.missingMunicipio.push({ ...itemDetail, pendencia: 'Sem Município', valor_atual: 'Usando padrão' });
           warnings.push(`${ident}: Município do paciente usando padrão.`);
         }
 
@@ -498,6 +525,7 @@ const BpaExportar: React.FC = () => {
         exportedCount,
         warnings,
         stats,
+        details,
         error: null,
         fileName,
         blobUrl: url
@@ -512,6 +540,7 @@ const BpaExportar: React.FC = () => {
         exportedCount: 0,
         warnings: [],
         stats,
+        details,
         error: err.message || 'Erro ao processar dados.',
         fileName: '',
         blobUrl: null
