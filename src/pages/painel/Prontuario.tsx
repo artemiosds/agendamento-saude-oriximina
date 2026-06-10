@@ -1931,7 +1931,7 @@ const ProntuarioPage: React.FC = () => {
     }
 
     const now = new Date();
-    const horaFim = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const horaFim = nowTimeBrazilStr(now);
     let duracaoMinutos = 0;
     if (activeAtendimento?.horaInicio) {
       const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
