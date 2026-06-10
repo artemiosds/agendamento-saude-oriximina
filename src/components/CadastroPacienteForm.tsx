@@ -134,7 +134,7 @@ export interface PacienteFormData {
   isAutista: boolean;
   patientProcedures?: any[];
   customData?: Record<string, any>;
-
+  sexo: string;
 }
 
 export const emptyPacienteForm: PacienteFormData = {
