@@ -265,6 +265,8 @@ const ProntuarioPage: React.FC = () => {
   const editIdRef = useRef<string | null>(null);
   const formRef = useRef(emptyForm);
   const autosaveInFlightRef = useRef(false);
+  const savingRef = useRef(false);
+  const finalizingRef = useRef(false);
   useEffect(() => { editIdRef.current = editId; }, [editId]);
   useEffect(() => { formRef.current = form; }, [form]);
 
@@ -1285,6 +1287,12 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleSave = async (formOverride?: any): Promise<boolean> => {
+    // Anti-duplo-clique: bloqueia chamadas concorrentes antes mesmo de setSaving refletir.
+    if (savingRef.current) {
+      console.warn("[handleSave] Salvamento já em curso — clique duplo ignorado.");
+      return false;
+    }
+    savingRef.current = true;
     console.log("[handleSave] Iniciando salvamento...", { hasEditId: !!editId, editId });
     const f = formOverride || formRef.current;
     const ef = especialidadeFieldsRef.current;
@@ -1664,6 +1672,7 @@ const ProntuarioPage: React.FC = () => {
       return false;
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   };
 
@@ -1904,8 +1913,14 @@ const ProntuarioPage: React.FC = () => {
   // ============ END AUTOSAVE ============
 
   const handleFinalizarAtendimento = async () => {
-    const saved = await handleSave();
-    if (!saved) return;
+    if (finalizingRef.current) {
+      console.warn("[handleFinalizarAtendimento] Finalização já em curso — clique duplo ignorado.");
+      return;
+    }
+    finalizingRef.current = true;
+    try {
+      const saved = await handleSave();
+      if (!saved) return;
 
     // Resolve the agendamento ID — from activeAtendimento or form
     const agendamentoId = activeAtendimento?.agendamentoId || form.agendamento_id;
@@ -1984,6 +1999,9 @@ const ProntuarioPage: React.FC = () => {
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
     navigate("/painel/agenda");
+    } finally {
+      finalizingRef.current = false;
+    }
   };
 
   // Dedicated handler: register session only (no close)
