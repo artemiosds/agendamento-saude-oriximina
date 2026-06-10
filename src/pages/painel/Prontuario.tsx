@@ -4773,7 +4773,7 @@ const ProntuarioPage: React.FC = () => {
           })()}
           profissional={user ? { id: user.id, nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
           unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
-          dataAtendimento={new Date().toLocaleDateString('pt-BR')}
+          dataAtendimento={new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
         />
       )}
 
