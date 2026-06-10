@@ -151,6 +151,7 @@ export const emptyPacienteForm: PacienteFormData = {
   isGestante: false, isPne: false, isAutista: false,
   patientProcedures: [],
   customData: {},
+  sexo: "",
 };
 
 
