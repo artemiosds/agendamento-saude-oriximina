@@ -245,6 +245,7 @@ const BpaExportar: React.FC = () => {
       municipio_padrao: '150530'
     });
     setResults(null);
+    setSelectedCategory(null);
   };
 
   const handleGerar = async () => {
