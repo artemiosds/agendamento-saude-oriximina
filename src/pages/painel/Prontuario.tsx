@@ -1287,6 +1287,12 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleSave = async (formOverride?: any): Promise<boolean> => {
+    // Anti-duplo-clique: bloqueia chamadas concorrentes antes mesmo de setSaving refletir.
+    if (savingRef.current) {
+      console.warn("[handleSave] Salvamento já em curso — clique duplo ignorado.");
+      return false;
+    }
+    savingRef.current = true;
     console.log("[handleSave] Iniciando salvamento...", { hasEditId: !!editId, editId });
     const f = formOverride || formRef.current;
     const ef = especialidadeFieldsRef.current;
