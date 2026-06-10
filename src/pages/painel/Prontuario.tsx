@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
-import { cn, todayLocalStr } from "@/lib/utils";
+import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -135,7 +135,7 @@ const emptyForm = {
   profissional_id: "",
   profissional_nome: "",
   agendamento_id: "",
-  data_atendimento: new Date().toISOString().split("T")[0],
+  data_atendimento: todayLocalStr(),
   hora_atendimento: "",
   tipo_registro: "consulta",
   queixa_principal: "",
@@ -302,7 +302,7 @@ const ProntuarioPage: React.FC = () => {
   const [cycleSaving, setCycleSaving] = useState(false);
   const [cycleForm, setCycleForm] = useState({
     treatment_type: '', total_sessions: 0, frequency: '1x_semana',
-    start_date: new Date().toISOString().split("T")[0], clinical_notes: '',
+    start_date: todayLocalStr(), clinical_notes: '',
     weekdays: [] as number[], duration_months: 3,
   });
 
@@ -554,7 +554,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const registrationReferenceDate =
-    form.data_atendimento || searchParams.get('data') || new Date().toISOString().split('T')[0];
+    form.data_atendimento || searchParams.get('data') || todayLocalStr();
   const registrationReferenceDateLabel = registrationReferenceDate
     ? new Date(`${registrationReferenceDate}T12:00:00`).toLocaleDateString('pt-BR')
     : 'a data do prontuário';
@@ -1063,13 +1063,13 @@ const ProntuarioPage: React.FC = () => {
         setSelectedProcIds([]);
         setSelectedCidsByProc({});
         setProcDetails({});
-        loadProntuarioProcedimentos("", pacienteId, data || new Date().toISOString().split("T")[0]); // Load global patient procedures for this date
+        loadProntuarioProcedimentos("", pacienteId, data || todayLocalStr()); // Load global patient procedures for this date
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
           paciente_nome: pacienteNome,
           agendamento_id: agendamentoId || "",
-          data_atendimento: data || new Date().toISOString().split("T")[0],
+          data_atendimento: data || todayLocalStr(),
           hora_atendimento: horaInicio || "",
           tipo_registro: tipoRegistro,
         });
@@ -1179,14 +1179,14 @@ const ProntuarioPage: React.FC = () => {
     setSoapEnabled(true);
     
     if (pacienteId) {
-      loadProntuarioProcedimentos("", pacienteId, new Date().toISOString().split("T")[0]);
+      loadProntuarioProcedimentos("", pacienteId, todayLocalStr());
     }
     
     setForm({ 
       ...emptyForm, 
       paciente_id: pacienteId || "",
       paciente_nome: pacienteNome || "",
-      data_atendimento: new Date().toISOString().split("T")[0], 
+      data_atendimento: todayLocalStr(), 
       tipo_registro: "avaliacao_inicial" 
     });
     setDialogOpen(true);
@@ -1308,7 +1308,7 @@ const ProntuarioPage: React.FC = () => {
       return false;
     }
     // Prevent creating/editing prontuários for future dates
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayLocalStr();
     if (f.data_atendimento > today && !editId) {
       toast.error("Não é possível registrar prontuário para data futura. O atendimento precisa ocorrer primeiro.");
       return false;
@@ -1704,7 +1704,7 @@ const ProntuarioPage: React.FC = () => {
     if (!hasContent) return;
 
     if (f.tipo_registro === 'sessao' && !editIdRef.current) return; // require explicit "Registrar Sessão"
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalStr();
     if (!editIdRef.current && f.data_atendimento > today) return;
 
     autosaveInFlightRef.current = true;
@@ -1931,7 +1931,7 @@ const ProntuarioPage: React.FC = () => {
     }
 
     const now = new Date();
-    const horaFim = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const horaFim = nowTimeBrazilStr(now);
     let duracaoMinutos = 0;
     if (activeAtendimento?.horaInicio) {
       const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
@@ -2480,7 +2480,7 @@ const ProntuarioPage: React.FC = () => {
       });
       toast.success(`Ciclo criado com ${totalSessions} sessões! Aguardam agendamento pela recepção.`);
       setCycleOpen(false);
-      setCycleForm({ treatment_type: '', total_sessions: 0, frequency: '1x_semana', start_date: new Date().toISOString().split("T")[0], clinical_notes: '', weekdays: [], duration_months: 3 });
+      setCycleForm({ treatment_type: '', total_sessions: 0, frequency: '1x_semana', start_date: todayLocalStr(), clinical_notes: '', weekdays: [], duration_months: 3 });
     } catch (err: any) {
       toast.error("Erro ao criar ciclo: " + (err?.message || ""));
     }
@@ -3273,7 +3273,7 @@ const ProntuarioPage: React.FC = () => {
                              </div>
 
                             {(() => {
-                              const nextSession = sessaoCycleSessions.find(s => s.status === 'agendada' && s.scheduled_date >= new Date().toISOString().split('T')[0]);
+                              const nextSession = sessaoCycleSessions.find(s => s.status === 'agendada' && s.scheduled_date >= todayLocalStr());
                               const waitingSchedule = sessaoCycleSessions.filter(s => s.status === 'pendente_agendamento' || !s.appointment_id).length;
                               
                               if (!nextSession && waitingSchedule === 0) return null;
@@ -4773,7 +4773,7 @@ const ProntuarioPage: React.FC = () => {
           })()}
           profissional={user ? { id: user.id, nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
           unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
-          dataAtendimento={new Date().toLocaleDateString('pt-BR')}
+          dataAtendimento={new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
         />
       )}
 
