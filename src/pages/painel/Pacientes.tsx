@@ -277,7 +277,8 @@ const Pacientes: React.FC = () => {
           isGestante: target.isGestante,
           isPne: target.isPne,
           isAutista: target.isAutista,
-          documentoUrl: target.documento_url || ""
+          documentoUrl: target.documento_url || "",
+          sexo: (target as any).sexo || target.custom_data?.sexo || ""
         });
         setDialogOpen(true);
         
