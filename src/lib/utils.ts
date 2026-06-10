@@ -54,3 +54,41 @@ export function nowMinutesInBrazil(): number {
 
   return hour * 60 + minute;
 }
+
+/** Current time HH:MM in America/Sao_Paulo, independent of browser TZ. */
+export function nowTimeBrazilStr(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BRAZIL_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const h = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const m = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${h}:${m}`;
+}
+
+/** Format a date string (YYYY-MM-DD) as DD/MM/YYYY, timezone-safe (uses noon UTC). */
+export function formatDateBR(dateStr?: string | null): string {
+  if (!dateStr) return "";
+  // Avoid Date parsing drift by anchoring to noon UTC for date-only strings
+  const s = dateStr.length <= 10 ? dateStr + "T12:00:00" : dateStr;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("pt-BR", { timeZone: BRAZIL_TIMEZONE });
+}
+
+/** Format a full timestamp as DD/MM/YYYY HH:MM in America/Sao_Paulo. */
+export function formatDateTimeBR(ts?: string | Date | null): string {
+  if (!ts) return "";
+  const d = ts instanceof Date ? ts : new Date(ts);
+  if (isNaN(d.getTime())) return String(ts);
+  return d.toLocaleString("pt-BR", {
+    timeZone: BRAZIL_TIMEZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
