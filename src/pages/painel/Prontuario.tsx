@@ -1913,8 +1913,14 @@ const ProntuarioPage: React.FC = () => {
   // ============ END AUTOSAVE ============
 
   const handleFinalizarAtendimento = async () => {
-    const saved = await handleSave();
-    if (!saved) return;
+    if (finalizingRef.current) {
+      console.warn("[handleFinalizarAtendimento] Finalização já em curso — clique duplo ignorado.");
+      return;
+    }
+    finalizingRef.current = true;
+    try {
+      const saved = await handleSave();
+      if (!saved) return;
 
     // Resolve the agendamento ID — from activeAtendimento or form
     const agendamentoId = activeAtendimento?.agendamentoId || form.agendamento_id;
