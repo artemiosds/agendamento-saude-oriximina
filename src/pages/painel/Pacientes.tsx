@@ -109,7 +109,7 @@ interface FichaDados {
 }
 
 const PACIENTE_COLUMNS =
-  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
+  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data,sexo";
 
 const mapPacienteRow = (p: any) => ({
   id: p.id,
@@ -156,6 +156,7 @@ const mapPacienteRow = (p: any) => ({
   turno_preferido: p.turno_preferido || "",
   especialidade_destino: p.especialidade_destino || "",
   custom_data: p.custom_data || {},
+  sexo: p.sexo || (p.custom_data?.sexo) || "",
 });
 
 
@@ -276,7 +277,8 @@ const Pacientes: React.FC = () => {
           isGestante: target.isGestante,
           isPne: target.isPne,
           isAutista: target.isAutista,
-          documentoUrl: target.documento_url || ""
+          documentoUrl: target.documento_url || "",
+          sexo: (target as any).sexo || target.custom_data?.sexo || ""
         });
         setDialogOpen(true);
         
@@ -610,6 +612,7 @@ const Pacientes: React.FC = () => {
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
       customData: (p as any).custom_data || {},
+      sexo: (p as any).sexo || (p as any).custom_data?.sexo || "",
     });
 
     setErrors({});
@@ -627,7 +630,7 @@ const Pacientes: React.FC = () => {
     if (!form.cns?.trim()) newErrors.cns = "CNS é obrigatório";
     if (!form.naturalidade?.trim()) newErrors.naturalidade = "Naturalidade é obrigatória";
     if (!form.telefone?.trim()) newErrors.telefone = "Telefone é obrigatório";
-    if (!cd.sexo) newErrors.sexo = "Sexo é obrigatório";
+    if (!form.sexo) newErrors.sexo = "Sexo é obrigatório";
     if (!cd.cep?.trim()) newErrors.cep = "CEP é obrigatório";
     if (!cd.logradouro?.trim()) newErrors.logradouro = "Logradouro é obrigatório";
     if (!cd.numero?.trim()) newErrors.numero = "Número é obrigatório";
@@ -698,6 +701,7 @@ const Pacientes: React.FC = () => {
       is_gestante: form.isGestante,
       is_pne: form.isPne,
       is_autista: form.isAutista,
+      sexo: form.sexo,
       custom_data: {
         ...(form.customData || {}),
         atualizado_em: new Date().toISOString(),
