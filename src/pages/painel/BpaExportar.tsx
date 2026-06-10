@@ -125,6 +125,7 @@ const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
 };
 
 const BpaExportar: React.FC = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     competencia: '',
     unidade_id: 'all',
@@ -140,6 +141,8 @@ const BpaExportar: React.FC = () => {
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  
   const [results, setResults] = useState<{
     totalFound: number;
     exportedCount: number;
@@ -153,6 +156,16 @@ const BpaExportar: React.FC = () => {
       fallbackCbo: number;
       invalidCbo: number;
       defaultProc: number;
+    };
+    details: {
+      missingCns: any[];
+      missingSexo: any[];
+      inferredSexo: any[];
+      missingMunicipio: any[];
+      missingCbo: any[];
+      fallbackCbo: any[];
+      invalidCbo: any[];
+      defaultProc: any[];
     };
     error: string | null;
     fileName: string;
