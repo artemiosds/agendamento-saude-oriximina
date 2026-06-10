@@ -267,6 +267,7 @@ const ProntuarioPage: React.FC = () => {
   const autosaveInFlightRef = useRef(false);
   const savingRef = useRef(false);
   const finalizingRef = useRef(false);
+  const registeringSessionRef = useRef(false);
   useEffect(() => { editIdRef.current = editId; }, [editId]);
   useEffect(() => { formRef.current = form; }, [form]);
 
@@ -1939,14 +1940,22 @@ const ProntuarioPage: React.FC = () => {
     }
     const pac = pacientes.find((px) => px.id === form.paciente_id);
 
-    // Fire-and-forget: side-effects rodam em background, navegação é instantânea
+    // Confirma no banco a finalização do atendimento antes de navegar
+    const { error: finalizeError } = await (supabase as any)
+      .from("atendimentos")
+      .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
+      .eq("agendamento_id", agendamentoId);
+
+    if (finalizeError) {
+      console.error("[Prontuario] Falha ao finalizar atendimento no banco:", finalizeError);
+      toast.error("❌ Não foi possível finalizar o atendimento. Tente novamente.");
+      return;
+    }
+
+    // Side-effects secundários em background (log e alta automática)
     void (async () => {
       try {
-        const tasks: Promise<any>[] = [
-          (supabase as any)
-            .from("atendimentos")
-            .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
-            .eq("agendamento_id", agendamentoId),
+        const tasks: Array<Promise<any> | any> = [
           logAction({
             acao: "atendimento_finalizado",
             entidade: "atendimento",
@@ -2006,6 +2015,10 @@ const ProntuarioPage: React.FC = () => {
 
   // Dedicated handler: register session only (no close)
   const handleRegistrarSessaoOnly = async () => {
+    if (registeringSessionRef.current) {
+      console.warn("[handleRegistrarSessaoOnly] Registro já em curso — clique duplo ignorado.");
+      return;
+    }
     if (!currentSessionForRegistration || !sessaoCycle) {
       toast.error("Nenhuma sessão disponível para registro.");
       return;
@@ -2014,6 +2027,7 @@ const ProntuarioPage: React.FC = () => {
       toast.error(sessionRegistrationError);
       return;
     }
+    registeringSessionRef.current = true;
     const soapPayload = sessionSoapPayload;
     const soapError = null;
     setSoapErrors(false);
@@ -2141,6 +2155,7 @@ const ProntuarioPage: React.FC = () => {
       toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
     } finally {
       setSaving(false);
+      registeringSessionRef.current = false;
     }
   };
 
