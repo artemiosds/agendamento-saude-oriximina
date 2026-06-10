@@ -1,6 +1,7 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DebouncedInput } from '@/components/ui/debounced-input';
 import { DebouncedTextarea } from '@/components/ui/debounced-textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -45,7 +46,7 @@ const DynamicProntuarioFields: React.FC<DynamicProntuarioFieldsProps> = ({
             )}
 
             {(field.tipo === 'text' || field.tipo === 'texto') && (
-              <Input
+              <DebouncedInput
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 placeholder={`Informe ${field.label.toLowerCase()}...`}
@@ -54,7 +55,7 @@ const DynamicProntuarioFields: React.FC<DynamicProntuarioFieldsProps> = ({
             )}
 
             {(field.tipo === 'number' || field.tipo === 'numero') && (
-              <Input
+              <DebouncedInput
                 type="number"
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}

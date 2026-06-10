@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DebouncedInput } from "@/components/ui/debounced-input";
+import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -1419,7 +1421,7 @@ const FilaEspera: React.FC = () => {
                 )}
                 <div>
                   <Label>Nome completo *</Label>
-                  <Input
+                  <DebouncedInput
                     value={novoPaciente.nome}
                     onChange={(e) => setNovoPaciente((p) => ({ ...p, nome: e.target.value }))}
                   />
@@ -1428,7 +1430,7 @@ const FilaEspera: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>CPF</Label>
-                    <Input
+                    <DebouncedInput
                       value={novoPaciente.cpf}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, cpf: e.target.value }))}
                       placeholder="000.000.000-00"
@@ -1436,7 +1438,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div>
                     <Label>Cartão SUS / CNS</Label>
-                    <Input
+                    <DebouncedInput
                       value={novoPaciente.cns}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, cns: e.target.value }))}
                       placeholder="Nº do cartão SUS"
@@ -1445,7 +1447,7 @@ const FilaEspera: React.FC = () => {
                 </div>
                 <div>
                   <Label>Nome da Mãe</Label>
-                  <Input
+                  <DebouncedInput
                     value={novoPaciente.nomeMae}
                     onChange={(e) => setNovoPaciente((p) => ({ ...p, nomeMae: e.target.value }))}
                     placeholder="Nome completo da mãe"
@@ -1454,7 +1456,7 @@ const FilaEspera: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Telefone *</Label>
-                    <Input
+                    <DebouncedInput
                       value={novoPaciente.telefone}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, telefone: e.target.value }))}
                       placeholder="(93) 99999-0000"
@@ -1465,7 +1467,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div>
                     <Label>E-mail (opcional)</Label>
-                    <Input
+                    <DebouncedInput
                       type="email"
                       value={novoPaciente.email}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, email: e.target.value }))}
@@ -1476,7 +1478,7 @@ const FilaEspera: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Data Nasc.</Label>
-                    <Input
+                    <DebouncedInput
                       type="date"
                       value={novoPaciente.dataNascimento}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, dataNascimento: e.target.value }))}
@@ -1502,7 +1504,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div>
                     <Label>Endereço</Label>
-                    <Input
+                    <DebouncedInput
                       value={novoPaciente.endereco}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, endereco: e.target.value }))}
                     />
@@ -1513,7 +1515,7 @@ const FilaEspera: React.FC = () => {
                   <div className="space-y-3">
                     <div>
                       <Label>Descrição Clínica</Label>
-                      <Input
+                      <DebouncedInput
                         value={novoPaciente.descricaoClinica}
                         onChange={(e) => setNovoPaciente((p) => ({ ...p, descricaoClinica: e.target.value }))}
                         placeholder="Ex: dor lombar crônica, avaliação psicológica..."
@@ -1521,7 +1523,7 @@ const FilaEspera: React.FC = () => {
                     </div>
                     <div>
                       <Label>CID (opcional)</Label>
-                      <Input
+                      <DebouncedInput
                         value={novoPaciente.cid}
                         onChange={(e) => setNovoPaciente((p) => ({ ...p, cid: e.target.value }))}
                         placeholder="Ex: F41.1"
@@ -1585,7 +1587,7 @@ const FilaEspera: React.FC = () => {
             </div>
             <div>
               <Label>Observação Geral</Label>
-              <Input
+              <DebouncedInput
                 value={form.observacoes}
                 onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))}
                 placeholder="Observações administrativas ou complementares..."
@@ -1596,7 +1598,7 @@ const FilaEspera: React.FC = () => {
               <div className="space-y-3">
                 <div>
                   <Label>Descrição Clínica</Label>
-                  <Input
+                  <DebouncedInput
                     value={form.descricaoClinica}
                     onChange={(e) => setForm((p) => ({ ...p, descricaoClinica: e.target.value }))}
                     placeholder="Motivo de espera / queixa principal..."
@@ -1604,7 +1606,7 @@ const FilaEspera: React.FC = () => {
                 </div>
                 <div>
                   <Label>CID (opcional)</Label>
-                  <Input
+                  <DebouncedInput
                     value={form.cid}
                     onChange={(e) => setForm((p) => ({ ...p, cid: e.target.value }))}
                     placeholder="Ex: F41.1"
@@ -1668,7 +1670,7 @@ const FilaEspera: React.FC = () => {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>Nome Completo *</Label>
-                <Input
+                <DebouncedInput
                   value={importForm.nome}
                   onChange={(e) => setImportForm((p) => ({ ...p, nome: e.target.value }))}
                 />
@@ -1676,7 +1678,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div>
                 <Label>Telefone *</Label>
-                <Input
+                <DebouncedInput
                   value={importForm.telefone}
                   onChange={(e) => setImportForm((p) => ({ ...p, telefone: e.target.value }))}
                   placeholder="(93) 99999-0000"
@@ -1685,7 +1687,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div>
                 <Label>CPF (opcional)</Label>
-                <Input
+                <DebouncedInput
                   value={importForm.cpf}
                   onChange={(e) => setImportForm((p) => ({ ...p, cpf: e.target.value }))}
                   placeholder="000.000.000-00"
@@ -1693,7 +1695,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div>
                 <Label>CNS / Cartão SUS</Label>
-                <Input
+                <DebouncedInput
                   value={importForm.cns}
                   onChange={(e) => setImportForm((p) => ({ ...p, cns: e.target.value }))}
                   placeholder="Nº do Cartão SUS"
@@ -1701,7 +1703,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div className="col-span-2">
                 <Label>Nome da Mãe</Label>
-                <Input
+                <DebouncedInput
                   value={(importForm as any).nomeMae || ""}
                   onChange={(e) => setImportForm((p) => ({ ...p, nomeMae: e.target.value }) as any)}
                   placeholder="Nome completo da mãe"
@@ -1709,7 +1711,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div>
                 <Label>E-mail (opcional)</Label>
-                <Input
+                <DebouncedInput
                   type="email"
                   value={importForm.email}
                   onChange={(e) => setImportForm((p) => ({ ...p, email: e.target.value }))}
@@ -1718,7 +1720,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div>
                 <Label>Data Nasc.</Label>
-                <Input
+                <DebouncedInput
                   type="date"
                   value={importForm.dataNascimento}
                   onChange={(e) => setImportForm((p) => ({ ...p, dataNascimento: e.target.value }))}
@@ -1748,7 +1750,7 @@ const FilaEspera: React.FC = () => {
                     Data de Solicitação Original *{" "}
                     <span className="text-xs text-muted-foreground">(da ficha de papel)</span>
                   </Label>
-                  <Input
+                  <DebouncedInput
                     type="date"
                     value={importForm.dataSolicitacaoOriginal}
                     onChange={(e) => setImportForm((p) => ({ ...p, dataSolicitacaoOriginal: e.target.value }))}
@@ -1837,7 +1839,7 @@ const FilaEspera: React.FC = () => {
               <div className="space-y-3">
                 <div>
                   <Label>Descrição Clínica (opcional)</Label>
-                  <Textarea
+                  <DebouncedTextarea
                     value={importForm.descricaoClinica}
                     onChange={(e) => setImportForm((p) => ({ ...p, descricaoClinica: e.target.value }))}
                     placeholder="Motivo de espera / queixa principal..."
@@ -1846,7 +1848,7 @@ const FilaEspera: React.FC = () => {
                 </div>
                 <div>
                   <Label>CID (opcional)</Label>
-                  <Input
+                  <DebouncedInput
                     value={importForm.cid}
                     onChange={(e) => setImportForm((p) => ({ ...p, cid: e.target.value }))}
                     placeholder="Ex: F41.1"
@@ -1854,7 +1856,7 @@ const FilaEspera: React.FC = () => {
                 </div>
                 <div>
                   <Label>Observações</Label>
-                  <Textarea
+                  <DebouncedTextarea
                     value={importForm.observacoes}
                     onChange={(e) => setImportForm((p) => ({ ...p, observacoes: e.target.value }))}
                     placeholder="Observações administrativas..."
@@ -2207,7 +2209,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div>
                 <Label>Observações</Label>
-                <Textarea
+                <DebouncedTextarea
                   value={absenceObs}
                   onChange={(e) => setAbsenceObs(e.target.value)}
                   placeholder="Detalhes adicionais sobre a falta..."
