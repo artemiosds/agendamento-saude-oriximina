@@ -416,6 +416,7 @@ const BpaExportar: React.FC = () => {
           } else {
             isCritical = true;
             stats.missingSexo++;
+            warnings.push(`${ident}: Sexo do paciente não informado.`);
             details.missingSexo.push({ ...itemDetail, pendencia: 'Sexo Indefinido', valor_atual: 'Vazio' });
           }
         }
