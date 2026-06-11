@@ -387,149 +387,130 @@ const BpaExportar: React.FC = () => {
           cbo: obterCboValido(prof)
         };
 
-        // CNES
-        const unitCd = unit?.custom_data as any;
-        const cnesValue = unitCd?.cnes || unit?.cnes || formData.cnes;
-        const cnes = zfill(cnesValue, 7);
-        if (!cnes || cnes === '0000000') warnings.push(`${ident}: CNES da unidade ausente.`);
+        let isCritical = false;
 
-        // CNS Profissional
-        const profCd = prof?.custom_data as any;
-        const cns_prof_value = prof?.cns || profCd?.cns || formData.cns_profissional;
-        const cns_prof = zfill(cns_prof_value, 15);
-        if (!cns_prof || cns_prof === '000000000000000') warnings.push(`${ident}: CNS do profissional ausente.`);
-
-        // CBO
-        let cbo_raw = obterCboValido(prof);
-        let usando_fallback_cbo = false;
-
-        if (!cbo_raw) {
-          const fallback_limpo = somenteNumeros(formData.cbo);
-          if (fallback_limpo.length === 6) {
-            cbo_raw = fallback_limpo;
-            usando_fallback_cbo = true;
-            stats.fallbackCbo++;
-            details.fallbackCbo.push({ ...itemDetail, pendencia: 'CBO Fallback', valor_atual: 'Usando padrão informado' });
-          }
-        }
-
-        const cbo = zfill(cbo_raw, 6);
-        if (!cbo_raw || cbo === '000000') {
-          stats.missingCbo++;
-          details.missingCbo.push({ ...itemDetail, pendencia: 'Sem CBO Prof.', valor_atual: 'Ausente' });
-          warnings.push(`${ident}: CBO do profissional ausente ou inválido (deve ter 6 dígitos).`);
-        } else if (usando_fallback_cbo) {
-          warnings.push(`${ident}: CBO usando fallback informado manualmente.`);
-        }
-
-        if (formData.cbo && somenteNumeros(formData.cbo).length !== 6 && !obterCboValido(prof)) {
-          stats.invalidCbo++;
-          details.invalidCbo.push({ ...itemDetail, pendencia: 'CBO Inválido', valor_atual: formData.cbo });
-        }
-
-        // Procedimento
-        const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
-        const procRaw = proc_real || formData.procedimento_padrao;
-        if (!proc_real) {
-          stats.defaultProc++;
-          details.defaultProc.push({ ...itemDetail, pendencia: 'Proc. Padrão', valor_atual: 'Usando padrão informado' });
-        }
-        const proc = zfill(procRaw, 10);
-
-        // Paciente
-        const pacCd = pac?.custom_data as any;
-        const cns_pac_value = pac?.cns || pacCd?.cns;
-        const cns_pac = zfill(cns_pac_value || '', 15);
-        if (!cns_pac || cns_pac === '000000000000000') {
+        // CNS Paciente
+        const cns_pac_raw = pac?.cns || (pac?.custom_data as any)?.cns || '';
+        const cns_pac = zfill(cns_pac_raw, 15);
+        if (!cns_pac_raw || cns_pac === '000000000000000') {
+          isCritical = true;
           stats.missingCns++;
-          details.missingCns.push({ ...itemDetail, pendencia: 'Sem CNS Pac.', valor_atual: 'Ausente' });
-          warnings.push(`${ident}: CNS do paciente ausente.`);
+          details.missingCns.push({ ...itemDetail, pendencia: 'CNS Ausente/Inválido', valor_atual: cns_pac_raw || 'Vazio' });
         }
 
-        const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
-        
+        // Sexo
         let sexo = ' ';
-        const raw_sexo = (pac?.sexo || pacCd?.sexo || '').toUpperCase();
-        
+        const raw_sexo = (pac?.sexo || (pac?.custom_data as any)?.sexo || '').toUpperCase();
         if (raw_sexo.startsWith('M') || raw_sexo === 'MASCULINO' || raw_sexo === 'MALE') {
           sexo = 'M';
         } else if (raw_sexo.startsWith('F') || raw_sexo === 'FEMININO' || raw_sexo === 'FEMALE') {
           sexo = 'F';
         } else {
-          // Tenta inferir pelo nome
           const inferred = inferirSexoPorNome(pac?.nome || pront.paciente_nome || '');
           if (inferred) {
             sexo = inferred;
             stats.inferredSexo++;
             details.inferredSexo.push({ ...itemDetail, pendencia: 'Sexo Inferido', valor_atual: 'Indefinido', sugestao: inferred });
-            warnings.push(`${ident}: Sexo inferido pelo nome (${inferred}).`);
+          } else {
+            isCritical = true;
+            stats.missingSexo++;
+            details.missingSexo.push({ ...itemDetail, pendencia: 'Sexo Indefinido', valor_atual: 'Vazio' });
           }
         }
-        
-        if (sexo === ' ') {
-          stats.missingSexo++;
-          details.missingSexo.push({ ...itemDetail, pendencia: 'Sexo Indef.', valor_atual: 'Indefinido' });
-          warnings.push(`${ident}: Sexo do paciente ausente e não foi possível inferir.`);
-        }
 
-        const data_nasc = formatarData(pac?.data_nascimento || pacCd?.data_nascimento);
-        const data_atend = formatarData(pront.data_atendimento);
-        const idade = calcularIdade(pac?.data_nascimento || pacCd?.data_nascimento, pront.data_atendimento);
+        // Nascimento
+        const raw_nasc = pac?.data_nascimento || (pac?.custom_data as any)?.data_nascimento;
+        const data_nasc = formatarData(raw_nasc);
+        if (data_nasc === "00000000") {
+          isCritical = true;
+          stats.invalidNascimento++;
+          details.invalidNascimento.push({ ...itemDetail, pendencia: 'Nascimento Inválido', valor_atual: raw_nasc || 'Vazio' });
+        }
 
         // Município
-        const mun_real = pac?.municipio || pacCd?.municipio_ibge;
-        const municipio = zfill(mun_real || formData.municipio_padrao, 6);
-        if (!mun_real) {
+        const mun_raw = pac?.municipio || (pac?.custom_data as any)?.municipio_ibge;
+        let municipio = somenteNumeros(mun_raw);
+        if (municipio.length !== 6) {
+          municipio = somenteNumeros(formData.municipio_padrao);
+        }
+        if (municipio.length !== 6 || municipio === '000000') {
+          isCritical = true;
           stats.missingMunicipio++;
-          details.missingMunicipio.push({ ...itemDetail, pendencia: 'Sem Município', valor_atual: 'Usando padrão' });
-          warnings.push(`${ident}: Município do paciente usando padrão.`);
+          details.missingMunicipio.push({ ...itemDetail, pendencia: 'Município Inválido', valor_atual: mun_raw || 'Vazio' });
         }
 
-        // CID
-        const cid = (pront.custom_data?.cid || pac?.cid || '0000').substring(0, 4);
-
-        const endereco = limparTexto(pac?.endereco || pacCd?.endereco || '');
-
-        // Montagem do Layout BPA-I (205 chars fixos)
-        let l = "";
-        l += "03";                                      // 001-002 (2) - Tipo Registro
-        l += cnes;                                      // 003-009 (7) - CNES
-        l += zfill(competencia, 6);                     // 010-015 (6) - Competência
-        l += cns_prof;                                  // 016-030 (15) - CNS Profissional
-        l += cbo;                                       // 031-036 (6) - CBO
-        l += proc;                                      // 037-046 (10) - Procedimento
-        l += cns_pac;                                   // 047-061 (15) - CNS Paciente
-        l += sexo;                                      // 062 (1) - Sexo
-        l += " ";                                       // 063 (1) - Espaço fixo
-        l += rpad(cid, 4);                              // 064-067 (4) - CID
-        l += idade;                                     // 068-070 (3) - Idade
-        l += " ".repeat(6);                             // 071-076 (6) - Espaços
-        l += municipio;                                 // 077-082 (6) - Município
-        l += "000001";                                  // 083-088 (6) - Quantidade
-        l += "001";                                     // 089-091 (3) - Incremento
-        l += " ".repeat(10);                            // 092-101 (10) - Espaços
-        l += data_atend;                                // 102-109 (8) - Data Atendimento
-        l += rpad(nome_pac, 40);                        // 110-149 (40) - Nome Paciente
-        l += data_nasc;                                 // 150-157 (8) - Data Nascimento
-        l += "99";                                      // 158-159 (2) - Origem (Fixo 99)
-        l += " ".repeat(4);                             // 160-163 (4) - Espaços
-        l += "010";                                     // 164-166 (3) - Serviço/Classificação
-        l += rpad(endereco, 30);                        // 167-196 (30) - Endereço
-        l += "00000";                                   // 197-201 (5) - Espaços
-        l += " ".repeat(3);                             // 202-204 (3) - Espaços
-        l += " ";                                       // 205 (1) - Espaço final
-
-        // Aplica padEnd/slice como última garantia de segurança antes da validação final
-        l = l.padEnd(205, " ").slice(0, 205);
-
-        // Validação final rigorosa de 205 caracteres
-        if (l.length !== 205) {
-          hasError = true;
-          warnings.push(`${ident} (${data_atend}): Erro crítico de tamanho na linha (${l.length}/205) mesmo após normalização.`);
+        if (isCritical) {
+          criticalCount++;
+          details.critical.push({ ...itemDetail, pendencia: 'Erro Crítico', valor_atual: 'Dados incompletos' });
         }
-        
-        linhas.push(l);
-        exportedCount++;
+
+        // Se não for crítico ou se o usuário permitiu exportar com pendências
+        if (!isCritical || formData.exportar_com_pendencias) {
+          const unitCd = unit?.custom_data as any;
+          const cnes = zfill(unitCd?.cnes || unit?.cnes || formData.cnes, 7);
+          const profCd = prof?.custom_data as any;
+          const cns_prof = zfill(prof?.cns || profCd?.cns || formData.cns_profissional, 15);
+          
+          let cbo_raw = obterCboValido(prof);
+          if (!cbo_raw) {
+            cbo_raw = somenteNumeros(formData.cbo);
+            if (cbo_raw.length === 6) {
+              stats.fallbackCbo++;
+            } else {
+              stats.missingCbo++;
+            }
+          }
+          const cbo = zfill(cbo_raw, 6);
+
+          const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
+          const proc = zfill(proc_real || formData.procedimento_padrao, 10);
+          if (!proc_real) stats.defaultProc++;
+
+          const data_atend = formatarData(pront.data_atendimento);
+          const idade = calcularIdade(raw_nasc, pront.data_atendimento);
+          const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
+          const cid = (pront.custom_data?.cid || pac?.cid || '0000').substring(0, 4);
+          const endereco = limparTexto(pac?.endereco || (pac?.custom_data as any)?.endereco || '');
+
+          // Montagem do Layout BPA-I (205 chars fixos)
+          let l = "";
+          l += "03";                                      // 001-002 (2) - Tipo Registro
+          l += cnes;                                      // 003-009 (7) - CNES
+          l += zfill(competencia, 6);                     // 010-015 (6) - Competência
+          l += cns_prof;                                  // 016-030 (15) - CNS Profissional
+          l += cbo;                                       // 031-036 (6) - CBO
+          l += proc;                                      // 037-046 (10) - Procedimento
+          l += cns_pac;                                   // 047-061 (15) - CNS Paciente
+          l += sexo;                                      // 062 (1) - Sexo
+          l += " ";                                       // 063 (1) - Espaço fixo
+          l += rpad(cid, 4);                              // 064-067 (4) - CID
+          l += idade;                                     // 068-070 (3) - Idade
+          l += " ".repeat(6);                             // 071-076 (6) - Espaços
+          l += municipio;                                 // 077-082 (6) - Município
+          l += "000001";                                  // 083-088 (6) - Quantidade
+          l += "001";                                     // 089-091 (3) - Incremento
+          l += " ".repeat(10);                            // 092-101 (10) - Espaços
+          l += data_atend;                                // 102-109 (8) - Data Atendimento
+          l += rpad(nome_pac, 40);                        // 110-149 (40) - Nome Paciente
+          l += data_nasc;                                 // 150-157 (8) - Data Nascimento
+          l += "99";                                      // 158-159 (2) - Raça/Cor
+          l += " ".repeat(4);                             // 160-163 (4)
+          l += "010";                                     // 164-166 (3) - Nacionalidade
+          l += rpad(endereco, 30);                        // 167-196 (30)
+          l += "00000";                                   // 197-201 (5)
+          l += " ".repeat(3);                             // 202-204 (3)
+          l += " ";                                       // 205 (1)
+
+          l = l.padEnd(205, " ").slice(0, 205);
+          
+          if (l.length !== 205) {
+            hasError = true;
+            warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/205).`);
+          }
+          
+          linhas.push(l);
+          exportedCount++;
+        }
       });
 
       if (hasError) {
