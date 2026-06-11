@@ -628,6 +628,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - 14);
       const cutoff = localDateStr(cutoffDate);
+      
+      // OPTIMIZATION: Only fetch appointments for the selected date range in the UI if possible,
+      // but DataContext currently holds a global list. We'll optimize by fetching only 7 days back 
+      // instead of 14 for terminal statuses, and keeping all future ones.
+      const cutoffShort = localDateStr(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+
 
       const columns =
         "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
@@ -658,8 +664,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .range(from, from + PAGE - 1);
 
           query = scope === "recent"
-            ? query.gte("data", cutoff)
-            : query.lt("data", cutoff).not("status", "in", `(${terminalPastStatuses.join(",")})`);
+            ? query.gte("data", cutoffShort)
+            : query.lt("data", cutoffShort).not("status", "in", `(${terminalPastStatuses.join(",")})`);
+
 
           if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
           const { data, error } = await query;

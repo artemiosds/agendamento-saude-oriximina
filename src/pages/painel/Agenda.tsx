@@ -318,7 +318,7 @@ const Agenda: React.FC = () => {
 
   // Load raw iniciado_em for em_atendimento agendamentos to compute alerts
   React.useEffect(() => {
-    const ids = agendamentos.filter(a => a.status === 'em_atendimento' || a.status === 'concluido').map(a => a.id);
+    const ids = agendamentos.filter(a => (a.status === 'em_atendimento' || a.status === 'concluido') && a.data === selectedDate).map(a => a.id);
     if (ids.length === 0) { setAgendamentosRaw({}); return; }
     (async () => {
       const map: Record<string, { iniciado_em: string | null; concluido_em: string | null }> = {};
@@ -340,8 +340,10 @@ const Agenda: React.FC = () => {
   const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
-    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
+    const dayAgs = agendamentos.filter((a) => a.data === selectedDate);
+    const dayAgIds = dayAgs.map((a) => a.id);
     if (dayAgIds.length === 0) { setTriageMap({}); setArrivalMap({}); return; }
+
     (async () => {
       const [triageRes, filaRes] = await Promise.all([
         supabase
@@ -375,8 +377,10 @@ const Agenda: React.FC = () => {
 
   // Realtime: refletir imediatamente nova classificação de risco da triagem
   useEffect(() => {
-    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
+    const dayAgs = agendamentos.filter((a) => a.data === selectedDate);
+    const dayAgIds = dayAgs.map((a) => a.id);
     if (dayAgIds.length === 0) return;
+
     const channel = supabase
       .channel(`triage-agenda-${selectedDate}`)
       .on(
@@ -406,9 +410,14 @@ const Agenda: React.FC = () => {
   const [tipoFilter, setTipoFilter] = useState<string>("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
+    if (!searchTerm) {
+      setDebouncedSearch("");
+      return;
+    }
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 500);
     return () => clearTimeout(t);
   }, [searchTerm]);
+
 
   // ── Horário atual (atualiza a cada 60s) para reordenação dinâmica da fila ──
   const [nowMinutes, setNowMinutes] = useState<number>(() => nowMinutesInBrazil());
