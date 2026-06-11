@@ -21,10 +21,11 @@ const limparTexto = (str: string): string => {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // remove acentos
     .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, " ")    // remove tudo que não for A-Z, 0-9 ou espaço
+    .replace(/[^A-Z0-9 ]/g, "")      // remove tudo que não for A-Z, 0-9 ou espaço (agora sem trocar por espaço para evitar caracteres extras)
     .replace(/\s+/g, " ")           // normaliza espaços repetidos
     .trim();
 };
+
 
 const somenteNumeros = (str: any): string => {
   return String(str || '').replace(/\D/g, '');
