@@ -507,12 +507,13 @@ const BpaExportar: React.FC = () => {
           l += rpad(nome_pac, 40);                        // 110-149 (40) - Nome Paciente
           l += data_nasc;                                 // 150-157 (8) - Data Nascimento
           l += "99";                                      // 158-159 (2) - Raça/Cor
-          l += " ".repeat(4);                             // 160-163 (4)
+          l += "0000";                                    // 160-163 (4) - Reservado (zeros)
           l += "010";                                     // 164-166 (3) - Nacionalidade
-          l += rpad(endereco, 30);                        // 167-196 (30)
-          l += "00000";                                   // 197-201 (5)
-          l += " ".repeat(3);                             // 202-204 (3)
-          l += " ";                                       // 205 (1)
+          l += rpad(endereco, 30);                        // 167-196 (30) - Endereço
+          l += "00000";                                   // 197-201 (5) - Reservado (zeros)
+          l += "   ";                                     // 202-204 (3) - Reservado (espaços)
+          l += " ";                                       // 205 (1) - Reservado (espaço)
+
 
           l = l.padEnd(205, " ").slice(0, 205);
           
