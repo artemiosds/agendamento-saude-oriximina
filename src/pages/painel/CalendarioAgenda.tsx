@@ -77,10 +77,9 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     let hasDisponibilidade = false;
     let allBlocked = profs.length > 0;
 
-    const dayAgendamentos = useMemo(() => agendamentos.filter(a => a.data === dateStr), [agendamentos, dateStr]);
+    const dayAgendamentos = agendamentos.filter(a => a.data === dateStr);
     
     // Filtro por profissional e unidade
-
     const relevantAgs = dayAgendamentos.filter(a => {
       const matchProf = effectiveProfFilter === "all" || a.profissionalId === effectiveProfFilter;
       const matchUnit = filterUnit === "all" || a.unidadeId === filterUnit;
@@ -151,11 +150,8 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
         ))}
         {days.map(d => {
           const ds = localDateStr(d);
-          const isCurrMonth = isSameMonth(d, currentDate);
-          
-          // PERF: Only compute full status for current month days or visible days
           const info = getDayStatus(ds, profsFiltrados);
-
+          const isCurrMonth = isSameMonth(d, currentDate);
           
           return (
             <Tooltip key={ds}>
