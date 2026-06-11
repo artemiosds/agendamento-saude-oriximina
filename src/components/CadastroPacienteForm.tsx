@@ -400,16 +400,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               {!H("sexo") && (
                 <div>
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("sexo", "Sexo")}</Label>
-                  <Select value={form.sexo || ""} onValueChange={(v) => {
-                    console.log("Sexo selecionado no campo:", v);
-                    set("sexo", v);
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="masculino">Masculino</SelectItem>
-                      <SelectItem value="feminino">Feminino</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <p style={{ fontSize: 10, color: "red", marginBottom: 2 }}>DEBUG SEXO: {form.sexo || "VAZIO"}</p>
+                  <select
+                    value={form.sexo || ""}
+                    onChange={(e) => {
+                      console.log("Sexo selecionado nativo:", e.target.value);
+                      set("sexo", e.target.value);
+                    }}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Selecione</option>
+                    <option value="masculino">Masculino</option>
+                    <option value="feminino">Feminino</option>
+                  </select>
                   {errors.sexo && <p className="text-xs text-destructive mt-1">{errors.sexo}</p>}
                 </div>
               )}
