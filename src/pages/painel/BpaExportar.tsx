@@ -48,9 +48,13 @@ const formatarData = (date: any): string => {
     const d = new Date(date);
     if (isNaN(d.getTime())) return "00000000";
     const year = d.getFullYear();
+    if (year < 1900 || year > 2100) return "00000000";
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
-    return `${year}${month}${day}`;
+    const res = `${year}${month}${day}`;
+    // Validações sugeridas pelo usuário para evitar datas "fake"
+    if (res === "00000000" || res.startsWith("00") || res.includes("9999")) return "00000000";
+    return res;
   } catch {
     return "00000000";
   }
