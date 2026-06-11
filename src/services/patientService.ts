@@ -60,7 +60,7 @@ export const patientService = {
       naturalidade: paciente.naturalidade || "",
       naturalidade_uf: paciente.naturalidade_uf || "",
       // Campos do custom_data
-      sexo: cd.sexo || "",
+      sexo: paciente.sexo || cd.sexo || "",
       raca_cor: cd.raca_cor || cd.racaCor || "",
       etnia: cd.etnia || "",
       etnia_outra: cd.etnia_outra || cd.etniaOutra || "",
@@ -164,6 +164,7 @@ export const patientService = {
       endereco: getValue('endereco', getValue('logradouro', oldPaciente.endereco)),
       observacoes: getValue('observacoes', oldPaciente.observacoes),
       cid: getValue('cid', oldPaciente.cid),
+      sexo: getValue('sexo', oldPaciente.sexo),
       // Exceção administrativa de bloqueio (TFD / Ordem Judicial)
       is_tfd: (inputCustomData.is_tfd === true) || (oldPaciente.is_tfd === true && inputCustomData.is_tfd === undefined),
       possui_ordem_judicial: (inputCustomData.possui_ordem_judicial === true) || (oldPaciente.possui_ordem_judicial === true && inputCustomData.possui_ordem_judicial === undefined),
