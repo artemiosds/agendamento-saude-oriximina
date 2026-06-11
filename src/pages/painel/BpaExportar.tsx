@@ -152,6 +152,7 @@ const BpaExportar: React.FC = () => {
     totalFound: number;
     exportedCount: number;
     warnings: string[];
+    criticalCount: number;
     stats: {
       missingCns: number;
       missingSexo: number;
@@ -161,6 +162,7 @@ const BpaExportar: React.FC = () => {
       fallbackCbo: number;
       invalidCbo: number;
       defaultProc: number;
+      invalidNascimento: number;
     };
     details: {
       missingCns: any[];
@@ -171,6 +173,8 @@ const BpaExportar: React.FC = () => {
       fallbackCbo: any[];
       invalidCbo: any[];
       defaultProc: any[];
+      invalidNascimento: any[];
+      critical: any[];
     };
     error: string | null;
     fileName: string;
