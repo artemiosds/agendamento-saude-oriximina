@@ -653,20 +653,43 @@ const BpaExportar: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-4 mt-8">
-            <Button onClick={handleGerar} disabled={loading || loadingData} className="px-8">
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Gerando...
-                </>
-              ) : (
-                'Gerar Arquivo BPA-I'
-              )}
-            </Button>
-            <Button variant="outline" onClick={handleLimpar} disabled={loading}>
-              Limpar Filtros
-            </Button>
+          <div className="flex flex-col gap-4 mt-8">
+            <div className="flex items-center space-x-2 border p-3 rounded-md bg-slate-50">
+              <input 
+                type="checkbox" 
+                id="exportar_com_pendencias" 
+                checked={formData.exportar_com_pendencias}
+                onChange={(e) => setFormData(prev => ({ ...prev, exportar_com_pendencias: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label
+                  htmlFor="exportar_com_pendencias"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Exportar mesmo com pendências críticas
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Marque esta opção para permitir o download mesmo que existam dados obrigatórios faltando (CNS, Sexo, Nascimento, Município).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <Button onClick={handleGerar} disabled={loading || loadingData} className="px-8">
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Gerando...
+                  </>
+                ) : (
+                  'Gerar Arquivo BPA-I'
+                )}
+              </Button>
+              <Button variant="outline" onClick={handleLimpar} disabled={loading}>
+                Limpar Filtros
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
