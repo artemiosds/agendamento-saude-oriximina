@@ -60,7 +60,7 @@ export const patientService = {
       naturalidade: paciente.naturalidade || "",
       naturalidade_uf: paciente.naturalidade_uf || "",
       // Campos do custom_data
-      sexo: cd.sexo || "",
+      sexo: paciente.sexo || cd.sexo || "",
       raca_cor: cd.raca_cor || cd.racaCor || "",
       etnia: cd.etnia || "",
       etnia_outra: cd.etnia_outra || cd.etniaOutra || "",

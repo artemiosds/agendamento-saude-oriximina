@@ -130,7 +130,7 @@ const AtualizacaoCadastral: React.FC = () => {
         tipoLogradouro: cd.tipoLogradouro || cd.tipo_logradouro_dne || "",
         tipoLogradouroCodigo: cd.tipoLogradouroCodigo || "",
         telefoneSecundario: cd.telefoneSecundario || cd.telefone_secundario || "",
-        sexo: cd.sexo || "",
+        sexo: p.sexo || cd.sexo || "",
         racaCor: cd.racaCor || cd.raca_cor || "",
         nacionalidade: cd.nacionalidade || "brasileiro",
       },

@@ -156,7 +156,7 @@ const mapPacienteRow = (p: any) => ({
   turno_preferido: p.turno_preferido || "",
   especialidade_destino: p.especialidade_destino || "",
   custom_data: p.custom_data || {},
-  sexo: p.sexo || (p.custom_data?.sexo) || "",
+  sexo: p.sexo || p.custom_data?.sexo || "",
 });
 
 
