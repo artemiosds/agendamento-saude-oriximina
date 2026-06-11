@@ -440,6 +440,7 @@ const BpaExportar: React.FC = () => {
         if (municipio.length !== 6 || municipio === '000000') {
           isCritical = true;
           stats.missingMunicipio++;
+          warnings.push(`${ident}: Município de residência inválido ou ausente.`);
           details.missingMunicipio.push({ ...itemDetail, pendencia: 'Município Inválido', valor_atual: mun_raw || 'Vazio' });
         }
 
