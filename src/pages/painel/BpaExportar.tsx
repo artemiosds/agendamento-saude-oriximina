@@ -251,7 +251,8 @@ const BpaExportar: React.FC = () => {
       cns_profissional: '',
       cbo: '',
       procedimento_padrao: '0301010072',
-      municipio_padrao: '150530'
+      municipio_padrao: '150530',
+      exportar_com_pendencias: false
     });
     setResults(null);
     setSelectedCategory(null);
