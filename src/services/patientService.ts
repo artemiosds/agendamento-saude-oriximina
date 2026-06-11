@@ -1,6 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import { normalizePhone } from '@/lib/phoneUtils';
 import { auditService } from './auditService';
+import { normalizeSexo } from '@/lib/utils/sexo-normalization';
+
 
 
 export const patientService = {
@@ -60,7 +62,7 @@ export const patientService = {
       naturalidade: paciente.naturalidade || "",
       naturalidade_uf: paciente.naturalidade_uf || "",
       // Campos do custom_data
-      sexo: paciente.sexo || cd.sexo || "",
+      sexo: normalizeSexo(paciente.sexo || cd.sexo),
       raca_cor: cd.raca_cor || cd.racaCor || "",
       etnia: cd.etnia || "",
       etnia_outra: cd.etnia_outra || cd.etniaOutra || "",
