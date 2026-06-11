@@ -179,6 +179,17 @@ const BpaExportar: React.FC = () => {
     error: string | null;
     fileName: string;
     blobUrl: string | null;
+    headerPreview: string | null;
+    headerDetails: {
+      tipo: string;
+      identificacao: string;
+      competencia: string;
+      linhas: string;
+      itens: string;
+      cnes: string;
+      versao: string;
+      tamanho: number;
+    } | null;
   } | null>(null);
 
   useEffect(() => {
