@@ -23,6 +23,8 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
 import { patientService } from "@/services/patientService";
 import CadastroPacienteForm, { emptyPacienteForm } from "@/components/CadastroPacienteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { normalizeSexo } from "@/lib/utils/sexo-normalization";
+
 
 const AtualizacaoCadastral: React.FC = () => {
   const navigate = useNavigate();
@@ -130,7 +132,7 @@ const AtualizacaoCadastral: React.FC = () => {
         tipoLogradouro: cd.tipoLogradouro || cd.tipo_logradouro_dne || "",
         tipoLogradouroCodigo: cd.tipoLogradouroCodigo || "",
         telefoneSecundario: cd.telefoneSecundario || cd.telefone_secundario || "",
-        sexo: p.sexo || cd.sexo || "",
+        sexo: normalizeSexo(p.sexo || cd.sexo),
         racaCor: cd.racaCor || cd.raca_cor || "",
         nacionalidade: cd.nacionalidade || "brasileiro",
       },

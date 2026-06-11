@@ -1,6 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import { normalizePhone } from '@/lib/phoneUtils';
 import { auditService } from './auditService';
+import { normalizeSexo } from '@/lib/utils/sexo-normalization';
+
 
 
 export const patientService = {
@@ -60,7 +62,7 @@ export const patientService = {
       naturalidade: paciente.naturalidade || "",
       naturalidade_uf: paciente.naturalidade_uf || "",
       // Campos do custom_data
-      sexo: paciente.sexo || cd.sexo || "",
+      sexo: normalizeSexo(paciente.sexo || cd.sexo),
       raca_cor: cd.raca_cor || cd.racaCor || "",
       etnia: cd.etnia || "",
       etnia_outra: cd.etnia_outra || cd.etniaOutra || "",
@@ -117,7 +119,7 @@ export const patientService = {
     const updatedCustomData = {
       ...cd,
       ...inputCustomData,
-      sexo: getValue('sexo', cd.sexo),
+      sexo: normalizeSexo(getValue('sexo', cd.sexo)),
       raca_cor: getValue('raca_cor', getValue('racaCor', cd.raca_cor)),
       racaCor: getValue('raca_cor', getValue('racaCor', cd.raca_cor)),
       etnia: getValue('etnia', cd.etnia),
@@ -164,7 +166,7 @@ export const patientService = {
       endereco: getValue('endereco', getValue('logradouro', oldPaciente.endereco)),
       observacoes: getValue('observacoes', oldPaciente.observacoes),
       cid: getValue('cid', oldPaciente.cid),
-      sexo: getValue('sexo', oldPaciente.sexo),
+      sexo: normalizeSexo(getValue('sexo', oldPaciente.sexo)),
       // Exceção administrativa de bloqueio (TFD / Ordem Judicial)
       is_tfd: (inputCustomData.is_tfd === true) || (oldPaciente.is_tfd === true && inputCustomData.is_tfd === undefined),
       possui_ordem_judicial: (inputCustomData.possui_ordem_judicial === true) || (oldPaciente.possui_ordem_judicial === true && inputCustomData.possui_ordem_judicial === undefined),

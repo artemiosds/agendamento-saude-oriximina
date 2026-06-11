@@ -35,6 +35,8 @@ import { calculatePatientPendingFields } from "@/lib/paciente-validation";
 import { validatePacienteFields } from "@/lib/validation";
 import { checkPatientDuplicity } from "@/lib/paciente-duplicity";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeSexo } from "@/lib/utils/sexo-normalization";
+
 import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
@@ -156,7 +158,7 @@ const mapPacienteRow = (p: any) => ({
   turno_preferido: p.turno_preferido || "",
   especialidade_destino: p.especialidade_destino || "",
   custom_data: p.custom_data || {},
-  sexo: p.sexo || p.custom_data?.sexo || "",
+  sexo: normalizeSexo(p.sexo || p.custom_data?.sexo),
 });
 
 
@@ -278,7 +280,7 @@ const Pacientes: React.FC = () => {
           isPne: target.isPne,
           isAutista: target.isAutista,
           documentoUrl: target.documento_url || "",
-          sexo: (target as any).sexo || target.custom_data?.sexo || ""
+          sexo: normalizeSexo((target as any).sexo || target.custom_data?.sexo)
         });
         setDialogOpen(true);
         
@@ -612,7 +614,7 @@ const Pacientes: React.FC = () => {
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
       customData: (p as any).custom_data || {},
-      sexo: (p as any).sexo || (p as any).custom_data?.sexo || "",
+      sexo: normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo),
     });
 
     setErrors({});

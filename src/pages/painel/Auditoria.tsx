@@ -21,6 +21,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { openPrintDocument } from '@/lib/printLayout';
+import { normalizeSexo } from '@/lib/utils/sexo-normalization';
+
 
 interface LogEntry {
   id: string;
@@ -254,9 +256,9 @@ const formatAuditValue = (field: string, value: any): string => {
   if (value === null || value === undefined || value === "") return "Não informado";
   
   if (field === "sexo") {
-    const s = String(value).toLowerCase();
-    if (s === "masculino" || s === "m") return "Masculino";
-    if (s === "feminino" || s === "f") return "Feminino";
+    const s = normalizeSexo(value);
+    if (s === "masculino") return "Masculino";
+    if (s === "feminino") return "Feminino";
     return value;
   }
 
