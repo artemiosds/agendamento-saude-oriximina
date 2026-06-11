@@ -736,6 +736,7 @@ const BpaExportar: React.FC = () => {
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
                     Detalhes da pendência: {
+                      selectedCategory === 'critical' ? 'Pendências Críticas (Bloqueantes)' :
                       selectedCategory === 'missingCns' ? 'Sem CNS Paciente' :
                       selectedCategory === 'missingSexo' ? 'Sexo Indefinido' :
                       selectedCategory === 'inferredSexo' ? 'Sexo Inferido pelo Nome' :
@@ -743,7 +744,8 @@ const BpaExportar: React.FC = () => {
                       selectedCategory === 'fallbackCbo' ? 'CBO Fallback Informado' :
                       selectedCategory === 'invalidCbo' ? 'CBO Inválido' :
                       selectedCategory === 'defaultProc' ? 'Procedimento Padrão Utilizado' :
-                      selectedCategory === 'missingMunicipio' ? 'Sem Município (Usando Padrão)' : ''
+                      selectedCategory === 'invalidNascimento' ? 'Data de Nascimento Inválida' :
+                      selectedCategory === 'missingMunicipio' ? 'Município Inválido ou Ausente' : ''
                     }
                   </CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
