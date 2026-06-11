@@ -365,13 +365,7 @@ const BpaExportar: React.FC = () => {
 
       let exportedCount = 0;
       let criticalCount = 0;
-      const linhas: string[] = [];
-
-      // Cabeçalho (Line 1 - Tipo 01)
-      const totalRegistrosZfill6 = zfill(prontuarios.length, 6);
-      let header = `01BPAAMBULATCOMPET${competencia}${totalRegistrosZfill6}`;
-      header = header.padEnd(205, " ").slice(0, 205);
-      linhas.push(header);
+      const linhasProducao: string[] = [];
       
       let hasError = false;
 
