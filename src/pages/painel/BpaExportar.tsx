@@ -427,6 +427,7 @@ const BpaExportar: React.FC = () => {
         if (data_nasc === "00000000") {
           isCritical = true;
           stats.invalidNascimento++;
+          warnings.push(`${ident}: Data de nascimento inválida (${raw_nasc || 'Vazio'}).`);
           details.invalidNascimento.push({ ...itemDetail, pendencia: 'Nascimento Inválido', valor_atual: raw_nasc || 'Vazio' });
         }
 
