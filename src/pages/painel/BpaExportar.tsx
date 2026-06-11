@@ -395,6 +395,8 @@ const BpaExportar: React.FC = () => {
         if (!cns_pac_raw || cns_pac === '000000000000000') {
           isCritical = true;
           stats.missingCns++;
+          const msg = `${ident}: CNS do paciente ausente ou inválido.`;
+          warnings.push(msg);
           details.missingCns.push({ ...itemDetail, pendencia: 'CNS Ausente/Inválido', valor_atual: cns_pac_raw || 'Vazio' });
         }
 
