@@ -744,6 +744,60 @@ const BpaExportar: React.FC = () => {
 
       {results && (
         <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          {results.headerDetails && (
+            <Card className="border-blue-200 bg-blue-50/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                  Diagnóstico Técnico do Cabeçalho (Registro 01)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Tipo</span>
+                    <span className="font-mono text-sm">{results.headerDetails.tipo}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">ID</span>
+                    <span className="font-mono text-sm">{results.headerDetails.identificacao}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Competência</span>
+                    <span className="font-mono text-sm">{results.headerDetails.competencia}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Linhas</span>
+                    <span className="font-mono text-sm">{results.headerDetails.linhas}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Itens</span>
+                    <span className="font-mono text-sm">{results.headerDetails.itens}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">CNES Gestor</span>
+                    <span className="font-mono text-sm">{results.headerDetails.cnes}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Versão</span>
+                    <span className="font-mono text-sm">{results.headerDetails.versao}</span>
+                  </div>
+                </div>
+                
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase text-muted-foreground">Conteúdo da Primeira Linha (ANSI / 205 caracteres)</span>
+                  <div className="bg-slate-900 text-slate-50 p-3 rounded font-mono text-[10px] break-all whitespace-pre overflow-x-auto">
+                    {results.headerPreview}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Tamanho real: {results.headerDetails.tamanho} caracteres</span>
+                    <span>Encoding: ISO-8859-1 (Sem BOM)</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
             <Card className="bg-blue-50">
               <CardContent className="p-4 text-center">
