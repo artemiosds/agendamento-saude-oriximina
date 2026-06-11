@@ -351,6 +351,7 @@ const BpaExportar: React.FC = () => {
       const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
 
       let exportedCount = 0;
+      let criticalCount = 0;
       const linhas: string[] = [];
 
       // Cabeçalho (Line 1 - Tipo 01)
