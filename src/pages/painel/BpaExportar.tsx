@@ -21,10 +21,11 @@ const limparTexto = (str: string): string => {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // remove acentos
     .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, " ")    // remove tudo que não for A-Z, 0-9 ou espaço
+    .replace(/[^A-Z0-9 ]/g, "")      // remove tudo que não for A-Z, 0-9 ou espaço (agora sem trocar por espaço para evitar caracteres extras)
     .replace(/\s+/g, " ")           // normaliza espaços repetidos
     .trim();
 };
+
 
 const somenteNumeros = (str: any): string => {
   return String(str || '').replace(/\D/g, '');
@@ -506,12 +507,13 @@ const BpaExportar: React.FC = () => {
           l += rpad(nome_pac, 40);                        // 110-149 (40) - Nome Paciente
           l += data_nasc;                                 // 150-157 (8) - Data Nascimento
           l += "99";                                      // 158-159 (2) - Raça/Cor
-          l += " ".repeat(4);                             // 160-163 (4)
+          l += "0000";                                    // 160-163 (4) - Reservado (zeros)
           l += "010";                                     // 164-166 (3) - Nacionalidade
-          l += rpad(endereco, 30);                        // 167-196 (30)
-          l += "00000";                                   // 197-201 (5)
-          l += " ".repeat(3);                             // 202-204 (3)
-          l += " ";                                       // 205 (1)
+          l += rpad(endereco, 30);                        // 167-196 (30) - Endereço
+          l += "00000";                                   // 197-201 (5) - Reservado (zeros)
+          l += "   ";                                     // 202-204 (3) - Reservado (espaços)
+          l += " ";                                       // 205 (1) - Reservado (espaço)
+
 
           l = l.padEnd(205, " ").slice(0, 205);
           
@@ -544,15 +546,26 @@ const BpaExportar: React.FC = () => {
       }
 
       // Geração do Cabeçalho Oficial (Reg 01) - Pós processamento para contagem real
+      // Layout oficial Registro 01:
+      // 01-02 (02) - Tipo Registro (01)
+      // 03-05 (03) - Identificador (BPA)
+      // 06-11 (06) - Competência (AAAAMM)
+      // 12-17 (06) - Quantidade de Folhas (sempre 000001 no individualizado)
+      // 18-23 (06) - Quantidade de Registros (Linhas do tipo 03)
+      // 24-29 (06) - Quantidade de Itens (Soma das quantidades dos registros tipo 03)
+      // 30-36 (07) - CNES do estabelecimento principal
+      // 37-40 (04) - Versão do layout (Ex: 0101)
+      // 41-205 (165) - Brancos
+      
       const cnesGestor = zfill(formData.cnes || '0000000', 7);
       const qtdFolhas = "000001";
       const qtdRegistros = zfill(exportedCount, 6);
-      const qtdItens = zfill(exportedCount, 6); // Cada linha tem qty 1
+      const qtdItens = zfill(exportedCount, 6); // Cada linha tem qty 1 no BPA-I
       const versao = "0101";
 
       let header = "01";              // 01-02 Tipo
       header += "BPA";                // 03-05 ID
-      header += competencia;          // 06-11 Competência
+      header += formData.competencia; // 06-11 Competência (AAAAMM)
       header += qtdFolhas;            // 12-17 Folhas
       header += qtdRegistros;         // 18-23 Registros
       header += qtdItens;             // 24-29 Itens
@@ -561,19 +574,28 @@ const BpaExportar: React.FC = () => {
       header = header.padEnd(205, " ").slice(0, 205);
 
       const todasLinhas = [header, ...linhasProducao];
-      const content = todasLinhas.join('\r\n') + '\r\n'; // Garante que a última linha tenha quebra de linha
+      const content = todasLinhas.join('\r\n') + '\r\n';
 
-      // Conversão para ISO-8859-1 (ANSI)
+      // Conversão rigorosa para ISO-8859-1 (ANSI) sem BOM
+      // O navegador por padrão usa UTF-8. Para garantir ANSI, mapeamos charCode.
       const bytes = new Uint8Array(content.length);
       for (let i = 0; i < content.length; i++) {
         const code = content.charCodeAt(i);
-        // Mapeamento básico para ANSI (caracteres comuns)
-        bytes[i] = code < 256 ? code : 63; // 63 is '?'
+        // ISO-8859-1 mapeia 1:1 com os primeiros 256 charcodes do Unicode
+        // Se for fora desse range (ex: caracteres especiais complexos), trocamos por espaço ou '?'
+        if (code < 256) {
+          bytes[i] = code;
+        } else {
+          // Fallback para caracteres acentuados que podem estar fora do range padrão mas no Latin1
+          // No JavaScript charCodeAt retorna UTF-16.
+          bytes[i] = 32; // Espaço
+        }
       }
       
-      const blob = new Blob([bytes], { type: 'text/plain;charset=ISO-8859-1' });
+      const blob = new Blob([bytes], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
-      const fileName = `producao_bpa_${competencia}.txt`;
+      const fileName = `producao_bpa_${formData.competencia}.txt`;
+
 
       setResults({
         totalFound: prontuarios.length,
@@ -791,9 +813,16 @@ const BpaExportar: React.FC = () => {
                   </div>
                   <div className="flex justify-between text-[10px] text-muted-foreground">
                     <span>Tamanho real: {results.headerDetails.tamanho} caracteres</span>
+                    <span>Primeiros bytes (HEX): {
+                      results.headerPreview ? 
+                        Array.from(results.headerPreview.slice(0, 10))
+                          .map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
+                          .join(' ') : ''
+                    }</span>
                     <span>Encoding: ISO-8859-1 (Sem BOM)</span>
                   </div>
                 </div>
+
               </CardContent>
             </Card>
           )}
