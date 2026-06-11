@@ -520,7 +520,7 @@ const BpaExportar: React.FC = () => {
             warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/205).`);
           }
           
-          linhas.push(l);
+          linhasProducao.push(l);
           exportedCount++;
         }
       });
