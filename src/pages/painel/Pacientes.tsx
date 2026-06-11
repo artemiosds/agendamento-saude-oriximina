@@ -282,6 +282,9 @@ const Pacientes: React.FC = () => {
           documentoUrl: target.documento_url || "",
           sexo: normalizeSexo((target as any).sexo || target.custom_data?.sexo)
         });
+        const formSexo = normalizeSexo((target as any).sexo || target.custom_data?.sexo);
+        console.log("Paciente carregado:", target);
+        console.log("Sexo aplicado no formulário:", formSexo);
         console.log("PACIENTE RAW (URL ID)", target);
         console.log("SEXO NORMALIZADO (URL ID)", normalizeSexo((target as any).sexo || target.custom_data?.sexo));
         setDialogOpen(true);
@@ -574,9 +577,9 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: (typeof pacientes)[0]) => {
     setEditId(p.id);
-    console.log("PACIENTE RAW (CLICK)", p);
     const mappedSexo = normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo);
-    console.log("SEXO NORMALIZADO (CLICK)", mappedSexo);
+    console.log("Abrindo edição - Paciente bruto:", p);
+    console.log("Abrindo edição - Sexo calculado:", mappedSexo);
     setForm({
       ...emptyPacienteForm,
       nome: p.nome,
@@ -628,6 +631,7 @@ const Pacientes: React.FC = () => {
   };
 
   const handleSave = async () => {
+    console.log("Sexo antes de salvar:", form.sexo);
     const { normalizePhone } = await import("@/lib/phoneUtils");
     const newErrors: Record<string, string> = {};
     const cd: any = form.customData || {};

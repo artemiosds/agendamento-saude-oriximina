@@ -166,9 +166,14 @@ interface Props {
 }
 
 const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
-  const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
-  const setCustom = (key: string, value: any) =>
+  const set = (field: keyof PacienteFormData, value: any) => {
+    console.log(`[CadastroPacienteForm] Alterando campo ${field}:`, value);
+    onChange({ ...form, [field]: value });
+  };
+  const setCustom = (key: string, value: any) => {
+    console.log(`[CadastroPacienteForm] Alterando customData ${key}:`, value);
     onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
+  };
   const cd = form.customData || {};
 
   // Persiste valor default de Nacionalidade exibido no Select (evita erro de validação quando o usuário não interage)
@@ -395,7 +400,10 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               {!H("sexo") && (
                 <div>
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("sexo", "Sexo")}</Label>
-                  <Select value={form.sexo || ""} onValueChange={(v) => set("sexo", v)}>
+                  <Select value={form.sexo || ""} onValueChange={(v) => {
+                    console.log("Sexo selecionado no campo:", v);
+                    set("sexo", v);
+                  }}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="masculino">Masculino</SelectItem>
