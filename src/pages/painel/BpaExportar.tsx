@@ -341,7 +341,9 @@ const BpaExportar: React.FC = () => {
           details,
           error: null,
           fileName: '',
-          blobUrl: null
+          blobUrl: null,
+          headerPreview: null,
+          headerDetails: null
         });
         setLoading(false);
         return;
