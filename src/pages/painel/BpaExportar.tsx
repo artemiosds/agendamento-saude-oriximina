@@ -705,14 +705,14 @@ const BpaExportar: React.FC = () => {
             </Card>
 
             {[
+              { id: 'critical', label: 'Pendên. Críticas', count: results.criticalCount, color: 'red' },
               { id: 'missingCns', label: 'Sem CNS Pac.', count: results.stats.missingCns, color: 'amber' },
               { id: 'missingSexo', label: 'Sexo Indef.', count: results.stats.missingSexo, color: 'amber' },
-              { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
+              { id: 'invalidNascimento', label: 'Nascimento Inv.', count: results.stats.invalidNascimento, color: 'amber' },
+              { id: 'missingMunicipio', label: 'Mun. Inválido', count: results.stats.missingMunicipio, color: 'amber' },
               { id: 'missingCbo', label: 'Sem CBO Prof.', count: results.stats.missingCbo, color: 'amber' },
-              { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' },
-              { id: 'invalidCbo', label: 'CBO Inválido', count: results.stats.invalidCbo, color: 'red' },
-              { id: 'defaultProc', label: 'Proc. Padrão', count: results.stats.defaultProc, color: 'slate' },
-              { id: 'missingMunicipio', label: 'Sem Município', count: results.stats.missingMunicipio, color: 'amber' }
+              { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
+              { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' }
             ].map((stat) => (
               <Card 
                 key={stat.id}
