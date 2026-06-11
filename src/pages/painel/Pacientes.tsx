@@ -574,6 +574,9 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: (typeof pacientes)[0]) => {
     setEditId(p.id);
+    console.log("PACIENTE RAW (CLICK)", p);
+    const mappedSexo = normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo);
+    console.log("SEXO NORMALIZADO (CLICK)", mappedSexo);
     setForm({
       ...emptyPacienteForm,
       nome: p.nome,
@@ -616,8 +619,9 @@ const Pacientes: React.FC = () => {
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
       customData: (p as any).custom_data || {},
-      sexo: normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo),
+      sexo: mappedSexo,
     });
+    console.log("FORM SEXO (CLICK)", mappedSexo);
 
     setErrors({});
     setDialogOpen(true);
