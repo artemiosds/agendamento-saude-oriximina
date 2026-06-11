@@ -535,17 +535,40 @@ const BpaExportar: React.FC = () => {
           details,
           error: "O arquivo não foi gerado porque foram detectadas pendências críticas. Corrija os dados dos pacientes ou marque 'Exportar mesmo com pendências'.",
           fileName: '',
-          blobUrl: null
+          blobUrl: null,
+          headerPreview: null,
+          headerDetails: null
         });
         setLoading(false);
         return;
       }
 
-      const content = linhas.join('\r\n');
+      // Geração do Cabeçalho Oficial (Reg 01) - Pós processamento para contagem real
+      const cnesGestor = zfill(formData.cnes || '0000000', 7);
+      const qtdFolhas = "000001";
+      const qtdRegistros = zfill(exportedCount, 6);
+      const qtdItens = zfill(exportedCount, 6); // Cada linha tem qty 1
+      const versao = "0101";
+
+      let header = "01";              // 01-02 Tipo
+      header += "BPA";                // 03-05 ID
+      header += competencia;          // 06-11 Competência
+      header += qtdFolhas;            // 12-17 Folhas
+      header += qtdRegistros;         // 18-23 Registros
+      header += qtdItens;             // 24-29 Itens
+      header += cnesGestor;           // 30-36 CNES Gestor
+      header += versao;               // 37-40 Versão
+      header = header.padEnd(205, " ").slice(0, 205);
+
+      const todasLinhas = [header, ...linhasProducao];
+      const content = todasLinhas.join('\r\n') + '\r\n'; // Garante que a última linha tenha quebra de linha
+
+      // Conversão para ISO-8859-1 (ANSI)
       const bytes = new Uint8Array(content.length);
       for (let i = 0; i < content.length; i++) {
         const code = content.charCodeAt(i);
-        bytes[i] = code < 256 ? code : 63;
+        // Mapeamento básico para ANSI (caracteres comuns)
+        bytes[i] = code < 256 ? code : 63; // 63 is '?'
       }
       
       const blob = new Blob([bytes], { type: 'text/plain;charset=ISO-8859-1' });
@@ -561,7 +584,18 @@ const BpaExportar: React.FC = () => {
         details,
         error: null,
         fileName,
-        blobUrl: url
+        blobUrl: url,
+        headerPreview: header,
+        headerDetails: {
+          tipo: "01",
+          identificacao: "BPA",
+          competencia,
+          linhas: qtdRegistros,
+          itens: qtdItens,
+          cnes: cnesGestor,
+          versao,
+          tamanho: header.length
+        }
       });
 
       toast.success('Exportação processada!');
@@ -577,7 +611,9 @@ const BpaExportar: React.FC = () => {
         details,
         error: err.message || 'Erro ao processar dados.',
         fileName: '',
-        blobUrl: null
+        blobUrl: null,
+        headerPreview: null,
+        headerDetails: null
       });
     } finally {
       setLoading(false);
