@@ -184,11 +184,10 @@ const BpaExportar: React.FC = () => {
     headerDetails: {
       tipo: string;
       identificacao: string;
+      destino: string;
+      tipo_competencia: string;
       competencia: string;
-      linhas: string;
-      itens: string;
-      cnes: string;
-      versao: string;
+      registros: string;
       tamanho: number;
     } | null;
   } | null>(null);
@@ -545,33 +544,10 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Geração do Cabeçalho Oficial (Reg 01) - Pós processamento para contagem real
-      // Layout oficial Registro 01:
-      // 01-02 (02) - Tipo Registro (01)
-      // 03-05 (03) - Identificador (BPA)
-      // 06-11 (06) - Competência (AAAAMM)
-      // 12-17 (06) - Quantidade de Folhas (sempre 000001 no individualizado)
-      // 18-23 (06) - Quantidade de Registros (Linhas do tipo 03)
-      // 24-29 (06) - Quantidade de Itens (Soma das quantidades dos registros tipo 03)
-      // 30-36 (07) - CNES do estabelecimento principal
-      // 37-40 (04) - Versão do layout (Ex: 0101)
-      // 41-205 (165) - Brancos
-      
-      const cnesGestor = zfill(formData.cnes || '0000000', 7);
-      const qtdFolhas = "000001";
+      // Geração do Cabeçalho Oficial (Reg 01) - Padrão BPA Magnético / AMBULAT COMPET
+      // Layout solicitado: 01BPAAMBULATCOMPET + competencia + totalRegistros
       const qtdRegistros = zfill(exportedCount, 6);
-      const qtdItens = zfill(exportedCount, 6); // Cada linha tem qty 1 no BPA-I
-      const versao = "0101";
-
-      let header = "01";              // 01-02 Tipo
-      header += "BPA";                // 03-05 ID
-      header += formData.competencia; // 06-11 Competência (AAAAMM)
-      header += qtdFolhas;            // 12-17 Folhas
-      header += qtdRegistros;         // 18-23 Registros
-      header += qtdItens;             // 24-29 Itens
-      header += cnesGestor;           // 30-36 CNES Gestor
-      header += versao;               // 37-40 Versão
-      header = header.padEnd(205, " ").slice(0, 205);
+      const header = (`01BPAAMBULATCOMPET${formData.competencia}${qtdRegistros}`).padEnd(205, " ").slice(0, 205);
 
       const todasLinhas = [header, ...linhasProducao];
       const content = todasLinhas.join('\r\n') + '\r\n';
@@ -775,7 +751,7 @@ const BpaExportar: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase text-muted-foreground">Tipo</span>
                     <span className="font-mono text-sm">{results.headerDetails.tipo}</span>
@@ -785,24 +761,20 @@ const BpaExportar: React.FC = () => {
                     <span className="font-mono text-sm">{results.headerDetails.identificacao}</span>
                   </div>
                   <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Destino</span>
+                    <span className="font-mono text-sm">{results.headerDetails.destino}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">T. Compet.</span>
+                    <span className="font-mono text-sm">{results.headerDetails.tipo_competencia}</span>
+                  </div>
+                  <div className="flex flex-col">
                     <span className="text-[10px] uppercase text-muted-foreground">Competência</span>
                     <span className="font-mono text-sm">{results.headerDetails.competencia}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">Linhas</span>
-                    <span className="font-mono text-sm">{results.headerDetails.linhas}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">Itens</span>
-                    <span className="font-mono text-sm">{results.headerDetails.itens}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">CNES Gestor</span>
-                    <span className="font-mono text-sm">{results.headerDetails.cnes}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">Versão</span>
-                    <span className="font-mono text-sm">{results.headerDetails.versao}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Registros</span>
+                    <span className="font-mono text-sm">{results.headerDetails.registros}</span>
                   </div>
                 </div>
                 
