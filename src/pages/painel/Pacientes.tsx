@@ -734,6 +734,7 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
+        console.log("SALVANDO EDIÇÃO - PAYLOAD", dbFields);
         // Agora aguardamos o salvamento real para garantir sincronização e evitar race conditions
         const { data: updatedPaciente, error } = await supabase.from("pacientes").update(dbFields).eq("id", editId).select().single();
         
@@ -835,6 +836,7 @@ const Pacientes: React.FC = () => {
           },
         };
         // Aguardar o insert para garantir integridade e sincronização imediata
+        console.log("SALVANDO NOVO - PAYLOAD", insertPayload);
         const { error } = await supabase.from("pacientes").insert(insertPayload);
         
         if (error) {
