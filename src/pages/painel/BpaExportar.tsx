@@ -587,11 +587,10 @@ const BpaExportar: React.FC = () => {
         headerDetails: {
           tipo: "01",
           identificacao: "BPA",
-          competencia,
-          linhas: qtdRegistros,
-          itens: qtdItens,
-          cnes: cnesGestor,
-          versao,
+          destino: "AMBULAT",
+          tipo_competencia: "COMPET",
+          competencia: formData.competencia,
+          registros: qtdRegistros,
           tamanho: header.length
         }
       });
