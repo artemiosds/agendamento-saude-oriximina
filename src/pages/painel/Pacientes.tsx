@@ -282,6 +282,8 @@ const Pacientes: React.FC = () => {
           documentoUrl: target.documento_url || "",
           sexo: normalizeSexo((target as any).sexo || target.custom_data?.sexo)
         });
+        console.log("PACIENTE RAW (URL ID)", target);
+        console.log("SEXO NORMALIZADO (URL ID)", normalizeSexo((target as any).sexo || target.custom_data?.sexo));
         setDialogOpen(true);
         
         // Clean URL after opening
@@ -572,6 +574,9 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: (typeof pacientes)[0]) => {
     setEditId(p.id);
+    console.log("PACIENTE RAW (CLICK)", p);
+    const mappedSexo = normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo);
+    console.log("SEXO NORMALIZADO (CLICK)", mappedSexo);
     setForm({
       ...emptyPacienteForm,
       nome: p.nome,
@@ -614,8 +619,9 @@ const Pacientes: React.FC = () => {
       isPne: (p as any).isPne || (p as any).is_pne || false,
       isAutista: (p as any).isAutista || (p as any).is_autista || false,
       customData: (p as any).custom_data || {},
-      sexo: normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo),
+      sexo: mappedSexo,
     });
+    console.log("FORM SEXO (CLICK)", mappedSexo);
 
     setErrors({});
     setDialogOpen(true);
@@ -728,6 +734,7 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
+        console.log("SALVANDO EDIÇÃO - PAYLOAD", dbFields);
         // Agora aguardamos o salvamento real para garantir sincronização e evitar race conditions
         const { data: updatedPaciente, error } = await supabase.from("pacientes").update(dbFields).eq("id", editId).select().single();
         
@@ -829,6 +836,7 @@ const Pacientes: React.FC = () => {
           },
         };
         // Aguardar o insert para garantir integridade e sincronização imediata
+        console.log("SALVANDO NOVO - PAYLOAD", insertPayload);
         const { error } = await supabase.from("pacientes").insert(insertPayload);
         
         if (error) {

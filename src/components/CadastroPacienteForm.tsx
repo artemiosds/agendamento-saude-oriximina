@@ -312,6 +312,8 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
     complementares: !!(errors.nacionalidade || errors.racaCor || errors.especialidadeDestino || errors.ubsOrigem || errors.cid || errors.justificativa),
   };
 
+  console.log("FORM SEXO NO COMPONENTE", form.sexo);
+
   return (
     <div className="flex flex-col h-full">
       {/* Status autosave removido */}
