@@ -518,9 +518,10 @@ const BpaExportar: React.FC = () => {
           totalFound: prontuarios.length,
           exportedCount: 0,
           warnings,
+          criticalCount,
           stats,
           details,
-          error: "O arquivo não foi gerado porque alguns registros possuem tamanho inválido. Verifique os avisos acima para identificar os pacientes e corrija seus dados (Nome, Endereço, etc).",
+          error: "O arquivo não foi gerado porque foram detectadas pendências críticas. Corrija os dados dos pacientes ou marque 'Exportar mesmo com pendências'.",
           fileName: '',
           blobUrl: null
         });
