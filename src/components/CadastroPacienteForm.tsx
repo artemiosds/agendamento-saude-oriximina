@@ -166,14 +166,9 @@ interface Props {
 }
 
 const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
-  const set = (field: keyof PacienteFormData, value: any) => {
-    console.log(`[CadastroPacienteForm] Alterando campo ${field}:`, value);
-    onChange({ ...form, [field]: value });
-  };
-  const setCustom = (key: string, value: any) => {
-    console.log(`[CadastroPacienteForm] Alterando customData ${key}:`, value);
+  const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
+  const setCustom = (key: string, value: any) =>
     onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
-  };
   const cd = form.customData || {};
 
   // Persiste valor default de Nacionalidade exibido no Select (evita erro de validação quando o usuário não interage)
@@ -400,19 +395,13 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               {!H("sexo") && (
                 <div>
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("sexo", "Sexo")}</Label>
-                  <p style={{ fontSize: 10, color: "red", marginBottom: 2 }}>DEBUG SEXO: {form.sexo || "VAZIO"}</p>
-                  <select
-                    value={form.sexo || ""}
-                    onChange={(e) => {
-                      console.log("Sexo selecionado nativo:", e.target.value);
-                      set("sexo", e.target.value);
-                    }}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="">Selecione</option>
-                    <option value="masculino">Masculino</option>
-                    <option value="feminino">Feminino</option>
-                  </select>
+                  <Select value={form.sexo || ""} onValueChange={(v) => set("sexo", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="masculino">Masculino</SelectItem>
+                      <SelectItem value="feminino">Feminino</SelectItem>
+                    </SelectContent>
+                  </Select>
                   {errors.sexo && <p className="text-xs text-destructive mt-1">{errors.sexo}</p>}
                 </div>
               )}

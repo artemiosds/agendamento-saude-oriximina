@@ -578,8 +578,6 @@ const Pacientes: React.FC = () => {
   const openEdit = (p: (typeof pacientes)[0]) => {
     setEditId(p.id);
     const mappedSexo = normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo);
-    console.log("Abrindo edição - Paciente bruto:", p);
-    console.log("Abrindo edição - Sexo calculado:", mappedSexo);
     setForm({
       ...emptyPacienteForm,
       nome: p.nome,
@@ -631,7 +629,6 @@ const Pacientes: React.FC = () => {
   };
 
   const handleSave = async () => {
-    console.log("Sexo antes de salvar:", form.sexo);
     const { normalizePhone } = await import("@/lib/phoneUtils");
     const newErrors: Record<string, string> = {};
     const cd: any = form.customData || {};
@@ -713,9 +710,10 @@ const Pacientes: React.FC = () => {
       is_gestante: form.isGestante,
       is_pne: form.isPne,
       is_autista: form.isAutista,
-      sexo: form.sexo,
+      sexo: normalizeSexo(form.sexo),
       custom_data: {
         ...(form.customData || {}),
+        sexo: normalizeSexo(form.sexo),
         atualizado_em: new Date().toISOString(),
         atualizado_por: user?.id || "",
         atualizado_por_nome: user?.nome || "",
@@ -738,7 +736,6 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
-        console.log("SALVANDO EDIÇÃO - PAYLOAD", dbFields);
         // Agora aguardamos o salvamento real para garantir sincronização e evitar race conditions
         const { data: updatedPaciente, error } = await supabase.from("pacientes").update(dbFields).eq("id", editId).select().single();
         
@@ -840,7 +837,6 @@ const Pacientes: React.FC = () => {
           },
         };
         // Aguardar o insert para garantir integridade e sincronização imediata
-        console.log("SALVANDO NOVO - PAYLOAD", insertPayload);
         const { error } = await supabase.from("pacientes").insert(insertPayload);
         
         if (error) {

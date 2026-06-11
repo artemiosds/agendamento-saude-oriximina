@@ -180,7 +180,6 @@ export const patientService = {
       custom_data: updatedCustomData,
     };
 
-    console.log("Payload paciente gerado:", payload);
     return this.sanitizePacientePayload(payload);
   },
 
@@ -247,8 +246,6 @@ export const patientService = {
       .eq('id', pacienteId)
       .select()
       .single();
-
-    console.log("Paciente salvo no Supabase:", data);
 
     if (!error && data) {
       auditService.auditUpdate({
