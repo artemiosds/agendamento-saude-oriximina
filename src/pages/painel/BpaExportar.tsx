@@ -325,6 +325,7 @@ const BpaExportar: React.FC = () => {
           totalFound: 0,
           exportedCount: 0,
           warnings: ["Nenhum prontuário finalizado encontrado para esta competência e filtros."],
+          criticalCount: 0,
           stats,
           details,
           error: null,
