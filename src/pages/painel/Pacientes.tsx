@@ -282,6 +282,9 @@ const Pacientes: React.FC = () => {
           documentoUrl: target.documento_url || "",
           sexo: normalizeSexo((target as any).sexo || target.custom_data?.sexo)
         });
+        const formSexo = normalizeSexo((target as any).sexo || target.custom_data?.sexo);
+        console.log("Paciente carregado:", target);
+        console.log("Sexo aplicado no formulário:", formSexo);
         console.log("PACIENTE RAW (URL ID)", target);
         console.log("SEXO NORMALIZADO (URL ID)", normalizeSexo((target as any).sexo || target.custom_data?.sexo));
         setDialogOpen(true);
