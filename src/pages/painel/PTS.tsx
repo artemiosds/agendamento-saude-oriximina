@@ -22,6 +22,12 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
 import { cn } from '@/lib/utils';
+import { 
+  loadDocumentConfig, 
+  buildDocumentShell, 
+  docCarimboFor,
+  printViaIframe 
+} from '@/lib/printLayout';
 
 const SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
