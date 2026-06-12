@@ -168,7 +168,7 @@ const statusMetaColor = (s: string): string => {
 const PTS: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { pacientes, funcionarios, logAction } = useData();
+  const { pacientes, funcionarios, unidades, logAction } = useData();
 
   // List state
   const [ptsList, setPtsList] = useState<PTSRecord[]>([]);
