@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, ExternalLink, X } from 'lucide-react';
+import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, ExternalLink, X, FileUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -191,6 +191,106 @@ const BpaExportar: React.FC = () => {
       tamanho: number;
     } | null;
   } | null>(null);
+
+  // === Referência: arquivo BPA válido aceito pelo importador oficial ===
+  interface RefDiag {
+    fileName: string;
+    totalBytes: number;
+    hasBOM: boolean;
+    crlf: boolean;
+    firstLineLen: number;
+    firstLineHex: string;
+    firstLineText: string;
+    headerBytes: number[]; // 205 bytes da primeira linha (sem CRLF)
+  }
+  const [refDiag, setRefDiag] = useState<RefDiag | null>(null);
+  const [useRefHeader, setUseRefHeader] = useState(true);
+
+  const bytesToHex = (arr: number[] | Uint8Array, sep = ' ') =>
+    Array.from(arr).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(sep);
+
+  const bytesToIso = (arr: number[] | Uint8Array) =>
+    Array.from(arr).map(b => String.fromCharCode(b)).join('');
+
+  const handleRefFile = async (file: File | null) => {
+    if (!file) { setRefDiag(null); return; }
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const hasBOM = buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
+      const start = hasBOM ? 3 : 0;
+      // detecta fim de primeira linha (LF ou CRLF)
+      let lfIdx = -1;
+      for (let i = start; i < buf.length; i++) {
+        if (buf[i] === 0x0A) { lfIdx = i; break; }
+      }
+      const lineEnd = lfIdx === -1 ? buf.length : lfIdx;
+      const crlf = lfIdx > 0 && buf[lfIdx - 1] === 0x0D;
+      const contentEnd = crlf ? lfIdx - 1 : lineEnd;
+      const headerBytes = Array.from(buf.slice(start, contentEnd));
+      const firstLineLen = headerBytes.length;
+      const firstLineHex = bytesToHex(headerBytes.slice(0, 50));
+      const firstLineText = bytesToIso(headerBytes);
+
+      setRefDiag({
+        fileName: file.name,
+        totalBytes: buf.length,
+        hasBOM,
+        crlf,
+        firstLineLen,
+        firstLineHex,
+        firstLineText,
+        headerBytes,
+      });
+      toast.success(`Referência carregada: ${file.name} (${firstLineLen} chars na 1ª linha)`);
+    } catch (err: any) {
+      console.error('Erro lendo arquivo referência:', err);
+      toast.error('Não foi possível ler o arquivo de referência.');
+      setRefDiag(null);
+    }
+  };
+
+  /** Gera cabeçalho a partir do modelo de referência, substituindo apenas competência e total de registros. */
+  const buildHeaderFromRef = (
+    refBytes: number[],
+    competencia: string,
+    totalRegistros: number
+  ): { bytes: number[]; substituicoes: Array<{ pos: number; tipo: string; antes: string; depois: string }> } => {
+    const out = refBytes.slice();
+    const text = bytesToIso(refBytes);
+    const subs: Array<{ pos: number; tipo: string; antes: string; depois: string }> = [];
+
+    // Procura padrão de competência AAAAMM (ano 20XX, mês 01-12)
+    const compRegex = /20\d{2}(0[1-9]|1[0-2])/g;
+    let m: RegExpExecArray | null;
+    while ((m = compRegex.exec(text)) !== null) {
+      const pos = m.index;
+      // Substitui se diferente
+      if (m[0] !== competencia) {
+        for (let i = 0; i < 6; i++) out[pos + i] = competencia.charCodeAt(i);
+        subs.push({ pos, tipo: 'competencia', antes: m[0], depois: competencia });
+      }
+      break; // só a primeira ocorrência
+    }
+
+    // Total de registros: tipicamente 6 dígitos após a competência
+    const qtdStr = zfill(totalRegistros, 6);
+    if (subs.length > 0) {
+      const compPos = subs[0].pos;
+      // procura próximo bloco de 6 dígitos consecutivos após a competência
+      const after = text.slice(compPos + 6);
+      const qtdMatch = /^(\D{0,20})(\d{6})/.exec(after);
+      if (qtdMatch) {
+        const qtdPos = compPos + 6 + qtdMatch[1].length;
+        const antes = qtdMatch[2];
+        if (antes !== qtdStr) {
+          for (let i = 0; i < 6; i++) out[qtdPos + i] = qtdStr.charCodeAt(i);
+          subs.push({ pos: qtdPos, tipo: 'total_registros', antes, depois: qtdStr });
+        }
+      }
+    }
+
+    return { bytes: out, substituicoes: subs };
+  };
 
   useEffect(() => {
     fetchInitialData();
@@ -544,33 +644,54 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Geração do Cabeçalho Oficial (Reg 01) - Padrão BPA Magnético / AMBULAT COMPET
-      // Layout solicitado: 01BPAAMBULATCOMPET + competencia + totalRegistros
+      // Geração do Cabeçalho
       const qtdRegistros = zfill(exportedCount, 6);
-      const header = (`01BPAAMBULATCOMPET${formData.competencia}${qtdRegistros}`).padEnd(205, " ").slice(0, 205);
+      const fallbackHeader = (`01BPAAMBULATCOMPET${formData.competencia}${qtdRegistros}`).padEnd(205, " ").slice(0, 205);
 
-      const todasLinhas = [header, ...linhasProducao];
-      const content = todasLinhas.join('\r\n') + '\r\n';
+      let headerBytes: Uint8Array;
+      let header: string;
+      let headerOrigem: 'referencia' | 'padrao' = 'padrao';
+      let substituicoes: Array<{ pos: number; tipo: string; antes: string; depois: string }> = [];
 
-      // Conversão rigorosa para ISO-8859-1 (ANSI) sem BOM
-      // O navegador por padrão usa UTF-8. Para garantir ANSI, mapeamos charCode.
-      const bytes = new Uint8Array(content.length);
-      for (let i = 0; i < content.length; i++) {
-        const code = content.charCodeAt(i);
-        // ISO-8859-1 mapeia 1:1 com os primeiros 256 charcodes do Unicode
-        // Se for fora desse range (ex: caracteres especiais complexos), trocamos por espaço ou '?'
-        if (code < 256) {
-          bytes[i] = code;
-        } else {
-          // Fallback para caracteres acentuados que podem estar fora do range padrão mas no Latin1
-          // No JavaScript charCodeAt retorna UTF-16.
-          bytes[i] = 32; // Espaço
-        }
+      if (refDiag && useRefHeader && refDiag.headerBytes.length > 0) {
+        const built = buildHeaderFromRef(refDiag.headerBytes, formData.competencia, exportedCount);
+        const arr = built.bytes.slice();
+        while (arr.length < refDiag.firstLineLen) arr.push(0x20);
+        headerBytes = new Uint8Array(arr.slice(0, refDiag.firstLineLen));
+        header = bytesToIso(Array.from(headerBytes));
+        substituicoes = built.substituicoes;
+        headerOrigem = 'referencia';
+      } else {
+        header = fallbackHeader;
+        headerBytes = new Uint8Array(header.length);
+        for (let i = 0; i < header.length; i++) headerBytes[i] = header.charCodeAt(i) < 256 ? header.charCodeAt(i) : 32;
       }
-      
-      const blob = new Blob([bytes], { type: 'application/octet-stream' });
+
+      // Linhas de produção em ISO-8859-1 sem BOM
+      const prodContent = linhasProducao.join('\r\n') + (linhasProducao.length ? '\r\n' : '');
+      const prodBytes = new Uint8Array(prodContent.length);
+      for (let i = 0; i < prodContent.length; i++) {
+        const code = prodContent.charCodeAt(i);
+        prodBytes[i] = code < 256 ? code : 32;
+      }
+
+      const CRLF = new Uint8Array([0x0D, 0x0A]);
+      const total = new Uint8Array(headerBytes.length + CRLF.length + prodBytes.length);
+      total.set(headerBytes, 0);
+      total.set(CRLF, headerBytes.length);
+      total.set(prodBytes, headerBytes.length + CRLF.length);
+
+      const blob = new Blob([total], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
-      const fileName = `producao_bpa_${formData.competencia}.txt`;
+      const fileName = headerOrigem === 'referencia'
+        ? `BPA_${formData.competencia}.TXT`
+        : `producao_bpa_${formData.competencia}.txt`;
+
+      console.log('[BPA] Header origem:', headerOrigem);
+      console.log('[BPA] Header len bytes:', headerBytes.length);
+      console.log('[BPA] Header HEX (50):', bytesToHex(Array.from(headerBytes).slice(0, 50)));
+      console.log('[BPA] Header texto:', header);
+      if (substituicoes.length) console.log('[BPA] Substituições aplicadas:', substituicoes);
 
 
       setResults({
@@ -585,10 +706,10 @@ const BpaExportar: React.FC = () => {
         blobUrl: url,
         headerPreview: header,
         headerDetails: {
-          tipo: "01",
-          identificacao: "BPA",
-          destino: "AMBULAT",
-          tipo_competencia: "COMPET",
+          tipo: header.substring(0, 2),
+          identificacao: header.substring(2, 5),
+          destino: headerOrigem === 'referencia' ? '(REF)' : 'AMBULAT',
+          tipo_competencia: headerOrigem === 'referencia' ? '(REF)' : 'COMPET',
           competencia: formData.competencia,
           registros: qtdRegistros,
           tamanho: header.length
@@ -625,6 +746,115 @@ const BpaExportar: React.FC = () => {
           Gere arquivo BPA-I utilizando atendimentos realizados e dados cadastrais do sistema.
         </p>
       </div>
+
+      {/* Calibração por Arquivo de Referência */}
+      <Card className="border-amber-300 bg-amber-50/40">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileUp className="h-4 w-4 text-amber-700" />
+            Calibração por Arquivo BPA Válido (Referência)
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Selecione um arquivo TXT BPA-I que já foi aceito pelo importador oficial. O sistema vai ler o
+            cabeçalho byte a byte e reproduzir o mesmo padrão, alterando somente <strong>competência</strong> e
+            <strong> total de registros</strong>. Nada mais é inventado.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-end gap-3">
+            <div className="flex-1 space-y-2">
+              <Label htmlFor="ref_bpa_file">Arquivo BPA válido de referência (.txt)</Label>
+              <Input
+                id="ref_bpa_file"
+                type="file"
+                accept=".txt,text/plain,application/octet-stream"
+                onChange={(e) => handleRefFile(e.target.files?.[0] || null)}
+              />
+            </div>
+            {refDiag && (
+              <>
+                <div className="flex items-center gap-2 border p-2 rounded-md bg-white">
+                  <input
+                    type="checkbox"
+                    id="use_ref_header"
+                    checked={useRefHeader}
+                    onChange={(e) => setUseRefHeader(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor="use_ref_header" className="text-xs font-medium">
+                    Usar cabeçalho da referência
+                  </label>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setRefDiag(null)}>
+                  <X className="h-4 w-4 mr-1" /> Limpar
+                </Button>
+              </>
+            )}
+          </div>
+
+          {refDiag && (
+            <div className="space-y-3 border-t pt-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                <div><span className="text-muted-foreground block">Arquivo</span><span className="font-mono">{refDiag.fileName}</span></div>
+                <div><span className="text-muted-foreground block">Tamanho total</span><span className="font-mono">{refDiag.totalBytes} bytes</span></div>
+                <div><span className="text-muted-foreground block">BOM</span><span className={`font-mono ${refDiag.hasBOM ? 'text-red-600' : 'text-green-600'}`}>{refDiag.hasBOM ? 'SIM' : 'NÃO'}</span></div>
+                <div><span className="text-muted-foreground block">CRLF</span><span className={`font-mono ${refDiag.crlf ? 'text-green-600' : 'text-amber-600'}`}>{refDiag.crlf ? 'SIM' : 'NÃO (só LF)'}</span></div>
+                <div><span className="text-muted-foreground block">1ª linha</span><span className="font-mono">{refDiag.firstLineLen} chars</span></div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase text-muted-foreground">Conteúdo da 1ª linha (referência)</span>
+                <div className="bg-emerald-950 text-emerald-50 p-3 rounded font-mono text-[10px] break-all whitespace-pre overflow-x-auto">
+                  {refDiag.firstLineText}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase text-muted-foreground">Primeiros 50 bytes (HEX)</span>
+                <div className="bg-slate-900 text-slate-100 p-2 rounded font-mono text-[10px] overflow-x-auto">
+                  {refDiag.firstLineHex}
+                </div>
+              </div>
+
+              {results?.headerPreview && (
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase text-muted-foreground">Comparação byte a byte (referência × gerado)</span>
+                  <div className="border rounded overflow-x-auto max-h-64">
+                    <table className="text-[10px] font-mono w-full">
+                      <thead className="bg-slate-100 sticky top-0">
+                        <tr>
+                          <th className="px-2 py-1 text-left">Pos</th>
+                          <th className="px-2 py-1 text-left">Ref</th>
+                          <th className="px-2 py-1 text-left">Gerado</th>
+                          <th className="px-2 py-1 text-left">HEX Ref</th>
+                          <th className="px-2 py-1 text-left">HEX Gerado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: Math.max(refDiag.firstLineLen, results.headerPreview.length) }).map((_, i) => {
+                          const r = refDiag.headerBytes[i];
+                          const g = results.headerPreview!.charCodeAt(i);
+                          const diff = r !== g;
+                          return (
+                            <tr key={i} className={diff ? 'bg-red-50' : ''}>
+                              <td className="px-2 py-0.5">{String(i + 1).padStart(3, '0')}</td>
+                              <td className="px-2 py-0.5">{r !== undefined ? (r === 0x20 ? '·' : String.fromCharCode(r)) : '∅'}</td>
+                              <td className="px-2 py-0.5">{!isNaN(g) ? (g === 0x20 ? '·' : String.fromCharCode(g)) : '∅'}</td>
+                              <td className="px-2 py-0.5">{r !== undefined ? r.toString(16).toUpperCase().padStart(2, '0') : '--'}</td>
+                              <td className="px-2 py-0.5">{!isNaN(g) ? g.toString(16).toUpperCase().padStart(2, '0') : '--'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
 
       <Card>
         <CardHeader>
