@@ -16,7 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Loader2, Plus, Search, Eye, Edit2, AlertTriangle, Trash2, Save,
-  RefreshCw, Clock, Target, CheckSquare, ChevronRight,
+  RefreshCw, Clock, Target, CheckSquare, ChevronRight, Printer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
