@@ -644,33 +644,54 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Geração do Cabeçalho Oficial (Reg 01) - Padrão BPA Magnético / AMBULAT COMPET
-      // Layout solicitado: 01BPAAMBULATCOMPET + competencia + totalRegistros
+      // Geração do Cabeçalho
       const qtdRegistros = zfill(exportedCount, 6);
-      const header = (`01BPAAMBULATCOMPET${formData.competencia}${qtdRegistros}`).padEnd(205, " ").slice(0, 205);
+      const fallbackHeader = (`01BPAAMBULATCOMPET${formData.competencia}${qtdRegistros}`).padEnd(205, " ").slice(0, 205);
 
-      const todasLinhas = [header, ...linhasProducao];
-      const content = todasLinhas.join('\r\n') + '\r\n';
+      let headerBytes: Uint8Array;
+      let header: string;
+      let headerOrigem: 'referencia' | 'padrao' = 'padrao';
+      let substituicoes: Array<{ pos: number; tipo: string; antes: string; depois: string }> = [];
 
-      // Conversão rigorosa para ISO-8859-1 (ANSI) sem BOM
-      // O navegador por padrão usa UTF-8. Para garantir ANSI, mapeamos charCode.
-      const bytes = new Uint8Array(content.length);
-      for (let i = 0; i < content.length; i++) {
-        const code = content.charCodeAt(i);
-        // ISO-8859-1 mapeia 1:1 com os primeiros 256 charcodes do Unicode
-        // Se for fora desse range (ex: caracteres especiais complexos), trocamos por espaço ou '?'
-        if (code < 256) {
-          bytes[i] = code;
-        } else {
-          // Fallback para caracteres acentuados que podem estar fora do range padrão mas no Latin1
-          // No JavaScript charCodeAt retorna UTF-16.
-          bytes[i] = 32; // Espaço
-        }
+      if (refDiag && useRefHeader && refDiag.headerBytes.length > 0) {
+        const built = buildHeaderFromRef(refDiag.headerBytes, formData.competencia, exportedCount);
+        const arr = built.bytes.slice();
+        while (arr.length < refDiag.firstLineLen) arr.push(0x20);
+        headerBytes = new Uint8Array(arr.slice(0, refDiag.firstLineLen));
+        header = bytesToIso(Array.from(headerBytes));
+        substituicoes = built.substituicoes;
+        headerOrigem = 'referencia';
+      } else {
+        header = fallbackHeader;
+        headerBytes = new Uint8Array(header.length);
+        for (let i = 0; i < header.length; i++) headerBytes[i] = header.charCodeAt(i) < 256 ? header.charCodeAt(i) : 32;
       }
-      
-      const blob = new Blob([bytes], { type: 'application/octet-stream' });
+
+      // Linhas de produção em ISO-8859-1 sem BOM
+      const prodContent = linhasProducao.join('\r\n') + (linhasProducao.length ? '\r\n' : '');
+      const prodBytes = new Uint8Array(prodContent.length);
+      for (let i = 0; i < prodContent.length; i++) {
+        const code = prodContent.charCodeAt(i);
+        prodBytes[i] = code < 256 ? code : 32;
+      }
+
+      const CRLF = new Uint8Array([0x0D, 0x0A]);
+      const total = new Uint8Array(headerBytes.length + CRLF.length + prodBytes.length);
+      total.set(headerBytes, 0);
+      total.set(CRLF, headerBytes.length);
+      total.set(prodBytes, headerBytes.length + CRLF.length);
+
+      const blob = new Blob([total], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
-      const fileName = `producao_bpa_${formData.competencia}.txt`;
+      const fileName = headerOrigem === 'referencia'
+        ? `BPA_${formData.competencia}.TXT`
+        : `producao_bpa_${formData.competencia}.txt`;
+
+      console.log('[BPA] Header origem:', headerOrigem);
+      console.log('[BPA] Header len bytes:', headerBytes.length);
+      console.log('[BPA] Header HEX (50):', bytesToHex(Array.from(headerBytes).slice(0, 50)));
+      console.log('[BPA] Header texto:', header);
+      if (substituicoes.length) console.log('[BPA] Substituições aplicadas:', substituicoes);
 
 
       setResults({
