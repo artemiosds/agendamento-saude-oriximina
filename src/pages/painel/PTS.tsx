@@ -487,7 +487,9 @@ const PTS: React.FC = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const unitName = user?.unidadeNome || 'Unidade de Saúde';
+    const unidade = unidades.find(u => u.id === pts.unit_id);
+    const unitName = unidade?.nome || 'Unidade de Saúde';
+
     
     printWindow.document.write(`
       <html>
