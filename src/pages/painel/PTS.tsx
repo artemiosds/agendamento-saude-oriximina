@@ -483,6 +483,160 @@ const PTS: React.FC = () => {
     }
   };
 
+  const handlePrint = useCallback((pts: PTSRecord, pac: any, prof: any, sigtaps: SelectedSigtap[], cids: SelectedCid[], metas: PTSMeta[]) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const unitName = user?.unidadeNome || 'Unidade de Saúde';
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>PTS - ${pac?.nome || 'Paciente'}</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; line-height: 1.4; color: #333; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+            .unit-name { font-size: 18px; font-weight: bold; text-transform: uppercase; }
+            .title { font-size: 22px; font-weight: bold; margin-top: 5px; }
+            .section { margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 4px; }
+            .section-title { font-weight: bold; font-size: 12px; text-transform: uppercase; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 2px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+            .field { margin-bottom: 8px; }
+            .label { font-weight: bold; font-size: 11px; color: #555; display: block; }
+            .value { font-size: 14px; }
+            .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; border: 1px solid #ccc; margin-right: 5px; margin-bottom: 5px; }
+            .meta-item { border-bottom: 1px solid #eee; padding: 5px 0; }
+            .meta-item:last-child { border-bottom: none; }
+            @media print {
+              .no-print { display: none; }
+              body { padding: 0; }
+              .section { break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="unit-name">${unitName}</div>
+            <div class="title">Projeto Terapêutico Singular (PTS)</div>
+          </div>
+
+          <div class="section grid">
+            <div class="field">
+              <span class="label">PACIENTE</span>
+              <span class="value">${pac?.nome || pts.patient_id}</span>
+            </div>
+            <div class="field">
+              <span class="label">PROFISSIONAL RESPONSÁVEL</span>
+              <span class="value">${prof?.nome || '—'}</span>
+            </div>
+            <div class="field">
+              <span class="label">DATA DE CRIAÇÃO</span>
+              <span class="value">${new Date(pts.created_at).toLocaleDateString('pt-BR')}</span>
+            </div>
+            <div class="field">
+              <span class="label">STATUS / PRIORIDADE</span>
+              <span class="value">${pts.status || 'Ativo'} / ${pts.prioridade || 'Média'}</span>
+            </div>
+          </div>
+
+          ${pts.data_proxima_revisao ? `
+          <div class="section">
+            <span class="label">PRÓXIMA REVISÃO</span>
+            <span class="value">${new Date(pts.data_proxima_revisao + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+          </div>
+          ` : ''}
+
+          ${pts.contextos_afetados && pts.contextos_afetados.length > 0 ? `
+          <div class="section">
+            <span class="label">CONTEXTOS AFETADOS</span>
+            <div style="margin-top: 5px;">
+              ${pts.contextos_afetados.map(c => `<span class="badge">${c}</span>`).join('')}
+            </div>
+          </div>
+          ` : ''}
+
+          ${pts.especialidades_envolvidas.length > 0 ? `
+          <div class="section">
+            <span class="label">ESPECIALIDADES ENVOLVIDAS</span>
+            <div style="margin-top: 5px;">
+              ${pts.especialidades_envolvidas.map(s => `<span class="badge">${s}</span>`).join('')}
+            </div>
+          </div>
+          ` : ''}
+
+          ${pts.diagnostico_funcional ? `
+          <div class="section">
+            <span class="section-title">DIAGNÓSTICO FUNCIONAL</span>
+            <div class="value">${pts.diagnostico_funcional.replace(/\n/g, '<br>')}</div>
+          </div>
+          ` : ''}
+
+          ${pts.objetivos_terapeuticos ? `
+          <div class="section">
+            <span class="section-title">OBJETIVOS TERAPÊUTICOS</span>
+            <div class="value">${pts.objetivos_terapeuticos.replace(/\n/g, '<br>')}</div>
+          </div>
+          ` : ''}
+
+          ${metas.length > 0 ? `
+          <div class="section">
+            <span class="section-title">METAS ESTRUTURADAS (${metas.length})</span>
+            <div class="value">
+              ${metas.map(m => `
+                <div class="meta-item">
+                  <strong>${m.titulo}</strong> (${m.categoria}) - <em>${m.status}</em><br>
+                  ${m.descricao ? `<small>${m.descricao}</small><br>` : ''}
+                  ${m.indicador ? `<span>📊 ${m.indicador}</span>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          ` : ''}
+
+          ${sigtaps.length > 0 ? `
+          <div class="section">
+            <span class="section-title">PROCEDIMENTOS SIGTAP</span>
+            <div class="value" style="font-size: 12px;">
+              ${sigtaps.map(s => `<div>${s.procedimento_codigo} - ${s.procedimento_nome}</div>`).join('')}
+            </div>
+          </div>
+          ` : ''}
+
+          ${cids.length > 0 ? `
+          <div class="section">
+            <span class="section-title">CIDs RELACIONADOS</span>
+            <div class="value">
+              ${cids.map(c => `<span class="badge">${c.cid_codigo}: ${c.cid_descricao}</span>`).join('')}
+            </div>
+          </div>
+          ` : ''}
+
+          <div style="margin-top: 50px; text-align: center;">
+            <div style="border-top: 1px solid #000; width: 300px; margin: 0 auto;"></div>
+            <div style="font-size: 12px; margin-top: 5px;">Assinatura do Profissional</div>
+          </div>
+
+          <div style="margin-top: 30px; text-align: center;">
+            <div style="border-top: 1px solid #000; width: 300px; margin: 0 auto;"></div>
+            <div style="font-size: 12px; margin-top: 5px;">Assinatura do Paciente / Responsável</div>
+          </div>
+
+          <div style="font-size: 10px; color: #999; margin-top: 40px; text-align: right;">
+            Gerado em ${new Date().toLocaleString('pt-BR')}
+          </div>
+
+          <script>
+            window.onload = () => {
+              window.print();
+              setTimeout(() => { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }, [user]);
+
   const handleAddSigtap = async () => {
     if (!selectedProcCodigo) return;
     const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
