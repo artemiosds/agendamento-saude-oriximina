@@ -2024,8 +2024,13 @@ const PTS: React.FC = () => {
                 )}
 
                 {/* Actions */}
-                {canEditPts(detailPts) && (
-                  <div className="flex gap-2 pt-2 border-t flex-wrap">
+                <div className="flex gap-2 pt-2 border-t flex-wrap">
+                  <Button variant="outline" size="sm" className="bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+                    onClick={() => handlePrint(detailPts, pacientes.find(p => p.id === detailPts.patient_id), funcionarios.find(f => f.id === detailPts.professional_id), detailSigtap, detailCids, detailMetas)}>
+                    <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
+                  </Button>
+                  {canEditPts(detailPts) && (
+                    <div className="flex gap-2 flex-wrap">
                     <Button variant="outline" size="sm" onClick={() => {
                       const pts = detailPts;
                       setDetailPts(null);
