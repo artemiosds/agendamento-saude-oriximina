@@ -2054,8 +2054,9 @@ const PTS: React.FC = () => {
                         <CheckSquare className="w-3.5 h-3.5 mr-1" /> Alta/Encerrar
                       </Button>
                     )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })()}
