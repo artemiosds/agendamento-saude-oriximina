@@ -63,7 +63,7 @@ const menuGroups: MenuGroup[] = [
       { to: '/painel/pts',               label: 'PTS',                   icon: FileText,    modulo: 'prontuario' },
       { to: '/painel/multiprofissional', label: 'Avaliação Multi',       icon: BookOpen,    modulo: 'atendimento' },
       { to: '/painel/alta',              label: 'Relatório de Alta',     icon: FileText,    modulo: 'prontuario' },
-      
+      { to: '/painel/meu-prontuario',    label: 'Meu Prontuário',        icon: Stethoscope, modulo: 'prontuario', hide_from_master: true },
     ],
   },
   {
