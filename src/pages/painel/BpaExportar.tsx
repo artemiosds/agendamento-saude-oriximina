@@ -706,10 +706,10 @@ const BpaExportar: React.FC = () => {
         blobUrl: url,
         headerPreview: header,
         headerDetails: {
-          tipo: "01",
-          identificacao: "BPA",
-          destino: "AMBULAT",
-          tipo_competencia: "COMPET",
+          tipo: header.substring(0, 2),
+          identificacao: header.substring(2, 5),
+          destino: headerOrigem === 'referencia' ? '(REF)' : 'AMBULAT',
+          tipo_competencia: headerOrigem === 'referencia' ? '(REF)' : 'COMPET',
           competencia: formData.competencia,
           registros: qtdRegistros,
           tamanho: header.length
