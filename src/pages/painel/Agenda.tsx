@@ -138,6 +138,41 @@ const STATUS_FILTER_GROUPS: Record<string, string[]> = {
   pendente: ["pendente"],
 };
 
+// Status que NÃO podem existir/aparecer em uma data futura (cujo dia ainda não chegou).
+// Se um registro estiver com um destes status numa data > hoje, é tratado como "confirmado"
+// para fins de exibição/filtros/contadores (presentation only — não altera o dado no banco).
+const STATUS_INCOMPATIVEIS_DATA_FUTURA = new Set([
+  "confirmado_chegada",
+  "chegada_confirmada",
+  "aguardando_triagem",
+  "triagem_concluida",
+  "aguardando_atendimento",
+  "aguardando_profissional",
+  "apto_atendimento",
+  "apto",
+  "em_atendimento",
+  "concluido",
+  "finalizado",
+  "atendido",
+  "atendimento_encerrado",
+  "prontuario_finalizado",
+]);
+
+/**
+ * Retorna o status efetivo para EXIBIÇÃO/FILTRO/CONTAGEM.
+ * Não altera o status persistido. Apenas neutraliza inconsistências
+ * (ex.: registro marcado como "concluído" em data futura) para que a UI
+ * mostre "Confirmado" enquanto a data não chegar.
+ */
+const getDisplayStatus = (ag: { status?: string; data?: string }, todayStr: string): string => {
+  const raw = String(ag?.status || "").toLowerCase();
+  if (!raw) return raw;
+  if (ag?.data && ag.data > todayStr && STATUS_INCOMPATIVEIS_DATA_FUTURA.has(raw)) {
+    return "confirmado";
+  }
+  return raw;
+};
+
 // Lista única de status que NÃO ocupam vaga na agenda.
 const STATUS_NAO_OCUPA_VAGA = new Set([
   "cancelado",
@@ -797,7 +832,8 @@ const Agenda: React.FC = () => {
 
     if (statusFilter !== "all") {
       const allowed = STATUS_FILTER_GROUPS[statusFilter] || [statusFilter];
-      result = result.filter((a) => allowed.includes(a.status));
+      const todayStr = todayLocalStr();
+      result = result.filter((a) => allowed.includes(getDisplayStatus(a, todayStr)));
     }
 
     if (tipoFilter !== "all") {
@@ -852,9 +888,10 @@ const Agenda: React.FC = () => {
     const activeBase = base.filter(a => selectedDate < todayLocalStr() ? true : statusOcupaVaga(a.status));
 
     const byGroup: Record<string, number> = {};
+    const todayStr = todayLocalStr();
     for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
       const allowed = STATUS_FILTER_GROUPS[key];
-      byGroup[key] = base.filter((a) => allowed.includes(a.status)).length;
+      byGroup[key] = base.filter((a) => allowed.includes(getDisplayStatus(a, todayStr))).length;
     }
     
     // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
@@ -1330,6 +1367,24 @@ const Agenda: React.FC = () => {
   const handleStatusChange = async (agId: string, newStatus: string) => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
+
+    // Bloqueia transições para status de atendimento em datas futuras.
+    // Evita registros tipo "Apto p/ Atendimento" / "Em Atendimento" / "Concluído"
+    // em dias que ainda nem chegaram.
+    const todayStr = todayLocalStr();
+    const STATUS_BLOQUEADOS_FUTURO = new Set([
+      "confirmado_chegada",
+      "chegada_confirmada",
+      "apto_atendimento",
+      "em_atendimento",
+      "concluido",
+      "finalizado",
+      "atendido",
+    ]);
+    if (ag.data > todayStr && STATUS_BLOQUEADOS_FUTURO.has(newStatus)) {
+      toast.error("⚠️ Não é possível alterar este status antes da data do agendamento.");
+      return;
+    }
 
     // Regra de permissão profissional para marcar falta (Req 1 & 3)
     if (isProfissional && newStatus === "falta" && ag.profissionalId !== user?.id) {
@@ -3060,10 +3115,10 @@ const Agenda: React.FC = () => {
                         <span
                           className={cn(
                             "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
-                            statusBadgeClass[ag.status] || "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {statusLabels[ag.status] || ag.status}
+                           statusBadgeClass[getDisplayStatus(ag, todayLocalStr())] || "bg-muted text-muted-foreground",
+                         )}
+                       >
+                         {statusLabels[getDisplayStatus(ag, todayLocalStr())] || ag.status}
                         </span>
                         {ag.googleEventId && (
                           <span
@@ -3866,8 +3921,8 @@ const Agenda: React.FC = () => {
                       </div>
                       <div className="mt-1">
                         <StatusBadge
-                          label={statusLabels[ag.status] || ag.status}
-                          className={statusBadgeClass[ag.status]}
+                          label={statusLabels[getDisplayStatus(ag, todayLocalStr())] || ag.status}
+                          className={statusBadgeClass[getDisplayStatus(ag, todayLocalStr())]}
                         />
                       </div>
                     </div>
