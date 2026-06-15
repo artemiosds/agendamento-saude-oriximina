@@ -1023,7 +1023,14 @@ const BpaExportar: React.FC = () => {
           const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
           const pacCd = (pac?.custom_data as any) || {};
           const unidadeCd = unitCd || {};
-          const cid = rpad(limparTexto(pront.custom_data?.cid || pac?.cid || ''), 4);
+          // CID: para Psico/Fono/Fisio/Nutri, reutilizar a resolução do BPA-Produção
+          // (mesma função: bpaService.resolveBpaProcedimentosECids → resolveCidForBpaProcedure)
+          // como fonte primária. Sem fallback inventado: se o BPA-Produção não achou,
+          // a Exportar também não inventa.
+          const cidProducao = sigtapReq.exige ? (producaoResolvida?.cid || '') : '';
+          const cidBruto = cidProducao || pront.custom_data?.cid || pac?.cid || '';
+          const cid = rpad(limparTexto(cidBruto), 4);
+
           const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
           const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
