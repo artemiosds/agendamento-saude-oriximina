@@ -12,9 +12,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
-import logoSms from '@/assets/logo-sms.jpeg';
-import logoSmsOrix from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerII from '@/assets/logo-cer-ii.png';
+import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
