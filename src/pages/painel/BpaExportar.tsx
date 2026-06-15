@@ -930,6 +930,7 @@ const BpaExportar: React.FC = () => {
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
           if (!proc_real && sigtapReq.exige) {
             pendenciaPaciente = true;
+            motivosPendencia.push('SIGTAP obrigatório ausente');
             stats.missingSigtap++;
             const fontesTxt = fontesConsultadas.length ? fontesConsultadas.join(' / ') : 'Prontuário';
             const motivo = `Profissão "${sigtapReq.profissao || 'indefinida'}" exige SIGTAP. Fontes consultadas: ${fontesTxt}. Nenhum código localizado em campo fixo, custom_data, seção dinâmica, prontuario_procedimentos${sigtapReq.categoria === 'fisioterap' ? ' ou PTS ativo' : ''}.`;
