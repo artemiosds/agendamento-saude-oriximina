@@ -991,6 +991,7 @@ const BpaExportar: React.FC = () => {
           // Etnia: obrigatória APENAS quando nacionalidade brasileira (010) + raça indígena (05)
           if (raca === '05' && nacionalidade === '010' && !etniaCadastro) {
             pendenciaPaciente = true;
+            motivosPendencia.push('Etnia indígena');
             warnings.push(`${ident}: Etnia indígena é obrigatória para paciente brasileiro com raça/cor indígena.`);
           }
 
