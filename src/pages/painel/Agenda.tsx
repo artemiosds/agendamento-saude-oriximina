@@ -209,6 +209,7 @@ const Agenda: React.FC = () => {
     addAtendimento,
     logAction,
     refreshAgendamentos,
+    ensureAgendamentosForDate,
     refreshFila,
     fila,
     updateFila,
