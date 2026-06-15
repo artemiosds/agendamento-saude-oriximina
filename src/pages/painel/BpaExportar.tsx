@@ -770,7 +770,49 @@ const BpaExportar: React.FC = () => {
             const code = sigByPts.get(pts.id);
             if (code) ptsSigtapByPatient.set(pid, code);
           });
+      }
+
+      // === Resolução unificada com BPA-Produção (Psico/Fono/Fisio/Nutri) ===
+      // Reutiliza EXATAMENTE a mesma função do BPA-Produção
+      // (bpaService.resolveBpaProcedimentosECids) para resolver SIGTAP e CID.
+      // Sem lógica paralela: se o BPA-Produção encontra, a Exportar também encontra.
+      const producaoByPront = new Map<string, { codigo_sigtap: string; cid: string; fonte_procedimento: string; fonte_cid: string; fonte_resolucao: string; status: string }>();
+      try {
+        let triagemSigtapPadrao = '';
+        try {
+          const { data: cfgRow } = await (supabase as any)
+            .from('system_config').select('value').eq('key', 'bpa_config').maybeSingle();
+          const cfg = cfgRow?.value || {};
+          triagemSigtapPadrao = String(cfg.bpa_triagem_sigtap || '').replace(/\D/g, '');
+        } catch { /* ignora — não bloqueia resolução */ }
+
+        const linhasProducaoSvc = await bpaService.resolveBpaProcedimentosECids({
+          competencia: formData.competencia,
+          unidadeId: formData.unidade_id !== 'all' ? formData.unidade_id : undefined,
+          profissionalId: formData.profissional_id !== 'all' ? formData.profissional_id : undefined,
+          triagemSigtapPadrao,
+        });
+        for (const ln of linhasProducaoSvc) {
+          if (!ln.prontuario_id) continue;
+          const atual = producaoByPront.get(ln.prontuario_id);
+          const scoreNew = (ln.codigo_sigtap ? 2 : 0) + (ln.status_bpa === 'ok' ? 1 : 0);
+          const scoreOld = atual ? ((atual.codigo_sigtap ? 2 : 0) + (atual.status === 'ok' ? 1 : 0)) : -1;
+          if (scoreNew > scoreOld) {
+            producaoByPront.set(ln.prontuario_id, {
+              codigo_sigtap: ln.codigo_sigtap || '',
+              cid: ln.cid || '',
+              fonte_procedimento: ln.fonte_procedimento || '',
+              fonte_cid: ln.fonte_cid || '',
+              fonte_resolucao: ln.fonte_resolucao || '',
+              status: ln.status_bpa || '',
+            });
+          }
         }
+        console.log('[BPA-Exportar] resoluções herdadas do BPA-Produção:', producaoByPront.size);
+      } catch (e) {
+        console.warn('[BPA-Exportar] falha ao consultar bpaService (fallback para lógica local):', e);
+      }
+
       }
 
       let exportedCount = 0;
