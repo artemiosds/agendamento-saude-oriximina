@@ -991,6 +991,8 @@ const BpaExportar: React.FC = () => {
               cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || '',
               usou_padrao: !proc_real,
               origem: pront.origem || 'Prontuário',
+              origem_sigtap: proc_origem || (sigtapReq.exige ? '—' : 'Padrão'),
+              profissao_categoria: sigtapReq.categoria || '',
             }
           };
 
