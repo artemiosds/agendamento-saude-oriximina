@@ -12,6 +12,18 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
+import logoSms from '@/assets/logo-sms.jpeg';
+import logoSmsOrix from '@/assets/logo-sms-oriximina.jpeg';
+import logoCerII from '@/assets/logo-cer-ii.png';
+
+// Comparador alfabético estável: nome → data
+const cmpAlfa = (a: any, b: any) => {
+  const na = String(a?.paciente_nome || '').toLocaleLowerCase('pt-BR');
+  const nb = String(b?.paciente_nome || '').toLocaleLowerCase('pt-BR');
+  const c = na.localeCompare(nb, 'pt-BR');
+  if (c !== 0) return c;
+  return String(a?.data_atendimento || '').localeCompare(String(b?.data_atendimento || ''));
+};
 
 /**
  * Funções de Formatação e Utilitários
