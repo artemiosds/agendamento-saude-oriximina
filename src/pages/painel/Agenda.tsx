@@ -3097,10 +3097,10 @@ const Agenda: React.FC = () => {
                         <span
                           className={cn(
                             "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
-                            statusBadgeClass[ag.status] || "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {statusLabels[ag.status] || ag.status}
+                           statusBadgeClass[getDisplayStatus(ag, todayLocalStr())] || "bg-muted text-muted-foreground",
+                         )}
+                       >
+                         {statusLabels[getDisplayStatus(ag, todayLocalStr())] || ag.status}
                         </span>
                         {ag.googleEventId && (
                           <span
