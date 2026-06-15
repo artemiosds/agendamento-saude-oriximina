@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
+import { bpaService } from '@/services/bpaService';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
@@ -769,8 +770,50 @@ const BpaExportar: React.FC = () => {
             const code = sigByPts.get(pts.id);
             if (code) ptsSigtapByPatient.set(pid, code);
           });
-        }
       }
+      }
+
+      // === Resolução unificada com BPA-Produção (Psico/Fono/Fisio/Nutri) ===
+      // Reutiliza EXATAMENTE a mesma função do BPA-Produção
+      // (bpaService.resolveBpaProcedimentosECids) para resolver SIGTAP e CID.
+      // Sem lógica paralela: se o BPA-Produção encontra, a Exportar também encontra.
+      const producaoByPront = new Map<string, { codigo_sigtap: string; cid: string; fonte_procedimento: string; fonte_cid: string; fonte_resolucao: string; status: string }>();
+      try {
+        let triagemSigtapPadrao = '';
+        try {
+          const { data: cfgRow } = await (supabase as any)
+            .from('system_config').select('value').eq('key', 'bpa_config').maybeSingle();
+          const cfg = cfgRow?.value || {};
+          triagemSigtapPadrao = String(cfg.bpa_triagem_sigtap || '').replace(/\D/g, '');
+        } catch { /* ignora — não bloqueia resolução */ }
+
+        const linhasProducaoSvc = await bpaService.resolveBpaProcedimentosECids({
+          competencia: formData.competencia,
+          unidadeId: formData.unidade_id !== 'all' ? formData.unidade_id : undefined,
+          profissionalId: formData.profissional_id !== 'all' ? formData.profissional_id : undefined,
+          triagemSigtapPadrao,
+        });
+        for (const ln of linhasProducaoSvc) {
+          if (!ln.prontuario_id) continue;
+          const atual = producaoByPront.get(ln.prontuario_id);
+          const scoreNew = (ln.codigo_sigtap ? 2 : 0) + (ln.status_bpa === 'ok' ? 1 : 0);
+          const scoreOld = atual ? ((atual.codigo_sigtap ? 2 : 0) + (atual.status === 'ok' ? 1 : 0)) : -1;
+          if (scoreNew > scoreOld) {
+            producaoByPront.set(ln.prontuario_id, {
+              codigo_sigtap: ln.codigo_sigtap || '',
+              cid: ln.cid || '',
+              fonte_procedimento: ln.fonte_procedimento || '',
+              fonte_cid: ln.fonte_cid || '',
+              fonte_resolucao: ln.fonte_resolucao || '',
+              status: ln.status_bpa || '',
+            });
+          }
+        }
+        console.log('[BPA-Exportar] resoluções herdadas do BPA-Produção:', producaoByPront.size);
+      } catch (e) {
+        console.warn('[BPA-Exportar] falha ao consultar bpaService (fallback para lógica local):', e);
+      }
+
 
       let exportedCount = 0;
       let criticalCount = 0;
@@ -926,6 +969,22 @@ const BpaExportar: React.FC = () => {
             }
           }
 
+          // === Override unificado com BPA-Produção (Psico/Fono/Fisio/Nutri) ===
+          // Para essas profissões, se o BPA-Produção resolveu o SIGTAP com sua lógica
+          // oficial (campos diretos + catálogo + procedimentos vinculados + PTS), usamos
+          // esse código como fonte primária — eliminando divergências Exportar vs Produção.
+          const producaoResolvida = sigtapReq.exige ? producaoByPront.get(pront.id) : undefined;
+          if (producaoResolvida?.codigo_sigtap && producaoResolvida.codigo_sigtap !== proc_real) {
+            proc_real = producaoResolvida.codigo_sigtap;
+            proc_origem = producaoResolvida.fonte_procedimento === 'pts' ? 'PTS' : 'Prontuário';
+            proc_campo = `bpaService:${producaoResolvida.fonte_resolucao || 'resolvido'}`;
+            if (producaoResolvida.fonte_procedimento === 'pts') ptsEncontrado = Math.max(ptsEncontrado, 1);
+          } else if (!proc_real && producaoResolvida?.codigo_sigtap) {
+            proc_real = producaoResolvida.codigo_sigtap;
+            proc_origem = producaoResolvida.fonte_procedimento === 'pts' ? 'PTS' : 'Prontuário';
+            proc_campo = `bpaService:${producaoResolvida.fonte_resolucao || 'resolvido'}`;
+          }
+
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
           if (!proc_real && sigtapReq.exige) {
@@ -964,7 +1023,14 @@ const BpaExportar: React.FC = () => {
           const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
           const pacCd = (pac?.custom_data as any) || {};
           const unidadeCd = unitCd || {};
-          const cid = rpad(limparTexto(pront.custom_data?.cid || pac?.cid || ''), 4);
+          // CID: para Psico/Fono/Fisio/Nutri, reutilizar a resolução do BPA-Produção
+          // (mesma função: bpaService.resolveBpaProcedimentosECids → resolveCidForBpaProcedure)
+          // como fonte primária. Sem fallback inventado: se o BPA-Produção não achou,
+          // a Exportar também não inventa.
+          const cidProducao = sigtapReq.exige ? (producaoResolvida?.cid || '') : '';
+          const cidBruto = cidProducao || pront.custom_data?.cid || pac?.cid || '';
+          const cid = rpad(limparTexto(cidBruto), 4);
+
           const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
           const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
@@ -1089,7 +1155,7 @@ const BpaExportar: React.FC = () => {
             bairro: String(pac?.bairro || pacCdAny.bairro || '').toUpperCase(),
             data_atendimento: formatarDataBR(pront.data_atendimento),
             codigo_sigtap: proc_real || formData.procedimento_padrao || '',
-            cid_usado: String(pront.custom_data?.cid || pac?.cid || '').toUpperCase(),
+            cid_usado: String(cidBruto || '').toUpperCase(),
             _ctx: {
               profissional_nome: prof?.nome || '',
               cns_prof,
