@@ -666,7 +666,8 @@ const BpaExportar: React.FC = () => {
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
           const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
           const raca = mapRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
-          const etnia = raca === '05' ? fixedDigits(pacCd.etnia_codigo || pacCd.etnia, 4) : '    ';
+          const etniaCadastro = somenteNumeros(pacCd.etnia_codigo || pacCd.etnia);
+          const etnia = raca === '05' ? rpad(etniaCadastro, 4) : '    ';
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
           let pendenciaPaciente = false;
@@ -682,6 +683,12 @@ const BpaExportar: React.FC = () => {
             const motivo = nacRes.motivo || 'Inválido';
             warnings.push(`${ident}: Nacionalidade inválida — ${motivo} (valor: ${valorAtual}).`);
             details.missingNacionalidade.push({ ...itemDetail, pendencia: `Nacionalidade: ${motivo}`, valor_atual: String(valorAtual) });
+          }
+
+          // Etnia: obrigatória APENAS quando nacionalidade brasileira (010) + raça indígena (05)
+          if (raca === '05' && nacionalidade === '010' && !etniaCadastro) {
+            pendenciaPaciente = true;
+            warnings.push(`${ident}: Etnia indígena é obrigatória para paciente brasileiro com raça/cor indígena.`);
           }
 
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
