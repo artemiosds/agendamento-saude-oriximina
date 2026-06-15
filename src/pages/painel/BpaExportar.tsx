@@ -598,7 +598,7 @@ const BpaExportar: React.FC = () => {
         let isCritical = false;
 
         // CNS Paciente
-        const cns_pac_raw = pac?.cns || (pac?.custom_data as any)?.cns || '';
+        const cns_pac_raw = primeiroValorPreenchido(pac?.cns, (pac?.custom_data as any)?.cns) || '';
         const cns_pac = zfill(cns_pac_raw, 15);
         if (!cns_pac_raw || cns_pac === '000000000000000') {
           isCritical = true;
@@ -630,7 +630,7 @@ const BpaExportar: React.FC = () => {
         }
 
         // Nascimento
-        const raw_nasc = pac?.data_nascimento || (pac?.custom_data as any)?.data_nascimento;
+        const raw_nasc = primeiroValorPreenchido(pac?.data_nascimento, (pac?.custom_data as any)?.data_nascimento);
         const data_nasc = formatarData(raw_nasc);
         if (data_nasc === "00000000") {
           isCritical = true;
@@ -1236,10 +1236,10 @@ const BpaExportar: React.FC = () => {
                           <TableCell>
                             <div className="font-medium">{item.paciente_nome}</div>
                             <div className="text-xs text-muted-foreground">
-                              {item.paciente_cpf ? `CPF: ${item.paciente_cpf}` : 'Sem CPF'} | {item.paciente_nascimento ? `Nasc: ${new Date(item.paciente_nascimento).toLocaleDateString()}` : 'Sem Nasc.'}
+                              {item.paciente_cpf ? `CPF: ${item.paciente_cpf}` : 'Sem CPF'} | {item.paciente_nascimento ? `Nasc: ${formatarDataBR(item.paciente_nascimento)}` : 'Sem Nasc.'}
                             </div>
                           </TableCell>
-                          <TableCell>{new Date(item.data_atendimento).toLocaleDateString()}</TableCell>
+                          <TableCell>{formatarDataBR(item.data_atendimento)}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span>{item.profissional_nome}</span>
