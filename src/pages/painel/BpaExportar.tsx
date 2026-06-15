@@ -169,13 +169,24 @@ const LOGRADOURO_DNE: Record<string, string> = {
   ALAMEDA: '003', PRACA: '062', PRAÇA: '062', RAMAL: '082', VILA: '108', VIA: '107',
 };
 
-const codigoLogradouroBpa = (pac: any): string => {
+// Retorna o código oficial DNE (3 dígitos) ou null se não puder determinar com segurança.
+const codigoLogradouroBpa = (pac: any): string | null => {
   const cd = pac?.custom_data || {};
   const salvo = somenteNumeros(cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || cd.tipo_logradouro_dne);
   if (salvo) return salvo.slice(-3).padStart(3, '0');
-  const tipo = limparTexto(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').split(' ')[0];
-  const enderecoPrimeira = limparTexto(pac?.logradouro || pac?.endereco || cd.logradouro || cd.endereco || '').split(' ')[0];
-  return LOGRADOURO_DNE[tipo] || LOGRADOURO_DNE[enderecoPrimeira] || '   ';
+  const tipo = limparTexto(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').toUpperCase().split(' ')[0];
+  const enderecoPrimeira = limparTexto(pac?.logradouro || pac?.endereco || cd.logradouro || cd.endereco || '').toUpperCase().split(' ')[0];
+  return LOGRADOURO_DNE[tipo] || LOGRADOURO_DNE[enderecoPrimeira] || null;
+};
+
+// Valida e normaliza nacionalidade (3 dígitos). Retorna null se cadastro não tiver código oficial.
+const nacionalidadeBpa = (pac: any): string | null => {
+  const cd = pac?.custom_data || {};
+  const raw = pac?.nacionalidade ?? cd.nacionalidade_codigo ?? cd.nacionalidade ?? cd.nacionalidadeCodigo;
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  const num = somenteNumeros(raw);
+  if (!num) return null;
+  return num.slice(-3).padStart(3, '0');
 };
 
 const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
