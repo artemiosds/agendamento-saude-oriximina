@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
 import { bpaService } from '@/services/bpaService';
+import BpaResolverSigtapModal, { ResolverSigtapItem } from '@/components/bpa/BpaResolverSigtapModal';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
