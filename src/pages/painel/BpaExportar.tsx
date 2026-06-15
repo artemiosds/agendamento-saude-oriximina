@@ -1195,14 +1195,17 @@ const BpaExportar: React.FC = () => {
       const cols = [
         'paciente_nome', 'paciente_cns', 'data_nascimento', 'sexo',
         'tipo_logradouro', 'logradouro', 'numero', 'bairro',
-        'data_atendimento', 'codigo_sigtap', 'cid_usado'
+        'data_atendimento', 'codigo_sigtap', 'origem_sigtap', 'cid_usado'
       ];
       const colsLabels = [
         'PACIENTE', 'CNS', 'NASCIMENTO', 'SEXO',
         'TIPO LOG.', 'LOGRADOURO', 'Nº', 'BAIRRO',
-        'ATENDIMENTO', 'SIGTAP', 'CID'
+        'ATENDIMENTO', 'SIGTAP', 'ORIGEM SIGTAP', 'CID'
       ];
       const dataRows = confSorted.map(r => cols.map(c => {
+        if (c === 'origem_sigtap') {
+          return String((r as any)?._ctx?.origem_sigtap || '—');
+        }
         const v = (r as any)[c] ?? '';
         if (c === 'paciente_nome' || c === 'logradouro' || c === 'bairro' || c === 'tipo_logradouro') {
           return String(v).toUpperCase();
@@ -1215,8 +1218,8 @@ const BpaExportar: React.FC = () => {
       // Largura
       ws['!cols'] = [
         { wch: 34 }, { wch: 18 }, { wch: 12 }, { wch: 6 },
-        { wch: 12 }, { wch: 34 }, { wch: 8 }, { wch: 22 },
-        { wch: 14 }, { wch: 12 }, { wch: 10 },
+        { wch: 12 }, { wch: 30 }, { wch: 6 }, { wch: 20 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
       ];
       // Mesclar as linhas institucionais para visual mais limpo
       (ws as any)['!merges'] = headerLines.slice(0, -1).map((_, i) => ({
