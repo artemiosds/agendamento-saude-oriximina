@@ -178,6 +178,7 @@ interface DataContextType {
   refreshDisponibilidades: () => Promise<void>;
   refreshAgendamentos: () => Promise<void>;
   ensureAgendamentosForDate: (date: string) => Promise<void>;
+  ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
   refreshPacientes: () => Promise<void>;
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
@@ -621,6 +622,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     custom_data: p.custom_data || {},
   });
 
+  // Dates hydrated outside the fast default window must survive realtime/poll refreshes.
+  const loadedExtraDatesRef = useRef<Set<string>>(new Set());
+  const agendamentoColumns =
+    "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
+
+  const mapAgendamentoRow = (a: any): Agendamento => ({
+    id: a.id,
+    pacienteId: a.paciente_id,
+    pacienteNome: a.paciente_nome,
+    unidadeId: a.unidade_id,
+    salaId: a.sala_id || "",
+    setorId: a.setor_id || "",
+    profissionalId: a.profissional_id,
+    profissionalNome: a.profissional_nome,
+    data: a.data,
+    hora: a.hora,
+    status: a.status,
+    tipo: a.tipo,
+    observacoes: a.observacoes || "",
+    origem: (a.origem || "recepcao") as any,
+    agendadoPorExterno: (a as any).agendado_por_externo || "",
+    googleEventId: a.google_event_id || "",
+    syncStatus: a.sync_status || "",
+    criadoEm: a.criado_em || "",
+    criadoPor: a.criado_por || "",
+    horaChegada: a.hora_chegada || "",
+  });
+
+  const dateKeysBetween = (startDate: string, endDate: string) => {
+    const start = startDate <= endDate ? startDate : endDate;
+    const end = startDate <= endDate ? endDate : startDate;
+    const [sy, sm, sd] = start.split("-").map(Number);
+    const [ey, em, ed] = end.split("-").map(Number);
+    const cursor = new Date(Date.UTC(sy, sm - 1, sd));
+    const last = new Date(Date.UTC(ey, em - 1, ed));
+    const keys: string[] = [];
+    while (cursor <= last) {
+      keys.push(cursor.toISOString().slice(0, 10));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return keys;
+  };
+
   const loadAgendamentos = useCallback(async () => {
     try {
       // PERF: reduced window from 30 to 14 days back to keep startup fast.
@@ -630,8 +674,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cutoffDate.setDate(cutoffDate.getDate() - 14);
       const cutoff = localDateStr(cutoffDate);
 
-      const columns =
-        "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
       const terminalPastStatuses = [
         "cancelado",
         "cancelada",
@@ -654,7 +696,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         while (true) {
           let query = supabase
             .from("agendamentos" as any)
-            .select(columns)
+            .select(agendamentoColumns)
             .order("data", { ascending: false })
             .range(from, from + PAGE - 1);
 
@@ -675,80 +717,61 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const recentRows = await fetchAgendamentosPage("recent");
       const openPastRows = await fetchAgendamentosPage("openPast");
       const allData = Array.from(new Map([...recentRows, ...openPastRows].map((row) => [row.id, row])).values());
-      setAgendamentos(
-        allData.map((a: any) => ({
-          id: a.id,
-          pacienteId: a.paciente_id,
-          pacienteNome: a.paciente_nome,
-          unidadeId: a.unidade_id,
-          salaId: a.sala_id || "",
-          setorId: a.setor_id || "",
-          profissionalId: a.profissional_id,
-          profissionalNome: a.profissional_nome,
-          data: a.data,
-          hora: a.hora,
-          status: a.status,
-          tipo: a.tipo,
-          observacoes: a.observacoes || "",
-          origem: (a.origem || "recepcao") as any,
-          agendadoPorExterno: (a as any).agendado_por_externo || "",
-          googleEventId: a.google_event_id || "",
-          syncStatus: a.sync_status || "",
-          criadoEm: a.criado_em || "",
-          criadoPor: a.criado_por || "",
-          horaChegada: a.hora_chegada || "",
-        })),
-      );
+      const mapped = allData.map(mapAgendamentoRow);
+      setAgendamentos((prev) => {
+        const scopeKey = userUnidadeId || "all";
+        const map = new Map<string, Agendamento>();
+        for (const item of prev) {
+          if (loadedExtraDatesRef.current.has(`${item.data}|${scopeKey}`)) map.set(item.id, item);
+        }
+        for (const item of mapped) map.set(item.id, item);
+        return Array.from(map.values());
+      });
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
   }, [isGlobalAdmin, userUnidadeId]);
 
-  // On-demand loader: fetches ALL agendamentos for a specific date (any status)
-  // and merges into the in-memory list. Used by Agenda when navigating to a
-  // date outside the default 14-day window so past months show every status
-  // (Confirmados, Aptos, Em atendimento, Concluídos, Faltou, Cancelados, Pendentes).
-  const loadedExtraDatesRef = useRef<Set<string>>(new Set());
-  const ensureAgendamentosForDate = useCallback(async (date: string) => {
+  // On-demand loaders: fetch ALL agendamentos (any status) for past days/ranges
+  // and merge into memory, preserving them across realtime polling refreshes.
+  const ensureAgendamentosForRange = useCallback(async (startDate: string, endDate: string) => {
     try {
-      if (!date) return;
-      const key = `${date}|${userUnidadeId || 'all'}`;
-      if (loadedExtraDatesRef.current.has(key)) return;
-      loadedExtraDatesRef.current.add(key);
+      if (!startDate || !endDate) return;
+      const scopeKey = userUnidadeId || "all";
+      const requestedDates = dateKeysBetween(startDate, endDate);
+      const missingDates = requestedDates.filter((date) => !loadedExtraDatesRef.current.has(`${date}|${scopeKey}`));
+      if (missingDates.length === 0) return;
+      missingDates.forEach((date) => loadedExtraDatesRef.current.add(`${date}|${scopeKey}`));
 
-      const columns =
-        "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
-      let query = supabase
-        .from("agendamentos" as any)
-        .select(columns)
-        .eq("data", date)
-        .order("hora", { ascending: true });
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
-      const { data, error } = await query;
-      if (error || !data || data.length === 0) return;
+      const queryStart = missingDates[0];
+      const queryEnd = missingDates[missingDates.length - 1];
+      const PAGE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      while (true) {
+        let query = supabase
+          .from("agendamentos" as any)
+          .select(agendamentoColumns)
+          .gte("data", queryStart)
+          .lte("data", queryEnd)
+          .order("data", { ascending: true })
+          .order("hora", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+        const { data, error } = await query;
+        if (error) {
+          missingDates.forEach((date) => loadedExtraDatesRef.current.delete(`${date}|${scopeKey}`));
+          console.error("ensureAgendamentosForRange query error:", error);
+          return;
+        }
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      if (allData.length === 0) return;
 
-      const mapped = data.map((a: any) => ({
-        id: a.id,
-        pacienteId: a.paciente_id,
-        pacienteNome: a.paciente_nome,
-        unidadeId: a.unidade_id,
-        salaId: a.sala_id || "",
-        setorId: a.setor_id || "",
-        profissionalId: a.profissional_id,
-        profissionalNome: a.profissional_nome,
-        data: a.data,
-        hora: a.hora,
-        status: a.status,
-        tipo: a.tipo,
-        observacoes: a.observacoes || "",
-        origem: (a.origem || "recepcao") as any,
-        agendadoPorExterno: (a as any).agendado_por_externo || "",
-        googleEventId: a.google_event_id || "",
-        syncStatus: a.sync_status || "",
-        criadoEm: a.criado_em || "",
-        criadoPor: a.criado_por || "",
-        horaChegada: a.hora_chegada || "",
-      })) as Agendamento[];
+      const mapped = allData.map(mapAgendamentoRow);
 
       setAgendamentos((prev) => {
         const map = new Map(prev.map((p) => [p.id, p] as const));
@@ -756,9 +779,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return Array.from(map.values());
       });
     } catch (err) {
-      console.error("ensureAgendamentosForDate error:", err);
+      console.error("ensureAgendamentosForRange error:", err);
     }
   }, [isGlobalAdmin, userUnidadeId]);
+
+  const ensureAgendamentosForDate = useCallback(async (date: string) => {
+    await ensureAgendamentosForRange(date, date);
+  }, [ensureAgendamentosForRange]);
 
   const loadFila = useCallback(async () => {
     try {
@@ -2252,6 +2279,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshDisponibilidades,
     refreshAgendamentos,
     ensureAgendamentosForDate,
+    ensureAgendamentosForRange,
     refreshPacientes,
     refreshFila,
     refreshBloqueios,
@@ -2297,6 +2325,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshDisponibilidades,
     refreshAgendamentos,
     ensureAgendamentosForDate,
+    ensureAgendamentosForRange,
     refreshPacientes,
     refreshFila,
     refreshBloqueios,
