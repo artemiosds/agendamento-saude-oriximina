@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, ExternalLink, X, FileUp } from 'lucide-react';
+import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -127,6 +127,89 @@ const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
   if (masculinos.includes(primeiroNome)) return 'M';
   
   return null;
+};
+
+const BPA_HEADER_LENGTH = 130;
+const BPA_I_RECORD_LENGTH = 338;
+const CRLF_BYTES = new Uint8Array([0x0D, 0x0A]);
+
+const bytesToHex = (arr: number[] | Uint8Array, sep = ' ') =>
+  Array.from(arr).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(sep);
+
+const toIsoBytes = (content: string): Uint8Array => {
+  const bytes = new Uint8Array(content.length);
+  for (let i = 0; i < content.length; i++) {
+    const code = content.charCodeAt(i);
+    bytes[i] = code <= 255 ? code : 0x20;
+  }
+  return bytes;
+};
+
+const fixedText = (valor: any, tamanho: number): string => rpad(limparTexto(String(valor || '')), tamanho);
+
+const fixedDigits = (valor: any, tamanho: number): string => {
+  const s = somenteNumeros(valor);
+  if (!s) return ' '.repeat(tamanho);
+  return s.slice(-tamanho).padStart(tamanho, '0');
+};
+
+const mapRacaCorBpa = (valor: any): string => {
+  const s = limparTexto(String(valor || '')).toLowerCase();
+  if (['01', 'branca', 'branco'].includes(s)) return '01';
+  if (['02', 'preta', 'preto', 'negra', 'negro'].includes(s)) return '02';
+  if (['03', 'parda', 'pardo'].includes(s)) return '03';
+  if (['04', 'amarela', 'amarelo'].includes(s)) return '04';
+  if (['05', 'indigena', 'indígena'].includes(s)) return '05';
+  return '99';
+};
+
+const LOGRADOURO_DNE: Record<string, string> = {
+  RUA: '081', R: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
+  BECO: '011', BC: '011', ESTRADA: '035', EST: '035', RODOVIA: '072', ROD: '072',
+  ALAMEDA: '003', PRACA: '062', PRAÇA: '062', RAMAL: '082', VILA: '108', VIA: '107',
+};
+
+const codigoLogradouroBpa = (pac: any): string => {
+  const cd = pac?.custom_data || {};
+  const salvo = somenteNumeros(cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || cd.tipo_logradouro_dne);
+  if (salvo) return salvo.slice(-3).padStart(3, '0');
+  const tipo = limparTexto(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').split(' ')[0];
+  const enderecoPrimeira = limparTexto(pac?.logradouro || pac?.endereco || cd.logradouro || cd.endereco || '').split(' ')[0];
+  return LOGRADOURO_DNE[tipo] || LOGRADOURO_DNE[enderecoPrimeira] || '   ';
+};
+
+const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
+  const soma = itens.reduce((acc, item) => acc + Number(somenteNumeros(item.procedimento) || 0) + Number(somenteNumeros(item.quantidade) || 0), 0);
+  return zfill((soma % 1111) + 1111, 4);
+};
+
+const buildHeaderOficial = (params: {
+  competencia: string;
+  totalRegistros: number;
+  totalFolhas: number;
+  campoControle: string;
+  orgaoOrigem: string;
+  siglaOrigem: string;
+  documentoOrigem: string;
+  orgaoDestino: string;
+  indicadorDestino: string;
+  versaoSistema: string;
+}): string => {
+  const header =
+    '01' +
+    '#BPA#' +
+    zfill(params.competencia, 6) +
+    zfill(params.totalRegistros, 6) +
+    zfill(params.totalFolhas, 6) +
+    zfill(params.campoControle, 4) +
+    fixedText(params.orgaoOrigem, 30) +
+    fixedText(params.siglaOrigem, 6) +
+    zfill(params.documentoOrigem, 14) +
+    fixedText(params.orgaoDestino, 40) +
+    (params.indicadorDestino === 'E' ? 'E' : 'M') +
+    rpad(limparTexto(params.versaoSistema || 'SMSORIXI'), 10);
+
+  return header.slice(0, BPA_HEADER_LENGTH).padEnd(BPA_HEADER_LENGTH, ' ');
 };
 
 const BpaExportar: React.FC = () => {
