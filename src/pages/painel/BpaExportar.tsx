@@ -455,6 +455,7 @@ const BpaExportar: React.FC = () => {
       let exportedCount = 0;
       let criticalCount = 0;
       const linhasProducao: string[] = [];
+      const itensControle: Array<{ procedimento: string; quantidade: string }> = [];
       
       let hasError = false;
 
@@ -570,47 +571,81 @@ const BpaExportar: React.FC = () => {
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
           const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
-          const cid = (pront.custom_data?.cid || pac?.cid || '0000').substring(0, 4);
-          const endereco = limparTexto(pac?.endereco || (pac?.custom_data as any)?.endereco || '');
+          const pacCd = (pac?.custom_data as any) || {};
+          const unidadeCd = unitCd || {};
+          const cid = rpad(limparTexto(pront.custom_data?.cid || pac?.cid || ''), 4);
+          const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
+          const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
+          const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
+          const raca = mapRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
+          const etnia = raca === '05' ? fixedDigits(pacCd.etnia_codigo || pacCd.etnia, 4) : '    ';
+          const nacionalidade = fixedDigits(pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || '010', 3);
+          const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
+          const classificacao = fixedDigits(pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || '', 3);
+          const sequenciaEquipe = fixedDigits(pront.custom_data?.sequencia_equipe || unidadeCd.sequencia_equipe || '', 8);
+          const areaEquipe = fixedDigits(pront.custom_data?.area_equipe || unidadeCd.area_equipe || '', 4);
+          const cnpj = fixedDigits(unidadeCd.cnpj || unit?.cnpj || pacCd.cnpj || '', 14);
+          const cep = fixedDigits(pac?.cep || pacCd.cep, 8);
+          const codigoLogradouro = codigoLogradouroBpa(pac);
+          const endereco = fixedText(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco, 30);
+          const complemento = fixedText(pac?.complemento || pacCd.complemento, 10);
+          const numero = rpad(limparTexto(pac?.numero || pacCd.numero), 5);
+          const bairro = fixedText(pac?.bairro || pacCd.bairro, 30);
+          const telefone = fixedDigits(pac?.telefone || pacCd.telefone, 11);
+          const email = rpad(String(pac?.email || pacCd.email || '').toUpperCase().replace(/[\r\n]/g, ' ').slice(0, 40), 40);
+          const ineEquipe = fixedDigits(unidadeCd.ine || pront.custom_data?.ine_equipe || '', 10);
+          const folhaBpa = Math.floor(exportedCount / 20) + 1;
+          const sequenciaFolha = (exportedCount % 20) + 1;
 
-          // Montagem do Layout BPA-I (205 chars fixos)
+          // Montagem do Layout oficial BPA-I: Registro 03 com 338 caracteres antes do CRLF
           let l = "";
-          l += "03";                                      // 001-002 (2) - Tipo Registro
-          l += cnes;                                      // 003-009 (7) - CNES
-          l += zfill(competencia, 6);                     // 010-015 (6) - Competência
-          l += cns_prof;                                  // 016-030 (15) - CNS Profissional
-          l += cbo;                                       // 031-036 (6) - CBO
-          l += proc;                                      // 037-046 (10) - Procedimento
-          l += cns_pac;                                   // 047-061 (15) - CNS Paciente
-          l += sexo;                                      // 062 (1) - Sexo
-          l += " ";                                       // 063 (1) - Espaço fixo
-          l += rpad(cid, 4);                              // 064-067 (4) - CID
-          l += idade;                                     // 068-070 (3) - Idade
-          l += " ".repeat(6);                             // 071-076 (6) - Espaços
-          l += municipio;                                 // 077-082 (6) - Município
-          l += "000001";                                  // 083-088 (6) - Quantidade
-          l += "001";                                     // 089-091 (3) - Incremento
-          l += " ".repeat(10);                            // 092-101 (10) - Espaços
-          l += data_atend;                                // 102-109 (8) - Data Atendimento
-          l += rpad(nome_pac, 40);                        // 110-149 (40) - Nome Paciente
-          l += data_nasc;                                 // 150-157 (8) - Data Nascimento
-          l += "99";                                      // 158-159 (2) - Raça/Cor
-          l += "0000";                                    // 160-163 (4) - Reservado (zeros)
-          l += "010";                                     // 164-166 (3) - Nacionalidade
-          l += rpad(endereco, 30);                        // 167-196 (30) - Endereço
-          l += "00000";                                   // 197-201 (5) - Reservado (zeros)
-          l += "   ";                                     // 202-204 (3) - Reservado (espaços)
-          l += " ";                                       // 205 (1) - Reservado (espaço)
+          l += "03";                                      // 001-002 - Tipo Registro
+          l += cnes;                                      // 003-009 - CNES
+          l += zfill(competencia, 6);                     // 010-015 - Competência
+          l += cns_prof;                                  // 016-030 - CNS Profissional
+          l += cbo;                                       // 031-036 - CBO
+          l += data_atend;                                // 037-044 - Data Atendimento
+          l += zfill(folhaBpa, 3);                        // 045-047 - Folha BPA
+          l += zfill(sequenciaFolha, 2);                  // 048-049 - Sequência na folha
+          l += proc;                                      // 050-059 - Procedimento SIGTAP
+          l += cns_pac;                                   // 060-074 - CNS Paciente
+          l += sexo;                                      // 075-075 - Sexo
+          l += municipio;                                 // 076-081 - Município IBGE
+          l += cid;                                       // 082-085 - CID
+          l += idade;                                     // 086-088 - Idade
+          l += quantidade;                                // 089-094 - Quantidade
+          l += carater;                                   // 095-096 - Caráter atendimento
+          l += autorizacao;                               // 097-109 - Autorização
+          l += "BPA";                                     // 110-112 - Origem
+          l += rpad(nome_pac, 30);                        // 113-142 - Nome paciente
+          l += data_nasc;                                 // 143-150 - Data nascimento
+          l += raca;                                      // 151-152 - Raça/cor
+          l += etnia;                                     // 153-156 - Etnia
+          l += nacionalidade;                             // 157-159 - Nacionalidade
+          l += servico;                                   // 160-162 - Serviço
+          l += classificacao;                             // 163-165 - Classificação
+          l += sequenciaEquipe;                           // 166-173 - Sequência equipe
+          l += areaEquipe;                                // 174-177 - Área equipe
+          l += cnpj;                                      // 178-191 - CNPJ
+          l += cep;                                       // 192-199 - CEP paciente
+          l += codigoLogradouro;                          // 200-202 - Código logradouro
+          l += endereco;                                  // 203-232 - Endereço
+          l += complemento;                               // 233-242 - Complemento
+          l += numero;                                    // 243-247 - Número
+          l += bairro;                                    // 248-277 - Bairro
+          l += telefone;                                  // 278-288 - Telefone
+          l += email;                                     // 289-328 - E-mail
+          l += ineEquipe;                                 // 329-338 - INE equipe
 
-
-          l = l.padEnd(205, " ").slice(0, 205);
+          l = l.padEnd(BPA_I_RECORD_LENGTH, " ").slice(0, BPA_I_RECORD_LENGTH);
           
-          if (l.length !== 205) {
+          if (l.length !== BPA_I_RECORD_LENGTH) {
             hasError = true;
-            warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/205).`);
+            warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`);
           }
           
           linhasProducao.push(l);
+          itensControle.push({ procedimento: proc, quantidade });
           exportedCount++;
         }
       });
