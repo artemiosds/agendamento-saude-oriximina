@@ -693,6 +693,36 @@ const BpaExportar: React.FC = () => {
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
 
+      // === Carga de SIGTAP via prontuario_procedimentos (todas as profissões) ===
+      // Alguns prontuários gravam o procedimento somente na tabela vinculada
+      // prontuario_procedimentos -> procedimentos.codigo_sigtap, sem espelhar em
+      // custom_data. Carregamos isso para evitar falso "SIGTAP ausente".
+      const prontIdsAll = prontuarios.map((p: any) => p.id).filter(Boolean);
+      const sigtapPorProntuario = new Map<string, string>();
+      if (prontIdsAll.length > 0) {
+        const { data: ppRows } = await (supabase as any)
+          .from('prontuario_procedimentos')
+          .select('prontuario_id, procedimento_id')
+          .in('prontuario_id', prontIdsAll);
+        const procIds = [...new Set((ppRows || []).map((r: any) => r.procedimento_id).filter(Boolean))] as string[];
+        const codigoPorProcId = new Map<string, string>();
+        if (procIds.length > 0) {
+          const { data: procRows } = await (supabase as any)
+            .from('procedimentos')
+            .select('id, codigo_sigtap')
+            .in('id', procIds);
+          (procRows || []).forEach((p: any) => {
+            const code = somenteNumeros(p.codigo_sigtap || '');
+            if (code) codigoPorProcId.set(p.id, code);
+          });
+        }
+        (ppRows || []).forEach((r: any) => {
+          if (sigtapPorProntuario.has(r.prontuario_id)) return;
+          const code = codigoPorProcId.get(r.procedimento_id);
+          if (code) sigtapPorProntuario.set(r.prontuario_id, code);
+        });
+      }
+
       // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
       // Para Psicóloga, Fonoaudiólogo(a) e Nutricionista o SIGTAP vem somente do Prontuário.
       // Para Fisioterapeuta, se o Prontuário não tiver SIGTAP, buscamos no PTS ativo do paciente.
@@ -701,8 +731,9 @@ const BpaExportar: React.FC = () => {
       prontuarios.forEach((pr: any) => {
         const prof = funcMap.get(pr.profissional_id) as any;
         const cat = profissaoExigeSigtap(prof).categoria;
-        const procPront = pr.custom_data?.procedimento_sigtap || pr.outro_procedimento;
-        if (cat === 'fisioterap' && !procPront && pr.paciente_id) {
+        const inProntCd = extrairSigtapDoProntuario(pr).codigo;
+        const inVinculado = sigtapPorProntuario.get(pr.id) || '';
+        if (cat === 'fisioterap' && !inProntCd && !inVinculado && pr.paciente_id) {
           fisioPatientIds.add(String(pr.paciente_id));
         }
       });
