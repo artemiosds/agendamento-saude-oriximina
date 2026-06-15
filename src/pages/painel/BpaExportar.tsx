@@ -116,6 +116,22 @@ const obterCboValido = (prof: any): string => {
   return '';
 };
 
+// Profissões que EXIGEM procedimento SIGTAP válido para BPA-I.
+// Médico e demais perfis NÃO são bloqueados por ausência de SIGTAP.
+const PROFISSOES_EXIGEM_SIGTAP = ['psicolog', 'fonoaudiolog', 'fisioterap', 'nutricion'];
+const normalizarProfissaoTxt = (v: any) => String(v || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().trim();
+const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string } => {
+  if (!prof) return { exige: false, profissao: '' };
+  const cd = prof.custom_data || {};
+  const candidatos = [prof.profissao, prof.cargo, cd.profissao, cd.cargo, cd.especialidade]
+    .map(normalizarProfissaoTxt).filter(Boolean);
+  const profissao = candidatos[0] || '';
+  const exige = candidatos.some(p => PROFISSOES_EXIGEM_SIGTAP.some(k => p.includes(k)));
+  return { exige, profissao };
+};
+
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
   if (!nome) return null;
   const primeiroNome = limparTexto(nome).split(' ')[0];
@@ -342,6 +358,7 @@ const BpaExportar: React.FC = () => {
       invalidNascimento: number;
       missingNacionalidade: number;
       missingLogradouro: number;
+      missingSigtap: number;
     };
     details: {
       missingCns: any[];
@@ -355,6 +372,7 @@ const BpaExportar: React.FC = () => {
       invalidNascimento: any[];
       missingNacionalidade: any[];
       missingLogradouro: any[];
+      missingSigtap: any[];
       critical: any[];
     };
     error: string | null;
@@ -477,7 +495,8 @@ const BpaExportar: React.FC = () => {
       defaultProc: 0,
       invalidNascimento: 0,
       missingNacionalidade: 0,
-      missingLogradouro: 0
+      missingLogradouro: 0,
+      missingSigtap: 0
     };
 
     const details = {
@@ -492,6 +511,7 @@ const BpaExportar: React.FC = () => {
       invalidNascimento: [] as any[],
       missingNacionalidade: [] as any[],
       missingLogradouro: [] as any[],
+      missingSigtap: [] as any[],
       critical: [] as any[]
     };
     
@@ -684,9 +704,31 @@ const BpaExportar: React.FC = () => {
           }
           const cbo = zfill(cbo_raw, 6);
 
+          let pendenciaPaciente = false;
           const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
-          const proc = zfill(proc_real || formData.procedimento_padrao, 10);
-          if (!proc_real) stats.defaultProc++;
+          const sigtapReq = profissaoExigeSigtap(prof);
+          // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
+          // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
+          if (!proc_real && sigtapReq.exige) {
+            pendenciaPaciente = true;
+            stats.missingSigtap++;
+            const motivo = `Procedimento SIGTAP obrigatório para a profissão "${sigtapReq.profissao || 'indefinida'}" e ausente no registro.`;
+            warnings.push(`${ident}: ${motivo}`);
+            details.missingSigtap.push({
+              ...itemDetail,
+              pendencia: 'Procedimento SIGTAP Ausente',
+              valor_atual: 'Vazio',
+              profissao: sigtapReq.profissao || 'indefinida',
+              sigtap_obrigatorio: 'Sim',
+              motivo
+            });
+          }
+          // Sem fallback silencioso quando a profissão exigir SIGTAP.
+          const proc = zfill(
+            proc_real || (sigtapReq.exige ? '' : formData.procedimento_padrao),
+            10
+          );
+          if (!proc_real && !sigtapReq.exige) stats.defaultProc++;
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
@@ -702,7 +744,6 @@ const BpaExportar: React.FC = () => {
           const etnia = raca === '05' ? rpad(etniaCadastro, 4) : '    ';
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
-          let pendenciaPaciente = false;
           const nacRes = nacionalidadeBpa(pac);
           let nacionalidade: string;
           if (nacRes.codigo) {
@@ -1136,6 +1177,7 @@ const BpaExportar: React.FC = () => {
               { id: 'missingMunicipio', label: 'Mun. Inválido', count: results.stats.missingMunicipio, color: 'amber' },
               { id: 'missingNacionalidade', label: 'Sem Nacionalidade', count: results.stats.missingNacionalidade, color: 'amber' },
               { id: 'missingLogradouro', label: 'Cód. Logradouro', count: results.stats.missingLogradouro, color: 'amber' },
+              { id: 'missingSigtap', label: 'SIGTAP Obrigatório', count: results.stats.missingSigtap, color: 'red' },
               { id: 'missingCbo', label: 'Sem CBO Prof.', count: results.stats.missingCbo, color: 'amber' },
               { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
               { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' }
@@ -1173,6 +1215,7 @@ const BpaExportar: React.FC = () => {
                       selectedCategory === 'invalidNascimento' ? 'Data de Nascimento Inválida' :
                       selectedCategory === 'missingNacionalidade' ? 'Nacionalidade Ausente ou Sem Código Oficial' :
                       selectedCategory === 'missingLogradouro' ? 'Código do Logradouro Indeterminado' :
+                      selectedCategory === 'missingSigtap' ? 'Procedimento SIGTAP Obrigatório Ausente' :
                       selectedCategory === 'missingMunicipio' ? 'Município Inválido ou Ausente' : ''
                     }
                   </CardTitle>
@@ -1333,7 +1376,8 @@ const BpaExportar: React.FC = () => {
                       <div className="pt-2 border-t text-xs space-y-1">
                         <div className="font-semibold text-red-700">Motivos dos bloqueios:</div>
                         {results.stats.missingNacionalidade > 0 && <div>• Nacionalidade inválida/ausente: <b>{results.stats.missingNacionalidade}</b></div>}
-                        {results.stats.missingLogradouro > 0 && <div>• Código de logradouro indeterminado: <b>{results.stats.missingLogradouro}</b></div>}
+                       {results.stats.missingLogradouro > 0 && <div>• Código de logradouro indeterminado: <b>{results.stats.missingLogradouro}</b></div>}
+                       {results.stats.missingSigtap > 0 && <div>• Procedimento SIGTAP obrigatório (Psicologia/Fono/Fisio/Nutrição) ausente: <b>{results.stats.missingSigtap}</b></div>}
                         {results.stats.missingCns > 0 && <div>• CNS ausente: <b>{results.stats.missingCns}</b></div>}
                         {results.stats.missingSexo > 0 && <div>• Sexo indefinido: <b>{results.stats.missingSexo}</b></div>}
                         {results.stats.invalidNascimento > 0 && <div>• Nascimento inválido: <b>{results.stats.invalidNascimento}</b></div>}
