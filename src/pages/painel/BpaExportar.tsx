@@ -598,14 +598,48 @@ const BpaExportar: React.FC = () => {
           const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
           const raca = mapRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
           const etnia = raca === '05' ? fixedDigits(pacCd.etnia_codigo || pacCd.etnia, 4) : '    ';
-          const nacionalidade = fixedDigits(pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || '010', 3);
+
+          // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
+          const nacCodigo = nacionalidadeBpa(pac);
+          let nacionalidade: string;
+          if (nacCodigo) {
+            nacionalidade = nacCodigo;
+          } else {
+            nacionalidade = '   ';
+            stats.missingNacionalidade++;
+            const valorAtual = pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || 'Vazio';
+            warnings.push(`${ident}: Nacionalidade ausente ou sem código oficial no cadastro (${valorAtual}).`);
+            details.missingNacionalidade.push({ ...itemDetail, pendencia: 'Nacionalidade Ausente/Inválida', valor_atual: String(valorAtual) });
+            if (!formData.exportar_com_pendencias) {
+              isCritical = true;
+            }
+          }
+
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
           const classificacao = fixedDigits(pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || '', 3);
           const sequenciaEquipe = fixedDigits(pront.custom_data?.sequencia_equipe || unidadeCd.sequencia_equipe || '', 8);
           const areaEquipe = fixedDigits(pront.custom_data?.area_equipe || unidadeCd.area_equipe || '', 4);
           const cnpj = fixedDigits(unidadeCd.cnpj || unit?.cnpj || pacCd.cnpj || '', 14);
           const cep = fixedDigits(pac?.cep || pacCd.cep, 8);
-          const codigoLogradouro = codigoLogradouroBpa(pac);
+
+          // Código de logradouro: derivar do tipo real. Sem chute.
+          const logradouroCodigo = codigoLogradouroBpa(pac);
+          let codigoLogradouro: string;
+          if (logradouroCodigo) {
+            codigoLogradouro = logradouroCodigo;
+          } else {
+            codigoLogradouro = '   ';
+            const temEndereco = !!(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco);
+            if (temEndereco) {
+              stats.missingLogradouro++;
+              const valorAtual = pac?.tipo_logradouro || pacCd.tipo_logradouro || pac?.logradouro || pac?.endereco || 'Vazio';
+              warnings.push(`${ident}: Código do logradouro não pôde ser determinado a partir do cadastro (${valorAtual}).`);
+              details.missingLogradouro.push({ ...itemDetail, pendencia: 'Código de Logradouro Indeterminado', valor_atual: String(valorAtual) });
+              if (!formData.exportar_com_pendencias) {
+                isCritical = true;
+              }
+            }
+          }
           const endereco = fixedText(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco, 30);
           const complemento = fixedText(pac?.complemento || pacCd.complemento, 10);
           const numero = rpad(limparTexto(pac?.numero || pacCd.numero), 5);
