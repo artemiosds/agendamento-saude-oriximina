@@ -188,21 +188,74 @@ const NACIONALIDADE_BPA_VALIDAS = new Set<string>([
   '200','210','220','230','240','250','260','270','280','290','300','999'
 ]);
 
+// Mapeia textos amigáveis do cadastro -> código oficial SIA/SUS de Nacionalidade
+const NACIONALIDADE_TEXTO_MAP: Record<string, string> = {
+  'brasileiro': '010',
+  'brasileira': '010',
+  'brasileiroa': '010',
+  'brasileirao': '010',
+  'brasileirao a': '010',
+  'brasil': '010',
+  'brasileiro nato': '010',
+  'brasileira nata': '010',
+  'nato': '010',
+  'nata': '010',
+  'naturalizado': '020',
+  'naturalizada': '020',
+  'brasileiro naturalizado': '020',
+  'brasileira naturalizada': '020',
+  'naturalizado brasileiro': '020',
+  'naturalizada brasileira': '020',
+  'estrangeiro': '030',
+  'estrangeira': '030',
+};
+
+const normalizarTextoNacionalidade = (s: string): string =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[()\-_/\\.,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const resolverNacionalidadeBpa = (valorCadastro: any): { codigo: string | null; descricao?: string; origem: 'numerico' | 'texto' | 'vazio' | 'desconhecido'; motivoErro?: string } => {
+  if (valorCadastro === null || valorCadastro === undefined || String(valorCadastro).trim() === '') {
+    return { codigo: null, origem: 'vazio', motivoErro: 'Sem valor no cadastro' };
+  }
+  const str = String(valorCadastro).trim();
+  // Tentativa 1: numérico puro
+  if (/^\d+$/.test(str)) {
+    const num = somenteNumeros(str);
+    if (num.length > 3) return { codigo: null, origem: 'numerico', motivoErro: `Tamanho inválido (${num.length} dígitos)` };
+    const codigo = num.padStart(3, '0');
+    if (codigo === '000') return { codigo: null, origem: 'numerico', motivoErro: 'Código 000 não é aceito' };
+    if (!NACIONALIDADE_BPA_VALIDAS.has(codigo)) {
+      return { codigo: null, origem: 'numerico', motivoErro: `Código ${codigo} fora da tabela SIA conhecida` };
+    }
+    return { codigo, origem: 'numerico' };
+  }
+  // Tentativa 2: texto amigável -> mapeamento
+  const norm = normalizarTextoNacionalidade(str);
+  if (NACIONALIDADE_TEXTO_MAP[norm]) {
+    return { codigo: NACIONALIDADE_TEXTO_MAP[norm], descricao: str, origem: 'texto' };
+  }
+  // Tentativa 3: heurística por palavra-chave segura
+  if (/\bbrasil/.test(norm) && /natural/.test(norm)) {
+    return { codigo: '020', descricao: str, origem: 'texto' };
+  }
+  if (/\bbrasil/.test(norm)) {
+    return { codigo: '010', descricao: str, origem: 'texto' };
+  }
+  return { codigo: null, origem: 'desconhecido', motivoErro: `Valor textual não mapeado: "${str}"` };
+};
+
 const nacionalidadeBpa = (pac: any): { codigo: string | null; motivo?: string } => {
   const cd = pac?.custom_data || {};
   const raw = pac?.nacionalidade ?? cd.nacionalidade_codigo ?? cd.nacionalidade ?? cd.nacionalidadeCodigo;
-  if (raw === null || raw === undefined || String(raw).trim() === '') {
-    return { codigo: null, motivo: 'Sem valor no cadastro' };
-  }
-  const num = somenteNumeros(raw);
-  if (!num) return { codigo: null, motivo: `Valor não-numérico: "${raw}"` };
-  if (num.length > 3) return { codigo: null, motivo: `Tamanho inválido (${num.length} dígitos)` };
-  const codigo = num.padStart(3, '0');
-  if (codigo === '000') return { codigo: null, motivo: 'Código 000 não é aceito' };
-  if (!NACIONALIDADE_BPA_VALIDAS.has(codigo)) {
-    return { codigo: null, motivo: `Código ${codigo} fora da tabela SIA conhecida` };
-  }
-  return { codigo };
+  const res = resolverNacionalidadeBpa(raw);
+  if (res.codigo) return { codigo: res.codigo };
+  return { codigo: null, motivo: res.motivoErro };
 };
 
 const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
