@@ -37,46 +37,50 @@ const zfill = (valor: any, tamanho: number): string => {
   return s.padStart(tamanho, '0');
 };
 
+const primeiroValorPreenchido = (...valores: any[]): any =>
+  valores.find((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '');
+
 const rpad = (valor: any, tamanho: number): string => {
   const s = String(valor || '');
   if (s.length > tamanho) return s.slice(0, tamanho);
   return s.padEnd(tamanho, ' ');
 };
 
+const parseDataSegura = (date: any): { ano: number; mes: number; dia: number } | null => {
+  if (!date) return null;
+  const raw = String(date).trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  const partes = iso
+    ? { ano: Number(iso[1]), mes: Number(iso[2]), dia: Number(iso[3]) }
+    : dmy
+      ? { ano: Number(dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3]), mes: Number(dmy[2]), dia: Number(dmy[1]) }
+      : null;
+  if (!partes || partes.ano < 1900 || partes.ano > 2100 || partes.mes < 1 || partes.mes > 12 || partes.dia < 1 || partes.dia > 31) return null;
+  const validacao = new Date(Date.UTC(partes.ano, partes.mes - 1, partes.dia));
+  if (validacao.getUTCFullYear() !== partes.ano || validacao.getUTCMonth() + 1 !== partes.mes || validacao.getUTCDate() !== partes.dia) return null;
+  return partes;
+};
+
 const formatarData = (date: any): string => {
-  if (!date) return "00000000";
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return "00000000";
-    const year = d.getFullYear();
-    if (year < 1900 || year > 2100) return "00000000";
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const res = `${year}${month}${day}`;
-    // Validações sugeridas pelo usuário para evitar datas "fake"
-    if (res === "00000000" || res.startsWith("00") || res.includes("9999")) return "00000000";
-    return res;
-  } catch {
-    return "00000000";
-  }
+  const d = parseDataSegura(date);
+  if (!d) return "00000000";
+  return `${d.ano}${String(d.mes).padStart(2, '0')}${String(d.dia).padStart(2, '0')}`;
+};
+
+const formatarDataBR = (date: any): string => {
+  const d = parseDataSegura(date);
+  if (!d) return '';
+  return `${String(d.dia).padStart(2, '0')}/${String(d.mes).padStart(2, '0')}/${d.ano}`;
 };
 
 const calcularIdade = (dataNasc: any, dataAtendimento: any): string => {
-  if (!dataNasc || !dataAtendimento) return "000";
-  try {
-    const nasc = new Date(dataNasc);
-    const aten = new Date(dataAtendimento);
-    if (isNaN(nasc.getTime()) || isNaN(aten.getTime())) return "000";
-    
-    let idade = aten.getFullYear() - nasc.getFullYear();
-    const m = aten.getMonth() - nasc.getMonth();
-    if (m < 0 || (m === 0 && aten.getDate() < nasc.getDate())) {
-      idade--;
-    }
-    return zfill(Math.max(0, idade), 3);
-  } catch {
-    return "000";
-  }
+  const nasc = parseDataSegura(dataNasc);
+  const aten = parseDataSegura(dataAtendimento);
+  if (!nasc || !aten) return "000";
+  let idade = aten.ano - nasc.ano;
+  if (aten.mes < nasc.mes || (aten.mes === nasc.mes && aten.dia < nasc.dia)) idade--;
+  return zfill(Math.max(0, idade), 3);
 };
 
 const obterCboValido = (prof: any): string => {
