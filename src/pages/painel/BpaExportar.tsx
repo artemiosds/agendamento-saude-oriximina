@@ -358,6 +358,7 @@ const BpaExportar: React.FC = () => {
       invalidNascimento: number;
       missingNacionalidade: number;
       missingLogradouro: number;
+      missingSigtap: number;
     };
     details: {
       missingCns: any[];
