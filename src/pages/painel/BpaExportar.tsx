@@ -705,8 +705,29 @@ const BpaExportar: React.FC = () => {
           const cbo = zfill(cbo_raw, 6);
 
           const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
-          const proc = zfill(proc_real || formData.procedimento_padrao, 10);
-          if (!proc_real) stats.defaultProc++;
+          const sigtapReq = profissaoExigeSigtap(prof);
+          // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
+          // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
+          if (!proc_real && sigtapReq.exige) {
+            pendenciaPaciente = true;
+            stats.missingSigtap++;
+            const motivo = `Procedimento SIGTAP obrigatório para a profissão "${sigtapReq.profissao || 'indefinida'}" e ausente no registro.`;
+            warnings.push(`${ident}: ${motivo}`);
+            details.missingSigtap.push({
+              ...itemDetail,
+              pendencia: 'Procedimento SIGTAP Ausente',
+              valor_atual: 'Vazio',
+              profissao: sigtapReq.profissao || 'indefinida',
+              sigtap_obrigatorio: 'Sim',
+              motivo
+            });
+          }
+          // Sem fallback silencioso quando a profissão exigir SIGTAP.
+          const proc = zfill(
+            proc_real || (sigtapReq.exige ? '' : formData.procedimento_padrao),
+            10
+          );
+          if (!proc_real && !sigtapReq.exige) stats.defaultProc++;
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
