@@ -694,9 +694,14 @@ const BpaExportar: React.FC = () => {
             warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`);
           }
           
-          linhasProducao.push(l);
-          itensControle.push({ procedimento: proc, quantidade });
-          exportedCount++;
+          if (pendenciaPaciente && !formData.exportar_com_pendencias) {
+            criticalCount++;
+            details.critical.push({ ...itemDetail, pendencia: 'Pendência de cadastro (nacionalidade/logradouro)', valor_atual: 'Corrigir cadastro' });
+          } else {
+            linhasProducao.push(l);
+            itensControle.push({ procedimento: proc, quantidade });
+            exportedCount++;
+          }
         }
       });
 
