@@ -1030,6 +1030,211 @@ const BpaExportar: React.FC = () => {
     }
   };
 
+  // ============ Excel & Impressão (Conferência BPA-I) ============
+  const obterContextoCabecalho = () => {
+    const unid = formData.unidade_id !== 'all'
+      ? unidades.find(u => u.id === formData.unidade_id)
+      : (results?.confRows?.[0]?._ctx ? { nome: results.confRows[0]._ctx.unidade_nome, custom_data: { cnes: results.confRows[0]._ctx.cnes } } : unidades[0]);
+    const prof = formData.profissional_id !== 'all'
+      ? profissionais.find(p => p.id === formData.profissional_id)
+      : null;
+    const cd: any = unid?.custom_data || {};
+    const competencia = formData.competencia
+      ? `${formData.competencia.slice(4, 6)}/${formData.competencia.slice(0, 4)}`
+      : '';
+    return {
+      unidade_nome: (unid?.nome || results?.confRows?.[0]?._ctx?.unidade_nome || '—').toUpperCase(),
+      cnes: cd.cnes || (unid as any)?.cnes || results?.confRows?.[0]?._ctx?.cnes || '',
+      competencia,
+      profissional_nome: (prof?.nome || (formData.profissional_id === 'all' ? 'TODOS' : '—')).toUpperCase(),
+      cns_prof: prof?.cns || (prof?.custom_data as any)?.cns || formData.cns_profissional || '',
+      cbo: obterCboValido(prof) || formData.cbo || '',
+    };
+  };
+
+  const handleBaixarExcel = () => {
+    if (!results || !results.confRows.length) {
+      toast.error('Gere a exportação BPA-I antes de baixar o Excel.');
+      return;
+    }
+    try {
+      const ctx = obterContextoCabecalho();
+      const wb = XLSX.utils.book_new();
+
+      // Aba BPA-I com cabeçalho institucional
+      const headerLines = [
+        ['SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ'],
+        [`UNIDADE DE SAÚDE: ${ctx.unidade_nome}    CNES: ${ctx.cnes}`],
+        [`MÊS DE REFERÊNCIA: ${ctx.competencia}`],
+        [`PROFISSIONAL: ${ctx.profissional_nome}    CNS: ${ctx.cns_prof}    CBO: ${ctx.cbo}`],
+        [],
+      ];
+      const cols = [
+        'paciente_nome', 'paciente_cns', 'data_nascimento', 'sexo',
+        'tipo_logradouro', 'logradouro', 'numero', 'bairro',
+        'data_atendimento', 'codigo_sigtap', 'cid_usado'
+      ];
+      const dataRows = results.confRows.map(r => cols.map(c => (r as any)[c] ?? ''));
+      const aoa = [...headerLines, cols, ...dataRows];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      // Largura
+      ws['!cols'] = [
+        { wch: 32 }, { wch: 18 }, { wch: 14 }, { wch: 6 },
+        { wch: 12 }, { wch: 32 }, { wch: 8 }, { wch: 20 },
+        { wch: 14 }, { wch: 14 }, { wch: 10 },
+      ];
+      // Congelar cabeçalho (linha 6 = índice 5)
+      (ws as any)['!freeze'] = { xSplit: 0, ySplit: 6 };
+      (ws as any)['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: 5 }, e: { c: cols.length - 1, r: 5 + dataRows.length } }) };
+      // Estilo cabeçalho de coluna (linha 6)
+      cols.forEach((_, i) => {
+        const cell = ws[XLSX.utils.encode_cell({ c: i, r: 5 })];
+        if (cell) {
+          (cell as any).s = {
+            font: { bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '2A6F97' } },
+            alignment: { wrapText: true, horizontal: 'center', vertical: 'center' },
+          };
+        }
+      });
+      // Página A4 paisagem
+      (ws as any)['!pageSetup'] = { orientation: 'landscape', paperSize: 9, fitToWidth: 1, fitToHeight: 0 };
+      XLSX.utils.book_append_sheet(wb, ws, 'BPA-I');
+
+      // Aba Pendências
+      const pendHead = ['Seq', 'Paciente', 'CNS', 'CPF', 'Profissional', 'CBO', 'Procedimento', 'SIGTAP', 'Data', 'Origem', 'Pendências'];
+      const pendData = results.pendRows.map((p: any, i: number) => [
+        i + 1,
+        String(p.paciente_nome || '').toUpperCase(),
+        p.cns_paciente || '',
+        p.paciente_cpf || '',
+        p.profissional_nome || '',
+        p.cbo || '',
+        p.procedimento || '',
+        p.procedimento || '',
+        formatarDataBR(p.data_atendimento),
+        'Prontuário',
+        (p.pendencias || [p.pendencia || '']).join('; '),
+      ]);
+      const wsP = XLSX.utils.aoa_to_sheet([pendHead, ...pendData]);
+      wsP['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 18 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 50 }];
+      (wsP as any)['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: pendHead.length - 1, r: pendData.length } }) };
+      XLSX.utils.book_append_sheet(wb, wsP, 'Pendências');
+
+      // Aba Resumo
+      const porProf = new Map<string, number>();
+      const porProc = new Map<string, number>();
+      const porUnid = new Map<string, number>();
+      results.confRows.forEach((r: any) => {
+        porProf.set(r._ctx.profissional_nome || '—', (porProf.get(r._ctx.profissional_nome || '—') || 0) + 1);
+        porProc.set(r.codigo_sigtap || '—', (porProc.get(r.codigo_sigtap || '—') || 0) + 1);
+        porUnid.set(r._ctx.unidade_nome || '—', (porUnid.get(r._ctx.unidade_nome || '—') || 0) + 1);
+      });
+      const resumo: any[][] = [
+        ['Competência', ctx.competencia],
+        ['Unidade', ctx.unidade_nome],
+        ['Profissional', ctx.profissional_nome],
+        ['Data de geração', new Date().toLocaleString('pt-BR')],
+        ['Total de linhas encontradas', results.totalFound],
+        ['Válidas (exportadas)', results.exportedCount],
+        ['Pendentes', results.pendRows.length],
+        ['Fonte Prontuário', results.confRows.length],
+        ['Fonte PTS', 0],
+        [],
+        ['Por profissional', ''],
+        ...Array.from(porProf.entries()),
+        [],
+        ['Por procedimento SIGTAP', ''],
+        ...Array.from(porProc.entries()),
+        [],
+        ['Por unidade', ''],
+        ...Array.from(porUnid.entries()),
+      ];
+      const wsR = XLSX.utils.aoa_to_sheet(resumo);
+      wsR['!cols'] = [{ wch: 35 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, wsR, 'Resumo');
+
+      const sufixo = formData.profissional_id !== 'all'
+        ? (ctx.profissional_nome.split(' ').slice(0, 2).join('-') || 'PROF')
+        : (ctx.unidade_nome.split(' ').slice(0, 2).join('-') || 'UNID');
+      const fname = `BPA-I_${formData.competencia}_${sufixo}.xlsx`.replace(/\s+/g, '_');
+      XLSX.writeFile(wb, fname);
+      toast.success('Planilha gerada.');
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Falha ao gerar Excel: ' + (e.message || e));
+    }
+  };
+
+  const handleImprimirConferencia = () => {
+    if (!results || !results.confRows.length) {
+      toast.error('Gere a exportação BPA-I antes de imprimir.');
+      return;
+    }
+    const ctx = obterContextoCabecalho();
+    const win = window.open('', '_blank', 'width=1200,height=800');
+    if (!win) {
+      toast.error('Permita pop-ups para imprimir.');
+      return;
+    }
+    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
+    const rowsHtml = results.confRows.map((r: any) => `
+      <tr>
+        <td>${esc(r.paciente_nome)}</td>
+        <td>${esc(r.paciente_cns)}</td>
+        <td>${esc(r.data_nascimento)}</td>
+        <td>${esc(r.sexo)}</td>
+        <td>${esc(r.tipo_logradouro)}</td>
+        <td>${esc(r.logradouro)}</td>
+        <td>${esc(r.numero)}</td>
+        <td>${esc(r.bairro)}</td>
+        <td>${esc(r.data_atendimento)}</td>
+        <td>${esc(r.codigo_sigtap)}</td>
+        <td>${esc(r.cid_usado)}</td>
+      </tr>`).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Conferência BPA-I ${ctx.competencia}</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; color:#000; }
+  h1 { font-size: 13pt; text-align:center; margin: 0 0 4px; }
+  .meta { margin-bottom: 8px; font-size: 10pt; }
+  .meta div { margin: 1px 0; }
+  table { width:100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  th, td { border: 1px solid #333; padding: 3px 4px; font-size: 9pt; }
+  th { background:#2A6F97; color:#fff; }
+  tbody tr:nth-child(even) td { background:#f5f7fa; }
+  footer { position: fixed; bottom: 4mm; left: 10mm; right: 10mm; font-size: 8pt; display:flex; justify-content: space-between; border-top:1px solid #999; padding-top:2px; }
+</style></head>
+<body>
+  <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ — Conferência BPA-I</h1>
+  <div class="meta">
+    <div><b>UNIDADE:</b> ${esc(ctx.unidade_nome)} &nbsp; <b>CNES:</b> ${esc(ctx.cnes)}</div>
+    <div><b>MÊS DE REFERÊNCIA:</b> ${esc(ctx.competencia)}</div>
+    <div><b>PROFISSIONAL:</b> ${esc(ctx.profissional_nome)} &nbsp; <b>CNS:</b> ${esc(ctx.cns_prof)} &nbsp; <b>CBO:</b> ${esc(ctx.cbo)}</div>
+    <div><b>Total de registros:</b> ${results.confRows.length}</div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
+      <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
+      <th>Atendimento</th><th>SIGTAP</th><th>CID</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <footer>
+    <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+    <span>Responsável: ${esc(user?.nome || user?.usuario || '—')}</span>
+  </footer>
+  <script>window.onload=()=>{setTimeout(()=>window.print(),300);};</script>
+</body></html>`;
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  };
+
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col gap-2">
