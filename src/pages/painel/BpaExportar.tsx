@@ -1223,6 +1223,40 @@ const BpaExportar: React.FC = () => {
               </Alert>
 
               {results.blobUrl && (
+                <Card className="border-primary/30 bg-slate-50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                      Resumo Final da Exportação
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div><div className="text-xs text-muted-foreground">Total encontrado</div><div className="font-bold text-lg">{results.totalFound}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Exportados no TXT</div><div className="font-bold text-lg text-green-700">{results.exportedCount}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Bloqueados</div><div className="font-bold text-lg text-red-700">{results.criticalCount}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Folhas no cabeçalho</div><div className="font-bold text-lg">{results.headerDetails?.totalFolhas}</div></div>
+                    </div>
+                    {results.criticalCount > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-red-700">Motivos dos bloqueios:</div>
+                        {results.stats.missingNacionalidade > 0 && <div>• Nacionalidade inválida/ausente: <b>{results.stats.missingNacionalidade}</b></div>}
+                        {results.stats.missingLogradouro > 0 && <div>• Código de logradouro indeterminado: <b>{results.stats.missingLogradouro}</b></div>}
+                        {results.stats.missingCns > 0 && <div>• CNS ausente: <b>{results.stats.missingCns}</b></div>}
+                        {results.stats.missingSexo > 0 && <div>• Sexo indefinido: <b>{results.stats.missingSexo}</b></div>}
+                        {results.stats.invalidNascimento > 0 && <div>• Nascimento inválido: <b>{results.stats.invalidNascimento}</b></div>}
+                        {results.stats.missingMunicipio > 0 && <div>• Município inválido: <b>{results.stats.missingMunicipio}</b></div>}
+                      </div>
+                    )}
+                    <div className="pt-2 border-t text-xs text-muted-foreground">
+                      ✓ Cabeçalho declara <b>{results.headerDetails?.registros}</b> registros — confere com {results.exportedCount} linhas no arquivo.
+                      Registros bloqueados <b>não</b> entram no TXT nem na contagem.
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {results.blobUrl && (
                 <div className="flex justify-center p-4 bg-white border rounded-lg shadow-sm">
                   <a 
                     href={results.blobUrl} 
