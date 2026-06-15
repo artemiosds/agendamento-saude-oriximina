@@ -130,18 +130,32 @@ const obterCboValido = (prof: any): string => {
 
 // Profissões que EXIGEM procedimento SIGTAP válido para BPA-I.
 // Médico e demais perfis NÃO são bloqueados por ausência de SIGTAP.
-const PROFISSOES_EXIGEM_SIGTAP = ['psicolog', 'fonoaudiolog', 'fisioterap', 'nutricion'];
+// Categoria define a origem de busca do SIGTAP:
+//   - psicolog / fonoaudiolog / nutricion → buscar APENAS no Prontuário
+//   - fisioterap → buscar no Prontuário e, se ausente, também no PTS
+type CategoriaSigtap = 'psicolog' | 'fonoaudiolog' | 'nutricion' | 'fisioterap' | '';
+const CATEGORIAS_SIGTAP: CategoriaSigtap[] = ['psicolog', 'fonoaudiolog', 'fisioterap', 'nutricion'];
 const normalizarProfissaoTxt = (v: any) => String(v || '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().trim();
-const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string } => {
-  if (!prof) return { exige: false, profissao: '' };
+const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string; categoria: CategoriaSigtap } => {
+  if (!prof) return { exige: false, profissao: '', categoria: '' };
   const cd = prof.custom_data || {};
   const candidatos = [prof.profissao, prof.cargo, cd.profissao, cd.cargo, cd.especialidade]
     .map(normalizarProfissaoTxt).filter(Boolean);
   const profissao = candidatos[0] || '';
-  const exige = candidatos.some(p => PROFISSOES_EXIGEM_SIGTAP.some(k => p.includes(k)));
-  return { exige, profissao };
+  let categoria: CategoriaSigtap = '';
+  for (const p of candidatos) {
+    const hit = CATEGORIAS_SIGTAP.find(k => p.includes(k));
+    if (hit) { categoria = hit; break; }
+  }
+  return { exige: !!categoria, profissao, categoria };
+};
+// Fontes consultadas para o SIGTAP de acordo com a categoria da profissão.
+const fontesSigtapParaCategoria = (cat: CategoriaSigtap): string[] => {
+  if (cat === 'fisioterap') return ['Prontuário', 'PTS'];
+  if (cat) return ['Prontuário'];
+  return [];
 };
 
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
