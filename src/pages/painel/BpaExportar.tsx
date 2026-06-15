@@ -180,13 +180,29 @@ const codigoLogradouroBpa = (pac: any): string | null => {
 };
 
 // Valida e normaliza nacionalidade (3 dígitos). Retorna null se cadastro não tiver código oficial.
-const nacionalidadeBpa = (pac: any): string | null => {
+// Tabela SIA/SUS de Nacionalidade (DATASUS) — códigos mais comuns. Usada para validar
+// que o valor gravado no cadastro está dentro da faixa aceita pelo importador BPA.
+const NACIONALIDADE_BPA_VALIDAS = new Set<string>([
+  '010','020','022','030','031','035','040','045','050','060','070','080','090',
+  '105','110','115','120','130','140','150','160','170','180','190',
+  '200','210','220','230','240','250','260','270','280','290','300','999'
+]);
+
+const nacionalidadeBpa = (pac: any): { codigo: string | null; motivo?: string } => {
   const cd = pac?.custom_data || {};
   const raw = pac?.nacionalidade ?? cd.nacionalidade_codigo ?? cd.nacionalidade ?? cd.nacionalidadeCodigo;
-  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  if (raw === null || raw === undefined || String(raw).trim() === '') {
+    return { codigo: null, motivo: 'Sem valor no cadastro' };
+  }
   const num = somenteNumeros(raw);
-  if (!num) return null;
-  return num.slice(-3).padStart(3, '0');
+  if (!num) return { codigo: null, motivo: `Valor não-numérico: "${raw}"` };
+  if (num.length > 3) return { codigo: null, motivo: `Tamanho inválido (${num.length} dígitos)` };
+  const codigo = num.padStart(3, '0');
+  if (codigo === '000') return { codigo: null, motivo: 'Código 000 não é aceito' };
+  if (!NACIONALIDADE_BPA_VALIDAS.has(codigo)) {
+    return { codigo: null, motivo: `Código ${codigo} fora da tabela SIA conhecida` };
+  }
+  return { codigo };
 };
 
 const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
