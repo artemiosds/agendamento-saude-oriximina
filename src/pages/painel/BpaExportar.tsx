@@ -1425,14 +1425,14 @@ const BpaExportar: React.FC = () => {
 </div>
 <table class="bpa-table">
   <colgroup>
-    <col style="width:18%"/><col style="width:11%"/><col style="width:7%"/><col style="width:4%"/>
-    <col style="width:7%"/><col style="width:18%"/><col style="width:5%"/><col style="width:11%"/>
-    <col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
+    <col style="width:17%"/><col style="width:10%"/><col style="width:6%"/><col style="width:4%"/>
+    <col style="width:6%"/><col style="width:16%"/><col style="width:4%"/><col style="width:10%"/>
+    <col style="width:7%"/><col style="width:7%"/><col style="width:8%"/><col style="width:5%"/>
   </colgroup>
   <thead><tr>
     <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
     <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
-    <th>Atendimento</th><th>SIGTAP</th><th>CID</th>
+    <th>Atendimento</th><th>SIGTAP</th><th>Origem SIGTAP</th><th>CID</th>
   </tr></thead>
   <tbody>${rowsHtml}</tbody>
 </table>`;
