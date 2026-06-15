@@ -811,14 +811,29 @@ const BpaExportar: React.FC = () => {
           const cbo = zfill(cbo_raw, 6);
 
           let pendenciaPaciente = false;
-          const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
           const sigtapReq = profissaoExigeSigtap(prof);
+          // Origem do SIGTAP varia por profissão:
+          //   psicólogo / fonoaudiólogo / nutricionista → Prontuário
+          //   fisioterapeuta → Prontuário e, se ausente, PTS ativo do paciente
+          const procPront = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento || '';
+          let proc_real: string = procPront ? String(procPront) : '';
+          let proc_origem: 'Prontuário' | 'PTS' | '' = proc_real ? 'Prontuário' : '';
+          const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria);
+          if (!proc_real && sigtapReq.categoria === 'fisioterap' && pront.paciente_id) {
+            const ptsCode = ptsSigtapByPatient.get(String(pront.paciente_id));
+            if (ptsCode) {
+              proc_real = ptsCode;
+              proc_origem = 'PTS';
+            }
+          }
+
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
           if (!proc_real && sigtapReq.exige) {
             pendenciaPaciente = true;
             stats.missingSigtap++;
-            const motivo = `Procedimento SIGTAP obrigatório para a profissão "${sigtapReq.profissao || 'indefinida'}" e ausente no registro.`;
+            const fontesTxt = fontesConsultadas.length ? fontesConsultadas.join(' e ') : 'Prontuário';
+            const motivo = `Profissão "${sigtapReq.profissao || 'indefinida'}" exige SIGTAP. Fontes consultadas: ${fontesTxt}. Procedimento não localizado em nenhuma fonte.`;
             warnings.push(`${ident}: ${motivo}`);
             details.missingSigtap.push({
               ...itemDetail,
@@ -826,6 +841,8 @@ const BpaExportar: React.FC = () => {
               valor_atual: 'Vazio',
               profissao: sigtapReq.profissao || 'indefinida',
               sigtap_obrigatorio: 'Sim',
+              fontes_consultadas: fontesTxt,
+              origem_sigtap: '—',
               motivo
             });
           }
@@ -835,6 +852,7 @@ const BpaExportar: React.FC = () => {
             10
           );
           if (!proc_real && !sigtapReq.exige) stats.defaultProc++;
+
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
