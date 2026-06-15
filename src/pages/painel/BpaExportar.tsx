@@ -116,6 +116,22 @@ const obterCboValido = (prof: any): string => {
   return '';
 };
 
+// Profissões que EXIGEM procedimento SIGTAP válido para BPA-I.
+// Médico e demais perfis NÃO são bloqueados por ausência de SIGTAP.
+const PROFISSOES_EXIGEM_SIGTAP = ['psicolog', 'fonoaudiolog', 'fisioterap', 'nutricion'];
+const normalizarProfissaoTxt = (v: any) => String(v || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().trim();
+const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string } => {
+  if (!prof) return { exige: false, profissao: '' };
+  const cd = prof.custom_data || {};
+  const candidatos = [prof.profissao, prof.cargo, cd.profissao, cd.cargo, cd.especialidade]
+    .map(normalizarProfissaoTxt).filter(Boolean);
+  const profissao = candidatos[0] || '';
+  const exige = candidatos.some(p => PROFISSOES_EXIGEM_SIGTAP.some(k => p.includes(k)));
+  return { exige, profissao };
+};
+
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
   if (!nome) return null;
   const primeiroNome = limparTexto(nome).split(' ')[0];
