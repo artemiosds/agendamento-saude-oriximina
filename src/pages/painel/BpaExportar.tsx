@@ -897,40 +897,57 @@ const BpaExportar: React.FC = () => {
                     <span className="font-mono text-sm">{results.headerDetails.tipo}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">ID</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Identificação</span>
                     <span className="font-mono text-sm">{results.headerDetails.identificacao}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">Destino</span>
-                    <span className="font-mono text-sm">{results.headerDetails.destino}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Registros</span>
+                    <span className="font-mono text-sm">{results.headerDetails.registros}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">T. Compet.</span>
-                    <span className="font-mono text-sm">{results.headerDetails.tipo_competencia}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Folhas</span>
+                    <span className="font-mono text-sm">{results.headerDetails.totalFolhas}</span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase text-muted-foreground">Competência</span>
                     <span className="font-mono text-sm">{results.headerDetails.competencia}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">Registros</span>
-                    <span className="font-mono text-sm">{results.headerDetails.registros}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Controle</span>
+                    <span className="font-mono text-sm">{results.headerDetails.campoControle}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Cabeçalho sem CRLF</span>
+                    <span className="font-mono text-sm">{results.headerDetails.tamanho}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Registro sem CRLF</span>
+                    <span className="font-mono text-sm">{results.headerDetails.firstRecordLength}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">CRLF</span>
+                    <span className="font-mono text-sm">{results.headerDetails.crlf ? 'SIM' : 'NÃO'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">BOM</span>
+                    <span className="font-mono text-sm">{results.headerDetails.bom ? 'SIM' : 'NÃO'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Início Registro</span>
+                    <span className="font-mono text-sm">{results.headerDetails.firstRecordPreview.slice(0, 2)}</span>
                   </div>
                 </div>
                 
                 <div className="space-y-1">
-                  <span className="text-[10px] uppercase text-muted-foreground">Conteúdo da Primeira Linha (ANSI / 205 caracteres)</span>
+                  <span className="text-[10px] uppercase text-muted-foreground">Cabeçalho completo (ANSI / 130 caracteres sem CRLF)</span>
                   <div className="bg-slate-900 text-slate-50 p-3 rounded font-mono text-[10px] break-all whitespace-pre overflow-x-auto">
                     {results.headerPreview}
                   </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <div className="flex flex-col md:flex-row md:justify-between gap-1 text-[10px] text-muted-foreground">
                     <span>Tamanho real: {results.headerDetails.tamanho} caracteres</span>
-                    <span>Primeiros bytes (HEX): {
-                      results.headerPreview ? 
-                        Array.from(results.headerPreview.slice(0, 10))
-                          .map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
-                          .join(' ') : ''
-                    }</span>
+                    <span>Primeiros bytes (HEX): {results.headerDetails.headerHex}</span>
                     <span>Encoding: ISO-8859-1 (Sem BOM)</span>
                   </div>
                 </div>
