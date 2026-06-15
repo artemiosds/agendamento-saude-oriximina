@@ -210,6 +210,7 @@ const Agenda: React.FC = () => {
     logAction,
     refreshAgendamentos,
     ensureAgendamentosForDate,
+    ensureAgendamentosForRange,
     refreshFila,
     fila,
     updateFila,
@@ -244,6 +245,13 @@ const Agenda: React.FC = () => {
     // Always call — the context dedupes per (date, unidade) and merges.
     ensureAgendamentosForDate(selectedDate);
   }, [selectedDate, ensureAgendamentosForDate]);
+
+  const handleAgendaVisibleRangeChange = useCallback((startDate: string, endDate: string) => {
+    const today = todayLocalStr();
+    const pastEnd = endDate < today ? endDate : addDaysToDateStr(today, -1);
+    if (startDate > pastEnd) return;
+    ensureAgendamentosForRange(startDate, pastEnd);
+  }, [ensureAgendamentosForRange]);
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState(isProfissional ? (user?.id || "all") : "all");
   const [searchProf, setSearchProf] = useState("");
@@ -2596,6 +2604,7 @@ const Agenda: React.FC = () => {
                 <CalendarioAgenda
                   selectedDate={selectedDate}
                   onDateChange={(date) => setSelectedDate(date)}
+                  onVisibleRangeChange={handleAgendaVisibleRangeChange}
                   agendamentos={agendamentos}
                   bloqueios={bloqueios}
                   disponibilidades={disponibilidades}
