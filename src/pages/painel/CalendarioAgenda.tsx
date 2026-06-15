@@ -33,6 +33,7 @@ interface DiaInfo {
 interface CalendarioAgendaProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
+  onVisibleRangeChange?: (startDate: string, endDate: string) => void;
   agendamentos: any[];
   bloqueios: any[];
   disponibilidades: any[];
@@ -47,6 +48,7 @@ interface CalendarioAgendaProps {
 export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   selectedDate,
   onDateChange,
+  onVisibleRangeChange,
   agendamentos,
   bloqueios,
   disponibilidades,
@@ -63,6 +65,22 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   useEffect(() => {
     setCurrentDate(dateStrToUtcDate(selectedDate));
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (!onVisibleRangeChange) return;
+    if (view === "month") {
+      const start = startOfWeek(startOfMonth(currentDate));
+      const end = endOfWeek(endOfMonth(currentDate));
+      onVisibleRangeChange(localDateStr(start), localDateStr(end));
+      return;
+    }
+    if (view === "week") {
+      onVisibleRangeChange(localDateStr(startOfWeek(currentDate)), localDateStr(endOfWeek(currentDate)));
+      return;
+    }
+    const day = localDateStr(currentDate);
+    onVisibleRangeChange(day, day);
+  }, [currentDate, view, onVisibleRangeChange]);
 
   const STATUS_NAO_OCUPA = new Set(["cancelado", "falta", "excluido", "removido", "inativo"]);
 
