@@ -2015,12 +2015,37 @@ const BpaExportar: React.FC = () => {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
+                            <div className="flex justify-end gap-2 flex-wrap">
+                              {selectedCategory === 'missingSigtap' && item.paciente_id && item.data_atendimento && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8"
+                                  title="Resolver pendência selecionando um SIGTAP da tabela oficial"
+                                  onClick={() => setResolverModal({
+                                    open: true,
+                                    item: {
+                                      paciente_id: item.paciente_id,
+                                      paciente_nome: item.paciente_nome,
+                                      profissional_id: item.profissional_id,
+                                      profissional_nome: item.profissional_nome,
+                                      profissao: item.profissao,
+                                      profissao_categoria: item.profissao_categoria,
+                                      data_atendimento: item.data_atendimento,
+                                      unidade_id: item.unidade_id,
+                                      unidade_nome: item.unidade_nome,
+                                      cbo: item.cbo,
+                                    },
+                                  })}
+                                >
+                                  Resolver SIGTAP
+                                </Button>
+                              )}
                               {item.paciente_id && (
-                                <Button 
-                                  variant="outline" 
-                                  size="icon" 
-                                  className="h-8 w-8" 
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
                                   title="Ver Paciente"
                                   onClick={() => navigate(`/painel/pacientes?id=${item.paciente_id}`)}
                                 >
@@ -2028,10 +2053,10 @@ const BpaExportar: React.FC = () => {
                                 </Button>
                               )}
                               {item.profissional_id && (
-                                <Button 
-                                  variant="outline" 
-                                  size="icon" 
-                                  className="h-8 w-8" 
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
                                   title="Ver Profissional"
                                   onClick={() => navigate(`/painel/funcionarios?id=${item.profissional_id}`)}
                                 >
