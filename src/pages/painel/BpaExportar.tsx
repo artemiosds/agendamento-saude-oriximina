@@ -258,6 +258,8 @@ const BpaExportar: React.FC = () => {
       invalidCbo: number;
       defaultProc: number;
       invalidNascimento: number;
+      missingNacionalidade: number;
+      missingLogradouro: number;
     };
     details: {
       missingCns: any[];
@@ -269,6 +271,8 @@ const BpaExportar: React.FC = () => {
       invalidCbo: any[];
       defaultProc: any[];
       invalidNascimento: any[];
+      missingNacionalidade: any[];
+      missingLogradouro: any[];
       critical: any[];
     };
     error: string | null;
