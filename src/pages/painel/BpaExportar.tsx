@@ -557,11 +557,11 @@ const BpaExportar: React.FC = () => {
       // são re-vinculados ao cadastro real mais completo (CPF + CNS + nascimento).
       const pacByNameMap = new Map<string, any>();
       (pacientesByNameRes.data || []).forEach((p: any) => {
-        const key = (p.nome || '').trim().toUpperCase();
+        const key = chaveNomePaciente(p.nome);
         if (!key) return;
         const existing = pacByNameMap.get(key);
-        const score = (p.cpf ? 1 : 0) + (p.cns ? 1 : 0) + (p.data_nascimento ? 1 : 0);
-        const existingScore = existing ? (existing.cpf ? 1 : 0) + (existing.cns ? 1 : 0) + (existing.data_nascimento ? 1 : 0) : -1;
+        const score = scoreCompletudePaciente(p);
+        const existingScore = existing ? scoreCompletudePaciente(existing) : -1;
         if (!existing || score > existingScore) pacByNameMap.set(key, p);
       });
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
@@ -578,7 +578,7 @@ const BpaExportar: React.FC = () => {
       prontuarios.forEach((pront: any, index: number) => {
         let pac = pacMap.get(pront.paciente_id) as any;
         if (!pac || (!primeiroValorPreenchido(pac.cpf, pac.cns, pac.data_nascimento, (pac.custom_data as any)?.cpf, (pac.custom_data as any)?.cns, (pac.custom_data as any)?.data_nascimento))) {
-          const k = (pront.paciente_nome || '').trim().toUpperCase();
+          const k = chaveNomePaciente(pront.paciente_nome);
           const fallback = k ? pacByNameMap.get(k) : null;
           if (fallback) pac = fallback;
         }
