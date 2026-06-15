@@ -1025,6 +1025,8 @@ const BpaExportar: React.FC = () => {
               { id: 'missingSexo', label: 'Sexo Indef.', count: results.stats.missingSexo, color: 'amber' },
               { id: 'invalidNascimento', label: 'Nascimento Inv.', count: results.stats.invalidNascimento, color: 'amber' },
               { id: 'missingMunicipio', label: 'Mun. Inválido', count: results.stats.missingMunicipio, color: 'amber' },
+              { id: 'missingNacionalidade', label: 'Sem Nacionalidade', count: results.stats.missingNacionalidade, color: 'amber' },
+              { id: 'missingLogradouro', label: 'Cód. Logradouro', count: results.stats.missingLogradouro, color: 'amber' },
               { id: 'missingCbo', label: 'Sem CBO Prof.', count: results.stats.missingCbo, color: 'amber' },
               { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
               { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' }
