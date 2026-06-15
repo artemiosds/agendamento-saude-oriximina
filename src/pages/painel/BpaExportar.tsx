@@ -37,46 +37,59 @@ const zfill = (valor: any, tamanho: number): string => {
   return s.padStart(tamanho, '0');
 };
 
+const primeiroValorPreenchido = (...valores: any[]): any =>
+  valores.find((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '');
+
+const chaveNomePaciente = (nome: any): string => limparTexto(String(nome || '')).toUpperCase();
+
+const scoreCompletudePaciente = (pac: any): number => {
+  const cd = pac?.custom_data || {};
+  return (primeiroValorPreenchido(pac?.cpf, cd.cpf) ? 1 : 0)
+    + (primeiroValorPreenchido(pac?.cns, cd.cns) ? 1 : 0)
+    + (primeiroValorPreenchido(pac?.data_nascimento, cd.data_nascimento) ? 1 : 0);
+};
+
 const rpad = (valor: any, tamanho: number): string => {
   const s = String(valor || '');
   if (s.length > tamanho) return s.slice(0, tamanho);
   return s.padEnd(tamanho, ' ');
 };
 
+const parseDataSegura = (date: any): { ano: number; mes: number; dia: number } | null => {
+  if (!date) return null;
+  const raw = String(date).trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  const partes = iso
+    ? { ano: Number(iso[1]), mes: Number(iso[2]), dia: Number(iso[3]) }
+    : dmy
+      ? { ano: Number(dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3]), mes: Number(dmy[2]), dia: Number(dmy[1]) }
+      : null;
+  if (!partes || partes.ano < 1900 || partes.ano > 2100 || partes.mes < 1 || partes.mes > 12 || partes.dia < 1 || partes.dia > 31) return null;
+  const validacao = new Date(Date.UTC(partes.ano, partes.mes - 1, partes.dia));
+  if (validacao.getUTCFullYear() !== partes.ano || validacao.getUTCMonth() + 1 !== partes.mes || validacao.getUTCDate() !== partes.dia) return null;
+  return partes;
+};
+
 const formatarData = (date: any): string => {
-  if (!date) return "00000000";
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return "00000000";
-    const year = d.getFullYear();
-    if (year < 1900 || year > 2100) return "00000000";
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const res = `${year}${month}${day}`;
-    // Validações sugeridas pelo usuário para evitar datas "fake"
-    if (res === "00000000" || res.startsWith("00") || res.includes("9999")) return "00000000";
-    return res;
-  } catch {
-    return "00000000";
-  }
+  const d = parseDataSegura(date);
+  if (!d) return "00000000";
+  return `${d.ano}${String(d.mes).padStart(2, '0')}${String(d.dia).padStart(2, '0')}`;
+};
+
+const formatarDataBR = (date: any): string => {
+  const d = parseDataSegura(date);
+  if (!d) return '';
+  return `${String(d.dia).padStart(2, '0')}/${String(d.mes).padStart(2, '0')}/${d.ano}`;
 };
 
 const calcularIdade = (dataNasc: any, dataAtendimento: any): string => {
-  if (!dataNasc || !dataAtendimento) return "000";
-  try {
-    const nasc = new Date(dataNasc);
-    const aten = new Date(dataAtendimento);
-    if (isNaN(nasc.getTime()) || isNaN(aten.getTime())) return "000";
-    
-    let idade = aten.getFullYear() - nasc.getFullYear();
-    const m = aten.getMonth() - nasc.getMonth();
-    if (m < 0 || (m === 0 && aten.getDate() < nasc.getDate())) {
-      idade--;
-    }
-    return zfill(Math.max(0, idade), 3);
-  } catch {
-    return "000";
-  }
+  const nasc = parseDataSegura(dataNasc);
+  const aten = parseDataSegura(dataAtendimento);
+  if (!nasc || !aten) return "000";
+  let idade = aten.ano - nasc.ano;
+  if (aten.mes < nasc.mes || (aten.mes === nasc.mes && aten.dia < nasc.dia)) idade--;
+  return zfill(Math.max(0, idade), 3);
 };
 
 const obterCboValido = (prof: any): string => {
@@ -544,11 +557,11 @@ const BpaExportar: React.FC = () => {
       // são re-vinculados ao cadastro real mais completo (CPF + CNS + nascimento).
       const pacByNameMap = new Map<string, any>();
       (pacientesByNameRes.data || []).forEach((p: any) => {
-        const key = (p.nome || '').trim().toUpperCase();
+        const key = chaveNomePaciente(p.nome);
         if (!key) return;
         const existing = pacByNameMap.get(key);
-        const score = (p.cpf ? 1 : 0) + (p.cns ? 1 : 0) + (p.data_nascimento ? 1 : 0);
-        const existingScore = existing ? (existing.cpf ? 1 : 0) + (existing.cns ? 1 : 0) + (existing.data_nascimento ? 1 : 0) : -1;
+        const score = scoreCompletudePaciente(p);
+        const existingScore = existing ? scoreCompletudePaciente(existing) : -1;
         if (!existing || score > existingScore) pacByNameMap.set(key, p);
       });
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
@@ -564,8 +577,8 @@ const BpaExportar: React.FC = () => {
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
         let pac = pacMap.get(pront.paciente_id) as any;
-        if (!pac || (!pac.cpf && !pac.cns && !pac.data_nascimento)) {
-          const k = (pront.paciente_nome || '').trim().toUpperCase();
+        if (!pac || (!primeiroValorPreenchido(pac.cpf, pac.cns, pac.data_nascimento, (pac.custom_data as any)?.cpf, (pac.custom_data as any)?.cns, (pac.custom_data as any)?.data_nascimento))) {
+          const k = chaveNomePaciente(pront.paciente_nome);
           const fallback = k ? pacByNameMap.get(k) : null;
           if (fallback) pac = fallback;
         }
@@ -577,15 +590,15 @@ const BpaExportar: React.FC = () => {
           id: pront.id,
           paciente_id: pront.paciente_id,
           paciente_nome: ident,
-          paciente_cpf: pac?.cpf,
-          paciente_nascimento: pac?.data_nascimento,
+          paciente_cpf: primeiroValorPreenchido(pac?.cpf, (pac?.custom_data as any)?.cpf),
+          paciente_nascimento: primeiroValorPreenchido(pac?.data_nascimento, (pac?.custom_data as any)?.data_nascimento),
           data_atendimento: pront.data_atendimento,
           profissional_id: pront.profissional_id,
           profissional_nome: prof?.nome || 'Profissional não encontrado',
           unidade_id: pront.unidade_id,
           unidade_nome: unit?.nome || 'Unidade não encontrada',
           procedimento: pront.custom_data?.procedimento_sigtap || pront.outro_procedimento,
-          cns_paciente: pac?.cns,
+          cns_paciente: primeiroValorPreenchido(pac?.cns, (pac?.custom_data as any)?.cns),
           sexo: pac?.sexo,
           municipio: pac?.municipio || (pac?.custom_data as any)?.municipio_ibge,
           cbo: obterCboValido(prof)
@@ -594,7 +607,7 @@ const BpaExportar: React.FC = () => {
         let isCritical = false;
 
         // CNS Paciente
-        const cns_pac_raw = pac?.cns || (pac?.custom_data as any)?.cns || '';
+        const cns_pac_raw = primeiroValorPreenchido(pac?.cns, (pac?.custom_data as any)?.cns) || '';
         const cns_pac = zfill(cns_pac_raw, 15);
         if (!cns_pac_raw || cns_pac === '000000000000000') {
           isCritical = true;
@@ -626,7 +639,7 @@ const BpaExportar: React.FC = () => {
         }
 
         // Nascimento
-        const raw_nasc = pac?.data_nascimento || (pac?.custom_data as any)?.data_nascimento;
+        const raw_nasc = primeiroValorPreenchido(pac?.data_nascimento, (pac?.custom_data as any)?.data_nascimento);
         const data_nasc = formatarData(raw_nasc);
         if (data_nasc === "00000000") {
           isCritical = true;
@@ -1232,10 +1245,10 @@ const BpaExportar: React.FC = () => {
                           <TableCell>
                             <div className="font-medium">{item.paciente_nome}</div>
                             <div className="text-xs text-muted-foreground">
-                              {item.paciente_cpf ? `CPF: ${item.paciente_cpf}` : 'Sem CPF'} | {item.paciente_nascimento ? `Nasc: ${new Date(item.paciente_nascimento).toLocaleDateString()}` : 'Sem Nasc.'}
+                              {item.paciente_cpf ? `CPF: ${item.paciente_cpf}` : 'Sem CPF'} | {item.paciente_nascimento ? `Nasc: ${formatarDataBR(item.paciente_nascimento)}` : 'Sem Nasc.'}
                             </div>
                           </TableCell>
-                          <TableCell>{new Date(item.data_atendimento).toLocaleDateString()}</TableCell>
+                          <TableCell>{formatarDataBR(item.data_atendimento)}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span>{item.profissional_nome}</span>
