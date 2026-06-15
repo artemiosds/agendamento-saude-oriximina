@@ -209,6 +209,43 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
   return { codigo: '', campo: '' };
 };
 
+// ============================================================================
+// Helpers de EXIBIÇÃO (Excel/PDF/Diagnóstico) — NÃO mexem no TXT BPA-I.
+// Garantem que SIGTAP apareça sempre como código numérico (igual ao TXT) e
+// que CID exibido só apareça quando for um código válido (ex.: M545, F328).
+// ============================================================================
+
+// Normaliza um valor qualquer para o código SIGTAP de 10 dígitos.
+// Aceita number/string que contenha o código; ignora descrições textuais.
+// Retorna '' quando não houver código resolvível.
+const sigtapCodigoExibicao = (v: any): string => {
+  if (v === null || v === undefined) return '';
+  const n = somenteNumeros(String(v));
+  if (n.length < 6 || n.length > 10) return '';
+  return n.padStart(10, '0').slice(-10);
+};
+
+// Formata "Origem SIGTAP" no padrão "[codigo] - [origem]".
+// Se não houver código, devolve apenas a origem (ou '—').
+const formatarOrigemSigtap = (codigo: any, origem: any): string => {
+  const cod = sigtapCodigoExibicao(codigo);
+  const org = String(origem || '').trim();
+  if (cod && org) return `${cod} - ${org}`;
+  if (cod) return cod;
+  return org || '—';
+};
+
+// Valida e normaliza CID para exibição: aceita formatos oficiais (ex.: M54,
+// M545, F32, F329). Rejeita lixo textual como "DESE", strings vazias, etc.
+// Retorna '—' quando inválido. NÃO inventa CID.
+const cidExibicao = (v: any): string => {
+  const s = String(v ?? '').trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, '');
+  if (!s) return '—';
+  // CID-10: 1 letra + 2 ou 3 dígitos (com sufixo opcional de 1 letra/dígito).
+  if (/^[A-Z]\d{2,3}[A-Z0-9]?$/.test(s)) return s;
+  return '—';
+};
+
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
   if (!nome) return null;
   const primeiroNome = limparTexto(nome).split(' ')[0];
@@ -1154,8 +1191,8 @@ const BpaExportar: React.FC = () => {
             numero: String(pac?.numero || pacCdAny.numero || ''),
             bairro: String(pac?.bairro || pacCdAny.bairro || '').toUpperCase(),
             data_atendimento: formatarDataBR(pront.data_atendimento),
-            codigo_sigtap: proc_real || formData.procedimento_padrao || '',
-            cid_usado: String(cidBruto || '').toUpperCase(),
+            codigo_sigtap: sigtapCodigoExibicao(proc_real || formData.procedimento_padrao) || (proc_real || formData.procedimento_padrao || ''),
+            cid_usado: cidExibicao(cidBruto),
             _ctx: {
               profissional_nome: prof?.nome || '',
               cns_prof,
@@ -1386,7 +1423,7 @@ const BpaExportar: React.FC = () => {
       ];
       const dataRows = confSorted.map(r => cols.map(c => {
         if (c === 'origem_sigtap') {
-          return String((r as any)?._ctx?.origem_sigtap || '—');
+          return formatarOrigemSigtap((r as any)?.codigo_sigtap, (r as any)?._ctx?.origem_sigtap);
         }
         const v = (r as any)[c] ?? '';
         if (c === 'paciente_nome' || c === 'logradouro' || c === 'bairro' || c === 'tipo_logradouro') {
@@ -1447,8 +1484,8 @@ const BpaExportar: React.FC = () => {
         String(p.profissional_nome || '').toUpperCase(),
         String(p.profissao || '—').toUpperCase(),
         p.cbo || '',
-        p.procedimento || '',
-        String(p.origem_sigtap || '—'),
+        sigtapCodigoExibicao(p.codigo_sigtap ?? p.procedimento) || '—',
+        formatarOrigemSigtap(p.codigo_sigtap ?? p.procedimento, p.origem_sigtap),
         String(p.fontes_consultadas || '—'),
         formatarDataBR(p.data_atendimento),
         (p.pendencias || [p.pendencia || '']).join('; '),
@@ -1552,9 +1589,9 @@ const BpaExportar: React.FC = () => {
           <td class="c">${esc(r.numero)}</td>
           <td>${esc(String(r.bairro || '').toUpperCase())}</td>
           <td class="c">${esc(r.data_atendimento)}</td>
-          <td class="c">${esc(r.codigo_sigtap)}</td>
-          <td class="c">${esc(r?._ctx?.origem_sigtap || '—')}</td>
-          <td class="c">${esc(r.cid_usado)}</td>
+          <td class="c">${esc(sigtapCodigoExibicao(r.codigo_sigtap) || r.codigo_sigtap || '—')}</td>
+          <td class="c">${esc(formatarOrigemSigtap(r.codigo_sigtap, r?._ctx?.origem_sigtap))}</td>
+          <td class="c">${esc(cidExibicao(r.cid_usado))}</td>
         </tr>`).join('');
 
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
