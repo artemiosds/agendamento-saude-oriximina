@@ -892,6 +892,7 @@ const BpaExportar: React.FC = () => {
           const cbo = zfill(cbo_raw, 6);
 
           let pendenciaPaciente = false;
+          const motivosPendencia: string[] = [];
           const sigtapReq = profissaoExigeSigtap(prof);
           // Origem do SIGTAP varia por profissão:
           //   psicólogo / fonoaudiólogo / nutricionista → Prontuário (campo fixo, custom_data
