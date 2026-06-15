@@ -950,6 +950,31 @@ const BpaExportar: React.FC = () => {
       console.log('[BPA] Header texto:', header);
 
 
+      // Consolidar pendências por registro (Pendências tab)
+      const pendMap = new Map<string, any>();
+      const pushPend = (item: any, motivo: string) => {
+        const key = item.id || `${item.paciente_nome}-${item.data_atendimento}`;
+        const cur = pendMap.get(key) || { ...item, pendencias: [] as string[] };
+        if (!cur.pendencias.includes(motivo)) cur.pendencias.push(motivo);
+        pendMap.set(key, cur);
+      };
+      const pendCats: Array<[string, string]> = [
+        ['missingCns', 'CNS paciente ausente'],
+        ['missingSexo', 'Sexo ausente'],
+        ['invalidNascimento', 'Data nascimento inválida'],
+        ['missingMunicipio', 'Município ausente'],
+        ['missingCbo', 'CBO profissional ausente'],
+        ['missingSigtap', 'Procedimento SIGTAP ausente'],
+        ['missingNacionalidade', 'Nacionalidade ausente/inválida'],
+        ['missingLogradouro', 'Código de logradouro ausente'],
+        ['defaultProc', 'Usando procedimento padrão'],
+        ['critical', 'Erro crítico'],
+      ];
+      pendCats.forEach(([k, lbl]) => {
+        (details as any)[k]?.forEach((it: any) => pushPend(it, lbl));
+      });
+      pendRows.push(...Array.from(pendMap.values()));
+
       setResults({
         totalFound: prontuarios.length,
         exportedCount,
