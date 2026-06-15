@@ -40,6 +40,15 @@ const zfill = (valor: any, tamanho: number): string => {
 const primeiroValorPreenchido = (...valores: any[]): any =>
   valores.find((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '');
 
+const chaveNomePaciente = (nome: any): string => limparTexto(String(nome || '')).toUpperCase();
+
+const scoreCompletudePaciente = (pac: any): number => {
+  const cd = pac?.custom_data || {};
+  return (primeiroValorPreenchido(pac?.cpf, cd.cpf) ? 1 : 0)
+    + (primeiroValorPreenchido(pac?.cns, cd.cns) ? 1 : 0)
+    + (primeiroValorPreenchido(pac?.data_nascimento, cd.data_nascimento) ? 1 : 0);
+};
+
 const rpad = (valor: any, tamanho: number): string => {
   const s = String(valor || '');
   if (s.length > tamanho) return s.slice(0, tamanho);
