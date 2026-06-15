@@ -325,6 +325,7 @@ const buildHeaderOficial = (params: {
 
 const BpaExportar: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     competencia: '',
     unidade_id: 'all',
