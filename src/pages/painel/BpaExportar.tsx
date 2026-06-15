@@ -744,7 +744,6 @@ const BpaExportar: React.FC = () => {
           const etnia = raca === '05' ? rpad(etniaCadastro, 4) : '    ';
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
-          let pendenciaPaciente = false;
           const nacRes = nacionalidadeBpa(pac);
           let nacionalidade: string;
           if (nacRes.codigo) {
