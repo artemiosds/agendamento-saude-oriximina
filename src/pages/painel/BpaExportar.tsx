@@ -895,7 +895,7 @@ const BpaExportar: React.FC = () => {
             paciente_cns: cns_pac_raw,
             data_nascimento: formatarDataBR(raw_nasc),
             sexo,
-            tipo_logradouro: String(pac?.tipo_logradouro || pacCdAny.tipo_logradouro || '').toUpperCase(),
+            tipo_logradouro: tipoLogradouroTextoBpa(pac),
             logradouro: String(pac?.logradouro || pac?.endereco || pacCdAny.logradouro || pacCdAny.endereco || '').toUpperCase(),
             numero: String(pac?.numero || pacCdAny.numero || ''),
             bairro: String(pac?.bairro || pacCdAny.bairro || '').toUpperCase(),
