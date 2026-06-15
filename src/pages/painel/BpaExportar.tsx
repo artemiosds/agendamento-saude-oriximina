@@ -1423,7 +1423,7 @@ const BpaExportar: React.FC = () => {
       ];
       const dataRows = confSorted.map(r => cols.map(c => {
         if (c === 'origem_sigtap') {
-          return String((r as any)?._ctx?.origem_sigtap || '—');
+          return formatarOrigemSigtap((r as any)?.codigo_sigtap, (r as any)?._ctx?.origem_sigtap);
         }
         const v = (r as any)[c] ?? '';
         if (c === 'paciente_nome' || c === 'logradouro' || c === 'bairro' || c === 'tipo_logradouro') {
