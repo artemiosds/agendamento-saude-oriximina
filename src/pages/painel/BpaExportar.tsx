@@ -1253,44 +1253,107 @@ const BpaExportar: React.FC = () => {
       return;
     }
     const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
-    const rowsHtml = results.confRows.map((r: any) => `
+    const confSorted = [...results.confRows].sort(cmpAlfa);
+    const abs = (u: string) => new URL(u, window.location.origin).href;
+    const logo1 = abs(logoSms);
+    const logo2 = abs(logoSmsOrix);
+    const logo3 = abs(logoCerII);
+    const rowsHtml = confSorted.map((r: any) => `
       <tr>
-        <td>${esc(r.paciente_nome)}</td>
+        <td class="nome">${esc(String(r.paciente_nome || '').toUpperCase())}</td>
         <td>${esc(r.paciente_cns)}</td>
-        <td>${esc(r.data_nascimento)}</td>
-        <td>${esc(r.sexo)}</td>
-        <td>${esc(r.tipo_logradouro)}</td>
-        <td>${esc(r.logradouro)}</td>
-        <td>${esc(r.numero)}</td>
-        <td>${esc(r.bairro)}</td>
-        <td>${esc(r.data_atendimento)}</td>
-        <td>${esc(r.codigo_sigtap)}</td>
-        <td>${esc(r.cid_usado)}</td>
+        <td class="c">${esc(r.data_nascimento)}</td>
+        <td class="c">${esc(r.sexo)}</td>
+        <td class="c">${esc(r.tipo_logradouro)}</td>
+        <td>${esc(String(r.logradouro || '').toUpperCase())}</td>
+        <td class="c">${esc(r.numero)}</td>
+        <td>${esc(String(r.bairro || '').toUpperCase())}</td>
+        <td class="c">${esc(r.data_atendimento)}</td>
+        <td class="c">${esc(r.codigo_sigtap)}</td>
+        <td class="c">${esc(r.cid_usado)}</td>
       </tr>`).join('');
+    const geradoEm = new Date().toLocaleString('pt-BR');
+    const respo = esc(user?.nome || user?.usuario || '—');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Conferência BPA-I ${ctx.competencia}</title>
 <style>
-  @page { size: A4 landscape; margin: 10mm; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; color:#000; }
-  h1 { font-size: 13pt; text-align:center; margin: 0 0 4px; }
-  .meta { margin-bottom: 8px; font-size: 10pt; }
-  .meta div { margin: 1px 0; }
-  table { width:100%; border-collapse: collapse; }
+  @page { size: A4 landscape; margin: 14mm 12mm 22mm 12mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color:#111; padding-bottom: 18mm; }
+  .institutional {
+    display: grid;
+    grid-template-columns: 70px 1fr 70px;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #2A6F97;
+    margin-bottom: 10px;
+  }
+  .institutional .logos-left, .institutional .logos-right {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .institutional img { height: 60px; width: auto; max-width: 70px; object-fit: contain; }
+  .institutional .title { text-align:center; }
+  .institutional .title h1 { font-size: 13pt; margin: 0 0 2px; color:#2A6F97; letter-spacing: .3px; }
+  .institutional .title h2 { font-size: 11pt; margin: 0; font-weight: 600; color:#333; }
+  .institutional .title .sub { font-size: 9pt; color:#555; margin-top: 2px; }
+  .meta { margin: 0 0 10px; font-size: 9.5pt; background:#F2F6F9; border:1px solid #D6E2EC; padding: 6px 8px; border-radius: 4px; }
+  .meta div { margin: 2px 0; }
+  .meta b { color:#2A6F97; }
+  table { width:100%; border-collapse: collapse; table-layout: fixed; }
   thead { display: table-header-group; }
-  th, td { border: 1px solid #333; padding: 3px 4px; font-size: 9pt; }
-  th { background:#2A6F97; color:#fff; }
+  tfoot { display: table-footer-group; }
+  th, td { border: 1px solid #555; padding: 3px 4px; font-size: 8.5pt; word-wrap: break-word; overflow-wrap: anywhere; vertical-align: top; }
+  th { background:#2A6F97; color:#fff; font-weight: 700; text-align:center; }
+  td.c { text-align:center; }
+  td.nome { font-weight: 600; }
   tbody tr:nth-child(even) td { background:#f5f7fa; }
-  footer { position: fixed; bottom: 4mm; left: 10mm; right: 10mm; font-size: 8pt; display:flex; justify-content: space-between; border-top:1px solid #999; padding-top:2px; }
+  .footer {
+    position: fixed;
+    bottom: 6mm;
+    left: 12mm;
+    right: 12mm;
+    font-size: 8pt;
+    color:#444;
+    border-top: 1px solid #999;
+    padding-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+  }
+  .footer .center { flex: 1; text-align:center; }
+  .footer .right { text-align: right; }
+  @media print {
+    .footer { position: fixed; }
+  }
 </style></head>
 <body>
-  <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ — Conferência BPA-I</h1>
+  <header class="institutional">
+    <div class="logos-left"><img src="${logo1}" alt="SMS"/></div>
+    <div class="title">
+      <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
+      <h2>Conferência BPA-I — Boletim de Produção Ambulatorial Individualizado</h2>
+      <div class="sub">Competência ${esc(ctx.competencia)} &middot; ${esc(ctx.unidade_nome)}</div>
+    </div>
+    <div class="logos-right">
+      <img src="${logo2}" alt="SMS Oriximiná"/>
+      <img src="${logo3}" alt="CER II"/>
+    </div>
+  </header>
   <div class="meta">
     <div><b>UNIDADE:</b> ${esc(ctx.unidade_nome)} &nbsp; <b>CNES:</b> ${esc(ctx.cnes)}</div>
     <div><b>MÊS DE REFERÊNCIA:</b> ${esc(ctx.competencia)}</div>
     <div><b>PROFISSIONAL:</b> ${esc(ctx.profissional_nome)} &nbsp; <b>CNS:</b> ${esc(ctx.cns_prof)} &nbsp; <b>CBO:</b> ${esc(ctx.cbo)}</div>
-    <div><b>Total de registros:</b> ${results.confRows.length}</div>
+    <div><b>Total de registros:</b> ${confSorted.length}</div>
   </div>
   <table>
+    <colgroup>
+      <col style="width:18%"/><col style="width:11%"/><col style="width:7%"/><col style="width:4%"/>
+      <col style="width:7%"/><col style="width:18%"/><col style="width:5%"/><col style="width:11%"/>
+      <col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
+    </colgroup>
     <thead><tr>
       <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
       <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
@@ -1298,11 +1361,12 @@ const BpaExportar: React.FC = () => {
     </tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>
-  <footer>
-    <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
-    <span>Responsável: ${esc(user?.nome || user?.usuario || '—')}</span>
-  </footer>
-  <script>window.onload=()=>{setTimeout(()=>window.print(),300);};</script>
+  <div class="footer">
+    <span>Gerado em ${geradoEm}</span>
+    <span class="center">Conferência BPA-I &middot; Competência ${esc(ctx.competencia)}</span>
+    <span class="right">Responsável: ${respo}</span>
+  </div>
+  <script>window.onload=()=>{setTimeout(()=>window.print(),400);};</script>
 </body></html>`;
     win.document.open();
     win.document.write(html);
