@@ -617,17 +617,18 @@ const BpaExportar: React.FC = () => {
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
           let pendenciaPaciente = false;
-          const nacCodigo = nacionalidadeBpa(pac);
+          const nacRes = nacionalidadeBpa(pac);
           let nacionalidade: string;
-          if (nacCodigo) {
-            nacionalidade = nacCodigo;
+          if (nacRes.codigo) {
+            nacionalidade = nacRes.codigo;
           } else {
             nacionalidade = '   ';
             pendenciaPaciente = true;
             stats.missingNacionalidade++;
             const valorAtual = pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || 'Vazio';
-            warnings.push(`${ident}: Nacionalidade ausente ou sem código oficial no cadastro (${valorAtual}).`);
-            details.missingNacionalidade.push({ ...itemDetail, pendencia: 'Nacionalidade Ausente/Inválida', valor_atual: String(valorAtual) });
+            const motivo = nacRes.motivo || 'Inválido';
+            warnings.push(`${ident}: Nacionalidade inválida — ${motivo} (valor: ${valorAtual}).`);
+            details.missingNacionalidade.push({ ...itemDetail, pendencia: `Nacionalidade: ${motivo}`, valor_atual: String(valorAtual) });
           }
 
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
