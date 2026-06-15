@@ -1376,7 +1376,8 @@ const BpaExportar: React.FC = () => {
                       <div className="pt-2 border-t text-xs space-y-1">
                         <div className="font-semibold text-red-700">Motivos dos bloqueios:</div>
                         {results.stats.missingNacionalidade > 0 && <div>• Nacionalidade inválida/ausente: <b>{results.stats.missingNacionalidade}</b></div>}
-                        {results.stats.missingLogradouro > 0 && <div>• Código de logradouro indeterminado: <b>{results.stats.missingLogradouro}</b></div>}
+                       {results.stats.missingLogradouro > 0 && <div>• Código de logradouro indeterminado: <b>{results.stats.missingLogradouro}</b></div>}
+                       {results.stats.missingSigtap > 0 && <div>• Procedimento SIGTAP obrigatório (Psicologia/Fono/Fisio/Nutrição) ausente: <b>{results.stats.missingSigtap}</b></div>}
                         {results.stats.missingCns > 0 && <div>• CNS ausente: <b>{results.stats.missingCns}</b></div>}
                         {results.stats.missingSexo > 0 && <div>• Sexo indefinido: <b>{results.stats.missingSexo}</b></div>}
                         {results.stats.invalidNascimento > 0 && <div>• Nascimento inválido: <b>{results.stats.invalidNascimento}</b></div>}
