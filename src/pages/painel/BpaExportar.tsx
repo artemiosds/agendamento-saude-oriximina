@@ -771,6 +771,7 @@ const BpaExportar: React.FC = () => {
             if (code) ptsSigtapByPatient.set(pid, code);
           });
       }
+      }
 
       // === Resolução unificada com BPA-Produção (Psico/Fono/Fisio/Nutri) ===
       // Reutiliza EXATAMENTE a mesma função do BPA-Produção
@@ -813,7 +814,6 @@ const BpaExportar: React.FC = () => {
         console.warn('[BPA-Exportar] falha ao consultar bpaService (fallback para lógica local):', e);
       }
 
-      }
 
       let exportedCount = 0;
       let criticalCount = 0;
