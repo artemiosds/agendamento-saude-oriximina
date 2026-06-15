@@ -597,6 +597,8 @@ const BpaExportar: React.FC = () => {
       let criticalCount = 0;
       const linhasProducao: string[] = [];
       const itensControle: Array<{ procedimento: string; quantidade: string }> = [];
+      const confRows: any[] = [];
+      const pendRows: any[] = [];
       
       let hasError = false;
 
