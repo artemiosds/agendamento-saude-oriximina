@@ -668,54 +668,44 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Geração do Cabeçalho
+      // Geração do Cabeçalho oficial: Registro 01 com 130 caracteres antes do CRLF
       const qtdRegistros = zfill(exportedCount, 6);
-      const fallbackHeader = (`01BPAAMBULATCOMPET${formData.competencia}${qtdRegistros}`).padEnd(205, " ").slice(0, 205);
+      const totalFolhas = Math.max(1, Math.ceil(exportedCount / 20));
+      const campoControle = calcularCampoControle(itensControle);
+      const unidadeHeader = formData.unidade_id !== 'all'
+        ? unidades.find((u) => u.id === formData.unidade_id)
+        : unidades[0];
+      const unidadeHeaderCd = (unidadeHeader?.custom_data as any) || {};
+      const header = buildHeaderOficial({
+        competencia: formData.competencia,
+        totalRegistros: exportedCount,
+        totalFolhas,
+        campoControle,
+        orgaoOrigem: unidadeHeader?.nome || 'SECRETARIA MUNICIPAL DE SAUDE',
+        siglaOrigem: unidadeHeaderCd.sigla || 'SMS',
+        documentoOrigem: unidadeHeaderCd.cnpj || unidadeHeader?.cnpj || unidadeHeaderCd.cpf || '',
+        orgaoDestino: unidadeHeaderCd.orgao_destino_bpa || unidadeHeaderCd.orgao_saude_destino || 'SECRETARIA MUNICIPAL DE SAUDE',
+        indicadorDestino: unidadeHeaderCd.indicador_destino_bpa || 'M',
+        versaoSistema: unidadeHeaderCd.versao_bpa || 'SMSORIXI',
+      });
+      const headerBytes = toIsoBytes(header);
 
-      let headerBytes: Uint8Array;
-      let header: string;
-      let headerOrigem: 'referencia' | 'padrao' = 'padrao';
-      let substituicoes: Array<{ pos: number; tipo: string; antes: string; depois: string }> = [];
-
-      if (refDiag && useRefHeader && refDiag.headerBytes.length > 0) {
-        const built = buildHeaderFromRef(refDiag.headerBytes, formData.competencia, exportedCount);
-        const arr = built.bytes.slice();
-        while (arr.length < refDiag.firstLineLen) arr.push(0x20);
-        headerBytes = new Uint8Array(arr.slice(0, refDiag.firstLineLen));
-        header = bytesToIso(Array.from(headerBytes));
-        substituicoes = built.substituicoes;
-        headerOrigem = 'referencia';
-      } else {
-        header = fallbackHeader;
-        headerBytes = new Uint8Array(header.length);
-        for (let i = 0; i < header.length; i++) headerBytes[i] = header.charCodeAt(i) < 256 ? header.charCodeAt(i) : 32;
-      }
-
-      // Linhas de produção em ISO-8859-1 sem BOM
+      // Arquivo ANSI/ISO-8859-1, sem BOM e com CRLF entre todas as linhas.
       const prodContent = linhasProducao.join('\r\n') + (linhasProducao.length ? '\r\n' : '');
-      const prodBytes = new Uint8Array(prodContent.length);
-      for (let i = 0; i < prodContent.length; i++) {
-        const code = prodContent.charCodeAt(i);
-        prodBytes[i] = code < 256 ? code : 32;
-      }
+      const prodBytes = toIsoBytes(prodContent);
 
-      const CRLF = new Uint8Array([0x0D, 0x0A]);
-      const total = new Uint8Array(headerBytes.length + CRLF.length + prodBytes.length);
+      const total = new Uint8Array(headerBytes.length + CRLF_BYTES.length + prodBytes.length);
       total.set(headerBytes, 0);
-      total.set(CRLF, headerBytes.length);
-      total.set(prodBytes, headerBytes.length + CRLF.length);
+      total.set(CRLF_BYTES, headerBytes.length);
+      total.set(prodBytes, headerBytes.length + CRLF_BYTES.length);
 
       const blob = new Blob([total], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
-      const fileName = headerOrigem === 'referencia'
-        ? `BPA_${formData.competencia}.TXT`
-        : `producao_bpa_${formData.competencia}.txt`;
+      const fileName = `PA${formData.competencia}.TXT`;
 
-      console.log('[BPA] Header origem:', headerOrigem);
       console.log('[BPA] Header len bytes:', headerBytes.length);
       console.log('[BPA] Header HEX (50):', bytesToHex(Array.from(headerBytes).slice(0, 50)));
       console.log('[BPA] Header texto:', header);
-      if (substituicoes.length) console.log('[BPA] Substituições aplicadas:', substituicoes);
 
 
       setResults({
@@ -731,12 +721,18 @@ const BpaExportar: React.FC = () => {
         headerPreview: header,
         headerDetails: {
           tipo: header.substring(0, 2),
-          identificacao: header.substring(2, 5),
-          destino: headerOrigem === 'referencia' ? '(REF)' : 'AMBULAT',
-          tipo_competencia: headerOrigem === 'referencia' ? '(REF)' : 'COMPET',
+          identificacao: header.substring(2, 7),
           competencia: formData.competencia,
           registros: qtdRegistros,
-          tamanho: header.length
+          totalFolhas: zfill(totalFolhas, 6),
+          campoControle,
+          tamanho: header.length,
+          recordLength: BPA_I_RECORD_LENGTH,
+          headerHex: bytesToHex(Array.from(headerBytes).slice(0, 16)),
+          crlf: true,
+          bom: false,
+          firstRecordPreview: linhasProducao[0] || '',
+          firstRecordLength: linhasProducao[0]?.length || 0,
         }
       });
 
