@@ -1368,6 +1368,24 @@ const Agenda: React.FC = () => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
 
+    // Bloqueia transições para status de atendimento em datas futuras.
+    // Evita registros tipo "Apto p/ Atendimento" / "Em Atendimento" / "Concluído"
+    // em dias que ainda nem chegaram.
+    const todayStr = todayLocalStr();
+    const STATUS_BLOQUEADOS_FUTURO = new Set([
+      "confirmado_chegada",
+      "chegada_confirmada",
+      "apto_atendimento",
+      "em_atendimento",
+      "concluido",
+      "finalizado",
+      "atendido",
+    ]);
+    if (ag.data > todayStr && STATUS_BLOQUEADOS_FUTURO.has(newStatus)) {
+      toast.error("⚠️ Não é possível alterar este status antes da data do agendamento.");
+      return;
+    }
+
     // Regra de permissão profissional para marcar falta (Req 1 & 3)
     if (isProfissional && newStatus === "falta" && ag.profissionalId !== user?.id) {
       toast.error("Você só pode registrar falta em pacientes vinculados à sua agenda.");
