@@ -539,6 +539,9 @@ const BpaExportar: React.FC = () => {
     } | null;
   } | null>(null);
 
+  // Modal de correção SIGTAP/CID (somente para pendência "Procedimento SIGTAP Ausente")
+  const [resolverModal, setResolverModal] = useState<{ open: boolean; item: ResolverSigtapItem | null }>({ open: false, item: null });
+
   useEffect(() => {
     fetchInitialData();
   }, []);
