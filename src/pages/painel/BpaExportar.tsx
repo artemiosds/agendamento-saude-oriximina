@@ -1589,9 +1589,9 @@ const BpaExportar: React.FC = () => {
           <td class="c">${esc(r.numero)}</td>
           <td>${esc(String(r.bairro || '').toUpperCase())}</td>
           <td class="c">${esc(r.data_atendimento)}</td>
-          <td class="c">${esc(r.codigo_sigtap)}</td>
-          <td class="c">${esc(r?._ctx?.origem_sigtap || '—')}</td>
-          <td class="c">${esc(r.cid_usado)}</td>
+          <td class="c">${esc(sigtapCodigoExibicao(r.codigo_sigtap) || r.codigo_sigtap || '—')}</td>
+          <td class="c">${esc(formatarOrigemSigtap(r.codigo_sigtap, r?._ctx?.origem_sigtap))}</td>
+          <td class="c">${esc(cidExibicao(r.cid_usado))}</td>
         </tr>`).join('');
 
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
