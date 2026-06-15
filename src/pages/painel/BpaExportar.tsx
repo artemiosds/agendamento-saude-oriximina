@@ -852,6 +852,32 @@ const BpaExportar: React.FC = () => {
             warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`);
           }
           
+          // Row de conferência (Excel/Impressão) — só inclui o que realmente entrou no TXT
+          const pacCdAny = (pac?.custom_data as any) || {};
+          const rowConf = {
+            paciente_nome: String(pac?.nome || pront.paciente_nome || '').toUpperCase(),
+            paciente_cns: cns_pac_raw,
+            data_nascimento: formatarDataBR(raw_nasc),
+            sexo,
+            tipo_logradouro: String(pac?.tipo_logradouro || pacCdAny.tipo_logradouro || '').toUpperCase(),
+            logradouro: String(pac?.logradouro || pac?.endereco || pacCdAny.logradouro || pacCdAny.endereco || '').toUpperCase(),
+            numero: String(pac?.numero || pacCdAny.numero || ''),
+            bairro: String(pac?.bairro || pacCdAny.bairro || '').toUpperCase(),
+            data_atendimento: formatarDataBR(pront.data_atendimento),
+            codigo_sigtap: proc_real || formData.procedimento_padrao || '',
+            cid_usado: String(pront.custom_data?.cid || pac?.cid || '').toUpperCase(),
+            _ctx: {
+              profissional_nome: prof?.nome || '',
+              cns_prof,
+              cbo,
+              unidade_nome: unit?.nome || '',
+              cnes,
+              cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || '',
+              usou_padrao: !proc_real,
+              origem: pront.origem || 'Prontuário',
+            }
+          };
+
           if (pendenciaPaciente && !formData.exportar_com_pendencias) {
             criticalCount++;
             details.critical.push({ ...itemDetail, pendencia: 'Pendência de cadastro (nacionalidade/logradouro)', valor_atual: 'Corrigir cadastro' });
@@ -859,6 +885,7 @@ const BpaExportar: React.FC = () => {
             linhasProducao.push(l);
             itensControle.push({ procedimento: proc, quantidade });
             exportedCount++;
+            confRows.push(rowConf);
           }
         }
       });
