@@ -1665,15 +1665,35 @@ const BpaExportar: React.FC = () => {
               )}
 
               {results.blobUrl && (
-                <div className="flex justify-center p-4 bg-white border rounded-lg shadow-sm">
-                  <a 
-                    href={results.blobUrl} 
+                <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
+                  <a
+                    href={results.blobUrl}
                     download={results.fileName}
                     className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8"
                   >
                     <Download className="mr-2 h-5 w-5" />
                     Baixar Arquivo {results.fileName}
                   </a>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 px-6"
+                    onClick={handleBaixarExcel}
+                    disabled={!results.confRows?.length}
+                  >
+                    <FileSpreadsheet className="mr-2 h-5 w-5 text-emerald-600" />
+                    Baixar Excel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 px-6"
+                    onClick={handleImprimirConferencia}
+                    disabled={!results.confRows?.length}
+                  >
+                    <Printer className="mr-2 h-5 w-5" />
+                    Imprimir Conferência
+                  </Button>
                 </div>
               )}
 
