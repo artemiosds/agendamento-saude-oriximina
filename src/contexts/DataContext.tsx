@@ -704,6 +704,62 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [isGlobalAdmin, userUnidadeId]);
 
+  // On-demand loader: fetches ALL agendamentos for a specific date (any status)
+  // and merges into the in-memory list. Used by Agenda when navigating to a
+  // date outside the default 14-day window so past months show every status
+  // (Confirmados, Aptos, Em atendimento, Concluídos, Faltou, Cancelados, Pendentes).
+  const loadedExtraDatesRef = useRef<Set<string>>(new Set());
+  const ensureAgendamentosForDate = useCallback(async (date: string) => {
+    try {
+      if (!date) return;
+      const key = `${date}|${userUnidadeId || 'all'}`;
+      if (loadedExtraDatesRef.current.has(key)) return;
+      loadedExtraDatesRef.current.add(key);
+
+      const columns =
+        "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
+      let query = supabase
+        .from("agendamentos" as any)
+        .select(columns)
+        .eq("data", date)
+        .order("hora", { ascending: true });
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
+      if (error || !data || data.length === 0) return;
+
+      const mapped = data.map((a: any) => ({
+        id: a.id,
+        pacienteId: a.paciente_id,
+        pacienteNome: a.paciente_nome,
+        unidadeId: a.unidade_id,
+        salaId: a.sala_id || "",
+        setorId: a.setor_id || "",
+        profissionalId: a.profissional_id,
+        profissionalNome: a.profissional_nome,
+        data: a.data,
+        hora: a.hora,
+        status: a.status,
+        tipo: a.tipo,
+        observacoes: a.observacoes || "",
+        origem: (a.origem || "recepcao") as any,
+        agendadoPorExterno: (a as any).agendado_por_externo || "",
+        googleEventId: a.google_event_id || "",
+        syncStatus: a.sync_status || "",
+        criadoEm: a.criado_em || "",
+        criadoPor: a.criado_por || "",
+        horaChegada: a.hora_chegada || "",
+      })) as Agendamento[];
+
+      setAgendamentos((prev) => {
+        const map = new Map(prev.map((p) => [p.id, p] as const));
+        for (const m of mapped) map.set(m.id, m);
+        return Array.from(map.values());
+      });
+    } catch (err) {
+      console.error("ensureAgendamentosForDate error:", err);
+    }
+  }, [isGlobalAdmin, userUnidadeId]);
+
   const loadFila = useCallback(async () => {
     try {
       const TERMINAL_STATUSES = ['atendido', 'cancelado', 'falta', 'concluido', 'excluido_da_fila_triagem'];
