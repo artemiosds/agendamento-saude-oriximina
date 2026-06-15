@@ -169,13 +169,24 @@ const LOGRADOURO_DNE: Record<string, string> = {
   ALAMEDA: '003', PRACA: '062', PRAÇA: '062', RAMAL: '082', VILA: '108', VIA: '107',
 };
 
-const codigoLogradouroBpa = (pac: any): string => {
+// Retorna o código oficial DNE (3 dígitos) ou null se não puder determinar com segurança.
+const codigoLogradouroBpa = (pac: any): string | null => {
   const cd = pac?.custom_data || {};
   const salvo = somenteNumeros(cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || cd.tipo_logradouro_dne);
   if (salvo) return salvo.slice(-3).padStart(3, '0');
-  const tipo = limparTexto(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').split(' ')[0];
-  const enderecoPrimeira = limparTexto(pac?.logradouro || pac?.endereco || cd.logradouro || cd.endereco || '').split(' ')[0];
-  return LOGRADOURO_DNE[tipo] || LOGRADOURO_DNE[enderecoPrimeira] || '   ';
+  const tipo = limparTexto(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').toUpperCase().split(' ')[0];
+  const enderecoPrimeira = limparTexto(pac?.logradouro || pac?.endereco || cd.logradouro || cd.endereco || '').toUpperCase().split(' ')[0];
+  return LOGRADOURO_DNE[tipo] || LOGRADOURO_DNE[enderecoPrimeira] || null;
+};
+
+// Valida e normaliza nacionalidade (3 dígitos). Retorna null se cadastro não tiver código oficial.
+const nacionalidadeBpa = (pac: any): string | null => {
+  const cd = pac?.custom_data || {};
+  const raw = pac?.nacionalidade ?? cd.nacionalidade_codigo ?? cd.nacionalidade ?? cd.nacionalidadeCodigo;
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  const num = somenteNumeros(raw);
+  if (!num) return null;
+  return num.slice(-3).padStart(3, '0');
 };
 
 const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
@@ -247,6 +258,8 @@ const BpaExportar: React.FC = () => {
       invalidCbo: number;
       defaultProc: number;
       invalidNascimento: number;
+      missingNacionalidade: number;
+      missingLogradouro: number;
     };
     details: {
       missingCns: any[];
@@ -258,6 +271,8 @@ const BpaExportar: React.FC = () => {
       invalidCbo: any[];
       defaultProc: any[];
       invalidNascimento: any[];
+      missingNacionalidade: any[];
+      missingLogradouro: any[];
       critical: any[];
     };
     error: string | null;
@@ -378,7 +393,9 @@ const BpaExportar: React.FC = () => {
       fallbackCbo: 0,
       invalidCbo: 0,
       defaultProc: 0,
-      invalidNascimento: 0
+      invalidNascimento: 0,
+      missingNacionalidade: 0,
+      missingLogradouro: 0
     };
 
     const details = {
@@ -391,6 +408,8 @@ const BpaExportar: React.FC = () => {
       invalidCbo: [] as any[],
       defaultProc: [] as any[],
       invalidNascimento: [] as any[],
+      missingNacionalidade: [] as any[],
+      missingLogradouro: [] as any[],
       critical: [] as any[]
     };
     
@@ -579,14 +598,45 @@ const BpaExportar: React.FC = () => {
           const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
           const raca = mapRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
           const etnia = raca === '05' ? fixedDigits(pacCd.etnia_codigo || pacCd.etnia, 4) : '    ';
-          const nacionalidade = fixedDigits(pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || '010', 3);
+
+          // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
+          let pendenciaPaciente = false;
+          const nacCodigo = nacionalidadeBpa(pac);
+          let nacionalidade: string;
+          if (nacCodigo) {
+            nacionalidade = nacCodigo;
+          } else {
+            nacionalidade = '   ';
+            pendenciaPaciente = true;
+            stats.missingNacionalidade++;
+            const valorAtual = pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || 'Vazio';
+            warnings.push(`${ident}: Nacionalidade ausente ou sem código oficial no cadastro (${valorAtual}).`);
+            details.missingNacionalidade.push({ ...itemDetail, pendencia: 'Nacionalidade Ausente/Inválida', valor_atual: String(valorAtual) });
+          }
+
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
           const classificacao = fixedDigits(pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || '', 3);
           const sequenciaEquipe = fixedDigits(pront.custom_data?.sequencia_equipe || unidadeCd.sequencia_equipe || '', 8);
           const areaEquipe = fixedDigits(pront.custom_data?.area_equipe || unidadeCd.area_equipe || '', 4);
           const cnpj = fixedDigits(unidadeCd.cnpj || unit?.cnpj || pacCd.cnpj || '', 14);
           const cep = fixedDigits(pac?.cep || pacCd.cep, 8);
-          const codigoLogradouro = codigoLogradouroBpa(pac);
+
+          // Código de logradouro: derivar do tipo real. Sem chute.
+          const logradouroCodigo = codigoLogradouroBpa(pac);
+          let codigoLogradouro: string;
+          if (logradouroCodigo) {
+            codigoLogradouro = logradouroCodigo;
+          } else {
+            codigoLogradouro = '   ';
+            const temEndereco = !!(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco);
+            if (temEndereco) {
+              pendenciaPaciente = true;
+              stats.missingLogradouro++;
+              const valorAtual = pac?.tipo_logradouro || pacCd.tipo_logradouro || pac?.logradouro || pac?.endereco || 'Vazio';
+              warnings.push(`${ident}: Código do logradouro não pôde ser determinado a partir do cadastro (${valorAtual}).`);
+              details.missingLogradouro.push({ ...itemDetail, pendencia: 'Código de Logradouro Indeterminado', valor_atual: String(valorAtual) });
+            }
+          }
           const endereco = fixedText(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco, 30);
           const complemento = fixedText(pac?.complemento || pacCd.complemento, 10);
           const numero = rpad(limparTexto(pac?.numero || pacCd.numero), 5);
@@ -644,9 +694,14 @@ const BpaExportar: React.FC = () => {
             warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`);
           }
           
-          linhasProducao.push(l);
-          itensControle.push({ procedimento: proc, quantidade });
-          exportedCount++;
+          if (pendenciaPaciente && !formData.exportar_com_pendencias) {
+            criticalCount++;
+            details.critical.push({ ...itemDetail, pendencia: 'Pendência de cadastro (nacionalidade/logradouro)', valor_atual: 'Corrigir cadastro' });
+          } else {
+            linhasProducao.push(l);
+            itensControle.push({ procedimento: proc, quantidade });
+            exportedCount++;
+          }
         }
       });
 
@@ -970,6 +1025,8 @@ const BpaExportar: React.FC = () => {
               { id: 'missingSexo', label: 'Sexo Indef.', count: results.stats.missingSexo, color: 'amber' },
               { id: 'invalidNascimento', label: 'Nascimento Inv.', count: results.stats.invalidNascimento, color: 'amber' },
               { id: 'missingMunicipio', label: 'Mun. Inválido', count: results.stats.missingMunicipio, color: 'amber' },
+              { id: 'missingNacionalidade', label: 'Sem Nacionalidade', count: results.stats.missingNacionalidade, color: 'amber' },
+              { id: 'missingLogradouro', label: 'Cód. Logradouro', count: results.stats.missingLogradouro, color: 'amber' },
               { id: 'missingCbo', label: 'Sem CBO Prof.', count: results.stats.missingCbo, color: 'amber' },
               { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
               { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' }
@@ -1005,6 +1062,8 @@ const BpaExportar: React.FC = () => {
                       selectedCategory === 'invalidCbo' ? 'CBO Inválido' :
                       selectedCategory === 'defaultProc' ? 'Procedimento Padrão Utilizado' :
                       selectedCategory === 'invalidNascimento' ? 'Data de Nascimento Inválida' :
+                      selectedCategory === 'missingNacionalidade' ? 'Nacionalidade Ausente ou Sem Código Oficial' :
+                      selectedCategory === 'missingLogradouro' ? 'Código do Logradouro Indeterminado' :
                       selectedCategory === 'missingMunicipio' ? 'Município Inválido ou Ausente' : ''
                     }
                   </CardTitle>
