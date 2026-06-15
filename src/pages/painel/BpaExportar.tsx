@@ -969,6 +969,22 @@ const BpaExportar: React.FC = () => {
             }
           }
 
+          // === Override unificado com BPA-Produção (Psico/Fono/Fisio/Nutri) ===
+          // Para essas profissões, se o BPA-Produção resolveu o SIGTAP com sua lógica
+          // oficial (campos diretos + catálogo + procedimentos vinculados + PTS), usamos
+          // esse código como fonte primária — eliminando divergências Exportar vs Produção.
+          const producaoResolvida = sigtapReq.exige ? producaoByPront.get(pront.id) : undefined;
+          if (producaoResolvida?.codigo_sigtap && producaoResolvida.codigo_sigtap !== proc_real) {
+            proc_real = producaoResolvida.codigo_sigtap;
+            proc_origem = producaoResolvida.fonte_procedimento === 'pts' ? 'PTS' : 'Prontuário';
+            proc_campo = `bpaService:${producaoResolvida.fonte_resolucao || 'resolvido'}`;
+            if (producaoResolvida.fonte_procedimento === 'pts') ptsEncontrado = Math.max(ptsEncontrado, 1);
+          } else if (!proc_real && producaoResolvida?.codigo_sigtap) {
+            proc_real = producaoResolvida.codigo_sigtap;
+            proc_origem = producaoResolvida.fonte_procedimento === 'pts' ? 'PTS' : 'Prontuário';
+            proc_campo = `bpaService:${producaoResolvida.fonte_resolucao || 'resolvido'}`;
+          }
+
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
           if (!proc_real && sigtapReq.exige) {
