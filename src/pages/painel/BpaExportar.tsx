@@ -1012,6 +1012,7 @@ const BpaExportar: React.FC = () => {
             const temEndereco = !!(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco);
             if (temEndereco) {
               pendenciaPaciente = true;
+              motivosPendencia.push('Código de logradouro');
               stats.missingLogradouro++;
               const valorAtual = pac?.tipo_logradouro || pacCd.tipo_logradouro || pac?.logradouro || pac?.endereco || 'Vazio';
               warnings.push(`${ident}: Código do logradouro não pôde ser determinado a partir do cadastro (${valorAtual}).`);
