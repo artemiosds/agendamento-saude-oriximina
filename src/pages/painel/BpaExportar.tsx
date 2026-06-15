@@ -600,19 +600,18 @@ const BpaExportar: React.FC = () => {
           const etnia = raca === '05' ? fixedDigits(pacCd.etnia_codigo || pacCd.etnia, 4) : '    ';
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
+          let pendenciaPaciente = false;
           const nacCodigo = nacionalidadeBpa(pac);
           let nacionalidade: string;
           if (nacCodigo) {
             nacionalidade = nacCodigo;
           } else {
             nacionalidade = '   ';
+            pendenciaPaciente = true;
             stats.missingNacionalidade++;
             const valorAtual = pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || 'Vazio';
             warnings.push(`${ident}: Nacionalidade ausente ou sem código oficial no cadastro (${valorAtual}).`);
             details.missingNacionalidade.push({ ...itemDetail, pendencia: 'Nacionalidade Ausente/Inválida', valor_atual: String(valorAtual) });
-            if (!formData.exportar_com_pendencias) {
-              isCritical = true;
-            }
           }
 
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
@@ -631,13 +630,11 @@ const BpaExportar: React.FC = () => {
             codigoLogradouro = '   ';
             const temEndereco = !!(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco);
             if (temEndereco) {
+              pendenciaPaciente = true;
               stats.missingLogradouro++;
               const valorAtual = pac?.tipo_logradouro || pacCd.tipo_logradouro || pac?.logradouro || pac?.endereco || 'Vazio';
               warnings.push(`${ident}: Código do logradouro não pôde ser determinado a partir do cadastro (${valorAtual}).`);
               details.missingLogradouro.push({ ...itemDetail, pendencia: 'Código de Logradouro Indeterminado', valor_atual: String(valorAtual) });
-              if (!formData.exportar_com_pendencias) {
-                isCritical = true;
-              }
             }
           }
           const endereco = fixedText(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco, 30);
