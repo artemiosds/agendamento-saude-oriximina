@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
+import { bpaService } from '@/services/bpaService';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
