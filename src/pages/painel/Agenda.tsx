@@ -3903,8 +3903,8 @@ const Agenda: React.FC = () => {
                       </div>
                       <div className="mt-1">
                         <StatusBadge
-                          label={statusLabels[ag.status] || ag.status}
-                          className={statusBadgeClass[ag.status]}
+                          label={statusLabels[getDisplayStatus(ag, todayLocalStr())] || ag.status}
+                          className={statusBadgeClass[getDisplayStatus(ag, todayLocalStr())]}
                         />
                       </div>
                     </div>
