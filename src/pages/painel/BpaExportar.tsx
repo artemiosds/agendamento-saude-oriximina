@@ -2181,6 +2181,19 @@ const BpaExportar: React.FC = () => {
           )}
         </div>
       )}
+
+      <BpaResolverSigtapModal
+        open={resolverModal.open}
+        item={resolverModal.item}
+        userId={(user as any)?.id}
+        userNome={(user as any)?.nome || (user as any)?.usuario}
+        onClose={() => setResolverModal({ open: false, item: null })}
+        onResolved={() => {
+          // Regenera análise para refletir a correção em tela, TXT, Excel e PDF
+          setResolverModal({ open: false, item: null });
+          void handleGerar();
+        }}
+      />
     </div>
   );
 };
