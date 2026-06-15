@@ -379,6 +379,8 @@ const BpaExportar: React.FC = () => {
     };
     error: string | null;
     fileName: string;
+    confRows: any[];
+    pendRows: any[];
     blobUrl: string | null;
     headerPreview: string | null;
     headerDetails: {
