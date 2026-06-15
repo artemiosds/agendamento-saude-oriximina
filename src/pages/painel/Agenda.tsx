@@ -209,6 +209,7 @@ const Agenda: React.FC = () => {
     addAtendimento,
     logAction,
     refreshAgendamentos,
+    ensureAgendamentosForDate,
     refreshFila,
     fila,
     updateFila,
@@ -231,6 +232,18 @@ const Agenda: React.FC = () => {
   const navigate = useNavigate();
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
+
+  // Past-date hydration: when navigating to a date outside the default
+  // 14-day window, on-demand fetch ALL agendamentos for that date so the
+  // status panels (Confirmados, Aptos, Em atendimento, Concluídos, Faltou,
+  // Cancelados, Pendentes) are populated for past months.
+  useEffect(() => {
+    if (!selectedDate) return;
+    const today = todayLocalStr();
+    if (selectedDate >= today) return;
+    // Always call — the context dedupes per (date, unidade) and merges.
+    ensureAgendamentosForDate(selectedDate);
+  }, [selectedDate, ensureAgendamentosForDate]);
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState(isProfissional ? (user?.id || "all") : "all");
   const [searchProf, setSearchProf] = useState("");
