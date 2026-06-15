@@ -153,9 +153,59 @@ const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string; c
 };
 // Fontes consultadas para o SIGTAP de acordo com a categoria da profissão.
 const fontesSigtapParaCategoria = (cat: CategoriaSigtap): string[] => {
-  if (cat === 'fisioterap') return ['Prontuário', 'PTS'];
-  if (cat) return ['Prontuário'];
+  if (cat === 'fisioterap') return ['Prontuário', 'Procedimentos vinculados', 'PTS'];
+  if (cat) return ['Prontuário', 'Procedimentos vinculados'];
   return [];
+};
+
+// Extrai SIGTAP do prontuário olhando em TODAS as fontes possíveis dentro do registro:
+// campo fixo (outro_procedimento, procedimentos_texto), custom_data (procedimento_sigtap,
+// codigo_sigtap, sigtap, procedimento, procedimento_codigo) e arrays dinâmicos
+// (procedimentos[], procedimentos_realizados[], sigtap[]). Retorna o primeiro
+// código de 10 dígitos válido encontrado e o nome do campo de origem.
+const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string } => {
+  if (!pront) return { codigo: '', campo: '' };
+  const cd = pront.custom_data || {};
+  const pickCodigo = (v: any): string => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'string' || typeof v === 'number') {
+      const n = somenteNumeros(v);
+      if (n.length >= 6 && n.length <= 10) return n.padStart(10, '0').slice(-10);
+      return '';
+    }
+    if (typeof v === 'object') {
+      const cand = v.codigo_sigtap || v.codigo || v.sigtap || v.procedimento_sigtap || v.procedimento_codigo || v.procedimento;
+      return pickCodigo(cand);
+    }
+    return '';
+  };
+  const candidatosSimples: Array<[string, any]> = [
+    ['custom_data.procedimento_sigtap', cd.procedimento_sigtap],
+    ['custom_data.codigo_sigtap',       cd.codigo_sigtap],
+    ['custom_data.sigtap',              cd.sigtap],
+    ['custom_data.procedimento_codigo', cd.procedimento_codigo],
+    ['custom_data.procedimento',        cd.procedimento],
+    ['outro_procedimento',              pront.outro_procedimento],
+    ['procedimentos_texto',             pront.procedimentos_texto],
+  ];
+  for (const [campo, v] of candidatosSimples) {
+    const code = pickCodigo(v);
+    if (code) return { codigo: code, campo };
+  }
+  const arrays: Array<[string, any]> = [
+    ['custom_data.procedimentos',           cd.procedimentos],
+    ['custom_data.procedimentos_realizados', cd.procedimentos_realizados],
+    ['custom_data.sigtap_lista',            cd.sigtap_lista],
+  ];
+  for (const [campo, arr] of arrays) {
+    if (Array.isArray(arr)) {
+      for (const item of arr) {
+        const code = pickCodigo(item);
+        if (code) return { codigo: code, campo: `${campo}[]` };
+      }
+    }
+  }
+  return { codigo: '', campo: '' };
 };
 
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
