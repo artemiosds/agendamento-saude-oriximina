@@ -207,8 +207,22 @@ const mapRacaCorBpa = (valor: any): string => {
 const LOGRADOURO_DNE: Record<string, string> = {
   RUA: '081', R: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
   BECO: '011', BC: '011', ESTRADA: '035', EST: '035', RODOVIA: '072', ROD: '072',
-  ALAMEDA: '003', PRACA: '062', PRAÇA: '062', RAMAL: '082', VILA: '108', VIA: '107',
+  ALAMEDA: '003', AL: '003', PRACA: '062', PRAÇA: '062', PCA: '062',
+  RAMAL: '082', VILA: '108', VL: '108', VIA: '107',
+  COMUNIDADE: '023', COM: '023', CONJUNTO: '025', CJ: '025',
+  LARGO: '044', LGO: '044', LADEIRA: '043', LD: '043',
+  PASSARELA: '057', PSA: '057', QUADRA: '068', QD: '068',
+  ROTULA: '075', ROTATORIA: '075', SETOR: '086', SET: '086',
+  SITIO: '090', FAZENDA: '037', LOTEAMENTO: '046',
 };
+
+// Mapa reverso: código DNE -> nome canônico (descrição que aparece no Excel/PDF)
+const LOGRADOURO_NOME_POR_CODIGO: Record<string, string> = (() => {
+  const ordem = ['RUA','AVENIDA','TRAVESSA','BECO','ESTRADA','RODOVIA','ALAMEDA','PRACA','RAMAL','VILA','VIA','COMUNIDADE','CONJUNTO','LARGO','LADEIRA','PASSARELA','QUADRA','ROTULA','SETOR','SITIO','FAZENDA','LOTEAMENTO'];
+  const out: Record<string,string> = {};
+  for (const k of ordem) { const c = LOGRADOURO_DNE[k]; if (c && !out[c]) out[c] = k; }
+  return out;
+})();
 
 // Retorna o código oficial DNE (3 dígitos) ou null se não puder determinar com segurança.
 const codigoLogradouroBpa = (pac: any): string | null => {
@@ -218,6 +232,17 @@ const codigoLogradouroBpa = (pac: any): string | null => {
   const tipo = limparTexto(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').toUpperCase().split(' ')[0];
   const enderecoPrimeira = limparTexto(pac?.logradouro || pac?.endereco || cd.logradouro || cd.endereco || '').toUpperCase().split(' ')[0];
   return LOGRADOURO_DNE[tipo] || LOGRADOURO_DNE[enderecoPrimeira] || null;
+};
+
+// Resolve o TEXTO do tipo de logradouro usando exatamente a mesma regra do TXT BPA-I.
+// Se o código DNE foi resolvido, devolve o nome canônico (RUA, AVENIDA, ...).
+// Caso contrário, devolve o valor bruto do cadastro em maiúsculas (sem inventar fallback).
+const tipoLogradouroTextoBpa = (pac: any): string => {
+  const codigo = codigoLogradouroBpa(pac);
+  if (codigo && LOGRADOURO_NOME_POR_CODIGO[codigo]) return LOGRADOURO_NOME_POR_CODIGO[codigo];
+  const cd = pac?.custom_data || {};
+  const bruto = String(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').trim().toUpperCase();
+  return bruto;
 };
 
 // Valida e normaliza nacionalidade (3 dígitos). Retorna null se cadastro não tiver código oficial.
