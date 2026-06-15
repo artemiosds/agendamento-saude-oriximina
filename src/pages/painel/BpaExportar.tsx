@@ -980,6 +980,7 @@ const BpaExportar: React.FC = () => {
           } else {
             nacionalidade = '   ';
             pendenciaPaciente = true;
+            motivosPendencia.push('Nacionalidade');
             stats.missingNacionalidade++;
             const valorAtual = pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || 'Vazio';
             const motivo = nacRes.motivo || 'Inválido';
