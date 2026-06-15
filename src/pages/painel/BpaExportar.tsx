@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
 import { bpaService } from '@/services/bpaService';
+import BpaResolverSigtapModal, { ResolverSigtapItem } from '@/components/bpa/BpaResolverSigtapModal';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
@@ -537,6 +538,9 @@ const BpaExportar: React.FC = () => {
       firstRecordLength: number;
     } | null;
   } | null>(null);
+
+  // Modal de correção SIGTAP/CID (somente para pendência "Procedimento SIGTAP Ausente")
+  const [resolverModal, setResolverModal] = useState<{ open: boolean; item: ResolverSigtapItem | null }>({ open: false, item: null });
 
   useEffect(() => {
     fetchInitialData();
@@ -2011,12 +2015,37 @@ const BpaExportar: React.FC = () => {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
+                            <div className="flex justify-end gap-2 flex-wrap">
+                              {selectedCategory === 'missingSigtap' && item.paciente_id && item.data_atendimento && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8"
+                                  title="Resolver pendência selecionando um SIGTAP da tabela oficial"
+                                  onClick={() => setResolverModal({
+                                    open: true,
+                                    item: {
+                                      paciente_id: item.paciente_id,
+                                      paciente_nome: item.paciente_nome,
+                                      profissional_id: item.profissional_id,
+                                      profissional_nome: item.profissional_nome,
+                                      profissao: item.profissao,
+                                      profissao_categoria: item.profissao_categoria,
+                                      data_atendimento: item.data_atendimento,
+                                      unidade_id: item.unidade_id,
+                                      unidade_nome: item.unidade_nome,
+                                      cbo: item.cbo,
+                                    },
+                                  })}
+                                >
+                                  Resolver SIGTAP
+                                </Button>
+                              )}
                               {item.paciente_id && (
-                                <Button 
-                                  variant="outline" 
-                                  size="icon" 
-                                  className="h-8 w-8" 
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
                                   title="Ver Paciente"
                                   onClick={() => navigate(`/painel/pacientes?id=${item.paciente_id}`)}
                                 >
@@ -2024,10 +2053,10 @@ const BpaExportar: React.FC = () => {
                                 </Button>
                               )}
                               {item.profissional_id && (
-                                <Button 
-                                  variant="outline" 
-                                  size="icon" 
-                                  className="h-8 w-8" 
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
                                   title="Ver Profissional"
                                   onClick={() => navigate(`/painel/funcionarios?id=${item.profissional_id}`)}
                                 >
@@ -2152,6 +2181,19 @@ const BpaExportar: React.FC = () => {
           )}
         </div>
       )}
+
+      <BpaResolverSigtapModal
+        open={resolverModal.open}
+        item={resolverModal.item}
+        userId={(user as any)?.id}
+        userNome={(user as any)?.nome || (user as any)?.usuario}
+        onClose={() => setResolverModal({ open: false, item: null })}
+        onResolved={() => {
+          // Regenera análise para refletir a correção em tela, TXT, Excel e PDF
+          setResolverModal({ open: false, item: null });
+          void handleGerar();
+        }}
+      />
     </div>
   );
 };
