@@ -12,6 +12,18 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
+import logoSms from '@/assets/logo-sms.jpeg';
+import logoSmsOrix from '@/assets/logo-sms-oriximina.jpeg';
+import logoCerII from '@/assets/logo-cer-ii.png';
+
+// Comparador alfabético estável: nome → data
+const cmpAlfa = (a: any, b: any) => {
+  const na = String(a?.paciente_nome || '').toLocaleLowerCase('pt-BR');
+  const nb = String(b?.paciente_nome || '').toLocaleLowerCase('pt-BR');
+  const c = na.localeCompare(nb, 'pt-BR');
+  if (c !== 0) return c;
+  return String(a?.data_atendimento || '').localeCompare(String(b?.data_atendimento || ''));
+};
 
 /**
  * Funções de Formatação e Utilitários
@@ -1061,12 +1073,18 @@ const BpaExportar: React.FC = () => {
       const ctx = obterContextoCabecalho();
       const wb = XLSX.utils.book_new();
 
+      // Ordenação alfabética estável
+      const confSorted = [...results.confRows].sort(cmpAlfa);
+      const pendSorted = [...results.pendRows].sort(cmpAlfa);
+
       // Aba BPA-I com cabeçalho institucional
       const headerLines = [
         ['SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ'],
+        ['CONFERÊNCIA BPA-I (Boletim de Produção Ambulatorial Individualizado)'],
         [`UNIDADE DE SAÚDE: ${ctx.unidade_nome}    CNES: ${ctx.cnes}`],
         [`MÊS DE REFERÊNCIA: ${ctx.competencia}`],
         [`PROFISSIONAL: ${ctx.profissional_nome}    CNS: ${ctx.cns_prof}    CBO: ${ctx.cbo}`],
+        [`Gerado em ${new Date().toLocaleString('pt-BR')} por ${user?.nome || user?.usuario || '—'}`],
         [],
       ];
       const cols = [
@@ -1074,21 +1092,48 @@ const BpaExportar: React.FC = () => {
         'tipo_logradouro', 'logradouro', 'numero', 'bairro',
         'data_atendimento', 'codigo_sigtap', 'cid_usado'
       ];
-      const dataRows = results.confRows.map(r => cols.map(c => (r as any)[c] ?? ''));
-      const aoa = [...headerLines, cols, ...dataRows];
+      const colsLabels = [
+        'PACIENTE', 'CNS', 'NASCIMENTO', 'SEXO',
+        'TIPO LOG.', 'LOGRADOURO', 'Nº', 'BAIRRO',
+        'ATENDIMENTO', 'SIGTAP', 'CID'
+      ];
+      const dataRows = confSorted.map(r => cols.map(c => {
+        const v = (r as any)[c] ?? '';
+        if (c === 'paciente_nome' || c === 'logradouro' || c === 'bairro' || c === 'tipo_logradouro') {
+          return String(v).toUpperCase();
+        }
+        return v;
+      }));
+      const headerRowIdx = headerLines.length; // índice (0-based) da linha do cabeçalho de colunas
+      const aoa = [...headerLines, colsLabels, ...dataRows];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       // Largura
       ws['!cols'] = [
-        { wch: 32 }, { wch: 18 }, { wch: 14 }, { wch: 6 },
-        { wch: 12 }, { wch: 32 }, { wch: 8 }, { wch: 20 },
-        { wch: 14 }, { wch: 14 }, { wch: 10 },
+        { wch: 34 }, { wch: 18 }, { wch: 12 }, { wch: 6 },
+        { wch: 12 }, { wch: 34 }, { wch: 8 }, { wch: 22 },
+        { wch: 14 }, { wch: 12 }, { wch: 10 },
       ];
-      // Congelar cabeçalho (linha 6 = índice 5)
-      (ws as any)['!freeze'] = { xSplit: 0, ySplit: 6 };
-      (ws as any)['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: 5 }, e: { c: cols.length - 1, r: 5 + dataRows.length } }) };
-      // Estilo cabeçalho de coluna (linha 6)
-      cols.forEach((_, i) => {
-        const cell = ws[XLSX.utils.encode_cell({ c: i, r: 5 })];
+      // Mesclar as linhas institucionais para visual mais limpo
+      (ws as any)['!merges'] = headerLines.slice(0, -1).map((_, i) => ({
+        s: { c: 0, r: i }, e: { c: cols.length - 1, r: i },
+      }));
+      // Congelar abaixo do cabeçalho de colunas
+      (ws as any)['!freeze'] = { xSplit: 0, ySplit: headerRowIdx + 1 };
+      (ws as any)['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: headerRowIdx }, e: { c: cols.length - 1, r: headerRowIdx + dataRows.length } }) };
+      // Estilo cabeçalho institucional
+      headerLines.forEach((_, r) => {
+        const cell = ws[XLSX.utils.encode_cell({ c: 0, r })];
+        if (cell) {
+          (cell as any).s = {
+            font: { bold: r === 0, sz: r === 0 ? 14 : 10, color: { rgb: r === 0 ? 'FFFFFF' : '000000' } },
+            fill: r === 0 ? { fgColor: { rgb: '2A6F97' } } : { fgColor: { rgb: 'F2F6F9' } },
+            alignment: { horizontal: r === 0 ? 'center' : 'left', vertical: 'center' },
+          };
+        }
+      });
+      // Estilo cabeçalho de coluna
+      colsLabels.forEach((_, i) => {
+        const cell = ws[XLSX.utils.encode_cell({ c: i, r: headerRowIdx })];
         if (cell) {
           (cell as any).s = {
             font: { bold: true, color: { rgb: 'FFFFFF' } },
@@ -1097,18 +1142,19 @@ const BpaExportar: React.FC = () => {
           };
         }
       });
-      // Página A4 paisagem
+      // Página A4 paisagem + repetir cabeçalho
       (ws as any)['!pageSetup'] = { orientation: 'landscape', paperSize: 9, fitToWidth: 1, fitToHeight: 0 };
+      (ws as any)['!printHeader'] = `${headerRowIdx + 1}:${headerRowIdx + 1}`;
       XLSX.utils.book_append_sheet(wb, ws, 'BPA-I');
 
-      // Aba Pendências
-      const pendHead = ['Seq', 'Paciente', 'CNS', 'CPF', 'Profissional', 'CBO', 'Procedimento', 'SIGTAP', 'Data', 'Origem', 'Pendências'];
-      const pendData = results.pendRows.map((p: any, i: number) => [
+      // Aba Pendências (ordem alfabética)
+      const pendHead = ['SEQ', 'PACIENTE', 'CNS', 'CPF', 'PROFISSIONAL', 'CBO', 'PROCEDIMENTO', 'SIGTAP', 'DATA', 'ORIGEM', 'PENDÊNCIAS'];
+      const pendData = pendSorted.map((p: any, i: number) => [
         i + 1,
         String(p.paciente_nome || '').toUpperCase(),
         p.cns_paciente || '',
         p.paciente_cpf || '',
-        p.profissional_nome || '',
+        String(p.profissional_nome || '').toUpperCase(),
         p.cbo || '',
         p.procedimento || '',
         p.procedimento || '',
@@ -1117,20 +1163,37 @@ const BpaExportar: React.FC = () => {
         (p.pendencias || [p.pendencia || '']).join('; '),
       ]);
       const wsP = XLSX.utils.aoa_to_sheet([pendHead, ...pendData]);
-      wsP['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 18 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 50 }];
+      wsP['!cols'] = [{ wch: 5 }, { wch: 32 }, { wch: 18 }, { wch: 14 }, { wch: 30 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 60 }];
+      (wsP as any)['!freeze'] = { xSplit: 0, ySplit: 1 };
       (wsP as any)['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: pendHead.length - 1, r: pendData.length } }) };
+      pendHead.forEach((_, i) => {
+        const cell = wsP[XLSX.utils.encode_cell({ c: i, r: 0 })];
+        if (cell) (cell as any).s = {
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: 'B91C1C' } },
+          alignment: { wrapText: true, horizontal: 'center', vertical: 'center' },
+        };
+      });
+      // Quebra de texto nas pendências
+      pendData.forEach((_, r) => {
+        const cell = wsP[XLSX.utils.encode_cell({ c: 10, r: r + 1 })];
+        if (cell) (cell as any).s = { alignment: { wrapText: true, vertical: 'top' } };
+      });
       XLSX.utils.book_append_sheet(wb, wsP, 'Pendências');
 
       // Aba Resumo
       const porProf = new Map<string, number>();
       const porProc = new Map<string, number>();
       const porUnid = new Map<string, number>();
-      results.confRows.forEach((r: any) => {
-        porProf.set(r._ctx.profissional_nome || '—', (porProf.get(r._ctx.profissional_nome || '—') || 0) + 1);
+      confSorted.forEach((r: any) => {
+        porProf.set(r._ctx?.profissional_nome || '—', (porProf.get(r._ctx?.profissional_nome || '—') || 0) + 1);
         porProc.set(r.codigo_sigtap || '—', (porProc.get(r.codigo_sigtap || '—') || 0) + 1);
-        porUnid.set(r._ctx.unidade_nome || '—', (porUnid.get(r._ctx.unidade_nome || '—') || 0) + 1);
+        porUnid.set(r._ctx?.unidade_nome || '—', (porUnid.get(r._ctx?.unidade_nome || '—') || 0) + 1);
       });
       const resumo: any[][] = [
+        ['RESUMO DA PRODUÇÃO BPA-I'],
+        [],
+        ['MÉTRICAS GERAIS', ''],
         ['Competência', ctx.competencia],
         ['Unidade', ctx.unidade_nome],
         ['Profissional', ctx.profissional_nome],
@@ -1141,17 +1204,29 @@ const BpaExportar: React.FC = () => {
         ['Fonte Prontuário', results.confRows.length],
         ['Fonte PTS', 0],
         [],
-        ['Por profissional', ''],
-        ...Array.from(porProf.entries()),
+        ['POR PROFISSIONAL', 'QTD'],
+        ...Array.from(porProf.entries()).sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')),
         [],
-        ['Por procedimento SIGTAP', ''],
-        ...Array.from(porProc.entries()),
+        ['POR PROCEDIMENTO SIGTAP', 'QTD'],
+        ...Array.from(porProc.entries()).sort((a, b) => a[0].localeCompare(b[0])),
         [],
-        ['Por unidade', ''],
-        ...Array.from(porUnid.entries()),
+        ['POR UNIDADE', 'QTD'],
+        ...Array.from(porUnid.entries()).sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')),
       ];
       const wsR = XLSX.utils.aoa_to_sheet(resumo);
-      wsR['!cols'] = [{ wch: 35 }, { wch: 40 }];
+      wsR['!cols'] = [{ wch: 40 }, { wch: 40 }];
+      (wsR as any)['!merges'] = [{ s: { c: 0, r: 0 }, e: { c: 1, r: 0 } }];
+      // Destacar títulos de seção
+      [0, 2, 13, 13 + porProf.size + 2, 13 + porProf.size + 2 + porProc.size + 2].forEach(r => {
+        [0, 1].forEach(c => {
+          const cell = wsR[XLSX.utils.encode_cell({ c, r })];
+          if (cell) (cell as any).s = {
+            font: { bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '2A6F97' } },
+            alignment: { horizontal: c === 0 ? 'left' : 'center' },
+          };
+        });
+      });
       XLSX.utils.book_append_sheet(wb, wsR, 'Resumo');
 
       const sufixo = formData.profissional_id !== 'all'
@@ -1178,44 +1253,107 @@ const BpaExportar: React.FC = () => {
       return;
     }
     const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
-    const rowsHtml = results.confRows.map((r: any) => `
+    const confSorted = [...results.confRows].sort(cmpAlfa);
+    const abs = (u: string) => new URL(u, window.location.origin).href;
+    const logo1 = abs(logoSms);
+    const logo2 = abs(logoSmsOrix);
+    const logo3 = abs(logoCerII);
+    const rowsHtml = confSorted.map((r: any) => `
       <tr>
-        <td>${esc(r.paciente_nome)}</td>
+        <td class="nome">${esc(String(r.paciente_nome || '').toUpperCase())}</td>
         <td>${esc(r.paciente_cns)}</td>
-        <td>${esc(r.data_nascimento)}</td>
-        <td>${esc(r.sexo)}</td>
-        <td>${esc(r.tipo_logradouro)}</td>
-        <td>${esc(r.logradouro)}</td>
-        <td>${esc(r.numero)}</td>
-        <td>${esc(r.bairro)}</td>
-        <td>${esc(r.data_atendimento)}</td>
-        <td>${esc(r.codigo_sigtap)}</td>
-        <td>${esc(r.cid_usado)}</td>
+        <td class="c">${esc(r.data_nascimento)}</td>
+        <td class="c">${esc(r.sexo)}</td>
+        <td class="c">${esc(r.tipo_logradouro)}</td>
+        <td>${esc(String(r.logradouro || '').toUpperCase())}</td>
+        <td class="c">${esc(r.numero)}</td>
+        <td>${esc(String(r.bairro || '').toUpperCase())}</td>
+        <td class="c">${esc(r.data_atendimento)}</td>
+        <td class="c">${esc(r.codigo_sigtap)}</td>
+        <td class="c">${esc(r.cid_usado)}</td>
       </tr>`).join('');
+    const geradoEm = new Date().toLocaleString('pt-BR');
+    const respo = esc(user?.nome || user?.usuario || '—');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Conferência BPA-I ${ctx.competencia}</title>
 <style>
-  @page { size: A4 landscape; margin: 10mm; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; color:#000; }
-  h1 { font-size: 13pt; text-align:center; margin: 0 0 4px; }
-  .meta { margin-bottom: 8px; font-size: 10pt; }
-  .meta div { margin: 1px 0; }
-  table { width:100%; border-collapse: collapse; }
+  @page { size: A4 landscape; margin: 14mm 12mm 22mm 12mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color:#111; padding-bottom: 18mm; }
+  .institutional {
+    display: grid;
+    grid-template-columns: 70px 1fr 70px;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #2A6F97;
+    margin-bottom: 10px;
+  }
+  .institutional .logos-left, .institutional .logos-right {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .institutional img { height: 60px; width: auto; max-width: 70px; object-fit: contain; }
+  .institutional .title { text-align:center; }
+  .institutional .title h1 { font-size: 13pt; margin: 0 0 2px; color:#2A6F97; letter-spacing: .3px; }
+  .institutional .title h2 { font-size: 11pt; margin: 0; font-weight: 600; color:#333; }
+  .institutional .title .sub { font-size: 9pt; color:#555; margin-top: 2px; }
+  .meta { margin: 0 0 10px; font-size: 9.5pt; background:#F2F6F9; border:1px solid #D6E2EC; padding: 6px 8px; border-radius: 4px; }
+  .meta div { margin: 2px 0; }
+  .meta b { color:#2A6F97; }
+  table { width:100%; border-collapse: collapse; table-layout: fixed; }
   thead { display: table-header-group; }
-  th, td { border: 1px solid #333; padding: 3px 4px; font-size: 9pt; }
-  th { background:#2A6F97; color:#fff; }
+  tfoot { display: table-footer-group; }
+  th, td { border: 1px solid #555; padding: 3px 4px; font-size: 8.5pt; word-wrap: break-word; overflow-wrap: anywhere; vertical-align: top; }
+  th { background:#2A6F97; color:#fff; font-weight: 700; text-align:center; }
+  td.c { text-align:center; }
+  td.nome { font-weight: 600; }
   tbody tr:nth-child(even) td { background:#f5f7fa; }
-  footer { position: fixed; bottom: 4mm; left: 10mm; right: 10mm; font-size: 8pt; display:flex; justify-content: space-between; border-top:1px solid #999; padding-top:2px; }
+  .footer {
+    position: fixed;
+    bottom: 6mm;
+    left: 12mm;
+    right: 12mm;
+    font-size: 8pt;
+    color:#444;
+    border-top: 1px solid #999;
+    padding-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+  }
+  .footer .center { flex: 1; text-align:center; }
+  .footer .right { text-align: right; }
+  @media print {
+    .footer { position: fixed; }
+  }
 </style></head>
 <body>
-  <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ — Conferência BPA-I</h1>
+  <header class="institutional">
+    <div class="logos-left"><img src="${logo1}" alt="SMS"/></div>
+    <div class="title">
+      <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
+      <h2>Conferência BPA-I — Boletim de Produção Ambulatorial Individualizado</h2>
+      <div class="sub">Competência ${esc(ctx.competencia)} &middot; ${esc(ctx.unidade_nome)}</div>
+    </div>
+    <div class="logos-right">
+      <img src="${logo2}" alt="SMS Oriximiná"/>
+      <img src="${logo3}" alt="CER II"/>
+    </div>
+  </header>
   <div class="meta">
     <div><b>UNIDADE:</b> ${esc(ctx.unidade_nome)} &nbsp; <b>CNES:</b> ${esc(ctx.cnes)}</div>
     <div><b>MÊS DE REFERÊNCIA:</b> ${esc(ctx.competencia)}</div>
     <div><b>PROFISSIONAL:</b> ${esc(ctx.profissional_nome)} &nbsp; <b>CNS:</b> ${esc(ctx.cns_prof)} &nbsp; <b>CBO:</b> ${esc(ctx.cbo)}</div>
-    <div><b>Total de registros:</b> ${results.confRows.length}</div>
+    <div><b>Total de registros:</b> ${confSorted.length}</div>
   </div>
   <table>
+    <colgroup>
+      <col style="width:18%"/><col style="width:11%"/><col style="width:7%"/><col style="width:4%"/>
+      <col style="width:7%"/><col style="width:18%"/><col style="width:5%"/><col style="width:11%"/>
+      <col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
+    </colgroup>
     <thead><tr>
       <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
       <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
@@ -1223,11 +1361,12 @@ const BpaExportar: React.FC = () => {
     </tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>
-  <footer>
-    <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
-    <span>Responsável: ${esc(user?.nome || user?.usuario || '—')}</span>
-  </footer>
-  <script>window.onload=()=>{setTimeout(()=>window.print(),300);};</script>
+  <div class="footer">
+    <span>Gerado em ${geradoEm}</span>
+    <span class="center">Conferência BPA-I &middot; Competência ${esc(ctx.competencia)}</span>
+    <span class="right">Responsável: ${respo}</span>
+  </div>
+  <script>window.onload=()=>{setTimeout(()=>window.print(),400);};</script>
 </body></html>`;
     win.document.open();
     win.document.write(html);
