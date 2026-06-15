@@ -568,7 +568,7 @@ const BpaExportar: React.FC = () => {
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
         let pac = pacMap.get(pront.paciente_id) as any;
-        if (!pac || (!pac.cpf && !pac.cns && !pac.data_nascimento)) {
+        if (!pac || (!primeiroValorPreenchido(pac.cpf, pac.cns, pac.data_nascimento, (pac.custom_data as any)?.cpf, (pac.custom_data as any)?.cns, (pac.custom_data as any)?.data_nascimento))) {
           const k = (pront.paciente_nome || '').trim().toUpperCase();
           const fallback = k ? pacByNameMap.get(k) : null;
           if (fallback) pac = fallback;
@@ -581,15 +581,15 @@ const BpaExportar: React.FC = () => {
           id: pront.id,
           paciente_id: pront.paciente_id,
           paciente_nome: ident,
-          paciente_cpf: pac?.cpf,
-          paciente_nascimento: pac?.data_nascimento,
+          paciente_cpf: primeiroValorPreenchido(pac?.cpf, (pac?.custom_data as any)?.cpf),
+          paciente_nascimento: primeiroValorPreenchido(pac?.data_nascimento, (pac?.custom_data as any)?.data_nascimento),
           data_atendimento: pront.data_atendimento,
           profissional_id: pront.profissional_id,
           profissional_nome: prof?.nome || 'Profissional não encontrado',
           unidade_id: pront.unidade_id,
           unidade_nome: unit?.nome || 'Unidade não encontrada',
           procedimento: pront.custom_data?.procedimento_sigtap || pront.outro_procedimento,
-          cns_paciente: pac?.cns,
+          cns_paciente: primeiroValorPreenchido(pac?.cns, (pac?.custom_data as any)?.cns),
           sexo: pac?.sexo,
           municipio: pac?.municipio || (pac?.custom_data as any)?.municipio_ibge,
           cbo: obterCboValido(prof)
