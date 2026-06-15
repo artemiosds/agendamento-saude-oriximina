@@ -180,13 +180,29 @@ const codigoLogradouroBpa = (pac: any): string | null => {
 };
 
 // Valida e normaliza nacionalidade (3 dígitos). Retorna null se cadastro não tiver código oficial.
-const nacionalidadeBpa = (pac: any): string | null => {
+// Tabela SIA/SUS de Nacionalidade (DATASUS) — códigos mais comuns. Usada para validar
+// que o valor gravado no cadastro está dentro da faixa aceita pelo importador BPA.
+const NACIONALIDADE_BPA_VALIDAS = new Set<string>([
+  '010','020','022','030','031','035','040','045','050','060','070','080','090',
+  '105','110','115','120','130','140','150','160','170','180','190',
+  '200','210','220','230','240','250','260','270','280','290','300','999'
+]);
+
+const nacionalidadeBpa = (pac: any): { codigo: string | null; motivo?: string } => {
   const cd = pac?.custom_data || {};
   const raw = pac?.nacionalidade ?? cd.nacionalidade_codigo ?? cd.nacionalidade ?? cd.nacionalidadeCodigo;
-  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  if (raw === null || raw === undefined || String(raw).trim() === '') {
+    return { codigo: null, motivo: 'Sem valor no cadastro' };
+  }
   const num = somenteNumeros(raw);
-  if (!num) return null;
-  return num.slice(-3).padStart(3, '0');
+  if (!num) return { codigo: null, motivo: `Valor não-numérico: "${raw}"` };
+  if (num.length > 3) return { codigo: null, motivo: `Tamanho inválido (${num.length} dígitos)` };
+  const codigo = num.padStart(3, '0');
+  if (codigo === '000') return { codigo: null, motivo: 'Código 000 não é aceito' };
+  if (!NACIONALIDADE_BPA_VALIDAS.has(codigo)) {
+    return { codigo: null, motivo: `Código ${codigo} fora da tabela SIA conhecida` };
+  }
+  return { codigo };
 };
 
 const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
@@ -601,17 +617,18 @@ const BpaExportar: React.FC = () => {
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
           let pendenciaPaciente = false;
-          const nacCodigo = nacionalidadeBpa(pac);
+          const nacRes = nacionalidadeBpa(pac);
           let nacionalidade: string;
-          if (nacCodigo) {
-            nacionalidade = nacCodigo;
+          if (nacRes.codigo) {
+            nacionalidade = nacRes.codigo;
           } else {
             nacionalidade = '   ';
             pendenciaPaciente = true;
             stats.missingNacionalidade++;
             const valorAtual = pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || 'Vazio';
-            warnings.push(`${ident}: Nacionalidade ausente ou sem código oficial no cadastro (${valorAtual}).`);
-            details.missingNacionalidade.push({ ...itemDetail, pendencia: 'Nacionalidade Ausente/Inválida', valor_atual: String(valorAtual) });
+            const motivo = nacRes.motivo || 'Inválido';
+            warnings.push(`${ident}: Nacionalidade inválida — ${motivo} (valor: ${valorAtual}).`);
+            details.missingNacionalidade.push({ ...itemDetail, pendencia: `Nacionalidade: ${motivo}`, valor_atual: String(valorAtual) });
           }
 
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
@@ -1204,6 +1221,40 @@ const BpaExportar: React.FC = () => {
                   {results.exportedCount} linhas geradas com sucesso. Verifique os avisos acima antes de baixar.
                 </AlertDescription>
               </Alert>
+
+              {results.blobUrl && (
+                <Card className="border-primary/30 bg-slate-50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                      Resumo Final da Exportação
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div><div className="text-xs text-muted-foreground">Total encontrado</div><div className="font-bold text-lg">{results.totalFound}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Exportados no TXT</div><div className="font-bold text-lg text-green-700">{results.exportedCount}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Bloqueados</div><div className="font-bold text-lg text-red-700">{results.criticalCount}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Folhas no cabeçalho</div><div className="font-bold text-lg">{results.headerDetails?.totalFolhas}</div></div>
+                    </div>
+                    {results.criticalCount > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-red-700">Motivos dos bloqueios:</div>
+                        {results.stats.missingNacionalidade > 0 && <div>• Nacionalidade inválida/ausente: <b>{results.stats.missingNacionalidade}</b></div>}
+                        {results.stats.missingLogradouro > 0 && <div>• Código de logradouro indeterminado: <b>{results.stats.missingLogradouro}</b></div>}
+                        {results.stats.missingCns > 0 && <div>• CNS ausente: <b>{results.stats.missingCns}</b></div>}
+                        {results.stats.missingSexo > 0 && <div>• Sexo indefinido: <b>{results.stats.missingSexo}</b></div>}
+                        {results.stats.invalidNascimento > 0 && <div>• Nascimento inválido: <b>{results.stats.invalidNascimento}</b></div>}
+                        {results.stats.missingMunicipio > 0 && <div>• Município inválido: <b>{results.stats.missingMunicipio}</b></div>}
+                      </div>
+                    )}
+                    <div className="pt-2 border-t text-xs text-muted-foreground">
+                      ✓ Cabeçalho declara <b>{results.headerDetails?.registros}</b> registros — confere com {results.exportedCount} linhas no arquivo.
+                      Registros bloqueados <b>não</b> entram no TXT nem na contagem.
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {results.blobUrl && (
                 <div className="flex justify-center p-4 bg-white border rounded-lg shadow-sm">
