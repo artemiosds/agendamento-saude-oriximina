@@ -1371,6 +1371,7 @@ const BpaExportar: React.FC = () => {
           <td>${esc(String(r.bairro || '').toUpperCase())}</td>
           <td class="c">${esc(r.data_atendimento)}</td>
           <td class="c">${esc(r.codigo_sigtap)}</td>
+          <td class="c">${esc(r?._ctx?.origem_sigtap || '—')}</td>
           <td class="c">${esc(r.cid_usado)}</td>
         </tr>`).join('');
 
