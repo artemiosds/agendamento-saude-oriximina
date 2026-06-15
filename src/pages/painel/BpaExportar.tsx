@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, ExternalLink, X, FileUp } from 'lucide-react';
+import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -129,6 +129,89 @@ const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
   return null;
 };
 
+const BPA_HEADER_LENGTH = 130;
+const BPA_I_RECORD_LENGTH = 338;
+const CRLF_BYTES = new Uint8Array([0x0D, 0x0A]);
+
+const bytesToHex = (arr: number[] | Uint8Array, sep = ' ') =>
+  Array.from(arr).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(sep);
+
+const toIsoBytes = (content: string): Uint8Array => {
+  const bytes = new Uint8Array(content.length);
+  for (let i = 0; i < content.length; i++) {
+    const code = content.charCodeAt(i);
+    bytes[i] = code <= 255 ? code : 0x20;
+  }
+  return bytes;
+};
+
+const fixedText = (valor: any, tamanho: number): string => rpad(limparTexto(String(valor || '')), tamanho);
+
+const fixedDigits = (valor: any, tamanho: number): string => {
+  const s = somenteNumeros(valor);
+  if (!s) return ' '.repeat(tamanho);
+  return s.slice(-tamanho).padStart(tamanho, '0');
+};
+
+const mapRacaCorBpa = (valor: any): string => {
+  const s = limparTexto(String(valor || '')).toLowerCase();
+  if (['01', 'branca', 'branco'].includes(s)) return '01';
+  if (['02', 'preta', 'preto', 'negra', 'negro'].includes(s)) return '02';
+  if (['03', 'parda', 'pardo'].includes(s)) return '03';
+  if (['04', 'amarela', 'amarelo'].includes(s)) return '04';
+  if (['05', 'indigena', 'indígena'].includes(s)) return '05';
+  return '99';
+};
+
+const LOGRADOURO_DNE: Record<string, string> = {
+  RUA: '081', R: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
+  BECO: '011', BC: '011', ESTRADA: '035', EST: '035', RODOVIA: '072', ROD: '072',
+  ALAMEDA: '003', PRACA: '062', PRAÇA: '062', RAMAL: '082', VILA: '108', VIA: '107',
+};
+
+const codigoLogradouroBpa = (pac: any): string => {
+  const cd = pac?.custom_data || {};
+  const salvo = somenteNumeros(cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || cd.tipo_logradouro_dne);
+  if (salvo) return salvo.slice(-3).padStart(3, '0');
+  const tipo = limparTexto(pac?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || '').split(' ')[0];
+  const enderecoPrimeira = limparTexto(pac?.logradouro || pac?.endereco || cd.logradouro || cd.endereco || '').split(' ')[0];
+  return LOGRADOURO_DNE[tipo] || LOGRADOURO_DNE[enderecoPrimeira] || '   ';
+};
+
+const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
+  const soma = itens.reduce((acc, item) => acc + Number(somenteNumeros(item.procedimento) || 0) + Number(somenteNumeros(item.quantidade) || 0), 0);
+  return zfill((soma % 1111) + 1111, 4);
+};
+
+const buildHeaderOficial = (params: {
+  competencia: string;
+  totalRegistros: number;
+  totalFolhas: number;
+  campoControle: string;
+  orgaoOrigem: string;
+  siglaOrigem: string;
+  documentoOrigem: string;
+  orgaoDestino: string;
+  indicadorDestino: string;
+  versaoSistema: string;
+}): string => {
+  const header =
+    '01' +
+    '#BPA#' +
+    zfill(params.competencia, 6) +
+    zfill(params.totalRegistros, 6) +
+    zfill(params.totalFolhas, 6) +
+    zfill(params.campoControle, 4) +
+    fixedText(params.orgaoOrigem, 30) +
+    fixedText(params.siglaOrigem, 6) +
+    zfill(params.documentoOrigem, 14) +
+    fixedText(params.orgaoDestino, 40) +
+    (params.indicadorDestino === 'E' ? 'E' : 'M') +
+    rpad(limparTexto(params.versaoSistema || 'SMSORIXI'), 10);
+
+  return header.slice(0, BPA_HEADER_LENGTH).padEnd(BPA_HEADER_LENGTH, ' ');
+};
+
 const BpaExportar: React.FC = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -184,113 +267,19 @@ const BpaExportar: React.FC = () => {
     headerDetails: {
       tipo: string;
       identificacao: string;
-      destino: string;
-      tipo_competencia: string;
       competencia: string;
       registros: string;
+      totalFolhas: string;
+      campoControle: string;
       tamanho: number;
+      recordLength: number;
+      headerHex: string;
+      crlf: boolean;
+      bom: boolean;
+      firstRecordPreview: string;
+      firstRecordLength: number;
     } | null;
   } | null>(null);
-
-  // === Referência: arquivo BPA válido aceito pelo importador oficial ===
-  interface RefDiag {
-    fileName: string;
-    totalBytes: number;
-    hasBOM: boolean;
-    crlf: boolean;
-    firstLineLen: number;
-    firstLineHex: string;
-    firstLineText: string;
-    headerBytes: number[]; // 205 bytes da primeira linha (sem CRLF)
-  }
-  const [refDiag, setRefDiag] = useState<RefDiag | null>(null);
-  const [useRefHeader, setUseRefHeader] = useState(true);
-
-  const bytesToHex = (arr: number[] | Uint8Array, sep = ' ') =>
-    Array.from(arr).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(sep);
-
-  const bytesToIso = (arr: number[] | Uint8Array) =>
-    Array.from(arr).map(b => String.fromCharCode(b)).join('');
-
-  const handleRefFile = async (file: File | null) => {
-    if (!file) { setRefDiag(null); return; }
-    try {
-      const buf = new Uint8Array(await file.arrayBuffer());
-      const hasBOM = buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
-      const start = hasBOM ? 3 : 0;
-      // detecta fim de primeira linha (LF ou CRLF)
-      let lfIdx = -1;
-      for (let i = start; i < buf.length; i++) {
-        if (buf[i] === 0x0A) { lfIdx = i; break; }
-      }
-      const lineEnd = lfIdx === -1 ? buf.length : lfIdx;
-      const crlf = lfIdx > 0 && buf[lfIdx - 1] === 0x0D;
-      const contentEnd = crlf ? lfIdx - 1 : lineEnd;
-      const headerBytes = Array.from(buf.slice(start, contentEnd));
-      const firstLineLen = headerBytes.length;
-      const firstLineHex = bytesToHex(headerBytes.slice(0, 50));
-      const firstLineText = bytesToIso(headerBytes);
-
-      setRefDiag({
-        fileName: file.name,
-        totalBytes: buf.length,
-        hasBOM,
-        crlf,
-        firstLineLen,
-        firstLineHex,
-        firstLineText,
-        headerBytes,
-      });
-      toast.success(`Referência carregada: ${file.name} (${firstLineLen} chars na 1ª linha)`);
-    } catch (err: any) {
-      console.error('Erro lendo arquivo referência:', err);
-      toast.error('Não foi possível ler o arquivo de referência.');
-      setRefDiag(null);
-    }
-  };
-
-  /** Gera cabeçalho a partir do modelo de referência, substituindo apenas competência e total de registros. */
-  const buildHeaderFromRef = (
-    refBytes: number[],
-    competencia: string,
-    totalRegistros: number
-  ): { bytes: number[]; substituicoes: Array<{ pos: number; tipo: string; antes: string; depois: string }> } => {
-    const out = refBytes.slice();
-    const text = bytesToIso(refBytes);
-    const subs: Array<{ pos: number; tipo: string; antes: string; depois: string }> = [];
-
-    // Procura padrão de competência AAAAMM (ano 20XX, mês 01-12)
-    const compRegex = /20\d{2}(0[1-9]|1[0-2])/g;
-    let m: RegExpExecArray | null;
-    while ((m = compRegex.exec(text)) !== null) {
-      const pos = m.index;
-      // Substitui se diferente
-      if (m[0] !== competencia) {
-        for (let i = 0; i < 6; i++) out[pos + i] = competencia.charCodeAt(i);
-        subs.push({ pos, tipo: 'competencia', antes: m[0], depois: competencia });
-      }
-      break; // só a primeira ocorrência
-    }
-
-    // Total de registros: tipicamente 6 dígitos após a competência
-    const qtdStr = zfill(totalRegistros, 6);
-    if (subs.length > 0) {
-      const compPos = subs[0].pos;
-      // procura próximo bloco de 6 dígitos consecutivos após a competência
-      const after = text.slice(compPos + 6);
-      const qtdMatch = /^(\D{0,20})(\d{6})/.exec(after);
-      if (qtdMatch) {
-        const qtdPos = compPos + 6 + qtdMatch[1].length;
-        const antes = qtdMatch[2];
-        if (antes !== qtdStr) {
-          for (let i = 0; i < 6; i++) out[qtdPos + i] = qtdStr.charCodeAt(i);
-          subs.push({ pos: qtdPos, tipo: 'total_registros', antes, depois: qtdStr });
-        }
-      }
-    }
-
-    return { bytes: out, substituicoes: subs };
-  };
 
   useEffect(() => {
     fetchInitialData();
@@ -466,6 +455,7 @@ const BpaExportar: React.FC = () => {
       let exportedCount = 0;
       let criticalCount = 0;
       const linhasProducao: string[] = [];
+      const itensControle: Array<{ procedimento: string; quantidade: string }> = [];
       
       let hasError = false;
 
@@ -581,47 +571,81 @@ const BpaExportar: React.FC = () => {
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
           const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || '');
-          const cid = (pront.custom_data?.cid || pac?.cid || '0000').substring(0, 4);
-          const endereco = limparTexto(pac?.endereco || (pac?.custom_data as any)?.endereco || '');
+          const pacCd = (pac?.custom_data as any) || {};
+          const unidadeCd = unitCd || {};
+          const cid = rpad(limparTexto(pront.custom_data?.cid || pac?.cid || ''), 4);
+          const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
+          const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
+          const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
+          const raca = mapRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
+          const etnia = raca === '05' ? fixedDigits(pacCd.etnia_codigo || pacCd.etnia, 4) : '    ';
+          const nacionalidade = fixedDigits(pac?.nacionalidade || pacCd.nacionalidade_codigo || pacCd.nacionalidade || '010', 3);
+          const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
+          const classificacao = fixedDigits(pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || '', 3);
+          const sequenciaEquipe = fixedDigits(pront.custom_data?.sequencia_equipe || unidadeCd.sequencia_equipe || '', 8);
+          const areaEquipe = fixedDigits(pront.custom_data?.area_equipe || unidadeCd.area_equipe || '', 4);
+          const cnpj = fixedDigits(unidadeCd.cnpj || unit?.cnpj || pacCd.cnpj || '', 14);
+          const cep = fixedDigits(pac?.cep || pacCd.cep, 8);
+          const codigoLogradouro = codigoLogradouroBpa(pac);
+          const endereco = fixedText(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco, 30);
+          const complemento = fixedText(pac?.complemento || pacCd.complemento, 10);
+          const numero = rpad(limparTexto(pac?.numero || pacCd.numero), 5);
+          const bairro = fixedText(pac?.bairro || pacCd.bairro, 30);
+          const telefone = fixedDigits(pac?.telefone || pacCd.telefone, 11);
+          const email = rpad(String(pac?.email || pacCd.email || '').toUpperCase().replace(/[\r\n]/g, ' ').slice(0, 40), 40);
+          const ineEquipe = fixedDigits(unidadeCd.ine || pront.custom_data?.ine_equipe || '', 10);
+          const folhaBpa = Math.floor(exportedCount / 20) + 1;
+          const sequenciaFolha = (exportedCount % 20) + 1;
 
-          // Montagem do Layout BPA-I (205 chars fixos)
+          // Montagem do Layout oficial BPA-I: Registro 03 com 338 caracteres antes do CRLF
           let l = "";
-          l += "03";                                      // 001-002 (2) - Tipo Registro
-          l += cnes;                                      // 003-009 (7) - CNES
-          l += zfill(competencia, 6);                     // 010-015 (6) - Competência
-          l += cns_prof;                                  // 016-030 (15) - CNS Profissional
-          l += cbo;                                       // 031-036 (6) - CBO
-          l += proc;                                      // 037-046 (10) - Procedimento
-          l += cns_pac;                                   // 047-061 (15) - CNS Paciente
-          l += sexo;                                      // 062 (1) - Sexo
-          l += " ";                                       // 063 (1) - Espaço fixo
-          l += rpad(cid, 4);                              // 064-067 (4) - CID
-          l += idade;                                     // 068-070 (3) - Idade
-          l += " ".repeat(6);                             // 071-076 (6) - Espaços
-          l += municipio;                                 // 077-082 (6) - Município
-          l += "000001";                                  // 083-088 (6) - Quantidade
-          l += "001";                                     // 089-091 (3) - Incremento
-          l += " ".repeat(10);                            // 092-101 (10) - Espaços
-          l += data_atend;                                // 102-109 (8) - Data Atendimento
-          l += rpad(nome_pac, 40);                        // 110-149 (40) - Nome Paciente
-          l += data_nasc;                                 // 150-157 (8) - Data Nascimento
-          l += "99";                                      // 158-159 (2) - Raça/Cor
-          l += "0000";                                    // 160-163 (4) - Reservado (zeros)
-          l += "010";                                     // 164-166 (3) - Nacionalidade
-          l += rpad(endereco, 30);                        // 167-196 (30) - Endereço
-          l += "00000";                                   // 197-201 (5) - Reservado (zeros)
-          l += "   ";                                     // 202-204 (3) - Reservado (espaços)
-          l += " ";                                       // 205 (1) - Reservado (espaço)
+          l += "03";                                      // 001-002 - Tipo Registro
+          l += cnes;                                      // 003-009 - CNES
+          l += zfill(competencia, 6);                     // 010-015 - Competência
+          l += cns_prof;                                  // 016-030 - CNS Profissional
+          l += cbo;                                       // 031-036 - CBO
+          l += data_atend;                                // 037-044 - Data Atendimento
+          l += zfill(folhaBpa, 3);                        // 045-047 - Folha BPA
+          l += zfill(sequenciaFolha, 2);                  // 048-049 - Sequência na folha
+          l += proc;                                      // 050-059 - Procedimento SIGTAP
+          l += cns_pac;                                   // 060-074 - CNS Paciente
+          l += sexo;                                      // 075-075 - Sexo
+          l += municipio;                                 // 076-081 - Município IBGE
+          l += cid;                                       // 082-085 - CID
+          l += idade;                                     // 086-088 - Idade
+          l += quantidade;                                // 089-094 - Quantidade
+          l += carater;                                   // 095-096 - Caráter atendimento
+          l += autorizacao;                               // 097-109 - Autorização
+          l += "BPA";                                     // 110-112 - Origem
+          l += rpad(nome_pac, 30);                        // 113-142 - Nome paciente
+          l += data_nasc;                                 // 143-150 - Data nascimento
+          l += raca;                                      // 151-152 - Raça/cor
+          l += etnia;                                     // 153-156 - Etnia
+          l += nacionalidade;                             // 157-159 - Nacionalidade
+          l += servico;                                   // 160-162 - Serviço
+          l += classificacao;                             // 163-165 - Classificação
+          l += sequenciaEquipe;                           // 166-173 - Sequência equipe
+          l += areaEquipe;                                // 174-177 - Área equipe
+          l += cnpj;                                      // 178-191 - CNPJ
+          l += cep;                                       // 192-199 - CEP paciente
+          l += codigoLogradouro;                          // 200-202 - Código logradouro
+          l += endereco;                                  // 203-232 - Endereço
+          l += complemento;                               // 233-242 - Complemento
+          l += numero;                                    // 243-247 - Número
+          l += bairro;                                    // 248-277 - Bairro
+          l += telefone;                                  // 278-288 - Telefone
+          l += email;                                     // 289-328 - E-mail
+          l += ineEquipe;                                 // 329-338 - INE equipe
 
-
-          l = l.padEnd(205, " ").slice(0, 205);
+          l = l.padEnd(BPA_I_RECORD_LENGTH, " ").slice(0, BPA_I_RECORD_LENGTH);
           
-          if (l.length !== 205) {
+          if (l.length !== BPA_I_RECORD_LENGTH) {
             hasError = true;
-            warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/205).`);
+            warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`);
           }
           
           linhasProducao.push(l);
+          itensControle.push({ procedimento: proc, quantidade });
           exportedCount++;
         }
       });
@@ -644,54 +668,44 @@ const BpaExportar: React.FC = () => {
         return;
       }
 
-      // Geração do Cabeçalho
+      // Geração do Cabeçalho oficial: Registro 01 com 130 caracteres antes do CRLF
       const qtdRegistros = zfill(exportedCount, 6);
-      const fallbackHeader = (`01BPAAMBULATCOMPET${formData.competencia}${qtdRegistros}`).padEnd(205, " ").slice(0, 205);
+      const totalFolhas = Math.max(1, Math.ceil(exportedCount / 20));
+      const campoControle = calcularCampoControle(itensControle);
+      const unidadeHeader = formData.unidade_id !== 'all'
+        ? unidades.find((u) => u.id === formData.unidade_id)
+        : unidades[0];
+      const unidadeHeaderCd = (unidadeHeader?.custom_data as any) || {};
+      const header = buildHeaderOficial({
+        competencia: formData.competencia,
+        totalRegistros: exportedCount,
+        totalFolhas,
+        campoControle,
+        orgaoOrigem: unidadeHeader?.nome || 'SECRETARIA MUNICIPAL DE SAUDE',
+        siglaOrigem: unidadeHeaderCd.sigla || 'SMS',
+        documentoOrigem: unidadeHeaderCd.cnpj || unidadeHeader?.cnpj || unidadeHeaderCd.cpf || '',
+        orgaoDestino: unidadeHeaderCd.orgao_destino_bpa || unidadeHeaderCd.orgao_saude_destino || 'SECRETARIA MUNICIPAL DE SAUDE',
+        indicadorDestino: unidadeHeaderCd.indicador_destino_bpa || 'M',
+        versaoSistema: unidadeHeaderCd.versao_bpa || 'SMSORIXI',
+      });
+      const headerBytes = toIsoBytes(header);
 
-      let headerBytes: Uint8Array;
-      let header: string;
-      let headerOrigem: 'referencia' | 'padrao' = 'padrao';
-      let substituicoes: Array<{ pos: number; tipo: string; antes: string; depois: string }> = [];
-
-      if (refDiag && useRefHeader && refDiag.headerBytes.length > 0) {
-        const built = buildHeaderFromRef(refDiag.headerBytes, formData.competencia, exportedCount);
-        const arr = built.bytes.slice();
-        while (arr.length < refDiag.firstLineLen) arr.push(0x20);
-        headerBytes = new Uint8Array(arr.slice(0, refDiag.firstLineLen));
-        header = bytesToIso(Array.from(headerBytes));
-        substituicoes = built.substituicoes;
-        headerOrigem = 'referencia';
-      } else {
-        header = fallbackHeader;
-        headerBytes = new Uint8Array(header.length);
-        for (let i = 0; i < header.length; i++) headerBytes[i] = header.charCodeAt(i) < 256 ? header.charCodeAt(i) : 32;
-      }
-
-      // Linhas de produção em ISO-8859-1 sem BOM
+      // Arquivo ANSI/ISO-8859-1, sem BOM e com CRLF entre todas as linhas.
       const prodContent = linhasProducao.join('\r\n') + (linhasProducao.length ? '\r\n' : '');
-      const prodBytes = new Uint8Array(prodContent.length);
-      for (let i = 0; i < prodContent.length; i++) {
-        const code = prodContent.charCodeAt(i);
-        prodBytes[i] = code < 256 ? code : 32;
-      }
+      const prodBytes = toIsoBytes(prodContent);
 
-      const CRLF = new Uint8Array([0x0D, 0x0A]);
-      const total = new Uint8Array(headerBytes.length + CRLF.length + prodBytes.length);
+      const total = new Uint8Array(headerBytes.length + CRLF_BYTES.length + prodBytes.length);
       total.set(headerBytes, 0);
-      total.set(CRLF, headerBytes.length);
-      total.set(prodBytes, headerBytes.length + CRLF.length);
+      total.set(CRLF_BYTES, headerBytes.length);
+      total.set(prodBytes, headerBytes.length + CRLF_BYTES.length);
 
       const blob = new Blob([total], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
-      const fileName = headerOrigem === 'referencia'
-        ? `BPA_${formData.competencia}.TXT`
-        : `producao_bpa_${formData.competencia}.txt`;
+      const fileName = `PA${formData.competencia}.TXT`;
 
-      console.log('[BPA] Header origem:', headerOrigem);
       console.log('[BPA] Header len bytes:', headerBytes.length);
       console.log('[BPA] Header HEX (50):', bytesToHex(Array.from(headerBytes).slice(0, 50)));
       console.log('[BPA] Header texto:', header);
-      if (substituicoes.length) console.log('[BPA] Substituições aplicadas:', substituicoes);
 
 
       setResults({
@@ -707,12 +721,18 @@ const BpaExportar: React.FC = () => {
         headerPreview: header,
         headerDetails: {
           tipo: header.substring(0, 2),
-          identificacao: header.substring(2, 5),
-          destino: headerOrigem === 'referencia' ? '(REF)' : 'AMBULAT',
-          tipo_competencia: headerOrigem === 'referencia' ? '(REF)' : 'COMPET',
+          identificacao: header.substring(2, 7),
           competencia: formData.competencia,
           registros: qtdRegistros,
-          tamanho: header.length
+          totalFolhas: zfill(totalFolhas, 6),
+          campoControle,
+          tamanho: header.length,
+          recordLength: BPA_I_RECORD_LENGTH,
+          headerHex: bytesToHex(Array.from(headerBytes).slice(0, 16)),
+          crlf: true,
+          bom: false,
+          firstRecordPreview: linhasProducao[0] || '',
+          firstRecordLength: linhasProducao[0]?.length || 0,
         }
       });
 
@@ -746,115 +766,6 @@ const BpaExportar: React.FC = () => {
           Gere arquivo BPA-I utilizando atendimentos realizados e dados cadastrais do sistema.
         </p>
       </div>
-
-      {/* Calibração por Arquivo de Referência */}
-      <Card className="border-amber-300 bg-amber-50/40">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileUp className="h-4 w-4 text-amber-700" />
-            Calibração por Arquivo BPA Válido (Referência)
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Selecione um arquivo TXT BPA-I que já foi aceito pelo importador oficial. O sistema vai ler o
-            cabeçalho byte a byte e reproduzir o mesmo padrão, alterando somente <strong>competência</strong> e
-            <strong> total de registros</strong>. Nada mais é inventado.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col md:flex-row md:items-end gap-3">
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="ref_bpa_file">Arquivo BPA válido de referência (.txt)</Label>
-              <Input
-                id="ref_bpa_file"
-                type="file"
-                accept=".txt,text/plain,application/octet-stream"
-                onChange={(e) => handleRefFile(e.target.files?.[0] || null)}
-              />
-            </div>
-            {refDiag && (
-              <>
-                <div className="flex items-center gap-2 border p-2 rounded-md bg-white">
-                  <input
-                    type="checkbox"
-                    id="use_ref_header"
-                    checked={useRefHeader}
-                    onChange={(e) => setUseRefHeader(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  <label htmlFor="use_ref_header" className="text-xs font-medium">
-                    Usar cabeçalho da referência
-                  </label>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setRefDiag(null)}>
-                  <X className="h-4 w-4 mr-1" /> Limpar
-                </Button>
-              </>
-            )}
-          </div>
-
-          {refDiag && (
-            <div className="space-y-3 border-t pt-3">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-                <div><span className="text-muted-foreground block">Arquivo</span><span className="font-mono">{refDiag.fileName}</span></div>
-                <div><span className="text-muted-foreground block">Tamanho total</span><span className="font-mono">{refDiag.totalBytes} bytes</span></div>
-                <div><span className="text-muted-foreground block">BOM</span><span className={`font-mono ${refDiag.hasBOM ? 'text-red-600' : 'text-green-600'}`}>{refDiag.hasBOM ? 'SIM' : 'NÃO'}</span></div>
-                <div><span className="text-muted-foreground block">CRLF</span><span className={`font-mono ${refDiag.crlf ? 'text-green-600' : 'text-amber-600'}`}>{refDiag.crlf ? 'SIM' : 'NÃO (só LF)'}</span></div>
-                <div><span className="text-muted-foreground block">1ª linha</span><span className="font-mono">{refDiag.firstLineLen} chars</span></div>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-[10px] uppercase text-muted-foreground">Conteúdo da 1ª linha (referência)</span>
-                <div className="bg-emerald-950 text-emerald-50 p-3 rounded font-mono text-[10px] break-all whitespace-pre overflow-x-auto">
-                  {refDiag.firstLineText}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-[10px] uppercase text-muted-foreground">Primeiros 50 bytes (HEX)</span>
-                <div className="bg-slate-900 text-slate-100 p-2 rounded font-mono text-[10px] overflow-x-auto">
-                  {refDiag.firstLineHex}
-                </div>
-              </div>
-
-              {results?.headerPreview && (
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase text-muted-foreground">Comparação byte a byte (referência × gerado)</span>
-                  <div className="border rounded overflow-x-auto max-h-64">
-                    <table className="text-[10px] font-mono w-full">
-                      <thead className="bg-slate-100 sticky top-0">
-                        <tr>
-                          <th className="px-2 py-1 text-left">Pos</th>
-                          <th className="px-2 py-1 text-left">Ref</th>
-                          <th className="px-2 py-1 text-left">Gerado</th>
-                          <th className="px-2 py-1 text-left">HEX Ref</th>
-                          <th className="px-2 py-1 text-left">HEX Gerado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Array.from({ length: Math.max(refDiag.firstLineLen, results.headerPreview.length) }).map((_, i) => {
-                          const r = refDiag.headerBytes[i];
-                          const g = results.headerPreview!.charCodeAt(i);
-                          const diff = r !== g;
-                          return (
-                            <tr key={i} className={diff ? 'bg-red-50' : ''}>
-                              <td className="px-2 py-0.5">{String(i + 1).padStart(3, '0')}</td>
-                              <td className="px-2 py-0.5">{r !== undefined ? (r === 0x20 ? '·' : String.fromCharCode(r)) : '∅'}</td>
-                              <td className="px-2 py-0.5">{!isNaN(g) ? (g === 0x20 ? '·' : String.fromCharCode(g)) : '∅'}</td>
-                              <td className="px-2 py-0.5">{r !== undefined ? r.toString(16).toUpperCase().padStart(2, '0') : '--'}</td>
-                              <td className="px-2 py-0.5">{!isNaN(g) ? g.toString(16).toUpperCase().padStart(2, '0') : '--'}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
 
       <Card>
         <CardHeader>
@@ -986,40 +897,57 @@ const BpaExportar: React.FC = () => {
                     <span className="font-mono text-sm">{results.headerDetails.tipo}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">ID</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Identificação</span>
                     <span className="font-mono text-sm">{results.headerDetails.identificacao}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">Destino</span>
-                    <span className="font-mono text-sm">{results.headerDetails.destino}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Registros</span>
+                    <span className="font-mono text-sm">{results.headerDetails.registros}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">T. Compet.</span>
-                    <span className="font-mono text-sm">{results.headerDetails.tipo_competencia}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Folhas</span>
+                    <span className="font-mono text-sm">{results.headerDetails.totalFolhas}</span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase text-muted-foreground">Competência</span>
                     <span className="font-mono text-sm">{results.headerDetails.competencia}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-muted-foreground">Registros</span>
-                    <span className="font-mono text-sm">{results.headerDetails.registros}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">Controle</span>
+                    <span className="font-mono text-sm">{results.headerDetails.campoControle}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Cabeçalho sem CRLF</span>
+                    <span className="font-mono text-sm">{results.headerDetails.tamanho}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Registro sem CRLF</span>
+                    <span className="font-mono text-sm">{results.headerDetails.firstRecordLength}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">CRLF</span>
+                    <span className="font-mono text-sm">{results.headerDetails.crlf ? 'SIM' : 'NÃO'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">BOM</span>
+                    <span className="font-mono text-sm">{results.headerDetails.bom ? 'SIM' : 'NÃO'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground">Início Registro</span>
+                    <span className="font-mono text-sm">{results.headerDetails.firstRecordPreview.slice(0, 2)}</span>
                   </div>
                 </div>
                 
                 <div className="space-y-1">
-                  <span className="text-[10px] uppercase text-muted-foreground">Conteúdo da Primeira Linha (ANSI / 205 caracteres)</span>
+                  <span className="text-[10px] uppercase text-muted-foreground">Cabeçalho completo (ANSI / 130 caracteres sem CRLF)</span>
                   <div className="bg-slate-900 text-slate-50 p-3 rounded font-mono text-[10px] break-all whitespace-pre overflow-x-auto">
                     {results.headerPreview}
                   </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <div className="flex flex-col md:flex-row md:justify-between gap-1 text-[10px] text-muted-foreground">
                     <span>Tamanho real: {results.headerDetails.tamanho} caracteres</span>
-                    <span>Primeiros bytes (HEX): {
-                      results.headerPreview ? 
-                        Array.from(results.headerPreview.slice(0, 10))
-                          .map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
-                          .join(' ') : ''
-                    }</span>
+                    <span>Primeiros bytes (HEX): {results.headerDetails.headerHex}</span>
                     <span>Encoding: ISO-8859-1 (Sem BOM)</span>
                   </div>
                 </div>
