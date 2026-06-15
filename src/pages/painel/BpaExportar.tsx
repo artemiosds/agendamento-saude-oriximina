@@ -530,13 +530,27 @@ const BpaExportar: React.FC = () => {
       const profIds = [...new Set(prontuarios.map((p: any) => p.profissional_id).filter(Boolean))] as string[];
       const unidadeIds = [...new Set(prontuarios.map((p: any) => p.unidade_id).filter(Boolean))] as string[];
 
-      const [pacientesRes, funcionariosRes, unidadesRes] = await Promise.all([
+      const nomesUnicos = [...new Set(prontuarios.map((p: any) => (p.paciente_nome || '').trim()).filter(Boolean))] as string[];
+
+      const [pacientesRes, pacientesByNameRes, funcionariosRes, unidadesRes] = await Promise.all([
         supabase.from('pacientes').select('*').in('id', pacienteIds),
+        nomesUnicos.length ? supabase.from('pacientes').select('*').in('nome', nomesUnicos) : Promise.resolve({ data: [] as any[] }),
         supabase.from('funcionarios').select('*').in('id', profIds),
         supabase.from('unidades').select('*').in('id', unidadeIds)
       ]);
 
       const pacMap = new Map(pacientesRes.data?.map(p => [p.id, p]));
+      // Fallback por nome: prontuários cujo paciente_id ficou órfão (duplicidade/merge)
+      // são re-vinculados ao cadastro real mais completo (CPF + CNS + nascimento).
+      const pacByNameMap = new Map<string, any>();
+      (pacientesByNameRes.data || []).forEach((p: any) => {
+        const key = (p.nome || '').trim().toUpperCase();
+        if (!key) return;
+        const existing = pacByNameMap.get(key);
+        const score = (p.cpf ? 1 : 0) + (p.cns ? 1 : 0) + (p.data_nascimento ? 1 : 0);
+        const existingScore = existing ? (existing.cpf ? 1 : 0) + (existing.cns ? 1 : 0) + (existing.data_nascimento ? 1 : 0) : -1;
+        if (!existing || score > existingScore) pacByNameMap.set(key, p);
+      });
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
 
@@ -549,7 +563,12 @@ const BpaExportar: React.FC = () => {
 
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
-        const pac = pacMap.get(pront.paciente_id) as any;
+        let pac = pacMap.get(pront.paciente_id) as any;
+        if (!pac || (!pac.cpf && !pac.cns && !pac.data_nascimento)) {
+          const k = (pront.paciente_nome || '').trim().toUpperCase();
+          const fallback = k ? pacByNameMap.get(k) : null;
+          if (fallback) pac = fallback;
+        }
         const prof = funcMap.get(pront.profissional_id) as any;
         const unit = unitMap.get(pront.unidade_id) as any;
         
