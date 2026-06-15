@@ -1062,6 +1062,8 @@ const BpaExportar: React.FC = () => {
                       selectedCategory === 'invalidCbo' ? 'CBO Inválido' :
                       selectedCategory === 'defaultProc' ? 'Procedimento Padrão Utilizado' :
                       selectedCategory === 'invalidNascimento' ? 'Data de Nascimento Inválida' :
+                      selectedCategory === 'missingNacionalidade' ? 'Nacionalidade Ausente ou Sem Código Oficial' :
+                      selectedCategory === 'missingLogradouro' ? 'Código do Logradouro Indeterminado' :
                       selectedCategory === 'missingMunicipio' ? 'Município Inválido ou Ausente' : ''
                     }
                   </CardTitle>
