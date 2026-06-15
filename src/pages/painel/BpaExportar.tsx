@@ -12,9 +12,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
-import logoSms from '@/assets/logo-sms.jpeg';
-import logoSmsOrix from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerII from '@/assets/logo-cer-ii.png';
+import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
@@ -1241,136 +1239,100 @@ const BpaExportar: React.FC = () => {
     }
   };
 
-  const handleImprimirConferencia = () => {
+  const handleImprimirConferencia = async () => {
     if (!results || !results.confRows.length) {
       toast.error('Gere a exportação BPA-I antes de imprimir.');
       return;
     }
-    const ctx = obterContextoCabecalho();
-    const win = window.open('', '_blank', 'width=1200,height=800');
-    if (!win) {
-      toast.error('Permita pop-ups para imprimir.');
-      return;
-    }
-    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
-    const confSorted = [...results.confRows].sort(cmpAlfa);
-    const abs = (u: string) => new URL(u, window.location.origin).href;
-    const logo1 = abs(logoSms);
-    const logo2 = abs(logoSmsOrix);
-    const logo3 = abs(logoCerII);
-    const rowsHtml = confSorted.map((r: any) => `
-      <tr>
-        <td class="nome">${esc(String(r.paciente_nome || '').toUpperCase())}</td>
-        <td>${esc(r.paciente_cns)}</td>
-        <td class="c">${esc(r.data_nascimento)}</td>
-        <td class="c">${esc(r.sexo)}</td>
-        <td class="c">${esc(r.tipo_logradouro)}</td>
-        <td>${esc(String(r.logradouro || '').toUpperCase())}</td>
-        <td class="c">${esc(r.numero)}</td>
-        <td>${esc(String(r.bairro || '').toUpperCase())}</td>
-        <td class="c">${esc(r.data_atendimento)}</td>
-        <td class="c">${esc(r.codigo_sigtap)}</td>
-        <td class="c">${esc(r.cid_usado)}</td>
-      </tr>`).join('');
-    const geradoEm = new Date().toLocaleString('pt-BR');
-    const respo = esc(user?.nome || user?.usuario || '—');
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>Conferência BPA-I ${ctx.competencia}</title>
+    try {
+      const ctx = obterContextoCabecalho();
+      const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
+      const confSorted = [...results.confRows].sort(cmpAlfa);
+      const rowsHtml = confSorted.map((r: any) => `
+        <tr>
+          <td class="nome">${esc(String(r.paciente_nome || '').toUpperCase())}</td>
+          <td>${esc(r.paciente_cns)}</td>
+          <td class="c">${esc(r.data_nascimento)}</td>
+          <td class="c">${esc(r.sexo)}</td>
+          <td class="c">${esc(r.tipo_logradouro)}</td>
+          <td>${esc(String(r.logradouro || '').toUpperCase())}</td>
+          <td class="c">${esc(r.numero)}</td>
+          <td>${esc(String(r.bairro || '').toUpperCase())}</td>
+          <td class="c">${esc(r.data_atendimento)}</td>
+          <td class="c">${esc(r.codigo_sigtap)}</td>
+          <td class="c">${esc(r.cid_usado)}</td>
+        </tr>`).join('');
+
+      // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
+      // Não é position:fixed, portanto não sobrepõe o conteúdo.
+      const respo = esc(user?.nome || user?.usuario || '—');
+      const body = `
 <style>
-  @page { size: A4 landscape; margin: 14mm 12mm 22mm 12mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color:#111; padding-bottom: 18mm; }
-  .institutional {
+  /* Sobrescreve o @page do shell institucional para paisagem */
+  @page { size: A4 landscape; }
+  .bpa-meta {
+    margin: 0 0 10px;
+    padding: 6px 10px;
+    border: 1px solid #D6E2EC;
+    background: #F2F6F9;
+    border-radius: 4px;
+    font-size: 9pt;
+    line-height: 1.35;
+    color: #1f2937;
     display: grid;
-    grid-template-columns: 70px 1fr 70px;
-    align-items: center;
-    gap: 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #2A6F97;
-    margin-bottom: 10px;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 16px;
   }
-  .institutional .logos-left, .institutional .logos-right {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
+  .bpa-meta b { color: #0c4a6e; }
+  .bpa-meta .full { grid-column: 1 / -1; }
+  .bpa-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 4px; }
+  .bpa-table thead { display: table-header-group; }
+  .bpa-table th, .bpa-table td {
+    border: 1px solid #555;
+    padding: 3px 4px;
+    font-size: 8.5pt;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    vertical-align: top;
   }
-  .institutional img { height: 60px; width: auto; max-width: 70px; object-fit: contain; }
-  .institutional .title { text-align:center; }
-  .institutional .title h1 { font-size: 13pt; margin: 0 0 2px; color:#2A6F97; letter-spacing: .3px; }
-  .institutional .title h2 { font-size: 11pt; margin: 0; font-weight: 600; color:#333; }
-  .institutional .title .sub { font-size: 9pt; color:#555; margin-top: 2px; }
-  .meta { margin: 0 0 10px; font-size: 9.5pt; background:#F2F6F9; border:1px solid #D6E2EC; padding: 6px 8px; border-radius: 4px; }
-  .meta div { margin: 2px 0; }
-  .meta b { color:#2A6F97; }
-  table { width:100%; border-collapse: collapse; table-layout: fixed; }
-  thead { display: table-header-group; }
-  tfoot { display: table-footer-group; }
-  th, td { border: 1px solid #555; padding: 3px 4px; font-size: 8.5pt; word-wrap: break-word; overflow-wrap: anywhere; vertical-align: top; }
-  th { background:#2A6F97; color:#fff; font-weight: 700; text-align:center; }
-  td.c { text-align:center; }
-  td.nome { font-weight: 600; }
-  tbody tr:nth-child(even) td { background:#f5f7fa; }
-  .footer {
-    position: fixed;
-    bottom: 6mm;
-    left: 12mm;
-    right: 12mm;
-    font-size: 8pt;
-    color:#444;
-    border-top: 1px solid #999;
-    padding-top: 4px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #fff;
-  }
-  .footer .center { flex: 1; text-align:center; }
-  .footer .right { text-align: right; }
-  @media print {
-    .footer { position: fixed; }
-  }
-</style></head>
-<body>
-  <header class="institutional">
-    <div class="logos-left"><img src="${logo1}" alt="SMS"/></div>
-    <div class="title">
-      <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
-      <h2>Conferência BPA-I — Boletim de Produção Ambulatorial Individualizado</h2>
-      <div class="sub">Competência ${esc(ctx.competencia)} &middot; ${esc(ctx.unidade_nome)}</div>
-    </div>
-    <div class="logos-right">
-      <img src="${logo2}" alt="SMS Oriximiná"/>
-      <img src="${logo3}" alt="CER II"/>
-    </div>
-  </header>
-  <div class="meta">
-    <div><b>UNIDADE:</b> ${esc(ctx.unidade_nome)} &nbsp; <b>CNES:</b> ${esc(ctx.cnes)}</div>
-    <div><b>MÊS DE REFERÊNCIA:</b> ${esc(ctx.competencia)}</div>
-    <div><b>PROFISSIONAL:</b> ${esc(ctx.profissional_nome)} &nbsp; <b>CNS:</b> ${esc(ctx.cns_prof)} &nbsp; <b>CBO:</b> ${esc(ctx.cbo)}</div>
-    <div><b>Total de registros:</b> ${confSorted.length}</div>
-  </div>
-  <table>
-    <colgroup>
-      <col style="width:18%"/><col style="width:11%"/><col style="width:7%"/><col style="width:4%"/>
-      <col style="width:7%"/><col style="width:18%"/><col style="width:5%"/><col style="width:11%"/>
-      <col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
-    </colgroup>
-    <thead><tr>
-      <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
-      <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
-      <th>Atendimento</th><th>SIGTAP</th><th>CID</th>
-    </tr></thead>
-    <tbody>${rowsHtml}</tbody>
-  </table>
-  <div class="footer">
-    <span>Gerado em ${geradoEm}</span>
-    <span class="center">Conferência BPA-I &middot; Competência ${esc(ctx.competencia)}</span>
-    <span class="right">Responsável: ${respo}</span>
-  </div>
-  <script>window.onload=()=>{setTimeout(()=>window.print(),400);};</script>
-</body></html>`;
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+  .bpa-table th { background:#2A6F97; color:#fff; font-weight: 700; text-align:center; }
+  .bpa-table td.c { text-align:center; }
+  .bpa-table td.nome { font-weight: 600; }
+  .bpa-table tbody tr:nth-child(even) td { background:#f5f7fa; }
+</style>
+<div class="bpa-meta">
+  <div><b>Unidade:</b> ${esc(ctx.unidade_nome)}</div>
+  <div><b>CNES:</b> ${esc(ctx.cnes || '—')}</div>
+  <div><b>Competência:</b> ${esc(ctx.competencia)}</div>
+  <div><b>Profissional:</b> ${esc(ctx.profissional_nome)}</div>
+  <div><b>CNS:</b> ${esc(ctx.cns_prof || '—')}</div>
+  <div><b>CBO:</b> ${esc(ctx.cbo || '—')}</div>
+  <div><b>Total de registros:</b> ${confSorted.length}</div>
+  <div><b>Responsável pela geração:</b> ${respo}</div>
+  <div class="full"><b>Gerado em:</b> ${new Date().toLocaleString('pt-BR')}</div>
+</div>
+<table class="bpa-table">
+  <colgroup>
+    <col style="width:18%"/><col style="width:11%"/><col style="width:7%"/><col style="width:4%"/>
+    <col style="width:7%"/><col style="width:18%"/><col style="width:5%"/><col style="width:11%"/>
+    <col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
+  </colgroup>
+  <thead><tr>
+    <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
+    <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
+    <th>Atendimento</th><th>SIGTAP</th><th>CID</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>`;
+
+      const config = await loadDocumentConfig();
+      const title = `Conferência BPA-I — Competência ${ctx.competencia}`;
+      const html = buildDocumentShell(title, body, config);
+      printViaIframe(html);
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Falha ao gerar impressão: ' + (e?.message || e));
+    }
   };
 
 
