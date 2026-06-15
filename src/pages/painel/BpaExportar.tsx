@@ -130,18 +130,32 @@ const obterCboValido = (prof: any): string => {
 
 // Profissões que EXIGEM procedimento SIGTAP válido para BPA-I.
 // Médico e demais perfis NÃO são bloqueados por ausência de SIGTAP.
-const PROFISSOES_EXIGEM_SIGTAP = ['psicolog', 'fonoaudiolog', 'fisioterap', 'nutricion'];
+// Categoria define a origem de busca do SIGTAP:
+//   - psicolog / fonoaudiolog / nutricion → buscar APENAS no Prontuário
+//   - fisioterap → buscar no Prontuário e, se ausente, também no PTS
+type CategoriaSigtap = 'psicolog' | 'fonoaudiolog' | 'nutricion' | 'fisioterap' | '';
+const CATEGORIAS_SIGTAP: CategoriaSigtap[] = ['psicolog', 'fonoaudiolog', 'fisioterap', 'nutricion'];
 const normalizarProfissaoTxt = (v: any) => String(v || '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().trim();
-const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string } => {
-  if (!prof) return { exige: false, profissao: '' };
+const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string; categoria: CategoriaSigtap } => {
+  if (!prof) return { exige: false, profissao: '', categoria: '' };
   const cd = prof.custom_data || {};
   const candidatos = [prof.profissao, prof.cargo, cd.profissao, cd.cargo, cd.especialidade]
     .map(normalizarProfissaoTxt).filter(Boolean);
   const profissao = candidatos[0] || '';
-  const exige = candidatos.some(p => PROFISSOES_EXIGEM_SIGTAP.some(k => p.includes(k)));
-  return { exige, profissao };
+  let categoria: CategoriaSigtap = '';
+  for (const p of candidatos) {
+    const hit = CATEGORIAS_SIGTAP.find(k => p.includes(k));
+    if (hit) { categoria = hit; break; }
+  }
+  return { exige: !!categoria, profissao, categoria };
+};
+// Fontes consultadas para o SIGTAP de acordo com a categoria da profissão.
+const fontesSigtapParaCategoria = (cat: CategoriaSigtap): string[] => {
+  if (cat === 'fisioterap') return ['Prontuário', 'PTS'];
+  if (cat) return ['Prontuário'];
+  return [];
 };
 
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
@@ -629,6 +643,54 @@ const BpaExportar: React.FC = () => {
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
 
+      // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
+      // Para Psicóloga, Fonoaudiólogo(a) e Nutricionista o SIGTAP vem somente do Prontuário.
+      // Para Fisioterapeuta, se o Prontuário não tiver SIGTAP, buscamos no PTS ativo do paciente.
+      const ptsSigtapByPatient = new Map<string, string>();
+      const fisioPatientIds = new Set<string>();
+      prontuarios.forEach((pr: any) => {
+        const prof = funcMap.get(pr.profissional_id) as any;
+        const cat = profissaoExigeSigtap(prof).categoria;
+        const procPront = pr.custom_data?.procedimento_sigtap || pr.outro_procedimento;
+        if (cat === 'fisioterap' && !procPront && pr.paciente_id) {
+          fisioPatientIds.add(String(pr.paciente_id));
+        }
+      });
+      if (fisioPatientIds.size > 0) {
+        const ids = Array.from(fisioPatientIds);
+        const { data: ptsRows } = await (supabase as any)
+          .from('pts')
+          .select('id, patient_id, status, updated_at')
+          .in('patient_id', ids);
+        const ativos = (ptsRows || []).filter((r: any) => {
+          const s = String(r.status || '').toLowerCase();
+          return s === 'ativo' || s === 'em_andamento' || s === 'em andamento' || !s;
+        });
+        const ptsByPatient = new Map<string, any>();
+        ativos.forEach((r: any) => {
+          const ex = ptsByPatient.get(String(r.patient_id));
+          if (!ex || new Date(r.updated_at || 0) > new Date(ex.updated_at || 0)) {
+            ptsByPatient.set(String(r.patient_id), r);
+          }
+        });
+        const ptsIds = Array.from(ptsByPatient.values()).map((r: any) => r.id);
+        if (ptsIds.length > 0) {
+          const { data: sigRows } = await (supabase as any)
+            .from('pts_sigtap')
+            .select('pts_id, procedimento_codigo')
+            .in('pts_id', ptsIds);
+          const sigByPts = new Map<string, string>();
+          (sigRows || []).forEach((s: any) => {
+            const code = somenteNumeros(s.procedimento_codigo || '');
+            if (code && !sigByPts.has(s.pts_id)) sigByPts.set(s.pts_id, code);
+          });
+          ptsByPatient.forEach((pts, pid) => {
+            const code = sigByPts.get(pts.id);
+            if (code) ptsSigtapByPatient.set(pid, code);
+          });
+        }
+      }
+
       let exportedCount = 0;
       let criticalCount = 0;
       const linhasProducao: string[] = [];
@@ -749,14 +811,29 @@ const BpaExportar: React.FC = () => {
           const cbo = zfill(cbo_raw, 6);
 
           let pendenciaPaciente = false;
-          const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
           const sigtapReq = profissaoExigeSigtap(prof);
+          // Origem do SIGTAP varia por profissão:
+          //   psicólogo / fonoaudiólogo / nutricionista → Prontuário
+          //   fisioterapeuta → Prontuário e, se ausente, PTS ativo do paciente
+          const procPront = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento || '';
+          let proc_real: string = procPront ? String(procPront) : '';
+          let proc_origem: 'Prontuário' | 'PTS' | '' = proc_real ? 'Prontuário' : '';
+          const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria);
+          if (!proc_real && sigtapReq.categoria === 'fisioterap' && pront.paciente_id) {
+            const ptsCode = ptsSigtapByPatient.get(String(pront.paciente_id));
+            if (ptsCode) {
+              proc_real = ptsCode;
+              proc_origem = 'PTS';
+            }
+          }
+
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
           if (!proc_real && sigtapReq.exige) {
             pendenciaPaciente = true;
             stats.missingSigtap++;
-            const motivo = `Procedimento SIGTAP obrigatório para a profissão "${sigtapReq.profissao || 'indefinida'}" e ausente no registro.`;
+            const fontesTxt = fontesConsultadas.length ? fontesConsultadas.join(' e ') : 'Prontuário';
+            const motivo = `Profissão "${sigtapReq.profissao || 'indefinida'}" exige SIGTAP. Fontes consultadas: ${fontesTxt}. Procedimento não localizado em nenhuma fonte.`;
             warnings.push(`${ident}: ${motivo}`);
             details.missingSigtap.push({
               ...itemDetail,
@@ -764,6 +841,8 @@ const BpaExportar: React.FC = () => {
               valor_atual: 'Vazio',
               profissao: sigtapReq.profissao || 'indefinida',
               sigtap_obrigatorio: 'Sim',
+              fontes_consultadas: fontesTxt,
+              origem_sigtap: '—',
               motivo
             });
           }
@@ -773,6 +852,7 @@ const BpaExportar: React.FC = () => {
             10
           );
           if (!proc_real && !sigtapReq.exige) stats.defaultProc++;
+
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
@@ -911,6 +991,8 @@ const BpaExportar: React.FC = () => {
               cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || '',
               usou_padrao: !proc_real,
               origem: pront.origem || 'Prontuário',
+              origem_sigtap: proc_origem || (sigtapReq.exige ? '—' : 'Padrão'),
+              profissao_categoria: sigtapReq.categoria || '',
             }
           };
 
