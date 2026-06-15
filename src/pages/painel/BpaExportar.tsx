@@ -643,6 +643,54 @@ const BpaExportar: React.FC = () => {
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
 
+      // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
+      // Para Psicóloga, Fonoaudiólogo(a) e Nutricionista o SIGTAP vem somente do Prontuário.
+      // Para Fisioterapeuta, se o Prontuário não tiver SIGTAP, buscamos no PTS ativo do paciente.
+      const ptsSigtapByPatient = new Map<string, string>();
+      const fisioPatientIds = new Set<string>();
+      prontuarios.forEach((pr: any) => {
+        const prof = funcMap.get(pr.profissional_id) as any;
+        const cat = profissaoExigeSigtap(prof).categoria;
+        const procPront = pr.custom_data?.procedimento_sigtap || pr.outro_procedimento;
+        if (cat === 'fisioterap' && !procPront && pr.paciente_id) {
+          fisioPatientIds.add(String(pr.paciente_id));
+        }
+      });
+      if (fisioPatientIds.size > 0) {
+        const ids = Array.from(fisioPatientIds);
+        const { data: ptsRows } = await (supabase as any)
+          .from('pts')
+          .select('id, patient_id, status, updated_at')
+          .in('patient_id', ids);
+        const ativos = (ptsRows || []).filter((r: any) => {
+          const s = String(r.status || '').toLowerCase();
+          return s === 'ativo' || s === 'em_andamento' || s === 'em andamento' || !s;
+        });
+        const ptsByPatient = new Map<string, any>();
+        ativos.forEach((r: any) => {
+          const ex = ptsByPatient.get(String(r.patient_id));
+          if (!ex || new Date(r.updated_at || 0) > new Date(ex.updated_at || 0)) {
+            ptsByPatient.set(String(r.patient_id), r);
+          }
+        });
+        const ptsIds = Array.from(ptsByPatient.values()).map((r: any) => r.id);
+        if (ptsIds.length > 0) {
+          const { data: sigRows } = await (supabase as any)
+            .from('pts_sigtap')
+            .select('pts_id, procedimento_codigo')
+            .in('pts_id', ptsIds);
+          const sigByPts = new Map<string, string>();
+          (sigRows || []).forEach((s: any) => {
+            const code = somenteNumeros(s.procedimento_codigo || '');
+            if (code && !sigByPts.has(s.pts_id)) sigByPts.set(s.pts_id, code);
+          });
+          ptsByPatient.forEach((pts, pid) => {
+            const code = sigByPts.get(pts.id);
+            if (code) ptsSigtapByPatient.set(pid, code);
+          });
+        }
+      }
+
       let exportedCount = 0;
       let criticalCount = 0;
       const linhasProducao: string[] = [];
