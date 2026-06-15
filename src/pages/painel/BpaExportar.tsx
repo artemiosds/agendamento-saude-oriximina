@@ -267,113 +267,19 @@ const BpaExportar: React.FC = () => {
     headerDetails: {
       tipo: string;
       identificacao: string;
-      destino: string;
-      tipo_competencia: string;
       competencia: string;
       registros: string;
+      totalFolhas: string;
+      campoControle: string;
       tamanho: number;
+      recordLength: number;
+      headerHex: string;
+      crlf: boolean;
+      bom: boolean;
+      firstRecordPreview: string;
+      firstRecordLength: number;
     } | null;
   } | null>(null);
-
-  // === Referência: arquivo BPA válido aceito pelo importador oficial ===
-  interface RefDiag {
-    fileName: string;
-    totalBytes: number;
-    hasBOM: boolean;
-    crlf: boolean;
-    firstLineLen: number;
-    firstLineHex: string;
-    firstLineText: string;
-    headerBytes: number[]; // 205 bytes da primeira linha (sem CRLF)
-  }
-  const [refDiag, setRefDiag] = useState<RefDiag | null>(null);
-  const [useRefHeader, setUseRefHeader] = useState(true);
-
-  const bytesToHex = (arr: number[] | Uint8Array, sep = ' ') =>
-    Array.from(arr).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(sep);
-
-  const bytesToIso = (arr: number[] | Uint8Array) =>
-    Array.from(arr).map(b => String.fromCharCode(b)).join('');
-
-  const handleRefFile = async (file: File | null) => {
-    if (!file) { setRefDiag(null); return; }
-    try {
-      const buf = new Uint8Array(await file.arrayBuffer());
-      const hasBOM = buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
-      const start = hasBOM ? 3 : 0;
-      // detecta fim de primeira linha (LF ou CRLF)
-      let lfIdx = -1;
-      for (let i = start; i < buf.length; i++) {
-        if (buf[i] === 0x0A) { lfIdx = i; break; }
-      }
-      const lineEnd = lfIdx === -1 ? buf.length : lfIdx;
-      const crlf = lfIdx > 0 && buf[lfIdx - 1] === 0x0D;
-      const contentEnd = crlf ? lfIdx - 1 : lineEnd;
-      const headerBytes = Array.from(buf.slice(start, contentEnd));
-      const firstLineLen = headerBytes.length;
-      const firstLineHex = bytesToHex(headerBytes.slice(0, 50));
-      const firstLineText = bytesToIso(headerBytes);
-
-      setRefDiag({
-        fileName: file.name,
-        totalBytes: buf.length,
-        hasBOM,
-        crlf,
-        firstLineLen,
-        firstLineHex,
-        firstLineText,
-        headerBytes,
-      });
-      toast.success(`Referência carregada: ${file.name} (${firstLineLen} chars na 1ª linha)`);
-    } catch (err: any) {
-      console.error('Erro lendo arquivo referência:', err);
-      toast.error('Não foi possível ler o arquivo de referência.');
-      setRefDiag(null);
-    }
-  };
-
-  /** Gera cabeçalho a partir do modelo de referência, substituindo apenas competência e total de registros. */
-  const buildHeaderFromRef = (
-    refBytes: number[],
-    competencia: string,
-    totalRegistros: number
-  ): { bytes: number[]; substituicoes: Array<{ pos: number; tipo: string; antes: string; depois: string }> } => {
-    const out = refBytes.slice();
-    const text = bytesToIso(refBytes);
-    const subs: Array<{ pos: number; tipo: string; antes: string; depois: string }> = [];
-
-    // Procura padrão de competência AAAAMM (ano 20XX, mês 01-12)
-    const compRegex = /20\d{2}(0[1-9]|1[0-2])/g;
-    let m: RegExpExecArray | null;
-    while ((m = compRegex.exec(text)) !== null) {
-      const pos = m.index;
-      // Substitui se diferente
-      if (m[0] !== competencia) {
-        for (let i = 0; i < 6; i++) out[pos + i] = competencia.charCodeAt(i);
-        subs.push({ pos, tipo: 'competencia', antes: m[0], depois: competencia });
-      }
-      break; // só a primeira ocorrência
-    }
-
-    // Total de registros: tipicamente 6 dígitos após a competência
-    const qtdStr = zfill(totalRegistros, 6);
-    if (subs.length > 0) {
-      const compPos = subs[0].pos;
-      // procura próximo bloco de 6 dígitos consecutivos após a competência
-      const after = text.slice(compPos + 6);
-      const qtdMatch = /^(\D{0,20})(\d{6})/.exec(after);
-      if (qtdMatch) {
-        const qtdPos = compPos + 6 + qtdMatch[1].length;
-        const antes = qtdMatch[2];
-        if (antes !== qtdStr) {
-          for (let i = 0; i < 6; i++) out[qtdPos + i] = qtdStr.charCodeAt(i);
-          subs.push({ pos: qtdPos, tipo: 'total_registros', antes, depois: qtdStr });
-        }
-      }
-    }
-
-    return { bytes: out, substituicoes: subs };
-  };
 
   useEffect(() => {
     fetchInitialData();
