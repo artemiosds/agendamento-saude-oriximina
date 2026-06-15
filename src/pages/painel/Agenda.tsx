@@ -138,6 +138,41 @@ const STATUS_FILTER_GROUPS: Record<string, string[]> = {
   pendente: ["pendente"],
 };
 
+// Status que NÃO podem existir/aparecer em uma data futura (cujo dia ainda não chegou).
+// Se um registro estiver com um destes status numa data > hoje, é tratado como "confirmado"
+// para fins de exibição/filtros/contadores (presentation only — não altera o dado no banco).
+const STATUS_INCOMPATIVEIS_DATA_FUTURA = new Set([
+  "confirmado_chegada",
+  "chegada_confirmada",
+  "aguardando_triagem",
+  "triagem_concluida",
+  "aguardando_atendimento",
+  "aguardando_profissional",
+  "apto_atendimento",
+  "apto",
+  "em_atendimento",
+  "concluido",
+  "finalizado",
+  "atendido",
+  "atendimento_encerrado",
+  "prontuario_finalizado",
+]);
+
+/**
+ * Retorna o status efetivo para EXIBIÇÃO/FILTRO/CONTAGEM.
+ * Não altera o status persistido. Apenas neutraliza inconsistências
+ * (ex.: registro marcado como "concluído" em data futura) para que a UI
+ * mostre "Confirmado" enquanto a data não chegar.
+ */
+const getDisplayStatus = (ag: { status?: string; data?: string }, todayStr: string): string => {
+  const raw = String(ag?.status || "").toLowerCase();
+  if (!raw) return raw;
+  if (ag?.data && ag.data > todayStr && STATUS_INCOMPATIVEIS_DATA_FUTURA.has(raw)) {
+    return "confirmado";
+  }
+  return raw;
+};
+
 // Lista única de status que NÃO ocupam vaga na agenda.
 const STATUS_NAO_OCUPA_VAGA = new Set([
   "cancelado",
