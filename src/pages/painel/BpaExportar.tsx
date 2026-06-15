@@ -1191,8 +1191,8 @@ const BpaExportar: React.FC = () => {
             numero: String(pac?.numero || pacCdAny.numero || ''),
             bairro: String(pac?.bairro || pacCdAny.bairro || '').toUpperCase(),
             data_atendimento: formatarDataBR(pront.data_atendimento),
-            codigo_sigtap: proc_real || formData.procedimento_padrao || '',
-            cid_usado: String(cidBruto || '').toUpperCase(),
+            codigo_sigtap: sigtapCodigoExibicao(proc_real || formData.procedimento_padrao) || (proc_real || formData.procedimento_padrao || ''),
+            cid_usado: cidExibicao(cidBruto),
             _ctx: {
               profissional_nome: prof?.nome || '',
               cns_prof,
