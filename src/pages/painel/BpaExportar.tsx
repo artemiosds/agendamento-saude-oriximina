@@ -556,6 +556,8 @@ const BpaExportar: React.FC = () => {
           error: null,
           fileName: '',
           blobUrl: null,
+          confRows: [],
+          pendRows: [],
           headerPreview: null,
           headerDetails: null
         });
@@ -870,6 +872,8 @@ const BpaExportar: React.FC = () => {
           error: "O arquivo não foi gerado porque foram detectadas pendências críticas. Corrija os dados dos pacientes ou marque 'Exportar mesmo com pendências'.",
           fileName: '',
           blobUrl: null,
+          confRows: [],
+          pendRows: [],
           headerPreview: null,
           headerDetails: null
         });
@@ -927,6 +931,8 @@ const BpaExportar: React.FC = () => {
         error: null,
         fileName,
         blobUrl: url,
+        confRows,
+        pendRows,
         headerPreview: header,
         headerDetails: {
           tipo: header.substring(0, 2),
@@ -959,6 +965,8 @@ const BpaExportar: React.FC = () => {
         error: err.message || 'Erro ao processar dados.',
         fileName: '',
         blobUrl: null,
+          confRows: [],
+          pendRows: [],
         headerPreview: null,
         headerDetails: null
       });
