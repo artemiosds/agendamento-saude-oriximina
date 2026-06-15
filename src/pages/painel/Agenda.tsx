@@ -888,9 +888,10 @@ const Agenda: React.FC = () => {
     const activeBase = base.filter(a => selectedDate < todayLocalStr() ? true : statusOcupaVaga(a.status));
 
     const byGroup: Record<string, number> = {};
+    const todayStr = todayLocalStr();
     for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
       const allowed = STATUS_FILTER_GROUPS[key];
-      byGroup[key] = base.filter((a) => allowed.includes(a.status)).length;
+      byGroup[key] = base.filter((a) => allowed.includes(getDisplayStatus(a, todayStr))).length;
     }
     
     // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
