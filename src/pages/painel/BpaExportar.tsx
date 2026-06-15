@@ -1215,6 +1215,7 @@ const BpaExportar: React.FC = () => {
                       selectedCategory === 'invalidNascimento' ? 'Data de Nascimento Inválida' :
                       selectedCategory === 'missingNacionalidade' ? 'Nacionalidade Ausente ou Sem Código Oficial' :
                       selectedCategory === 'missingLogradouro' ? 'Código do Logradouro Indeterminado' :
+                      selectedCategory === 'missingSigtap' ? 'Procedimento SIGTAP Obrigatório Ausente' :
                       selectedCategory === 'missingMunicipio' ? 'Município Inválido ou Ausente' : ''
                     }
                   </CardTitle>
