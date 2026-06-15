@@ -832,7 +832,8 @@ const Agenda: React.FC = () => {
 
     if (statusFilter !== "all") {
       const allowed = STATUS_FILTER_GROUPS[statusFilter] || [statusFilter];
-      result = result.filter((a) => allowed.includes(a.status));
+      const todayStr = todayLocalStr();
+      result = result.filter((a) => allowed.includes(getDisplayStatus(a, todayStr)));
     }
 
     if (tipoFilter !== "all") {
