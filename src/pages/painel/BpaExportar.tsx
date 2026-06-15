@@ -393,7 +393,9 @@ const BpaExportar: React.FC = () => {
       fallbackCbo: 0,
       invalidCbo: 0,
       defaultProc: 0,
-      invalidNascimento: 0
+      invalidNascimento: 0,
+      missingNacionalidade: 0,
+      missingLogradouro: 0
     };
 
     const details = {
@@ -406,6 +408,8 @@ const BpaExportar: React.FC = () => {
       invalidCbo: [] as any[],
       defaultProc: [] as any[],
       invalidNascimento: [] as any[],
+      missingNacionalidade: [] as any[],
+      missingLogradouro: [] as any[],
       critical: [] as any[]
     };
     
