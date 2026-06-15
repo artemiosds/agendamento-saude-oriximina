@@ -1106,7 +1106,15 @@ const BpaExportar: React.FC = () => {
 
           if (pendenciaPaciente && !formData.exportar_com_pendencias) {
             criticalCount++;
-            details.critical.push({ ...itemDetail, pendencia: 'Pendência de cadastro (nacionalidade/logradouro)', valor_atual: 'Corrigir cadastro' });
+            const motivosTxt = motivosPendencia.length ? motivosPendencia.join(' + ') : 'Pendência';
+            const apenasSigtap = motivosPendencia.length === 1 && motivosPendencia[0] === 'SIGTAP obrigatório ausente';
+            const apenasCadastro = motivosPendencia.length > 0 && !motivosPendencia.includes('SIGTAP obrigatório ausente');
+            const rotulo = apenasSigtap
+              ? 'Pendência clínica: SIGTAP obrigatório ausente'
+              : apenasCadastro
+                ? `Pendência cadastral: ${motivosTxt}`
+                : `Pendência mista: ${motivosTxt}`;
+            details.critical.push({ ...itemDetail, pendencia: rotulo, valor_atual: motivosTxt });
           } else {
             linhasProducao.push(l);
             itensControle.push({ procedimento: proc, quantidade });
