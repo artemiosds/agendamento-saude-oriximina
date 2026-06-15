@@ -104,14 +104,31 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       return matchProf && matchUnit;
     });
 
+    // Normaliza status para datas futuras: agendamentos cuja data ainda não chegou
+    // não podem ter status pós-chegada (apto/em atendimento/concluído). Tratamos como "confirmado".
+    const todayStrCal = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const POSTERIORES = new Set([
+      "confirmado_chegada","chegada_confirmada","aguardando_triagem","triagem_concluida",
+      "aguardando_atendimento","aguardando_profissional","apto_atendimento","apto",
+      "em_atendimento","concluido","finalizado","atendido","atendimento_encerrado","prontuario_finalizado",
+    ]);
+    const effectiveStatus = (a: any): string => {
+      const s = String(a.status || "").toLowerCase();
+      if (a.data && a.data > todayStrCal && POSTERIORES.has(s)) return "confirmado";
+      return s;
+    };
+
     const counts = {
-      confirmados: relevantAgs.filter(a => a.status === "confirmado").length,
-      aptos: relevantAgs.filter(a => a.status === "apto_atendimento").length,
-      emAtendimento: relevantAgs.filter(a => a.status === "em_atendimento").length,
-      concluidos: relevantAgs.filter(a => ["concluido", "finalizado"].includes(a.status)).length,
-      faltou: relevantAgs.filter(a => a.status === "falta").length,
-      cancelados: relevantAgs.filter(a => a.status === "cancelado").length,
-      pendentes: relevantAgs.filter(a => a.status === "pendente").length,
+      confirmados: relevantAgs.filter(a => effectiveStatus(a) === "confirmado").length,
+      aptos: relevantAgs.filter(a => effectiveStatus(a) === "apto_atendimento").length,
+      emAtendimento: relevantAgs.filter(a => effectiveStatus(a) === "em_atendimento").length,
+      concluidos: relevantAgs.filter(a => ["concluido", "finalizado"].includes(effectiveStatus(a))).length,
+      faltou: relevantAgs.filter(a => effectiveStatus(a) === "falta").length,
+      cancelados: relevantAgs.filter(a => effectiveStatus(a) === "cancelado").length,
+      pendentes: relevantAgs.filter(a => effectiveStatus(a) === "pendente").length,
     };
 
     agendamentosCount = relevantAgs.filter(a => !STATUS_NAO_OCUPA.has(a.status)).length;
