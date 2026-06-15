@@ -1195,14 +1195,17 @@ const BpaExportar: React.FC = () => {
       const cols = [
         'paciente_nome', 'paciente_cns', 'data_nascimento', 'sexo',
         'tipo_logradouro', 'logradouro', 'numero', 'bairro',
-        'data_atendimento', 'codigo_sigtap', 'cid_usado'
+        'data_atendimento', 'codigo_sigtap', 'origem_sigtap', 'cid_usado'
       ];
       const colsLabels = [
         'PACIENTE', 'CNS', 'NASCIMENTO', 'SEXO',
         'TIPO LOG.', 'LOGRADOURO', 'Nº', 'BAIRRO',
-        'ATENDIMENTO', 'SIGTAP', 'CID'
+        'ATENDIMENTO', 'SIGTAP', 'ORIGEM SIGTAP', 'CID'
       ];
       const dataRows = confSorted.map(r => cols.map(c => {
+        if (c === 'origem_sigtap') {
+          return String((r as any)?._ctx?.origem_sigtap || '—');
+        }
         const v = (r as any)[c] ?? '';
         if (c === 'paciente_nome' || c === 'logradouro' || c === 'bairro' || c === 'tipo_logradouro') {
           return String(v).toUpperCase();
@@ -1215,8 +1218,8 @@ const BpaExportar: React.FC = () => {
       // Largura
       ws['!cols'] = [
         { wch: 34 }, { wch: 18 }, { wch: 12 }, { wch: 6 },
-        { wch: 12 }, { wch: 34 }, { wch: 8 }, { wch: 22 },
-        { wch: 14 }, { wch: 12 }, { wch: 10 },
+        { wch: 12 }, { wch: 30 }, { wch: 6 }, { wch: 20 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
       ];
       // Mesclar as linhas institucionais para visual mais limpo
       (ws as any)['!merges'] = headerLines.slice(0, -1).map((_, i) => ({
@@ -1253,18 +1256,19 @@ const BpaExportar: React.FC = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'BPA-I');
 
       // Aba Pendências (ordem alfabética)
-      const pendHead = ['SEQ', 'PACIENTE', 'CNS', 'CPF', 'PROFISSIONAL', 'CBO', 'PROCEDIMENTO', 'SIGTAP', 'DATA', 'ORIGEM', 'PENDÊNCIAS'];
+      const pendHead = ['SEQ', 'PACIENTE', 'CNS', 'CPF', 'PROFISSIONAL', 'PROFISSÃO', 'CBO', 'SIGTAP', 'ORIGEM SIGTAP', 'FONTES CONSULTADAS', 'DATA', 'PENDÊNCIAS'];
       const pendData = pendSorted.map((p: any, i: number) => [
         i + 1,
         String(p.paciente_nome || '').toUpperCase(),
         p.cns_paciente || '',
         p.paciente_cpf || '',
         String(p.profissional_nome || '').toUpperCase(),
+        String(p.profissao || '—').toUpperCase(),
         p.cbo || '',
         p.procedimento || '',
-        p.procedimento || '',
+        String(p.origem_sigtap || '—'),
+        String(p.fontes_consultadas || '—'),
         formatarDataBR(p.data_atendimento),
-        'Prontuário',
         (p.pendencias || [p.pendencia || '']).join('; '),
       ]);
       const wsP = XLSX.utils.aoa_to_sheet([pendHead, ...pendData]);
@@ -1367,6 +1371,7 @@ const BpaExportar: React.FC = () => {
           <td>${esc(String(r.bairro || '').toUpperCase())}</td>
           <td class="c">${esc(r.data_atendimento)}</td>
           <td class="c">${esc(r.codigo_sigtap)}</td>
+          <td class="c">${esc(r?._ctx?.origem_sigtap || '—')}</td>
           <td class="c">${esc(r.cid_usado)}</td>
         </tr>`).join('');
 
@@ -1420,14 +1425,14 @@ const BpaExportar: React.FC = () => {
 </div>
 <table class="bpa-table">
   <colgroup>
-    <col style="width:18%"/><col style="width:11%"/><col style="width:7%"/><col style="width:4%"/>
-    <col style="width:7%"/><col style="width:18%"/><col style="width:5%"/><col style="width:11%"/>
-    <col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
+    <col style="width:17%"/><col style="width:10%"/><col style="width:6%"/><col style="width:4%"/>
+    <col style="width:6%"/><col style="width:16%"/><col style="width:4%"/><col style="width:10%"/>
+    <col style="width:7%"/><col style="width:7%"/><col style="width:8%"/><col style="width:5%"/>
   </colgroup>
   <thead><tr>
     <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
     <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
-    <th>Atendimento</th><th>SIGTAP</th><th>CID</th>
+    <th>Atendimento</th><th>SIGTAP</th><th>Origem SIGTAP</th><th>CID</th>
   </tr></thead>
   <tbody>${rowsHtml}</tbody>
 </table>`;
