@@ -1256,18 +1256,19 @@ const BpaExportar: React.FC = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'BPA-I');
 
       // Aba Pendências (ordem alfabética)
-      const pendHead = ['SEQ', 'PACIENTE', 'CNS', 'CPF', 'PROFISSIONAL', 'CBO', 'PROCEDIMENTO', 'SIGTAP', 'DATA', 'ORIGEM', 'PENDÊNCIAS'];
+      const pendHead = ['SEQ', 'PACIENTE', 'CNS', 'CPF', 'PROFISSIONAL', 'PROFISSÃO', 'CBO', 'SIGTAP', 'ORIGEM SIGTAP', 'FONTES CONSULTADAS', 'DATA', 'PENDÊNCIAS'];
       const pendData = pendSorted.map((p: any, i: number) => [
         i + 1,
         String(p.paciente_nome || '').toUpperCase(),
         p.cns_paciente || '',
         p.paciente_cpf || '',
         String(p.profissional_nome || '').toUpperCase(),
+        String(p.profissao || '—').toUpperCase(),
         p.cbo || '',
         p.procedimento || '',
-        p.procedimento || '',
+        String(p.origem_sigtap || '—'),
+        String(p.fontes_consultadas || '—'),
         formatarDataBR(p.data_atendimento),
-        'Prontuário',
         (p.pendencias || [p.pendencia || '']).join('; '),
       ]);
       const wsP = XLSX.utils.aoa_to_sheet([pendHead, ...pendData]);
