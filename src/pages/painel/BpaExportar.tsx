@@ -704,6 +704,7 @@ const BpaExportar: React.FC = () => {
           }
           const cbo = zfill(cbo_raw, 6);
 
+          let pendenciaPaciente = false;
           const proc_real = pront.custom_data?.procedimento_sigtap || pront.outro_procedimento;
           const sigtapReq = profissaoExigeSigtap(prof);
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
