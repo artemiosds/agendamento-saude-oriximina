@@ -139,19 +139,23 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       const list = Array.isArray(pronts) ? pronts : [];
       setProntuarios(list);
 
-      // PTS ativo (apenas relevante para fisioterapia)
+      // PTS (apenas relevante para fisioterapia) — lista TODOS os ativos
       let pts: any = null;
+      let ptsAtivos: any[] = [];
       if (isFisio) {
         const { data: ptsArr } = await (supabase as any)
           .from("pts")
-          .select("id, status, custom_data, diagnostico_funcional, objetivo_geral")
+          .select("id, status, custom_data, diagnostico_funcional, objetivo_geral, created_at")
           .eq("patient_id", item.paciente_id)
           .order("created_at", { ascending: false })
-          .limit(5);
+          .limit(10);
         if (Array.isArray(ptsArr) && ptsArr.length) {
-          pts = ptsArr.find((p: any) => String(p.status || "").toLowerCase() === "ativo") || ptsArr[0];
+          ptsAtivos = ptsArr.filter((p: any) => String(p.status || "").toLowerCase() === "ativo");
+          // pré-seleção: 1º ativo se houver apenas um; se nenhum ativo, mais recente
+          pts = ptsAtivos.length === 1 ? ptsAtivos[0] : (ptsAtivos[0] || ptsArr[0] || null);
         }
       }
+      setPtsList(ptsAtivos);
       setPtsAtivo(pts);
 
       // Valor atual: pega primeiro código já preenchido em qualquer prontuário
