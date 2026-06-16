@@ -1536,34 +1536,6 @@ const ProntuarioPage: React.FC = () => {
         ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || "")
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(f);
-      const allDynamicData = {
-        ...getCustomDataObject(f),
-        ...dynamicFields,
-        ...ef,
-      };
-      // Adiciona prefixo esp_ para campos de especialidade apenas se não existirem
-      Object.entries(ef || {}).forEach(([key, value]) => {
-        if (!key.startsWith('esp_')) {
-          allDynamicData[`esp_${key}`] = value;
-        }
-      });
-
-      const record: any = {
-        paciente_id: f.paciente_id || `manual_${Date.now()}`,
-        paciente_nome: f.paciente_nome,
-        profissional_id: profIdToSave,
-        profissional_nome: profNomeToSave,
-        ...(effectiveEditId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
-        agendamento_id: f.agendamento_id,
-        data_atendimento: f.data_atendimento,
-        hora_atendimento: f.hora_atendimento,
-        queixa_principal: f.queixa_principal,
-        anamnese: f.anamnese,
-        sinais_sintomas: f.sinais_sintomas,
-        exame_fisico: f.exame_fisico,
-        hipotese: f.hipotese,
-        conduta: f.conduta,
-      const dynamicFields = getDynamicFieldsPayload(f);
 
       const record: any = {
         paciente_id: f.paciente_id || `manual_${Date.now()}`,
