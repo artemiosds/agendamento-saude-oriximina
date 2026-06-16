@@ -110,6 +110,7 @@ async function processOne(
   provider: WhatsAppProvider,
   providerInstance: string,
   msg: QueueRow,
+  humanized: boolean,
 ): Promise<{ ok: boolean; reason?: string }> {
   // marca como processando
   await supabase.from("whatsapp_queue").update({
@@ -120,24 +121,44 @@ async function processOne(
   const dateKey = todayKey();
   const pid = msg.paciente_id || msg.telefone || msg.id;
 
-  // 1. Delay de entrada (jitter humano determinístico)
-  const dIn = entryDelayMs(pid, dateKey);
-  console.log(`[QueueProcessor] ${msg.id} entry delay ${dIn}ms`);
-  await sleep(dIn);
+  // ============================================================
+  // SEQUÊNCIA HUMANIZADA OBRIGATÓRIA (antibloqueio real, NÃO rate limit):
+  //   PASSO 1: entryDelay  = 3000 + |hash(pid + dataHoje)| % 9000        ms
+  //   PASSO 2: POST /chat/presence { presence: "composing" }   (UazapiGO / Evolution)
+  //   PASSO 3: typingDelay = clamp(msg.length * 35, 2000, 8000)          ms
+  //   PASSO 4: POST /chat/presence { presence: "paused" }
+  //   PASSO 5: envio real (sendTextMessage)
+  //   PASSO 6: postDelay   = 5000 + (|hash + 1|) % 25000                 ms
+  // Hash é DETERMINÍSTICO por (patient_id + YYYY-MM-DD) — sem Math.random.
+  // Pode ser desligado por Master via system_config.whatsapp_humanizado.enabled=false.
+  // ============================================================
 
-  // 2. Presence "composing"
-  await provider.sendPresence(msg.telefone, "composing");
+  // PASSO 1
+  if (humanized) {
+    const dIn = entryDelayMs(pid, dateKey);
+    console.log(`[QueueProcessor] ${msg.id} PASSO1 entry ${dIn}ms`);
+    await sleep(dIn);
 
-  // 3. Typing delay proporcional ao tamanho
-  const dType = typingDelayMs(msg.mensagem || "");
-  console.log(`[QueueProcessor] ${msg.id} typing ${dType}ms (len=${(msg.mensagem||"").length})`);
-  await sleep(dType);
+    // PASSO 2 — presence composing
+    console.log(`[QueueProcessor] ${msg.id} PASSO2 sendPresence(composing) -> ${msg.telefone}`);
+    await provider.sendPresence(msg.telefone, "composing");
 
-  // 4. Presence "paused"
-  await provider.sendPresence(msg.telefone, "paused");
+    // PASSO 3 — typing
+    const dType = typingDelayMs(msg.mensagem || "");
+    console.log(`[QueueProcessor] ${msg.id} PASSO3 typing ${dType}ms (len=${(msg.mensagem||"").length})`);
+    await sleep(dType);
 
-  // 5. Envio real
+    // PASSO 4 — presence paused
+    console.log(`[QueueProcessor] ${msg.id} PASSO4 sendPresence(paused)`);
+    await provider.sendPresence(msg.telefone, "paused");
+  } else {
+    console.log(`[QueueProcessor] ${msg.id} humanização DESLIGADA — pulando presence/delays`);
+  }
+
+  // PASSO 5 — envio real
   const result = await provider.sendTextMessage(msg.telefone, msg.mensagem || "");
+
+
 
   if (result.ok) {
     await supabase.from("whatsapp_queue").update({
