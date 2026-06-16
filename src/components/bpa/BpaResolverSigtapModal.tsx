@@ -352,6 +352,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       toast.error("Falha ao aplicar correção: " + (e?.message || "erro desconhecido"));
     } finally {
       setSaving(false);
+      setProgress(null);
     }
   };
 
