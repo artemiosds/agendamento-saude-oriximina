@@ -20,6 +20,29 @@ export interface VisitaDomiciliarValue {
   medidas_cadeira_rodas?: MedidasCadeiraRodasValue;
 }
 
+const MEDIDAS_LETRAS = ["A","B","C","D","E","F","G","H","I","J","K","L","M"] as const;
+
+export const createEmptyMedidasCadeiraRodas = (
+  dataAtendimento?: string
+): MedidasCadeiraRodasValue => ({
+  data_avaliacao: dataAtendimento || "",
+  equipamento_solicitado: "",
+  diagnostico_condicao_funcional: "",
+  motivo_solicitacao: "",
+  controle_cervical: "",
+  controle_tronco: "",
+  equilibrio_sentado: "",
+  mobilidade_membros_superiores: "",
+  mobilidade_membros_inferiores: "",
+  deformidades_contraturas: "",
+  risco_lesao_pressao: "",
+  tipo_cadeira_indicada: "",
+  medidas: MEDIDAS_LETRAS.reduce((acc, l) => ({ ...acc, [l]: "" }), {} as Record<string, string>),
+  adaptacoes_justificativa: "",
+  orientacoes_parecer: "",
+  observacoes_gerais: "",
+});
+
 interface Props {
   value?: VisitaDomiciliarValue;
   onChange?: (value: VisitaDomiciliarValue) => void;
@@ -59,6 +82,19 @@ const VisitaDomiciliarProntuario: React.FC<Props> = ({
   };
 
   const finalidade: FinalidadeVisita = data.finalidade_atendimento || "geral";
+
+  // Seed skeleton se finalidade já é medidas_cadeira_rodas mas o objeto ainda não existe
+  useEffect(() => {
+    if (
+      finalidade === "medidas_cadeira_rodas" &&
+      !data.medidas_cadeira_rodas
+    ) {
+      update({
+        medidas_cadeira_rodas: createEmptyMedidasCadeiraRodas(dataAtendimento),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalidade, data.medidas_cadeira_rodas]);
 
   return (
     <Card className="p-4 space-y-4 border-teal-500/30 bg-teal-500/5">
@@ -136,9 +172,19 @@ const VisitaDomiciliarProntuario: React.FC<Props> = ({
         <RadioGroup
           className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2"
           value={finalidade}
-          onValueChange={(v) =>
-            update({ finalidade_atendimento: v as FinalidadeVisita })
-          }
+          onValueChange={(v) => {
+            const next = v as FinalidadeVisita;
+            if (next === "medidas_cadeira_rodas") {
+              update({
+                finalidade_atendimento: next,
+                medidas_cadeira_rodas:
+                  data.medidas_cadeira_rodas ||
+                  createEmptyMedidasCadeiraRodas(dataAtendimento),
+              });
+            } else {
+              update({ finalidade_atendimento: next });
+            }
+          }}
           disabled={disabled}
         >
           <label
