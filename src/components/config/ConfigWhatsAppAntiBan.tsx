@@ -16,6 +16,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Shield, Loader2, Save, Trash2, RefreshCw, AlertTriangle, Clock, PowerOff, Power } from 'lucide-react';
+import CircuitBreakerCard from './whatsapp/CircuitBreakerCard';
 import { toast } from 'sonner';
 
 const DAYS = [
@@ -322,7 +323,11 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
         </div>
       </div>
 
+      {/* Circuit breaker + envio humanizado */}
+      <CircuitBreakerCard />
+
       {/* Seletor de unidade */}
+
       {editableUnits.length > 1 && (
         <Card className="border-0 shadow-card">
           <CardContent className="p-4 flex items-center gap-3">
