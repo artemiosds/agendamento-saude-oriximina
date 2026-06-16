@@ -85,37 +85,34 @@ export async function imprimirVisitaDomiciliar(
 
   const css = `
     <style>
-      .vd-section { margin: 10px 0; page-break-inside: avoid; }
+      .vd-section { margin: 7px 0; page-break-inside: avoid; }
       .vd-section-title {
-        font-size: 10.5pt; font-weight: 700; color: #2A6F97;
-        border-bottom: 1px solid #2A6F97; padding: 2px 0 3px;
-        margin: 0 0 6px; text-transform: uppercase; letter-spacing: .5px;
+        font-size: 8.5pt; font-weight: 700; color: #0369a1;
+        border-bottom: .5px solid #0369a1; padding: 0 0 2px;
+        margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0;
       }
-      .vd-section-body { font-size: 9.5pt; line-height: 1.45; }
-      .vd-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
-      .vd-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 12px; }
-      .vd-field-block { margin-bottom: 6px; }
-      .vd-field-inline { margin: 2px 0; }
+      .vd-section-body { font-size: 9pt; line-height: 1.25; }
+      .vd-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+      .vd-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 8px; }
+      .vd-field-block { margin-bottom: 4px; }
+      .vd-field-inline { margin: 1px 0; }
       .vd-field-label { font-weight: 600; color: #333; }
       .vd-field-value { color: #111; }
       .vd-empty { color: #999; }
-      .vd-am-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+      .vd-am-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 0; }
       .vd-am-table th, .vd-am-table td {
-        border: 1px solid #bbb; padding: 3px 6px; text-align: left;
+        border: 1px solid #cbd5e1; padding: 2px 5px; text-align: left;
       }
-      .vd-am-table th { background: #f0f4f7; color: #2A6F97; }
+      .vd-am-table th { background: #f1f5f9; color: #0f172a; }
       .vd-am-letra {
-        display: inline-block; width: 18px; height: 18px; line-height: 18px;
+        display: inline-block; width: 16px; height: 16px; line-height: 16px;
         background: #2A6F97; color: #fff; border-radius: 50%; text-align: center;
-        font-weight: 700; font-size: 8.5pt; margin-right: 4px;
+        font-weight: 700; font-size: 8pt; margin-right: 4px;
       }
       .vd-cm { text-align: right; width: 60px; }
-      .vd-carimbo { margin-top: 28px; }
-      .vd-final { padding: 4px 8px; background: #e6f2f7; border-left: 3px solid #2A6F97; font-weight: 600; }
-      .vd-diagrama-placeholder {
-        border: 1px dashed #888; padding: 10px; text-align: center;
-        color: #666; font-size: 9pt; margin: 6px 0;
-      }
+      .vd-carimbo { margin-top: 22px; }
+      .vd-final { padding: 4px 8px; background: #f0f9ff; border-left: 3px solid #2A6F97; font-weight: 600; }
+      .vd-diagram { display:block; width:100%; max-width:680px; max-height:300px; height:auto; object-fit:contain; margin:0 auto; }
     </style>`;
 
   let body = css;
