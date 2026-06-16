@@ -159,9 +159,19 @@ const VisitaDomiciliarProntuario: React.FC<Props> = ({
         <RadioGroup
           className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2"
           value={finalidade}
-          onValueChange={(v) =>
-            update({ finalidade_atendimento: v as FinalidadeVisita })
-          }
+          onValueChange={(v) => {
+            const next = v as FinalidadeVisita;
+            if (next === "medidas_cadeira_rodas") {
+              update({
+                finalidade_atendimento: next,
+                medidas_cadeira_rodas:
+                  data.medidas_cadeira_rodas ||
+                  createEmptyMedidasCadeiraRodas(dataAtendimento),
+              });
+            } else {
+              update({ finalidade_atendimento: next });
+            }
+          }}
           disabled={disabled}
         >
           <label
