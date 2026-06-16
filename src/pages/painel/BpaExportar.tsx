@@ -15,6 +15,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
 import { bpaService } from '@/services/bpaService';
 import BpaResolverSigtapModal, { ResolverSigtapItem } from '@/components/bpa/BpaResolverSigtapModal';
+import {
+  isValidCnsAlgo,
+  pickValidCnsPaciente,
+  normalizeRacaCorBpa,
+  normalizeEtniaBpa,
+  fetchCepInfoMap,
+  resolveMunicipioBpa,
+  normalizeCep,
+  type CepInfo,
+} from '@/lib/bpaNormalization';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
