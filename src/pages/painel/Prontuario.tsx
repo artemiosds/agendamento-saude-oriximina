@@ -551,30 +551,73 @@ const ProntuarioPage: React.FC = () => {
   const [remarcarSaving, setRemarcarSaving] = useState(false);
   const [selectSessionOpen, setSelectSessionOpen] = useState(false);
 
-  const loadSessaoData = async (patientId: string, _professionalId?: string) => {
+  const buildTreatmentContext = useCallback((source: any = form): TreatmentContext => {
+    const cd = getCustomDataObject(source);
+    const professionalId = source?.profissional_id || (!editId ? user?.id : "") || "";
+    const professional = funcionarios.find((f) => f.id === professionalId);
+    return {
+      patientId: source?.paciente_id || "",
+      prontuarioId: editId,
+      professionalId,
+      professionalName: source?.profissional_nome || professional?.nome || "",
+      specialty: getTreatmentSpecialtyFromSource(source, professional, !editId ? user?.profissao : ""),
+      date: source?.data_atendimento || todayLocalStr(),
+      explicitCycleId: cd.treatment_cycle_id || cd.cycle_id || cd.treatmentCycleId || null,
+      explicitPtsId: cd.pts_id || cd.ptsId || source?.pts_meta_id || cd.pts_meta_id || null,
+      explicitPtsMetaId: source?.pts_meta_id || cd.pts_meta_id || null,
+    };
+  }, [editId, form, funcionarios, user?.id, user?.profissao]);
+
+  const loadSessaoData = async (contextInput: string | TreatmentContext, _professionalId?: string) => {
     setSessaoDataLoading(true);
     try {
-      // Search for ANY active cycle for this patient (not filtered by professional)
-      // so cycles created by other professionals are also detected
-      let cycleQuery = (supabase as any).from('treatment_cycles').select('*')
-        .eq('patient_id', patientId)
-        .in('status', ['em_andamento', 'ativo'])
-        .order('created_at', { ascending: false })
-        .limit(1);
+      const context = typeof contextInput === 'string'
+        ? buildTreatmentContext({ ...formRef.current, paciente_id: contextInput, profissional_id: _professionalId || formRef.current.profissional_id })
+        : contextInput;
+      const patientId = context.patientId;
+      const professionalId = context.professionalId || "";
+      const specialty = context.specialty || "";
 
-      const [cycleRes, ptsRes] = await Promise.all([
-        cycleQuery.maybeSingle(),
-        supabase.from('pts').select('*')
+      let cycle: ActiveCycle | null = null;
+      if (context.explicitCycleId) {
+        const { data } = await (supabase as any).from('treatment_cycles').select('*')
+          .eq('id', context.explicitCycleId)
           .eq('patient_id', patientId)
-          .eq('status', 'ativo')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      const cycle = cycleRes.data;
+          .maybeSingle();
+        const explicitCycle = data as ActiveCycle | null;
+        cycle = explicitCycle && (!professionalId || explicitCycle.professional_id === professionalId) ? explicitCycle : null;
+      } else if (patientId && professionalId) {
+        const { data } = await (supabase as any).from('treatment_cycles').select('*')
+          .eq('patient_id', patientId)
+          .eq('professional_id', professionalId)
+          .in('status', ['em_andamento', 'ativo'])
+          .order('created_at', { ascending: false });
+        cycle = ((data || []) as ActiveCycle[]).find((candidate) =>
+          isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty) &&
+          isDateInsideCycle(candidate, context.date)
+        ) || null;
+      }
       setSessaoCycle(cycle || null);
-      
-      const pts = ptsRes.data as ActivePTS | null;
+
+      let pts: ActivePTS | null = null;
+      if (context.explicitPtsId || context.explicitPtsMetaId || cycle?.pts_id) {
+        const ptsId = context.explicitPtsId || context.explicitPtsMetaId || cycle?.pts_id;
+        const { data } = await supabase.from('pts').select('*')
+          .eq('id', ptsId)
+          .eq('patient_id', patientId)
+          .maybeSingle();
+        const explicitPts = data as ActivePTS | null;
+        pts = explicitPts && (!professionalId || explicitPts.professional_id === professionalId || cycle?.pts_id === explicitPts.id) && isPtsSpecialtyCompatible(explicitPts, specialty)
+          ? explicitPts
+          : null;
+      } else if (patientId && professionalId) {
+        const { data } = await supabase.from('pts').select('*')
+          .eq('patient_id', patientId)
+          .eq('professional_id', professionalId)
+          .eq('status', 'ativo')
+          .order('created_at', { ascending: false });
+        pts = ((data || []) as ActivePTS[]).find((candidate) => isPtsSpecialtyCompatible(candidate, specialty)) || null;
+      }
       setSessaoPts(pts);
 
       if (pts) {
