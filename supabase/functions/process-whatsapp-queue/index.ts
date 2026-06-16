@@ -187,10 +187,12 @@ async function processOne(
     }).eq("id", msg.id);
   }
 
-  // 6. Delay pós-envio (sempre, mesmo em erro — protege o número)
-  const dOut = postSendDelayMs(pid, dateKey);
-  console.log(`[QueueProcessor] ${msg.id} post delay ${dOut}ms`);
-  await sleep(dOut);
+  // PASSO 6 — Delay pós-envio (apenas no modo humanizado)
+  if (humanized) {
+    const dOut = postSendDelayMs(pid, dateKey);
+    console.log(`[QueueProcessor] ${msg.id} PASSO6 post ${dOut}ms`);
+    await sleep(dOut);
+  }
 
   return { ok: result.ok, reason: result.errorMessage };
 }
