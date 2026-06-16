@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,7 @@ export interface MedidasCadeiraRodasValue {
 
 interface Props {
   value?: MedidasCadeiraRodasValue;
-  onChange?: (value: MedidasCadeiraRodasValue) => void;
+  onChange: (value: MedidasCadeiraRodasValue) => void;
   disabled?: boolean;
   paciente?: any;
   unidade?: any;
@@ -54,35 +54,17 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
   disabled,
   dataAtendimento,
 }) => {
-  const controlled = typeof onChange === "function";
-  const [local, setLocal] = useState<MedidasCadeiraRodasValue>(
-    value ?? { data_avaliacao: dataAtendimento || "", medidas: {} }
-  );
-  const data = controlled
-    ? (value ?? { data_avaliacao: dataAtendimento || "", medidas: {} })
-    : local;
-
-  // Keep local in sync if controlled value object changes from outside.
-  const lastExternal = useRef(value);
-  useEffect(() => {
-    if (controlled && value !== lastExternal.current) {
-      lastExternal.current = value;
-    }
-  }, [value, controlled]);
+  const data = value ?? { data_avaliacao: dataAtendimento || "", medidas: {} };
 
   const updateField = <K extends keyof MedidasCadeiraRodasValue>(key: K, value: MedidasCadeiraRodasValue[K]) => {
-    const next = { ...data, [key]: value };
-    if (controlled) onChange!(next);
-    else setLocal(next);
+    onChange({ ...data, [key]: value });
   };
 
   const updateMedida = (letra: string, v: string) => {
-    const next = {
+    onChange({
       ...data,
       medidas: { ...(data.medidas || {}), [letra]: v },
-    };
-    if (controlled) onChange!(next);
-    else setLocal(next);
+    });
   };
 
   return (
