@@ -158,6 +158,7 @@ const emptyForm = {
   soap_objetivo: "",
   soap_avaliacao: "",
   soap_plano: "",
+  custom_data: {} as any,
 };
 
 const classificarIMC = (imc: number): string => {
@@ -242,6 +243,55 @@ const sessionStatusLabels: Record<string, string> = {
   paciente_faltou: "Faltou",
   cancelada: "Cancelada",
   remarcada: "Remarcada",
+};
+
+type TreatmentContext = {
+  patientId: string;
+  prontuarioId?: string | null;
+  professionalId?: string | null;
+  professionalName?: string | null;
+  specialty?: string | null;
+  date?: string | null;
+  explicitCycleId?: string | null;
+  explicitPtsId?: string | null;
+  explicitPtsMetaId?: string | null;
+};
+
+const normalizeContextText = (value?: string | null) =>
+  (value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+const getCustomDataObject = (source: any) =>
+  source?.custom_data && typeof source.custom_data === "object" ? source.custom_data : {};
+
+const getTreatmentSpecialtyFromSource = (source: any, professional?: any, userProfissao?: string) => {
+  const cd = getCustomDataObject(source);
+  return (
+    cd.especialidade || cd.specialty || cd.profissao ||
+    source?.especialidade || source?.specialty || source?.profissao ||
+    professional?.profissao || professional?.cargo || userProfissao || ""
+  );
+};
+
+const isDateInsideCycle = (cycle: any, date?: string | null) => {
+  if (!date) return true;
+  if (cycle?.start_date && date < cycle.start_date) return false;
+  const end = cycle?.end_date_predicted || cycle?.end_date || cycle?.data_fim;
+  if (end && date > end) return false;
+  return true;
+};
+
+const isSpecialtyCompatible = (left?: string | null, right?: string | null) => {
+  const a = normalizeContextText(left);
+  const b = normalizeContextText(right);
+  if (!a || !b) return true;
+  return a === b || a.includes(b) || b.includes(a);
+};
+
+const isPtsSpecialtyCompatible = (pts: any, specialty?: string | null) => {
+  const normalizedSpecialty = normalizeContextText(specialty);
+  const involved = Array.isArray(pts?.especialidades_envolvidas) ? pts.especialidades_envolvidas : [];
+  if (!normalizedSpecialty || involved.length === 0) return true;
+  return involved.some((item: string) => isSpecialtyCompatible(item, specialty));
 };
 
 const ProntuarioPage: React.FC = () => {
