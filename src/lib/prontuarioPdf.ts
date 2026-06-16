@@ -124,6 +124,87 @@ function section(label: string, value: string): string {
     </div>`;
 }
 
+const normalizeContextText = (value?: string | null) =>
+  (value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+const getCustomDataObject = (source: any) =>
+  source?.custom_data && typeof source.custom_data === "object" ? source.custom_data : {};
+
+const isSpecialtyCompatible = (left?: string | null, right?: string | null) => {
+  const a = normalizeContextText(left);
+  const b = normalizeContextText(right);
+  if (!a || !b) return true;
+  return a === b || a.includes(b) || b.includes(a);
+};
+
+const isDateInsideCycle = (cycle: any, date?: string | null) => {
+  if (!date) return true;
+  if (cycle?.start_date && date < cycle.start_date) return false;
+  const end = cycle?.end_date_predicted || cycle?.end_date || cycle?.data_fim;
+  return !(end && date > end);
+};
+
+const isPtsSpecialtyCompatible = (pts: any, specialty?: string | null) => {
+  const target = normalizeContextText(specialty);
+  const involved = Array.isArray(pts?.especialidades_envolvidas) ? pts.especialidades_envolvidas : [];
+  if (!target || involved.length === 0) return true;
+  return involved.some((item: string) => isSpecialtyCompatible(item, specialty));
+};
+
+async function fetchContextualTreatment(prontuario: any, profissional: any) {
+  const cd = getCustomDataObject(prontuario);
+  const specialty = cd.especialidade || cd.specialty || cd.profissao || prontuario.especialidade || profissional?.profissao || profissional?.cargo || "";
+  const explicitCycleId = cd.treatment_cycle_id || cd.cycle_id || cd.treatmentCycleId || null;
+  const explicitPtsId = cd.pts_id || cd.ptsId || null;
+  const explicitPtsMetaId = prontuario.pts_meta_id || cd.pts_meta_id || null;
+  let ciclo: any = null;
+
+  if (explicitCycleId) {
+    const { data } = await supabase
+      .from('treatment_cycles')
+      .select('*')
+      .eq('id', explicitCycleId)
+      .eq('patient_id', prontuario.paciente_id)
+      .maybeSingle();
+    ciclo = data;
+  } else if (prontuario.paciente_id && prontuario.profissional_id) {
+    const { data } = await supabase
+      .from('treatment_cycles')
+      .select('*')
+      .eq('patient_id', prontuario.paciente_id)
+      .eq('professional_id', prontuario.profissional_id)
+      .in('status', ['em_andamento', 'ativo'])
+      .order('created_at', { ascending: false });
+    ciclo = ((data || []) as any[]).find((candidate) =>
+      isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty) &&
+      isDateInsideCycle(candidate, prontuario.data_atendimento)
+    ) || null;
+  }
+
+  let ptsId = explicitPtsId || ciclo?.pts_id || null;
+  if (!ptsId && explicitPtsMetaId) {
+    const { data: meta } = await (supabase as any).from('pts_metas').select('pts_id').eq('id', explicitPtsMetaId).maybeSingle();
+    ptsId = meta?.pts_id || null;
+  }
+
+  let pts: any = null;
+  if (ptsId) {
+    const { data } = await supabase.from('pts').select('*').eq('id', ptsId).eq('patient_id', prontuario.paciente_id).maybeSingle();
+    pts = data;
+  } else if (prontuario.paciente_id && prontuario.profissional_id) {
+    const { data } = await supabase
+      .from('pts')
+      .select('*')
+      .eq('patient_id', prontuario.paciente_id)
+      .eq('professional_id', prontuario.profissional_id)
+      .eq('status', 'ativo')
+      .order('created_at', { ascending: false });
+    pts = ((data || []) as any[]).find((candidate) => isPtsSpecialtyCompatible(candidate, specialty)) || null;
+  }
+
+  return { ciclo, pts };
+}
+
 async function fetchFullProntuarioData(prontuarioId: string) {
   const { data: prontuario, error: pErr } = await supabase
     .from('prontuarios')
@@ -151,34 +232,7 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     .eq('id', prontuario.unidade_id)
     .maybeSingle();
 
-  const { data: ciclo } = await supabase
-    .from('treatment_cycles')
-    .select('*')
-    .eq('patient_id', prontuario.paciente_id)
-    .eq('status', 'em_andamento')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let pts = null;
-  if (ciclo?.pts_id) {
-    const { data: ptsData } = await supabase
-      .from('pts')
-      .select('*')
-      .eq('id', ciclo.pts_id)
-      .maybeSingle();
-    pts = ptsData;
-  } else {
-    const { data: ptsData } = await supabase
-      .from('pts')
-      .select('*')
-      .eq('patient_id', prontuario.paciente_id)
-      .eq('status', 'ativo')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    pts = ptsData;
-  }
+  const { ciclo, pts } = await fetchContextualTreatment(prontuario, profissional);
 
   // Busca procedimentos vinculados
   const { data: procs } = await supabase
@@ -289,6 +343,21 @@ export async function downloadProntuarioPdf(
   const modelKey = `estrutura_prontuario_${tipoRegistro}`;
   const legacyModelKey = tipoRegistro === 'avaliacao_inicial' ? 'estrutura_prontuario_primeira_consulta' : '';
   const modelSchema = allConfigs?.[modelKey] || (legacyModelKey ? allConfigs?.[legacyModelKey] : null);
+  const legacyFields = [
+    { k: 'queixa_principal', l: 'Queixa Principal' },
+    { k: 'anamnese', l: 'Anamnese / Histórico' },
+    { k: 'sinais_sintomas', l: 'Sinais e Sintomas' },
+    { k: 'exame_fisico', l: 'Exame Físico' },
+    { k: 'hipotese', l: 'Hipótese' },
+    { k: 'conduta', l: 'Conduta' },
+    { k: 'evolucao', l: 'Evolução' },
+    { k: 'observacoes', l: 'Observações Gerais' },
+    { k: 'procedimentos_texto', l: 'Procedimentos' },
+    { k: 'prescricao', l: 'Prescrição' },
+    { k: 'solicitacao_exames', l: 'Solicitação de Exames' },
+    { k: 'resultado_exame', l: 'Resultado de Exame' },
+    { k: 'indicacao_retorno', l: 'Indicação de Retorno' }
+  ];
   
   if (modelSchema?.fields) {
     modelSchema.fields.forEach((f: any) => {
@@ -332,21 +401,6 @@ export async function downloadProntuarioPdf(
   }
 
   // Fallback for some hardcoded essential fields if they have value but weren't in config
-  const legacyFields = [
-    { k: 'queixa_principal', l: 'Queixa Principal' },
-    { k: 'anamnese', l: 'Anamnese / Histórico' },
-    { k: 'sinais_sintomas', l: 'Sinais e Sintomas' },
-    { k: 'exame_fisico', l: 'Exame Físico' },
-    { k: 'hipotese', l: 'Hipótese' },
-    { k: 'conduta', l: 'Conduta' },
-    { k: 'evolucao', l: 'Evolução' },
-    { k: 'observacoes', l: 'Observações Gerais' },
-    { k: 'procedimentos_texto', l: 'Procedimentos' },
-    { k: 'prescricao', l: 'Prescrição' },
-    { k: 'solicitacao_exames', l: 'Solicitação de Exames' },
-    { k: 'resultado_exame', l: 'Resultado de Exame' },
-    { k: 'indicacao_retorno', l: 'Indicação de Retorno' }
-  ];
   legacyFields.forEach(f => {
     if (!activeFieldsForType.some(af => af.key === f.k) && prontuario[f.k]) {
       clinicalContentHtml += renderSection(f.l, prontuario[f.k]);

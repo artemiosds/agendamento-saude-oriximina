@@ -100,6 +100,7 @@ interface ProntuarioDB {
   procedimentos_texto: string;
   outro_procedimento: string;
   episodio_id: string | null;
+  pts_meta_id?: string | null;
   custom_data?: any;
   criado_em: string;
   atualizado_em: string;
@@ -154,10 +155,12 @@ const emptyForm = {
   procedimentos_texto: "",
   outro_procedimento: "",
   episodio_id: "",
+  pts_meta_id: "",
   soap_subjetivo: "",
   soap_objetivo: "",
   soap_avaliacao: "",
   soap_plano: "",
+  custom_data: {} as any,
 };
 
 const classificarIMC = (imc: number): string => {
@@ -242,6 +245,55 @@ const sessionStatusLabels: Record<string, string> = {
   paciente_faltou: "Faltou",
   cancelada: "Cancelada",
   remarcada: "Remarcada",
+};
+
+type TreatmentContext = {
+  patientId: string;
+  prontuarioId?: string | null;
+  professionalId?: string | null;
+  professionalName?: string | null;
+  specialty?: string | null;
+  date?: string | null;
+  explicitCycleId?: string | null;
+  explicitPtsId?: string | null;
+  explicitPtsMetaId?: string | null;
+};
+
+const normalizeContextText = (value?: string | null) =>
+  (value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+const getCustomDataObject = (source: any) =>
+  source?.custom_data && typeof source.custom_data === "object" ? source.custom_data : {};
+
+const getTreatmentSpecialtyFromSource = (source: any, professional?: any, userProfissao?: string) => {
+  const cd = getCustomDataObject(source);
+  return (
+    cd.especialidade || cd.specialty || cd.profissao ||
+    source?.especialidade || source?.specialty || source?.profissao ||
+    professional?.profissao || professional?.cargo || userProfissao || ""
+  );
+};
+
+const isDateInsideCycle = (cycle: any, date?: string | null) => {
+  if (!date) return true;
+  if (cycle?.start_date && date < cycle.start_date) return false;
+  const end = cycle?.end_date_predicted || cycle?.end_date || cycle?.data_fim;
+  if (end && date > end) return false;
+  return true;
+};
+
+const isSpecialtyCompatible = (left?: string | null, right?: string | null) => {
+  const a = normalizeContextText(left);
+  const b = normalizeContextText(right);
+  if (!a || !b) return true;
+  return a === b || a.includes(b) || b.includes(a);
+};
+
+const isPtsSpecialtyCompatible = (pts: any, specialty?: string | null) => {
+  const normalizedSpecialty = normalizeContextText(specialty);
+  const involved = Array.isArray(pts?.especialidades_envolvidas) ? pts.especialidades_envolvidas : [];
+  if (!normalizedSpecialty || involved.length === 0) return true;
+  return involved.some((item: string) => isSpecialtyCompatible(item, specialty));
 };
 
 const ProntuarioPage: React.FC = () => {
@@ -467,16 +519,19 @@ const ProntuarioPage: React.FC = () => {
   interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
 
+  const formProfessional = useMemo(
+    () => funcionarios.find((f) => f.id === form.profissional_id),
+    [funcionarios, form.profissional_id],
+  );
+
   const effectiveProfissao = useMemo(() => {
-    // Se for registro de sessão e tiver ciclo, prioriza a especialidade do ciclo
     if (form.tipo_registro === 'sessao' && sessaoCycle?.specialty) {
       return sessaoCycle.specialty;
     }
-    // Caso contrário, usa a do usuário logado
-    return user?.profissao;
-  }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
+    return getTreatmentSpecialtyFromSource(form, formProfessional, !editId ? user?.profissao : '') || user?.profissao;
+  }, [editId, form, formProfessional, form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
 
-  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(user?.id, form.tipo_registro, effectiveProfissao);
+  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(form.profissional_id || user?.id, form.tipo_registro, effectiveProfissao);
 
   const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
@@ -501,30 +556,75 @@ const ProntuarioPage: React.FC = () => {
   const [remarcarSaving, setRemarcarSaving] = useState(false);
   const [selectSessionOpen, setSelectSessionOpen] = useState(false);
 
-  const loadSessaoData = async (patientId: string, _professionalId?: string) => {
+  const buildTreatmentContext = useCallback((source: any = form): TreatmentContext => {
+    const cd = getCustomDataObject(source);
+    const professionalId = source?.profissional_id || (!editId ? user?.id : "") || "";
+    const professional = funcionarios.find((f) => f.id === professionalId);
+    return {
+      patientId: source?.paciente_id || "",
+      prontuarioId: editId,
+      professionalId,
+      professionalName: source?.profissional_nome || professional?.nome || "",
+      specialty: getTreatmentSpecialtyFromSource(source, professional, !editId ? user?.profissao : ""),
+      date: source?.data_atendimento || todayLocalStr(),
+      explicitCycleId: cd.treatment_cycle_id || cd.cycle_id || cd.treatmentCycleId || null,
+      explicitPtsId: cd.pts_id || cd.ptsId || null,
+      explicitPtsMetaId: source?.pts_meta_id || cd.pts_meta_id || null,
+    };
+  }, [editId, form, funcionarios, user?.id, user?.profissao]);
+
+  const loadSessaoData = async (contextInput: string | TreatmentContext, _professionalId?: string) => {
     setSessaoDataLoading(true);
     try {
-      // Search for ANY active cycle for this patient (not filtered by professional)
-      // so cycles created by other professionals are also detected
-      let cycleQuery = (supabase as any).from('treatment_cycles').select('*')
-        .eq('patient_id', patientId)
-        .in('status', ['em_andamento', 'ativo'])
-        .order('created_at', { ascending: false })
-        .limit(1);
+      const context = typeof contextInput === 'string'
+        ? buildTreatmentContext({ ...formRef.current, paciente_id: contextInput, profissional_id: _professionalId || formRef.current.profissional_id })
+        : contextInput;
+      const patientId = context.patientId;
+      const professionalId = context.professionalId || "";
+      const specialty = context.specialty || "";
 
-      const [cycleRes, ptsRes] = await Promise.all([
-        cycleQuery.maybeSingle(),
-        supabase.from('pts').select('*')
+      let cycle: ActiveCycle | null = null;
+      if (context.explicitCycleId) {
+        const { data } = await (supabase as any).from('treatment_cycles').select('*')
+          .eq('id', context.explicitCycleId)
           .eq('patient_id', patientId)
-          .eq('status', 'ativo')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      const cycle = cycleRes.data;
+          .maybeSingle();
+        cycle = data as ActiveCycle | null;
+      } else if (patientId && professionalId) {
+        const { data } = await (supabase as any).from('treatment_cycles').select('*')
+          .eq('patient_id', patientId)
+          .eq('professional_id', professionalId)
+          .in('status', ['em_andamento', 'ativo'])
+          .order('created_at', { ascending: false });
+        cycle = ((data || []) as ActiveCycle[]).find((candidate) =>
+          isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty) &&
+          isDateInsideCycle(candidate, context.date)
+        ) || null;
+      }
       setSessaoCycle(cycle || null);
-      
-      const pts = ptsRes.data as ActivePTS | null;
+
+      let pts: ActivePTS | null = null;
+      if (context.explicitPtsId || context.explicitPtsMetaId || cycle?.pts_id) {
+        let ptsId = context.explicitPtsId || cycle?.pts_id || null;
+        if (!ptsId && context.explicitPtsMetaId) {
+          const { data: meta } = await (supabase as any).from('pts_metas').select('pts_id').eq('id', context.explicitPtsMetaId).maybeSingle();
+          ptsId = meta?.pts_id || null;
+        }
+        if (ptsId) {
+          const { data } = await supabase.from('pts').select('*')
+            .eq('id', ptsId)
+            .eq('patient_id', patientId)
+            .maybeSingle();
+          pts = data as ActivePTS | null;
+        }
+      } else if (patientId && professionalId) {
+        const { data } = await supabase.from('pts').select('*')
+          .eq('patient_id', patientId)
+          .eq('professional_id', professionalId)
+          .eq('status', 'ativo')
+          .order('created_at', { ascending: false });
+        pts = ((data || []) as ActivePTS[]).find((candidate) => isPtsSpecialtyCompatible(candidate, specialty)) || null;
+      }
       setSessaoPts(pts);
 
       if (pts) {
@@ -1094,9 +1194,9 @@ const ProntuarioPage: React.FC = () => {
   // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
     if (form.paciente_id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
-      loadSessaoData(form.paciente_id);
+      loadSessaoData(buildTreatmentContext(form));
     }
-  }, [form.tipo_registro, form.paciente_id, form.agendamento_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.tipo_registro, form.paciente_id, form.agendamento_id, form.profissional_id, form.data_atendimento, editId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const matchesCurrentSessionByAppointment = currentSessionForRegistration?.appointment_id === form.agendamento_id;
@@ -1203,6 +1303,11 @@ const ProntuarioPage: React.FC = () => {
     setSelectedProcIds([]);
     setSelectedCidsByProc({});
     setProcDetails({});
+    setSessaoCycle(null);
+    setSessaoCycleSessions([]);
+    setSessaoPts(null);
+    setSessaoPtsSigtap([]);
+    setSessaoPtsCids([]);
 
     loadProntuarioProcedimentos(p.id, p.paciente_id, p.data_atendimento);
     loadEpisodios(p.paciente_id);
@@ -1231,13 +1336,28 @@ const ProntuarioPage: React.FC = () => {
       procedimentos_texto: p.procedimentos_texto || "",
       outro_procedimento: p.outro_procedimento || "",
       episodio_id: p.episodio_id || "",
+      pts_meta_id: (p as any).pts_meta_id || "",
       soap_subjetivo: (p as any).soap_subjetivo || "",
       soap_objetivo: (p as any).soap_objetivo || "",
       soap_avaliacao: (p as any).soap_avaliacao || "",
       soap_plano: (p as any).soap_plano || "",
+      custom_data: getCustomDataObject(p),
     };
     setForm(formData);
     setPreviousForm(formData);
+    if (formData.paciente_id && (formData.tipo_registro === 'sessao' || !!formData.agendamento_id)) {
+      loadSessaoData({
+        patientId: formData.paciente_id,
+        prontuarioId: p.id,
+        professionalId: formData.profissional_id,
+        professionalName: formData.profissional_nome,
+        specialty: getTreatmentSpecialtyFromSource(formData, funcionarios.find((f) => f.id === formData.profissional_id), user?.profissao),
+        date: formData.data_atendimento,
+        explicitCycleId: formData.custom_data?.treatment_cycle_id || formData.custom_data?.cycle_id || formData.custom_data?.treatmentCycleId || null,
+        explicitPtsId: formData.custom_data?.pts_id || formData.custom_data?.ptsId || null,
+        explicitPtsMetaId: formData.pts_meta_id || formData.custom_data?.pts_meta_id || null,
+      });
+    }
     // Load exames from solicitacao_exames JSON
     try {
       const parsed = p.solicitacao_exames ? JSON.parse(p.solicitacao_exames) : null;
@@ -1367,6 +1487,7 @@ const ProntuarioPage: React.FC = () => {
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(f);
       const allDynamicData = {
+        ...getCustomDataObject(f),
         ...dynamicFields,
         ...ef,
       };
@@ -1634,7 +1755,7 @@ const ProntuarioPage: React.FC = () => {
         loadProntuarios(),
         refreshAgendamentos(),
         form.tipo_registro === 'sessao' && form.paciente_id
-          ? loadSessaoData(form.paciente_id)
+          ? loadSessaoData(buildTreatmentContext())
           : Promise.resolve(),
       ]).catch(err => console.error('[Prontuario] background reload failed:', err));
 
@@ -1756,6 +1877,7 @@ const ProntuarioPage: React.FC = () => {
           dynamic_fields: dynamicFields
         }),
         custom_data: {
+          ...getCustomDataObject(f),
           ...dynamicFields,
           ...ef,
           ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => {
@@ -2071,6 +2193,7 @@ const ProntuarioPage: React.FC = () => {
         evolucao: form.evolucao,
         observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
         custom_data: {
+          ...getCustomDataObject(form),
           ...dynamicFields,
           ...especialidadeFields,
           ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
@@ -2152,7 +2275,7 @@ const ProntuarioPage: React.FC = () => {
       await Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
-        loadSessaoData(form.paciente_id),
+        loadSessaoData(buildTreatmentContext()),
       ]);
       setSessionRegistrationRequested(false);
     } catch (err: any) {
@@ -2201,7 +2324,7 @@ const ProntuarioPage: React.FC = () => {
 
       // Refresh data
       await Promise.all([
-        loadSessaoData(form.paciente_id),
+        loadSessaoData(buildTreatmentContext()),
         refreshAgendamentos(),
       ]);
     } catch (err: any) {
@@ -2253,7 +2376,7 @@ const ProntuarioPage: React.FC = () => {
 
       toast.success(`Sessão ${session.session_number} desmarcada e horário liberado na agenda.`);
       await Promise.all([
-        loadSessaoData(form.paciente_id),
+        loadSessaoData(buildTreatmentContext()),
         refreshAgendamentos(),
       ]);
     } catch (err: any) {
@@ -2300,7 +2423,7 @@ const ProntuarioPage: React.FC = () => {
       });
 
       toast.success(`Sessão ${session.session_number} retornada ao status Agendada.`);
-      await loadSessaoData(form.paciente_id);
+      await loadSessaoData(buildTreatmentContext());
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao limpar sessão: " + err.message);
@@ -2726,8 +2849,8 @@ const ProntuarioPage: React.FC = () => {
           {form.paciente_id && (
             <FichaPacienteCabecalho
               pacienteId={form.paciente_id}
-              profissionalNome={form.paciente_id ? (funcionarios.find(f => f.id === (searchParams.get("profissionalId") || user?.id))?.nome || user?.nome || "") : ""}
-              profissionalId={searchParams.get("profissionalId") || user?.id || ""}
+              profissionalNome={form.profissional_nome || formProfessional?.nome || user?.nome || ""}
+              profissionalId={form.profissional_id || user?.id || ""}
               agendamentoId={form.agendamento_id || undefined}
               triagem={triagemHeaderData}
               funcionarios={funcionariosLight}
@@ -3023,10 +3146,10 @@ const ProntuarioPage: React.FC = () => {
                 </div>
 
                 {/* Card de Especialidade */}
-                {user?.profissao && (
+                {effectiveProfissao && (
                   <CamposEspecialidade
-                    profissao={user.profissao}
-                    profissionalId={user.id}
+                    profissao={effectiveProfissao}
+                    profissionalId={form.profissional_id || user?.id || ""}
                     tipoProntuario={form.tipo_registro === 'avaliacao_inicial' ? 'avaliacao' : form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={handleEspecialidadeChange}
@@ -3080,10 +3203,10 @@ const ProntuarioPage: React.FC = () => {
                   </div>
                 </div>
 
-                {user?.profissao && (
+                {effectiveProfissao && (
                   <CamposEspecialidade
-                    profissao={user.profissao}
-                    profissionalId={user.id}
+                    profissao={effectiveProfissao}
+                    profissionalId={form.profissional_id || user?.id || ""}
                     tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={handleEspecialidadeChange}
@@ -3360,12 +3483,14 @@ const ProntuarioPage: React.FC = () => {
                               <Activity className="w-5 h-5 text-muted-foreground/60" />
                             </div>
                             <div className="space-y-1">
-                              <p className="text-sm font-medium text-foreground">Nenhum ciclo de tratamento ativo.</p>
-                              <p className="text-xs text-muted-foreground max-w-[280px]">Crie um ciclo para acompanhar o progresso terapêutico.</p>
+                              <p className="text-sm font-medium text-foreground">{editId ? 'Nenhum ciclo/PTS vinculado a este prontuário.' : 'Nenhum ciclo de tratamento ativo.'}</p>
+                              <p className="text-xs text-muted-foreground max-w-[280px]">{editId ? 'Este registro não possui ciclo compatível com o profissional e especialidade do prontuário.' : 'Crie um ciclo para acompanhar o progresso terapêutico.'}</p>
                             </div>
-                            <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setCycleOpen(true)}>
-                              <Plus className="w-3.5 h-3.5 mr-1" /> Criar ciclo
-                            </Button>
+                            {!editId && (
+                              <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setCycleOpen(true)}>
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Criar ciclo
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3467,7 +3592,7 @@ const ProntuarioPage: React.FC = () => {
                                     if (error) toast.error('Erro ao vincular PTS');
                                     else {
                                       toast.success('PTS vinculado com sucesso');
-                                      loadSessaoData(sessaoCycle.patient_id);
+                                      loadSessaoData(buildTreatmentContext());
                                     }
                                   }}
                                 >
@@ -4317,7 +4442,7 @@ const ProntuarioPage: React.FC = () => {
             .eq("id", agendarSessaoTarget.id);
 
           toast.success("Sessão agendada com sucesso!");
-          await loadSessaoData(form.paciente_id);
+          await loadSessaoData(buildTreatmentContext());
           refreshAgendamentos();
         }}
         mode="agendar"
@@ -4348,7 +4473,7 @@ const ProntuarioPage: React.FC = () => {
           }
 
           toast.success(`Sessão remarcada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
-          await loadSessaoData(form.paciente_id);
+          await loadSessaoData(buildTreatmentContext());
           refreshAgendamentos();
         }}
         mode="remarcar"
