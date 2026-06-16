@@ -2220,6 +2220,7 @@ const ProntuarioPage: React.FC = () => {
           ...dynamicFields,
           ...especialidadeFields,
           ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
+          ...(getCustomDataObject(form).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(form).visita_domiciliar } : {}),
         },
 
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
