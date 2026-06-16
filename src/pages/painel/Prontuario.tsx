@@ -1432,6 +1432,9 @@ const ProntuarioPage: React.FC = () => {
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
       if (effectiveEditId) {
+        // Segurança: se por algum motivo o profissional não estiver no form em edição,
+        // remove os campos do update para preservar o original do banco.
+        if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
         const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id, criado_em, atualizado_em").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
