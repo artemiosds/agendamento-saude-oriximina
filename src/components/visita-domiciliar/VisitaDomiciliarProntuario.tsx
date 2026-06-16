@@ -75,8 +75,16 @@ const VisitaDomiciliarProntuario: React.FC<Props> = ({
     }
   }, [value, controlled]);
 
+  // Ref sincrônica do snapshot atual para suportar updates consecutivos
+  // (ex.: A-M digitados em sequência) sem perder o anterior.
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  });
+
   const update = (patch: Partial<VisitaDomiciliarValue>) => {
-    const next = { ...data, ...patch };
+    const next = { ...dataRef.current, ...patch };
+    dataRef.current = next;
     if (controlled) onChange!(next);
     else setLocal(next);
   };
