@@ -54,11 +54,13 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
   disabled,
   dataAtendimento,
 }) => {
-  const controlled = value !== undefined && typeof onChange === "function";
+  const controlled = typeof onChange === "function";
   const [local, setLocal] = useState<MedidasCadeiraRodasValue>(
     value ?? { data_avaliacao: dataAtendimento || "", medidas: {} }
   );
-  const data = controlled ? (value as MedidasCadeiraRodasValue) : local;
+  const data = controlled
+    ? (value ?? { data_avaliacao: dataAtendimento || "", medidas: {} })
+    : local;
 
   // Keep local in sync if controlled value object changes from outside.
   const lastExternal = useRef(value);
@@ -68,6 +70,12 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
     }
   }, [value, controlled]);
 
+  const updateField = <K extends keyof MedidasCadeiraRodasValue>(key: K, value: MedidasCadeiraRodasValue[K]) => {
+    const next = { ...data, [key]: value };
+    if (controlled) onChange!(next);
+    else setLocal(next);
+  };
+
   const update = (patch: Partial<MedidasCadeiraRodasValue>) => {
     const next = { ...data, ...patch };
     if (controlled) onChange!(next);
@@ -75,7 +83,12 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
   };
 
   const updateMedida = (letra: string, v: string) => {
-    update({ medidas: { ...(data.medidas || {}), [letra]: v } });
+    const next = {
+      ...data,
+      medidas: { ...(data.medidas || {}), [letra]: v },
+    };
+    if (controlled) onChange!(next);
+    else setLocal(next);
   };
 
   return (
@@ -94,7 +107,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Input
             type="date"
             value={data.data_avaliacao || ""}
-            onChange={(e) => update({ data_avaliacao: e.target.value })}
+            onChange={(e) => updateField("data_avaliacao", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -102,7 +115,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Label>Equipamento solicitado</Label>
           <Input
             value={data.equipamento_solicitado || ""}
-            onChange={(e) => update({ equipamento_solicitado: e.target.value })}
+            onChange={(e) => updateField("equipamento_solicitado", e.target.value)}
             placeholder="Ex.: Cadeira de rodas adulto, almofada antiescaras..."
             disabled={disabled}
           />
@@ -112,7 +125,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={3}
             value={data.diagnostico_condicao_funcional || ""}
-            onChange={(e) => update({ diagnostico_condicao_funcional: e.target.value })}
+            onChange={(e) => updateField("diagnostico_condicao_funcional", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -121,7 +134,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={3}
             value={data.motivo_solicitacao || ""}
-            onChange={(e) => update({ motivo_solicitacao: e.target.value })}
+            onChange={(e) => updateField("motivo_solicitacao", e.target.value)}
             disabled={disabled}
           />
         </div>
