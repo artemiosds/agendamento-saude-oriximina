@@ -1969,7 +1969,8 @@ const BpaExportar: React.FC = () => {
               { id: 'missingSigtap', label: 'SIGTAP Obrigatório', count: results.stats.missingSigtap, color: 'red' },
               { id: 'missingCbo', label: 'Sem CBO Prof.', count: results.stats.missingCbo, color: 'amber' },
               { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
-              { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' }
+              { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' },
+              { id: 'autoCorrected', label: 'Correções Automáticas', count: results.stats.autoCorrected, color: 'emerald' }
             ].map((stat) => (
               <Card 
                 key={stat.id}
