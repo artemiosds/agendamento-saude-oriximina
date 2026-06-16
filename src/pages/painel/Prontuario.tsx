@@ -798,9 +798,10 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const canConfirmSessionRegistration = useMemo(
-    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && (!soapEnabled || !sessionSoapValidationError)),
-    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError, soapEnabled],
+    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && (form.tipo_registro === 'visita_domiciliar' || !soapEnabled || !sessionSoapValidationError)),
+    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError, soapEnabled, form.tipo_registro],
   );
+
 
   // Medications & exam types state
   interface MedicationDB {
@@ -3142,22 +3143,25 @@ const ProntuarioPage: React.FC = () => {
 
             {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
 
-            {/* SOAP Evolution — ALL 5 types */}
-            <SoapFieldsAdaptive
-              profissao={effectiveProfissao}
-              values={soapValues}
-              onChange={handleSoapChange}
-              soapErrors={soapErrors}
-              onClearErrors={handleClearSoapErrors}
-              soapEnabled={soapEnabled}
-              onToggleSoap={setSoapEnabled}
-              highlightSOAP={sessaoHighlightSOAP}
-              soapRef={soapRef as React.RefObject<HTMLDivElement>}
-              customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
-              customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
-              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, effectiveProfissao || '') : undefined}
-              onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
-            />
+            {/* SOAP Evolution — oculto para Visita Domiciliar */}
+            {form.tipo_registro !== 'visita_domiciliar' && (
+              <SoapFieldsAdaptive
+                profissao={effectiveProfissao}
+                values={soapValues}
+                onChange={handleSoapChange}
+                soapErrors={soapErrors}
+                onClearErrors={handleClearSoapErrors}
+                soapEnabled={soapEnabled}
+                onToggleSoap={setSoapEnabled}
+                highlightSOAP={sessaoHighlightSOAP}
+                soapRef={soapRef as React.RefObject<HTMLDivElement>}
+                customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
+                customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
+                onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, effectiveProfissao || '') : undefined}
+                onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
+              />
+            )}
+
 
             {/* 🏠 PRONTUÁRIO — VISITA DOMICILIAR (isolado) */}
             {form.tipo_registro === 'visita_domiciliar' && (
