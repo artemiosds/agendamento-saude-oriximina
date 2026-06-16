@@ -232,34 +232,7 @@ async function fetchFullProntuarioData(prontuarioId: string) {
     .eq('id', prontuario.unidade_id)
     .maybeSingle();
 
-  const { data: ciclo } = await supabase
-    .from('treatment_cycles')
-    .select('*')
-    .eq('patient_id', prontuario.paciente_id)
-    .eq('status', 'em_andamento')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let pts = null;
-  if (ciclo?.pts_id) {
-    const { data: ptsData } = await supabase
-      .from('pts')
-      .select('*')
-      .eq('id', ciclo.pts_id)
-      .maybeSingle();
-    pts = ptsData;
-  } else {
-    const { data: ptsData } = await supabase
-      .from('pts')
-      .select('*')
-      .eq('patient_id', prontuario.paciente_id)
-      .eq('status', 'ativo')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    pts = ptsData;
-  }
+  const { ciclo, pts } = await fetchContextualTreatment(prontuario, profissional);
 
   // Busca procedimentos vinculados
   const { data: procs } = await supabase
