@@ -1906,6 +1906,7 @@ const ProntuarioPage: React.FC = () => {
             const finalKey = key.startsWith('esp_') ? key : `esp_${key}`;
             return [finalKey, value];
           })),
+          ...(getCustomDataObject(f).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(f).visita_domiciliar } : {}),
         },
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
