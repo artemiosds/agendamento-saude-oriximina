@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,7 @@ export interface MedidasCadeiraRodasValue {
 
 interface Props {
   value?: MedidasCadeiraRodasValue;
-  onChange?: (value: MedidasCadeiraRodasValue) => void;
+  onChange: (value: MedidasCadeiraRodasValue) => void;
   disabled?: boolean;
   paciente?: any;
   unidade?: any;
@@ -54,28 +54,17 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
   disabled,
   dataAtendimento,
 }) => {
-  const controlled = value !== undefined && typeof onChange === "function";
-  const [local, setLocal] = useState<MedidasCadeiraRodasValue>(
-    value ?? { data_avaliacao: dataAtendimento || "", medidas: {} }
-  );
-  const data = controlled ? (value as MedidasCadeiraRodasValue) : local;
+  const data = value ?? { data_avaliacao: dataAtendimento || "", medidas: {} };
 
-  // Keep local in sync if controlled value object changes from outside.
-  const lastExternal = useRef(value);
-  useEffect(() => {
-    if (controlled && value !== lastExternal.current) {
-      lastExternal.current = value;
-    }
-  }, [value, controlled]);
-
-  const update = (patch: Partial<MedidasCadeiraRodasValue>) => {
-    const next = { ...data, ...patch };
-    if (controlled) onChange!(next);
-    else setLocal(next);
+  const updateField = <K extends keyof MedidasCadeiraRodasValue>(key: K, value: MedidasCadeiraRodasValue[K]) => {
+    onChange({ ...data, [key]: value });
   };
 
   const updateMedida = (letra: string, v: string) => {
-    update({ medidas: { ...(data.medidas || {}), [letra]: v } });
+    onChange({
+      ...data,
+      medidas: { ...(data.medidas || {}), [letra]: v },
+    });
   };
 
   return (
@@ -94,7 +83,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Input
             type="date"
             value={data.data_avaliacao || ""}
-            onChange={(e) => update({ data_avaliacao: e.target.value })}
+            onChange={(e) => updateField("data_avaliacao", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -102,7 +91,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Label>Equipamento solicitado</Label>
           <Input
             value={data.equipamento_solicitado || ""}
-            onChange={(e) => update({ equipamento_solicitado: e.target.value })}
+            onChange={(e) => updateField("equipamento_solicitado", e.target.value)}
             placeholder="Ex.: Cadeira de rodas adulto, almofada antiescaras..."
             disabled={disabled}
           />
@@ -112,7 +101,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={3}
             value={data.diagnostico_condicao_funcional || ""}
-            onChange={(e) => update({ diagnostico_condicao_funcional: e.target.value })}
+            onChange={(e) => updateField("diagnostico_condicao_funcional", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -121,7 +110,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={3}
             value={data.motivo_solicitacao || ""}
-            onChange={(e) => update({ motivo_solicitacao: e.target.value })}
+            onChange={(e) => updateField("motivo_solicitacao", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -138,7 +127,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
             <Label>{f.label}</Label>
             <Input
               value={(data as any)[f.key] || ""}
-              onChange={(e) => update({ [f.key]: e.target.value } as any)}
+              onChange={(e) => updateField(f.key as keyof MedidasCadeiraRodasValue, e.target.value)}
               disabled={disabled}
             />
           </div>
@@ -156,7 +145,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
             <Label>{f.label}</Label>
             <Input
               value={(data as any)[f.key] || ""}
-              onChange={(e) => update({ [f.key]: e.target.value } as any)}
+              onChange={(e) => updateField(f.key as keyof MedidasCadeiraRodasValue, e.target.value)}
               disabled={disabled}
             />
           </div>
@@ -206,7 +195,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={4}
             value={data.adaptacoes_justificativa || ""}
-            onChange={(e) => update({ adaptacoes_justificativa: e.target.value })}
+            onChange={(e) => updateField("adaptacoes_justificativa", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -215,7 +204,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={4}
             value={data.orientacoes_parecer || ""}
-            onChange={(e) => update({ orientacoes_parecer: e.target.value })}
+            onChange={(e) => updateField("orientacoes_parecer", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -226,7 +215,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
         <Textarea
           rows={3}
           value={data.observacoes_gerais || ""}
-          onChange={(e) => update({ observacoes_gerais: e.target.value })}
+          onChange={(e) => updateField("observacoes_gerais", e.target.value)}
           disabled={disabled}
         />
       </div>

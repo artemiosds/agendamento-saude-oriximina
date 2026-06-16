@@ -1564,6 +1564,7 @@ const ProntuarioPage: React.FC = () => {
         paciente: record.paciente_nome,
         queixa: record.queixa_principal,
         hasCustomData: Object.keys(record.custom_data || {}).length > 0,
+        hasVisitaDomiciliarMedidas: Boolean(record.custom_data?.visita_domiciliar?.medidas_cadeira_rodas),
         customData: record.custom_data
       });
 
@@ -3170,13 +3171,17 @@ const ProntuarioPage: React.FC = () => {
               <VisitaDomiciliarProntuario
                 value={(form.custom_data && (form.custom_data as any).visita_domiciliar) || {}}
                 onChange={(value) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    custom_data: {
-                      ...(getCustomDataObject(prev)),
-                      visita_domiciliar: value,
-                    },
-                  }))
+                  setForm((prev) => {
+                    const nextForm = {
+                      ...prev,
+                      custom_data: {
+                        ...(getCustomDataObject(prev)),
+                        visita_domiciliar: value,
+                      },
+                    };
+                    formRef.current = nextForm;
+                    return nextForm;
+                  })
                 }
                 disabled={saving}
                 paciente={pacientes.find((p) => p.id === form.paciente_id)}
