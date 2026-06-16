@@ -1,0 +1,154 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Card } from "@/components/ui/card";
+import { Home } from "lucide-react";
+import MedidasCadeiraRodasForm, {
+  MedidasCadeiraRodasValue,
+} from "./MedidasCadeiraRodasForm";
+
+export type FinalidadeVisita = "geral" | "medidas_cadeira_rodas";
+
+export interface VisitaDomiciliarValue {
+  evolucao_visita?: string;
+  conduta_orientacoes?: string;
+  observacoes?: string;
+  finalidade_atendimento?: FinalidadeVisita;
+  medidas_cadeira_rodas?: MedidasCadeiraRodasValue;
+}
+
+interface Props {
+  value?: VisitaDomiciliarValue;
+  onChange?: (value: VisitaDomiciliarValue) => void;
+  disabled?: boolean;
+  paciente?: any;
+  profissional?: any;
+  unidade?: any;
+  dataAtendimento?: string;
+}
+
+const VisitaDomiciliarProntuario: React.FC<Props> = ({
+  value,
+  onChange,
+  disabled,
+  paciente,
+  profissional,
+  unidade,
+  dataAtendimento,
+}) => {
+  const controlled = value !== undefined && typeof onChange === "function";
+  const [local, setLocal] = useState<VisitaDomiciliarValue>(
+    value ?? { finalidade_atendimento: "geral" }
+  );
+  const data = controlled ? (value as VisitaDomiciliarValue) : local;
+
+  const lastExternal = useRef(value);
+  useEffect(() => {
+    if (controlled && value !== lastExternal.current) {
+      lastExternal.current = value;
+    }
+  }, [value, controlled]);
+
+  const update = (patch: Partial<VisitaDomiciliarValue>) => {
+    const next = { ...data, ...patch };
+    if (controlled) onChange!(next);
+    else setLocal(next);
+  };
+
+  const finalidade: FinalidadeVisita = data.finalidade_atendimento || "geral";
+
+  return (
+    <Card className="p-4 space-y-4 border-teal-500/30 bg-teal-500/5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+            <Home className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Visita Domiciliar</h4>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Fluxo isolado e seguro
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label>Evolução da Visita</Label>
+          <Textarea
+            rows={4}
+            placeholder="Descreva detalhadamente o que foi observado e realizado durante a visita..."
+            value={data.evolucao_visita || ""}
+            onChange={(e) => update({ evolucao_visita: e.target.value })}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Conduta / Orientações</Label>
+          <Textarea
+            rows={4}
+            placeholder="Orientações fornecidas ao paciente e cuidadores, planos para próximas etapas..."
+            value={data.conduta_orientacoes || ""}
+            onChange={(e) => update({ conduta_orientacoes: e.target.value })}
+            disabled={disabled}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label>Observações</Label>
+        <Textarea
+          rows={3}
+          placeholder="Notas internas, intercorrências, riscos ambientais ou outras informações relevantes..."
+          value={data.observacoes || ""}
+          onChange={(e) => update({ observacoes: e.target.value })}
+          disabled={disabled}
+        />
+      </div>
+
+      <Card className="p-3 bg-background/60">
+        <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+          Finalidade do Atendimento na Visita
+        </Label>
+        <RadioGroup
+          className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2"
+          value={finalidade}
+          onValueChange={(v) =>
+            update({ finalidade_atendimento: v as FinalidadeVisita })
+          }
+          disabled={disabled}
+        >
+          <label
+            htmlFor="finalidade-geral"
+            className="flex items-center gap-2 border border-border rounded-md px-3 py-2 cursor-pointer hover:bg-accent/30 transition"
+          >
+            <RadioGroupItem value="geral" id="finalidade-geral" />
+            <span className="text-sm">Atendimento domiciliar geral</span>
+          </label>
+          <label
+            htmlFor="finalidade-cadeira"
+            className="flex items-center gap-2 border border-border rounded-md px-3 py-2 cursor-pointer hover:bg-accent/30 transition"
+          >
+            <RadioGroupItem value="medidas_cadeira_rodas" id="finalidade-cadeira" />
+            <span className="text-sm">Medidas para cadeira de rodas</span>
+          </label>
+        </RadioGroup>
+      </Card>
+
+      {finalidade === "medidas_cadeira_rodas" && (
+        <MedidasCadeiraRodasForm
+          value={data.medidas_cadeira_rodas}
+          onChange={(v) => update({ medidas_cadeira_rodas: v })}
+          disabled={disabled}
+          paciente={paciente}
+          unidade={unidade}
+          dataAtendimento={dataAtendimento}
+        />
+      )}
+    </Card>
+  );
+};
+
+export default VisitaDomiciliarProntuario;
