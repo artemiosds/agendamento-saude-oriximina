@@ -749,6 +749,28 @@ const BpaExportar: React.FC = () => {
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
 
+      // === Pré-carrega informações de CEP (ViaCEP) para validar município/IBGE ===
+      // Faz um único batch antes do loop: corrige CEPs cujo IBGE diverge do
+      // município cadastrado, sem ler/escrever no banco do paciente.
+      const cepsParaConsulta: string[] = [];
+      prontuarios.forEach((pr: any) => {
+        let pac = pacMap.get(pr.paciente_id) as any;
+        if (!pac) {
+          const k = chaveNomePaciente(pr.paciente_nome);
+          if (k) pac = pacByNameMap.get(k);
+        }
+        const cd = (pac?.custom_data as any) || {};
+        const c = normalizeCep(pac?.cep || cd.cep);
+        if (c) cepsParaConsulta.push(c);
+      });
+      let cepInfoMap = new Map<string, CepInfo>();
+      try {
+        cepInfoMap = await fetchCepInfoMap(cepsParaConsulta);
+      } catch (e) {
+        console.warn('[BPA-Exportar] ViaCEP indisponível — município será resolvido pelo cadastro/padrão.', e);
+      }
+
+
       // === Carga de SIGTAP via prontuario_procedimentos (todas as profissões) ===
       // Alguns prontuários gravam o procedimento somente na tabela vinculada
       // prontuario_procedimentos -> procedimentos.codigo_sigtap, sem espelhar em
