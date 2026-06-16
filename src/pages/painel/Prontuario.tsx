@@ -584,8 +584,7 @@ const ProntuarioPage: React.FC = () => {
           .eq('id', context.explicitCycleId)
           .eq('patient_id', patientId)
           .maybeSingle();
-        const explicitCycle = data as ActiveCycle | null;
-        cycle = explicitCycle && (!professionalId || explicitCycle.professional_id === professionalId) ? explicitCycle : null;
+        cycle = data as ActiveCycle | null;
       } else if (patientId && professionalId) {
         const { data } = await (supabase as any).from('treatment_cycles').select('*')
           .eq('patient_id', patientId)
@@ -606,10 +605,7 @@ const ProntuarioPage: React.FC = () => {
           .eq('id', ptsId)
           .eq('patient_id', patientId)
           .maybeSingle();
-        const explicitPts = data as ActivePTS | null;
-        pts = explicitPts && (!professionalId || explicitPts.professional_id === professionalId || cycle?.pts_id === explicitPts.id) && isPtsSpecialtyCompatible(explicitPts, specialty)
-          ? explicitPts
-          : null;
+        pts = data as ActivePTS | null;
       } else if (patientId && professionalId) {
         const { data } = await supabase.from('pts').select('*')
           .eq('patient_id', patientId)
