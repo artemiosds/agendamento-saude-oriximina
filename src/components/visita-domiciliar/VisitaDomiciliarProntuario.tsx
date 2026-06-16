@@ -83,6 +83,19 @@ const VisitaDomiciliarProntuario: React.FC<Props> = ({
 
   const finalidade: FinalidadeVisita = data.finalidade_atendimento || "geral";
 
+  // Seed skeleton se finalidade já é medidas_cadeira_rodas mas o objeto ainda não existe
+  useEffect(() => {
+    if (
+      finalidade === "medidas_cadeira_rodas" &&
+      !data.medidas_cadeira_rodas
+    ) {
+      update({
+        medidas_cadeira_rodas: createEmptyMedidasCadeiraRodas(dataAtendimento),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalidade, data.medidas_cadeira_rodas]);
+
   return (
     <Card className="p-4 space-y-4 border-teal-500/30 bg-teal-500/5">
       <div className="flex items-center justify-between gap-2">
