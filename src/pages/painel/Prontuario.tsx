@@ -1725,10 +1725,11 @@ const ProntuarioPage: React.FC = () => {
         })
         .filter(Boolean)
         .join(', ');
-      // Preserva profissional ao editar; usa logado ao criar
+      // Preserva profissional ao editar (nunca cair para user.id/nome em edição);
+      // usa logado apenas ao criar novo prontuário.
       const isEditing = Boolean(editIdRef.current);
-      const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
-      const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
+      const profIdAuto = isEditing ? (f.profissional_id || '') : (user?.id || '');
+      const profNomeAuto = isEditing ? (f.profissional_nome || '') : (user?.nome || '');
       const dynamicFields = getDynamicFieldsPayload(f);
       const record: any = {
         paciente_id: f.paciente_id,
