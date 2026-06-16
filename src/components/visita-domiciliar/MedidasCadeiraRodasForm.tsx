@@ -151,7 +151,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
             <Label>{f.label}</Label>
             <Input
               value={(data as any)[f.key] || ""}
-              onChange={(e) => update({ [f.key]: e.target.value } as any)}
+              onChange={(e) => updateField(f.key as keyof MedidasCadeiraRodasValue, e.target.value)}
               disabled={disabled}
             />
           </div>
@@ -169,7 +169,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
             <Label>{f.label}</Label>
             <Input
               value={(data as any)[f.key] || ""}
-              onChange={(e) => update({ [f.key]: e.target.value } as any)}
+              onChange={(e) => updateField(f.key as keyof MedidasCadeiraRodasValue, e.target.value)}
               disabled={disabled}
             />
           </div>
@@ -219,7 +219,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={4}
             value={data.adaptacoes_justificativa || ""}
-            onChange={(e) => update({ adaptacoes_justificativa: e.target.value })}
+            onChange={(e) => updateField("adaptacoes_justificativa", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -228,7 +228,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
           <Textarea
             rows={4}
             value={data.orientacoes_parecer || ""}
-            onChange={(e) => update({ orientacoes_parecer: e.target.value })}
+            onChange={(e) => updateField("orientacoes_parecer", e.target.value)}
             disabled={disabled}
           />
         </div>
@@ -239,7 +239,7 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
         <Textarea
           rows={3}
           value={data.observacoes_gerais || ""}
-          onChange={(e) => update({ observacoes_gerais: e.target.value })}
+          onChange={(e) => updateField("observacoes_gerais", e.target.value)}
           disabled={disabled}
         />
       </div>
