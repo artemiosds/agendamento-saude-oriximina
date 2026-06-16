@@ -68,7 +68,8 @@ export interface ImprimirVisitaDomiciliarParams {
 export async function imprimirVisitaDomiciliar(
   params: ImprimirVisitaDomiciliarParams,
 ): Promise<void> {
-  const { paciente, profissional, unidade, dataAtendimento, data, impressoPor } = params;
+  const { paciente, profissional, unidade, dataAtendimento, data: rawData, impressoPor } = params;
+  const data = rawData && typeof rawData === "object" ? rawData : {};
   const finalidade =
     data?.finalidade_atendimento === "medidas_cadeira_rodas"
       ? "Medidas para cadeira de rodas"
@@ -124,7 +125,7 @@ export async function imprimirVisitaDomiciliar(
       ${campo("Paciente", paciente?.nome)}
       ${campo("CPF", paciente?.cpf)}
       ${campo("CNS", paciente?.cns)}
-      ${campo("Data de Nasc.", paciente?.data_nasc ? fmtDateBR(paciente.data_nasc) : "")}
+      ${campo("Data de Nasc.", fmtDateBR(dataNascimentoPaciente(paciente)))}
       ${campo("Unidade", unidade?.nome)}
       ${campo("Data do Atendimento", fmtDateBR(dataAtendimento))}
       ${campo("Profissional", profissional?.nome)}
@@ -142,9 +143,7 @@ export async function imprimirVisitaDomiciliar(
     "Conduta / Orientações",
     campo("", data?.conduta_orientacoes, { block: true }),
   );
-  if (data?.observacoes) {
-    body += section("Observações", campo("", data.observacoes, { block: true }));
-  }
+  body += section("Observações", campo("", data?.observacoes, { block: true }));
 
   // Medidas para cadeira de rodas
   if (data?.finalidade_atendimento === "medidas_cadeira_rodas") {
@@ -172,10 +171,10 @@ export async function imprimirVisitaDomiciliar(
 
     body += section(
       "Diagrama de Medidas Anatômicas",
-      `<div style="text-align:center;margin:6px 0;">
+      `<div style="text-align:center;margin:3px 0;">
          <img src="${window.location.origin}/images/diagrama-cadeira-rodas.png"
               alt="Diagrama de medidas anatômicas para cadeira de rodas"
-              style="max-width:100%;max-height:360px;height:auto;object-fit:contain;" />
+               class="vd-diagram" />
        </div>`,
     );
 
@@ -184,7 +183,7 @@ export async function imprimirVisitaDomiciliar(
       (it) => `
         <tr>
           <td><span class="vd-am-letra">${it.letra}</span>${esc(it.label)}</td>
-          <td class="vd-cm">${m[it.letra] ? esc(m[it.letra]) + " cm" : "—"}</td>
+          <td class="vd-cm">${hasValue(m[it.letra]) ? esc(m[it.letra]) + " cm" : "—"}</td>
         </tr>`,
     ).join("");
 
@@ -204,12 +203,10 @@ export async function imprimirVisitaDomiciliar(
       "Orientações / Parecer do profissional",
       campo("", medidas.orientacoes_parecer, { block: true }),
     );
-    if (medidas.observacoes_gerais) {
-      body += section(
-        "Observações gerais",
-        campo("", medidas.observacoes_gerais, { block: true }),
-      );
-    }
+    body += section(
+      "Observações gerais",
+      campo("", medidas.observacoes_gerais, { block: true }),
+    );
   }
 
   body += `<div class="vd-carimbo">${carimbo}</div>`;
