@@ -128,7 +128,7 @@ const VisitaDomiciliarProntuario: React.FC<Props> = ({
               profissional,
               unidade,
               dataAtendimento,
-              data,
+              data: dataRef.current,
               impressoPor: profissional,
             })
           }
