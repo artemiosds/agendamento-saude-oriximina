@@ -1404,7 +1404,7 @@ const ProntuarioPage: React.FC = () => {
 
         // Carrega campos dinâmicos de volta para o form
         const dynamicFromCustomData = p.custom_data && typeof p.custom_data === 'object'
-          ? Object.fromEntries(Object.entries(p.custom_data).filter(([key]) => !key.startsWith('esp_')))
+          ? Object.fromEntries(Object.entries(p.custom_data).filter(([key]) => !key.startsWith('esp_') && key !== 'visita_domiciliar'))
           : {};
         if (Object.keys(dynamicFromCustomData).length > 0 || (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object')) {
           setForm(prev => ({
@@ -1544,7 +1544,7 @@ const ProntuarioPage: React.FC = () => {
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: allDynamicData,
+        custom_data: { ...allDynamicData, ...(getCustomDataObject(f).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(f).visita_domiciliar } : {}) },
 
         resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
@@ -1906,6 +1906,7 @@ const ProntuarioPage: React.FC = () => {
             const finalKey = key.startsWith('esp_') ? key : `esp_${key}`;
             return [finalKey, value];
           })),
+          ...(getCustomDataObject(f).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(f).visita_domiciliar } : {}),
         },
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
@@ -2219,6 +2220,7 @@ const ProntuarioPage: React.FC = () => {
           ...dynamicFields,
           ...especialidadeFields,
           ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
+          ...(getCustomDataObject(form).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(form).visita_domiciliar } : {}),
         },
 
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
