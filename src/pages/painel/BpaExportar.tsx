@@ -15,6 +15,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from '@/lib/printLayout';
 import { bpaService } from '@/services/bpaService';
 import BpaResolverSigtapModal, { ResolverSigtapItem } from '@/components/bpa/BpaResolverSigtapModal';
+import {
+  isValidCnsAlgo,
+  pickValidCnsPaciente,
+  normalizeRacaCorBpa,
+  normalizeEtniaBpa,
+  fetchCepInfoMap,
+  resolveMunicipioBpa,
+  normalizeCep,
+  type CepInfo,
+} from '@/lib/bpaNormalization';
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
@@ -500,6 +510,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: number;
       missingLogradouro: number;
       missingSigtap: number;
+      autoCorrected: number;
     };
     details: {
       missingCns: any[];
@@ -514,6 +525,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: any[];
       missingLogradouro: any[];
       missingSigtap: any[];
+      autoCorrected: any[];
       critical: any[];
     };
     error: string | null;
@@ -642,7 +654,8 @@ const BpaExportar: React.FC = () => {
       invalidNascimento: 0,
       missingNacionalidade: 0,
       missingLogradouro: 0,
-      missingSigtap: 0
+      missingSigtap: 0,
+      autoCorrected: 0,
     };
 
     const details = {
@@ -658,6 +671,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: [] as any[],
       missingLogradouro: [] as any[],
       missingSigtap: [] as any[],
+      autoCorrected: [] as any[],
       critical: [] as any[]
     };
     
@@ -734,6 +748,28 @@ const BpaExportar: React.FC = () => {
       });
       const funcMap = new Map(funcionariosRes.data?.map(f => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map(u => [u.id, u]));
+
+      // === Pré-carrega informações de CEP (ViaCEP) para validar município/IBGE ===
+      // Faz um único batch antes do loop: corrige CEPs cujo IBGE diverge do
+      // município cadastrado, sem ler/escrever no banco do paciente.
+      const cepsParaConsulta: string[] = [];
+      prontuarios.forEach((pr: any) => {
+        let pac = pacMap.get(pr.paciente_id) as any;
+        if (!pac) {
+          const k = chaveNomePaciente(pr.paciente_nome);
+          if (k) pac = pacByNameMap.get(k);
+        }
+        const cd = (pac?.custom_data as any) || {};
+        const c = normalizeCep(pac?.cep || cd.cep);
+        if (c) cepsParaConsulta.push(c);
+      });
+      let cepInfoMap = new Map<string, CepInfo>();
+      try {
+        cepInfoMap = await fetchCepInfoMap(cepsParaConsulta);
+      } catch (e) {
+        console.warn('[BPA-Exportar] ViaCEP indisponível — município será resolvido pelo cadastro/padrão.', e);
+      }
+
 
       // === Carga de SIGTAP via prontuario_procedimentos (todas as profissões) ===
       // Alguns prontuários gravam o procedimento somente na tabela vinculada
@@ -897,16 +933,32 @@ const BpaExportar: React.FC = () => {
 
         let isCritical = false;
 
-        // CNS Paciente
-        const cns_pac_raw = primeiroValorPreenchido(pac?.cns, (pac?.custom_data as any)?.cns) || '';
-        const cns_pac = zfill(cns_pac_raw, 15);
-        if (!cns_pac_raw || cns_pac === '000000000000000') {
+        // CNS Paciente — validação oficial (mod-11), com substituição automática
+        // por outro CNS válido cadastrado, quando disponível.
+        const cnsPick = pickValidCnsPaciente(pac);
+        const cns_pac_raw = cnsPick.cns || cnsPick.original || '';
+        const cns_pac = cnsPick.cns ? cnsPick.cns : zfill('', 15);
+        if (!cnsPick.cns) {
           isCritical = true;
           stats.missingCns++;
-          const msg = `${ident}: CNS do paciente ausente ou inválido.`;
-          warnings.push(msg);
-          details.missingCns.push({ ...itemDetail, pendencia: 'CNS Ausente/Inválido', valor_atual: cns_pac_raw || 'Vazio' });
+          const detalhe = cnsPick.original
+            ? `CNS original "${cnsPick.original}" reprovado na validação oficial e sem alternativa válida no cadastro.`
+            : 'CNS do paciente ausente.';
+          warnings.push(`${ident}: ${detalhe}`);
+          details.missingCns.push({
+            ...itemDetail,
+            pendencia: 'CNS Ausente/Inválido',
+            valor_atual: cnsPick.original || 'Vazio',
+          });
+        } else if (cnsPick.substituido) {
+          stats.autoCorrected++;
+          details.autoCorrected.push({
+            ...itemDetail,
+            pendencia: 'CNS substituído',
+            valor_atual: `Original "${cnsPick.original}" inválido → usado "${cnsPick.cns}" (fonte: ${cnsPick.fonte})`,
+          });
         }
+
 
         // Sexo
         let sexo = ' ';
@@ -939,18 +991,31 @@ const BpaExportar: React.FC = () => {
           details.invalidNascimento.push({ ...itemDetail, pendencia: 'Nascimento Inválido', valor_atual: raw_nasc || 'Vazio' });
         }
 
-        // Município
+        // Município — resolve via cadastro + CEP (ViaCEP) + padrão da exportação.
+        // Quando o CEP do paciente pertence a outro município, ajusta IBGE.
         const mun_raw = pac?.municipio || (pac?.custom_data as any)?.municipio_ibge;
-        let municipio = somenteNumeros(mun_raw);
-        if (municipio.length !== 6) {
-          municipio = somenteNumeros(formData.municipio_padrao);
-        }
-        if (municipio.length !== 6 || municipio === '000000') {
+        const cepNormalizado = normalizeCep(pac?.cep || (pac?.custom_data as any)?.cep);
+        const cepInfo = cepNormalizado ? cepInfoMap.get(cepNormalizado) : undefined;
+        const munRes = resolveMunicipioBpa({
+          municipioCadastro: mun_raw,
+          cepInfo,
+          municipioPadrao: formData.municipio_padrao,
+        });
+        const municipio = munRes.codigo;
+        if (!municipio || municipio.length !== 6 || municipio === '000000') {
           isCritical = true;
           stats.missingMunicipio++;
           warnings.push(`${ident}: Município de residência inválido ou ausente.`);
           details.missingMunicipio.push({ ...itemDetail, pendencia: 'Município Inválido', valor_atual: mun_raw || 'Vazio' });
+        } else if (munRes.autoCorrigido) {
+          stats.autoCorrected++;
+          details.autoCorrected.push({
+            ...itemDetail,
+            pendencia: munRes.fonte === 'cep' ? 'Município ajustado pelo CEP' : 'Município corrigido',
+            valor_atual: `${munRes.motivo || ''} (final: ${municipio})`,
+          });
         }
+
 
         if (isCritical) {
           criticalCount++;
@@ -1075,9 +1140,18 @@ const BpaExportar: React.FC = () => {
           const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
           const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
-          const raca = mapRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
-          const etniaCadastro = somenteNumeros(pacCd.etnia_codigo || pacCd.etnia);
-          const etnia = raca === '05' ? rpad(etniaCadastro, 4) : '    ';
+          // Raça/Cor — nunca emite 99. Quando ausente / "não declarada" / inválida,
+          // aplica padrão do fluxo (04 — Amarelo) e marca correção automática.
+          const racaRes = normalizeRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
+          const raca = racaRes.codigo;
+          if (racaRes.autoCorrigido) {
+            stats.autoCorrected++;
+            details.autoCorrected.push({
+              ...itemDetail,
+              pendencia: 'Raça/Cor → padrão Amarelo',
+              valor_atual: `${racaRes.valorOriginal || 'Vazio'} → 04 (Amarelo). ${racaRes.motivo}`,
+            });
+          }
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
           const nacRes = nacionalidadeBpa(pac);
@@ -1095,12 +1169,19 @@ const BpaExportar: React.FC = () => {
             details.missingNacionalidade.push({ ...itemDetail, pendencia: `Nacionalidade: ${motivo}`, valor_atual: String(valorAtual) });
           }
 
-          // Etnia: obrigatória APENAS quando nacionalidade brasileira (010) + raça indígena (05)
-          if (raca === '05' && nacionalidade === '010' && !etniaCadastro) {
+          // Etnia — contextual conforme raça/cor + nacionalidade
+          const etniaRes = normalizeEtniaBpa({
+            racaCodigo: raca,
+            nacionalidadeCodigo: nacionalidade,
+            etniaCadastro: pacCd.etnia_codigo || pacCd.etnia,
+          });
+          const etnia = etniaRes.etniaPadded;
+          if (etniaRes.pendencia) {
             pendenciaPaciente = true;
             motivosPendencia.push('Etnia indígena');
-            warnings.push(`${ident}: Etnia indígena é obrigatória para paciente brasileiro com raça/cor indígena.`);
+            warnings.push(`${ident}: ${etniaRes.motivo}.`);
           }
+
 
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
           const classificacao = fixedDigits(pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || '', 3);
@@ -1888,7 +1969,8 @@ const BpaExportar: React.FC = () => {
               { id: 'missingSigtap', label: 'SIGTAP Obrigatório', count: results.stats.missingSigtap, color: 'red' },
               { id: 'missingCbo', label: 'Sem CBO Prof.', count: results.stats.missingCbo, color: 'amber' },
               { id: 'inferredSexo', label: 'Sexo Inferido', count: results.stats.inferredSexo, color: 'blue' },
-              { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' }
+              { id: 'fallbackCbo', label: 'CBO Fallback', count: results.stats.fallbackCbo, color: 'blue' },
+              { id: 'autoCorrected', label: 'Correções Automáticas', count: results.stats.autoCorrected, color: 'emerald' }
             ].map((stat) => (
               <Card 
                 key={stat.id}
@@ -1924,7 +2006,8 @@ const BpaExportar: React.FC = () => {
                       selectedCategory === 'missingNacionalidade' ? 'Nacionalidade Ausente ou Sem Código Oficial' :
                       selectedCategory === 'missingLogradouro' ? 'Código do Logradouro Indeterminado' :
                       selectedCategory === 'missingSigtap' ? 'Procedimento SIGTAP Obrigatório Ausente' :
-                      selectedCategory === 'missingMunicipio' ? 'Município Inválido ou Ausente' : ''
+                      selectedCategory === 'missingMunicipio' ? 'Município Inválido ou Ausente' :
+                      selectedCategory === 'autoCorrected' ? 'Correções Automáticas Aplicadas (CNS / CEP / Município / Raça-Cor)' : ''
                     }
                   </CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -2115,6 +2198,13 @@ const BpaExportar: React.FC = () => {
                         {results.stats.missingSexo > 0 && <div>• Sexo indefinido: <b>{results.stats.missingSexo}</b></div>}
                         {results.stats.invalidNascimento > 0 && <div>• Nascimento inválido: <b>{results.stats.invalidNascimento}</b></div>}
                         {results.stats.missingMunicipio > 0 && <div>• Município inválido: <b>{results.stats.missingMunicipio}</b></div>}
+                      </div>
+                    )}
+                    {results.stats.autoCorrected > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-emerald-700">Correções automáticas aplicadas (auditável):</div>
+                        <div>• Total de correções: <b>{results.stats.autoCorrected}</b></div>
+                        <div className="text-muted-foreground">Inclui: substituição de CNS inválido por CNS válido do cadastro, ajuste de Município pelo IBGE do CEP (ViaCEP) e aplicação do padrão Amarelo quando raça/cor estiver ausente ou não declarada. Veja detalhes em "Correções Automáticas" acima.</div>
                       </div>
                     )}
                     <div className="pt-2 border-t text-xs text-muted-foreground">
