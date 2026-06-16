@@ -21,6 +21,9 @@ import {
 } from 'lucide-react';
 import ConfigWhatsAppAntiBan from './ConfigWhatsAppAntiBan';
 import ConfigWhatsAppEvents from './ConfigWhatsAppEvents';
+import QueueTable from './whatsapp/QueueTable';
+import InboxPanel from './whatsapp/InboxPanel';
+import HealthDashboard from './whatsapp/HealthDashboard';
 import { whatsappService, uazapigoService } from '@/services/whatsappService';
 import { toast } from 'sonner';
 
@@ -625,12 +628,14 @@ const ConfigWhatsApp: React.FC = () => {
 
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="grid grid-cols-1 md:grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-2 md:grid-cols-8 w-full">
           <TabsTrigger value="conexao" className="gap-1.5"><Zap className="w-4 h-4" /> Conexão</TabsTrigger>
           <TabsTrigger value="mensagens" className="gap-1.5"><FileText className="w-4 h-4" /> Mensagens</TabsTrigger>
           <TabsTrigger value="eventos" className="gap-1.5"><Bell className="w-4 h-4" /> Eventos</TabsTrigger>
-          
-          <TabsTrigger value="antiban" className="gap-1.5"><RotateCcw className="w-4 h-4" /> Fila</TabsTrigger>
+          <TabsTrigger value="antiban" className="gap-1.5"><Shield className="w-4 h-4" /> Anti-ban</TabsTrigger>
+          <TabsTrigger value="fila" className="gap-1.5"><RotateCcw className="w-4 h-4" /> Fila</TabsTrigger>
+          <TabsTrigger value="respostas" className="gap-1.5"><MessageSquare className="w-4 h-4" /> Respostas</TabsTrigger>
+          <TabsTrigger value="saude" className="gap-1.5"><AlertCircle className="w-4 h-4" /> Saúde</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5"><Clock className="w-4 h-4" /> Logs</TabsTrigger>
         </TabsList>
 
@@ -642,6 +647,19 @@ const ConfigWhatsApp: React.FC = () => {
         <TabsContent value="antiban" className="mt-4">
           <ConfigWhatsAppAntiBan />
         </TabsContent>
+
+        <TabsContent value="fila" className="mt-4">
+          <QueueTable />
+        </TabsContent>
+
+        <TabsContent value="respostas" className="mt-4">
+          <InboxPanel />
+        </TabsContent>
+
+        <TabsContent value="saude" className="mt-4">
+          <HealthDashboard />
+        </TabsContent>
+
 
         {/* ─── CONEXÃO ─── */}
         <TabsContent value="conexao" className="space-y-4 mt-4">
