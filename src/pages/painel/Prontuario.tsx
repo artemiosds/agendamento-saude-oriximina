@@ -2479,40 +2479,54 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  // Roteia visita_domiciliar para o helper isolado que renderiza todos os
-  // campos de custom_data.visita_domiciliar (inclui medidas_cadeira_rodas + A-M).
-  const handleVisitaDomiciliarOutput = (p: any) => {
-    const pac = pacientes.find((x) => x.id === p.paciente_id);
-    const uni = unidades.find((u) => u.id === (p.unidade_id || user?.unidadeId));
-    const vd = (p.custom_data && p.custom_data.visita_domiciliar) || {};
-    return imprimirVisitaDomiciliar({
+  // Roteia visita_domiciliar para o helper isolado, sempre recarregando o
+  // prontuário salvo para evitar snapshot antigo no PDF.
+  const handleVisitaDomiciliarOutput = async (p: any) => {
+    const { data: latest, error } = await (supabase as any)
+      .from("prontuarios")
+      .select("*")
+      .eq("id", p.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Erro ao buscar prontuário atualizado para impressão:", error);
+      toast.error("Não foi possível carregar o prontuário atualizado para impressão.");
+      return false;
+    }
+
+    const record = latest || p;
+    const pac = pacientes.find((x) => x.id === record.paciente_id) || { nome: record.paciente_nome };
+    const uni = unidades.find((u) => u.id === (record.unidade_id || user?.unidadeId));
+    const vd = getCustomDataObject(record).visita_domiciliar || {};
+    await imprimirVisitaDomiciliar({
       paciente: pac,
       profissional: {
-        id: p.profissional_id,
-        nome: p.profissional_nome,
-        profissao: p.profissional_profissao,
-        conselho: (p as any).profissional_conselho,
+        id: record.profissional_id,
+        nome: record.profissional_nome,
+        profissao: record.profissional_profissao,
+        conselho: (record as any).profissional_conselho,
       },
       unidade: uni,
-      dataAtendimento: p.data_atendimento,
+      dataAtendimento: record.data_atendimento,
       data: vd,
       impressoPor: { nome: user?.nome },
     });
+    return true;
   };
 
-  const handlePrint = (p: ProntuarioDB) => {
+  const handlePrint = async (p: ProntuarioDB) => {
     if ((p as any).tipo_registro === "visita_domiciliar") {
-      handleVisitaDomiciliarOutput(p);
+      await handleVisitaDomiciliarOutput(p);
       return;
     }
     downloadProntuarioPdf(p.id);
     toast.success("Preparando impressão...");
   };
 
-  const handleDownloadPdf = (p: ProntuarioDB) => {
+  const handleDownloadPdf = async (p: ProntuarioDB) => {
     if ((p as any).tipo_registro === "visita_domiciliar") {
-      handleVisitaDomiciliarOutput(p);
-      toast.success("PDF gerado");
+      const ok = await handleVisitaDomiciliarOutput(p);
+      if (ok) toast.success("PDF gerado");
       return;
     }
     downloadProntuarioPdf(p.id);
