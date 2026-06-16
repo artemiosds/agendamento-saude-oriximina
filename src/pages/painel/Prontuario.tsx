@@ -123,6 +123,7 @@ const TIPOS_REGISTRO = [
   { value: 'sessao', label: '🟡 Sessão' },
   { value: 'urgencia', label: '🔴 Urgência' },
   { value: 'procedimento', label: '🟣 Procedimento' },
+  { value: 'visita_domiciliar', label: '🏠 Visita Domiciliar' },
   { value: 'consulta', label: 'Consulta (legado)' },
   { value: 'reavaliacao', label: 'Reavaliação (legado)' },
   { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
@@ -1136,6 +1137,7 @@ const ProntuarioPage: React.FC = () => {
       'Urgência': 'urgencia',
       'Procedimento': 'procedimento',
       'Exame': 'procedimento',
+      'Visita Domiciliar': 'visita_domiciliar',
     };
     return map[agendaTipo] || 'avaliacao_inicial';
   };
@@ -3156,8 +3158,21 @@ const ProntuarioPage: React.FC = () => {
               onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
             />
 
+            {/* 🏠 PRONTUÁRIO — VISITA DOMICILIAR (isolado, ETAPA 2) */}
+            {form.tipo_registro === 'visita_domiciliar' && (
+              <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 p-4">
+                <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <span>🏠</span> Visita Domiciliar
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Componente isolado. Formulário completo será implementado na ETAPA 3.
+                </p>
+              </div>
+            )}
+
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
             {form.tipo_registro === 'avaliacao_inicial' && (
+
               <div className="space-y-4">
                 <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
                   <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
