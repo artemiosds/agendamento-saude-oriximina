@@ -241,6 +241,33 @@ const buildCustomDataPayload = (dynamicFields: Record<string, any>, specialtyFie
   ...Object.fromEntries(Object.entries(specialtyFields || {}).map(([key, value]) => [`esp_${key}`, value])),
 });
 
+/**
+ * Merge único e canônico de custom_data para handleSave, autosave e save de sessão.
+ * Garante que NADA seja perdido: preserva form.custom_data (incl. visita_domiciliar),
+ * campos dinâmicos planos do form, e campos de especialidade (com e sem prefixo esp_).
+ */
+const mergeFullCustomData = (
+  formData: Record<string, any>,
+  especialidadeFields: Record<string, any>,
+  dynamicFields: Record<string, any>,
+) => {
+  const baseCustom =
+    formData?.custom_data && typeof formData.custom_data === "object" ? formData.custom_data : {};
+  const ef = especialidadeFields || {};
+  const espPrefixed = Object.fromEntries(
+    Object.entries(ef).map(([key, value]) => [key.startsWith("esp_") ? key : `esp_${key}`, value]),
+  );
+  const merged: Record<string, any> = {
+    ...baseCustom,
+    ...(dynamicFields || {}),
+    ...ef,
+    ...espPrefixed,
+  };
+  // Re-afirma blocos críticos para garantir que sobrevivam ao merge
+  if (baseCustom.visita_domiciliar) merged.visita_domiciliar = baseCustom.visita_domiciliar;
+  return merged;
+};
+
 const sessionStatusLabels: Record<string, string> = {
   pendente_agendamento: "Ag. Agendamento",
   agendada: "Agendada",
