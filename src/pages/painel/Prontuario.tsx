@@ -1479,6 +1479,7 @@ const ProntuarioPage: React.FC = () => {
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(f);
       const allDynamicData = {
+        ...getCustomDataObject(f),
         ...dynamicFields,
         ...ef,
       };
@@ -1868,6 +1869,7 @@ const ProntuarioPage: React.FC = () => {
           dynamic_fields: dynamicFields
         }),
         custom_data: {
+          ...getCustomDataObject(f),
           ...dynamicFields,
           ...ef,
           ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => {
@@ -2183,6 +2185,7 @@ const ProntuarioPage: React.FC = () => {
         evolucao: form.evolucao,
         observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
         custom_data: {
+          ...getCustomDataObject(form),
           ...dynamicFields,
           ...especialidadeFields,
           ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
