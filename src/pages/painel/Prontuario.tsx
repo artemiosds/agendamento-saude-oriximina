@@ -2045,9 +2045,10 @@ const ProntuarioPage: React.FC = () => {
     let prontuarioId: string | null = editId;
     try {
       const procTexto = selectedProcIds.map(id => procedimentos.find(pr => pr.id === id)?.nome || "").filter(Boolean).join(", ");
-      const profIdSess = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      // Em edição, preserva o profissional original do prontuário (nunca usa user.id/nome).
+      const profIdSess = editId ? (form.profissional_id || "") : (user?.id || "");
       const profNomeSess = editId
-        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || "")
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(form);
       const record: any = {
