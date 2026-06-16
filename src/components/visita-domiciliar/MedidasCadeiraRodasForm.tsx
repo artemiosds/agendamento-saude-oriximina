@@ -167,9 +167,11 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
         <div className="text-center text-xs font-semibold text-primary uppercase tracking-wide">
           Diagrama de Medidas Anatômicas
         </div>
-        <div className="border-2 border-dashed border-border rounded-lg py-8 px-4 text-center text-xs text-muted-foreground">
-          Diagrama de medidas anatômicas — imagem oficial será adicionada depois.
-        </div>
+        <img
+          src="/images/diagrama-cadeira-rodas.png"
+          alt="Diagrama de medidas anatômicas para cadeira de rodas"
+          className="mx-auto h-auto max-h-[360px] w-full max-w-[640px] object-contain"
+        />
 
         <div className="text-xs font-semibold text-primary uppercase tracking-wide pt-2">
           Tabela de Medidas (cm)
