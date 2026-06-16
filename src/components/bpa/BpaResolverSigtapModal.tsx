@@ -117,8 +117,10 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setMotivo("");
     setAplicarPts(false);
     setProntuarios([]);
+    setPtsList([]);
     setPtsAtivo(null);
     setValoresAtuais({});
+    setProgress(null);
     if (item?.paciente_id && item?.data_atendimento) {
       void carregarContexto();
     }
