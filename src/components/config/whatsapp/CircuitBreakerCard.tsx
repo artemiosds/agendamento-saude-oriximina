@@ -131,7 +131,7 @@ export const CircuitBreakerCard: React.FC = () => {
                 className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm" />
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground">Fuso: America/Manaus. Envios fora dessa janela são adiados para o próximo início.</p>
+          <p className="text-[11px] text-muted-foreground">Fuso: America/Belem (UTC-3, horário de Brasília). Envios fora dessa janela são adiados para o próximo início.</p>
           <div className="flex justify-end">
             <Button size="sm" onClick={saveHumanized} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}Salvar
