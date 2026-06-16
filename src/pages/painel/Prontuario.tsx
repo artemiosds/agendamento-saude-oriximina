@@ -1208,10 +1208,12 @@ const ProntuarioPage: React.FC = () => {
 
   // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
-    if (form.paciente_id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
+    // Sempre que houver paciente selecionado dentro do prontuário, carregar ciclo/PTS
+    // vinculados ao profissional atual (logado em "Novo Prontuário" ou autor em edição).
+    if (form.paciente_id && dialogOpen) {
       loadSessaoData(buildTreatmentContext(form));
     }
-  }, [form.tipo_registro, form.paciente_id, form.agendamento_id, form.profissional_id, form.data_atendimento, editId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dialogOpen, form.tipo_registro, form.paciente_id, form.agendamento_id, form.profissional_id, form.data_atendimento, editId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const matchesCurrentSessionByAppointment = currentSessionForRegistration?.appointment_id === form.agendamento_id;
