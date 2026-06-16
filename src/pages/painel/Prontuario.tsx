@@ -2501,7 +2501,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handlePrint = (p: ProntuarioDB) => {
-    if (p.tipo_registro === "visita_domiciliar") {
+    if ((p as any).tipo_registro === "visita_domiciliar") {
       handleVisitaDomiciliarOutput(p);
       return;
     }
@@ -2510,7 +2510,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleDownloadPdf = (p: ProntuarioDB) => {
-    if (p.tipo_registro === "visita_domiciliar") {
+    if ((p as any).tipo_registro === "visita_domiciliar") {
       handleVisitaDomiciliarOutput(p);
       toast.success("PDF gerado");
       return;
