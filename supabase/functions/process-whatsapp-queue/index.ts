@@ -218,17 +218,17 @@ serve(async (req) => {
     const horaIni = wh.hora_inicio || "07:00";
     const horaFim = wh.hora_fim || "21:00";
 
-    // Janela comercial — fuso America/Manaus (UTC-4, sem horário de verão)
-    const nowManausH = (new Date().getUTCHours() - 4 + 24) % 24;
-    const nowManausM = new Date().getUTCMinutes();
-    const nowMin = nowManausH * 60 + nowManausM;
+    // Janela comercial — fuso America/Belem (UTC-3, sem horário de verão) — Oriximiná/PA segue Brasília
+    const nowBelemH = (new Date().getUTCHours() - 3 + 24) % 24;
+    const nowBelemM = new Date().getUTCMinutes();
+    const nowMin = nowBelemH * 60 + nowBelemM;
     const [hiH, hiM] = horaIni.split(":").map(Number);
     const [hfH, hfM] = horaFim.split(":").map(Number);
     const winStart = hiH * 60 + hiM;
     const winEnd = hfH * 60 + hfM;
     const dentroJanela = nowMin >= winStart && nowMin < winEnd;
     if (!dentroJanela) {
-      console.log(`[QueueProcessor] Fora da janela comercial (${horaIni}-${horaFim} Manaus). Nada a fazer.`);
+      console.log(`[QueueProcessor] Fora da janela comercial (${horaIni}-${horaFim} America/Belem). Nada a fazer.`);
       return new Response(JSON.stringify({ success: true, processed: 0, skipped: "fora_janela_comercial" }), { headers: corsHeaders });
     }
 
