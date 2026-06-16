@@ -3,10 +3,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card } from "@/components/ui/card";
-import { Home } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Home, Printer } from "lucide-react";
 import MedidasCadeiraRodasForm, {
   MedidasCadeiraRodasValue,
 } from "./MedidasCadeiraRodasForm";
+import { imprimirVisitaDomiciliar } from "@/lib/visitaDomiciliarPdf";
 
 export type FinalidadeVisita = "geral" | "medidas_cadeira_rodas";
 
@@ -72,6 +74,25 @@ const VisitaDomiciliarProntuario: React.FC<Props> = ({
             </p>
           </div>
         </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            imprimirVisitaDomiciliar({
+              paciente,
+              profissional,
+              unidade,
+              dataAtendimento,
+              data,
+              impressoPor: profissional,
+            })
+          }
+          disabled={disabled}
+        >
+          <Printer className="w-4 h-4 mr-1" />
+          Imprimir Visita Domiciliar
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
