@@ -933,16 +933,32 @@ const BpaExportar: React.FC = () => {
 
         let isCritical = false;
 
-        // CNS Paciente
-        const cns_pac_raw = primeiroValorPreenchido(pac?.cns, (pac?.custom_data as any)?.cns) || '';
-        const cns_pac = zfill(cns_pac_raw, 15);
-        if (!cns_pac_raw || cns_pac === '000000000000000') {
+        // CNS Paciente — validação oficial (mod-11), com substituição automática
+        // por outro CNS válido cadastrado, quando disponível.
+        const cnsPick = pickValidCnsPaciente(pac);
+        const cns_pac_raw = cnsPick.cns || cnsPick.original || '';
+        const cns_pac = cnsPick.cns ? cnsPick.cns : zfill('', 15);
+        if (!cnsPick.cns) {
           isCritical = true;
           stats.missingCns++;
-          const msg = `${ident}: CNS do paciente ausente ou inválido.`;
-          warnings.push(msg);
-          details.missingCns.push({ ...itemDetail, pendencia: 'CNS Ausente/Inválido', valor_atual: cns_pac_raw || 'Vazio' });
+          const detalhe = cnsPick.original
+            ? `CNS original "${cnsPick.original}" reprovado na validação oficial e sem alternativa válida no cadastro.`
+            : 'CNS do paciente ausente.';
+          warnings.push(`${ident}: ${detalhe}`);
+          details.missingCns.push({
+            ...itemDetail,
+            pendencia: 'CNS Ausente/Inválido',
+            valor_atual: cnsPick.original || 'Vazio',
+          });
+        } else if (cnsPick.substituido) {
+          stats.autoCorrected++;
+          details.autoCorrected.push({
+            ...itemDetail,
+            pendencia: 'CNS substituído',
+            valor_atual: `Original "${cnsPick.original}" inválido → usado "${cnsPick.cns}" (fonte: ${cnsPick.fonte})`,
+          });
         }
+
 
         // Sexo
         let sexo = ' ';
