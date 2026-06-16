@@ -531,7 +531,7 @@ const ProntuarioPage: React.FC = () => {
     return getTreatmentSpecialtyFromSource(form, formProfessional, !editId ? user?.profissao : '') || user?.profissao;
   }, [editId, form, formProfessional, form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
 
-  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(user?.id, form.tipo_registro, effectiveProfissao);
+  const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(form.profissional_id || user?.id, form.tipo_registro, effectiveProfissao);
 
   const showSoapDropdown = hasDropdownSoap(effectiveProfissao);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
@@ -3483,12 +3483,14 @@ const ProntuarioPage: React.FC = () => {
                               <Activity className="w-5 h-5 text-muted-foreground/60" />
                             </div>
                             <div className="space-y-1">
-                              <p className="text-sm font-medium text-foreground">Nenhum ciclo de tratamento ativo.</p>
-                              <p className="text-xs text-muted-foreground max-w-[280px]">Crie um ciclo para acompanhar o progresso terapêutico.</p>
+                              <p className="text-sm font-medium text-foreground">{editId ? 'Nenhum ciclo/PTS vinculado a este prontuário.' : 'Nenhum ciclo de tratamento ativo.'}</p>
+                              <p className="text-xs text-muted-foreground max-w-[280px]">{editId ? 'Este registro não possui ciclo compatível com o profissional e especialidade do prontuário.' : 'Crie um ciclo para acompanhar o progresso terapêutico.'}</p>
                             </div>
-                            <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setCycleOpen(true)}>
-                              <Plus className="w-3.5 h-3.5 mr-1" /> Criar ciclo
-                            </Button>
+                            {!editId && (
+                              <Button type="button" variant="default" size="sm" className="gradient-primary h-8" onClick={() => setCycleOpen(true)}>
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Criar ciclo
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
