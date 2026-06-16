@@ -1330,6 +1330,7 @@ const ProntuarioPage: React.FC = () => {
       procedimentos_texto: p.procedimentos_texto || "",
       outro_procedimento: p.outro_procedimento || "",
       episodio_id: p.episodio_id || "",
+      pts_meta_id: (p as any).pts_meta_id || "",
       soap_subjetivo: (p as any).soap_subjetivo || "",
       soap_objetivo: (p as any).soap_objetivo || "",
       soap_avaliacao: (p as any).soap_avaliacao || "",
