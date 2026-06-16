@@ -169,8 +169,13 @@ export async function imprimirVisitaDomiciliar(
 
     body += section(
       "Diagrama de Medidas Anatômicas",
-      `<div class="vd-diagrama-placeholder">Diagrama oficial de medidas anatômicas (será incluído).</div>`,
+      `<div style="text-align:center;margin:6px 0;">
+         <img src="${window.location.origin}/images/diagrama-cadeira-rodas.png"
+              alt="Diagrama de medidas anatômicas para cadeira de rodas"
+              style="max-width:100%;max-height:360px;height:auto;object-fit:contain;" />
+       </div>`,
     );
+
 
     const rows = TABELA_AM.map(
       (it) => `
