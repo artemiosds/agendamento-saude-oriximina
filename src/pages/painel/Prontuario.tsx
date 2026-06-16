@@ -2264,7 +2264,7 @@ const ProntuarioPage: React.FC = () => {
       await Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
-        loadSessaoData(form.paciente_id),
+        loadSessaoData(buildTreatmentContext()),
       ]);
       setSessionRegistrationRequested(false);
     } catch (err: any) {
@@ -3579,7 +3579,7 @@ const ProntuarioPage: React.FC = () => {
                                     if (error) toast.error('Erro ao vincular PTS');
                                     else {
                                       toast.success('PTS vinculado com sucesso');
-                                      loadSessaoData(sessaoCycle.patient_id);
+                                      loadSessaoData(buildTreatmentContext());
                                     }
                                   }}
                                 >
@@ -4429,7 +4429,7 @@ const ProntuarioPage: React.FC = () => {
             .eq("id", agendarSessaoTarget.id);
 
           toast.success("Sessão agendada com sucesso!");
-          await loadSessaoData(form.paciente_id);
+          await loadSessaoData(buildTreatmentContext());
           refreshAgendamentos();
         }}
         mode="agendar"
@@ -4460,7 +4460,7 @@ const ProntuarioPage: React.FC = () => {
           }
 
           toast.success(`Sessão remarcada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
-          await loadSessaoData(form.paciente_id);
+          await loadSessaoData(buildTreatmentContext());
           refreshAgendamentos();
         }}
         mode="remarcar"
