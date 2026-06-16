@@ -37,6 +37,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
+import VisitaDomiciliarProntuario from "@/components/visita-domiciliar/VisitaDomiciliarProntuario";
 import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
@@ -3158,16 +3159,30 @@ const ProntuarioPage: React.FC = () => {
               onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
             />
 
-            {/* 🏠 PRONTUÁRIO — VISITA DOMICILIAR (isolado, ETAPA 2) */}
+            {/* 🏠 PRONTUÁRIO — VISITA DOMICILIAR (isolado) */}
             {form.tipo_registro === 'visita_domiciliar' && (
-              <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 p-4">
-                <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                  <span>🏠</span> Visita Domiciliar
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Componente isolado. Formulário completo será implementado na ETAPA 3.
-                </p>
-              </div>
+              <VisitaDomiciliarProntuario
+                value={(form.custom_data && (form.custom_data as any).visita_domiciliar) || {}}
+                onChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    custom_data: {
+                      ...(getCustomDataObject(prev)),
+                      visita_domiciliar: value,
+                    },
+                  }))
+                }
+                disabled={saving}
+                paciente={pacientes.find((p) => p.id === form.paciente_id)}
+                profissional={{
+                  id: form.profissional_id || user?.id,
+                  nome: form.profissional_nome || user?.nome,
+                  profissao: user?.profissao,
+                  conselho: (user as any)?.numeroConselho,
+                }}
+                unidade={unidades.find((u) => u.id === user?.unidadeId)}
+                dataAtendimento={form.data_atendimento}
+              />
             )}
 
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
