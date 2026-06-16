@@ -64,6 +64,15 @@ const isSigtap = (v: any) => {
 };
 const normalizeSigtap = (v: any) => onlyDigits(v).padStart(10, "0").slice(-10);
 
+/** CID-10 oficial: 1 letra + 2 dígitos, opcional ponto + 1 dígito (ex.: M54, M54.5, Z00.0). */
+const CID10_REGEX = /^[A-TV-Z][0-9]{2}(\.?[0-9])?$/;
+const normalizeCid = (v: string) => String(v || "").trim().toUpperCase().replace(/\s+/g, "");
+const isValidCid10 = (v: string) => {
+  const n = normalizeCid(v);
+  if (!n) return false;
+  return CID10_REGEX.test(n);
+};
+
 const BpaResolverSigtapModal: React.FC<Props> = ({
   open, item, onClose, onResolved, userId, userNome,
 }) => {
