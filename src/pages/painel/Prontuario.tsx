@@ -100,6 +100,7 @@ interface ProntuarioDB {
   procedimentos_texto: string;
   outro_procedimento: string;
   episodio_id: string | null;
+  pts_meta_id?: string | null;
   custom_data?: any;
   criado_em: string;
   atualizado_em: string;
@@ -154,6 +155,7 @@ const emptyForm = {
   procedimentos_texto: "",
   outro_procedimento: "",
   episodio_id: "",
+  pts_meta_id: "",
   soap_subjetivo: "",
   soap_objetivo: "",
   soap_avaliacao: "",
@@ -517,14 +519,17 @@ const ProntuarioPage: React.FC = () => {
   interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
 
+  const formProfessional = useMemo(
+    () => funcionarios.find((f) => f.id === form.profissional_id),
+    [funcionarios, form.profissional_id],
+  );
+
   const effectiveProfissao = useMemo(() => {
-    // Se for registro de sessão e tiver ciclo, prioriza a especialidade do ciclo
     if (form.tipo_registro === 'sessao' && sessaoCycle?.specialty) {
       return sessaoCycle.specialty;
     }
-    // Caso contrário, usa a do usuário logado
-    return user?.profissao;
-  }, [form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
+    return getTreatmentSpecialtyFromSource(form, formProfessional, !editId ? user?.profissao : '') || user?.profissao;
+  }, [editId, form, formProfessional, form.tipo_registro, sessaoCycle?.specialty, user?.profissao]);
 
   const { isBlocoVisible: isProfBlocoVisible, isBlocoRequired, config: profConfig, visibleBlocks } = useProntuarioConfig(user?.id, form.tipo_registro, effectiveProfissao);
 
