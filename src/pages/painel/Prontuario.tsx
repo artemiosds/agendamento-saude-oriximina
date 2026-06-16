@@ -1746,7 +1746,7 @@ const ProntuarioPage: React.FC = () => {
         loadProntuarios(),
         refreshAgendamentos(),
         form.tipo_registro === 'sessao' && form.paciente_id
-          ? loadSessaoData(form.paciente_id)
+          ? loadSessaoData(buildTreatmentContext())
           : Promise.resolve(),
       ]).catch(err => console.error('[Prontuario] background reload failed:', err));
 
@@ -2313,7 +2313,7 @@ const ProntuarioPage: React.FC = () => {
 
       // Refresh data
       await Promise.all([
-        loadSessaoData(form.paciente_id),
+        loadSessaoData(buildTreatmentContext()),
         refreshAgendamentos(),
       ]);
     } catch (err: any) {
@@ -2365,7 +2365,7 @@ const ProntuarioPage: React.FC = () => {
 
       toast.success(`Sessão ${session.session_number} desmarcada e horário liberado na agenda.`);
       await Promise.all([
-        loadSessaoData(form.paciente_id),
+        loadSessaoData(buildTreatmentContext()),
         refreshAgendamentos(),
       ]);
     } catch (err: any) {
@@ -2412,7 +2412,7 @@ const ProntuarioPage: React.FC = () => {
       });
 
       toast.success(`Sessão ${session.session_number} retornada ao status Agendada.`);
-      await loadSessaoData(form.paciente_id);
+      await loadSessaoData(buildTreatmentContext());
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao limpar sessão: " + err.message);
