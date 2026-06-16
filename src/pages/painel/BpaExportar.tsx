@@ -257,6 +257,22 @@ const cidExibicao = (v: any): string => {
   return '—';
 };
 
+// Validação ESTRITA para o campo CID do BPA-I (4 posições fixas).
+// O BPA-I exige código com 4 caracteres (categoria + subcategoria), ex.: F840, M545.
+// Códigos com 3 caracteres (ex.: "F84") são parciais/truncados e NÃO devem ser
+// exportados — o importador SIA rejeita. Não inventamos subcategoria.
+const validarCidBpa = (v: any): { valido: boolean; codigo: string; motivo: string; normalizado: string } => {
+  const s = String(v ?? '').trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, '');
+  if (!s) return { valido: false, codigo: '', motivo: 'CID vazio', normalizado: '' };
+  if (/^[A-Z]\d{3}$/.test(s) || /^[A-Z]\d{2}[A-Z0-9]$/.test(s)) {
+    return { valido: true, codigo: s, motivo: '', normalizado: s };
+  }
+  if (/^[A-Z]\d{2}$/.test(s)) {
+    return { valido: false, codigo: '', motivo: `CID parcial/truncado "${s}" — exige subcategoria de 4 caracteres (ex.: ${s}0)`, normalizado: s };
+  }
+  return { valido: false, codigo: '', motivo: `CID inválido "${s}" — formato não reconhecido`, normalizado: s };
+};
+
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
   if (!nome) return null;
   const primeiroNome = limparTexto(nome).split(' ')[0];
@@ -1135,7 +1151,25 @@ const BpaExportar: React.FC = () => {
           // a Exportar também não inventa.
           const cidProducao = sigtapReq.exige ? (producaoResolvida?.cid || '') : '';
           const cidBruto = cidProducao || pront.custom_data?.cid || pac?.cid || '';
-          const cid = rpad(limparTexto(cidBruto), 4);
+          // Validação estrita BPA-I: 4 caracteres obrigatórios. CID com 3 chars
+          // (ex.: "F84") é parcial/truncado e deve bloquear a linha em vez de
+          // ser exportado padded como "F84 ". NÃO inventamos subcategoria.
+          let cid: string;
+          if (String(cidBruto || '').trim() === '') {
+            // Sem CID → campo em branco (4 espaços). Não é erro por si só.
+            cid = '    ';
+          } else {
+            const cidVal = validarCidBpa(cidBruto);
+            if (cidVal.valido) {
+              cid = rpad(cidVal.codigo, 4);
+            } else {
+              cid = '    ';
+              pendenciaPaciente = true;
+              motivosPendencia.push('CID inválido/truncado');
+              warnings.push(`${ident}: ${cidVal.motivo}. Fonte: ${cidProducao ? 'BPA-Produção' : (pront.custom_data?.cid ? 'Prontuário' : 'Cadastro')}.`);
+              details.critical.push({ ...itemDetail, pendencia: `CID inválido: ${cidVal.motivo}`, valor_atual: String(cidBruto) });
+            }
+          }
 
           const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
