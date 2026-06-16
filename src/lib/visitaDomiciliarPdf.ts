@@ -13,6 +13,11 @@ const esc = (v: unknown): string =>
 
 const nl2br = (v: unknown): string => esc(v).replace(/\n/g, "<br/>");
 
+const hasValue = (v: unknown): boolean => v !== undefined && v !== null && String(v).trim() !== "";
+
+const dataNascimentoPaciente = (paciente: any): string =>
+  paciente?.data_nascimento || paciente?.dataNascimento || paciente?.data_nasc || "";
+
 const fmtDateBR = (iso?: string): string => {
   if (!iso) return "—";
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
@@ -44,9 +49,10 @@ function section(title: string, html: string): string {
 }
 
 function campo(label: string, value: unknown, opts: { block?: boolean } = {}): string {
-  const v = value && String(value).trim() ? nl2br(value) : "<span class='vd-empty'>—</span>";
+  const v = hasValue(value) ? nl2br(value) : "<span class='vd-empty'>—</span>";
+  const labelHtml = label ? `<div class="vd-field-label">${esc(label)}</div>` : "";
   return opts.block
-    ? `<div class="vd-field-block"><div class="vd-field-label">${esc(label)}</div><div class="vd-field-value">${v}</div></div>`
+    ? `<div class="vd-field-block">${labelHtml}<div class="vd-field-value">${v}</div></div>`
     : `<div class="vd-field-inline"><span class="vd-field-label">${esc(label)}:</span> <span class="vd-field-value">${v}</span></div>`;
 }
 
