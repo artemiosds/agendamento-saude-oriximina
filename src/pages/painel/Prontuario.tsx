@@ -2089,6 +2089,7 @@ const ProntuarioPage: React.FC = () => {
       if (form.episodio_id && form.episodio_id !== "no_episode") record.episodio_id = form.episodio_id;
 
       if (editId) {
+        if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
         const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("id").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
