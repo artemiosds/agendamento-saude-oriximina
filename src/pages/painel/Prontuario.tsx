@@ -568,7 +568,7 @@ const ProntuarioPage: React.FC = () => {
       specialty: getTreatmentSpecialtyFromSource(source, professional, !editId ? user?.profissao : ""),
       date: source?.data_atendimento || todayLocalStr(),
       explicitCycleId: cd.treatment_cycle_id || cd.cycle_id || cd.treatmentCycleId || null,
-      explicitPtsId: cd.pts_id || cd.ptsId || source?.pts_meta_id || cd.pts_meta_id || null,
+      explicitPtsId: cd.pts_id || cd.ptsId || null,
       explicitPtsMetaId: source?.pts_meta_id || cd.pts_meta_id || null,
     };
   }, [editId, form, funcionarios, user?.id, user?.profissao]);
@@ -605,7 +605,17 @@ const ProntuarioPage: React.FC = () => {
 
       let pts: ActivePTS | null = null;
       if (context.explicitPtsId || context.explicitPtsMetaId || cycle?.pts_id) {
-        const ptsId = context.explicitPtsId || context.explicitPtsMetaId || cycle?.pts_id;
+        let ptsId = context.explicitPtsId || cycle?.pts_id || null;
+        if (!ptsId && context.explicitPtsMetaId) {
+          const { data: meta } = await (supabase as any).from('pts_metas').select('pts_id').eq('id', context.explicitPtsMetaId).maybeSingle();
+          ptsId = meta?.pts_id || null;
+        }
+        if (!ptsId) {
+          setSessaoPts(null);
+          setSessaoPtsSigtap([]);
+          setSessaoPtsCids([]);
+          return;
+        }
         const { data } = await supabase.from('pts').select('*')
           .eq('id', ptsId)
           .eq('patient_id', patientId)
@@ -1348,8 +1358,8 @@ const ProntuarioPage: React.FC = () => {
         specialty: getTreatmentSpecialtyFromSource(formData, funcionarios.find((f) => f.id === formData.profissional_id), user?.profissao),
         date: formData.data_atendimento,
         explicitCycleId: formData.custom_data?.treatment_cycle_id || formData.custom_data?.cycle_id || formData.custom_data?.treatmentCycleId || null,
-        explicitPtsId: formData.custom_data?.pts_id || formData.custom_data?.ptsId || formData.custom_data?.pts_meta_id || null,
-        explicitPtsMetaId: formData.custom_data?.pts_meta_id || null,
+        explicitPtsId: formData.custom_data?.pts_id || formData.custom_data?.ptsId || null,
+        explicitPtsMetaId: formData.pts_meta_id || formData.custom_data?.pts_meta_id || null,
       });
     }
     // Load exames from solicitacao_exames JSON
