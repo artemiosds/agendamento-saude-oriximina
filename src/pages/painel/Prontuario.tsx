@@ -596,10 +596,19 @@ const ProntuarioPage: React.FC = () => {
           .eq('professional_id', professionalId)
           .in('status', ['em_andamento', 'ativo'])
           .order('created_at', { ascending: false });
-        cycle = ((data || []) as ActiveCycle[]).find((candidate) =>
-          isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty) &&
-          isDateInsideCycle(candidate, context.date)
-        ) || null;
+        const list = (data || []) as ActiveCycle[];
+        // Professional + active status já é autoritativo. Especialidade/data são apenas desempate
+        // quando houver mais de um ciclo ativo do mesmo profissional para o mesmo paciente.
+        if (list.length === 1) {
+          cycle = list[0];
+        } else if (list.length > 1) {
+          cycle = list.find((candidate) =>
+            isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty) &&
+            isDateInsideCycle(candidate, context.date)
+          ) || list.find((candidate) =>
+            isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty)
+          ) || list[0];
+        }
       }
       setSessaoCycle(cycle || null);
 
@@ -623,7 +632,13 @@ const ProntuarioPage: React.FC = () => {
           .eq('professional_id', professionalId)
           .eq('status', 'ativo')
           .order('created_at', { ascending: false });
-        pts = ((data || []) as ActivePTS[]).find((candidate) => isPtsSpecialtyCompatible(candidate, specialty)) || null;
+        const list = (data || []) as ActivePTS[];
+        // Mesmo princípio: profissional + status ativo é autoritativo.
+        if (list.length === 1) {
+          pts = list[0];
+        } else if (list.length > 1) {
+          pts = list.find((candidate) => isPtsSpecialtyCompatible(candidate, specialty)) || list[0];
+        }
       }
       setSessaoPts(pts);
 
