@@ -1140,9 +1140,18 @@ const BpaExportar: React.FC = () => {
           const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
           const autorizacao = rpad(somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ''), 13);
-          const raca = mapRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
-          const etniaCadastro = somenteNumeros(pacCd.etnia_codigo || pacCd.etnia);
-          const etnia = raca === '05' ? rpad(etniaCadastro, 4) : '    ';
+          // Raça/Cor — nunca emite 99. Quando ausente / "não declarada" / inválida,
+          // aplica padrão do fluxo (04 — Amarelo) e marca correção automática.
+          const racaRes = normalizeRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
+          const raca = racaRes.codigo;
+          if (racaRes.autoCorrigido) {
+            stats.autoCorrected++;
+            details.autoCorrected.push({
+              ...itemDetail,
+              pendencia: 'Raça/Cor → padrão Amarelo',
+              valor_atual: `${racaRes.valorOriginal || 'Vazio'} → 04 (Amarelo). ${racaRes.motivo}`,
+            });
+          }
 
           // Nacionalidade: usar APENAS código oficial do cadastro do paciente. Sem fallback.
           const nacRes = nacionalidadeBpa(pac);
@@ -1160,12 +1169,19 @@ const BpaExportar: React.FC = () => {
             details.missingNacionalidade.push({ ...itemDetail, pendencia: `Nacionalidade: ${motivo}`, valor_atual: String(valorAtual) });
           }
 
-          // Etnia: obrigatória APENAS quando nacionalidade brasileira (010) + raça indígena (05)
-          if (raca === '05' && nacionalidade === '010' && !etniaCadastro) {
+          // Etnia — contextual conforme raça/cor + nacionalidade
+          const etniaRes = normalizeEtniaBpa({
+            racaCodigo: raca,
+            nacionalidadeCodigo: nacionalidade,
+            etniaCadastro: pacCd.etnia_codigo || pacCd.etnia,
+          });
+          const etnia = etniaRes.etniaPadded;
+          if (etniaRes.pendencia) {
             pendenciaPaciente = true;
             motivosPendencia.push('Etnia indígena');
-            warnings.push(`${ident}: Etnia indígena é obrigatória para paciente brasileiro com raça/cor indígena.`);
+            warnings.push(`${ident}: ${etniaRes.motivo}.`);
           }
+
 
           const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || '', 3);
           const classificacao = fixedDigits(pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || '', 3);
