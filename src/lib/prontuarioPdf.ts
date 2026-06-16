@@ -175,10 +175,17 @@ async function fetchContextualTreatment(prontuario: any, profissional: any) {
       .eq('professional_id', prontuario.profissional_id)
       .in('status', ['em_andamento', 'ativo'])
       .order('created_at', { ascending: false });
-    ciclo = ((data || []) as any[]).find((candidate) =>
-      isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty) &&
-      isDateInsideCycle(candidate, prontuario.data_atendimento)
-    ) || null;
+    const list = (data || []) as any[];
+    if (list.length === 1) {
+      ciclo = list[0];
+    } else if (list.length > 1) {
+      ciclo = list.find((candidate) =>
+        isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty) &&
+        isDateInsideCycle(candidate, prontuario.data_atendimento)
+      ) || list.find((candidate) =>
+        isSpecialtyCompatible(candidate.specialty || candidate.treatment_type, specialty)
+      ) || list[0];
+    }
   }
 
   let ptsId = explicitPtsId || ciclo?.pts_id || null;
@@ -199,7 +206,12 @@ async function fetchContextualTreatment(prontuario: any, profissional: any) {
       .eq('professional_id', prontuario.profissional_id)
       .eq('status', 'ativo')
       .order('created_at', { ascending: false });
-    pts = ((data || []) as any[]).find((candidate) => isPtsSpecialtyCompatible(candidate, specialty)) || null;
+    const list = (data || []) as any[];
+    if (list.length === 1) {
+      pts = list[0];
+    } else if (list.length > 1) {
+      pts = list.find((candidate) => isPtsSpecialtyCompatible(candidate, specialty)) || list[0];
+    }
   }
 
   return { ciclo, pts };
