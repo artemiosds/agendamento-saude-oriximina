@@ -241,6 +241,33 @@ const buildCustomDataPayload = (dynamicFields: Record<string, any>, specialtyFie
   ...Object.fromEntries(Object.entries(specialtyFields || {}).map(([key, value]) => [`esp_${key}`, value])),
 });
 
+/**
+ * Merge único e canônico de custom_data para handleSave, autosave e save de sessão.
+ * Garante que NADA seja perdido: preserva form.custom_data (incl. visita_domiciliar),
+ * campos dinâmicos planos do form, e campos de especialidade (com e sem prefixo esp_).
+ */
+const mergeFullCustomData = (
+  formData: Record<string, any>,
+  especialidadeFields: Record<string, any>,
+  dynamicFields: Record<string, any>,
+) => {
+  const baseCustom =
+    formData?.custom_data && typeof formData.custom_data === "object" ? formData.custom_data : {};
+  const ef = especialidadeFields || {};
+  const espPrefixed = Object.fromEntries(
+    Object.entries(ef).map(([key, value]) => [key.startsWith("esp_") ? key : `esp_${key}`, value]),
+  );
+  const merged: Record<string, any> = {
+    ...baseCustom,
+    ...(dynamicFields || {}),
+    ...ef,
+    ...espPrefixed,
+  };
+  // Re-afirma blocos críticos para garantir que sobrevivam ao merge
+  if (baseCustom.visita_domiciliar) merged.visita_domiciliar = baseCustom.visita_domiciliar;
+  return merged;
+};
+
 const sessionStatusLabels: Record<string, string> = {
   pendente_agendamento: "Ag. Agendamento",
   agendada: "Agendada",
@@ -1509,17 +1536,6 @@ const ProntuarioPage: React.FC = () => {
         ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || "")
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(f);
-      const allDynamicData = {
-        ...getCustomDataObject(f),
-        ...dynamicFields,
-        ...ef,
-      };
-      // Adiciona prefixo esp_ para campos de especialidade apenas se não existirem
-      Object.entries(ef || {}).forEach(([key, value]) => {
-        if (!key.startsWith('esp_')) {
-          allDynamicData[`esp_${key}`] = value;
-        }
-      });
 
       const record: any = {
         paciente_id: f.paciente_id || `manual_${Date.now()}`,
@@ -1540,12 +1556,12 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: le.length > 0 ? JSON.stringify({ exames: le }) : (f.solicitacao_exames?.includes('"exames":') ? JSON.stringify({ exames: [] }) : f.solicitacao_exames),
 
         evolucao: f.evolucao,
-        observacoes: JSON.stringify({ 
-          especialidade_fields: ef, 
+        observacoes: JSON.stringify({
+          especialidade_fields: ef,
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: { ...allDynamicData, ...(getCustomDataObject(f).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(f).visita_domiciliar } : {}) },
+        custom_data: mergeFullCustomData(f, ef, dynamicFields),
 
         resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
@@ -1566,6 +1582,7 @@ const ProntuarioPage: React.FC = () => {
         queixa: record.queixa_principal,
         hasCustomData: Object.keys(record.custom_data || {}).length > 0,
         hasVisitaDomiciliarMedidas: Boolean(record.custom_data?.visita_domiciliar?.medidas_cadeira_rodas),
+        customDataKeys: Object.keys(record.custom_data || {}),
         customData: record.custom_data
       });
 
@@ -1900,16 +1917,7 @@ const ProntuarioPage: React.FC = () => {
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: {
-          ...getCustomDataObject(f),
-          ...dynamicFields,
-          ...ef,
-          ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => {
-            const finalKey = key.startsWith('esp_') ? key : `esp_${key}`;
-            return [finalKey, value];
-          })),
-          ...(getCustomDataObject(f).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(f).visita_domiciliar } : {}),
-        },
+        custom_data: mergeFullCustomData(f, ef, dynamicFields),
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
@@ -2217,13 +2225,7 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
-        custom_data: {
-          ...getCustomDataObject(form),
-          ...dynamicFields,
-          ...especialidadeFields,
-          ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
-          ...(getCustomDataObject(form).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(form).visita_domiciliar } : {}),
-        },
+        custom_data: mergeFullCustomData(form, especialidadeFields, dynamicFields),
 
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
