@@ -211,6 +211,29 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: "config_not_found" }), { headers: corsHeaders });
     }
 
+    // Carrega toggle de humanização + janela comercial (Master controla via UI Anti-ban)
+    const { data: sys } = await supabase.from("system_config").select("configuracoes").eq("id", "default").maybeSingle();
+    const wh = (sys?.configuracoes as any)?.whatsapp_humanizado || {};
+    const humanized = wh.enabled !== false; // default true
+    const horaIni = wh.hora_inicio || "07:00";
+    const horaFim = wh.hora_fim || "21:00";
+
+    // Janela comercial — fuso America/Manaus (UTC-4, sem horário de verão)
+    const nowManausH = (new Date().getUTCHours() - 4 + 24) % 24;
+    const nowManausM = new Date().getUTCMinutes();
+    const nowMin = nowManausH * 60 + nowManausM;
+    const [hiH, hiM] = horaIni.split(":").map(Number);
+    const [hfH, hfM] = horaFim.split(":").map(Number);
+    const winStart = hiH * 60 + hiM;
+    const winEnd = hfH * 60 + hfM;
+    const dentroJanela = nowMin >= winStart && nowMin < winEnd;
+    if (!dentroJanela) {
+      console.log(`[QueueProcessor] Fora da janela comercial (${horaIni}-${horaFim} Manaus). Nada a fazer.`);
+      return new Response(JSON.stringify({ success: true, processed: 0, skipped: "fora_janela_comercial" }), { headers: corsHeaders });
+    }
+
+
+
     // Busca mensagens pendentes (ordenadas por prioridade numérica + agendamento)
     const nowIso = new Date().toISOString();
     const { data: pending, error: fetchErr } = await supabase
