@@ -2200,6 +2200,13 @@ const BpaExportar: React.FC = () => {
                         {results.stats.missingMunicipio > 0 && <div>• Município inválido: <b>{results.stats.missingMunicipio}</b></div>}
                       </div>
                     )}
+                    {results.stats.autoCorrected > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-emerald-700">Correções automáticas aplicadas (auditável):</div>
+                        <div>• Total de correções: <b>{results.stats.autoCorrected}</b></div>
+                        <div className="text-muted-foreground">Inclui: substituição de CNS inválido por CNS válido do cadastro, ajuste de Município pelo IBGE do CEP (ViaCEP) e aplicação do padrão Amarelo quando raça/cor estiver ausente ou não declarada. Veja detalhes em "Correções Automáticas" acima.</div>
+                      </div>
+                    )}
                     <div className="pt-2 border-t text-xs text-muted-foreground">
                       ✓ Cabeçalho declara <b>{results.headerDetails?.registros}</b> registros — confere com {results.exportedCount} linhas no arquivo.
                       Registros bloqueados <b>não</b> entram no TXT nem na contagem.
