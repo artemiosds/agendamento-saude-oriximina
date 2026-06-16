@@ -610,17 +610,13 @@ const ProntuarioPage: React.FC = () => {
           const { data: meta } = await (supabase as any).from('pts_metas').select('pts_id').eq('id', context.explicitPtsMetaId).maybeSingle();
           ptsId = meta?.pts_id || null;
         }
-        if (!ptsId) {
-          setSessaoPts(null);
-          setSessaoPtsSigtap([]);
-          setSessaoPtsCids([]);
-          return;
+        if (ptsId) {
+          const { data } = await supabase.from('pts').select('*')
+            .eq('id', ptsId)
+            .eq('patient_id', patientId)
+            .maybeSingle();
+          pts = data as ActivePTS | null;
         }
-        const { data } = await supabase.from('pts').select('*')
-          .eq('id', ptsId)
-          .eq('patient_id', patientId)
-          .maybeSingle();
-        pts = data as ActivePTS | null;
       } else if (patientId && professionalId) {
         const { data } = await supabase.from('pts').select('*')
           .eq('patient_id', patientId)
