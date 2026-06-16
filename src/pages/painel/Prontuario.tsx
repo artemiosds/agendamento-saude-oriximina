@@ -1564,6 +1564,7 @@ const ProntuarioPage: React.FC = () => {
         paciente: record.paciente_nome,
         queixa: record.queixa_principal,
         hasCustomData: Object.keys(record.custom_data || {}).length > 0,
+        hasVisitaDomiciliarMedidas: Boolean(record.custom_data?.visita_domiciliar?.medidas_cadeira_rodas),
         customData: record.custom_data
       });
 
