@@ -76,12 +76,6 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
     else setLocal(next);
   };
 
-  const update = (patch: Partial<MedidasCadeiraRodasValue>) => {
-    const next = { ...data, ...patch };
-    if (controlled) onChange!(next);
-    else setLocal(next);
-  };
-
   const updateMedida = (letra: string, v: string) => {
     const next = {
       ...data,
