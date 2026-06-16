@@ -15,11 +15,11 @@ import { toast } from 'sonner';
 interface InboundRow {
   id: string;
   phone: string;
-  patient_id: string | null;
+  paciente_id: string | null;
   body: string;
   intent: string | null;
   recebido_em: string;
-  appointment_id: string | null;
+  agendamento_id: string | null;
   processed: boolean;
 }
 
@@ -41,7 +41,7 @@ export const InboxPanel: React.FC = () => {
     setLoading(true);
     try {
       let q = supabase.from('whatsapp_inbound_messages')
-        .select('id,phone,patient_id,body,intent,recebido_em,appointment_id,processed')
+        .select('id,phone,paciente_id,body,intent,recebido_em,agendamento_id,processed')
         .order('recebido_em', { ascending: false })
         .limit(200);
       if (intent !== 'all') q = q.eq('intent', intent);
