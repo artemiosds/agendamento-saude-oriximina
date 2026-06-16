@@ -991,18 +991,31 @@ const BpaExportar: React.FC = () => {
           details.invalidNascimento.push({ ...itemDetail, pendencia: 'Nascimento Inválido', valor_atual: raw_nasc || 'Vazio' });
         }
 
-        // Município
+        // Município — resolve via cadastro + CEP (ViaCEP) + padrão da exportação.
+        // Quando o CEP do paciente pertence a outro município, ajusta IBGE.
         const mun_raw = pac?.municipio || (pac?.custom_data as any)?.municipio_ibge;
-        let municipio = somenteNumeros(mun_raw);
-        if (municipio.length !== 6) {
-          municipio = somenteNumeros(formData.municipio_padrao);
-        }
-        if (municipio.length !== 6 || municipio === '000000') {
+        const cepNormalizado = normalizeCep(pac?.cep || (pac?.custom_data as any)?.cep);
+        const cepInfo = cepNormalizado ? cepInfoMap.get(cepNormalizado) : undefined;
+        const munRes = resolveMunicipioBpa({
+          municipioCadastro: mun_raw,
+          cepInfo,
+          municipioPadrao: formData.municipio_padrao,
+        });
+        const municipio = munRes.codigo;
+        if (!municipio || municipio.length !== 6 || municipio === '000000') {
           isCritical = true;
           stats.missingMunicipio++;
           warnings.push(`${ident}: Município de residência inválido ou ausente.`);
           details.missingMunicipio.push({ ...itemDetail, pendencia: 'Município Inválido', valor_atual: mun_raw || 'Vazio' });
+        } else if (munRes.autoCorrigido) {
+          stats.autoCorrected++;
+          details.autoCorrected.push({
+            ...itemDetail,
+            pendencia: munRes.fonte === 'cep' ? 'Município ajustado pelo CEP' : 'Município corrigido',
+            valor_atual: `${munRes.motivo || ''} (final: ${municipio})`,
+          });
         }
+
 
         if (isCritical) {
           criticalCount++;
