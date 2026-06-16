@@ -288,7 +288,7 @@ serve(async (req) => {
       }
 
       try {
-        const r = await processOne(supabase, pInfo.provider, pInfo.instance, raw);
+        const r = await processOne(supabase, pInfo.provider, pInfo.instance, raw, humanized);
         if (r.ok) processed++; else failed++;
       } catch (e: any) {
         console.error(`[QueueProcessor] Exception em ${raw.id}:`, e?.message);
