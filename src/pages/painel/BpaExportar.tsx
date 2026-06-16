@@ -257,6 +257,22 @@ const cidExibicao = (v: any): string => {
   return '—';
 };
 
+// Validação ESTRITA para o campo CID do BPA-I (4 posições fixas).
+// O BPA-I exige código com 4 caracteres (categoria + subcategoria), ex.: F840, M545.
+// Códigos com 3 caracteres (ex.: "F84") são parciais/truncados e NÃO devem ser
+// exportados — o importador SIA rejeita. Não inventamos subcategoria.
+const validarCidBpa = (v: any): { valido: boolean; codigo: string; motivo: string; normalizado: string } => {
+  const s = String(v ?? '').trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, '');
+  if (!s) return { valido: false, codigo: '', motivo: 'CID vazio', normalizado: '' };
+  if (/^[A-Z]\d{3}$/.test(s) || /^[A-Z]\d{2}[A-Z0-9]$/.test(s)) {
+    return { valido: true, codigo: s, motivo: '', normalizado: s };
+  }
+  if (/^[A-Z]\d{2}$/.test(s)) {
+    return { valido: false, codigo: '', motivo: `CID parcial/truncado "${s}" — exige subcategoria de 4 caracteres (ex.: ${s}0)`, normalizado: s };
+  }
+  return { valido: false, codigo: '', motivo: `CID inválido "${s}" — formato não reconhecido`, normalizado: s };
+};
+
 const inferirSexoPorNome = (nome: string): 'M' | 'F' | null => {
   if (!nome) return null;
   const primeiroNome = limparTexto(nome).split(' ')[0];
