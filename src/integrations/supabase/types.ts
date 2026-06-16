@@ -3772,6 +3772,8 @@ export type Database = {
         Row: {
           created_at: string
           details: Json
+          fila_pausada_ate: string | null
+          fila_pausada_motivo: string
           id: string
           instance_name: string
           last_check_at: string | null
@@ -3787,6 +3789,8 @@ export type Database = {
         Insert: {
           created_at?: string
           details?: Json
+          fila_pausada_ate?: string | null
+          fila_pausada_motivo?: string
           id?: string
           instance_name?: string
           last_check_at?: string | null
@@ -3802,6 +3806,8 @@ export type Database = {
         Update: {
           created_at?: string
           details?: Json
+          fila_pausada_ate?: string | null
+          fila_pausada_motivo?: string
           id?: string
           instance_name?: string
           last_check_at?: string | null
@@ -3849,8 +3855,51 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_conversations: {
+        Row: {
+          created_at: string
+          human_handoff: boolean
+          human_handoff_at: string | null
+          last_outbound_at: string | null
+          last_patient_message_at: string | null
+          opted_out: boolean
+          opted_out_at: string | null
+          opted_out_reason: string
+          paciente_id: string
+          phone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          human_handoff?: boolean
+          human_handoff_at?: string | null
+          last_outbound_at?: string | null
+          last_patient_message_at?: string | null
+          opted_out?: boolean
+          opted_out_at?: string | null
+          opted_out_reason?: string
+          paciente_id?: string
+          phone: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          human_handoff?: boolean
+          human_handoff_at?: string | null
+          last_outbound_at?: string | null
+          last_patient_message_at?: string | null
+          opted_out?: boolean
+          opted_out_at?: string | null
+          opted_out_reason?: string
+          paciente_id?: string
+          phone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_event_config: {
         Row: {
+          antecedencia_minutos: number
           ativo: boolean
           created_at: string
           delay_envio_min: number
@@ -3858,13 +3907,16 @@ export type Database = {
           exigir_confirmacao: boolean
           horario_personalizado: string
           id: string
+          impedir_duplicidade: boolean
           limite_por_paciente: number
           prioridade: string
+          template_id: string | null
           template_mensagem: string
           unidade_id: string
           updated_at: string
         }
         Insert: {
+          antecedencia_minutos?: number
           ativo?: boolean
           created_at?: string
           delay_envio_min?: number
@@ -3872,13 +3924,16 @@ export type Database = {
           exigir_confirmacao?: boolean
           horario_personalizado?: string
           id?: string
+          impedir_duplicidade?: boolean
           limite_por_paciente?: number
           prioridade?: string
+          template_id?: string | null
           template_mensagem?: string
           unidade_id: string
           updated_at?: string
         }
         Update: {
+          antecedencia_minutos?: number
           ativo?: boolean
           created_at?: string
           delay_envio_min?: number
@@ -3886,11 +3941,135 @@ export type Database = {
           exigir_confirmacao?: boolean
           horario_personalizado?: string
           id?: string
+          impedir_duplicidade?: boolean
           limite_por_paciente?: number
           prioridade?: string
+          template_id?: string | null
           template_mensagem?: string
           unidade_id?: string
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_event_config_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_health_snapshots: {
+        Row: {
+          created_at: string
+          details: Json
+          entregues: number
+          enviadas: number
+          falhas: number
+          id: string
+          lidas: number
+          pausadas: number
+          pendentes: number
+          provider: string
+          rejeicoes_template: number
+          respostas: number
+          snapshot_date: string
+          status_conexao: string
+          taxa_confirmacao: number
+          taxa_erro: number
+          taxa_resposta: number
+          unidade_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          entregues?: number
+          enviadas?: number
+          falhas?: number
+          id?: string
+          lidas?: number
+          pausadas?: number
+          pendentes?: number
+          provider?: string
+          rejeicoes_template?: number
+          respostas?: number
+          snapshot_date?: string
+          status_conexao?: string
+          taxa_confirmacao?: number
+          taxa_erro?: number
+          taxa_resposta?: number
+          unidade_id?: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          entregues?: number
+          enviadas?: number
+          falhas?: number
+          id?: string
+          lidas?: number
+          pausadas?: number
+          pendentes?: number
+          provider?: string
+          rejeicoes_template?: number
+          respostas?: number
+          snapshot_date?: string
+          status_conexao?: string
+          taxa_confirmacao?: number
+          taxa_erro?: number
+          taxa_resposta?: number
+          unidade_id?: string
+        }
+        Relationships: []
+      }
+      whatsapp_inbound_messages: {
+        Row: {
+          agendamento_id: string
+          body: string
+          created_at: string
+          id: string
+          intent: string
+          paciente_id: string
+          paciente_nome: string
+          phone: string
+          processed: boolean
+          processed_at: string | null
+          provider: string
+          provider_message_id: string
+          raw: Json
+          recebido_em: string
+        }
+        Insert: {
+          agendamento_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          intent?: string
+          paciente_id?: string
+          paciente_nome?: string
+          phone: string
+          processed?: boolean
+          processed_at?: string | null
+          provider?: string
+          provider_message_id?: string
+          raw?: Json
+          recebido_em?: string
+        }
+        Update: {
+          agendamento_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          intent?: string
+          paciente_id?: string
+          paciente_nome?: string
+          phone?: string
+          processed?: boolean
+          processed_at?: string | null
+          provider?: string
+          provider_message_id?: string
+          raw?: Json
+          recebido_em?: string
         }
         Relationships: []
       }
@@ -3900,19 +4079,27 @@ export type Database = {
           agendamento_id: string
           category: string | null
           criado_em: string
+          delivered_at: string | null
+          error_code: string
           evento: string
           id: string
           mensagem: string
           metadados: Json
           motivo_bloqueio: string
           motivo_erro: string
+          next_retry_at: string | null
           paciente_id: string
           paciente_nome: string
+          payload_json: Json
           prioridade: string
+          priority: number
           processado_em: string | null
           provider: string
+          provider_message_id: string
+          read_at: string | null
           status: string
           telefone: string
+          template_id: string | null
           tentativas: number
           unidade_id: string
           updated_at: string
@@ -3922,19 +4109,27 @@ export type Database = {
           agendamento_id?: string
           category?: string | null
           criado_em?: string
+          delivered_at?: string | null
+          error_code?: string
           evento: string
           id?: string
           mensagem: string
           metadados?: Json
           motivo_bloqueio?: string
           motivo_erro?: string
+          next_retry_at?: string | null
           paciente_id?: string
           paciente_nome?: string
+          payload_json?: Json
           prioridade?: string
+          priority?: number
           processado_em?: string | null
           provider?: string
+          provider_message_id?: string
+          read_at?: string | null
           status?: string
           telefone: string
+          template_id?: string | null
           tentativas?: number
           unidade_id?: string
           updated_at?: string
@@ -3944,52 +4139,95 @@ export type Database = {
           agendamento_id?: string
           category?: string | null
           criado_em?: string
+          delivered_at?: string | null
+          error_code?: string
           evento?: string
           id?: string
           mensagem?: string
           metadados?: Json
           motivo_bloqueio?: string
           motivo_erro?: string
+          next_retry_at?: string | null
           paciente_id?: string
           paciente_nome?: string
+          payload_json?: Json
           prioridade?: string
+          priority?: number
           processado_em?: string | null
           provider?: string
+          provider_message_id?: string
+          read_at?: string | null
           status?: string
           telefone?: string
+          template_id?: string | null
           tentativas?: number
           unidade_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_queue_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_templates: {
         Row: {
           ativo: boolean
+          categoria: string
           created_at: string
+          evento: string
           id: string
+          idioma: string
           mensagem: string
+          nome_interno: string
+          permite_envio_fora_24h: boolean
+          provider: string
+          provider_template_id: string
+          status: string
           tipo: string
           unidade_id: string
           updated_at: string
+          variaveis_permitidas: Json
         }
         Insert: {
           ativo?: boolean
+          categoria?: string
           created_at?: string
+          evento?: string
           id?: string
+          idioma?: string
           mensagem?: string
+          nome_interno?: string
+          permite_envio_fora_24h?: boolean
+          provider?: string
+          provider_template_id?: string
+          status?: string
           tipo?: string
           unidade_id?: string
           updated_at?: string
+          variaveis_permitidas?: Json
         }
         Update: {
           ativo?: boolean
+          categoria?: string
           created_at?: string
+          evento?: string
           id?: string
+          idioma?: string
           mensagem?: string
+          nome_interno?: string
+          permite_envio_fora_24h?: boolean
+          provider?: string
+          provider_template_id?: string
+          status?: string
           tipo?: string
           unidade_id?: string
           updated_at?: string
+          variaveis_permitidas?: Json
         }
         Relationships: []
       }
@@ -4066,6 +4304,22 @@ export type Database = {
         }
         Returns: undefined
       }
+      enqueue_whatsapp_message: {
+        Args: {
+          p_agendado_para?: string
+          p_agendamento_id?: string
+          p_evento: string
+          p_paciente_id: string
+          p_paciente_nome: string
+          p_payload: Json
+          p_priority?: number
+          p_provider?: string
+          p_telefone: string
+          p_template_id: string
+          p_unidade_id?: string
+        }
+        Returns: Json
+      }
       get_atendimentos_pendentes_master: {
         Args: { p_minutos?: number; p_unidade_id?: string }
         Returns: {
@@ -4119,6 +4373,10 @@ export type Database = {
       }
       is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
+      is_whatsapp_24h_window_open: {
+        Args: { p_phone: string }
+        Returns: boolean
+      }
       liberar_falta:
         | {
             Args: {
@@ -4147,6 +4405,16 @@ export type Database = {
           }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
       refresh_paciente_profissional_status: { Args: never; Returns: undefined }
+      register_whatsapp_inbound: {
+        Args: {
+          p_body: string
+          p_phone: string
+          p_provider?: string
+          p_provider_message_id?: string
+          p_raw?: Json
+        }
+        Returns: Json
+      }
       resetar_faltas_paciente: {
         Args: { p_paciente_id: string }
         Returns: undefined
