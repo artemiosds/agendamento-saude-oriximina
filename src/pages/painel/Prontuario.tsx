@@ -1917,16 +1917,7 @@ const ProntuarioPage: React.FC = () => {
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: {
-          ...getCustomDataObject(f),
-          ...dynamicFields,
-          ...ef,
-          ...Object.fromEntries(Object.entries(ef || {}).map(([key, value]) => {
-            const finalKey = key.startsWith('esp_') ? key : `esp_${key}`;
-            return [finalKey, value];
-          })),
-          ...(getCustomDataObject(f).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(f).visita_domiciliar } : {}),
-        },
+        custom_data: mergeFullCustomData(f, ef, dynamicFields),
         indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
         motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
         procedimentos_texto: procTexto || f.procedimentos_texto || '',
