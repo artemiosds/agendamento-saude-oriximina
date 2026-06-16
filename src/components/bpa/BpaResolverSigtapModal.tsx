@@ -84,6 +84,12 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   const [ptsAtivo, setPtsAtivo] = useState<any | null>(null);
   const [valoresAtuais, setValoresAtuais] = useState<{ sigtap?: string; cid?: string }>({});
 
+  // Contexto carregado
+  const [prontuarios, setProntuarios] = useState<any[]>([]);
+  const [ptsList, setPtsList] = useState<any[]>([]);
+  const [ptsAtivo, setPtsAtivo] = useState<any | null>(null);
+  const [valoresAtuais, setValoresAtuais] = useState<{ sigtap?: string; cid?: string }>({});
+
   // Busca SIGTAP
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -97,6 +103,9 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
 
   const [motivo, setMotivo] = useState("");
   const [aplicarPts, setAplicarPts] = useState(false);
+
+  // Progresso de gravação em lote
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const isFisio = (item?.profissao_categoria || "").includes("fisioterap")
     || /fisio/i.test(item?.profissao || "");
