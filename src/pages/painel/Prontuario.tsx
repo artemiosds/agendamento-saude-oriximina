@@ -1187,9 +1187,9 @@ const ProntuarioPage: React.FC = () => {
   // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
     if (form.paciente_id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
-      loadSessaoData(form.paciente_id);
+      loadSessaoData(buildTreatmentContext(form));
     }
-  }, [form.tipo_registro, form.paciente_id, form.agendamento_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.tipo_registro, form.paciente_id, form.agendamento_id, form.profissional_id, form.data_atendimento, editId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const matchesCurrentSessionByAppointment = currentSessionForRegistration?.appointment_id === form.agendamento_id;
@@ -1296,6 +1296,11 @@ const ProntuarioPage: React.FC = () => {
     setSelectedProcIds([]);
     setSelectedCidsByProc({});
     setProcDetails({});
+    setSessaoCycle(null);
+    setSessaoCycleSessions([]);
+    setSessaoPts(null);
+    setSessaoPtsSigtap([]);
+    setSessaoPtsCids([]);
 
     loadProntuarioProcedimentos(p.id, p.paciente_id, p.data_atendimento);
     loadEpisodios(p.paciente_id);
@@ -1332,6 +1337,19 @@ const ProntuarioPage: React.FC = () => {
     };
     setForm(formData);
     setPreviousForm(formData);
+    if (formData.paciente_id && (formData.tipo_registro === 'sessao' || !!formData.agendamento_id)) {
+      loadSessaoData({
+        patientId: formData.paciente_id,
+        prontuarioId: p.id,
+        professionalId: formData.profissional_id,
+        professionalName: formData.profissional_nome,
+        specialty: getTreatmentSpecialtyFromSource(formData, funcionarios.find((f) => f.id === formData.profissional_id), user?.profissao),
+        date: formData.data_atendimento,
+        explicitCycleId: formData.custom_data?.treatment_cycle_id || formData.custom_data?.cycle_id || formData.custom_data?.treatmentCycleId || null,
+        explicitPtsId: formData.custom_data?.pts_id || formData.custom_data?.ptsId || formData.custom_data?.pts_meta_id || null,
+        explicitPtsMetaId: formData.custom_data?.pts_meta_id || null,
+      });
+    }
     // Load exames from solicitacao_exames JSON
     try {
       const parsed = p.solicitacao_exames ? JSON.parse(p.solicitacao_exames) : null;
