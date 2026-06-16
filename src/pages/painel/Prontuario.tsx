@@ -2849,8 +2849,8 @@ const ProntuarioPage: React.FC = () => {
           {form.paciente_id && (
             <FichaPacienteCabecalho
               pacienteId={form.paciente_id}
-              profissionalNome={form.paciente_id ? (funcionarios.find(f => f.id === (searchParams.get("profissionalId") || user?.id))?.nome || user?.nome || "") : ""}
-              profissionalId={searchParams.get("profissionalId") || user?.id || ""}
+              profissionalNome={form.profissional_nome || formProfessional?.nome || user?.nome || ""}
+              profissionalId={form.profissional_id || user?.id || ""}
               agendamentoId={form.agendamento_id || undefined}
               triagem={triagemHeaderData}
               funcionarios={funcionariosLight}
@@ -3146,10 +3146,10 @@ const ProntuarioPage: React.FC = () => {
                 </div>
 
                 {/* Card de Especialidade */}
-                {user?.profissao && (
+                {effectiveProfissao && (
                   <CamposEspecialidade
-                    profissao={user.profissao}
-                    profissionalId={user.id}
+                    profissao={effectiveProfissao}
+                    profissionalId={form.profissional_id || user?.id || ""}
                     tipoProntuario={form.tipo_registro === 'avaliacao_inicial' ? 'avaliacao' : form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={handleEspecialidadeChange}
@@ -3203,10 +3203,10 @@ const ProntuarioPage: React.FC = () => {
                   </div>
                 </div>
 
-                {user?.profissao && (
+                {effectiveProfissao && (
                   <CamposEspecialidade
-                    profissao={user.profissao}
-                    profissionalId={user.id}
+                    profissao={effectiveProfissao}
+                    profissionalId={form.profissional_id || user?.id || ""}
                     tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={handleEspecialidadeChange}
