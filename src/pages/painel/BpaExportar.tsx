@@ -1151,7 +1151,25 @@ const BpaExportar: React.FC = () => {
           // a Exportar também não inventa.
           const cidProducao = sigtapReq.exige ? (producaoResolvida?.cid || '') : '';
           const cidBruto = cidProducao || pront.custom_data?.cid || pac?.cid || '';
-          const cid = rpad(limparTexto(cidBruto), 4);
+          // Validação estrita BPA-I: 4 caracteres obrigatórios. CID com 3 chars
+          // (ex.: "F84") é parcial/truncado e deve bloquear a linha em vez de
+          // ser exportado padded como "F84 ". NÃO inventamos subcategoria.
+          let cid: string;
+          if (String(cidBruto || '').trim() === '') {
+            // Sem CID → campo em branco (4 espaços). Não é erro por si só.
+            cid = '    ';
+          } else {
+            const cidVal = validarCidBpa(cidBruto);
+            if (cidVal.valido) {
+              cid = rpad(cidVal.codigo, 4);
+            } else {
+              cid = '    ';
+              pendenciaPaciente = true;
+              motivosPendencia.push('CID inválido/truncado');
+              warnings.push(`${ident}: ${cidVal.motivo}. Fonte: ${cidProducao ? 'BPA-Produção' : (pront.custom_data?.cid ? 'Prontuário' : 'Cadastro')}.`);
+              details.critical.push({ ...itemDetail, pendencia: `CID inválido: ${cidVal.motivo}`, valor_atual: String(cidBruto) });
+            }
+          }
 
           const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || '01', 2);
