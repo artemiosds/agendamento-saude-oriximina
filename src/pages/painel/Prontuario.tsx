@@ -38,6 +38,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Separator } from "@/components/ui/separator";
 import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
 import VisitaDomiciliarProntuario from "@/components/visita-domiciliar/VisitaDomiciliarProntuario";
+import { imprimirVisitaDomiciliar } from "@/lib/visitaDomiciliarPdf";
 import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
@@ -2478,9 +2479,44 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
+  // Roteia visita_domiciliar para o helper isolado que renderiza todos os
+  // campos de custom_data.visita_domiciliar (inclui medidas_cadeira_rodas + A-M).
+  const handleVisitaDomiciliarOutput = (p: any) => {
+    const pac = pacientes.find((x) => x.id === p.paciente_id);
+    const uni = unidades.find((u) => u.id === (p.unidade_id || user?.unidadeId));
+    const vd = (p.custom_data && p.custom_data.visita_domiciliar) || {};
+    return imprimirVisitaDomiciliar({
+      paciente: pac,
+      profissional: {
+        id: p.profissional_id,
+        nome: p.profissional_nome,
+        profissao: p.profissional_profissao,
+        conselho: (p as any).profissional_conselho,
+      },
+      unidade: uni,
+      dataAtendimento: p.data_atendimento,
+      data: vd,
+      impressoPor: { nome: user?.nome },
+    });
+  };
+
   const handlePrint = (p: ProntuarioDB) => {
+    if ((p as any).tipo_registro === "visita_domiciliar") {
+      handleVisitaDomiciliarOutput(p);
+      return;
+    }
     downloadProntuarioPdf(p.id);
     toast.success("Preparando impressão...");
+  };
+
+  const handleDownloadPdf = (p: ProntuarioDB) => {
+    if ((p as any).tipo_registro === "visita_domiciliar") {
+      handleVisitaDomiciliarOutput(p);
+      toast.success("PDF gerado");
+      return;
+    }
+    downloadProntuarioPdf(p.id);
+    toast.success("PDF gerado");
   };
 
   const handlePrintFullHistory = (pacienteId: string, pacienteNome: string) => {
@@ -4874,7 +4910,7 @@ const ProntuarioPage: React.FC = () => {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => { downloadProntuarioPdf(p.id); toast.success("PDF gerado"); }}
+                            onClick={() => handleDownloadPdf(p)}
                             title="Baixar PDF"
                             aria-label="Baixar PDF"
                           >
@@ -5142,7 +5178,7 @@ const ProntuarioPage: React.FC = () => {
               <Separator className="my-4" />
 
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario.id); toast.success("PDF gerado"); }}>
+                <Button size="sm" onClick={() => handleDownloadPdf(viewerProntuario)}>
                   <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handlePrint(viewerProntuario)}>
