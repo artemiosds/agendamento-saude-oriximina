@@ -2491,14 +2491,14 @@ const ProntuarioPage: React.FC = () => {
     if (error) {
       console.error("Erro ao buscar prontuário atualizado para impressão:", error);
       toast.error("Não foi possível carregar o prontuário atualizado para impressão.");
-      return;
+      return false;
     }
 
     const record = latest || p;
     const pac = pacientes.find((x) => x.id === record.paciente_id) || { nome: record.paciente_nome };
     const uni = unidades.find((u) => u.id === (record.unidade_id || user?.unidadeId));
     const vd = getCustomDataObject(record).visita_domiciliar || {};
-    return imprimirVisitaDomiciliar({
+    await imprimirVisitaDomiciliar({
       paciente: pac,
       profissional: {
         id: record.profissional_id,
@@ -2511,6 +2511,7 @@ const ProntuarioPage: React.FC = () => {
       data: vd,
       impressoPor: { nome: user?.nome },
     });
+    return true;
   };
 
   const handlePrint = async (p: ProntuarioDB) => {
@@ -2524,8 +2525,8 @@ const ProntuarioPage: React.FC = () => {
 
   const handleDownloadPdf = async (p: ProntuarioDB) => {
     if ((p as any).tipo_registro === "visita_domiciliar") {
-      await handleVisitaDomiciliarOutput(p);
-      toast.success("PDF gerado");
+      const ok = await handleVisitaDomiciliarOutput(p);
+      if (ok) toast.success("PDF gerado");
       return;
     }
     downloadProntuarioPdf(p.id);
