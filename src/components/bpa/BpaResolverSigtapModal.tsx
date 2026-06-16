@@ -64,6 +64,15 @@ const isSigtap = (v: any) => {
 };
 const normalizeSigtap = (v: any) => onlyDigits(v).padStart(10, "0").slice(-10);
 
+/** CID-10 oficial: 1 letra + 2 dígitos, opcional ponto + 1 dígito (ex.: M54, M54.5, Z00.0). */
+const CID10_REGEX = /^[A-TV-Z][0-9]{2}(\.?[0-9])?$/;
+const normalizeCid = (v: string) => String(v || "").trim().toUpperCase().replace(/\s+/g, "");
+const isValidCid10 = (v: string) => {
+  const n = normalizeCid(v);
+  if (!n) return false;
+  return CID10_REGEX.test(n);
+};
+
 const BpaResolverSigtapModal: React.FC<Props> = ({
   open, item, onClose, onResolved, userId, userNome,
 }) => {
@@ -72,6 +81,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
 
   // Contexto carregado
   const [prontuarios, setProntuarios] = useState<any[]>([]);
+  const [ptsList, setPtsList] = useState<any[]>([]);
   const [ptsAtivo, setPtsAtivo] = useState<any | null>(null);
   const [valoresAtuais, setValoresAtuais] = useState<{ sigtap?: string; cid?: string }>({});
 
@@ -89,6 +99,9 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   const [motivo, setMotivo] = useState("");
   const [aplicarPts, setAplicarPts] = useState(false);
 
+  // Progresso de gravação em lote
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
   const isFisio = (item?.profissao_categoria || "").includes("fisioterap")
     || /fisio/i.test(item?.profissao || "");
 
@@ -104,8 +117,10 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setMotivo("");
     setAplicarPts(false);
     setProntuarios([]);
+    setPtsList([]);
     setPtsAtivo(null);
     setValoresAtuais({});
+    setProgress(null);
     if (item?.paciente_id && item?.data_atendimento) {
       void carregarContexto();
     }
@@ -124,19 +139,23 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       const list = Array.isArray(pronts) ? pronts : [];
       setProntuarios(list);
 
-      // PTS ativo (apenas relevante para fisioterapia)
+      // PTS (apenas relevante para fisioterapia) — lista TODOS os ativos
       let pts: any = null;
+      let ptsAtivos: any[] = [];
       if (isFisio) {
         const { data: ptsArr } = await (supabase as any)
           .from("pts")
-          .select("id, status, custom_data, diagnostico_funcional, objetivo_geral")
+          .select("id, status, custom_data, diagnostico_funcional, objetivo_geral, created_at")
           .eq("patient_id", item.paciente_id)
           .order("created_at", { ascending: false })
-          .limit(5);
+          .limit(10);
         if (Array.isArray(ptsArr) && ptsArr.length) {
-          pts = ptsArr.find((p: any) => String(p.status || "").toLowerCase() === "ativo") || ptsArr[0];
+          ptsAtivos = ptsArr.filter((p: any) => String(p.status || "").toLowerCase() === "ativo");
+          // pré-seleção: 1º ativo se houver apenas um; se nenhum ativo, mais recente
+          pts = ptsAtivos.length === 1 ? ptsAtivos[0] : (ptsAtivos[0] || ptsArr[0] || null);
         }
       }
+      setPtsList(ptsAtivos);
       setPtsAtivo(pts);
 
       // Valor atual: pega primeiro código já preenchido em qualquer prontuário
@@ -222,10 +241,21 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       .filter((r) => r.sigChange || r.cidChange);
   }, [prontuarios, selSigtap, selCid, cidManual]);
 
-  const podeSalvar = !!selSigtap && motivo.trim().length >= 3 && impactoCount > 0;
+  const cidEscolhidoRaw = (selCid || cidManual || "").trim();
+  const cidInvalido = cidEscolhidoRaw.length > 0 && !isValidCid10(cidEscolhidoRaw);
+
+  const podeSalvar =
+    !!selSigtap &&
+    motivo.trim().length >= 3 &&
+    impactoCount > 0 &&
+    !cidInvalido;
 
   const handleSalvar = async () => {
     if (!item || !selSigtap) return;
+    if (cidInvalido) {
+      toast.error("CID-10 inválido. Use o formato oficial (ex.: M54, M54.5, Z00.0).");
+      return;
+    }
     if (sobrescritas.length > 0) {
       const ok = window.confirm(
         `Atenção: ${sobrescritas.length} registro(s) já possuem valor diferente preenchido e serão SOBRESCRITOS.\n\nDeseja prosseguir?`,
@@ -233,12 +263,13 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       if (!ok) return;
     }
     setSaving(true);
+    setProgress({ done: 0, total: prontuarios.length });
     try {
       const newSig = normalizeSigtap(selSigtap.codigo);
-      const newCidRaw = (selCid || cidManual || "").trim().toUpperCase();
-      const newCid = newCidRaw || "";
+      const newCid = cidEscolhidoRaw ? normalizeCid(cidEscolhidoRaw) : "";
 
       // Update each prontuario.custom_data of (paciente, data)
+      let done = 0;
       for (const p of prontuarios) {
         const cd = { ...(p.custom_data || {}) };
         cd.procedimento_sigtap = newSig;
@@ -263,6 +294,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
           })
           .eq("id", p.id);
         if (error) throw error;
+        done += 1;
+        setProgress({ done, total: prontuarios.length });
       }
 
       // Aplicar também no PTS quando solicitado (Fisioterapia)
@@ -319,6 +352,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       toast.error("Falha ao aplicar correção: " + (e?.message || "erro desconhecido"));
     } finally {
       setSaving(false);
+      setProgress(null);
     }
   };
 
@@ -412,21 +446,57 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
               </select>
             ) : (
               <Input
-                placeholder="Ex.: M545"
+                placeholder="Ex.: M54 ou M54.5"
                 value={cidManual}
                 onChange={(e) => setCidManual(e.target.value.toUpperCase())}
-                maxLength={5}
+                maxLength={6}
+                aria-invalid={cidInvalido}
+                className={cidInvalido ? "border-destructive" : ""}
               />
+            )}
+            {cidInvalido && (
+              <p className="text-xs text-destructive">
+                CID-10 inválido. Use o formato oficial: 1 letra + 2 dígitos, opcional ponto + 1 dígito (ex.: <code>M54</code>, <code>M54.5</code>, <code>Z00.0</code>).
+              </p>
             )}
           </div>
         )}
 
-        {/* Toggle PTS para Fisio */}
-        {isFisio && ptsAtivo && (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={aplicarPts} onChange={(e) => setAplicarPts(e.target.checked)} />
-            Também aplicar no PTS ativo vinculado (recomendado quando a fonte original era PTS).
-          </label>
+        {/* Seleção de PTS para Fisio (quando houver mais de um ativo) */}
+        {isFisio && ptsList.length > 0 && (
+          <div className="space-y-2 rounded-md border p-3 bg-muted/20">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={aplicarPts} onChange={(e) => setAplicarPts(e.target.checked)} />
+              Também aplicar no PTS vinculado (Fisioterapia)
+            </label>
+            {aplicarPts && (
+              <>
+                {ptsList.length > 1 ? (
+                  <>
+                    <Label className="text-xs">Há {ptsList.length} PTS ativos — selecione qual será atualizado:</Label>
+                    <select
+                      className="w-full border rounded-md p-2 bg-background text-sm"
+                      value={ptsAtivo?.id || ""}
+                      onChange={(e) => {
+                        const sel = ptsList.find((p) => p.id === e.target.value) || null;
+                        setPtsAtivo(sel);
+                      }}
+                    >
+                      {ptsList.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          PTS {p.id.slice(0, 8)} · {p.diagnostico_funcional?.slice(0, 50) || p.objetivo_geral?.slice(0, 50) || "sem descrição"}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    PTS ativo: <code>{ptsAtivo?.id?.slice(0, 8)}</code>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
 
         {/* Motivo obrigatório */}
@@ -469,11 +539,34 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
           </Alert>
         )}
 
+        {/* Progresso em lote */}
+        {saving && progress && progress.total > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Aplicando correção em lote…</span>
+              <span>{progress.done} / {progress.total}</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%` }}
+              />
+            </div>
+            {progress.total >= 10 && (
+              <p className="text-[11px] text-muted-foreground">
+                Lote grande: não feche esta janela até concluir.
+              </p>
+            )}
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSalvar} disabled={!podeSalvar || saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Aplicar correção em {impactoCount} registro(s)
+            {saving && progress
+              ? `Aplicando ${progress.done}/${progress.total}…`
+              : `Aplicar correção em ${impactoCount} registro(s)`}
           </Button>
         </DialogFooter>
       </DialogContent>
