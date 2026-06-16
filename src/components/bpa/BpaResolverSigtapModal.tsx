@@ -446,21 +446,57 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
               </select>
             ) : (
               <Input
-                placeholder="Ex.: M545"
+                placeholder="Ex.: M54 ou M54.5"
                 value={cidManual}
                 onChange={(e) => setCidManual(e.target.value.toUpperCase())}
-                maxLength={5}
+                maxLength={6}
+                aria-invalid={cidInvalido}
+                className={cidInvalido ? "border-destructive" : ""}
               />
+            )}
+            {cidInvalido && (
+              <p className="text-xs text-destructive">
+                CID-10 inválido. Use o formato oficial: 1 letra + 2 dígitos, opcional ponto + 1 dígito (ex.: <code>M54</code>, <code>M54.5</code>, <code>Z00.0</code>).
+              </p>
             )}
           </div>
         )}
 
-        {/* Toggle PTS para Fisio */}
-        {isFisio && ptsAtivo && (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={aplicarPts} onChange={(e) => setAplicarPts(e.target.checked)} />
-            Também aplicar no PTS ativo vinculado (recomendado quando a fonte original era PTS).
-          </label>
+        {/* Seleção de PTS para Fisio (quando houver mais de um ativo) */}
+        {isFisio && ptsList.length > 0 && (
+          <div className="space-y-2 rounded-md border p-3 bg-muted/20">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={aplicarPts} onChange={(e) => setAplicarPts(e.target.checked)} />
+              Também aplicar no PTS vinculado (Fisioterapia)
+            </label>
+            {aplicarPts && (
+              <>
+                {ptsList.length > 1 ? (
+                  <>
+                    <Label className="text-xs">Há {ptsList.length} PTS ativos — selecione qual será atualizado:</Label>
+                    <select
+                      className="w-full border rounded-md p-2 bg-background text-sm"
+                      value={ptsAtivo?.id || ""}
+                      onChange={(e) => {
+                        const sel = ptsList.find((p) => p.id === e.target.value) || null;
+                        setPtsAtivo(sel);
+                      }}
+                    >
+                      {ptsList.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          PTS {p.id.slice(0, 8)} · {p.diagnostico_funcional?.slice(0, 50) || p.objetivo_geral?.slice(0, 50) || "sem descrição"}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    PTS ativo: <code>{ptsAtivo?.id?.slice(0, 8)}</code>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
 
         {/* Motivo obrigatório */}
