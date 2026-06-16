@@ -7,6 +7,7 @@
 
 import { buildDocumentShell, loadDocumentConfig, printViaIframe, docCarimboFor } from "./printLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { imprimirVisitaDomiciliar } from "./visitaDomiciliarPdf";
 
 export interface ProntuarioLike {
   id: string;
@@ -302,6 +303,26 @@ export async function downloadProntuarioPdf(
   const { prontuario, paciente, profissional, unidade, ciclo, pts, procs, exames, configTipos, configEspecialidades, allConfigs } = data;
   const config = await loadDocumentConfig();
   const tipoRegistro = prontuario.tipo_registro || 'sessao';
+
+  if (tipoRegistro === 'visita_domiciliar') {
+    const cd = getCustomDataObject(prontuario);
+    await imprimirVisitaDomiciliar({
+      paciente: paciente || { nome: prontuario.paciente_nome },
+      profissional: {
+        id: prontuario.profissional_id,
+        nome: prontuario.profissional_nome,
+        profissao: (profissional as any)?.profissao || (profissional as any)?.cargo,
+        conselho: [(profissional as any)?.tipo_conselho, (profissional as any)?.numero_conselho, (profissional as any)?.uf_conselho]
+          .filter(Boolean)
+          .join(' '),
+      },
+      unidade,
+      dataAtendimento: prontuario.data_atendimento,
+      data: cd.visita_domiciliar || {},
+    });
+    return;
+  }
+
   const title = `PRONTUÁRIO DE ATENDIMENTO — ${tipoRegistro.toUpperCase().replace(/_/g, ' ')}`;
 
   // 1. Determine which sections to show based on system_config
