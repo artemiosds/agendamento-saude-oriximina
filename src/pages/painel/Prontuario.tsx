@@ -2225,13 +2225,7 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
-        custom_data: {
-          ...getCustomDataObject(form),
-          ...dynamicFields,
-          ...especialidadeFields,
-          ...Object.fromEntries(Object.entries(especialidadeFields || {}).map(([key, value]) => [`esp_${key}`, value])),
-          ...(getCustomDataObject(form).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(form).visita_domiciliar } : {}),
-        },
+        custom_data: mergeFullCustomData(form, especialidadeFields, dynamicFields),
 
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
