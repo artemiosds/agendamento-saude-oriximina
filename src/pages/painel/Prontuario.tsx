@@ -1404,7 +1404,7 @@ const ProntuarioPage: React.FC = () => {
 
         // Carrega campos dinâmicos de volta para o form
         const dynamicFromCustomData = p.custom_data && typeof p.custom_data === 'object'
-          ? Object.fromEntries(Object.entries(p.custom_data).filter(([key]) => !key.startsWith('esp_')))
+          ? Object.fromEntries(Object.entries(p.custom_data).filter(([key]) => !key.startsWith('esp_') && key !== 'visita_domiciliar'))
           : {};
         if (Object.keys(dynamicFromCustomData).length > 0 || (parsed.dynamic_fields && typeof parsed.dynamic_fields === 'object')) {
           setForm(prev => ({
