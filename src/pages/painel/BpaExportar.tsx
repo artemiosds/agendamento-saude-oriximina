@@ -654,7 +654,8 @@ const BpaExportar: React.FC = () => {
       invalidNascimento: 0,
       missingNacionalidade: 0,
       missingLogradouro: 0,
-      missingSigtap: 0
+      missingSigtap: 0,
+      autoCorrected: 0,
     };
 
     const details = {
@@ -670,6 +671,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: [] as any[],
       missingLogradouro: [] as any[],
       missingSigtap: [] as any[],
+      autoCorrected: [] as any[],
       critical: [] as any[]
     };
     
