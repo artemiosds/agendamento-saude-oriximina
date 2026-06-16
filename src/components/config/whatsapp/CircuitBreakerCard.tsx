@@ -66,7 +66,7 @@ export const CircuitBreakerCard: React.FC = () => {
       const { data: cur } = await supabase
         .from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
       const next = { ...(cur?.configuracoes as any || {}), whatsapp_humanizado: {
-        enabled: humanized, hora_inicio: horaIni, hora_fim: horaFim, tz: 'America/Manaus',
+        enabled: humanized, hora_inicio: horaIni, hora_fim: horaFim, tz: 'America/Belem',
       }};
       const { error } = await supabase.from('system_config')
         .upsert({ id: 'default', configuracoes: next }, { onConflict: 'id' });
