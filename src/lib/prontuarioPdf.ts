@@ -343,6 +343,21 @@ export async function downloadProntuarioPdf(
   const modelKey = `estrutura_prontuario_${tipoRegistro}`;
   const legacyModelKey = tipoRegistro === 'avaliacao_inicial' ? 'estrutura_prontuario_primeira_consulta' : '';
   const modelSchema = allConfigs?.[modelKey] || (legacyModelKey ? allConfigs?.[legacyModelKey] : null);
+  const legacyFields = [
+    { k: 'queixa_principal', l: 'Queixa Principal' },
+    { k: 'anamnese', l: 'Anamnese / Histórico' },
+    { k: 'sinais_sintomas', l: 'Sinais e Sintomas' },
+    { k: 'exame_fisico', l: 'Exame Físico' },
+    { k: 'hipotese', l: 'Hipótese' },
+    { k: 'conduta', l: 'Conduta' },
+    { k: 'evolucao', l: 'Evolução' },
+    { k: 'observacoes', l: 'Observações Gerais' },
+    { k: 'procedimentos_texto', l: 'Procedimentos' },
+    { k: 'prescricao', l: 'Prescrição' },
+    { k: 'solicitacao_exames', l: 'Solicitação de Exames' },
+    { k: 'resultado_exame', l: 'Resultado de Exame' },
+    { k: 'indicacao_retorno', l: 'Indicação de Retorno' }
+  ];
   
   if (modelSchema?.fields) {
     modelSchema.fields.forEach((f: any) => {
@@ -386,21 +401,6 @@ export async function downloadProntuarioPdf(
   }
 
   // Fallback for some hardcoded essential fields if they have value but weren't in config
-  const legacyFields = [
-    { k: 'queixa_principal', l: 'Queixa Principal' },
-    { k: 'anamnese', l: 'Anamnese / Histórico' },
-    { k: 'sinais_sintomas', l: 'Sinais e Sintomas' },
-    { k: 'exame_fisico', l: 'Exame Físico' },
-    { k: 'hipotese', l: 'Hipótese' },
-    { k: 'conduta', l: 'Conduta' },
-    { k: 'evolucao', l: 'Evolução' },
-    { k: 'observacoes', l: 'Observações Gerais' },
-    { k: 'procedimentos_texto', l: 'Procedimentos' },
-    { k: 'prescricao', l: 'Prescrição' },
-    { k: 'solicitacao_exames', l: 'Solicitação de Exames' },
-    { k: 'resultado_exame', l: 'Resultado de Exame' },
-    { k: 'indicacao_retorno', l: 'Indicação de Retorno' }
-  ];
   legacyFields.forEach(f => {
     if (!activeFieldsForType.some(af => af.key === f.k) && prontuario[f.k]) {
       clinicalContentHtml += renderSection(f.l, prontuario[f.k]);
