@@ -195,29 +195,38 @@ export function normalizeCep(cepRaw: any): string {
  * Consulta o ViaCEP para uma lista de CEPs únicos e devolve um Map cep→info.
  * Falhas individuais não interrompem o lote.
  */
+const VIACEP_TIMEOUT_MS = 4000;
+const VIACEP_CHUNK_SIZE = 20;
+
+async function fetchOneCep(cep: string): Promise<CepInfo | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), VIACEP_TIMEOUT_MS);
+  try {
+    const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: ctrl.signal });
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    if (!j || j.erro) return null;
+    const ibge = onlyDigits(j.ibge);
+    if (ibge.length < 6) return null;
+    return { cep, ibge6: ibge.slice(0, 6), uf: j.uf, localidade: j.localidade };
+  } catch {
+    /* timeout/abort/rede — silencioso, fallback assume */
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchCepInfoMap(ceps: string[]): Promise<Map<string, CepInfo>> {
   const out = new Map<string, CepInfo>();
   const unicos = Array.from(new Set(ceps.map(onlyDigits).filter(c => c.length === 8)));
   if (unicos.length === 0) return out;
 
-  await Promise.all(unicos.map(async (cep) => {
-    try {
-      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      if (!r.ok) return;
-      const j: any = await r.json();
-      if (!j || j.erro) return;
-      const ibge = onlyDigits(j.ibge);
-      if (ibge.length < 6) return;
-      out.set(cep, {
-        cep,
-        ibge6: ibge.slice(0, 6),
-        uf: j.uf,
-        localidade: j.localidade,
-      });
-    } catch {
-      /* silencioso — apenas não corrige esse CEP */
-    }
-  }));
+  for (let i = 0; i < unicos.length; i += VIACEP_CHUNK_SIZE) {
+    const chunk = unicos.slice(i, i + VIACEP_CHUNK_SIZE);
+    const results = await Promise.all(chunk.map(fetchOneCep));
+    results.forEach((info) => { if (info) out.set(info.cep, info); });
+  }
 
   return out;
 }
