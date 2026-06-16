@@ -241,10 +241,21 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       .filter((r) => r.sigChange || r.cidChange);
   }, [prontuarios, selSigtap, selCid, cidManual]);
 
-  const podeSalvar = !!selSigtap && motivo.trim().length >= 3 && impactoCount > 0;
+  const cidEscolhidoRaw = (selCid || cidManual || "").trim();
+  const cidInvalido = cidEscolhidoRaw.length > 0 && !isValidCid10(cidEscolhidoRaw);
+
+  const podeSalvar =
+    !!selSigtap &&
+    motivo.trim().length >= 3 &&
+    impactoCount > 0 &&
+    !cidInvalido;
 
   const handleSalvar = async () => {
     if (!item || !selSigtap) return;
+    if (cidInvalido) {
+      toast.error("CID-10 inválido. Use o formato oficial (ex.: M54, M54.5, Z00.0).");
+      return;
+    }
     if (sobrescritas.length > 0) {
       const ok = window.confirm(
         `Atenção: ${sobrescritas.length} registro(s) já possuem valor diferente preenchido e serão SOBRESCRITOS.\n\nDeseja prosseguir?`,
@@ -252,12 +263,13 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       if (!ok) return;
     }
     setSaving(true);
+    setProgress({ done: 0, total: prontuarios.length });
     try {
       const newSig = normalizeSigtap(selSigtap.codigo);
-      const newCidRaw = (selCid || cidManual || "").trim().toUpperCase();
-      const newCid = newCidRaw || "";
+      const newCid = cidEscolhidoRaw ? normalizeCid(cidEscolhidoRaw) : "";
 
       // Update each prontuario.custom_data of (paciente, data)
+      let done = 0;
       for (const p of prontuarios) {
         const cd = { ...(p.custom_data || {}) };
         cd.procedimento_sigtap = newSig;
@@ -282,6 +294,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
           })
           .eq("id", p.id);
         if (error) throw error;
+        done += 1;
+        setProgress({ done, total: prontuarios.length });
       }
 
       // Aplicar também no PTS quando solicitado (Fisioterapia)
