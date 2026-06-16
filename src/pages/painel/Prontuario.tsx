@@ -1328,6 +1328,7 @@ const ProntuarioPage: React.FC = () => {
       soap_objetivo: (p as any).soap_objetivo || "",
       soap_avaliacao: (p as any).soap_avaliacao || "",
       soap_plano: (p as any).soap_plano || "",
+      custom_data: getCustomDataObject(p),
     };
     setForm(formData);
     setPreviousForm(formData);
