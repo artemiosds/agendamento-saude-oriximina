@@ -110,6 +110,7 @@ async function processOne(
   provider: WhatsAppProvider,
   providerInstance: string,
   msg: QueueRow,
+  humanized: boolean,
 ): Promise<{ ok: boolean; reason?: string }> {
   // marca como processando
   await supabase.from("whatsapp_queue").update({
@@ -120,24 +121,44 @@ async function processOne(
   const dateKey = todayKey();
   const pid = msg.paciente_id || msg.telefone || msg.id;
 
-  // 1. Delay de entrada (jitter humano determinístico)
-  const dIn = entryDelayMs(pid, dateKey);
-  console.log(`[QueueProcessor] ${msg.id} entry delay ${dIn}ms`);
-  await sleep(dIn);
+  // ============================================================
+  // SEQUÊNCIA HUMANIZADA OBRIGATÓRIA (antibloqueio real, NÃO rate limit):
+  //   PASSO 1: entryDelay  = 3000 + |hash(pid + dataHoje)| % 9000        ms
+  //   PASSO 2: POST /chat/presence { presence: "composing" }   (UazapiGO / Evolution)
+  //   PASSO 3: typingDelay = clamp(msg.length * 35, 2000, 8000)          ms
+  //   PASSO 4: POST /chat/presence { presence: "paused" }
+  //   PASSO 5: envio real (sendTextMessage)
+  //   PASSO 6: postDelay   = 5000 + (|hash + 1|) % 25000                 ms
+  // Hash é DETERMINÍSTICO por (patient_id + YYYY-MM-DD) — sem Math.random.
+  // Pode ser desligado por Master via system_config.whatsapp_humanizado.enabled=false.
+  // ============================================================
 
-  // 2. Presence "composing"
-  await provider.sendPresence(msg.telefone, "composing");
+  // PASSO 1
+  if (humanized) {
+    const dIn = entryDelayMs(pid, dateKey);
+    console.log(`[QueueProcessor] ${msg.id} PASSO1 entry ${dIn}ms`);
+    await sleep(dIn);
 
-  // 3. Typing delay proporcional ao tamanho
-  const dType = typingDelayMs(msg.mensagem || "");
-  console.log(`[QueueProcessor] ${msg.id} typing ${dType}ms (len=${(msg.mensagem||"").length})`);
-  await sleep(dType);
+    // PASSO 2 — presence composing
+    console.log(`[QueueProcessor] ${msg.id} PASSO2 sendPresence(composing) -> ${msg.telefone}`);
+    await provider.sendPresence(msg.telefone, "composing");
 
-  // 4. Presence "paused"
-  await provider.sendPresence(msg.telefone, "paused");
+    // PASSO 3 — typing
+    const dType = typingDelayMs(msg.mensagem || "");
+    console.log(`[QueueProcessor] ${msg.id} PASSO3 typing ${dType}ms (len=${(msg.mensagem||"").length})`);
+    await sleep(dType);
 
-  // 5. Envio real
+    // PASSO 4 — presence paused
+    console.log(`[QueueProcessor] ${msg.id} PASSO4 sendPresence(paused)`);
+    await provider.sendPresence(msg.telefone, "paused");
+  } else {
+    console.log(`[QueueProcessor] ${msg.id} humanização DESLIGADA — pulando presence/delays`);
+  }
+
+  // PASSO 5 — envio real
   const result = await provider.sendTextMessage(msg.telefone, msg.mensagem || "");
+
+
 
   if (result.ok) {
     await supabase.from("whatsapp_queue").update({
@@ -166,10 +187,12 @@ async function processOne(
     }).eq("id", msg.id);
   }
 
-  // 6. Delay pós-envio (sempre, mesmo em erro — protege o número)
-  const dOut = postSendDelayMs(pid, dateKey);
-  console.log(`[QueueProcessor] ${msg.id} post delay ${dOut}ms`);
-  await sleep(dOut);
+  // PASSO 6 — Delay pós-envio (apenas no modo humanizado)
+  if (humanized) {
+    const dOut = postSendDelayMs(pid, dateKey);
+    console.log(`[QueueProcessor] ${msg.id} PASSO6 post ${dOut}ms`);
+    await sleep(dOut);
+  }
 
   return { ok: result.ok, reason: result.errorMessage };
 }
@@ -187,6 +210,29 @@ serve(async (req) => {
     if (!cfg) {
       return new Response(JSON.stringify({ success: false, error: "config_not_found" }), { headers: corsHeaders });
     }
+
+    // Carrega toggle de humanização + janela comercial (Master controla via UI Anti-ban)
+    const { data: sys } = await supabase.from("system_config").select("configuracoes").eq("id", "default").maybeSingle();
+    const wh = (sys?.configuracoes as any)?.whatsapp_humanizado || {};
+    const humanized = wh.enabled !== false; // default true
+    const horaIni = wh.hora_inicio || "07:00";
+    const horaFim = wh.hora_fim || "21:00";
+
+    // Janela comercial — fuso America/Manaus (UTC-4, sem horário de verão)
+    const nowManausH = (new Date().getUTCHours() - 4 + 24) % 24;
+    const nowManausM = new Date().getUTCMinutes();
+    const nowMin = nowManausH * 60 + nowManausM;
+    const [hiH, hiM] = horaIni.split(":").map(Number);
+    const [hfH, hfM] = horaFim.split(":").map(Number);
+    const winStart = hiH * 60 + hiM;
+    const winEnd = hfH * 60 + hfM;
+    const dentroJanela = nowMin >= winStart && nowMin < winEnd;
+    if (!dentroJanela) {
+      console.log(`[QueueProcessor] Fora da janela comercial (${horaIni}-${horaFim} Manaus). Nada a fazer.`);
+      return new Response(JSON.stringify({ success: true, processed: 0, skipped: "fora_janela_comercial" }), { headers: corsHeaders });
+    }
+
+
 
     // Busca mensagens pendentes (ordenadas por prioridade numérica + agendamento)
     const nowIso = new Date().toISOString();
@@ -242,7 +288,7 @@ serve(async (req) => {
       }
 
       try {
-        const r = await processOne(supabase, pInfo.provider, pInfo.instance, raw);
+        const r = await processOne(supabase, pInfo.provider, pInfo.instance, raw, humanized);
         if (r.ok) processed++; else failed++;
       } catch (e: any) {
         console.error(`[QueueProcessor] Exception em ${raw.id}:`, e?.message);

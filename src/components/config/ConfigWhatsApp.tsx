@@ -24,6 +24,7 @@ import ConfigWhatsAppEvents from './ConfigWhatsAppEvents';
 import QueueTable from './whatsapp/QueueTable';
 import InboxPanel from './whatsapp/InboxPanel';
 import HealthDashboard from './whatsapp/HealthDashboard';
+import WebhookUrlCard from './whatsapp/WebhookUrlCard';
 import { whatsappService, uazapigoService } from '@/services/whatsappService';
 import { toast } from 'sonner';
 
@@ -686,6 +687,10 @@ const ConfigWhatsApp: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          <WebhookUrlCard />
+
+
 
           <Card className="shadow-card border-0">
             <CardContent className="p-5 space-y-4">
