@@ -1780,6 +1780,8 @@ const ProntuarioPage: React.FC = () => {
 
       let prontId = editIdRef.current;
       if (prontId) {
+        // Preserva profissional original se o form não tiver no autosave
+        if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
         const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
         if (error) throw error;
         console.log("[performAutosave] Draft atualizado:", prontId);
