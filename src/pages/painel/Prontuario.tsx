@@ -1356,11 +1356,14 @@ const ProntuarioPage: React.FC = () => {
         .filter(Boolean)
         .join(", ");
 
-      // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
-      // ao criar, usa o usuário logado.
-      const profIdToSave = effectiveEditId ? (f.profissional_id || user?.id || "") : (user?.id || "");
+      // Profissional responsável: ao editar, PRESERVA estritamente o original do prontuário
+      // (carregado em openEdit a partir de prontuarios.profissional_id/nome). Master pode
+      // trocar explicitamente via UI, alterando form.profissional_id/nome. NUNCA cair para
+      // user.id/user.nome em edição, para não trocar o responsável pelo usuário logado.
+      // Ao criar novo prontuário, usa o usuário logado.
+      const profIdToSave = effectiveEditId ? (f.profissional_id || "") : (user?.id || "");
       const profNomeToSave = effectiveEditId
-        ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || user?.nome || "")
+        ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || "")
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(f);
       const allDynamicData = {
