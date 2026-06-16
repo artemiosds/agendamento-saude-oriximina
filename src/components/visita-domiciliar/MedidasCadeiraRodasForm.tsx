@@ -56,15 +56,23 @@ const MedidasCadeiraRodasForm: React.FC<Props> = ({
 }) => {
   const data = value ?? { data_avaliacao: dataAtendimento || "", medidas: {} };
 
+  // Ref sempre atualizada com o último snapshot para evitar perda de
+  // digitações consecutivas (ex.: A, B, C em sequência rápida).
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  });
+
   const updateField = <K extends keyof MedidasCadeiraRodasValue>(key: K, value: MedidasCadeiraRodasValue[K]) => {
-    onChange({ ...data, [key]: value });
+    onChange({ ...dataRef.current, [key]: value });
   };
 
   const updateMedida = (letra: string, v: string) => {
-    onChange({
-      ...data,
-      medidas: { ...(data.medidas || {}), [letra]: v },
-    });
+    const current = dataRef.current;
+    const nextMedidas = { ...(current.medidas || {}), [letra]: v };
+    const next = { ...current, medidas: nextMedidas };
+    dataRef.current = next; // grava sincronamente para o próximo keystroke
+    onChange(next);
   };
 
   return (
