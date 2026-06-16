@@ -539,11 +539,34 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
           </Alert>
         )}
 
+        {/* Progresso em lote */}
+        {saving && progress && progress.total > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Aplicando correção em lote…</span>
+              <span>{progress.done} / {progress.total}</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%` }}
+              />
+            </div>
+            {progress.total >= 10 && (
+              <p className="text-[11px] text-muted-foreground">
+                Lote grande: não feche esta janela até concluir.
+              </p>
+            )}
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSalvar} disabled={!podeSalvar || saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Aplicar correção em {impactoCount} registro(s)
+            {saving && progress
+              ? `Aplicando ${progress.done}/${progress.total}…`
+              : `Aplicar correção em ${impactoCount} registro(s)`}
           </Button>
         </DialogFooter>
       </DialogContent>
