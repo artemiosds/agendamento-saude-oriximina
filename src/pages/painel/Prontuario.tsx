@@ -1356,11 +1356,14 @@ const ProntuarioPage: React.FC = () => {
         .filter(Boolean)
         .join(", ");
 
-      // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
-      // ao criar, usa o usuário logado.
-      const profIdToSave = effectiveEditId ? (f.profissional_id || user?.id || "") : (user?.id || "");
+      // Profissional responsável: ao editar, PRESERVA estritamente o original do prontuário
+      // (carregado em openEdit a partir de prontuarios.profissional_id/nome). Master pode
+      // trocar explicitamente via UI, alterando form.profissional_id/nome. NUNCA cair para
+      // user.id/user.nome em edição, para não trocar o responsável pelo usuário logado.
+      // Ao criar novo prontuário, usa o usuário logado.
+      const profIdToSave = effectiveEditId ? (f.profissional_id || "") : (user?.id || "");
       const profNomeToSave = effectiveEditId
-        ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || user?.nome || "")
+        ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || "")
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(f);
       const allDynamicData = {
@@ -1429,6 +1432,9 @@ const ProntuarioPage: React.FC = () => {
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
       if (effectiveEditId) {
+        // Segurança: se por algum motivo o profissional não estiver no form em edição,
+        // remove os campos do update para preservar o original do banco.
+        if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
         const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id, criado_em, atualizado_em").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
@@ -1719,10 +1725,11 @@ const ProntuarioPage: React.FC = () => {
         })
         .filter(Boolean)
         .join(', ');
-      // Preserva profissional ao editar; usa logado ao criar
+      // Preserva profissional ao editar (nunca cair para user.id/nome em edição);
+      // usa logado apenas ao criar novo prontuário.
       const isEditing = Boolean(editIdRef.current);
-      const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
-      const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
+      const profIdAuto = isEditing ? (f.profissional_id || '') : (user?.id || '');
+      const profNomeAuto = isEditing ? (f.profissional_nome || '') : (user?.nome || '');
       const dynamicFields = getDynamicFieldsPayload(f);
       const record: any = {
         paciente_id: f.paciente_id,
@@ -1773,6 +1780,8 @@ const ProntuarioPage: React.FC = () => {
 
       let prontId = editIdRef.current;
       if (prontId) {
+        // Preserva profissional original se o form não tiver no autosave
+        if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
         const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
         if (error) throw error;
         console.log("[performAutosave] Draft atualizado:", prontId);
@@ -2036,9 +2045,10 @@ const ProntuarioPage: React.FC = () => {
     let prontuarioId: string | null = editId;
     try {
       const procTexto = selectedProcIds.map(id => procedimentos.find(pr => pr.id === id)?.nome || "").filter(Boolean).join(", ");
-      const profIdSess = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      // Em edição, preserva o profissional original do prontuário (nunca usa user.id/nome).
+      const profIdSess = editId ? (form.profissional_id || "") : (user?.id || "");
       const profNomeSess = editId
-        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || "")
         : (user?.nome || "");
       const dynamicFields = getDynamicFieldsPayload(form);
       const record: any = {
@@ -2079,6 +2089,7 @@ const ProntuarioPage: React.FC = () => {
       if (form.episodio_id && form.episodio_id !== "no_episode") record.episodio_id = form.episodio_id;
 
       if (editId) {
+        if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
         const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("id").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
