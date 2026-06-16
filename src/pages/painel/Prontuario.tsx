@@ -2645,6 +2645,14 @@ const ProntuarioPage: React.FC = () => {
     pacientes.forEach((p: any) => m.set(p.id, p));
     return m;
   }, [pacientes]);
+  // Sempre prioriza o cadastro atual (pacientes) sobre o snapshot stale em prontuarios.paciente_nome
+  const currentPacienteNome = useCallback((pacienteId?: string, fallback?: string) => {
+    if (pacienteId) {
+      const p = pacienteByIdMap.get(pacienteId);
+      if (p?.nome) return p.nome as string;
+    }
+    return fallback || '';
+  }, [pacienteByIdMap]);
   const filtered = useMemo(() => {
     return prontuarios.filter((p) => {
       if (queryPacienteId) return p.paciente_id === queryPacienteId;
