@@ -4910,7 +4910,7 @@ const ProntuarioPage: React.FC = () => {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => { downloadProntuarioPdf(p.id); toast.success("PDF gerado"); }}
+                            onClick={() => handleDownloadPdf(p)}
                             title="Baixar PDF"
                             aria-label="Baixar PDF"
                           >
