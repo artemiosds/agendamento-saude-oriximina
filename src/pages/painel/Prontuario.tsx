@@ -2479,9 +2479,44 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
+  // Roteia visita_domiciliar para o helper isolado que renderiza todos os
+  // campos de custom_data.visita_domiciliar (inclui medidas_cadeira_rodas + A-M).
+  const handleVisitaDomiciliarOutput = (p: any) => {
+    const pac = pacientes.find((x) => x.id === p.paciente_id);
+    const uni = unidades.find((u) => u.id === (p.unidade_id || user?.unidadeId));
+    const vd = (p.custom_data && p.custom_data.visita_domiciliar) || {};
+    return imprimirVisitaDomiciliar({
+      paciente: pac,
+      profissional: {
+        id: p.profissional_id,
+        nome: p.profissional_nome,
+        profissao: p.profissional_profissao,
+        conselho: (p as any).profissional_conselho,
+      },
+      unidade: uni,
+      dataAtendimento: p.data_atendimento,
+      data: vd,
+      impressoPor: { nome: user?.nome },
+    });
+  };
+
   const handlePrint = (p: ProntuarioDB) => {
+    if (p.tipo_registro === "visita_domiciliar") {
+      handleVisitaDomiciliarOutput(p);
+      return;
+    }
     downloadProntuarioPdf(p.id);
     toast.success("Preparando impressão...");
+  };
+
+  const handleDownloadPdf = (p: ProntuarioDB) => {
+    if (p.tipo_registro === "visita_domiciliar") {
+      handleVisitaDomiciliarOutput(p);
+      toast.success("PDF gerado");
+      return;
+    }
+    downloadProntuarioPdf(p.id);
+    toast.success("PDF gerado");
   };
 
   const handlePrintFullHistory = (pacienteId: string, pacienteNome: string) => {
