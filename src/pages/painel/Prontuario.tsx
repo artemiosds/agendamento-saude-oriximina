@@ -3752,7 +3752,7 @@ const ProntuarioPage: React.FC = () => {
             )}
 
             {/* Legacy types: show generic fields */}
-            {!['avaliacao_inicial', 'retorno', 'sessao', 'urgencia', 'procedimento'].includes(form.tipo_registro) && (
+            {!['avaliacao_inicial', 'retorno', 'sessao', 'urgencia', 'procedimento', 'visita_domiciliar'].includes(form.tipo_registro) && (
               <div className="space-y-3">
                 <div><Label>Queixa Principal</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
                 <div><Label>Anamnese</Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} /></div>
