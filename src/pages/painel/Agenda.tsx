@@ -226,6 +226,12 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
     class: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30",
     icon: "🟠",
   },
+  "Visita Domiciliar": {
+    label: "Visita Domiciliar",
+    class: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30",
+    icon: "🏠",
+  },
+
 };
 
 const Agenda: React.FC = () => {
@@ -2375,6 +2381,7 @@ const Agenda: React.FC = () => {
                         <SelectItem value="Procedimento">Procedimento</SelectItem>
                         <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                         <SelectItem value="Urgência">Urgência</SelectItem>
+                        <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2832,6 +2839,7 @@ const Agenda: React.FC = () => {
                           <SelectItem value="Procedimento">Procedimento</SelectItem>
                           <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                           <SelectItem value="Urgência">Urgência</SelectItem>
+                          <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -3598,6 +3606,7 @@ const Agenda: React.FC = () => {
                     <SelectItem value="Procedimento">Procedimento</SelectItem>
                     <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
                     <SelectItem value="Urgência">Urgência</SelectItem>
+                    <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
