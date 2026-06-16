@@ -1544,7 +1544,7 @@ const ProntuarioPage: React.FC = () => {
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: allDynamicData,
+        custom_data: { ...allDynamicData, ...(getCustomDataObject(f).visita_domiciliar ? { visita_domiciliar: getCustomDataObject(f).visita_domiciliar } : {}) },
 
         resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
