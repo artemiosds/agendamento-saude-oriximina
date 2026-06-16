@@ -1330,7 +1330,8 @@ const ProntuarioPage: React.FC = () => {
     loadEpisodios(p.paciente_id);
     const formData = {
       paciente_id: p.paciente_id,
-      paciente_nome: p.paciente_nome,
+      // Prioriza nome ATUAL do cadastro do paciente; mantém o do prontuário só como fallback
+      paciente_nome: (pacientes.find((x: any) => x.id === p.paciente_id)?.nome) || p.paciente_nome,
       profissional_id: p.profissional_id || "",
       profissional_nome: p.profissional_nome || "",
       agendamento_id: p.agendamento_id || "",
@@ -1871,7 +1872,7 @@ const ProntuarioPage: React.FC = () => {
       const dynamicFields = getDynamicFieldsPayload(f);
       const record: any = {
         paciente_id: f.paciente_id,
-        paciente_nome: f.paciente_nome,
+        paciente_nome: (pacientes.find((x: any) => x.id === f.paciente_id)?.nome) || f.paciente_nome,
         profissional_id: profIdAuto,
         profissional_nome: profNomeAuto,
         ...(isEditing ? {} : { unidade_id: user?.unidadeId || '', setor: user?.setor || '' }),
@@ -2192,7 +2193,7 @@ const ProntuarioPage: React.FC = () => {
       const dynamicFields = getDynamicFieldsPayload(form);
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
-        paciente_nome: form.paciente_nome,
+        paciente_nome: (pacientes.find((x: any) => x.id === form.paciente_id)?.nome) || form.paciente_nome,
         profissional_id: profIdSess,
         profissional_nome: profNomeSess,
         ...(editId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
@@ -4762,7 +4763,7 @@ const ProntuarioPage: React.FC = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-foreground">{p.paciente_nome}</p>
+                            <p className="font-semibold text-foreground">{currentPacienteNome(p.paciente_id, p.paciente_nome)}</p>
                             <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
                               {new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}
                             </span>
@@ -4983,7 +4984,7 @@ const ProntuarioPage: React.FC = () => {
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-primary" />
-                  Prontuário — {viewerProntuario.paciente_nome}
+                  Prontuário — {currentPacienteNome(viewerProntuario.paciente_id, viewerProntuario.paciente_nome)}
                 </SheetTitle>
                 <SheetDescription>
                   {new Date(viewerProntuario.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}
