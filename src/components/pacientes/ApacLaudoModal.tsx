@@ -248,9 +248,9 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     const doc = iframe.contentDocument;
     if (!doc) return;
     doc.open();
-    doc.write(buildSkeletonHTML());
+    doc.write(buildSkeletonHTML(paciente));
     doc.close();
-  }, [open]);
+  }, [open, paciente]);
 
   const handlePrint = () => {
     const win = iframeRef.current?.contentWindow;
