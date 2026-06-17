@@ -2,6 +2,10 @@
 // Layout baseado no formulário oficial SUS (fls. 1/2).
 // Helper isolado: não altera fluxo, cadastro ou outras impressões.
 
+import { loadDocumentConfig } from "@/lib/printLayout";
+import { getCodigoIbge } from "@/lib/municipiosIbge";
+import logoSmsFallback from "@/assets/logo-sms-oriximina.jpeg";
+
 type AnyPaciente = Record<string, any>;
 
 const esc = (v: any): string => {
@@ -58,7 +62,7 @@ const labelSexo = (v?: string): "M" | "F" | "" => {
   return "";
 };
 
-export function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeNome?: string; cnesUnidade?: string }) {
+export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeNome?: string; cnesUnidade?: string }) {
   const cd: AnyPaciente = paciente?.custom_data || {};
 
   const nome = paciente?.nome || paciente?.nome_completo || "";
@@ -84,12 +88,32 @@ export function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeNome?: 
   const telRespSplit = splitDDD(telResp);
   const endereco = montaEndereco(cd);
   const municipio = paciente?.municipio || cd.municipio || "";
-  const ibge = cd.ibge || cd.codigo_ibge || cd.codigoIbge || cd.cod_ibge || "";
   const uf = cd.uf || paciente?.uf || cd.naturalidade_uf || "";
+  const ibge =
+    paciente?.codigo_ibge ||
+    paciente?.cod_ibge ||
+    cd.codigo_ibge ||
+    cd.codigoIbge ||
+    cd.cod_ibge ||
+    cd.municipio_ibge ||
+    cd.ibge ||
+    getCodigoIbge(municipio, uf);
   const cep = cd.cep || "";
 
   const unidadeNome = opts?.unidadeNome || "";
   const cnesUnidade = opts?.cnesUnidade || "";
+
+  // Carrega logos configuradas em "Impressão e Documentos" com fallback institucional
+  let logoLeft = "";
+  let logoRight = "";
+  try {
+    const cfg = await loadDocumentConfig();
+    const pick = (u: string) => (u && (u.startsWith("http") || u.startsWith("/")) ? u : "");
+    logoLeft = pick(cfg.logoEsquerda) || logoSmsFallback;
+    logoRight = pick(cfg.logoDireita) || "";
+  } catch {
+    logoLeft = logoSmsFallback;
+  }
 
   const css = `
     @page { size: A4 portrait; margin: 8mm; }
