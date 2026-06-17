@@ -995,6 +995,23 @@ const ProntuarioPage: React.FC = () => {
     queryClient.invalidateQueries({ queryKey: prontuariosQueryKey });
   }, [queryClient, prontuariosQueryKey]);
 
+  // Sincronização pós-save: atualiza imediatamente cache de detalhe e lista
+  // com o registro retornado do banco, sem esperar refetch/realtime.
+  const applySavedProntuarioToCache = useCallback((saved: any) => {
+    if (!saved?.id) return;
+    queryClient.setQueryData(['prontuario', saved.id], saved);
+    queryClient.setQueryData<ProntuarioDB[]>(prontuariosQueryKey, (prev) => {
+      const list = Array.isArray(prev) ? [...prev] : [];
+      const idx = list.findIndex((p: any) => p.id === saved.id);
+      const lite: any = {};
+      LIST_COLS.split(',').forEach((c) => { lite[c] = (saved as any)[c]; });
+      if (idx >= 0) list[idx] = { ...list[idx], ...lite };
+      else list.unshift(lite);
+      return list;
+    });
+    queryClient.invalidateQueries({ queryKey: prontuariosQueryKey, refetchType: 'none' });
+  }, [queryClient, prontuariosQueryKey]);
+
   useRealtimeSubscription({
     tables: ['prontuarios', 'treatment_cycles', 'treatment_sessions'],
     onchange: silentRefreshProntuarios,
@@ -1597,9 +1614,10 @@ const ProntuarioPage: React.FC = () => {
         // Segurança: se por algum motivo o profissional não estiver no form em edição,
         // remove os campos do update para preservar o original do banco.
         if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
-        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("id, criado_em, atualizado_em").maybeSingle();
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId).select("*").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
+        applySavedProntuarioToCache(updated);
         console.log("[handleSave] Prontuário atualizado com sucesso:", updated.id);
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
@@ -1661,12 +1679,13 @@ const ProntuarioPage: React.FC = () => {
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
           .insert(record)
-          .select("id, criado_em, atualizado_em")
+          .select("*")
           .single();
         if (error) throw error;
         console.log("[handleSave] Prontuário inserido com sucesso:", inserted?.id);
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        if (inserted) applySavedProntuarioToCache(inserted);
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
         if (prontuarioId) {
           editIdRef.current = prontuarioId;
@@ -1937,14 +1956,15 @@ const ProntuarioPage: React.FC = () => {
       if (prontId) {
         // Preserva profissional original se o form não tiver no autosave
         if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
-        const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
+        const { data: updated, error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId).select('*').maybeSingle();
         if (error) throw error;
+        if (updated) applySavedProntuarioToCache(updated);
         console.log("[performAutosave] Draft atualizado:", prontId);
       } else {
         const { data: inserted, error } = await (supabase as any)
           .from('prontuarios')
           .insert(record)
-          .select('id')
+          .select('*')
           .single();
         if (error) throw error;
         if (inserted?.id) {
@@ -1952,6 +1972,7 @@ const ProntuarioPage: React.FC = () => {
           console.log("[performAutosave] Novo draft criado:", prontId);
           setEditId(prontId);
           editIdRef.current = prontId;
+          applySavedProntuarioToCache(inserted);
           // Reset status de faltas ao registrar novo atendimento
           try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: record.paciente_id }); } catch {}
         }
@@ -2241,14 +2262,16 @@ const ProntuarioPage: React.FC = () => {
 
       if (editId) {
         if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
-        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("id").maybeSingle();
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("*").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
+        applySavedProntuarioToCache(updated);
       } else {
-        const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("id").single();
+        const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("*").single();
         if (error) throw error;
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        if (inserted) applySavedProntuarioToCache(inserted);
       }
 
       if (prontuarioId) {
