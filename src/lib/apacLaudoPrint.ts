@@ -158,16 +158,15 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       line-height: 1.12;
     }
     .sus-mark {
-      width: 12mm;
-      height: 11mm;
-      position: relative;
+      width: 13mm;
+      height: 12mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .sus-mark span { position: absolute; border: .8px solid #000; background: #fff; }
-    .sus-mark .a { width: 8mm; height: 8mm; left: 5mm; top: 0; }
-    .sus-mark .b { width: 16mm; height: 5mm; left: 0; top: 4.2mm; transform: skew(28deg); }
-    .sus-mark .c { width: 6mm; height: 11mm; left: 9mm; top: 3mm; transform: skew(-18deg); }
-    .sus-logo { display: flex; align-items: center; gap: .7mm; }
-    .sus-word { font-family: Arial Black, Arial, sans-serif; font-size: 13px; letter-spacing: 0; }
+    .sus-mark svg { width: 100%; height: 100%; display: block; }
+    .sus-logo { display: flex; flex-direction: column; align-items: center; gap: 0; }
+    .sus-word { font-family: Arial Black, Arial, sans-serif; font-size: 11px; letter-spacing: .3px; margin-top: -1mm; }
     .apac-main-title {
       display: flex;
       align-items: center;
