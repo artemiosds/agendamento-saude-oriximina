@@ -122,7 +122,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       border: 1px solid #000;
       background: #fff;
       overflow: hidden;
-      padding: 2mm;
+      padding: 0;
       page-break-after: avoid;
       page-break-inside: avoid;
     }
@@ -134,7 +134,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       overflow: hidden;
     }
     .apac-header {
-      height: 18mm;
+      height: 16.5mm;
       display: grid;
       grid-template-columns: 58mm 1fr;
       gap: 2mm;
@@ -148,24 +148,24 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     }
     .sus-header {
       display: grid;
-      grid-template-columns: 20mm 18mm 1fr;
+      grid-template-columns: 25mm 18mm 1fr;
       align-items: center;
-      padding: 1mm 1.5mm;
-      column-gap: 1.4mm;
+      padding: .8mm 1.2mm;
+      column-gap: 1.2mm;
       font-weight: 800;
       font-size: 9px;
       line-height: 1.12;
     }
     .sus-mark {
-      width: 18mm;
-      height: 12mm;
+      width: 12mm;
+      height: 11mm;
       position: relative;
-      margin-left: .5mm;
     }
     .sus-mark span { position: absolute; border: .8px solid #000; background: #fff; }
     .sus-mark .a { width: 8mm; height: 8mm; left: 5mm; top: 0; }
     .sus-mark .b { width: 16mm; height: 5mm; left: 0; top: 4.2mm; transform: skew(28deg); }
     .sus-mark .c { width: 6mm; height: 11mm; left: 9mm; top: 3mm; transform: skew(-18deg); }
+    .sus-logo { display: flex; align-items: center; gap: .7mm; }
     .sus-word { font-family: Arial Black, Arial, sans-serif; font-size: 13px; letter-spacing: 0; }
     .apac-main-title {
       display: flex;
@@ -280,14 +280,14 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .phone-boxes { height: 5.2mm; }
     .phone-number .apac-label { left: 10mm; right: 1mm; text-align: center; }
     .phone-number small { font-size: 5px; font-weight: 400; }
-    .estab { height: 16.3mm; }
-    .patient { height: 46mm; }
-    .proc { height: 14.4mm; }
-    .secondary { height: 47mm; }
-    .just { height: 49mm; }
-    .request { height: 24.8mm; }
-    .auth { height: 38.4mm; }
-    .exec { height: 9.4mm; }
+    .estab { height: 11.4mm; }
+    .patient { height: 52.5mm; }
+    .proc { height: 10.5mm; }
+    .secondary { height: 47.5mm; }
+    .just { height: 45.5mm; }
+    .request { height: 18.5mm; }
+    .auth { height: 37mm; }
+    .exec { height: 8.1mm; }
     .h-8 { min-height: 8mm; }
     .h-9 { min-height: 9mm; }
     .h-12 { min-height: 12mm; }
