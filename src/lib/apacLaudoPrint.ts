@@ -384,7 +384,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
           <div class="apac-row" style="grid-template-columns: 64mm 1fr 18mm; margin-bottom:${i === 4 ? 0 : .75}mm">
             ${digitField(`${n} - CÓDIGO DO PROCEDIMENTO SECUNDÁRIO`, "", 10, "h-8")}
             ${field(`${n + 1} - NOME DO PROCEDIMENTO SECUNDÁRIO`, "", "h-8")}
-            ${field(`${n + 2} - QTDE.", "", "h-8")}
+            ${field(`${n + 2} - QTDE.`, "", "h-8")}
           </div>`).join("")}
       </div>
 
