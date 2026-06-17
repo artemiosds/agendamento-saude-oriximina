@@ -58,7 +58,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   const nascDia = dataNascMatch ? dataNascMatch[3] : "";
   const nascMes = dataNascMatch ? dataNascMatch[2] : "";
   const nascAno = dataNascMatch ? dataNascMatch[1] : "";
-  void formatDataBR(rawDataNasc);
+  
   const sexo = labelSexo(paciente?.sexo || cd.sexo);
   const racaCor = paciente?.raca_cor || cd.racaCor || cd.raca_cor || "";
   const nomeMae = paciente?.nomeMae || paciente?.nome_mae || cd.nome_mae || "";
