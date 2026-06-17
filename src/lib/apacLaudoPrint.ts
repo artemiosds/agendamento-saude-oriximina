@@ -68,7 +68,8 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     cd.cod_ibge || cd.municipio_ibge || cd.ibge || getCodigoIbge(municipio, uf);
   const cep = cd.cep || "";
 
-  void opts;
+  const unidadeNome = opts?.unidadeNome || "";
+  const cnesUnidade = onlyDigits(opts?.cnesUnidade || "");
 
   const chars = (value: string, total: number) => {
     const clean = onlyDigits(value).slice(0, total).padEnd(total, " ");
@@ -294,6 +295,12 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .h-17 { min-height: 17mm; }
     .h-31 { min-height: 31mm; }
     .no-margin { margin-bottom: 0; }
+    .span-grid { display: grid; gap: .9mm; }
+    .span-grid .apac-field, .span-grid .sex-field { min-height: 0; height: 100%; }
+    .g-r1 { grid-row: 1; }
+    .g-r2 { grid-row: 2; }
+    .g-r3 { grid-row: 3; }
+    .g-span2 { grid-row: 1 / span 2; grid-column: 3; }
     .doc-line { display: flex; align-items: center; gap: 4mm; justify-content: center; font-size: 6px; padding-top: 3.2mm; }
     .doc-circle { letter-spacing: .6mm; white-space: nowrap; }
     .validade { text-align: center; font-size: 7px; padding-top: 3.4mm; }
@@ -331,9 +338,9 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
 
       ${section("IDENTIFICAÇÃO DO ESTABELECIMENTO DE SAÚDE (SOLICITANTE)")}
       <div class="section-body estab">
-        <div class="apac-row no-margin" style="grid-template-columns: 1fr 40mm">
-          ${field("1 - NOME DO ESTABELECIMENTO DE SAÚDE SOLICITANTE", "", "h-9")}
-          ${digitField("2 - CNES", "", 7, "h-9")}
+        <div class="apac-row no-margin" style="grid-template-columns: 1fr 50mm">
+          ${field("1 - NOME DO ESTABELECIMENTO DE SAÚDE SOLICITANTE", unidadeNome, "h-9")}
+          ${digitField("2 - CNES", cnesUnidade, 7, "h-9")}
         </div>
       </div>
 
@@ -400,45 +407,38 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
 
       ${section("SOLICITAÇÃO")}
       <div class="compact-body request">
-        <div class="apac-row" style="grid-template-columns: 1fr 28mm 64mm">
-          ${field("41 - NOME DO PROFISSIONAL SOLICITANTE", "", "h-9")}
-          ${dateField("42-DATA DA SOLICITAÇÃO", "", "h-9")}
-          ${field("45-ASSINATURA E CARIMBO (Nº REGISTRO DO CONSELHO)", "", "h-17")}
-        </div>
-        <div class="apac-row no-margin" style="grid-template-columns: 38mm 1fr 64mm; margin-top:-9mm">
-          ${field("43 - DOCUMENTO", "", "h-9", `<div class="doc-line"><span class="doc-circle">( ) CNS</span><span class="doc-circle">( ) CPF</span></div>`)}
-          ${digitField("44 - Nº DOCUMENTO (CNS/CPF) DO PROFISSIONAL SOLICITANTE", "", 15, "h-9")}
-          <div></div>
+        <div class="span-grid" style="grid-template-columns: 1fr 28mm 64mm; grid-template-rows: 9mm 9mm;">
+          ${field("41 - NOME DO PROFISSIONAL SOLICITANTE", "", "h-9 g-r1")}
+          ${dateField("42-DATA DA SOLICITAÇÃO", "", "h-9 g-r1")}
+          ${field("45-ASSINATURA E CARIMBO (Nº REGISTRO DO CONSELHO)", "", "g-span2")}
+          ${field("43 - DOCUMENTO", "", "g-r2", `<div class="doc-line"><span class="doc-circle">( ) CNS</span><span class="doc-circle">( ) CPF</span></div>`)}
+          ${digitField("44 - Nº DOCUMENTO (CNS/CPF) DO PROFISSIONAL SOLICITANTE", "", 15, "g-r2")}
         </div>
       </div>
 
       ${section("AUTORIZAÇÃO")}
       <div class="compact-body auth">
-        <div class="apac-row" style="grid-template-columns: 1fr 34mm 64mm">
-          ${field("46 - NOME DO PROFISSIONAL AUTORIZADOR", "", "h-9")}
-          ${field("47 - CÓD. ÓRGÃO EMISSOR", "", "h-9")}
-          ${field("52 - Nº DA AUTORIZAÇÃO (APAC)", "", "h-31")}
-        </div>
-        <div class="apac-row" style="grid-template-columns: 38mm 1fr 64mm; margin-top:-22mm">
-          ${field("48 - DOCUMENTO", "", "h-9", `<div class="doc-line"><span class="doc-circle">( ) CNS</span><span class="doc-circle">( ) CPF</span></div>`)}
-          ${digitField("49 - Nº DOCUMENTO (CNS/CPF) DO PROFISSIONAL AUTORIZADOR", "", 15, "h-9")}
-          <div></div>
-        </div>
-        <div class="apac-row no-margin" style="grid-template-columns: 30mm 1fr 64mm">
-          ${dateField("50-DATA DA AUTORIZAÇÃO", "", "h-9")}
-          ${field("51 - ASSINATURA E CARIMBO (Nº DO REGISTRO DO CONSELHO)", "", "h-9")}
-          ${field("53 - PERÍODO DE VALIDADE DA APAC", "", "h-9", `<div class="validade">____/____/____ &nbsp;&nbsp; a &nbsp;&nbsp; ____/____/____</div>`)}
+        <div class="span-grid" style="grid-template-columns: 1fr 34mm 64mm; grid-template-rows: 9mm 9mm 9mm;">
+          ${field("46 - NOME DO PROFISSIONAL AUTORIZADOR", "", "g-r1")}
+          ${field("47 - CÓD. ÓRGÃO EMISSOR", "", "g-r1")}
+          ${field("52 - Nº DA AUTORIZAÇÃO (APAC)", "", "g-span2")}
+          ${field("48 - DOCUMENTO", "", "g-r2", `<div class="doc-line"><span class="doc-circle">( ) CNS</span><span class="doc-circle">( ) CPF</span></div>`)}
+          ${digitField("49 - Nº DOCUMENTO (CNS/CPF) DO PROFISSIONAL AUTORIZADOR", "", 15, "g-r2")}
+          ${dateField("50-DATA DA AUTORIZAÇÃO", "", "g-r3")}
+          ${field("51 - ASSINATURA E CARIMBO (Nº DO REGISTRO DO CONSELHO)", "", "g-r3")}
+          ${field("53 - PERÍODO DE VALIDADE DA APAC", "", "g-r3", `<div class="validade">____/____/____ &nbsp; a &nbsp; ____/____/____</div>`)}
         </div>
       </div>
 
       ${section("IDENTIFICAÇÃO DO ESTABELECIMENTO DE SAÚDE (EXECUTANTE)")}
       <div class="compact-body exec">
-        <div class="apac-row no-margin" style="grid-template-columns: 1fr 42mm">
-          ${field("54 - NOME FANTASIA DO ESTABELECIMENTO DE SAÚDE EXECUTANTE", "", "h-8")}
-          ${digitField("55 - CNES", "", 7, "h-8")}
+        <div class="apac-row no-margin" style="grid-template-columns: 1fr 50mm">
+          ${field("54 - NOME FANTASIA DO ESTABELECIMENTO DE SAÚDE EXECUTANTE", unidadeNome, "h-8")}
+          ${digitField("55 - CNES", cnesUnidade, 7, "h-8")}
         </div>
       </div>
     </div>
+  </div>
   </div>
 </body>
 </html>`;
