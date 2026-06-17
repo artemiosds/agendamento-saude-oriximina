@@ -52,8 +52,13 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   const prontuario =
     paciente?.numeroProntuario || paciente?.numero_prontuario || cd.numeroProntuario || cd.numero_prontuario ||
     (paciente?.id ? String(paciente.id).slice(0, 8).toUpperCase() : "");
-  const cns = paciente?.cns || cd.cns || "";
-  const dataNasc = formatDataBR(paciente?.dataNascimento || paciente?.data_nascimento || cd.data_nascimento);
+  const cnsDigits = onlyDigits(paciente?.cns || cd.cns || "").slice(0, 15);
+  const rawDataNasc = paciente?.dataNascimento || paciente?.data_nascimento || cd.data_nascimento || "";
+  const dataNascMatch = String(rawDataNasc).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const nascDia = dataNascMatch ? dataNascMatch[3] : "";
+  const nascMes = dataNascMatch ? dataNascMatch[2] : "";
+  const nascAno = dataNascMatch ? dataNascMatch[1] : "";
+  const dataNasc = formatDataBR(rawDataNasc);
   const sexo = labelSexo(paciente?.sexo || cd.sexo);
   const racaCor = paciente?.raca_cor || cd.racaCor || cd.raca_cor || "";
   const nomeMae = paciente?.nomeMae || paciente?.nome_mae || cd.nome_mae || "";
