@@ -1679,12 +1679,13 @@ const ProntuarioPage: React.FC = () => {
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
           .insert(record)
-          .select("id, criado_em, atualizado_em")
+          .select("*")
           .single();
         if (error) throw error;
         console.log("[handleSave] Prontuário inserido com sucesso:", inserted?.id);
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        if (inserted) applySavedProntuarioToCache(inserted);
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
         if (prontuarioId) {
           editIdRef.current = prontuarioId;
