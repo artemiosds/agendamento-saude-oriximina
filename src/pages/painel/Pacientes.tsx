@@ -1604,11 +1604,26 @@ const Pacientes: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              className="w-full col-span-2 min-w-0"
+              className="w-full min-w-0"
               onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
             >
               <Printer className="w-4 h-4 mr-1.5" />
               <span className="truncate">Imprimir Só Dados</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full min-w-0"
+              onClick={() => {
+                const u = unidades.find((x) => x.id === (detalhePaciente.unidadeId || user?.unidadeId)) as any;
+                imprimirLaudoApac(detalhePaciente as any, {
+                  unidadeNome: u?.nome || "",
+                  cnesUnidade: u?.cnes || (u as any)?.cnes_codigo || "",
+                });
+              }}
+            >
+              <FileSignature className="w-4 h-4 mr-1.5" />
+              <span className="truncate">Laudo APAC</span>
             </Button>
           </div>
         );
