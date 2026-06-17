@@ -251,7 +251,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .date-value { font-size: 8px; font-weight: 700; letter-spacing: .4mm; padding-bottom: .5mm; }
     .date-value:empty::before { content: '      /      /'; font-weight: 400; }
     .sex-field {
-      border: 1px solid #777;
+      border: 1px solid #000;
       min-height: 7.2mm;
       position: relative;
       padding-top: 2.8mm;
@@ -264,7 +264,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       display: inline-flex;
       width: 4.2mm;
       height: 4.2mm;
-      border: 1px solid #999;
+      border: 1px solid #000;
       align-items: center;
       justify-content: center;
       margin: 0 1mm .2mm .5mm;
@@ -273,7 +273,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       vertical-align: middle;
     }
     .phone-field { display: grid; grid-template-columns: 9mm 1fr; min-height: 8.6mm; }
-    .phone-ddd, .phone-number { border: 1px solid #777; position: relative; min-height: 8.6mm; }
+    .phone-ddd, .phone-number { border: 1px solid #000; position: relative; min-height: 8.6mm; }
     .phone-number { border-left: 0; }
     .mini-label { text-align: center; font-size: 5.5px; padding-top: 1mm; }
     .mini-value { text-align: center; font-size: 7px; font-weight: 700; margin-top: .8mm; }
