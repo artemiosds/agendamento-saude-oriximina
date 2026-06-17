@@ -200,7 +200,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .apac-row { display: grid; gap: .9mm; margin-bottom: .9mm; }
     .apac-row:last-child { margin-bottom: 0; }
     .apac-field {
-      border: 1px solid #777;
+      border: 1px solid #000;
       min-height: 7.2mm;
       position: relative;
       padding: 2.6mm 1mm .5mm;
