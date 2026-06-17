@@ -265,3 +265,5 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     </Dialog>
   );
 }
+
+export default ApacLaudoModal;
