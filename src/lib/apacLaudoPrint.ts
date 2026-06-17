@@ -45,7 +45,25 @@ const labelSexo = (v?: string): "M" | "F" | "" => {
   return "";
 };
 
+export function buildLaudoApacHTML(paciente: AnyPaciente, opts?: { unidadeNome?: string; cnesUnidade?: string }): string {
+  return _buildLaudoApacHTML(paciente, opts);
+}
+
 export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeNome?: string; cnesUnidade?: string }) {
+  const html = _buildLaudoApacHTML(paciente, opts);
+  const w = window.open("", "_blank", "width=900,height=1200");
+  if (!w) {
+    alert("Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.");
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  const printNow = () => { try { w.focus(); w.print(); } catch (e) { console.error(e); } };
+  window.setTimeout(printNow, 250);
+}
+
+function _buildLaudoApacHTML(paciente: AnyPaciente, opts?: { unidadeNome?: string; cnesUnidade?: string }): string {
   const cd: AnyPaciente = paciente?.custom_data || {};
 
   const nome = paciente?.nome || paciente?.nome_completo || "";
@@ -468,18 +486,6 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   </div>
 </body>
 </html>`;
-
-  const w = window.open("", "_blank", "width=900,height=1200");
-  if (!w) {
-    alert("Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.");
-    return;
-  }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  const printNow = () => {
-    try { w.focus(); w.print(); } catch (e) { console.error(e); }
-  };
-  window.setTimeout(printNow, 250);
+  return html;
 }
 

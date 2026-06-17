@@ -44,6 +44,7 @@ import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/com
 import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
 import { imprimirLaudoApac } from "@/lib/apacLaudoPrint";
+import ApacLaudoModal from "@/components/pacientes/ApacLaudoModal";
 import { FileSignature } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
@@ -303,6 +304,15 @@ const Pacientes: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [search, pacientes]);
   const [importOpen, setImportOpen] = useState(false);
+  const [apacLaudo, setApacLaudo] = useState<{ paciente: any; unidadeNome: string; cnesUnidade: string } | null>(null);
+  const openApacLaudo = (p: any) => {
+    const u = unidades.find((x) => x.id === (p?.unidadeId || user?.unidadeId)) as any;
+    setApacLaudo({
+      paciente: p,
+      unidadeNome: u?.nome || "",
+      cnesUnidade: u?.cnes || u?.cnes_codigo || "",
+    });
+  };
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<PacienteFormData>(emptyPacienteForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1435,13 +1445,7 @@ const Pacientes: React.FC = () => {
                       size="sm"
                       variant="ghost"
                       className="h-8 w-8 p-0"
-                      onClick={() => {
-                        const u = unidades.find((x) => x.id === (p.unidadeId || user?.unidadeId)) as any;
-                        imprimirLaudoApac(p as any, {
-                          unidadeNome: u?.nome || "",
-                          cnesUnidade: u?.cnes || (u as any)?.cnes_codigo || "",
-                        });
-                      }}
+                      onClick={() => openApacLaudo(p)}
                       title="Imprimir Laudo APAC"
                     >
                       <FileSignature className="w-3.5 h-3.5" />
@@ -1546,6 +1550,13 @@ const Pacientes: React.FC = () => {
         </div>
       )}
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
+      <ApacLaudoModal
+        open={!!apacLaudo}
+        onOpenChange={(o) => { if (!o) setApacLaudo(null); }}
+        paciente={apacLaudo?.paciente || null}
+        unidadeNome={apacLaudo?.unidadeNome}
+        cnesUnidade={apacLaudo?.cnesUnidade}
+      />
 
       {/* Modal Detalhes - Paciente (página de Pacientes) */}
       {detalhePaciente && (() => {
@@ -1614,13 +1625,7 @@ const Pacientes: React.FC = () => {
               variant="ghost"
               size="sm"
               className="w-full min-w-0"
-              onClick={() => {
-                const u = unidades.find((x) => x.id === (detalhePaciente.unidadeId || user?.unidadeId)) as any;
-                imprimirLaudoApac(detalhePaciente as any, {
-                  unidadeNome: u?.nome || "",
-                  cnesUnidade: u?.cnes || (u as any)?.cnes_codigo || "",
-                });
-              }}
+              onClick={() => openApacLaudo(detalhePaciente)}
             >
               <FileSignature className="w-4 h-4 mr-1.5" />
               <span className="truncate">Laudo APAC</span>
