@@ -30,11 +30,25 @@ function buildSkeletonHTML(paciente: any | null): string {
   const boxes = (n: number, ch = "T") => Array.from({ length: n }, () => box(ch)).join("");
 
   // ETAPA 1 — dados reais apenas para campos 3, 9 e 14
+  // O objeto paciente vindo da página usa camelCase (dataNascimento, nomeMae, ...),
+  // mas alguns lugares ainda usam snake_case. Aceitamos ambos.
   const p = paciente || {};
   const cd = p.custom_data || {};
-  const nomePaciente = escapeHtml(p.nome) || "";
-  const nomeMae = escapeHtml(p.nome_mae) || "";
-  const municipio = escapeHtml(p.municipio || cd.municipio) || "";
+  const pick = (...keys: string[]) => {
+    for (const k of keys) {
+      const v = (p as any)[k];
+      if (v !== undefined && v !== null && v !== "") return v;
+    }
+    for (const k of keys) {
+      const v = (cd as any)[k];
+      if (v !== undefined && v !== null && v !== "") return v;
+    }
+    return "";
+  };
+  const nomePaciente = escapeHtml(pick("nome"));
+  const nomeMae = escapeHtml(pick("nomeMae", "nome_mae"));
+  const municipio = escapeHtml(pick("municipio"));
+
 
   // ETAPA 2 — Campos de caixa isolados: CNS, Data de Nascimento, CEP
   // Helper: preenche N caixas com dígitos da string; faltantes ficam vazias.
@@ -43,9 +57,9 @@ function buildSkeletonHTML(paciente: any | null): string {
     return Array.from({ length: n }, (_, i) => `<span class="box">${digits[i] ?? ""}</span>`).join("");
   };
   // CNS: 15 dígitos isolados, container próprio
-  const cnsHTML = `<span class="boxes">${digitBoxes(p.cns, 15)}</span>`;
+  const cnsHTML = `<span class="boxes">${digitBoxes(pick("cns"), 15)}</span>`;
   // Data de nascimento: DD / MM / AAAA — três containers separados
-  const dn = String(p.data_nascimento ?? "");
+  const dn = String(pick("dataNascimento", "data_nascimento") ?? "");
   let dd = "", mm = "", aaaa = "";
   // Aceita "YYYY-MM-DD" (ISO) e "DD/MM/YYYY"
   const iso = dn.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -59,12 +73,13 @@ function buildSkeletonHTML(paciente: any | null): string {
     `<span class="sep">/</span>` +
     `<span class="boxes">${digitBoxes(aaaa, 4)}</span>`;
   // CEP: 8 dígitos isolados, container próprio
-  const cepHTML = `<span class="boxes">${digitBoxes(p.cep || cd.cep, 8)}</span>`;
+  const cepHTML = `<span class="boxes">${digitBoxes(pick("cep"), 8)}</span>`;
+
 
   // ETAPA 3 — demais campos da identificação do paciente
-  const prontuario = escapeHtml(p.numero_prontuario || p.prontuario || p.codigo || p.id) || "";
+  const prontuario = escapeHtml(pick("numeroProntuario", "numero_prontuario", "prontuario", "codigo", "id"));
 
-  const sexoRaw = String(p.sexo ?? cd.sexo ?? "").trim().toLowerCase();
+  const sexoRaw = String(pick("sexo") ?? "").trim().toLowerCase();
   const isMasc = sexoRaw.startsWith("m");
   const isFem  = sexoRaw.startsWith("f");
   const checkMasc = isMasc ? "✕" : "";
@@ -73,38 +88,37 @@ function buildSkeletonHTML(paciente: any | null): string {
     `<span class="check">${checkMasc}</span>Masc. &nbsp; ` +
     `<span class="check">${checkFem}</span>Fem.`;
 
-  const racaCor = escapeHtml(p.raca_cor || cd.raca_cor) || "";
+  const racaCor = escapeHtml(pick("racaCor", "raca_cor"));
 
   // Telefones: DDD (2 caixas) + número (9 caixas) — containers separados
   const splitTel = (raw: unknown) => {
     const d = String(raw ?? "").replace(/\D/g, "");
     let ddd = "", num = "";
     if (d.length >= 10) {
-      // Formatos comuns BR: 10 ou 11 dígitos com DDD
       ddd = d.slice(0, 2);
-      num = d.slice(2, 11); // até 9 dígitos
+      num = d.slice(2, 11);
     } else {
       num = d.slice(0, 9);
     }
     return { ddd, num };
   };
-  const telPac = splitTel(p.telefone || cd.telefone);
+  const telPac = splitTel(pick("telefone"));
   const tel10HTML =
     `(<span class="boxes">${digitBoxes(telPac.ddd, 2)}</span>) ` +
     `<span class="boxes">${digitBoxes(telPac.num, 9)}</span>`;
 
-  const nomeResp = escapeHtml(p.nome_responsavel || cd.nome_responsavel) || "";
-  const telResp = splitTel(p.telefone_responsavel || cd.telefone_responsavel);
+  const nomeResp = escapeHtml(pick("nomeResponsavel", "nome_responsavel"));
+  const telResp = splitTel(pick("telefoneResponsavel", "telefone_responsavel"));
   const tel12HTML =
     `(<span class="boxes">${digitBoxes(telResp.ddd, 2)}</span>) ` +
     `<span class="boxes">${digitBoxes(telResp.num, 9)}</span>`;
 
   // Endereço composto (campo 13) — tolerante a campos vazios
   const enderecoComposto = (): string => {
-    const tipo = String(p.tipo_logradouro ?? cd.tipo_logradouro ?? "").trim();
-    const logr = String(p.logradouro ?? cd.logradouro ?? p.endereco ?? "").trim();
-    const num  = String(p.numero ?? cd.numero ?? "").trim();
-    const bairro = String(p.bairro ?? cd.bairro ?? "").trim();
+    const tipo = String(pick("tipoLogradouro", "tipo_logradouro") ?? "").trim();
+    const logr = String(pick("logradouro", "endereco") ?? "").trim();
+    const num  = String(pick("numero") ?? "").trim();
+    const bairro = String(pick("bairro") ?? "").trim();
     const rua = [tipo, logr].filter(Boolean).join(" ").trim();
     const parts: string[] = [];
     if (rua) parts.push(rua);
@@ -114,8 +128,9 @@ function buildSkeletonHTML(paciente: any | null): string {
   };
   const enderecoHTML = enderecoComposto();
 
-  const ibgeHTML = `<span class="boxes">${digitBoxes(p.ibge_municipio || cd.ibge_municipio || p.cod_ibge || cd.cod_ibge, 7)}</span>`;
-  const uf = escapeHtml(p.uf || cd.uf) || "";
+  const ibgeHTML = `<span class="boxes">${digitBoxes(pick("ibgeMunicipio", "ibge_municipio", "codIbge", "cod_ibge"), 7)}</span>`;
+  const uf = escapeHtml(pick("uf"));
+
 
   const band = (text: string) => `<div class="band">${text}</div>`;
   const field = (num: string, label: string, value: string = T, opts: { w?: string; h?: number } = {}) => `
