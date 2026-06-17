@@ -68,7 +68,8 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     cd.cod_ibge || cd.municipio_ibge || cd.ibge || getCodigoIbge(municipio, uf);
   const cep = cd.cep || "";
 
-  void opts;
+  const unidadeNome = opts?.unidadeNome || "";
+  const cnesUnidade = onlyDigits(opts?.cnesUnidade || "");
 
   const chars = (value: string, total: number) => {
     const clean = onlyDigits(value).slice(0, total).padEnd(total, " ");
