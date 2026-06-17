@@ -2,7 +2,7 @@
 // e sobrepondo os dados do paciente em posicionamento absoluto.
 
 import { getCodigoIbge } from "@/lib/municipiosIbge";
-import apacTemplate from "@/assets/apac-laudo-template.jpg.asset.json";
+
 
 type AnyPaciente = Record<string, any>;
 
@@ -77,6 +77,8 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   const V = (top: number, left: number, value: string, width?: number, extra: string = "") =>
     `<div class="apac-value" style="top:${top}mm;left:${left}mm;${width ? `width:${width}mm;` : ""}${extra}">${esc(value)}</div>`;
 
+  const templateUrl = `${window.location.origin}/images/apac-laudo-template.jpg`;
+
   const css = `
     @page { size: A4 portrait; margin: 0; }
     html, body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -85,16 +87,21 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .apac-page {
       position: relative;
       width: 210mm; height: 297mm;
-      background-image: url("${apacTemplate.url}");
-      background-size: 210mm 297mm;
-      background-repeat: no-repeat;
-      background-position: top left;
       overflow: hidden;
       page-break-after: avoid;
       page-break-inside: avoid;
     }
+    .apac-template {
+      position: absolute;
+      left: 0; top: 0;
+      width: 210mm; height: 297mm;
+      object-fit: fill;
+      z-index: 0;
+      pointer-events: none;
+    }
     .apac-value {
       position: absolute;
+      z-index: 1;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 8px;
       line-height: 1;
@@ -102,12 +109,13 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-weight: 600;
+      font-weight: 700;
     }
     .apac-x { font-size: 9px; font-weight: bold; }
     .print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 14px; background: #2A6F97; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; z-index: 9999; }
     @media print { .print-btn { display: none !important; } }
   `;
+
 
   const html = `<!doctype html>
 <html lang="pt-BR">
@@ -119,6 +127,8 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
 <body>
   <button class="print-btn" onclick="window.print()">Imprimir</button>
   <div class="apac-page">
+    <img id="apac-template" class="apac-template" src="${templateUrl}" alt="Laudo APAC" />
+
     <!-- 1 - Nome do estabelecimento solicitante -->
     ${V(38, 8, unidadeNome, 140)}
     <!-- 2 - CNES -->
@@ -174,4 +184,21 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   w.document.open();
   w.document.write(html);
   w.document.close();
+
+  const img = w.document.getElementById("apac-template") as HTMLImageElement | null;
+  const printNow = () => {
+    try { w.focus(); w.print(); } catch (e) { console.error(e); }
+  };
+  if (img?.complete && img.naturalWidth > 0) {
+    printNow();
+  } else if (img) {
+    img.onload = printNow;
+    img.onerror = () => {
+      console.error("Template APAC não carregou:", templateUrl);
+      printNow();
+    };
+  } else {
+    printNow();
+  }
 }
+
