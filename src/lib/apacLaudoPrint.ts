@@ -148,7 +148,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     }
     .sus-header {
       display: grid;
-      grid-template-columns: 25mm 18mm 1fr;
+      grid-template-columns: 24mm 17mm 1fr;
       align-items: center;
       padding: .8mm 1.2mm;
       column-gap: 1.2mm;
@@ -319,10 +319,9 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     <div class="apac-sheet">
       <div class="apac-header">
         <div class="sus-header">
-          <div class="sus-mark"><span class="a"></span><span class="b"></span><span class="c"></span></div>
-          <div class="sus-word">SUS</div>
+          <div class="sus-logo"><div class="sus-mark"><span class="a"></span><span class="b"></span><span class="c"></span></div><div class="sus-word">SUS</div></div>
           <div>Sistema<br>Único de<br>Saúde</div>
-          <div style="grid-column:3;grid-row:1;justify-self:end">Ministério<br>da<br>Saúde</div>
+          <div>Ministério<br>da<br>Saúde</div>
         </div>
         <div class="apac-main-title">
           <div>LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE<br>PROCEDIMENTO AMBULATORIAL</div>
