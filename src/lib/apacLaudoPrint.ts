@@ -103,19 +103,8 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   const unidadeNome = opts?.unidadeNome || "";
   const cnesUnidade = opts?.cnesUnidade || "";
 
-  // Logo oficial do SUS (igual ao modelo do Laudo APAC) — SVG inline para fidelidade
-  const SUS_LOGO_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60">
-      <rect x="0" y="0" width="60" height="60" fill="#ffffff"/>
-      <g fill="#000000">
-        <rect x="24" y="4"  width="12" height="52"/>
-        <rect x="4"  y="18" width="52" height="12"/>
-        <rect x="4"  y="40" width="52" height="6"/>
-      </g>
-    </svg>`
-  )}`;
-  const logoLeft = SUS_LOGO_SVG;
-  // Logo direita: logo institucional configurada (se houver), senão fallback
+  // Bloco-logo SUS / Ministério da Saúde (replica visual do modelo oficial APAC)
+  // Logo direita: logo institucional configurada (opcional)
   let logoRight = "";
   try {
     const cfg = await loadDocumentConfig();
@@ -126,47 +115,63 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   }
 
   const css = `
-    @page { size: A4 portrait; margin: 6mm; }
+    @page { size: A4 portrait; margin: 5mm; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #000; line-height: 1.15; }
-    .sheet { width: 100%; }
-    .header { display: flex; align-items: stretch; border: 1px solid #000; }
-    .header .logo { width: 70px; padding: 2px; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; }
-    .header .logo img { max-width: 100%; max-height: 36px; object-fit: contain; }
-    .header .sus { width: 130px; padding: 3px 4px; border-right: 1px solid #000; font-size: 7pt; line-height: 1.15; display: flex; align-items: center; }
-    .header .title { flex: 1; padding: 4px; text-align: center; font-style: italic; font-weight: bold; font-size: 9.5pt; display: flex; align-items: center; justify-content: center; }
-    .header .fls { width: 50px; padding: 3px; border-left: 1px solid #000; text-align: right; font-size: 7.5pt; font-weight: bold; display: flex; align-items: center; justify-content: flex-end; }
-    .header .logo-r { width: 70px; padding: 2px; border-left: 1px solid #000; display: flex; align-items: center; justify-content: center; }
-    .header .logo-r img { max-width: 100%; max-height: 36px; object-fit: contain; }
-    .section-title { background: #000; color: #fff; text-align: center; font-weight: bold; padding: 1px 2px; font-size: 7.5pt; border-left: 1px solid #000; border-right: 1px solid #000; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 7pt; color: #000; line-height: 1.1; }
+    .sheet { width: 200mm; min-height: 287mm; max-height: 287mm; margin: 0 auto; page-break-inside: avoid; page-break-after: avoid; }
+
+    /* Header */
+    .header { display: flex; align-items: stretch; border: 1px solid #000; height: 44px; }
+    .header .sus-logo { width: 38px; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; padding: 2px; }
+    .header .sus-logo svg { width: 100%; height: 100%; }
+    .header .sus-word { width: 56px; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18pt; letter-spacing: 1px; }
+    .header .sus-tx1, .header .sus-tx2 { width: 60px; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 6.5pt; font-weight: bold; line-height: 1.05; padding: 1px 2px; }
+    .header .title { flex: 1; padding: 4px; text-align: center; font-style: italic; font-weight: bold; font-size: 10pt; display: flex; align-items: center; justify-content: center; }
+    .header .fls { width: 46px; padding: 3px; border-left: 1px solid #000; text-align: right; font-size: 8pt; font-weight: bold; font-style: italic; display: flex; align-items: flex-start; justify-content: flex-end; }
+    .header .logo-r { width: 60px; border-left: 1px solid #000; display: flex; align-items: center; justify-content: center; padding: 2px; }
+    .header .logo-r img { max-width: 100%; max-height: 40px; object-fit: contain; }
+
+    /* Sections */
+    .section-title { background: #000; color: #fff; text-align: center; font-weight: bold; padding: 0 2px; font-size: 7.5pt; line-height: 12px; height: 12px; border-left: 1px solid #000; border-right: 1px solid #000; }
     .row { display: flex; border-left: 1px solid #000; border-right: 1px solid #000; }
     .row:last-child { border-bottom: 1px solid #000; }
-    .cell { border-top: 1px solid #000; border-right: 1px solid #000; padding: 1px 3px; min-height: 18px; position: relative; }
+    .cell { border-top: 1px solid #000; border-right: 1px solid #000; padding: 0 3px 1px; min-height: 17px; position: relative; overflow: hidden; }
     .cell:last-child { border-right: none; }
-    .lbl { font-size: 5.5pt; font-weight: normal; display: block; line-height: 1.05; }
-    .val { font-size: 8pt; font-weight: bold; min-height: 10px; padding-top: 0; }
+    .lbl { font-size: 5.5pt; font-weight: bold; text-transform: uppercase; display: block; line-height: 1.05; }
+    .val { font-size: 7.5pt; font-weight: bold; min-height: 9px; }
     .grow { flex: 1; }
     .w-cnes { width: 110px; }
     .w-pront { width: 110px; }
-    .w-sexo { width: 80px; }
-    .w-raca { width: 110px; }
-    .w-data { width: 90px; }
-    .w-ddd { width: 36px; }
-    .w-tel { width: 110px; }
+    .w-sexo { width: 78px; }
+    .w-raca { width: 100px; }
+    .w-data { width: 86px; }
+    .w-ddd { width: 34px; }
+    .w-tel { width: 108px; }
     .w-ibge { width: 90px; }
-    .w-uf { width: 40px; }
+    .w-uf { width: 38px; }
     .w-cep { width: 80px; }
     .sex-box { display: inline-block; border: 1px solid #000; width: 11px; height: 10px; vertical-align: middle; text-align: center; line-height: 10px; font-weight: bold; font-size: 7pt; }
-    .empty-block { min-height: 14px; }
-    .obs-block { min-height: 40px; }
-    .print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 14px; background: #2A6F97; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; }
-    @media print { .print-btn { display: none; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .sheet { page-break-inside: avoid; } }
+    .empty-block { min-height: 11px; }
+    .obs-block { min-height: 34px; }
+    .print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 14px; background: #2A6F97; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; z-index: 9999; }
+    @media print {
+      .print-btn, .no-print { display: none !important; }
+      body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .sheet { page-break-inside: avoid; page-break-after: avoid; }
+    }
   `;
 
-  const logoLeftHtml = logoLeft
-    ? `<img src="${esc(logoLeft)}" alt="Logo" />`
-    : `<b style="font-size:9pt">SUS</b>`;
+  // Símbolo SUS simplificado (cruz com barras onduladas) — fidelidade visual ao modelo
+  const susSymbol = `
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+      <g fill="#000">
+        <path d="M6 8 q6 -6 14 0 q8 6 14 0 v6 q-6 6 -14 0 q-8 -6 -14 0 z"/>
+        <path d="M6 20 q6 -6 14 0 q8 6 14 0 v4 q-6 6 -14 0 q-8 -6 -14 0 z"/>
+        <path d="M6 30 q6 -6 14 0 q8 6 14 0 v3 q-6 6 -14 0 q-8 -6 -14 0 z"/>
+      </g>
+    </svg>`;
+
   const logoRightHtml = logoRight ? `<div class="logo-r"><img src="${esc(logoRight)}" alt="Logo" /></div>` : "";
 
   const html = `<!doctype html>
@@ -180,12 +185,15 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   <button class="print-btn" onclick="window.print()">Imprimir</button>
   <div class="sheet">
     <div class="header">
-      <div class="logo">${logoLeftHtml}</div>
-      <div class="sus"><div><b>Sistema Único de Saúde</b><br/>Ministério da Saúde</div></div>
+      <div class="sus-logo">${susSymbol}</div>
+      <div class="sus-word">SUS</div>
+      <div class="sus-tx1">Sistema<br/>Único de<br/>Saúde</div>
+      <div class="sus-tx2">Ministério<br/>da<br/>Saúde</div>
       <div class="title">LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE<br/>PROCEDIMENTO AMBULATORIAL</div>
       <div class="fls">fls.1/2</div>
       ${logoRightHtml}
     </div>
+
 
     <div class="section-title">IDENTIFICAÇÃO DO ESTABELECIMENTO DE SAÚDE (SOLICITANTE)</div>
     <div class="row">
