@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
+import { buildLaudoApacHTML } from "@/lib/apacLaudoPrint";
 
 interface ApacLaudoModalProps {
   open: boolean;
@@ -12,367 +13,57 @@ interface ApacLaudoModalProps {
 }
 
 /**
- * ETAPA 0 — Estrutura visual vazia do Laudo APAC.
- * Todos os campos exibem "TESTE" como placeholder.
- * Nenhum dado real do paciente é utilizado nesta etapa.
+ * Laudo APAC — ficha A4 (1 página) construída em HTML/CSS.
+ * Apenas leitura dos dados do paciente; não persiste nada.
  */
-function escapeHtml(s: unknown): string {
-  if (s === null || s === undefined) return "";
-  const str = String(s);
-  if (str === "undefined" || str === "null" || str === "NaN") return "";
-  return str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
-
-function buildSkeletonHTML(paciente: any | null): string {
-  const T = "TESTE";
-  // Caixa individual de 1 dígito
-  const box = (ch = "") => `<span class="box">${ch}</span>`;
-  const boxes = (n: number, ch = "T") => Array.from({ length: n }, () => box(ch)).join("");
-
-  // ETAPA 1 — dados reais apenas para campos 3, 9 e 14
-  // O objeto paciente vindo da página usa camelCase (dataNascimento, nomeMae, ...),
-  // mas alguns lugares ainda usam snake_case. Aceitamos ambos.
-  const p = paciente || {};
-  const cd = p.custom_data || {};
-  const pick = (...keys: string[]) => {
-    for (const k of keys) {
-      const v = (p as any)[k];
-      if (v !== undefined && v !== null && v !== "") return v;
-    }
-    for (const k of keys) {
-      const v = (cd as any)[k];
-      if (v !== undefined && v !== null && v !== "") return v;
-    }
-    return "";
-  };
-  const nomePaciente = escapeHtml(pick("nome"));
-  const nomeMae = escapeHtml(pick("nomeMae", "nome_mae"));
-  const municipio = escapeHtml(pick("municipio"));
-
-
-  // ETAPA 2 — Campos de caixa isolados: CNS, Data de Nascimento, CEP
-  // Helper: preenche N caixas com dígitos da string; faltantes ficam vazias.
-  const digitBoxes = (raw: unknown, n: number) => {
-    const digits = String(raw ?? "").replace(/\D/g, "").slice(0, n);
-    return Array.from({ length: n }, (_, i) => `<span class="box">${digits[i] ?? ""}</span>`).join("");
-  };
-  // CNS: 15 dígitos isolados, container próprio
-  const cnsHTML = `<span class="boxes">${digitBoxes(pick("cns"), 15)}</span>`;
-  // Data de nascimento: DD / MM / AAAA — três containers separados
-  const dn = String(pick("dataNascimento", "data_nascimento") ?? "");
-  let dd = "", mm = "", aaaa = "";
-  // Aceita "YYYY-MM-DD" (ISO) e "DD/MM/YYYY"
-  const iso = dn.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const br = dn.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (iso) { aaaa = iso[1]; mm = iso[2]; dd = iso[3]; }
-  else if (br) { dd = br[1]; mm = br[2]; aaaa = br[3]; }
-  const dataNascHTML =
-    `<span class="boxes">${digitBoxes(dd, 2)}</span>` +
-    `<span class="sep">/</span>` +
-    `<span class="boxes">${digitBoxes(mm, 2)}</span>` +
-    `<span class="sep">/</span>` +
-    `<span class="boxes">${digitBoxes(aaaa, 4)}</span>`;
-  // CEP: 8 dígitos isolados, container próprio
-  const cepHTML = `<span class="boxes">${digitBoxes(pick("cep"), 8)}</span>`;
-
-
-  // ETAPA 3 — demais campos da identificação do paciente
-  const prontuario = escapeHtml(pick("numeroProntuario", "numero_prontuario", "prontuario", "codigo", "id"));
-
-  const sexoRaw = String(pick("sexo") ?? "").trim().toLowerCase();
-  const isMasc = sexoRaw.startsWith("m");
-  const isFem  = sexoRaw.startsWith("f");
-  const checkMasc = isMasc ? "✕" : "";
-  const checkFem  = isFem  ? "✕" : "";
-  const sexoHTML =
-    `<span class="check">${checkMasc}</span>Masc. &nbsp; ` +
-    `<span class="check">${checkFem}</span>Fem.`;
-
-  const racaCor = escapeHtml(pick("racaCor", "raca_cor"));
-
-  // Telefones: DDD (2 caixas) + número (9 caixas) — containers separados
-  const splitTel = (raw: unknown) => {
-    const d = String(raw ?? "").replace(/\D/g, "");
-    let ddd = "", num = "";
-    if (d.length >= 10) {
-      ddd = d.slice(0, 2);
-      num = d.slice(2, 11);
-    } else {
-      num = d.slice(0, 9);
-    }
-    return { ddd, num };
-  };
-  const telPac = splitTel(pick("telefone"));
-  const tel10HTML =
-    `(<span class="boxes">${digitBoxes(telPac.ddd, 2)}</span>) ` +
-    `<span class="boxes">${digitBoxes(telPac.num, 9)}</span>`;
-
-  const nomeResp = escapeHtml(pick("nomeResponsavel", "nome_responsavel"));
-  const telResp = splitTel(pick("telefoneResponsavel", "telefone_responsavel"));
-  const tel12HTML =
-    `(<span class="boxes">${digitBoxes(telResp.ddd, 2)}</span>) ` +
-    `<span class="boxes">${digitBoxes(telResp.num, 9)}</span>`;
-
-  // Endereço composto (campo 13) — tolerante a campos vazios
-  const enderecoComposto = (): string => {
-    const tipo = String(pick("tipoLogradouro", "tipo_logradouro") ?? "").trim();
-    const logr = String(pick("logradouro", "endereco") ?? "").trim();
-    const num  = String(pick("numero") ?? "").trim();
-    const bairro = String(pick("bairro") ?? "").trim();
-    const rua = [tipo, logr].filter(Boolean).join(" ").trim();
-    const parts: string[] = [];
-    if (rua) parts.push(rua);
-    if (num) parts.push(`Nº ${num}`);
-    if (bairro) parts.push(bairro);
-    return escapeHtml(parts.join(", "));
-  };
-  const enderecoHTML = enderecoComposto();
-
-  const ibgeHTML = `<span class="boxes">${digitBoxes(pick("ibgeMunicipio", "ibge_municipio", "codIbge", "cod_ibge"), 7)}</span>`;
-  const uf = escapeHtml(pick("uf"));
-
-
-  const band = (text: string) => `<div class="band">${text}</div>`;
-  const field = (num: string, label: string, value: string = T, opts: { w?: string; h?: number } = {}) => `
-    <div class="field" style="${opts.w ? `width:${opts.w};` : ""}${opts.h ? `min-height:${opts.h}px;` : ""}">
-      <div class="flabel">${num} - ${label}</div>
-      <div class="fvalue">${value}</div>
-    </div>`;
-
-  return `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"/>
-<title>Laudo APAC</title>
-<style>
-  @page { size: A4 portrait; margin: 6mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #ddd; font-family: Arial, Helvetica, sans-serif; color: #000; }
-  body { padding: 8px; }
-  .sheet {
-    width: 198mm; min-height: 285mm; margin: 0 auto; background: #fff;
-    padding: 4mm 5mm; font-size: 8px; line-height: 1.15;
-  }
-  @media print {
-    html, body { background: #fff; }
-    body { padding: 0; }
-    .sheet { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; }
-  }
-  .header { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 4px; }
-  .logo { width: 38px; height: 38px; border: 1px solid #000; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; }
-  .header-text { flex: 1; text-align: center; font-size: 9px; line-height: 1.2; }
-  .header-text .t1 { font-weight: bold; font-size: 10px; }
-  .header-text .t2 { font-size: 8px; }
-  .header-text .title { font-weight: bold; font-size: 10px; margin-top: 3px; text-transform: uppercase; }
-  .fls { font-size: 8px; min-width: 40px; text-align: right; }
-  .band {
-    background: #000; color: #fff; font-weight: bold; font-size: 8.5px;
-    padding: 2px 4px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.2px;
-  }
-  .row { display: flex; border-left: 1px solid #000; border-top: 1px solid #000; }
-  .row > .field { border-right: 1px solid #000; border-bottom: 1px solid #000; }
-  .field { padding: 1px 3px 2px; flex: 1; min-height: 24px; }
-  .flabel { font-size: 6.8px; font-weight: bold; text-transform: uppercase; line-height: 1.1; }
-  .fvalue { font-size: 8.5px; padding-top: 1px; min-height: 11px; }
-  .boxes { display: inline-flex; gap: 1px; }
-  .box {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 10px; height: 12px; border: 1px solid #000;
-    font-size: 8px; font-family: Arial, sans-serif; background: #fff;
-  }
-  .sep { display: inline-block; width: 6px; text-align: center; font-weight: bold; }
-  .check { display: inline-block; width: 9px; height: 9px; border: 1px solid #000; margin-right: 2px; vertical-align: middle; }
-  .inline-group { display: flex; gap: 8px; align-items: center; }
-  .multi { min-height: 36px; }
-  .tall { min-height: 48px; }
-</style>
-</head>
-<body>
-<div class="sheet">
-
-  <!-- CABEÇALHO -->
-  <div class="header">
-    <div class="logo">SUS</div>
-    <div class="header-text">
-      <div class="t1">Sistema Único de Saúde</div>
-      <div class="t2">Ministério da Saúde</div>
-      <div class="title">Laudo para Solicitação / Autorização de Procedimento Ambulatorial</div>
-    </div>
-    <div class="fls">fls.1/2</div>
-  </div>
-
-  <!-- 1. ESTABELECIMENTO SOLICITANTE -->
-  ${band("Identificação do Estabelecimento de Saúde (Solicitante)")}
-  <div class="row">
-    ${field("1", "Nome do Estabelecimento Solicitante", T, { w: "70%" })}
-    ${field("2", "CNES", `<span class="boxes">${boxes(7)}</span>`, { w: "30%" })}
-  </div>
-
-  <!-- 2. IDENTIFICAÇÃO DO PACIENTE -->
-  ${band("Identificação do Paciente")}
-  <div class="row">
-    ${field("3", "Nome do Paciente", nomePaciente, { w: "75%" })}
-    ${field("4", "Nº do Prontuário", prontuario, { w: "25%" })}
-  </div>
-  <div class="row">
-    ${field("5", "Cartão Nacional de Saúde (CNS)", cnsHTML, { w: "55%" })}
-    ${field("6", "Data de Nascimento", dataNascHTML, { w: "25%" })}
-    ${field("7", "Sexo", sexoHTML, { w: "10%" })}
-    ${field("8", "Raça / Cor", racaCor, { w: "10%" })}
-  </div>
-  <div class="row">
-    ${field("9", "Nome da Mãe", nomeMae, { w: "60%" })}
-    ${field("10", "Telefone de Contato", tel10HTML, { w: "40%" })}
-  </div>
-  <div class="row">
-    ${field("11", "Nome do Responsável", nomeResp, { w: "60%" })}
-    ${field("12", "Telefone do Responsável", tel12HTML, { w: "40%" })}
-  </div>
-  <div class="row">
-    ${field("13", "Endereço (Rua, Nº, Bairro)", enderecoHTML, { w: "100%" })}
-  </div>
-  <div class="row">
-    ${field("14", "Município de Residência", municipio, { w: "50%" })}
-    ${field("15", "Cód. IBGE Município", ibgeHTML, { w: "30%" })}
-    ${field("16", "UF", uf, { w: "8%" })}
-    ${field("17", "CEP", cepHTML, { w: "12%" })}
-  </div>
-
-  <!-- 3. PROCEDIMENTO SOLICITADO -->
-  ${band("Procedimento Solicitado")}
-  <div class="row">
-    ${field("18", "Código do Procedimento", `<span class="boxes">${boxes(10)}</span>`, { w: "30%" })}
-    ${field("19", "Nome do Procedimento", T, { w: "55%" })}
-    ${field("20", "Quantidade", T, { w: "15%" })}
-  </div>
-
-  <!-- 4. PROCEDIMENTOS SECUNDÁRIOS -->
-  ${band("Procedimento(s) Secundário(s)")}
-  <div class="row">
-    ${field("21", "CID-10 Principal", T, { w: "20%" })}
-    ${field("22", "CID-10 Secundário", T, { w: "20%" })}
-    ${field("23", "CID-10 Causas Associadas", T, { w: "20%" })}
-    ${field("24", "CID-10 Outras Causas", T, { w: "20%" })}
-    ${field("25", "Indicação Clínica", T, { w: "20%" })}
-  </div>
-  <div class="row">
-    ${field("26", "Procedimento Secundário 1", T, { w: "33.33%" })}
-    ${field("27", "Quantidade", T, { w: "16.66%" })}
-    ${field("28", "Procedimento Secundário 2", T, { w: "33.33%" })}
-    ${field("29", "Quantidade", T, { w: "16.66%" })}
-  </div>
-  <div class="row">
-    ${field("30", "Procedimento Secundário 3", T, { w: "33.33%" })}
-    ${field("31", "Quantidade", T, { w: "16.66%" })}
-    ${field("32", "Procedimento Secundário 4", T, { w: "33.33%" })}
-    ${field("33", "Quantidade", T, { w: "16.66%" })}
-  </div>
-  <div class="row">
-    ${field("34", "Procedimento Secundário 5", T, { w: "83.33%" })}
-    ${field("35", "Quantidade", T, { w: "16.66%" })}
-  </div>
-
-  <!-- 5. JUSTIFICATIVA -->
-  ${band("Justificativa do(s) Procedimento(s) Solicitado(s)")}
-  <div class="row">
-    ${field("36", "Sinais e Sintomas Clínicos", T, { w: "100%", h: 28 })}
-  </div>
-  <div class="row">
-    ${field("37", "Condições que Justificam o Caráter de Urgência (se for o caso)", T, { w: "100%", h: 22 })}
-  </div>
-  <div class="row">
-    ${field("38", "Resultados de Provas Diagnósticas", T, { w: "100%", h: 22 })}
-  </div>
-  <div class="row">
-    ${field("39", "Diagnóstico Inicial", T, { w: "60%" })}
-    ${field("40", "CID-10 Principal", T, { w: "40%" })}
-  </div>
-
-  <!-- 6. SOLICITAÇÃO -->
-  ${band("Solicitação")}
-  <div class="row">
-    ${field("41", "Nome do Profissional Solicitante", T, { w: "50%" })}
-    ${field("42", "Documento do Profissional Solicitante", T, { w: "20%" })}
-    ${field("43", "Nº do Documento", T, { w: "15%" })}
-    ${field("44", "Estado", T, { w: "8%" })}
-    ${field("45", "Data da Solicitação",
-      `<span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(4)}</span>`,
-      { w: "7%" })}
-  </div>
-
-  <!-- 7. AUTORIZAÇÃO -->
-  ${band("Autorização")}
-  <div class="row">
-    ${field("46", "Nº da APAC Principal Autorizada", `<span class="boxes">${boxes(13)}</span>`, { w: "30%" })}
-    ${field("47", "Período de Validade da APAC (Início)",
-      `<span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(4)}</span>`,
-      { w: "20%" })}
-    ${field("48", "Período de Validade da APAC (Fim)",
-      `<span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(4)}</span>`,
-      { w: "20%" })}
-    ${field("49", "Cód. do Órgão Emissor", T, { w: "15%" })}
-    ${field("50", "Cód. do Órgão Autorizador", T, { w: "15%" })}
-  </div>
-  <div class="row">
-    ${field("51", "Nome do Profissional Autorizador", T, { w: "60%" })}
-    ${field("52", "Documento do Autorizador", T, { w: "25%" })}
-    ${field("53", "Data da Autorização",
-      `<span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(4)}</span>`,
-      { w: "15%" })}
-  </div>
-
-  <!-- 8. EXECUTANTE -->
-  ${band("Identificação do Estabelecimento de Saúde (Executante)")}
-  <div class="row">
-    ${field("54", "Nome do Estabelecimento Executante", T, { w: "70%" })}
-    ${field("55", "CNES", `<span class="boxes">${boxes(7)}</span>`, { w: "30%" })}
-  </div>
-
-</div>
-</body></html>`;
-}
-
 export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !paciente) return;
     const iframe = iframeRef.current;
-    if (!iframe) return;
-    const doc = iframe.contentDocument;
+    const doc = iframe?.contentDocument;
     if (!doc) return;
     doc.open();
-    doc.write(buildSkeletonHTML(paciente));
+    doc.write(buildLaudoApacHTML(paciente));
     doc.close();
   }, [open, paciente]);
 
-  const handlePrint = async () => {
-    // ETAPA 1: baixar o PDF oficial intacto. A função buildSkeletonHTML e os
-    // helpers de coleta de dados automáticos permanecem preservados acima
-    // para uso na ETAPA 2 (preenchimento sobre o PDF oficial).
+  const handlePrint = () => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
     try {
-      const { baixarLaudoApacTemplate } = await import("@/lib/apacLaudoPdf");
-      const nome = (paciente?.nome || "laudo-apac").toString().replace(/\s+/g, "_").toLowerCase();
-      await baixarLaudoApacTemplate(`${nome}-laudo-apac.pdf`);
+      win.focus();
+      win.print();
     } catch (e) {
-      console.error(e);
+      console.error("[ApacLaudo] print failed", e);
     }
   };
+
+  const carregando = !paciente;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl w-[95vw] h-[92vh] p-0 flex flex-col gap-0">
         <DialogHeader className="px-4 py-3 border-b flex flex-row items-center justify-between space-y-0">
-          <DialogTitle>Laudo APAC — {paciente?.nome || "(estrutura visual)"}</DialogTitle>
-          <Button size="sm" onClick={handlePrint} className="mr-8">
+          <DialogTitle>Laudo APAC{paciente?.nome ? ` — ${paciente.nome}` : ""}</DialogTitle>
+          <Button size="sm" onClick={handlePrint} className="mr-8" disabled={carregando}>
             <Printer className="w-4 h-4 mr-2" />
             Imprimir
           </Button>
         </DialogHeader>
         <div className="flex-1 bg-muted overflow-hidden">
-          <iframe
-            ref={iframeRef}
-            title="Pré-visualização Laudo APAC"
-            className="w-full h-full bg-white border-0"
-          />
+          {carregando ? (
+            <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
+              Carregando dados do paciente...
+            </div>
+          ) : (
+            <iframe
+              ref={iframeRef}
+              title="Pré-visualização Laudo APAC"
+              className="w-full h-full bg-white border-0"
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>
