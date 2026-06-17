@@ -44,6 +44,7 @@ import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/com
 import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
 import { imprimirLaudoApac } from "@/lib/apacLaudoPrint";
+import ApacLaudoModal from "@/components/pacientes/ApacLaudoModal";
 import { FileSignature } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
