@@ -325,7 +325,15 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     <div class="apac-sheet">
       <div class="apac-header">
         <div class="sus-header">
-          <div class="sus-logo"><div class="sus-mark"><span class="a"></span><span class="b"></span><span class="c"></span></div><div class="sus-word">SUS</div></div>
+          <div class="sus-logo">
+            <div class="sus-mark">
+              <svg viewBox="0 0 60 56" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#000" stroke-width="1.5">
+                <path d="M14 4 H36 V20 H56 V36 H36 V52 H14 V36 H4 V20 H14 Z" />
+                <path d="M20 28 Q30 14 44 22 Q50 30 38 36 Q28 42 22 36" stroke-width="1.2"/>
+              </svg>
+            </div>
+            <div class="sus-word">SUS</div>
+          </div>
           <div>Sistema<br>Único de<br>Saúde</div>
           <div>Ministério<br>da<br>Saúde</div>
         </div>
