@@ -127,6 +127,8 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
 <body>
   <button class="print-btn" onclick="window.print()">Imprimir</button>
   <div class="apac-page">
+    <img id="apac-template" class="apac-template" src="${templateUrl}" alt="Laudo APAC" />
+
     <!-- 1 - Nome do estabelecimento solicitante -->
     ${V(38, 8, unidadeNome, 140)}
     <!-- 2 - CNES -->
@@ -182,4 +184,21 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   w.document.open();
   w.document.write(html);
   w.document.close();
+
+  const img = w.document.getElementById("apac-template") as HTMLImageElement | null;
+  const printNow = () => {
+    try { w.focus(); w.print(); } catch (e) { console.error(e); }
+  };
+  if (img?.complete && img.naturalWidth > 0) {
+    printNow();
+  } else if (img) {
+    img.onload = printNow;
+    img.onerror = () => {
+      console.error("Template APAC não carregou:", templateUrl);
+      printNow();
+    };
+  } else {
+    printNow();
+  }
 }
+
