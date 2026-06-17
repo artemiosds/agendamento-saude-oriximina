@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
@@ -18,16 +18,7 @@ interface ApacLaudoModalProps {
  */
 export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  useEffect(() => {
-    if (!open || !paciente) return;
-    const iframe = iframeRef.current;
-    const doc = iframe?.contentDocument;
-    if (!doc) return;
-    doc.open();
-    doc.write(buildLaudoApacHTML(paciente));
-    doc.close();
-  }, [open, paciente]);
+  const laudoHTML = useMemo(() => (open && paciente ? buildLaudoApacHTML(paciente) : ""), [open, paciente]);
 
   const handlePrint = () => {
     const win = iframeRef.current?.contentWindow;
@@ -59,8 +50,10 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
             </div>
           ) : (
             <iframe
+              key={paciente?.id || "apac-laudo"}
               ref={iframeRef}
               title="Pré-visualização Laudo APAC"
+              srcDoc={laudoHTML}
               className="w-full h-full bg-white border-0"
             />
           )}
