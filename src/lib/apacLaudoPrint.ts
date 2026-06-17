@@ -103,16 +103,26 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   const unidadeNome = opts?.unidadeNome || "";
   const cnesUnidade = opts?.cnesUnidade || "";
 
-  // Carrega logos configuradas em "Impressão e Documentos" com fallback institucional
-  let logoLeft = "";
+  // Logo oficial do SUS (igual ao modelo do Laudo APAC) — SVG inline para fidelidade
+  const SUS_LOGO_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60">
+      <rect x="0" y="0" width="60" height="60" fill="#ffffff"/>
+      <g fill="#000000">
+        <rect x="24" y="4"  width="12" height="52"/>
+        <rect x="4"  y="18" width="52" height="12"/>
+        <rect x="4"  y="40" width="52" height="6"/>
+      </g>
+    </svg>`
+  )}`;
+  const logoLeft = SUS_LOGO_SVG;
+  // Logo direita: logo institucional configurada (se houver), senão fallback
   let logoRight = "";
   try {
     const cfg = await loadDocumentConfig();
     const pick = (u: string) => (u && (u.startsWith("http") || u.startsWith("/")) ? u : "");
-    logoLeft = pick(cfg.logoEsquerda) || logoSmsFallback;
-    logoRight = pick(cfg.logoDireita) || "";
+    logoRight = pick(cfg.logoDireita) || pick(cfg.logoEsquerda) || logoSmsFallback;
   } catch {
-    logoLeft = logoSmsFallback;
+    logoRight = logoSmsFallback;
   }
 
   const css = `
