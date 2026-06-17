@@ -116,40 +116,48 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   }
 
   const css = `
-    @page { size: A4 portrait; margin: 8mm; }
+    @page { size: A4 portrait; margin: 6mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #000; margin: 0; }
+    html, body { margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #000; line-height: 1.15; }
     .sheet { width: 100%; }
     .header { display: flex; align-items: stretch; border: 1px solid #000; }
-    .header .logo { width: 18%; padding: 4px; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10pt; }
-    .header .sus { width: 22%; padding: 4px; border-right: 1px solid #000; font-size: 7.5pt; line-height: 1.15; }
-    .header .title { flex: 1; padding: 6px; text-align: center; font-style: italic; font-weight: bold; font-size: 11pt; display: flex; align-items: center; justify-content: center; }
-    .header .fls { width: 60px; padding: 4px; border-left: 1px solid #000; text-align: right; font-size: 8pt; font-weight: bold; }
-    .section-title { background: #000; color: #fff; text-align: center; font-weight: bold; padding: 3px; font-size: 9pt; border-left: 1px solid #000; border-right: 1px solid #000; }
+    .header .logo { width: 70px; padding: 2px; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; }
+    .header .logo img { max-width: 100%; max-height: 36px; object-fit: contain; }
+    .header .sus { width: 130px; padding: 3px 4px; border-right: 1px solid #000; font-size: 7pt; line-height: 1.15; display: flex; align-items: center; }
+    .header .title { flex: 1; padding: 4px; text-align: center; font-style: italic; font-weight: bold; font-size: 9.5pt; display: flex; align-items: center; justify-content: center; }
+    .header .fls { width: 50px; padding: 3px; border-left: 1px solid #000; text-align: right; font-size: 7.5pt; font-weight: bold; display: flex; align-items: center; justify-content: flex-end; }
+    .header .logo-r { width: 70px; padding: 2px; border-left: 1px solid #000; display: flex; align-items: center; justify-content: center; }
+    .header .logo-r img { max-width: 100%; max-height: 36px; object-fit: contain; }
+    .section-title { background: #000; color: #fff; text-align: center; font-weight: bold; padding: 1px 2px; font-size: 7.5pt; border-left: 1px solid #000; border-right: 1px solid #000; }
     .row { display: flex; border-left: 1px solid #000; border-right: 1px solid #000; }
     .row:last-child { border-bottom: 1px solid #000; }
-    .cell { border-top: 1px solid #000; border-right: 1px solid #000; padding: 2px 4px; min-height: 28px; position: relative; }
+    .cell { border-top: 1px solid #000; border-right: 1px solid #000; padding: 1px 3px; min-height: 18px; position: relative; }
     .cell:last-child { border-right: none; }
-    .lbl { font-size: 6.5pt; font-weight: normal; display: block; }
-    .val { font-size: 9.5pt; font-weight: bold; min-height: 14px; padding-top: 1px; }
+    .lbl { font-size: 5.5pt; font-weight: normal; display: block; line-height: 1.05; }
+    .val { font-size: 8pt; font-weight: bold; min-height: 10px; padding-top: 0; }
     .grow { flex: 1; }
-    .w-cnes { width: 130px; }
-    .w-pront { width: 130px; }
-    .w-sexo { width: 90px; }
-    .w-raca { width: 130px; }
-    .w-data { width: 110px; }
-    .w-ddd { width: 50px; }
-    .w-tel { width: 130px; }
-    .w-ibge { width: 110px; }
-    .w-uf { width: 60px; }
-    .w-cep { width: 110px; }
-    .sex-box { display: inline-block; border: 1px solid #000; width: 14px; height: 12px; vertical-align: middle; text-align: center; line-height: 12px; font-weight: bold; }
-    .obs { min-height: 110px; }
-    .empty-block { min-height: 24px; }
-    .obs-block { min-height: 90px; }
+    .w-cnes { width: 110px; }
+    .w-pront { width: 110px; }
+    .w-sexo { width: 80px; }
+    .w-raca { width: 110px; }
+    .w-data { width: 90px; }
+    .w-ddd { width: 36px; }
+    .w-tel { width: 110px; }
+    .w-ibge { width: 90px; }
+    .w-uf { width: 40px; }
+    .w-cep { width: 80px; }
+    .sex-box { display: inline-block; border: 1px solid #000; width: 11px; height: 10px; vertical-align: middle; text-align: center; line-height: 10px; font-weight: bold; font-size: 7pt; }
+    .empty-block { min-height: 14px; }
+    .obs-block { min-height: 40px; }
     .print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 14px; background: #2A6F97; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; }
-    @media print { .print-btn { display: none; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    @media print { .print-btn { display: none; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .sheet { page-break-inside: avoid; } }
   `;
+
+  const logoLeftHtml = logoLeft
+    ? `<img src="${esc(logoLeft)}" alt="Logo" />`
+    : `<b style="font-size:9pt">SUS</b>`;
+  const logoRightHtml = logoRight ? `<div class="logo-r"><img src="${esc(logoRight)}" alt="Logo" /></div>` : "";
 
   const html = `<!doctype html>
 <html lang="pt-BR">
@@ -162,10 +170,11 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   <button class="print-btn" onclick="window.print()">Imprimir</button>
   <div class="sheet">
     <div class="header">
-      <div class="logo">SUS</div>
-      <div class="sus"><b>Sistema Único de Saúde</b><br/>Ministério da Saúde</div>
+      <div class="logo">${logoLeftHtml}</div>
+      <div class="sus"><div><b>Sistema Único de Saúde</b><br/>Ministério da Saúde</div></div>
       <div class="title">LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE<br/>PROCEDIMENTO AMBULATORIAL</div>
       <div class="fls">fls.1/2</div>
+      ${logoRightHtml}
     </div>
 
     <div class="section-title">IDENTIFICAÇÃO DO ESTABELECIMENTO DE SAÚDE (SOLICITANTE)</div>
