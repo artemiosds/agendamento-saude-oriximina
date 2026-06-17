@@ -16,11 +16,25 @@ interface ApacLaudoModalProps {
  * Todos os campos exibem "TESTE" como placeholder.
  * Nenhum dado real do paciente é utilizado nesta etapa.
  */
-function buildSkeletonHTML(): string {
+function escapeHtml(s: unknown): string {
+  if (s === null || s === undefined) return "";
+  const str = String(s);
+  if (str === "undefined" || str === "null" || str === "NaN") return "";
+  return str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+function buildSkeletonHTML(paciente: any | null): string {
   const T = "TESTE";
   // Caixa individual de 1 dígito
   const box = (ch = "") => `<span class="box">${ch}</span>`;
   const boxes = (n: number, ch = "T") => Array.from({ length: n }, () => box(ch)).join("");
+
+  // ETAPA 1 — dados reais apenas para campos 3, 9 e 14
+  const p = paciente || {};
+  const cd = p.custom_data || {};
+  const nomePaciente = escapeHtml(p.nome) || "";
+  const nomeMae = escapeHtml(p.nome_mae) || "";
+  const municipio = escapeHtml(p.municipio || cd.municipio) || "";
 
   const band = (text: string) => `<div class="band">${text}</div>`;
   const field = (num: string, label: string, value: string = T, opts: { w?: string; h?: number } = {}) => `
