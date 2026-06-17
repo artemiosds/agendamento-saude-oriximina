@@ -295,6 +295,12 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .h-17 { min-height: 17mm; }
     .h-31 { min-height: 31mm; }
     .no-margin { margin-bottom: 0; }
+    .span-grid { display: grid; gap: .9mm; }
+    .span-grid .apac-field, .span-grid .sex-field { min-height: 0; height: 100%; }
+    .g-r1 { grid-row: 1; }
+    .g-r2 { grid-row: 2; }
+    .g-r3 { grid-row: 3; }
+    .g-span2 { grid-row: 1 / span 2; grid-column: 3; }
     .doc-line { display: flex; align-items: center; gap: 4mm; justify-content: center; font-size: 6px; padding-top: 3.2mm; }
     .doc-circle { letter-spacing: .6mm; white-space: nowrap; }
     .validade { text-align: center; font-size: 7px; padding-top: 3.4mm; }
