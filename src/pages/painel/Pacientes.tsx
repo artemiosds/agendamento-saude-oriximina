@@ -1618,13 +1618,7 @@ const Pacientes: React.FC = () => {
               variant="ghost"
               size="sm"
               className="w-full min-w-0"
-              onClick={() => {
-                const u = unidades.find((x) => x.id === (detalhePaciente.unidadeId || user?.unidadeId)) as any;
-                imprimirLaudoApac(detalhePaciente as any, {
-                  unidadeNome: u?.nome || "",
-                  cnesUnidade: u?.cnes || (u as any)?.cnes_codigo || "",
-                });
-              }}
+              onClick={() => openApacLaudo(detalhePaciente)}
             >
               <FileSignature className="w-4 h-4 mr-1.5" />
               <span className="truncate">Laudo APAC</span>
