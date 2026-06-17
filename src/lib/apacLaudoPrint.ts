@@ -2,7 +2,7 @@
 // e sobrepondo os dados do paciente em posicionamento absoluto.
 
 import { getCodigoIbge } from "@/lib/municipiosIbge";
-import apacTemplate from "@/assets/apac-laudo-template.jpg.asset.json";
+
 
 type AnyPaciente = Record<string, any>;
 
