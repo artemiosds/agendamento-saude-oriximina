@@ -363,8 +363,17 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
           ${field("4 - Nº DO PRONTUÁRIO", prontuario, "h-8")}
         </div>
         <div class="apac-row" style="grid-template-columns: 97mm 34mm 33mm 1fr">
-          ${digitField("5 - CARTÃO NACIONAL DE SAÚDE (CNS)", cns, 15, "h-8")}
-          ${dateField("6 - DATA DE NASCIMENTO", dataNasc, "h-8")}
+          ${digitField("5 - CARTÃO NACIONAL DE SAÚDE (CNS)", cnsDigits, 15, "h-8")}
+          <div class="apac-field date-slot-field h-8">
+            <div class="apac-label">6 - DATA DE NASCIMENTO</div>
+            <div class="date-slots">
+              <span class="date-slot dd">${esc(nascDia)}</span>
+              <span class="date-sep">/</span>
+              <span class="date-slot mm">${esc(nascMes)}</span>
+              <span class="date-sep">/</span>
+              <span class="date-slot yy">${esc(nascAno)}</span>
+            </div>
+          </div>
           <div class="sex-field"><div class="apac-label">7 - SEXO</div>Masc.${checkbox(sexo === "M")} Fem.${checkbox(sexo === "F")}</div>
           ${field("8 - RAÇA/COR", racaCor, "h-8")}
         </div>
