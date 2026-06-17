@@ -486,18 +486,6 @@ function _buildLaudoApacHTML(paciente: AnyPaciente, opts?: { unidadeNome?: strin
   </div>
 </body>
 </html>`;
-
-  const w = window.open("", "_blank", "width=900,height=1200");
-  if (!w) {
-    alert("Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.");
-    return;
-  }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  const printNow = () => {
-    try { w.focus(); w.print(); } catch (e) { console.error(e); }
-  };
-  window.setTimeout(printNow, 250);
+  return html;
 }
 
