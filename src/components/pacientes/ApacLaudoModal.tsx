@@ -36,6 +36,31 @@ function buildSkeletonHTML(paciente: any | null): string {
   const nomeMae = escapeHtml(p.nome_mae) || "";
   const municipio = escapeHtml(p.municipio || cd.municipio) || "";
 
+  // ETAPA 2 — Campos de caixa isolados: CNS, Data de Nascimento, CEP
+  // Helper: preenche N caixas com dígitos da string; faltantes ficam vazias.
+  const digitBoxes = (raw: unknown, n: number) => {
+    const digits = String(raw ?? "").replace(/\D/g, "").slice(0, n);
+    return Array.from({ length: n }, (_, i) => `<span class="box">${digits[i] ?? ""}</span>`).join("");
+  };
+  // CNS: 15 dígitos isolados, container próprio
+  const cnsHTML = `<span class="boxes">${digitBoxes(p.cns, 15)}</span>`;
+  // Data de nascimento: DD / MM / AAAA — três containers separados
+  const dn = String(p.data_nascimento ?? "");
+  let dd = "", mm = "", aaaa = "";
+  // Aceita "YYYY-MM-DD" (ISO) e "DD/MM/YYYY"
+  const iso = dn.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const br = dn.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (iso) { aaaa = iso[1]; mm = iso[2]; dd = iso[3]; }
+  else if (br) { dd = br[1]; mm = br[2]; aaaa = br[3]; }
+  const dataNascHTML =
+    `<span class="boxes">${digitBoxes(dd, 2)}</span>` +
+    `<span class="sep">/</span>` +
+    `<span class="boxes">${digitBoxes(mm, 2)}</span>` +
+    `<span class="sep">/</span>` +
+    `<span class="boxes">${digitBoxes(aaaa, 4)}</span>`;
+  // CEP: 8 dígitos isolados, container próprio
+  const cepHTML = `<span class="boxes">${digitBoxes(p.cep || cd.cep, 8)}</span>`;
+
   const band = (text: string) => `<div class="band">${text}</div>`;
   const field = (num: string, label: string, value: string = T, opts: { w?: string; h?: number } = {}) => `
     <div class="field" style="${opts.w ? `width:${opts.w};` : ""}${opts.h ? `min-height:${opts.h}px;` : ""}">
@@ -117,8 +142,8 @@ function buildSkeletonHTML(paciente: any | null): string {
     ${field("4", "Nº do Prontuário", T, { w: "25%" })}
   </div>
   <div class="row">
-    ${field("5", "Cartão Nacional de Saúde (CNS)", `<span class="boxes">${boxes(15)}</span>`, { w: "55%" })}
-    ${field("6", "Data de Nascimento", `<span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(2)}</span><span class="sep">/</span><span class="boxes">${boxes(4)}</span>`, { w: "25%" })}
+    ${field("5", "Cartão Nacional de Saúde (CNS)", cnsHTML, { w: "55%" })}
+    ${field("6", "Data de Nascimento", dataNascHTML, { w: "25%" })}
     ${field("7", "Sexo", `<span class="check"></span>Masc. &nbsp; <span class="check"></span>Fem.`, { w: "10%" })}
     ${field("8", "Raça / Cor", T, { w: "10%" })}
   </div>
@@ -141,7 +166,7 @@ function buildSkeletonHTML(paciente: any | null): string {
     ${field("14", "Município de Residência", municipio, { w: "50%" })}
     ${field("15", "Cód. IBGE Município", `<span class="boxes">${boxes(7)}</span>`, { w: "30%" })}
     ${field("16", "UF", T, { w: "8%" })}
-    ${field("17", "CEP", `<span class="boxes">${boxes(8)}</span>`, { w: "12%" })}
+    ${field("17", "CEP", cepHTML, { w: "12%" })}
   </div>
 
   <!-- 3. PROCEDIMENTO SOLICITADO -->
