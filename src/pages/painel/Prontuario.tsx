@@ -2262,14 +2262,16 @@ const ProntuarioPage: React.FC = () => {
 
       if (editId) {
         if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
-        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("id").maybeSingle();
+        const { data: updated, error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId).select("*").maybeSingle();
         if (error) throw error;
         if (!updated?.id) throw new Error("Nenhum prontuário foi atualizado. Verifique o ID do registro e as permissões.");
+        applySavedProntuarioToCache(updated);
       } else {
-        const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("id").single();
+        const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("*").single();
         if (error) throw error;
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        if (inserted) applySavedProntuarioToCache(inserted);
       }
 
       if (prontuarioId) {
