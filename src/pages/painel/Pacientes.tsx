@@ -1431,6 +1431,21 @@ const Pacientes: React.FC = () => {
                     >
                       <Printer className="w-3.5 h-3.5" />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      onClick={() => {
+                        const u = unidades.find((x) => x.id === (p.unidadeId || user?.unidadeId)) as any;
+                        imprimirLaudoApac(p as any, {
+                          unidadeNome: u?.nome || "",
+                          cnesUnidade: u?.cnes || (u as any)?.cnes_codigo || "",
+                        });
+                      }}
+                      title="Imprimir Laudo APAC"
+                    >
+                      <FileSignature className="w-3.5 h-3.5" />
+                    </Button>
                     {canAddToFila && !naFila && (
                       <Button
                         size="sm"
