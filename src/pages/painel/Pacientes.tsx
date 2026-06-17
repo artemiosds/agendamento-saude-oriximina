@@ -1550,6 +1550,13 @@ const Pacientes: React.FC = () => {
         </div>
       )}
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
+      <ApacLaudoModal
+        open={!!apacLaudo}
+        onOpenChange={(o) => { if (!o) setApacLaudo(null); }}
+        paciente={apacLaudo?.paciente || null}
+        unidadeNome={apacLaudo?.unidadeNome}
+        cnesUnidade={apacLaudo?.cnesUnidade}
+      />
 
       {/* Modal Detalhes - Paciente (página de Pacientes) */}
       {detalhePaciente && (() => {
