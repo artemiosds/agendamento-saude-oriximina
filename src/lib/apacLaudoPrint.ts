@@ -2,9 +2,7 @@
 // Layout baseado no formulário oficial SUS (fls. 1/2).
 // Helper isolado: não altera fluxo, cadastro ou outras impressões.
 
-import { loadDocumentConfig } from "@/lib/printLayout";
 import { getCodigoIbge } from "@/lib/municipiosIbge";
-import logoSmsFallback from "@/assets/logo-sms-oriximina.jpeg";
 
 type AnyPaciente = Record<string, any>;
 
