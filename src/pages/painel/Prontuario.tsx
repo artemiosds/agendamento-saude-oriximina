@@ -1956,14 +1956,15 @@ const ProntuarioPage: React.FC = () => {
       if (prontId) {
         // Preserva profissional original se o form não tiver no autosave
         if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
-        const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
+        const { data: updated, error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId).select('*').maybeSingle();
         if (error) throw error;
+        if (updated) applySavedProntuarioToCache(updated);
         console.log("[performAutosave] Draft atualizado:", prontId);
       } else {
         const { data: inserted, error } = await (supabase as any)
           .from('prontuarios')
           .insert(record)
-          .select('id')
+          .select('*')
           .single();
         if (error) throw error;
         if (inserted?.id) {
@@ -1971,6 +1972,7 @@ const ProntuarioPage: React.FC = () => {
           console.log("[performAutosave] Novo draft criado:", prontId);
           setEditId(prontId);
           editIdRef.current = prontId;
+          applySavedProntuarioToCache(inserted);
           // Reset status de faltas ao registrar novo atendimento
           try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: record.paciente_id }); } catch {}
         }
