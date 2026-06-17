@@ -238,7 +238,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       display: grid;
     }
     .digit-boxes span {
-      border-left: 1px solid #999;
+      border-left: 1px solid #000;
       display: flex;
       align-items: center;
       justify-content: center;
