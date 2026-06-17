@@ -43,6 +43,8 @@ import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
 import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
+import { imprimirLaudoApac } from "@/lib/apacLaudoPrint";
+import { FileSignature } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 
@@ -1429,6 +1431,21 @@ const Pacientes: React.FC = () => {
                     >
                       <Printer className="w-3.5 h-3.5" />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      onClick={() => {
+                        const u = unidades.find((x) => x.id === (p.unidadeId || user?.unidadeId)) as any;
+                        imprimirLaudoApac(p as any, {
+                          unidadeNome: u?.nome || "",
+                          cnesUnidade: u?.cnes || (u as any)?.cnes_codigo || "",
+                        });
+                      }}
+                      title="Imprimir Laudo APAC"
+                    >
+                      <FileSignature className="w-3.5 h-3.5" />
+                    </Button>
                     {canAddToFila && !naFila && (
                       <Button
                         size="sm"
@@ -1587,11 +1604,26 @@ const Pacientes: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              className="w-full col-span-2 min-w-0"
+              className="w-full min-w-0"
               onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
             >
               <Printer className="w-4 h-4 mr-1.5" />
               <span className="truncate">Imprimir Só Dados</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full min-w-0"
+              onClick={() => {
+                const u = unidades.find((x) => x.id === (detalhePaciente.unidadeId || user?.unidadeId)) as any;
+                imprimirLaudoApac(detalhePaciente as any, {
+                  unidadeNome: u?.nome || "",
+                  cnesUnidade: u?.cnes || (u as any)?.cnes_codigo || "",
+                });
+              }}
+            >
+              <FileSignature className="w-4 h-4 mr-1.5" />
+              <span className="truncate">Laudo APAC</span>
             </Button>
           </div>
         );
