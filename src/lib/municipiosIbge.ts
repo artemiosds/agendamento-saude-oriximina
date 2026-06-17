@@ -22,6 +22,15 @@ const MAP: Record<string, string> = {
   "monte alegre|pa": "1504802",
   "belem|pa": "1501402",
   "manaus|am": "1302603",
+  "sao paulo|sp": "3550308",
+  "rio de janeiro|rj": "3304557",
+  "brasilia|df": "5300108",
+  "salvador|ba": "2927408",
+  "fortaleza|ce": "2304400",
+  "belo horizonte|mg": "3106200",
+  "curitiba|pr": "4106902",
+  "porto alegre|rs": "4314902",
+  "recife|pe": "2611606",
 };
 
 export function getCodigoIbge(municipio?: string, uf?: string): string {

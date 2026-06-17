@@ -158,16 +158,15 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       line-height: 1.12;
     }
     .sus-mark {
-      width: 12mm;
-      height: 11mm;
-      position: relative;
+      width: 13mm;
+      height: 12mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .sus-mark span { position: absolute; border: .8px solid #000; background: #fff; }
-    .sus-mark .a { width: 8mm; height: 8mm; left: 5mm; top: 0; }
-    .sus-mark .b { width: 16mm; height: 5mm; left: 0; top: 4.2mm; transform: skew(28deg); }
-    .sus-mark .c { width: 6mm; height: 11mm; left: 9mm; top: 3mm; transform: skew(-18deg); }
-    .sus-logo { display: flex; align-items: center; gap: .7mm; }
-    .sus-word { font-family: Arial Black, Arial, sans-serif; font-size: 13px; letter-spacing: 0; }
+    .sus-mark svg { width: 100%; height: 100%; display: block; }
+    .sus-logo { display: flex; flex-direction: column; align-items: center; gap: 0; }
+    .sus-word { font-family: Arial Black, Arial, sans-serif; font-size: 11px; letter-spacing: .3px; margin-top: -1mm; }
     .apac-main-title {
       display: flex;
       align-items: center;
@@ -201,7 +200,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .apac-row { display: grid; gap: .9mm; margin-bottom: .9mm; }
     .apac-row:last-child { margin-bottom: 0; }
     .apac-field {
-      border: 1px solid #777;
+      border: 1px solid #000;
       min-height: 7.2mm;
       position: relative;
       padding: 2.6mm 1mm .5mm;
@@ -239,7 +238,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       display: grid;
     }
     .digit-boxes span {
-      border-left: 1px solid #999;
+      border-left: 1px solid #000;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -252,7 +251,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .date-value { font-size: 8px; font-weight: 700; letter-spacing: .4mm; padding-bottom: .5mm; }
     .date-value:empty::before { content: '      /      /'; font-weight: 400; }
     .sex-field {
-      border: 1px solid #777;
+      border: 1px solid #000;
       min-height: 7.2mm;
       position: relative;
       padding-top: 2.8mm;
@@ -265,7 +264,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       display: inline-flex;
       width: 4.2mm;
       height: 4.2mm;
-      border: 1px solid #999;
+      border: 1px solid #000;
       align-items: center;
       justify-content: center;
       margin: 0 1mm .2mm .5mm;
@@ -274,7 +273,7 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
       vertical-align: middle;
     }
     .phone-field { display: grid; grid-template-columns: 9mm 1fr; min-height: 8.6mm; }
-    .phone-ddd, .phone-number { border: 1px solid #777; position: relative; min-height: 8.6mm; }
+    .phone-ddd, .phone-number { border: 1px solid #000; position: relative; min-height: 8.6mm; }
     .phone-number { border-left: 0; }
     .mini-label { text-align: center; font-size: 5.5px; padding-top: 1mm; }
     .mini-value { text-align: center; font-size: 7px; font-weight: 700; margin-top: .8mm; }
@@ -326,7 +325,15 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     <div class="apac-sheet">
       <div class="apac-header">
         <div class="sus-header">
-          <div class="sus-logo"><div class="sus-mark"><span class="a"></span><span class="b"></span><span class="c"></span></div><div class="sus-word">SUS</div></div>
+          <div class="sus-logo">
+            <div class="sus-mark">
+              <svg viewBox="0 0 60 56" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#000" stroke-width="1.5">
+                <path d="M14 4 H36 V20 H56 V36 H36 V52 H14 V36 H4 V20 H14 Z" />
+                <path d="M20 28 Q30 14 44 22 Q50 30 38 36 Q28 42 22 36" stroke-width="1.2"/>
+              </svg>
+            </div>
+            <div class="sus-word">SUS</div>
+          </div>
           <div>Sistema<br>Único de<br>Saúde</div>
           <div>Ministério<br>da<br>Saúde</div>
         </div>
