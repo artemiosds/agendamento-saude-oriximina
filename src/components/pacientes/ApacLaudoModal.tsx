@@ -16,11 +16,25 @@ interface ApacLaudoModalProps {
  * Todos os campos exibem "TESTE" como placeholder.
  * Nenhum dado real do paciente é utilizado nesta etapa.
  */
-function buildSkeletonHTML(): string {
+function escapeHtml(s: unknown): string {
+  if (s === null || s === undefined) return "";
+  const str = String(s);
+  if (str === "undefined" || str === "null" || str === "NaN") return "";
+  return str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+function buildSkeletonHTML(paciente: any | null): string {
   const T = "TESTE";
   // Caixa individual de 1 dígito
   const box = (ch = "") => `<span class="box">${ch}</span>`;
   const boxes = (n: number, ch = "T") => Array.from({ length: n }, () => box(ch)).join("");
+
+  // ETAPA 1 — dados reais apenas para campos 3, 9 e 14
+  const p = paciente || {};
+  const cd = p.custom_data || {};
+  const nomePaciente = escapeHtml(p.nome) || "";
+  const nomeMae = escapeHtml(p.nome_mae) || "";
+  const municipio = escapeHtml(p.municipio || cd.municipio) || "";
 
   const band = (text: string) => `<div class="band">${text}</div>`;
   const field = (num: string, label: string, value: string = T, opts: { w?: string; h?: number } = {}) => `
@@ -99,7 +113,7 @@ function buildSkeletonHTML(): string {
   <!-- 2. IDENTIFICAÇÃO DO PACIENTE -->
   ${band("Identificação do Paciente")}
   <div class="row">
-    ${field("3", "Nome do Paciente", T, { w: "75%" })}
+    ${field("3", "Nome do Paciente", nomePaciente, { w: "75%" })}
     ${field("4", "Nº do Prontuário", T, { w: "25%" })}
   </div>
   <div class="row">
@@ -109,7 +123,7 @@ function buildSkeletonHTML(): string {
     ${field("8", "Raça / Cor", T, { w: "10%" })}
   </div>
   <div class="row">
-    ${field("9", "Nome da Mãe", T, { w: "60%" })}
+    ${field("9", "Nome da Mãe", nomeMae, { w: "60%" })}
     ${field("10", "Telefone de Contato",
       `(<span class="boxes">${boxes(2)}</span>) <span class="boxes">${boxes(9)}</span>`,
       { w: "40%" })}
@@ -124,7 +138,7 @@ function buildSkeletonHTML(): string {
     ${field("13", "Endereço (Rua, Nº, Bairro)", T, { w: "100%" })}
   </div>
   <div class="row">
-    ${field("14", "Município de Residência", T, { w: "50%" })}
+    ${field("14", "Município de Residência", municipio, { w: "50%" })}
     ${field("15", "Cód. IBGE Município", `<span class="boxes">${boxes(7)}</span>`, { w: "30%" })}
     ${field("16", "UF", T, { w: "8%" })}
     ${field("17", "CEP", `<span class="boxes">${boxes(8)}</span>`, { w: "12%" })}
@@ -234,9 +248,9 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     const doc = iframe.contentDocument;
     if (!doc) return;
     doc.open();
-    doc.write(buildSkeletonHTML());
+    doc.write(buildSkeletonHTML(paciente));
     doc.close();
-  }, [open]);
+  }, [open, paciente]);
 
   const handlePrint = () => {
     const win = iframeRef.current?.contentWindow;
