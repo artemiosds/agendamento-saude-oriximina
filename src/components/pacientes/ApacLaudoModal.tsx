@@ -195,33 +195,29 @@ function buildSkeletonHTML(paciente: any | null): string {
   ${band("Identificação do Paciente")}
   <div class="row">
     ${field("3", "Nome do Paciente", nomePaciente, { w: "75%" })}
-    ${field("4", "Nº do Prontuário", T, { w: "25%" })}
+    ${field("4", "Nº do Prontuário", prontuario, { w: "25%" })}
   </div>
   <div class="row">
     ${field("5", "Cartão Nacional de Saúde (CNS)", cnsHTML, { w: "55%" })}
     ${field("6", "Data de Nascimento", dataNascHTML, { w: "25%" })}
-    ${field("7", "Sexo", `<span class="check"></span>Masc. &nbsp; <span class="check"></span>Fem.`, { w: "10%" })}
-    ${field("8", "Raça / Cor", T, { w: "10%" })}
+    ${field("7", "Sexo", sexoHTML, { w: "10%" })}
+    ${field("8", "Raça / Cor", racaCor, { w: "10%" })}
   </div>
   <div class="row">
     ${field("9", "Nome da Mãe", nomeMae, { w: "60%" })}
-    ${field("10", "Telefone de Contato",
-      `(<span class="boxes">${boxes(2)}</span>) <span class="boxes">${boxes(9)}</span>`,
-      { w: "40%" })}
+    ${field("10", "Telefone de Contato", tel10HTML, { w: "40%" })}
   </div>
   <div class="row">
-    ${field("11", "Nome do Responsável", T, { w: "60%" })}
-    ${field("12", "Telefone do Responsável",
-      `(<span class="boxes">${boxes(2)}</span>) <span class="boxes">${boxes(9)}</span>`,
-      { w: "40%" })}
+    ${field("11", "Nome do Responsável", nomeResp, { w: "60%" })}
+    ${field("12", "Telefone do Responsável", tel12HTML, { w: "40%" })}
   </div>
   <div class="row">
-    ${field("13", "Endereço (Rua, Nº, Bairro)", T, { w: "100%" })}
+    ${field("13", "Endereço (Rua, Nº, Bairro)", enderecoHTML, { w: "100%" })}
   </div>
   <div class="row">
     ${field("14", "Município de Residência", municipio, { w: "50%" })}
-    ${field("15", "Cód. IBGE Município", `<span class="boxes">${boxes(7)}</span>`, { w: "30%" })}
-    ${field("16", "UF", T, { w: "8%" })}
+    ${field("15", "Cód. IBGE Município", ibgeHTML, { w: "30%" })}
+    ${field("16", "UF", uf, { w: "8%" })}
     ${field("17", "CEP", cepHTML, { w: "12%" })}
   </div>
 
