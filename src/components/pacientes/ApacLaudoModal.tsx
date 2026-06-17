@@ -329,10 +329,17 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     doc.close();
   }, [open, paciente]);
 
-  const handlePrint = () => {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    try { win.focus(); win.print(); } catch (e) { console.error(e); }
+  const handlePrint = async () => {
+    // ETAPA 1: baixar o PDF oficial intacto. A função buildSkeletonHTML e os
+    // helpers de coleta de dados automáticos permanecem preservados acima
+    // para uso na ETAPA 2 (preenchimento sobre o PDF oficial).
+    try {
+      const { baixarLaudoApacTemplate } = await import("@/lib/apacLaudoPdf");
+      const nome = (paciente?.nome || "laudo-apac").toString().replace(/\s+/g, "_").toLowerCase();
+      await baixarLaudoApacTemplate(`${nome}-laudo-apac.pdf`);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
