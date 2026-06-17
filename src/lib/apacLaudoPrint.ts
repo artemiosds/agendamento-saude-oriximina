@@ -52,8 +52,13 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
   const prontuario =
     paciente?.numeroProntuario || paciente?.numero_prontuario || cd.numeroProntuario || cd.numero_prontuario ||
     (paciente?.id ? String(paciente.id).slice(0, 8).toUpperCase() : "");
-  const cns = paciente?.cns || cd.cns || "";
-  const dataNasc = formatDataBR(paciente?.dataNascimento || paciente?.data_nascimento || cd.data_nascimento);
+  const cnsDigits = onlyDigits(paciente?.cns || cd.cns || "").slice(0, 15);
+  const rawDataNasc = paciente?.dataNascimento || paciente?.data_nascimento || cd.data_nascimento || "";
+  const dataNascMatch = String(rawDataNasc).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const nascDia = dataNascMatch ? dataNascMatch[3] : "";
+  const nascMes = dataNascMatch ? dataNascMatch[2] : "";
+  const nascAno = dataNascMatch ? dataNascMatch[1] : "";
+  
   const sexo = labelSexo(paciente?.sexo || cd.sexo);
   const racaCor = paciente?.raca_cor || cd.racaCor || cd.raca_cor || "";
   const nomeMae = paciente?.nomeMae || paciente?.nome_mae || cd.nome_mae || "";
@@ -250,6 +255,11 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .date-field { display: flex; align-items: flex-end; justify-content: center; }
     .date-value { font-size: 8px; font-weight: 700; letter-spacing: .4mm; padding-bottom: .5mm; }
     .date-value:empty::before { content: '      /      /'; font-weight: 400; }
+    .date-slot-field { padding: 2.6mm 1mm .8mm; }
+    .date-slots { display: flex; align-items: flex-end; justify-content: center; gap: 1mm; height: 100%; padding-top: 1mm; }
+    .date-slot { display: inline-block; border-bottom: 1px solid #000; min-width: 5mm; text-align: center; font-size: 8px; font-weight: 700; line-height: 1; padding: 0 .5mm; }
+    .date-slot.yy { min-width: 9mm; }
+    .date-sep { font-size: 9px; font-weight: 700; padding-bottom: 0; }
     .sex-field {
       border: 1px solid #000;
       min-height: 7.2mm;
@@ -358,8 +368,17 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
           ${field("4 - Nº DO PRONTUÁRIO", prontuario, "h-8")}
         </div>
         <div class="apac-row" style="grid-template-columns: 97mm 34mm 33mm 1fr">
-          ${digitField("5 - CARTÃO NACIONAL DE SAÚDE (CNS)", cns, 15, "h-8")}
-          ${dateField("6 - DATA DE NASCIMENTO", dataNasc, "h-8")}
+          ${digitField("5 - CARTÃO NACIONAL DE SAÚDE (CNS)", cnsDigits, 15, "h-8")}
+          <div class="apac-field date-slot-field h-8">
+            <div class="apac-label">6 - DATA DE NASCIMENTO</div>
+            <div class="date-slots">
+              <span class="date-slot dd">${esc(nascDia)}</span>
+              <span class="date-sep">/</span>
+              <span class="date-slot mm">${esc(nascMes)}</span>
+              <span class="date-sep">/</span>
+              <span class="date-slot yy">${esc(nascAno)}</span>
+            </div>
+          </div>
           <div class="sex-field"><div class="apac-label">7 - SEXO</div>Masc.${checkbox(sexo === "M")} Fem.${checkbox(sexo === "F")}</div>
           ${field("8 - RAÇA/COR", racaCor, "h-8")}
         </div>
