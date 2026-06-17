@@ -304,6 +304,15 @@ const Pacientes: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [search, pacientes]);
   const [importOpen, setImportOpen] = useState(false);
+  const [apacLaudo, setApacLaudo] = useState<{ paciente: any; unidadeNome: string; cnesUnidade: string } | null>(null);
+  const openApacLaudo = (p: any) => {
+    const u = unidades.find((x) => x.id === (p?.unidadeId || user?.unidadeId)) as any;
+    setApacLaudo({
+      paciente: p,
+      unidadeNome: u?.nome || "",
+      cnesUnidade: u?.cnes || u?.cnes_codigo || "",
+    });
+  };
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<PacienteFormData>(emptyPacienteForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
