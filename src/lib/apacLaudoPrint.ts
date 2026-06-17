@@ -255,6 +255,11 @@ export async function imprimirLaudoApac(paciente: AnyPaciente, opts?: { unidadeN
     .date-field { display: flex; align-items: flex-end; justify-content: center; }
     .date-value { font-size: 8px; font-weight: 700; letter-spacing: .4mm; padding-bottom: .5mm; }
     .date-value:empty::before { content: '      /      /'; font-weight: 400; }
+    .date-slot-field { padding: 2.6mm 1mm .8mm; }
+    .date-slots { display: flex; align-items: flex-end; justify-content: center; gap: 1mm; height: 100%; padding-top: 1mm; }
+    .date-slot { display: inline-block; border-bottom: 1px solid #000; min-width: 5mm; text-align: center; font-size: 8px; font-weight: 700; line-height: 1; padding: 0 .5mm; }
+    .date-slot.yy { min-width: 9mm; }
+    .date-sep { font-size: 9px; font-weight: 700; padding-bottom: 0; }
     .sex-field {
       border: 1px solid #000;
       min-height: 7.2mm;
