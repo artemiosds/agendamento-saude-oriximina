@@ -995,6 +995,23 @@ const ProntuarioPage: React.FC = () => {
     queryClient.invalidateQueries({ queryKey: prontuariosQueryKey });
   }, [queryClient, prontuariosQueryKey]);
 
+  // Sincronização pós-save: atualiza imediatamente cache de detalhe e lista
+  // com o registro retornado do banco, sem esperar refetch/realtime.
+  const applySavedProntuarioToCache = useCallback((saved: any) => {
+    if (!saved?.id) return;
+    queryClient.setQueryData(['prontuario', saved.id], saved);
+    queryClient.setQueryData<ProntuarioDB[]>(prontuariosQueryKey, (prev) => {
+      const list = Array.isArray(prev) ? [...prev] : [];
+      const idx = list.findIndex((p: any) => p.id === saved.id);
+      const lite: any = {};
+      LIST_COLS.split(',').forEach((c) => { lite[c] = (saved as any)[c]; });
+      if (idx >= 0) list[idx] = { ...list[idx], ...lite };
+      else list.unshift(lite);
+      return list;
+    });
+    queryClient.invalidateQueries({ queryKey: prontuariosQueryKey, refetchType: 'none' });
+  }, [queryClient, prontuariosQueryKey]);
+
   useRealtimeSubscription({
     tables: ['prontuarios', 'treatment_cycles', 'treatment_sessions'],
     onchange: silentRefreshProntuarios,
