@@ -483,7 +483,6 @@ function _buildLaudoApacHTML(paciente: AnyPaciente, opts?: { unidadeNome?: strin
       </div>
     </div>
   </div>
-  </div>
 </body>
 </html>`;
   return html;
