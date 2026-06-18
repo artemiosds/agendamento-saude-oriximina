@@ -44,8 +44,8 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     if (printing) return;
     setPrinting(true);
     try {
-      await templateRef.current?.waitReady(4000);
-      await printApacLaudo(paciente);
+      await templateRef.current?.waitReady(5000);
+      await printApacLaudo(paciente, templateRef.current?.svg || null);
     } catch (e) {
       console.error(e);
       toast.error("Não foi possível abrir a impressão. Tente novamente.");
@@ -58,8 +58,8 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     if (downloading) return;
     setDownloading(true);
     try {
-      await templateRef.current?.waitReady(4000);
-      await downloadApacLaudoPDF(templateRef.current?.element || null, paciente);
+      await templateRef.current?.waitReady(5000);
+      await downloadApacLaudoPDF(templateRef.current?.svg || null, paciente);
     } catch (e) {
       console.error(e);
       toast.error("Não foi possível gerar o PDF. Tente novamente.");
