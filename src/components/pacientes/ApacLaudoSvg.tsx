@@ -224,9 +224,7 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
           <clipPath id="clip-municipality">
             <rect x={F.municipality.x} y={F.municipality.y} width={F.municipality.width} height={F.municipality.height} />
           </clipPath>
-          <clipPath id="clip-state">
-            <rect x={F.state.x} y={F.state.y} width={F.state.width} height={F.state.height} />
-          </clipPath>
+          {/* UF é renderizada como 2 dígitos individuais — sem clipPath. */}
         </defs>
 
         {/* Imagem oficial — base do documento. */}
