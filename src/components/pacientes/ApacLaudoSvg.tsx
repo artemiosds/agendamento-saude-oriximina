@@ -287,12 +287,12 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
         <SvgFieldText value={data.racaCor} box={F.raceColor} clipId="clip-race-color" />
         <SvgFieldText value={data.nomeMae} box={F.motherName} clipId="clip-mother-name" />
 
-        <SvgDigits value={data.telDDD} boxes={F.patientPhone.ddd} />
+        <SvgFieldText value={data.telDDD} box={F.patientPhone.ddd} />
         <SvgDigits value={data.telNum} boxes={F.patientPhone.number} />
 
         <SvgFieldText value={data.nomeResponsavel} box={F.responsibleName} clipId="clip-responsible-name" />
 
-        <SvgDigits value={data.telRespDDD} boxes={F.responsiblePhone.ddd} />
+        <SvgFieldText value={data.telRespDDD} box={F.responsiblePhone.ddd} />
         <SvgDigits value={data.telRespNum} boxes={F.responsiblePhone.number} />
 
         <SvgFieldText value={data.endereco} box={F.address} clipId="clip-address" />
@@ -317,10 +317,10 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
             <DebugDigit box={F.sex.female} id="7.F" />
             <DebugTextBox box={F.raceColor} id="8" />
             <DebugTextBox box={F.motherName} id="9" />
-            {F.patientPhone.ddd.map((b, i) => <DebugDigit key={`10d-${i}`} box={b} id={i === 0 ? "10.DDD" : undefined} />)}
+            <DebugTextBox box={F.patientPhone.ddd} id="10.DDD" />
             {F.patientPhone.number.map((b, i) => <DebugDigit key={`10n-${i}`} box={b} id={i === 0 ? "10.N" : undefined} />)}
             <DebugTextBox box={F.responsibleName} id="11" />
-            {F.responsiblePhone.ddd.map((b, i) => <DebugDigit key={`12d-${i}`} box={b} id={i === 0 ? "12.DDD" : undefined} />)}
+            <DebugTextBox box={F.responsiblePhone.ddd} id="12.DDD" />
             {F.responsiblePhone.number.map((b, i) => <DebugDigit key={`12n-${i}`} box={b} id={i === 0 ? "12.N" : undefined} />)}
             <DebugTextBox box={F.address} id="13" />
             <DebugTextBox box={F.municipality} id="14" />

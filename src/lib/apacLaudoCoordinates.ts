@@ -110,10 +110,7 @@ export const APAC_SVG_FIELDS: ApacSvgFields = {
   //   Número: 9 caixas (vértices 1734,1798,1864,1928,1993,2058,2123,2187,
   //   2252,2317). cy=780 (centro das caixas inferiores, abaixo dos títulos).
   patientPhone: {
-    ddd: [
-      { cx: 1671, cy: 780, fontSize: 40 },
-      { cx: 1712, cy: 780, fontSize: 40 },
-    ],
+    ddd: { x: 1650, y: 748, width: 84, height: 64, fontSize: 40, align: "middle" },
     number: [
       { cx: 1766,   cy: 780, fontSize: 40 },
       { cx: 1831,   cy: 780, fontSize: 40 },
@@ -132,10 +129,7 @@ export const APAC_SVG_FIELDS: ApacSvgFields = {
 
   // 12 — Telefone do responsável — coordenadas próprias (cy=881)
   responsiblePhone: {
-    ddd: [
-      { cx: 1670, cy: 881, fontSize: 40 },
-      { cx: 1712, cy: 881, fontSize: 40 },
-    ],
+    ddd: { x: 1650, y: 849, width: 84, height: 64, fontSize: 40, align: "middle" },
     number: [
       { cx: 1765.5, cy: 881, fontSize: 40 },
       { cx: 1830,   cy: 881, fontSize: 40 },
