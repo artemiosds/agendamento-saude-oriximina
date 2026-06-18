@@ -191,6 +191,24 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
     [imgLoaded, imgError, ibgeLoading],
   );
 
+  // Modo calibração: clique no SVG imprime as coordenadas do viewBox
+  // (sistema 2480×3509), independentemente do zoom do modal.
+  const handleCalibrationClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!APAC_CALIBRATE) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const m = svg.getScreenCTM();
+    if (!m) return;
+    const p = pt.matrixTransform(m.inverse());
+    const x = Math.round(p.x);
+    const y = Math.round(p.y);
+    // eslint-disable-next-line no-console
+    console.log(`[APAC calibrate] x=${x}  y=${y}  → { cx: ${x}, cy: ${y} }`);
+  };
+
   return (
     <div ref={rootRef} className="apac-svg-wrap" style={{ width: "100%", height: "100%" }}>
       <svg
@@ -201,7 +219,8 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
-        style={{ display: "block", background: "#fff" }}
+        onClick={APAC_CALIBRATE ? handleCalibrationClick : undefined}
+        style={{ display: "block", background: "#fff", cursor: APAC_CALIBRATE ? "crosshair" : undefined }}
       >
         <defs>
           <clipPath id="clip-patient-name">
