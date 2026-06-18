@@ -67,8 +67,8 @@ export function buildOverlays(d: ApacLaudoData): Overlay[] {
   out.push({ kind: "digits", value: d.dataAAAA, startLeft: 122, top: 55.5, spacing: 3.0, count: 4, fontSize: D });
 
   // 7 - Sexo (X dentro do quadradinho)
-  out.push({ kind: "check", show: d.sexoMasc, left: 146.5, top: 57, fontSize: 11 });
-  out.push({ kind: "check", show: d.sexoFem, left: 163.5, top: 57, fontSize: 11 });
+  out.push({ kind: "check", show: d.sexoMasc, left: 150, top: 57.5, fontSize: 11 });
+  out.push({ kind: "check", show: d.sexoFem, left: 168, top: 57.5, fontSize: 11 });
 
   // 8 - Raça/Cor
   out.push({ kind: "text", value: d.racaCor, left: 168, top: 55.5, width: 34, fontSize: F });
