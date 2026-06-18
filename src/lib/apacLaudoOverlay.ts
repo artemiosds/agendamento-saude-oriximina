@@ -155,8 +155,6 @@ export const APAC_PATIENT_FIELDS: ApacPatientFields = {
     { x: 2267, y: 1020, width: 50, height: 68 },
   ],
 };
-  zipCode: digitBoxesFromMm({ firstCenterMm: 166.15, spacingMm: 4.012, topMm: 87.3, count: 8 }),
-};
 
 // ---------- Render plan ----------
 // Estrutura usada pelo componente React e pelo HTML de impressão.
