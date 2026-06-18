@@ -40,75 +40,73 @@ export interface CheckOverlay {
 export type Overlay = TextOverlay | DigitsOverlay | CheckOverlay;
 
 // Coordenadas calibradas sobre a página oficial (210×297 mm).
+// Calibração feita por detecção de bordas no JPG oficial (2480×3509 px).
 export function buildOverlays(d: ApacLaudoData): Overlay[] {
   const out: Overlay[] = [];
   const F = 9;
   const D = 9;
 
-  // 3 - Nome do paciente
-  out.push({ kind: "text", value: d.nome, left: 12, top: 46.5, width: 144, fontSize: F });
-  // 4 - Nº prontuário
-  out.push({ kind: "text", value: d.prontuario, left: 159, top: 46.5, width: 43, fontSize: F });
+  // ---- Linha 3/4 (y interno 45.3–51.5 mm) ----
+  // 3 - Nome do paciente: box x ≈ 11.85–158.8 mm
+  out.push({ kind: "text", value: d.nome, left: 13, top: 47.5, width: 144, fontSize: F });
+  // 4 - Nº do prontuário: box x ≈ 158.8–196.4 mm
+  out.push({ kind: "text", value: d.prontuario, left: 160, top: 47.5, width: 35, fontSize: F });
 
-  // 5 - CNS (15 dígitos)
+  // ---- Linha 5/6/7/8 (y interno 51.5–59.8 mm) ----
+  // 5 - CNS: 15 caixas em x ≈ 11.85–104.5 mm  (spacing ≈ 6.18 mm)
   out.push({
     kind: "digits",
     value: d.cns,
-    startLeft: 14.7,
-    top: 55.5,
-    spacing: 5.66,
+    startLeft: 14.95,
+    top: 55.2,
+    spacing: 6.175,
     count: 15,
     fontSize: D,
   });
 
-  // 6 - Data de nascimento DD / MM / AAAA  (slashes a ~108 e ~119 mm)
-  out.push({ kind: "digits", value: d.dataDD, startLeft: 102, top: 55.5, spacing: 3.5, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.dataMM, startLeft: 112.5, top: 55.5, spacing: 3.5, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.dataAAAA, startLeft: 122, top: 55.5, spacing: 3.0, count: 4, fontSize: D });
+  // 6 - Data de nascimento (DD / MM / AAAA) box x ≈ 107.0–137.6 mm
+  // slashes desenhados no formulário ≈ 120.6 e 131.2 mm
+  out.push({ kind: "digits", value: d.dataDD,   startLeft: 112.1, top: 55.2, spacing: 3.5, count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.dataMM,   startLeft: 122.7, top: 55.2, spacing: 3.5, count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.dataAAAA, startLeft: 130.7, top: 55.2, spacing: 2.3, count: 4, fontSize: D });
 
-  // 7 - Sexo (X dentro do quadradinho)
-  out.push({ kind: "check", show: d.sexoMasc, left: 150, top: 57.5, fontSize: 11 });
-  out.push({ kind: "check", show: d.sexoFem, left: 168, top: 57.5, fontSize: 11 });
+  // 7 - Sexo: caixinhas em ≈ Masc(150.2) Fem(167.9) mm, centro y ≈ 56.3 mm
+  out.push({ kind: "check", show: d.sexoMasc, left: 150.2, top: 56.6, fontSize: 11 });
+  out.push({ kind: "check", show: d.sexoFem,  left: 167.9, top: 56.6, fontSize: 11 });
 
-  // 8 - Raça/Cor
-  out.push({ kind: "text", value: d.racaCor, left: 168, top: 55.5, width: 34, fontSize: F });
+  // 8 - Raça/Cor: box x ≈ 174.0–196.4 mm
+  out.push({ kind: "text", value: d.racaCor, left: 175, top: 55.2, width: 20, fontSize: F });
 
-  // 9 - Nome da mãe
-  out.push({ kind: "text", value: d.nomeMae, left: 12, top: 64.5, width: 125, fontSize: F });
-  // 10 - DDD + Nº telefone
-  out.push({ kind: "digits", value: d.telDDD, startLeft: 141.5, top: 64.5, spacing: 4.2, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telNum, startLeft: 152, top: 64.5, spacing: 5.5, count: 9, fontSize: D });
+  // ---- Linha 9/10 (y interno 61.7–67.97 mm) ----
+  // 9 - Nome da mãe: box x ≈ 11.85–139.7 mm
+  out.push({ kind: "text", value: d.nomeMae, left: 13, top: 63.8, width: 125, fontSize: F });
+  // 10 - DDD (2 caixas) + Nº telefone (8 caixas)
+  out.push({ kind: "digits", value: d.telDDD, startLeft: 144.0, top: 63.8, spacing: 5.5,   count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.telNum, startLeft: 155.0, top: 63.8, spacing: 5.493, count: 8, fontSize: D });
 
-  // 11 - Nome responsável
-  out.push({ kind: "text", value: d.nomeResponsavel, left: 12, top: 73.5, width: 125, fontSize: F });
-  // 12 - DDD + Nº telefone responsável
-  out.push({ kind: "digits", value: d.telRespDDD, startLeft: 141.5, top: 73.5, spacing: 4.2, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telRespNum, startLeft: 152, top: 73.5, spacing: 5.5, count: 9, fontSize: D });
+  // ---- Linha 11/12 (y interno 70.25–76.51 mm) ----
+  out.push({ kind: "text", value: d.nomeResponsavel, left: 13, top: 72.3, width: 125, fontSize: F });
+  out.push({ kind: "digits", value: d.telRespDDD, startLeft: 144.0, top: 72.3, spacing: 5.5,   count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.telRespNum, startLeft: 155.0, top: 72.3, spacing: 5.493, count: 8, fontSize: D });
 
-  // 13 - Endereço
-  out.push({ kind: "text", value: d.endereco, left: 12, top: 82, width: 190, fontSize: F });
+  // ---- Linha 13 (y interno 77.6–83.9 mm) ----
+  // 13 - Endereço: ocupa toda a largura interna ≈ 11.85–196.4 mm
+  out.push({ kind: "text", value: d.endereco, left: 13, top: 79.8, width: 182, fontSize: F });
 
-  // 14 - Município
-  out.push({ kind: "text", value: d.municipio, left: 12, top: 89, width: 117, fontSize: F });
-  // 15 - Cód. IBGE (7 dígitos)
-  out.push({
-    kind: "digits",
-    value: d.ibge,
-    startLeft: 136.8,
-    top: 89,
-    spacing: 4.23,
-    count: 7,
-    fontSize: D,
-  });
-  // 16 - UF
-  out.push({ kind: "text", value: d.uf, left: 168, top: 89, width: 8, fontSize: F, align: "center" });
-  // 17 - CEP (8 dígitos)
+  // ---- Linha 14/15/16/17 (y interno 86.1–92.3 mm) ----
+  // 14 - Município de residência: box x ≈ 11.85–124.05 mm
+  out.push({ kind: "text", value: d.municipio, left: 13, top: 88.3, width: 110, fontSize: F });
+  // 15 - Cód. IBGE (7 dígitos, sem caixas internas): box x ≈ 124.05–152.4 mm
+  out.push({ kind: "text", value: d.ibge, left: 126, top: 88.3, width: 26, fontSize: F });
+  // 16 - UF: box x ≈ 152.4–158.3 mm
+  out.push({ kind: "text", value: d.uf, left: 152.4, top: 88.3, width: 5.9, fontSize: F, align: "center" });
+  // 17 - CEP: 8 caixas em x ≈ 164.1–196.4 mm  (spacing ≈ 4.01 mm)
   out.push({
     kind: "digits",
     value: d.cep,
-    startLeft: 179.7,
-    top: 89,
-    spacing: 2.96,
+    startLeft: 166.15,
+    top: 88.3,
+    spacing: 4.012,
     count: 8,
     fontSize: D,
   });
