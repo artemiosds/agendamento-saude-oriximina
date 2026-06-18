@@ -112,9 +112,20 @@ export function normalizePaciente(paciente: AnyPaciente | null): ApacLaudoData {
   const pick = pickFn(p, cd);
 
   const sexoRaw = pick("sexo", "genero").toLowerCase();
-  const tel = splitTel(pick("telefone", "celular"));
+  // Campo 10 — Telefone de Contato. Usa exatamente o "Telefone Principal"
+  // do cadastro (paciente.telefone). Mantém fallbacks só para registros
+  // legados; nunca usa telefone secundário/responsável.
+  const telPrincipalRaw = pick(
+    "telefone_principal",
+    "telefone",
+    "celular",
+    "phone",
+    "contato_principal",
+  );
+  const tel = splitTel(telPrincipalRaw);
   const telR = splitTel(pick("telefone_responsavel", "telefoneResponsavel", "celular_responsavel"));
   const dn = splitData(pick("data_nascimento", "dataNascimento", "birth_date"));
+
 
   let prontuario = pick("numero_prontuario", "numeroProntuario", "prontuario", "codigo", "patient_code");
   if (isUuid(prontuario)) prontuario = "";
