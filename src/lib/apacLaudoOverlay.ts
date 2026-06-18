@@ -1,188 +1,223 @@
-// Coordenadas (em mm) e valores sobrepostos ao template oficial APAC.
-// Única fonte de verdade — usada tanto no preview quanto na impressão.
+// Mapa central de coordenadas dos campos 3 a 17 do Laudo APAC.
+// Todas as posições são pixels da imagem oficial (laudo-apac-oficial.jpg,
+// natural 2480×3509). A conversão para mm é feita exclusivamente por
+// imageBoxPxToMm — única fonte de coordenadas para preview, impressão e PDF.
 
-import type { ApacLaudoData } from "./apacLaudoData";
-
-// Import via Vite: a imagem é incluída no bundle e funciona em dev,
-// preview e produção. Sem dependência de caminhos /__l5e/ temporários.
 import laudoApacTemplate from "@/assets/laudo-apac-oficial.jpg";
+import {
+  type ApacBox,
+  A4_WIDTH_MM,
+  A4_HEIGHT_MM,
+  APAC_TEMPLATE_NATURAL_WIDTH,
+  APAC_TEMPLATE_NATURAL_HEIGHT,
+  boxFromMm,
+  digitBoxesFromMm,
+  imageBoxPxToMm,
+  getTextOverlayStyle,
+  getDigitOverlayStyle,
+} from "./apacCoordinateSystem";
+
 export const APAC_TEMPLATE_URL: string = laudoApacTemplate;
+export { A4_WIDTH_MM, A4_HEIGHT_MM, APAC_TEMPLATE_NATURAL_WIDTH, APAC_TEMPLATE_NATURAL_HEIGHT };
+export type { ApacBox };
 
-export const A4_WIDTH_MM = 210;
-export const A4_HEIGHT_MM = 297;
+// Modo calibração — quando true, desenha um retângulo em cada caixa.
+export const APAC_DEBUG = false;
 
-export interface TextOverlay {
-  kind: "text";
-  value: string;
-  left: number; // mm
-  top: number; // mm
-  width: number; // mm (clip)
-  fontSize: number; // pt
-  align?: "left" | "center";
+export interface ApacPatientFields {
+  patientName: ApacBox;       // 3
+  recordNumber: ApacBox;      // 4
+  cns: ApacBox[];             // 5 (15)
+  birthDate: { day: ApacBox; month: ApacBox; year: ApacBox }; // 6
+  sex: { male: ApacBox; female: ApacBox };                    // 7
+  raceColor: ApacBox;         // 8
+  motherName: ApacBox;        // 9
+  patientPhone: { ddd: ApacBox[]; number: ApacBox[] };        // 10
+  responsibleName: ApacBox;   // 11
+  responsiblePhone: { ddd: ApacBox[]; number: ApacBox[] };    // 12
+  address: ApacBox;           // 13
+  municipality: ApacBox;      // 14
+  ibgeCode: ApacBox[];        // 15 (7)
+  state: ApacBox;             // 16
+  zipCode: ApacBox[];         // 17 (8)
 }
 
-export interface DigitsOverlay {
-  kind: "digits";
-  value: string;
-  startLeft: number; // mm (centro do primeiro dígito)
-  top: number; // mm
-  spacing: number; // mm entre centros
-  count: number;
-  fontSize: number;
+// Coordenadas calibradas: pixels da imagem oficial, derivadas das
+// medições já validadas em mm. Para recalibrar um campo, substituir
+// boxFromMm(...) por { x, y, width, height } medidos diretamente em px.
+export const APAC_PATIENT_FIELDS: ApacPatientFields = {
+  // 3 — Nome do paciente
+  patientName: boxFromMm(13, 46.5, 144, 5),
+  // 4 — Nº do prontuário
+  recordNumber: boxFromMm(160, 46.5, 35, 5),
+  // 5 — CNS (15 caixas)
+  cns: digitBoxesFromMm({ firstCenterMm: 14.95, spacingMm: 6.175, topMm: 54.2, count: 15 }),
+  // 6 — Data de nascimento (DD / MM / AAAA)
+  birthDate: {
+    day:   boxFromMm(111.8,  54.2, 8.6,  5),
+    month: boxFromMm(122.9,  54.2, 8.3,  5),
+    year:  boxFromMm(130.15, 54.2, 7.4,  5),
+  },
+  // 7 — Sexo
+  sex: {
+    male:   boxFromMm(148.7, 55.1, 3, 3),
+    female: boxFromMm(166.4, 55.1, 3, 3),
+  },
+  // 8 — Raça/Cor
+  raceColor: boxFromMm(175, 54.2, 20, 5),
+  // 9 — Nome da mãe
+  motherName: boxFromMm(13, 62.8, 125, 5),
+  // 10 — Telefone do paciente
+  patientPhone: {
+    ddd:    digitBoxesFromMm({ firstCenterMm: 142.4, spacingMm: 5.5,  topMm: 62.8, count: 2 }),
+    number: digitBoxesFromMm({ firstCenterMm: 153.5, spacingMm: 5.46, topMm: 62.8, count: 8 }),
+  },
+  // 11 — Nome do responsável
+  responsibleName: boxFromMm(13, 71.3, 125, 5),
+  // 12 — Telefone do responsável
+  responsiblePhone: {
+    ddd:    digitBoxesFromMm({ firstCenterMm: 142.4, spacingMm: 5.5,  topMm: 71.3, count: 2 }),
+    number: digitBoxesFromMm({ firstCenterMm: 153.5, spacingMm: 5.46, topMm: 71.3, count: 8 }),
+  },
+  // 13 — Endereço
+  address: boxFromMm(13, 78.8, 182, 5),
+  // 14 — Município de residência
+  municipality: boxFromMm(13, 87.3, 110, 5),
+  // 15 — Código IBGE (7 caixas)
+  ibgeCode: digitBoxesFromMm({ firstCenterMm: 126.08, spacingMm: 4.05, topMm: 87.3, count: 7 }),
+  // 16 — UF
+  state: boxFromMm(152.4, 87.3, 5.9, 5),
+  // 17 — CEP (8 caixas)
+  zipCode: digitBoxesFromMm({ firstCenterMm: 166.15, spacingMm: 4.012, topMm: 87.3, count: 8 }),
+};
+
+// ---------- Render plan ----------
+// Estrutura usada pelo componente React e pelo HTML de impressão.
+
+export type ApacRender =
+  | { kind: "text"; id: string; box: ApacBox; value: string; align?: "left" | "center"; fontSizePx?: number }
+  | { kind: "digit"; id: string; box: ApacBox; value: string; fontSizePx?: number }
+  | { kind: "check"; id: string; box: ApacBox; show: boolean; fontSizePx?: number };
+
+export interface ApacRenderData {
+  nome: string;
+  prontuario: string;
+  cns: string;
+  dataDD: string;
+  dataMM: string;
+  dataAAAA: string;
+  sexoMasc: boolean;
+  sexoFem: boolean;
+  racaCor: string;
+  nomeMae: string;
+  telDDD: string;
+  telNum: string;
+  nomeResponsavel: string;
+  telRespDDD: string;
+  telRespNum: string;
+  endereco: string;
+  municipio: string;
+  ibge: string;
+  uf: string;
+  cep: string;
 }
 
-export interface CheckOverlay {
-  kind: "check";
-  show: boolean;
-  left: number;
-  top: number;
-  fontSize: number;
-}
+const pushDigits = (
+  out: ApacRender[],
+  prefix: string,
+  boxes: ApacBox[],
+  value: string,
+) => {
+  const v = (value || "").slice(0, boxes.length);
+  for (let i = 0; i < v.length; i++) {
+    out.push({ kind: "digit", id: `${prefix}.${i + 1}`, box: boxes[i], value: v[i] });
+  }
+};
 
-export interface FieldOverlay {
-  kind: "field";
-  value: string;
-  left: number; // mm — canto superior esquerdo do campo
-  top: number; // mm
-  width: number; // mm — largura interna do campo
-  height: number; // mm — altura interna do campo
-  fontSize: number;
-}
+export function buildApacRenders(d: ApacRenderData): ApacRender[] {
+  const F = APAC_PATIENT_FIELDS;
+  const out: ApacRender[] = [];
 
-export type Overlay = TextOverlay | DigitsOverlay | CheckOverlay | FieldOverlay;
+  out.push({ kind: "text", id: "3", box: F.patientName, value: d.nome });
+  out.push({ kind: "text", id: "4", box: F.recordNumber, value: d.prontuario });
 
+  pushDigits(out, "5", F.cns, d.cns);
 
-// Coordenadas calibradas sobre a página oficial (210×297 mm).
-// Calibração feita por detecção de bordas no JPG oficial (2480×3509 px).
-export function buildOverlays(d: ApacLaudoData): Overlay[] {
-  const out: Overlay[] = [];
-  const F = 9;
-  const D = 9;
+  out.push({ kind: "text", id: "6.DD",   box: F.birthDate.day,   value: d.dataDD,   align: "center" });
+  out.push({ kind: "text", id: "6.MM",   box: F.birthDate.month, value: d.dataMM,   align: "center" });
+  out.push({ kind: "text", id: "6.AAAA", box: F.birthDate.year,  value: d.dataAAAA, align: "center" });
 
-  // ---- Linha 3/4 (y interno 45.3–51.5 mm) ----
-  // 3 - Nome do paciente: box x ≈ 11.85–158.8 mm
-  out.push({ kind: "text", value: d.nome, left: 13, top: 47.5, width: 144, fontSize: F });
-  // 4 - Nº do prontuário: box x ≈ 158.8–196.4 mm
-  out.push({ kind: "text", value: d.prontuario, left: 160, top: 47.5, width: 35, fontSize: F });
+  out.push({ kind: "check", id: "7.M", box: F.sex.male,   show: d.sexoMasc, fontSizePx: 14 });
+  out.push({ kind: "check", id: "7.F", box: F.sex.female, show: d.sexoFem,  fontSizePx: 14 });
 
-  // ---- Linha 5/6/7/8 (y interno 51.5–59.8 mm) ----
-  // 5 - CNS: 15 caixas em x ≈ 11.85–104.5 mm  (spacing ≈ 6.18 mm)
-  out.push({
-    kind: "digits",
-    value: d.cns,
-    startLeft: 14.95,
-    top: 55.2,
-    spacing: 6.175,
-    count: 15,
-    fontSize: D,
-  });
+  out.push({ kind: "text", id: "8", box: F.raceColor, value: d.racaCor });
+  out.push({ kind: "text", id: "9", box: F.motherName, value: d.nomeMae });
 
-  // 6 - Data de nascimento (DD / MM / AAAA) box x ≈ 107.0–137.6 mm
-  // Barras já desenhadas no template ≈ 120.6 e 131.2 mm.
-  // Três grupos isolados, sem reimprimir as barras.
-  // DD: espaço 107.0–120.6  → centros ~ 113.3 / 116.3
-  out.push({ kind: "digits", value: d.dataDD,   startLeft: 113.3, top: 55.2, spacing: 3.0, count: 2, fontSize: D });
-  // MM: espaço 120.6–131.2  → centros ~ 124.4 / 127.4
-  out.push({ kind: "digits", value: d.dataMM,   startLeft: 124.4, top: 55.2, spacing: 3.0, count: 2, fontSize: D });
-  // AAAA: espaço 131.2–137.6 → 4 dígitos compactos
-  out.push({ kind: "digits", value: d.dataAAAA, startLeft: 132.0, top: 55.2, spacing: 1.85, count: 4, fontSize: D });
+  pushDigits(out, "10.DDD", F.patientPhone.ddd, d.telDDD);
+  pushDigits(out, "10.N",   F.patientPhone.number, d.telNum);
 
-  // 7 - Sexo: caixinhas em ≈ Masc(150.2) Fem(167.9) mm, centro y ≈ 56.3 mm
-  out.push({ kind: "check", show: d.sexoMasc, left: 150.2, top: 56.6, fontSize: 11 });
-  out.push({ kind: "check", show: d.sexoFem,  left: 167.9, top: 56.6, fontSize: 11 });
+  out.push({ kind: "text", id: "11", box: F.responsibleName, value: d.nomeResponsavel });
 
-  // 8 - Raça/Cor: box x ≈ 174.0–196.4 mm
-  out.push({ kind: "text", value: d.racaCor, left: 175, top: 55.2, width: 20, fontSize: F });
+  pushDigits(out, "12.DDD", F.responsiblePhone.ddd, d.telRespDDD);
+  pushDigits(out, "12.N",   F.responsiblePhone.number, d.telRespNum);
 
-  // ---- Linha 9/10 (y interno 61.7–67.97 mm) ----
-  // 9 - Nome da mãe: box x ≈ 11.85–139.7 mm
-  out.push({ kind: "text", value: d.nomeMae, left: 13, top: 63.8, width: 125, fontSize: F });
-  // 10 - DDD (2 caixas, ≈ 139.7–150.7 mm) + Nº telefone (8 caixas, ≈ 150.7–196.4 mm)
-  out.push({ kind: "digits", value: d.telDDD, startLeft: 142.4, top: 63.8, spacing: 5.5,   count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telNum, startLeft: 153.5, top: 63.8, spacing: 5.46,  count: 8, fontSize: D });
+  out.push({ kind: "text", id: "13", box: F.address, value: d.endereco });
+  out.push({ kind: "text", id: "14", box: F.municipality, value: d.municipio });
 
-  // ---- Linha 11/12 (y interno 70.25–76.51 mm) ----
-  out.push({ kind: "text", value: d.nomeResponsavel, left: 13, top: 72.3, width: 125, fontSize: F });
-  out.push({ kind: "digits", value: d.telRespDDD, startLeft: 142.4, top: 72.3, spacing: 5.5,   count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telRespNum, startLeft: 153.5, top: 72.3, spacing: 5.46,  count: 8, fontSize: D });
+  pushDigits(out, "15", F.ibgeCode, d.ibge);
 
-  // ---- Linha 13 (y interno 77.6–83.9 mm) ----
-  // 13 - Endereço: ocupa toda a largura interna ≈ 11.85–196.4 mm
-  out.push({ kind: "text", value: d.endereco, left: 13, top: 79.8, width: 182, fontSize: F });
+  out.push({ kind: "text", id: "16", box: F.state, value: d.uf, align: "center" });
 
-  // ---- Linha 14/15/16/17 (y interno 86.1–92.3 mm) ----
-  // 14 - Município de residência: box x ≈ 11.85–124.05 mm
-  out.push({ kind: "text", value: d.municipio, left: 13, top: 88.3, width: 110, fontSize: F });
-  // 15 - Cód. IBGE: 7 caixas em x ≈ 124.05–152.4 mm  (spacing ≈ 4.05 mm)
-  out.push({
-    kind: "digits",
-    value: d.ibge,
-    startLeft: 126.08,
-    top: 88.5,
-    spacing: 4.05,
-    count: 7,
-    fontSize: D,
-  });
-  // 16 - UF: box x ≈ 152.4–158.3 mm — campo centralizado (somente sigla)
-  out.push({
-    kind: "field",
-    value: d.uf,
-    left: 152.4,
-    top: 86.4,
-    width: 5.9,
-    height: 4.6,
-    fontSize: 9,
-  });
-  // 17 - CEP: 8 caixas em x ≈ 164.1–196.4 mm  (spacing ≈ 4.01 mm)
-  out.push({
-    kind: "digits",
-    value: d.cep,
-    startLeft: 166.15,
-    top: 88.3,
-    spacing: 4.012,
-    count: 8,
-    fontSize: D,
-  });
-
+  pushDigits(out, "17", F.zipCode, d.cep);
 
   return out;
 }
 
+// ---------- HTML serializer (impressão / PDF) ----------
 
 const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
-export function overlaysToHTML(overlays: Overlay[]): string {
-  return overlays
-    .map((o) => {
-      if (o.kind === "text") {
-        if (!o.value) return "";
-        const align = o.align === "center" ? "text-align:center;" : "";
-        return `<div class="apac-value" style="left:${o.left}mm;top:${o.top}mm;width:${o.width}mm;font-size:${o.fontSize}pt;${align}">${esc(o.value)}</div>`;
+const styleToCss = (s: React.CSSProperties): string =>
+  Object.entries(s)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `${k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}:${v}`)
+    .join(";");
+
+export function rendersToHTML(
+  renders: ApacRender[],
+  imageWidthPx: number = APAC_TEMPLATE_NATURAL_WIDTH,
+  imageHeightPx: number = APAC_TEMPLATE_NATURAL_HEIGHT,
+): string {
+  return renders
+    .map((r) => {
+      if (r.kind === "text") {
+        if (!r.value) return "";
+        const style = getTextOverlayStyle(r.box, imageWidthPx, imageHeightPx, {
+          align: r.align,
+          fontSizePx: r.fontSizePx ?? 11,
+        });
+        return `<div data-apac-id="${r.id}" style="${styleToCss(style)}">${esc(r.value)}</div>`;
       }
-      if (o.kind === "digits") {
-        const v = (o.value || "").slice(0, o.count);
-        let html = "";
-        for (let i = 0; i < v.length; i++) {
-          const ch = v[i];
-          const cx = o.startLeft + i * o.spacing;
-          html += `<div class="apac-value apac-digit" style="left:${cx}mm;top:${o.top}mm;font-size:${o.fontSize}pt;">${esc(ch)}</div>`;
-        }
-        return html;
+      if (r.kind === "digit") {
+        if (!r.value) return "";
+        const style = getDigitOverlayStyle(r.box, imageWidthPx, imageHeightPx, r.fontSizePx ?? 11);
+        return `<div data-apac-id="${r.id}" style="${styleToCss(style)}">${esc(r.value)}</div>`;
       }
-      if (o.kind === "check") {
-        if (!o.show) return "";
-        return `<div class="apac-value apac-check" style="left:${o.left}mm;top:${o.top}mm;font-size:${o.fontSize}pt;">✕</div>`;
-      }
-      if (o.kind === "field") {
-        if (!o.value) return "";
-        return `<div class="apac-value apac-field" style="left:${o.left}mm;top:${o.top}mm;width:${o.width}mm;height:${o.height}mm;font-size:${o.fontSize}pt;">${esc(o.value)}</div>`;
+      if (r.kind === "check") {
+        if (!r.show) return "";
+        const style = getTextOverlayStyle(r.box, imageWidthPx, imageHeightPx, {
+          align: "center",
+          fontSizePx: r.fontSizePx ?? 14,
+        });
+        return `<div data-apac-id="${r.id}" style="${styleToCss(style)};font-weight:bold;">✕</div>`;
       }
       return "";
     })
     .join("");
 }
 
+// CSS compartilhado pela impressão / PDF.
 export const APAC_CSS = `
   html, body { margin: 0; padding: 0; background: #fff; }
   .apac-page {
@@ -204,32 +239,14 @@ export const APAC_CSS = `
     pointer-events: none;
     user-select: none;
   }
-  .apac-value {
-    position: absolute;
-    z-index: 2;
-    color: #000;
-    line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-  }
-  .apac-digit {
-    transform: translateX(-50%);
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-  }
-  .apac-check {
-    transform: translate(-50%, -50%);
-    font-weight: bold;
-    line-height: 1;
-  }
-  .apac-field {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: Arial, Helvetica, sans-serif;
-    font-weight: normal;
-    line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-  }
 `;
+
+// ---------- Compat shim ----------
+// Mantém a assinatura usada por chamadores externos (ex.: rotina de impressão)
+// produzindo agora overlays via o novo sistema unificado.
+export function buildOverlaysHTML(d: ApacRenderData): string {
+  return rendersToHTML(buildApacRenders(d));
+}
+
+// Re-export utilitários.
+export { imageBoxPxToMm } from "./apacCoordinateSystem";

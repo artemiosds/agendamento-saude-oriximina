@@ -9,8 +9,8 @@ import {
   APAC_CSS,
   A4_WIDTH_MM,
   A4_HEIGHT_MM,
-  buildOverlays,
-  overlaysToHTML,
+  buildApacRenders,
+  rendersToHTML,
 } from "./apacLaudoOverlay";
 import { normalizePaciente, type AnyPaciente, type ApacLaudoData } from "./apacLaudoData";
 import { lookupIbgeCode } from "./ibgeLookup";
@@ -30,7 +30,7 @@ async function resolveData(paciente: AnyPaciente | null): Promise<ApacLaudoData>
 }
 
 function buildPrintHTML(data: ApacLaudoData): string {
-  const overlaysHTML = overlaysToHTML(buildOverlays(data));
+  const overlaysHTML = rendersToHTML(buildApacRenders(data));
   // URL absoluta — janela aberta com window.open("") tem baseURI=about:blank,
   // caminhos relativos como "/__l5e/..." não resolveriam.
   const absTemplate = APAC_TEMPLATE_URL.startsWith("http")
