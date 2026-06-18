@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { DebouncedInput } from "@/components/ui/debounced-input";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -62,10 +61,10 @@ import { CalendarioDisponibilidade } from "@/components/CalendarioDisponibilidad
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { validatePacienteFields } from "@/lib/validation";
-import { checkPatientDuplicity, normalizeString } from "@/lib/paciente-duplicity";
+import { checkPatientDuplicity } from "@/lib/paciente-duplicity";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { supabase } from "@/integrations/supabase/client";
-import { getManchesterConfig, getManchesterBadgeStyle } from "@/lib/manchesterProtocol";
+import { getManchesterConfig } from "@/lib/manchesterProtocol";
 
 const ABSENCE_REASONS = [
   { value: "saude", label: "Problema de Saúde" },
@@ -179,7 +178,6 @@ const FilaEspera: React.FC = () => {
     funcionarios,
     unidades,
     addPaciente,
-    refreshPacientes,
     logAction,
     getAvailableDates,
     getAvailableSlots,
@@ -219,7 +217,7 @@ const FilaEspera: React.FC = () => {
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const canManage = can("fila", "can_edit");
-  const { unidadesVisiveis, profissionaisVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
+  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -227,7 +225,7 @@ const FilaEspera: React.FC = () => {
   const [filterUnidade, setFilterUnidade] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [filterEspecialidade, setFilterEspecialidade] = useState("all");
+  const [filterEspecialidade] = useState("all");
   const [sortField, setSortField] = useState<"prioridade" | "tempo" | "entrada" | "solicitacao">("prioridade");
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const reservasProcessandoRef = useRef<Set<string>>(new Set());
@@ -1203,7 +1201,7 @@ const FilaEspera: React.FC = () => {
         </div>
       </div>
 
-      {activeQueue.length > 0 && (
+      {greenCount + yellowCount + redCount > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card className="shadow-card border-0">
             <CardContent className="p-3 flex items-center gap-3">
@@ -2004,7 +2002,6 @@ const FilaEspera: React.FC = () => {
             const waitMin = getWaitMinutes(f, now);
             const waitColor = getWaitColor(waitMin, f.prioridade);
             const manchesterRisco = getManchesterConfig((f as any).classificacaoRisco);
-            const manchesterStyle = getManchesterBadgeStyle((f as any).classificacaoRisco);
             return (
               <Card
                 key={f.id}
