@@ -10,8 +10,6 @@ import {
   A4_HEIGHT_MM,
   APAC_TEMPLATE_NATURAL_WIDTH,
   APAC_TEMPLATE_NATURAL_HEIGHT,
-  boxFromMm,
-  digitBoxesFromMm,
   imageBoxPxToMm,
   getTextOverlayStyle,
   getDigitOverlayStyle,
