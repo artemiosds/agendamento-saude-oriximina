@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -99,7 +99,10 @@ const prioridadeLabel: Record<string, string> = {
 const statusLabels: Record<string, { label: string; color: string }> = {
   aguardando: { label: "Aguardando Triagem", color: "bg-warning/10 text-warning" },
   aguardando_enfermagem: { label: "Aguardando Enfermagem", color: "bg-blue-500/10 text-blue-600" },
-  aguardando_agendamento_interno: { label: "Aguard. Agendamento (Encaminhamento Interno)", color: "bg-indigo-500/10 text-indigo-600" },
+  aguardando_agendamento_interno: {
+    label: "Aguard. Agendamento (Encaminhamento Interno)",
+    color: "bg-indigo-500/10 text-indigo-600",
+  },
   apto_agendamento: { label: "Apto p/ Agendamento", color: "bg-success/10 text-success" },
   aguardando_multiprofissional: { label: "Avaliação Multiprofissional", color: "bg-purple-500/10 text-purple-600" },
   indeferido: { label: "Indeferido", color: "bg-destructive/10 text-destructive" },
@@ -124,6 +127,18 @@ interface ReservaInfo {
   };
   expiresAt: number;
 }
+
+const reservasAreEqual = (current: Record<string, ReservaInfo>, next: Record<string, ReservaInfo>): boolean => {
+  const currentKeys = Object.keys(current).sort();
+  const nextKeys = Object.keys(next).sort();
+
+  if (currentKeys.length !== nextKeys.length) return false;
+
+  return currentKeys.every((key, index) => {
+    if (key !== nextKeys[index]) return false;
+    return JSON.stringify(current[key]) === JSON.stringify(next[key]);
+  });
+};
 
 // Calculate wait time in minutes from criadoEm or horaChegada
 const getWaitMinutes = (f: { criadoEm?: string; horaChegada: string }, nowMs: number): number => {
@@ -173,34 +188,37 @@ const FilaEspera: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
-  
+
   const pacienteMap = useMemo(() => {
     const map = new Map<string, (typeof pacientes)[0]>();
-    pacientes.forEach(p => map.set(p.id, p));
+    pacientes.forEach((p) => map.set(p.id, p));
     return map;
   }, [pacientes]);
 
   const unitMap = useMemo(() => {
     const map = new Map<string, (typeof unidades)[0]>();
-    unidades.forEach(u => map.set(u.id, u));
+    unidades.forEach((u) => map.set(u.id, u));
     return map;
   }, [unidades]);
 
   const employeeMap = useMemo(() => {
     const map = new Map<string, (typeof funcionarios)[0]>();
-    funcionarios.forEach(f => map.set(f.id, f));
+    funcionarios.forEach((f) => map.set(f.id, f));
     return map;
   }, [funcionarios]);
 
-  const resolvePaciente = useCallback((pacienteId: string, fallbackNome?: string): string => {
-    return pacienteMap.get(pacienteId)?.nome || fallbackNome || 'Paciente não encontrado';
-  }, [pacienteMap]);
+  const resolvePaciente = useCallback(
+    (pacienteId: string, fallbackNome?: string): string => {
+      return pacienteMap.get(pacienteId)?.nome || fallbackNome || "Paciente não encontrado";
+    },
+    [pacienteMap],
+  );
 
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
-  const canManage = can('fila', 'can_edit');
+  const canManage = can("fila", "can_edit");
   const { unidadesVisiveis, profissionaisVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
 
@@ -212,9 +230,13 @@ const FilaEspera: React.FC = () => {
   const [filterEspecialidade, setFilterEspecialidade] = useState("all");
   const [sortField, setSortField] = useState<"prioridade" | "tempo" | "entrada" | "solicitacao">("prioridade");
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
+  const reservasProcessandoRef = useRef<Set<string>>(new Set());
+  const componentMountedRef = useRef(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 30;
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
@@ -288,6 +310,12 @@ const FilaEspera: React.FC = () => {
   });
 
   useEffect(() => {
+    return () => {
+      componentMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const loadReservas = () => {
       const loaded: Record<string, ReservaInfo> = {};
       for (let i = 0; i < localStorage.length; i++) {
@@ -301,7 +329,7 @@ const FilaEspera: React.FC = () => {
           }
         }
       }
-      setReservas(loaded);
+      setReservas((current) => (reservasAreEqual(current, loaded) ? current : loaded));
     };
     loadReservas();
     const interval = setInterval(() => {
@@ -340,16 +368,40 @@ const FilaEspera: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    Object.values(reservas).forEach(async (r) => {
-      if (r.expiresAt <= now) {
-        const filaItem = fila.find((f) => f.id === r.filaId && f.status === "chamado");
-        if (filaItem) {
-          await expirarReserva(r.filaId, r.slot, user);
-        } else {
-          localStorage.removeItem(`fila_reserva_${r.filaId}`);
+    const processarReservasExpiradas = async () => {
+      for (const reserva of Object.values(reservas)) {
+        if (reserva.expiresAt > now || reservasProcessandoRef.current.has(reserva.filaId)) {
+          continue;
+        }
+
+        reservasProcessandoRef.current.add(reserva.filaId);
+
+        try {
+          const filaItem = fila.find((item) => item.id === reserva.filaId && item.status === "chamado");
+
+          if (filaItem) {
+            await expirarReserva(reserva.filaId, reserva.slot, user);
+          }
+
+          localStorage.removeItem(`fila_reserva_${reserva.filaId}`);
+
+          if (componentMountedRef.current) {
+            setReservas((current) => {
+              if (!current[reserva.filaId]) return current;
+              const updated = { ...current };
+              delete updated[reserva.filaId];
+              return updated;
+            });
+          }
+        } catch (error) {
+          console.error("Erro ao processar reserva expirada:", error);
+        } finally {
+          reservasProcessandoRef.current.delete(reserva.filaId);
         }
       }
-    });
+    };
+
+    void processarReservasExpiradas();
   }, [now, reservas, fila, expirarReserva, user]);
 
   const manchesterOrder: Record<string, number> = {
@@ -360,17 +412,31 @@ const FilaEspera: React.FC = () => {
     azul: 5,
   };
 
+  const sortTimestamp = sortField === "tempo" ? now : 0;
+
   const filteredFila = useMemo(() => {
+    const ageCache = new Map<string, number>();
+
     // Helper: calculate age from dataNascimento
     const getAge = (pacienteId: string): number => {
+      const cachedAge = ageCache.get(pacienteId);
+      if (cachedAge !== undefined) return cachedAge;
+
       const pac = pacienteMap.get(pacienteId);
-      if (!pac?.dataNascimento) return 0;
+      if (!pac?.dataNascimento) {
+        ageCache.set(pacienteId, 0);
+        return 0;
+      }
       const birth = new Date(pac.dataNascimento);
-      if (isNaN(birth.getTime())) return 0;
+      if (isNaN(birth.getTime())) {
+        ageCache.set(pacienteId, 0);
+        return 0;
+      }
       const today = new Date();
       let age = today.getFullYear() - birth.getFullYear();
       const m = today.getMonth() - birth.getMonth();
       if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      ageCache.set(pacienteId, age);
       return age;
     };
 
@@ -385,7 +451,7 @@ const FilaEspera: React.FC = () => {
     const query = debouncedSearchQuery.toLowerCase().trim();
     return [...fila]
       .filter((f) => !query || resolvePaciente(f.pacienteId, f.pacienteNome).toLowerCase().includes(query))
-      .filter((f) => !(user?.unidadeId && user?.usuario !== 'admin.sms') || f.unidadeId === user?.unidadeId)
+      .filter((f) => !(user?.unidadeId && user?.usuario !== "admin.sms") || f.unidadeId === user?.unidadeId)
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
       .filter((f) => filterProf === "all" || f.profissionalId === filterProf)
       .filter((f) => filterStatus === "all" || f.status === filterStatus)
@@ -405,8 +471,8 @@ const FilaEspera: React.FC = () => {
           if (aIs80Plus !== bIs80Plus) return aIs80Plus - bIs80Plus;
 
           // 3º Prioridade Legal: idoso 60+, gestante, PCD, criança de colo
-          const aHasLegal = ['gestante', 'idoso', 'pcd', 'crianca'].includes(a.prioridade);
-          const bHasLegal = ['gestante', 'idoso', 'pcd', 'crianca'].includes(b.prioridade);
+          const aHasLegal = ["gestante", "idoso", "pcd", "crianca"].includes(a.prioridade);
+          const bHasLegal = ["gestante", "idoso", "pcd", "crianca"].includes(b.prioridade);
           if (aHasLegal !== bHasLegal) return aHasLegal ? -1 : 1;
           if (aHasLegal && bHasLegal) {
             const aLegal = legalPrioOrder[a.prioridade] ?? 99;
@@ -418,8 +484,8 @@ const FilaEspera: React.FC = () => {
           return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
         }
         if (sortField === "tempo") {
-          const aMin = getWaitMinutes(a, now);
-          const bMin = getWaitMinutes(b, now);
+          const aMin = getWaitMinutes(a, sortTimestamp);
+          const bMin = getWaitMinutes(b, sortTimestamp);
           return bMin - aMin;
         }
         if (sortField === "solicitacao") {
@@ -431,26 +497,70 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, pacienteMap, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery, resolvePaciente]);
+  }, [
+    fila,
+    pacienteMap,
+    filterUnidade,
+    filterProf,
+    filterStatus,
+    filterEspecialidade,
+    sortField,
+    sortTimestamp,
+    debouncedSearchQuery,
+    resolvePaciente,
+    user?.unidadeId,
+    user?.usuario,
+  ]);
 
-  const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
-  const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;
-  const chamadoCount = fila.filter((f) => f.status === "chamado").length;
-  const emAtendimentoCount = fila.filter((f) => f.status === "em_atendimento").length;
+  const { aguardandoCount, chamadoCount, emAtendimentoCount, greenCount, yellowCount, redCount } = useMemo(() => {
+    let aguardando = 0;
+    let chamado = 0;
+    let emAtendimento = 0;
+    let green = 0;
+    let yellow = 0;
+    let red = 0;
 
-  const greenCount = activeQueue.filter((f) => {
-    if (f.prioridade === "urgente") return false;
-    return getWaitMinutes(f, now) < 30;
-  }).length;
-  const yellowCount = activeQueue.filter((f) => {
-    if (f.prioridade === "urgente") return false;
-    const m = getWaitMinutes(f, now);
-    return m >= 30 && m <= 60;
-  }).length;
-  const redCount = activeQueue.filter((f) => {
-    if (f.prioridade === "urgente") return true;
-    return getWaitMinutes(f, now) > 60;
-  }).length;
+    for (const item of fila) {
+      if (item.status === "aguardando") aguardando++;
+      if (item.status === "chamado") chamado++;
+      if (item.status === "em_atendimento") emAtendimento++;
+
+      const isActive = ["aguardando", "chamado", "em_atendimento"].includes(item.status);
+      if (!isActive) continue;
+
+      if (item.prioridade === "urgente") {
+        red++;
+        continue;
+      }
+
+      const minutes = getWaitMinutes(item, now);
+      if (minutes < 30) green++;
+      else if (minutes <= 60) yellow++;
+      else red++;
+    }
+
+    return {
+      aguardandoCount: aguardando,
+      chamadoCount: chamado,
+      emAtendimentoCount: emAtendimento,
+      greenCount: green,
+      yellowCount: yellow,
+      redCount: red,
+    };
+  }, [fila, now]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredFila.length / PAGE_SIZE));
+  const pageStart = (page - 1) * PAGE_SIZE;
+
+  const paginatedFila = useMemo(() => filteredFila.slice(pageStart, pageStart + PAGE_SIZE), [filteredFila, pageStart]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchQuery, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const openNew = () => {
     setEditId(null);
@@ -521,7 +631,7 @@ const FilaEspera: React.FC = () => {
       telefone: novoPaciente.telefone,
       email: novoPaciente.email,
     });
-    
+
     if (err || Object.keys(newErrors).length > 0) {
       if (err) {
         if (err.includes("Nome")) newErrors.nome = err;
@@ -540,7 +650,7 @@ const FilaEspera: React.FC = () => {
       if (duplicity.existingPatient) {
         setDuplicataEncontrada({
           id: duplicity.existingPatient.id,
-          nome: duplicity.existingPatient.nome
+          nome: duplicity.existingPatient.nome,
         } as any);
       }
       return;
@@ -672,7 +782,7 @@ const FilaEspera: React.FC = () => {
       nome: dados.nome,
       dataNascimento: dados.dataNascimento,
       cpf: dados.cpf,
-      cns: dados.cns
+      cns: dados.cns,
     });
   };
 
@@ -709,7 +819,7 @@ const FilaEspera: React.FC = () => {
         if (duplicity.isDuplicate && !importDup) {
           setImportDup({
             id: duplicity.existingPatient!.id,
-            nome: duplicity.existingPatient!.nome
+            nome: duplicity.existingPatient!.nome,
           } as any);
           setImportSaving(false);
           return;
@@ -849,14 +959,19 @@ const FilaEspera: React.FC = () => {
   const [manualSlot, setManualSlot] = useState({ data: "", hora: "", profissionalId: "", unidadeId: "" });
 
   const manualCallDates = useMemo(() => {
-    if (!manualSlot.profissionalId || !manualSlot.unidadeId) return [];
+    if (!manualCallDialog || !manualSlot.profissionalId || !manualSlot.unidadeId) return [];
     return getAvailableDates(manualSlot.profissionalId, manualSlot.unidadeId, false);
-  }, [manualSlot.profissionalId, manualSlot.unidadeId, getAvailableDates]);
+  }, [manualCallDialog, manualSlot.profissionalId, manualSlot.unidadeId, getAvailableDates]);
 
   const manualCallDayInfoMap = useMemo(() => {
-    if (!manualSlot.profissionalId || !manualSlot.unidadeId) return {};
+    if (!manualCallDialog || !manualSlot.profissionalId || !manualSlot.unidadeId) return {};
     return getDayInfoMap(manualSlot.profissionalId, manualSlot.unidadeId, false);
-  }, [manualSlot.profissionalId, manualSlot.unidadeId, getDayInfoMap]);
+  }, [manualCallDialog, manualSlot.profissionalId, manualSlot.unidadeId, getDayInfoMap]);
+
+  const manualNextQueue = useMemo(() => {
+    if (!manualCallDialog || !manualSlot.profissionalId || !manualSlot.unidadeId) return [];
+    return getNextInQueue(manualSlot.profissionalId, manualSlot.unidadeId);
+  }, [manualCallDialog, manualSlot.profissionalId, manualSlot.unidadeId, getNextInQueue]);
 
   const handleManualCall = async () => {
     if (!manualSlot.hora || !manualSlot.profissionalId || !manualSlot.unidadeId) {
@@ -925,14 +1040,14 @@ const FilaEspera: React.FC = () => {
   };
 
   const rescheduleDates = useMemo(() => {
-    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return [];
+    if (!rescheduleOpen || !rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return [];
     return getAvailableDates(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
-  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getAvailableDates]);
+  }, [rescheduleOpen, rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getAvailableDates]);
 
   const rescheduleDayInfoMap = useMemo(() => {
-    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return {};
+    if (!rescheduleOpen || !rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return {};
     return getDayInfoMap(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
-  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getDayInfoMap]);
+  }, [rescheduleOpen, rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getDayInfoMap]);
 
   const handleRescheduleConfirm = async () => {
     if (
@@ -1019,6 +1134,13 @@ const FilaEspera: React.FC = () => {
     toast.success(`Reagendamento criado para ${rescheduleSlot.data} às ${rescheduleSlot.hora}!`);
     setRescheduleOpen(false);
   };
+
+  const matchingPacientes = useMemo(() => {
+    const query = form.pacienteNome.trim().toLowerCase();
+    if (query.length < 2 || form.pacienteId) return [];
+
+    return pacientes.filter((paciente) => paciente.nome.toLowerCase().includes(query)).slice(0, 5);
+  }, [pacientes, form.pacienteNome, form.pacienteId]);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -1237,13 +1359,14 @@ const FilaEspera: React.FC = () => {
                 </Select>
               </div>
             </div>
-            {manualSlot.profissionalId && manualSlot.unidadeId ? (
+            {manualCallDialog && manualSlot.profissionalId && manualSlot.unidadeId ? (
               (() => {
                 const dates = manualCallDates;
                 const dayInfo = manualCallDayInfoMap;
-                const slots = manualSlot.data
-                  ? getAvailableSlots(manualSlot.profissionalId, manualSlot.unidadeId, manualSlot.data, false)
-                  : [];
+                const slots =
+                  manualCallDialog && manualSlot.data
+                    ? getAvailableSlots(manualSlot.profissionalId, manualSlot.unidadeId, manualSlot.data, false)
+                    : [];
                 return (
                   <>
                     {dates.length === 0 ? (
@@ -1303,14 +1426,13 @@ const FilaEspera: React.FC = () => {
                 <p className="font-medium flex items-center gap-1">
                   <Users className="w-4 h-4" /> Próximos na fila:
                 </p>
-                {getNextInQueue(manualSlot.profissionalId, manualSlot.unidadeId)
-                  .slice(0, 3)
-                  .map((f, i) => (
-                    <p key={f.id} className="ml-5 text-muted-foreground">
-                      {i + 1}. {resolvePaciente(f.pacienteId, f.pacienteNome)} ({prioridadeLabel[f.prioridade] || f.prioridade})
-                    </p>
-                  ))}
-                {getNextInQueue(manualSlot.profissionalId, manualSlot.unidadeId).length === 0 && (
+                {manualNextQueue.slice(0, 3).map((f, i) => (
+                  <p key={f.id} className="ml-5 text-muted-foreground">
+                    {i + 1}. {resolvePaciente(f.pacienteId, f.pacienteNome)} (
+                    {prioridadeLabel[f.prioridade] || f.prioridade})
+                  </p>
+                ))}
+                {manualNextQueue.length === 0 && (
                   <p className="ml-5 text-muted-foreground italic">Nenhum paciente na fila</p>
                 )}
               </div>
@@ -1344,21 +1466,17 @@ const FilaEspera: React.FC = () => {
                 />
                 {form.pacienteNome.length >= 2 && !form.pacienteId && (
                   <div className="mt-1 max-h-32 overflow-y-auto border rounded-md bg-background">
-                    {pacientes
-                      .filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase()))
-                      .slice(0, 5)
-                      .map((p) => (
-                        <button
-                          key={p.id}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted border-b last:border-b-0"
-                          onClick={() => setForm((prev) => ({ ...prev, pacienteNome: p.nome, pacienteId: p.id }))}
-                        >
-                          <span className="font-medium">{p.nome}</span>
-                          <span className="text-muted-foreground ml-2">— {p.telefone}</span>
-                        </button>
-                      ))}
-                    {pacientes.filter((p) => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length ===
-                      0 && (
+                    {matchingPacientes.map((p) => (
+                      <button
+                        key={p.id}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted border-b last:border-b-0"
+                        onClick={() => setForm((prev) => ({ ...prev, pacienteNome: p.nome, pacienteId: p.id }))}
+                      >
+                        <span className="font-medium">{p.nome}</span>
+                        <span className="text-muted-foreground ml-2">— {p.telefone}</span>
+                      </button>
+                    ))}
+                    {matchingPacientes.length === 0 && (
                       <div className="px-3 py-2 text-sm text-muted-foreground italic">Nenhum paciente encontrado</div>
                     )}
                   </div>
@@ -1498,9 +1616,7 @@ const FilaEspera: React.FC = () => {
                         <SelectItem value="feminino">Feminino</SelectItem>
                       </SelectContent>
                     </Select>
-                    {pacienteErrors.sexo && (
-                      <p className="text-xs text-destructive mt-1">{pacienteErrors.sexo}</p>
-                    )}
+                    {pacienteErrors.sexo && <p className="text-xs text-destructive mt-1">{pacienteErrors.sexo}</p>}
                   </div>
                   <div>
                     <Label>Endereço</Label>
@@ -1728,10 +1844,7 @@ const FilaEspera: React.FC = () => {
               </div>
               <div>
                 <Label>Sexo *</Label>
-                <Select
-                  value={importForm.sexo}
-                  onValueChange={(v) => setImportForm((p) => ({ ...p, sexo: v }))}
-                >
+                <Select value={importForm.sexo} onValueChange={(v) => setImportForm((p) => ({ ...p, sexo: v }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
@@ -1882,7 +1995,7 @@ const FilaEspera: React.FC = () => {
             <CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent>
           </Card>
         ) : (
-          filteredFila.map((f, i) => {
+          paginatedFila.map((f, i) => {
             const prof = f.profissionalId ? employeeMap.get(f.profissionalId) : null;
             const unidade = unitMap.get(f.unidadeId);
             const reservaTime = getReservaTimeLeft(f.id);
@@ -1895,12 +2008,17 @@ const FilaEspera: React.FC = () => {
             return (
               <Card
                 key={f.id}
-                className={cn(
-                  "shadow-card border-0 transition-all",
-                  isChamado && "ring-2 ring-primary/30",
-                )}
+                className={cn("shadow-card border-0 transition-all", isChamado && "ring-2 ring-primary/30")}
                 style={{
-                  borderLeft: manchesterRisco ? `6px solid ${manchesterRisco.color}` : isActive && waitMin > 60 ? '6px solid hsl(var(--destructive))' : isActive && waitMin >= 30 ? '6px solid hsl(var(--warning))' : isActive ? '6px solid hsl(var(--success))' : undefined,
+                  borderLeft: manchesterRisco
+                    ? `6px solid ${manchesterRisco.color}`
+                    : isActive && waitMin > 60
+                      ? "6px solid hsl(var(--destructive))"
+                      : isActive && waitMin >= 30
+                        ? "6px solid hsl(var(--warning))"
+                        : isActive
+                          ? "6px solid hsl(var(--success))"
+                          : undefined,
                 }}
               >
                 <CardContent className="p-3 sm:p-4 flex flex-col gap-3">
@@ -1912,7 +2030,7 @@ const FilaEspera: React.FC = () => {
                           isActive ? `${waitColor.bg} ${waitColor.text}` : "gradient-primary text-primary-foreground",
                         )}
                       >
-                        {i + 1}
+                        {pageStart + i + 1}
                       </div>
                       {isActive && (
                         <span
@@ -1927,83 +2045,83 @@ const FilaEspera: React.FC = () => {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-foreground">{resolvePaciente(f.pacienteId, f.pacienteNome)}</p>
-                      {f.origemCadastro === "demanda_reprimida" && (
-                        <Badge
-                          variant="outline"
-                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
-                        >
-                          <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
-                        </Badge>
-                      )}
-                      {manchesterRisco && (
-                        <Badge
-                          className={`text-white text-[10px] px-1.5 py-0 ${manchesterRisco.pulse ? 'animate-[pulse-manchester_1.5s_infinite]' : ''}`}
-                          style={{ backgroundColor: manchesterRisco.color }}
-                        >
-                          {manchesterRisco.subtitle}
-                        </Badge>
-                      )}
-                      {isActive && (
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full",
-                            waitColor.bg,
-                            waitColor.text,
-                          )}
-                        >
-                          <Clock className="w-3 h-3" />
-                          {f.prioridade === "urgente" ? "URGENTE" : `Espera: ${formatWaitTime(waitMin)}`}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {unidade?.nome || f.setor} •{" "}
-                      {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}` : "Qualquer profissional"} •
-                      Chegou: {f.horaChegada}
-                    </p>
-                    {absenceHistory[f.pacienteId] && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive cursor-help mt-0.5">
-                              <TriangleAlert className="w-3 h-3" /> Falta anterior
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="font-semibold text-sm">Última falta: {absenceHistory[f.pacienteId].date}</p>
-                            <p className="text-sm">Motivo: {absenceHistory[f.pacienteId].reason}</p>
-                            {absenceHistory[f.pacienteId].obs && (
-                              <p className="text-sm text-muted-foreground">{absenceHistory[f.pacienteId].obs}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-foreground">{resolvePaciente(f.pacienteId, f.pacienteNome)}</p>
+                        {f.origemCadastro === "demanda_reprimida" && (
+                          <Badge
+                            variant="outline"
+                            className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
+                          >
+                            <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
+                          </Badge>
+                        )}
+                        {manchesterRisco && (
+                          <Badge
+                            className={`text-white text-[10px] px-1.5 py-0 ${manchesterRisco.pulse ? "animate-[pulse-manchester_1.5s_infinite]" : ""}`}
+                            style={{ backgroundColor: manchesterRisco.color }}
+                          >
+                            {manchesterRisco.subtitle}
+                          </Badge>
+                        )}
+                        {isActive && (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full",
+                              waitColor.bg,
+                              waitColor.text,
                             )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    {f.dataSolicitacaoOriginal && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        📅 Solicitação original: {f.dataSolicitacaoOriginal}
+                          >
+                            <Clock className="w-3 h-3" />
+                            {f.prioridade === "urgente" ? "URGENTE" : `Espera: ${formatWaitTime(waitMin)}`}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {unidade?.nome || f.setor} •{" "}
+                        {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}` : "Qualquer profissional"}{" "}
+                        • Chegou: {f.horaChegada}
                       </p>
-                    )}
-                    {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">📋 {f.observacoes}</p>}
-                    {f.descricaoClinica && (
-                      <p className="text-xs text-muted-foreground mt-0.5">🩺 {f.descricaoClinica}</p>
-                    )}
-                    {f.cid && <p className="text-xs text-muted-foreground mt-0.5">CID: {f.cid}</p>}
-                    {isChamado && reservaTime && !reservaTime.expired && (
-                      <div className="flex items-center gap-1 mt-1 text-xs font-medium text-primary">
-                        <Timer className="w-3 h-3" />
-                        Reserva: {reservaTime.minutes}:{String(reservaTime.seconds).padStart(2, "0")} restantes — Vaga:{" "}
-                        {reservaTime.slot.hora} com {reservaTime.slot.profissionalNome}
-                      </div>
-                    )}
-                    {isChamado && reservaTime && reservaTime.expired && (
-                      <div className="flex items-center gap-1 mt-1 text-xs font-medium text-destructive">
-                        <Timer className="w-3 h-3" />
-                        Reserva expirada!
-                      </div>
-                    )}
+                      {absenceHistory[f.pacienteId] && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive cursor-help mt-0.5">
+                                <TriangleAlert className="w-3 h-3" /> Falta anterior
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="font-semibold text-sm">Última falta: {absenceHistory[f.pacienteId].date}</p>
+                              <p className="text-sm">Motivo: {absenceHistory[f.pacienteId].reason}</p>
+                              {absenceHistory[f.pacienteId].obs && (
+                                <p className="text-sm text-muted-foreground">{absenceHistory[f.pacienteId].obs}</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {f.dataSolicitacaoOriginal && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          📅 Solicitação original: {f.dataSolicitacaoOriginal}
+                        </p>
+                      )}
+                      {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">📋 {f.observacoes}</p>}
+                      {f.descricaoClinica && (
+                        <p className="text-xs text-muted-foreground mt-0.5">🩺 {f.descricaoClinica}</p>
+                      )}
+                      {f.cid && <p className="text-xs text-muted-foreground mt-0.5">CID: {f.cid}</p>}
+                      {isChamado && reservaTime && !reservaTime.expired && (
+                        <div className="flex items-center gap-1 mt-1 text-xs font-medium text-primary">
+                          <Timer className="w-3 h-3" />
+                          Reserva: {reservaTime.minutes}:{String(reservaTime.seconds).padStart(2, "0")} restantes —
+                          Vaga: {reservaTime.slot.hora} com {reservaTime.slot.profissionalNome}
+                        </div>
+                      )}
+                      {isChamado && reservaTime && reservaTime.expired && (
+                        <div className="flex items-center gap-1 mt-1 text-xs font-medium text-destructive">
+                          <Timer className="w-3 h-3" />
+                          Reserva expirada!
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -2179,6 +2297,38 @@ const FilaEspera: React.FC = () => {
         )}
       </div>
 
+      {filteredFila.length > PAGE_SIZE && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-2">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredFila.length)} de {filteredFila.length}{" "}
+            pacientes
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page === 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Anterior
+            </Button>
+            <span className="text-sm">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page === totalPages}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Absence Modal */}
       <Dialog open={absenceModalOpen} onOpenChange={setAbsenceModalOpen}>
         <DialogContent className="sm:max-w-md">
@@ -2255,7 +2405,8 @@ const FilaEspera: React.FC = () => {
           {rescheduleFilaItem && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Reagendando <strong>{resolvePaciente(rescheduleFilaItem.pacienteId, rescheduleFilaItem.pacienteNome)}</strong>
+                Reagendando{" "}
+                <strong>{resolvePaciente(rescheduleFilaItem.pacienteId, rescheduleFilaItem.pacienteNome)}</strong>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2300,18 +2451,19 @@ const FilaEspera: React.FC = () => {
                   </Select>
                 </div>
               </div>
-              {rescheduleSlot.profissionalId && rescheduleSlot.unidadeId ? (
+              {rescheduleOpen && rescheduleSlot.profissionalId && rescheduleSlot.unidadeId ? (
                 (() => {
                   const dates = rescheduleDates;
                   const dayInfo = rescheduleDayInfoMap;
-                  const slots = rescheduleSlot.data
-                    ? getAvailableSlots(
-                        rescheduleSlot.profissionalId,
-                        rescheduleSlot.unidadeId,
-                        rescheduleSlot.data,
-                        false,
-                      )
-                    : [];
+                  const slots =
+                    rescheduleOpen && rescheduleSlot.data
+                      ? getAvailableSlots(
+                          rescheduleSlot.profissionalId,
+                          rescheduleSlot.unidadeId,
+                          rescheduleSlot.data,
+                          false,
+                        )
+                      : [];
                   return (
                     <>
                       {dates.length === 0 ? (
@@ -2391,9 +2543,7 @@ const FilaEspera: React.FC = () => {
         {detalheFila &&
           (() => {
             const pac = pacienteMap.get(detalheFila.pacienteId);
-            const prof = detalheFila.profissionalId 
-              ? employeeMap.get(detalheFila.profissionalId)
-              : null;
+            const prof = detalheFila.profissionalId ? employeeMap.get(detalheFila.profissionalId) : null;
             const unidade = unitMap.get(detalheFila.unidadeId);
             return (
               <>
