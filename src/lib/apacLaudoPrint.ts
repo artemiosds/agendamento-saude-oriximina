@@ -31,11 +31,17 @@ async function resolveData(paciente: AnyPaciente | null): Promise<ApacLaudoData>
 
 function buildPrintHTML(data: ApacLaudoData): string {
   const overlaysHTML = overlaysToHTML(buildOverlays(data));
+  // URL absoluta — janela aberta com window.open("") tem baseURI=about:blank,
+  // caminhos relativos como "/__l5e/..." não resolveriam.
+  const absTemplate = APAC_TEMPLATE_URL.startsWith("http")
+    ? APAC_TEMPLATE_URL
+    : `${window.location.origin}${APAC_TEMPLATE_URL}`;
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <title>Laudo APAC</title>
+  <base href="${window.location.origin}/" />
   <style>
     @page { size: A4 portrait; margin: 0; }
     html, body { width: ${A4_WIDTH_MM}mm; height: ${A4_HEIGHT_MM}mm; margin: 0; padding: 0; background: #fff; }
@@ -46,7 +52,7 @@ function buildPrintHTML(data: ApacLaudoData): string {
 </head>
 <body>
   <div class="apac-page">
-    <img class="apac-template" src="${APAC_TEMPLATE_URL}" alt="" />
+    <img class="apac-template" src="${absTemplate}" alt="" />
     ${overlaysHTML}
   </div>
 </body>
