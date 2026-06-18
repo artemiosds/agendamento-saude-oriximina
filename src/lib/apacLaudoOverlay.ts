@@ -189,10 +189,6 @@ export function rendersToHTML(
   imageWidthPx: number = APAC_TEMPLATE_NATURAL_WIDTH,
   imageHeightPx: number = APAC_TEMPLATE_NATURAL_HEIGHT,
 ): string {
-  // Importa as funções inline para evitar dependência circular em runtime.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getTextOverlayStyle, getDigitOverlayStyle } = require("./apacCoordinateSystem");
-
   return renders
     .map((r) => {
       if (r.kind === "text") {
