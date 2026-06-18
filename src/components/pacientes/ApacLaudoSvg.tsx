@@ -305,7 +305,7 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
             <DebugTextBox box={F.address} id="13" />
             <DebugTextBox box={F.municipality} id="14" />
             {F.ibgeCode.map((b, i) => <DebugDigit key={`15-${i}`} box={b} id={i === 0 ? "15" : undefined} />)}
-            <DebugTextBox box={F.state} id="16" />
+            {F.state.map((b, i) => <DebugDigit key={`16-${i}`} box={b} id={i === 0 ? "16" : undefined} />)}
             {F.zipCode.map((b, i) => <DebugDigit key={`17-${i}`} box={b} id={i === 0 ? "17" : undefined} />)}
           </g>
         )}
