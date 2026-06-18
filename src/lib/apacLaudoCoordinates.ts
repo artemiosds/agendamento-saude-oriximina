@@ -44,9 +44,9 @@ export interface ApacSvgFields {
   sex: { male: SvgDigitBox; female: SvgDigitBox };                     // 7
   raceColor: SvgTextBox;         // 8
   motherName: SvgTextBox;        // 9
-  patientPhone: { ddd: SvgDigitBox[]; number: SvgDigitBox[] };         // 10 — 2 + 9
+  patientPhone: { ddd: SvgTextBox; number: SvgDigitBox[] };            // 10 — DDD único + 9
   responsibleName: SvgTextBox;   // 11
-  responsiblePhone: { ddd: SvgDigitBox[]; number: SvgDigitBox[] };     // 12 — 2 + 9
+  responsiblePhone: { ddd: SvgTextBox; number: SvgDigitBox[] };        // 12 — DDD único + 9
   address: SvgTextBox;           // 13
   municipality: SvgTextBox;      // 14
   ibgeCode: SvgDigitBox[];       // 15 — 7 caixas
