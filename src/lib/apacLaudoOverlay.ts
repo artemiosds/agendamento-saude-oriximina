@@ -78,10 +78,14 @@ export function buildOverlays(d: ApacLaudoData): Overlay[] {
   });
 
   // 6 - Data de nascimento (DD / MM / AAAA) box x ≈ 107.0–137.6 mm
-  // slashes desenhados no formulário ≈ 120.6 e 131.2 mm
-  out.push({ kind: "digits", value: d.dataDD,   startLeft: 112.1, top: 55.2, spacing: 3.5, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.dataMM,   startLeft: 122.7, top: 55.2, spacing: 3.5, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.dataAAAA, startLeft: 130.7, top: 55.2, spacing: 2.3, count: 4, fontSize: D });
+  // Barras já desenhadas no template ≈ 120.6 e 131.2 mm.
+  // Três grupos isolados, sem reimprimir as barras.
+  // DD: espaço 107.0–120.6  → centros ~ 113.3 / 116.3
+  out.push({ kind: "digits", value: d.dataDD,   startLeft: 113.3, top: 55.2, spacing: 3.0, count: 2, fontSize: D });
+  // MM: espaço 120.6–131.2  → centros ~ 124.4 / 127.4
+  out.push({ kind: "digits", value: d.dataMM,   startLeft: 124.4, top: 55.2, spacing: 3.0, count: 2, fontSize: D });
+  // AAAA: espaço 131.2–137.6 → 4 dígitos compactos
+  out.push({ kind: "digits", value: d.dataAAAA, startLeft: 132.0, top: 55.2, spacing: 1.85, count: 4, fontSize: D });
 
   // 7 - Sexo: caixinhas em ≈ Masc(150.2) Fem(167.9) mm, centro y ≈ 56.3 mm
   out.push({ kind: "check", show: d.sexoMasc, left: 150.2, top: 56.6, fontSize: 11 });
@@ -93,14 +97,14 @@ export function buildOverlays(d: ApacLaudoData): Overlay[] {
   // ---- Linha 9/10 (y interno 61.7–67.97 mm) ----
   // 9 - Nome da mãe: box x ≈ 11.85–139.7 mm
   out.push({ kind: "text", value: d.nomeMae, left: 13, top: 63.8, width: 125, fontSize: F });
-  // 10 - DDD (2 caixas) + Nº telefone (8 caixas)
-  out.push({ kind: "digits", value: d.telDDD, startLeft: 144.0, top: 63.8, spacing: 5.5,   count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telNum, startLeft: 155.0, top: 63.8, spacing: 5.493, count: 8, fontSize: D });
+  // 10 - DDD (2 caixas, ≈ 139.7–150.7 mm) + Nº telefone (8 caixas, ≈ 150.7–196.4 mm)
+  out.push({ kind: "digits", value: d.telDDD, startLeft: 142.4, top: 63.8, spacing: 5.5,   count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.telNum, startLeft: 153.5, top: 63.8, spacing: 5.46,  count: 8, fontSize: D });
 
   // ---- Linha 11/12 (y interno 70.25–76.51 mm) ----
   out.push({ kind: "text", value: d.nomeResponsavel, left: 13, top: 72.3, width: 125, fontSize: F });
-  out.push({ kind: "digits", value: d.telRespDDD, startLeft: 144.0, top: 72.3, spacing: 5.5,   count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telRespNum, startLeft: 155.0, top: 72.3, spacing: 5.493, count: 8, fontSize: D });
+  out.push({ kind: "digits", value: d.telRespDDD, startLeft: 142.4, top: 72.3, spacing: 5.5,   count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.telRespNum, startLeft: 153.5, top: 72.3, spacing: 5.46,  count: 8, fontSize: D });
 
   // ---- Linha 13 (y interno 77.6–83.9 mm) ----
   // 13 - Endereço: ocupa toda a largura interna ≈ 11.85–196.4 mm
