@@ -50,8 +50,16 @@ export interface ApacLaudoData {
 
 const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
 
+// Remove o prefixo do país (55) quando o número vier com mais de 11 dígitos
+// começando por 55. Mantém DDD + número local (10 ou 11 dígitos).
+export const normalizeTelefoneBR = (raw: string): string => {
+  let d = onlyDigits(raw);
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  return d;
+};
+
 const splitTel = (raw: string) => {
-  const d = onlyDigits(raw);
+  const d = normalizeTelefoneBR(raw);
   if (d.length >= 10) return { ddd: d.slice(0, 2), num: d.slice(2, 11) };
   if (d.length === 0) return { ddd: "", num: "" };
   return { ddd: "", num: d.slice(0, 9) };
