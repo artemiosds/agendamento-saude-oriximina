@@ -18,6 +18,7 @@ import {
 import type { AnyPaciente } from "@/lib/apacLaudoData";
 import { useApacLaudoData } from "@/lib/useApacLaudoData";
 import {
+  APAC_CALIBRATE,
   APAC_DEBUG,
   APAC_SVG_FIELDS,
   APAC_SVG_HEIGHT,
