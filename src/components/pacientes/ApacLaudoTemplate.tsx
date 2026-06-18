@@ -82,20 +82,11 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
           src={absTemplate}
           alt=""
           className="apac-template"
-          crossOrigin="anonymous"
           onLoad={() => {
             setImgLoaded(true);
             setImgError(false);
           }}
-          onError={() => {
-            // Tenta novamente sem crossOrigin (alguns ambientes bloqueiam)
-            if (imgRef.current && imgRef.current.crossOrigin) {
-              imgRef.current.crossOrigin = "";
-              imgRef.current.src = absTemplate + (absTemplate.includes("?") ? "&" : "?") + "r=1";
-              return;
-            }
-            setImgError(true);
-          }}
+          onError={() => setImgError(true)}
           style={{
             position: "absolute",
             inset: 0,
