@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Printer, X } from "lucide-react";
-import ApacLaudoTemplate from "./ApacLaudoTemplate";
-import { printApacLaudo } from "@/lib/apacLaudoPrint";
+import { Printer, Download, X } from "lucide-react";
+import { toast } from "sonner";
+import ApacLaudoTemplate, { type ApacLaudoTemplateHandle } from "./ApacLaudoTemplate";
+import { printApacLaudo, downloadApacLaudoPDF } from "@/lib/apacLaudoPrint";
 import { A4_WIDTH_MM, A4_HEIGHT_MM } from "@/lib/apacLaudoOverlay";
 
 interface ApacLaudoModalProps {
@@ -12,7 +13,6 @@ interface ApacLaudoModalProps {
   paciente: any | null;
 }
 
-// 96dpi: 1mm = 3.7795px
 const MM_TO_PX = 96 / 25.4;
 const A4_PX_W = A4_WIDTH_MM * MM_TO_PX;
 const A4_PX_H = A4_HEIGHT_MM * MM_TO_PX;
@@ -20,7 +20,10 @@ const A4_PX_H = A4_HEIGHT_MM * MM_TO_PX;
 export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalProps) {
   const carregando = !paciente;
   const wrapRef = useRef<HTMLDivElement>(null);
+  const templateRef = useRef<ApacLaudoTemplateHandle>(null);
   const [scale, setScale] = useState(1);
+  const [printing, setPrinting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useLayoutEffect(() => {
     const recalc = () => {
@@ -37,6 +40,34 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     return () => ro.disconnect();
   }, [open]);
 
+  const handlePrint = async () => {
+    if (printing) return;
+    setPrinting(true);
+    try {
+      await templateRef.current?.waitReady(4000);
+      await printApacLaudo(paciente);
+    } catch (e) {
+      console.error(e);
+      toast.error("Não foi possível abrir a impressão. Tente novamente.");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await templateRef.current?.waitReady(4000);
+      await downloadApacLaudoPDF(templateRef.current?.element || null, paciente);
+    } catch (e) {
+      console.error(e);
+      toast.error("Não foi possível gerar o PDF. Tente novamente.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl w-[96vw] h-[92vh] p-0 flex flex-col gap-0">
@@ -44,10 +75,19 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
           <DialogTitle className="text-base">
             Laudo APAC{paciente?.nome ? ` — ${paciente.nome}` : ""}
           </DialogTitle>
-          <div className="flex items-center gap-2 mr-8">
-            <Button size="sm" onClick={() => printApacLaudo(paciente)} disabled={carregando}>
+          <div className="flex items-center gap-2 mr-8 flex-wrap">
+            <Button size="sm" onClick={handlePrint} disabled={carregando || printing}>
               <Printer className="w-4 h-4 mr-2" />
-              Imprimir Laudo APAC
+              {printing ? "Preparando impressão..." : "Imprimir Laudo APAC"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleDownload}
+              disabled={carregando || downloading}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {downloading ? "Gerando PDF..." : "Baixar PDF"}
             </Button>
             <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
               <X className="w-4 h-4 mr-2" />
@@ -82,7 +122,7 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
                   background: "#fff",
                 }}
               >
-                <ApacLaudoTemplate paciente={paciente} />
+                <ApacLaudoTemplate ref={templateRef} paciente={paciente} />
               </div>
             </div>
           )}

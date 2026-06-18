@@ -1,6 +1,9 @@
 // Normalização de dados para o Laudo APAC.
 // Somente os campos 3 a 17 são extraídos. Nenhuma persistência.
 
+import { normalizeUF } from "./ufMap";
+
+
 export type AnyPaciente = Record<string, any>;
 
 export const safeText = (v: unknown): string => {
@@ -124,8 +127,8 @@ export function normalizePaciente(paciente: AnyPaciente | null): ApacLaudoData {
       pick("bairro"),
     ),
     municipio: pick("municipio", "cidade"),
-    ibge: onlyDigits(pick("codigo_ibge", "ibge_municipio", "ibgeMunicipio", "codIbge", "cod_ibge", "ibge")).slice(0, 7),
-    uf: pick("uf", "estado").toUpperCase().slice(0, 2),
+    ibge: onlyDigits(pick("codigo_ibge", "ibge_municipio", "ibgeMunicipio", "codIbge", "cod_ibge", "municipio_ibge", "ibge")).slice(0, 7),
+    uf: normalizeUF(pick("uf", "estado")),
     cep: onlyDigits(pick("cep")).slice(0, 8),
   };
 }

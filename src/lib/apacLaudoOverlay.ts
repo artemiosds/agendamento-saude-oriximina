@@ -37,7 +37,18 @@ export interface CheckOverlay {
   fontSize: number;
 }
 
-export type Overlay = TextOverlay | DigitsOverlay | CheckOverlay;
+export interface FieldOverlay {
+  kind: "field";
+  value: string;
+  left: number; // mm — canto superior esquerdo do campo
+  top: number; // mm
+  width: number; // mm — largura interna do campo
+  height: number; // mm — altura interna do campo
+  fontSize: number;
+}
+
+export type Overlay = TextOverlay | DigitsOverlay | CheckOverlay | FieldOverlay;
+
 
 // Coordenadas calibradas sobre a página oficial (210×297 mm).
 // Calibração feita por detecção de bordas no JPG oficial (2480×3509 px).
@@ -96,10 +107,26 @@ export function buildOverlays(d: ApacLaudoData): Overlay[] {
   // ---- Linha 14/15/16/17 (y interno 86.1–92.3 mm) ----
   // 14 - Município de residência: box x ≈ 11.85–124.05 mm
   out.push({ kind: "text", value: d.municipio, left: 13, top: 88.3, width: 110, fontSize: F });
-  // 15 - Cód. IBGE (7 dígitos, sem caixas internas): box x ≈ 124.05–152.4 mm
-  out.push({ kind: "text", value: d.ibge, left: 126, top: 88.3, width: 26, fontSize: F });
-  // 16 - UF: box x ≈ 152.4–158.3 mm
-  out.push({ kind: "text", value: d.uf, left: 152.4, top: 88.3, width: 5.9, fontSize: F, align: "center" });
+  // 15 - Cód. IBGE: 7 caixas em x ≈ 124.05–152.4 mm  (spacing ≈ 4.05 mm)
+  out.push({
+    kind: "digits",
+    value: d.ibge,
+    startLeft: 126.08,
+    top: 88.5,
+    spacing: 4.05,
+    count: 7,
+    fontSize: D,
+  });
+  // 16 - UF: box x ≈ 152.4–158.3 mm — campo centralizado (somente sigla)
+  out.push({
+    kind: "field",
+    value: d.uf,
+    left: 152.4,
+    top: 86.4,
+    width: 5.9,
+    height: 4.6,
+    fontSize: 9,
+  });
   // 17 - CEP: 8 caixas em x ≈ 164.1–196.4 mm  (spacing ≈ 4.01 mm)
   out.push({
     kind: "digits",
@@ -110,6 +137,7 @@ export function buildOverlays(d: ApacLaudoData): Overlay[] {
     count: 8,
     fontSize: D,
   });
+
 
   return out;
 }
@@ -139,6 +167,10 @@ export function overlaysToHTML(overlays: Overlay[]): string {
       if (o.kind === "check") {
         if (!o.show) return "";
         return `<div class="apac-value apac-check" style="left:${o.left}mm;top:${o.top}mm;font-size:${o.fontSize}pt;">✕</div>`;
+      }
+      if (o.kind === "field") {
+        if (!o.value) return "";
+        return `<div class="apac-value apac-field" style="left:${o.left}mm;top:${o.top}mm;width:${o.width}mm;height:${o.height}mm;font-size:${o.fontSize}pt;">${esc(o.value)}</div>`;
       }
       return "";
     })
@@ -183,5 +215,15 @@ export const APAC_CSS = `
     transform: translate(-50%, -50%);
     font-weight: bold;
     line-height: 1;
+  }
+  .apac-field {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: normal;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
   }
 `;
