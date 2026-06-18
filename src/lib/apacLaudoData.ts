@@ -1,5 +1,5 @@
-// Normaliza dados do paciente para o Laudo APAC. APENAS leitura.
-// Não consulta banco, não persiste, não calcula código IBGE.
+// Normalização de dados para o Laudo APAC.
+// Somente os campos 3 a 17 são extraídos. Nenhuma persistência.
 
 export type AnyPaciente = Record<string, any>;
 
@@ -12,13 +12,11 @@ export const safeText = (v: unknown): string => {
 
 const pickFn = (p: AnyPaciente, cd: AnyPaciente) => (...keys: string[]): string => {
   for (const k of keys) {
-    const v = p?.[k];
-    const s = safeText(v);
+    const s = safeText(p?.[k]);
     if (s) return s;
   }
   for (const k of keys) {
-    const v = cd?.[k];
-    const s = safeText(v);
+    const s = safeText(cd?.[k]);
     if (s) return s;
   }
   return "";
@@ -28,9 +26,9 @@ export interface ApacLaudoData {
   nome: string;
   prontuario: string;
   cns: string;
-  dataNascDD: string;
-  dataNascMM: string;
-  dataNascAAAA: string;
+  dataDD: string;
+  dataMM: string;
+  dataAAAA: string;
   sexoMasc: boolean;
   sexoFem: boolean;
   racaCor: string;
@@ -47,26 +45,46 @@ export interface ApacLaudoData {
   cep: string;
 }
 
+const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
+
 const splitTel = (raw: string) => {
-  const d = raw.replace(/\D/g, "");
+  const d = onlyDigits(raw);
   if (d.length >= 10) return { ddd: d.slice(0, 2), num: d.slice(2, 11) };
+  if (d.length === 0) return { ddd: "", num: "" };
   return { ddd: "", num: d.slice(0, 9) };
 };
 
 const splitData = (raw: string) => {
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const s = safeText(raw);
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return { dd: iso[3], mm: iso[2], aaaa: iso[1] };
-  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (br) return { dd: br[1], mm: br[2], aaaa: br[3] };
   return { dd: "", mm: "", aaaa: "" };
 };
 
-const montarEndereco = (tipo: string, logr: string, numero: string, bairro: string): string => {
-  const rua = [tipo, logr].filter(Boolean).join(" ").trim();
+const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
+const montarEndereco = (
+  tipo: string,
+  logr: string,
+  numero: string,
+  bairro: string,
+): string => {
+  const t = safeText(tipo);
+  const l = safeText(logr);
+  // evita duplicar tipo se o logradouro já começa com ele
+  const ruaParts: string[] = [];
+  if (t && !new RegExp(`^${t}\\b`, "i").test(l)) ruaParts.push(t);
+  if (l) ruaParts.push(l);
+  const rua = ruaParts.join(" ").trim();
+
   const partes: string[] = [];
   if (rua) partes.push(rua);
-  if (numero) partes.push(`Nº ${numero}`);
-  if (bairro) partes.push(bairro);
+  const n = safeText(numero);
+  if (n) partes.push(`Nº ${n}`);
+  const b = safeText(bairro);
+  if (b) partes.push(b);
   return partes.join(", ");
 };
 
@@ -75,36 +93,39 @@ export function normalizePaciente(paciente: AnyPaciente | null): ApacLaudoData {
   const cd = (p.custom_data || {}) as AnyPaciente;
   const pick = pickFn(p, cd);
 
-  const sexoRaw = pick("sexo").toLowerCase();
+  const sexoRaw = pick("sexo", "genero").toLowerCase();
   const tel = splitTel(pick("telefone", "celular"));
-  const telR = splitTel(pick("telefoneResponsavel", "telefone_responsavel"));
-  const dn = splitData(pick("dataNascimento", "data_nascimento", "birth_date"));
+  const telR = splitTel(pick("telefone_responsavel", "telefoneResponsavel", "celular_responsavel"));
+  const dn = splitData(pick("data_nascimento", "dataNascimento", "birth_date"));
+
+  let prontuario = pick("numero_prontuario", "numeroProntuario", "prontuario", "codigo", "patient_code");
+  if (isUuid(prontuario)) prontuario = "";
 
   return {
     nome: pick("nome", "name"),
-    prontuario: pick("numeroProntuario", "numero_prontuario", "prontuario", "codigo", "patient_code"),
-    cns: pick("cns", "cartaoSus", "cartao_sus").replace(/\D/g, ""),
-    dataNascDD: dn.dd,
-    dataNascMM: dn.mm,
-    dataNascAAAA: dn.aaaa,
+    prontuario,
+    cns: onlyDigits(pick("cns", "cartao_sus", "cartaoSus")).slice(0, 15),
+    dataDD: dn.dd,
+    dataMM: dn.mm,
+    dataAAAA: dn.aaaa,
     sexoMasc: sexoRaw.startsWith("m"),
     sexoFem: sexoRaw.startsWith("f"),
-    racaCor: pick("racaCor", "raca_cor", "raca"),
-    nomeMae: pick("nomeMae", "nome_mae"),
+    racaCor: pick("raca_cor", "racaCor", "raca"),
+    nomeMae: pick("nome_mae", "nomeMae"),
     telDDD: tel.ddd,
     telNum: tel.num,
-    nomeResponsavel: pick("nomeResponsavel", "nome_responsavel", "responsavel"),
+    nomeResponsavel: pick("nome_responsavel", "nomeResponsavel", "responsavel"),
     telRespDDD: telR.ddd,
     telRespNum: telR.num,
     endereco: montarEndereco(
-      pick("tipoLogradouro", "tipo_logradouro"),
+      pick("tipo_logradouro", "tipoLogradouro"),
       pick("logradouro", "endereco", "rua"),
       pick("numero", "numero_endereco"),
       pick("bairro"),
     ),
     municipio: pick("municipio", "cidade"),
-    ibge: pick("ibgeMunicipio", "ibge_municipio", "codIbge", "cod_ibge", "ibge", "codigo_ibge").replace(/\D/g, ""),
-    uf: pick("uf", "estado"),
-    cep: pick("cep").replace(/\D/g, ""),
+    ibge: onlyDigits(pick("codigo_ibge", "ibge_municipio", "ibgeMunicipio", "codIbge", "cod_ibge", "ibge")).slice(0, 7),
+    uf: pick("uf", "estado").toUpperCase().slice(0, 2),
+    cep: onlyDigits(pick("cep")).slice(0, 8),
   };
 }
