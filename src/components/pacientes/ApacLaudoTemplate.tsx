@@ -29,6 +29,14 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
     const rootRef = useRef<HTMLDivElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
     const [imgLoaded, setImgLoaded] = useState(false);
+    const [imgError, setImgError] = useState(false);
+
+    // URL absoluta — evita problemas em alguns contextos onde a base
+    // não bate (impressão, html2canvas etc.). No preview funciona igualmente.
+    const absTemplate =
+      typeof window !== "undefined" && !APAC_TEMPLATE_URL.startsWith("http")
+        ? `${window.location.origin}${APAC_TEMPLATE_URL}`
+        : APAC_TEMPLATE_URL;
 
     useImperativeHandle(
       ref,
@@ -37,11 +45,9 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
         isReady: () => imgLoaded && !ibgeLoading,
         waitReady: async (timeoutMs = 4000) => {
           const start = Date.now();
-          // aguarda imagem
-          while (!imgLoaded && Date.now() - start < timeoutMs) {
+          while (!imgLoaded && !imgError && Date.now() - start < timeoutMs) {
             await new Promise((r) => setTimeout(r, 80));
           }
-          // aguarda IBGE (sem bloquear demais)
           while (ibgeLoading && Date.now() - start < timeoutMs) {
             await new Promise((r) => setTimeout(r, 80));
           }
@@ -54,7 +60,7 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
           }
         },
       }),
-      [imgLoaded, ibgeLoading],
+      [imgLoaded, imgError, ibgeLoading],
     );
 
     return (
@@ -73,11 +79,23 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
       >
         <img
           ref={imgRef}
-          src={APAC_TEMPLATE_URL}
-          alt="Laudo APAC — template oficial"
+          src={absTemplate}
+          alt=""
           className="apac-template"
           crossOrigin="anonymous"
-          onLoad={() => setImgLoaded(true)}
+          onLoad={() => {
+            setImgLoaded(true);
+            setImgError(false);
+          }}
+          onError={() => {
+            // Tenta novamente sem crossOrigin (alguns ambientes bloqueiam)
+            if (imgRef.current && imgRef.current.crossOrigin) {
+              imgRef.current.crossOrigin = "";
+              imgRef.current.src = absTemplate + (absTemplate.includes("?") ? "&" : "?") + "r=1";
+              return;
+            }
+            setImgError(true);
+          }}
           style={{
             position: "absolute",
             inset: 0,
@@ -90,6 +108,26 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
           }}
           draggable={false}
         />
+        {imgError && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 5,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "24px",
+              textAlign: "center",
+              color: "#900",
+              fontSize: "10pt",
+              background: "rgba(255,255,255,0.95)",
+            }}
+          >
+            Não foi possível carregar o modelo oficial do Laudo APAC.
+          </div>
+        )}
+
         {overlays.map((o, i) => {
           if (o.kind === "text") {
             if (!o.value) return null;
