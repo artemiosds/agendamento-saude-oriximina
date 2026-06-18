@@ -50,14 +50,15 @@ export interface ApacLaudoData {
 
 const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
 
-// Normalização brasileira: descarta prefixo 55 quando aplicável e devolve
-// somente DDD + número (10 ou 11 dígitos). Acima disso considera inválido.
+// Normalização brasileira do telefone principal: remove máscara, descarta o
+// prefixo 55 quando aplicável e devolve somente os 10 ou 11 dígitos de
+// DDD + número. Comprimentos diferentes são considerados inválidos.
 export function normalizeBrazilianPhone(value: unknown): string {
   let digits = String(value ?? "").replace(/\D/g, "");
   if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
     digits = digits.slice(2);
   }
-  if (digits.length > 11) return "";
+  if (digits.length !== 10 && digits.length !== 11) return "";
   return digits;
 }
 
@@ -66,10 +67,10 @@ export const normalizeTelefoneBR = normalizeBrazilianPhone;
 
 const splitTel = (raw: string) => {
   const d = normalizeBrazilianPhone(raw);
-  if (d.length >= 10) return { ddd: d.slice(0, 2), num: d.slice(2, 11) };
-  if (d.length === 0) return { ddd: "", num: "" };
-  return { ddd: "", num: d.slice(0, 9) };
+  if (!d) return { ddd: "", num: "" };
+  return { ddd: d.slice(0, 2), num: d.slice(2) };
 };
+
 
 const splitData = (raw: string) => {
   const s = safeText(raw);
