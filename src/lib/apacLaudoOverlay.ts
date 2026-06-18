@@ -3,8 +3,10 @@
 
 import type { ApacLaudoData } from "./apacLaudoData";
 
-export const APAC_TEMPLATE_URL =
-  "/__l5e/assets-v1/6f209566-9936-4e86-8185-20acc972fb2a/laudo-apac-oficial.jpg";
+// Import via Vite: a imagem é incluída no bundle e funciona em dev,
+// preview e produção. Sem dependência de caminhos /__l5e/ temporários.
+import laudoApacTemplate from "@/assets/laudo-apac-oficial.jpg";
+export const APAC_TEMPLATE_URL: string = laudoApacTemplate;
 
 export const A4_WIDTH_MM = 210;
 export const A4_HEIGHT_MM = 297;
