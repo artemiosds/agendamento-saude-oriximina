@@ -1,6 +1,6 @@
 // Componente do template oficial APAC.
-// Renderiza a imagem da página 1 do PDF oficial e sobrepõe somente os
-// campos 3 a 17. Tamanho real 210×297 mm.
+// Renderiza a imagem da página 1 do PDF oficial (referência única de
+// coordenadas em pixels) e sobrepõe somente os campos 3 a 17.
 
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { AnyPaciente } from "@/lib/apacLaudoData";
@@ -9,8 +9,16 @@ import {
   APAC_TEMPLATE_URL,
   A4_WIDTH_MM,
   A4_HEIGHT_MM,
-  buildOverlays,
+  APAC_TEMPLATE_NATURAL_WIDTH,
+  APAC_TEMPLATE_NATURAL_HEIGHT,
+  APAC_DEBUG,
+  buildApacRenders,
 } from "@/lib/apacLaudoOverlay";
+import {
+  getTextOverlayStyle,
+  getDigitOverlayStyle,
+  imageBoxPxToMm,
+} from "@/lib/apacCoordinateSystem";
 
 interface Props {
   paciente: AnyPaciente | null;
@@ -25,18 +33,20 @@ export interface ApacLaudoTemplateHandle {
 export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
   function ApacLaudoTemplate({ paciente }, ref) {
     const { data, ibgeLoading } = useApacLaudoData(paciente);
-    const overlays = useMemo(() => buildOverlays(data), [data]);
+    const renders = useMemo(() => buildApacRenders(data), [data]);
     const rootRef = useRef<HTMLDivElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
     const [imgLoaded, setImgLoaded] = useState(false);
     const [imgError, setImgError] = useState(false);
 
-    // URL absoluta — evita problemas em alguns contextos onde a base
-    // não bate (impressão, html2canvas etc.). No preview funciona igualmente.
     const absTemplate =
       typeof window !== "undefined" && !APAC_TEMPLATE_URL.startsWith("http")
         ? `${window.location.origin}${APAC_TEMPLATE_URL}`
         : APAC_TEMPLATE_URL;
+
+    // Dimensões reais da imagem carregada — fallback para os naturais conhecidos.
+    const naturalW = imgRef.current?.naturalWidth || APAC_TEMPLATE_NATURAL_WIDTH;
+    const naturalH = imgRef.current?.naturalHeight || APAC_TEMPLATE_NATURAL_HEIGHT;
 
     useImperativeHandle(
       ref,
@@ -119,106 +129,66 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
           </div>
         )}
 
-        {overlays.map((o, i) => {
-          if (o.kind === "text") {
-            if (!o.value) return null;
+        {renders.map((r) => {
+          if (r.kind === "text") {
+            if (!r.value) return null;
+            const style = getTextOverlayStyle(r.box, naturalW, naturalH, {
+              align: r.align,
+              fontSizePx: r.fontSizePx ?? 11,
+            });
             return (
-              <div
-                key={i}
-                className="apac-value"
-                style={{
-                  position: "absolute",
-                  zIndex: 2,
-                  left: `${o.left}mm`,
-                  top: `${o.top}mm`,
-                  width: `${o.width}mm`,
-                  fontSize: `${o.fontSize}pt`,
-                  lineHeight: 1,
-                  color: "#000",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textAlign: o.align === "center" ? "center" : "left",
-                }}
-              >
-                {o.value}
+              <div key={r.id} data-apac-id={r.id} style={style}>
+                {r.value}
               </div>
             );
           }
-          if (o.kind === "digits") {
-            const v = (o.value || "").slice(0, o.count);
+          if (r.kind === "digit") {
+            if (!r.value) return null;
+            const style = getDigitOverlayStyle(r.box, naturalW, naturalH, r.fontSizePx ?? 11);
             return (
-              <span key={i}>
-                {Array.from(v).map((ch, j) => (
-                  <div
-                    key={j}
-                    className="apac-value apac-digit"
-                    style={{
-                      position: "absolute",
-                      zIndex: 2,
-                      left: `${o.startLeft + j * o.spacing}mm`,
-                      top: `${o.top}mm`,
-                      transform: "translateX(-50%)",
-                      fontSize: `${o.fontSize}pt`,
-                      fontVariantNumeric: "tabular-nums",
-                      lineHeight: 1,
-                      color: "#000",
-                    }}
-                  >
-                    {ch}
-                  </div>
-                ))}
-              </span>
-            );
-          }
-          if (o.kind === "field") {
-            if (!o.value) return null;
-            return (
-              <div
-                key={i}
-                className="apac-value apac-field"
-                style={{
-                  position: "absolute",
-                  zIndex: 2,
-                  left: `${o.left}mm`,
-                  top: `${o.top}mm`,
-                  width: `${o.width}mm`,
-                  height: `${o.height}mm`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: `${o.fontSize}pt`,
-                  lineHeight: 1,
-                  color: "#000",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                }}
-              >
-                {o.value}
+              <div key={r.id} data-apac-id={r.id} style={style}>
+                {r.value}
               </div>
             );
           }
           // check
-          if (!o.show) return null;
+          if (!r.show) return null;
+          const style = getTextOverlayStyle(r.box, naturalW, naturalH, {
+            align: "center",
+            fontSizePx: r.fontSizePx ?? 14,
+          });
           return (
-            <div
-              key={i}
-              className="apac-value apac-check"
-              style={{
-                position: "absolute",
-                zIndex: 2,
-                left: `${o.left}mm`,
-                top: `${o.top}mm`,
-                transform: "translate(-50%, -50%)",
-                fontSize: `${o.fontSize}pt`,
-                fontWeight: "bold",
-                lineHeight: 1,
-                color: "#000",
-              }}
-            >
+            <div key={r.id} data-apac-id={r.id} style={{ ...style, fontWeight: "bold" }}>
               ✕
             </div>
           );
         })}
+
+        {APAC_DEBUG &&
+          renders.map((r) => {
+            const mm = imageBoxPxToMm(r.box, naturalW, naturalH);
+            return (
+              <div
+                key={`dbg-${r.id}`}
+                style={{
+                  position: "absolute",
+                  left: `${mm.leftMm}mm`,
+                  top: `${mm.topMm}mm`,
+                  width: `${mm.widthMm}mm`,
+                  height: `${mm.heightMm}mm`,
+                  border: "0.2mm solid rgba(255,0,0,0.8)",
+                  background: "rgba(255,0,0,0.06)",
+                  zIndex: 3,
+                  fontSize: "6px",
+                  color: "#900",
+                  lineHeight: 1,
+                  pointerEvents: "none",
+                }}
+              >
+                {r.id}
+              </div>
+            );
+          })}
       </div>
     );
   },
