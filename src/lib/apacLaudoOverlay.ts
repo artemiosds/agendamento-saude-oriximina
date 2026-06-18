@@ -10,8 +10,6 @@ import {
   A4_HEIGHT_MM,
   APAC_TEMPLATE_NATURAL_WIDTH,
   APAC_TEMPLATE_NATURAL_HEIGHT,
-  boxFromMm,
-  digitBoxesFromMm,
   imageBoxPxToMm,
   getTextOverlayStyle,
   getDigitOverlayStyle,
@@ -42,53 +40,118 @@ export interface ApacPatientFields {
   zipCode: ApacBox[];         // 17 (8)
 }
 
-// Coordenadas calibradas: pixels da imagem oficial, derivadas das
-// medições já validadas em mm. Para recalibrar um campo, substituir
-// boxFromMm(...) por { x, y, width, height } medidos diretamente em px.
+// Coordenadas calibradas por medição direta sobre a imagem oficial
+// (2480×3509 px). Cada caixa é um objeto literal em pixels — qualquer
+// recalibração futura deve substituir esses valores por novas medições
+// na mesma imagem. NÃO usar boxFromMm aqui para os campos 3 a 17.
 export const APAC_PATIENT_FIELDS: ApacPatientFields = {
-  // 3 — Nome do paciente
-  patientName: boxFromMm(13, 46.5, 144, 5),
-  // 4 — Nº do prontuário
-  recordNumber: boxFromMm(160, 46.5, 35, 5),
-  // 5 — CNS (15 caixas)
-  cns: digitBoxesFromMm({ firstCenterMm: 14.95, spacingMm: 6.175, topMm: 54.2, count: 15 }),
-  // 6 — Data de nascimento (DD / MM / AAAA)
+  // 3 — Nome do paciente (cell 140..1947, y 535..609)
+  patientName: { x: 148, y: 542, width: 1795, height: 60 },
+  // 4 — Nº do prontuário (cell 1965..2317)
+  recordNumber: { x: 1973, y: 542, width: 340, height: 60 },
+  // 5 — CNS (15 caixas, linhas verticais detectadas: 140,212,284,358,431,503,576,649,722,795,868,941,1014,1086,1159,1234; y 609..706)
+  cns: [
+    { x: 140,  y: 612, width: 72, height: 90 },
+    { x: 212,  y: 612, width: 72, height: 90 },
+    { x: 284,  y: 612, width: 74, height: 90 },
+    { x: 358,  y: 612, width: 73, height: 90 },
+    { x: 431,  y: 612, width: 72, height: 90 },
+    { x: 503,  y: 612, width: 73, height: 90 },
+    { x: 576,  y: 612, width: 73, height: 90 },
+    { x: 649,  y: 612, width: 73, height: 90 },
+    { x: 722,  y: 612, width: 73, height: 90 },
+    { x: 795,  y: 612, width: 73, height: 90 },
+    { x: 868,  y: 612, width: 73, height: 90 },
+    { x: 941,  y: 612, width: 73, height: 90 },
+    { x: 1014, y: 612, width: 72, height: 90 },
+    { x: 1086, y: 612, width: 73, height: 90 },
+    { x: 1159, y: 612, width: 75, height: 90 },
+  ],
+  // 6 — Data (cell 1264..1625; barras detectadas em x≈1368 e 1463)
   birthDate: {
-    day:   boxFromMm(111.8,  54.2, 8.6,  5),
-    month: boxFromMm(122.9,  54.2, 8.3,  5),
-    year:  boxFromMm(130.15, 54.2, 7.4,  5),
+    day:   { x: 1264, y: 612, width: 97,  height: 90 },
+    month: { x: 1375, y: 612, width: 81,  height: 90 },
+    year:  { x: 1470, y: 612, width: 155, height: 90 },
   },
-  // 7 — Sexo
+  // 7 — Sexo (Masc box 1731..1781; Fem box 1970..2014; altura visível ~ y 638..685)
   sex: {
-    male:   boxFromMm(148.7, 55.1, 3, 3),
-    female: boxFromMm(166.4, 55.1, 3, 3),
+    male:   { x: 1731, y: 638, width: 50, height: 48 },
+    female: { x: 1970, y: 638, width: 44, height: 48 },
   },
-  // 8 — Raça/Cor
-  raceColor: boxFromMm(175, 54.2, 20, 5),
-  // 9 — Nome da mãe
-  motherName: boxFromMm(13, 62.8, 125, 5),
-  // 10 — Telefone do paciente
+  // 8 — Raça/Cor (cell 2061..2319)
+  raceColor: { x: 2069, y: 612, width: 246, height: 90 },
+  // 9 — Nome da mãe (cell 140..1650, y 729..803)
+  motherName: { x: 148, y: 736, width: 1495, height: 60 },
+  // 10 — Telefone paciente
+  // DDD: única caixa no template (1669..1734) dividida em 2 metades lógicas
+  // Número: 9 caixas (1734,1798,1864,1928,1993,2058,2123,2187,2252,2317)
   patientPhone: {
-    ddd:    digitBoxesFromMm({ firstCenterMm: 142.4, spacingMm: 5.5,  topMm: 62.8, count: 2 }),
-    number: digitBoxesFromMm({ firstCenterMm: 153.5, spacingMm: 5.46, topMm: 62.8, count: 8 }),
+    ddd: [
+      { x: 1669, y: 732, width: 33, height: 68 },
+      { x: 1702, y: 732, width: 32, height: 68 },
+    ],
+    number: [
+      { x: 1734, y: 732, width: 64, height: 68 },
+      { x: 1798, y: 732, width: 66, height: 68 },
+      { x: 1864, y: 732, width: 64, height: 68 },
+      { x: 1928, y: 732, width: 65, height: 68 },
+      { x: 1993, y: 732, width: 65, height: 68 },
+      { x: 2058, y: 732, width: 65, height: 68 },
+      { x: 2123, y: 732, width: 64, height: 68 },
+      { x: 2187, y: 732, width: 65, height: 68 },
+      { x: 2252, y: 732, width: 65, height: 68 },
+    ],
   },
-  // 11 — Nome do responsável
-  responsibleName: boxFromMm(13, 71.3, 125, 5),
+  // 11 — Nome do responsável (cell 140..1649, y 830..904)
+  responsibleName: { x: 148, y: 837, width: 1494, height: 60 },
   // 12 — Telefone do responsável
+  // DDD: única caixa (1668..1733); Número: 9 caixas (1733..2315)
   responsiblePhone: {
-    ddd:    digitBoxesFromMm({ firstCenterMm: 142.4, spacingMm: 5.5,  topMm: 71.3, count: 2 }),
-    number: digitBoxesFromMm({ firstCenterMm: 153.5, spacingMm: 5.46, topMm: 71.3, count: 8 }),
+    ddd: [
+      { x: 1668, y: 833, width: 33, height: 68 },
+      { x: 1701, y: 833, width: 32, height: 68 },
+    ],
+    number: [
+      { x: 1733, y: 833, width: 65, height: 68 },
+      { x: 1798, y: 833, width: 64, height: 68 },
+      { x: 1862, y: 833, width: 65, height: 68 },
+      { x: 1927, y: 833, width: 65, height: 68 },
+      { x: 1992, y: 833, width: 64, height: 68 },
+      { x: 2056, y: 833, width: 65, height: 68 },
+      { x: 2121, y: 833, width: 65, height: 68 },
+      { x: 2186, y: 833, width: 65, height: 68 },
+      { x: 2251, y: 833, width: 64, height: 68 },
+    ],
   },
-  // 13 — Endereço
-  address: boxFromMm(13, 78.8, 182, 5),
-  // 14 — Município de residência
-  municipality: boxFromMm(13, 87.3, 110, 5),
-  // 15 — Código IBGE (7 caixas)
-  ibgeCode: digitBoxesFromMm({ firstCenterMm: 126.08, spacingMm: 4.05, topMm: 87.3, count: 7 }),
-  // 16 — UF
-  state: boxFromMm(152.4, 87.3, 5.9, 5),
-  // 17 — CEP (8 caixas)
-  zipCode: digitBoxesFromMm({ firstCenterMm: 166.15, spacingMm: 4.012, topMm: 87.3, count: 8 }),
+  // 13 — Endereço (cell 140..2317, y 917..991)
+  address: { x: 148, y: 924, width: 2165, height: 60 },
+  // 14 — Município (cell 140..1465, y 1017..1091)
+  municipality: { x: 148, y: 1024, width: 1313, height: 60 },
+  // 15 — Código IBGE (cell 1465..1800 sem divisores internos detectados;
+  // dividido em 7 cells uniformes de ~47.857 px)
+  ibgeCode: [
+    { x: 1465.0, y: 1020, width: 47.86, height: 68 },
+    { x: 1512.9, y: 1020, width: 47.86, height: 68 },
+    { x: 1560.7, y: 1020, width: 47.86, height: 68 },
+    { x: 1608.6, y: 1020, width: 47.86, height: 68 },
+    { x: 1656.4, y: 1020, width: 47.86, height: 68 },
+    { x: 1704.3, y: 1020, width: 47.86, height: 68 },
+    { x: 1752.1, y: 1020, width: 47.86, height: 68 },
+  ],
+  // 16 — UF (cell 1800..1938, com tick central em 1869)
+  state: { x: 1808, y: 1024, width: 122, height: 60 },
+  // 17 — CEP (cell 1938..2317 com 7 divisores internos detectados:
+  // 1988, 2034, 2080, 2126, 2172, 2221, 2267 → 8 caixas)
+  zipCode: [
+    { x: 1938, y: 1020, width: 50, height: 68 },
+    { x: 1988, y: 1020, width: 46, height: 68 },
+    { x: 2034, y: 1020, width: 46, height: 68 },
+    { x: 2080, y: 1020, width: 46, height: 68 },
+    { x: 2126, y: 1020, width: 46, height: 68 },
+    { x: 2172, y: 1020, width: 49, height: 68 },
+    { x: 2221, y: 1020, width: 46, height: 68 },
+    { x: 2267, y: 1020, width: 50, height: 68 },
+  ],
 };
 
 // ---------- Render plan ----------
