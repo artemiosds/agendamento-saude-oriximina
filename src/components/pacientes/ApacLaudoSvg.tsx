@@ -280,7 +280,7 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
 
         <SvgDigits value={data.ibge} boxes={F.ibgeCode} />
 
-        <SvgFieldText value={data.uf} box={F.state} clipId="clip-state" />
+        <SvgDigits value={data.uf} boxes={F.state} />
 
         <SvgDigits value={data.cep} boxes={F.zipCode} />
 
