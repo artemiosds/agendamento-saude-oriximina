@@ -13,6 +13,8 @@ import {
   boxFromMm,
   digitBoxesFromMm,
   imageBoxPxToMm,
+  getTextOverlayStyle,
+  getDigitOverlayStyle,
 } from "./apacCoordinateSystem";
 
 export const APAC_TEMPLATE_URL: string = laudoApacTemplate;
