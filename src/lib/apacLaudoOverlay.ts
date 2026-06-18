@@ -42,73 +42,72 @@ export type Overlay = TextOverlay | DigitsOverlay | CheckOverlay;
 // Coordenadas calibradas sobre a página oficial (210×297 mm).
 export function buildOverlays(d: ApacLaudoData): Overlay[] {
   const out: Overlay[] = [];
-  const F = 9; // tamanho padrão para texto
-  const D = 9; // tamanho padrão para dígitos
+  const F = 9;
+  const D = 9;
 
   // 3 - Nome do paciente
-  out.push({ kind: "text", value: d.nome, left: 12, top: 49.5, width: 144, fontSize: F });
+  out.push({ kind: "text", value: d.nome, left: 12, top: 46.5, width: 144, fontSize: F });
   // 4 - Nº prontuário
-  out.push({ kind: "text", value: d.prontuario, left: 159, top: 49.5, width: 43, fontSize: F });
+  out.push({ kind: "text", value: d.prontuario, left: 159, top: 46.5, width: 43, fontSize: F });
 
   // 5 - CNS (15 dígitos)
   out.push({
     kind: "digits",
     value: d.cns,
     startLeft: 14.7,
-    top: 60.5,
+    top: 55.5,
     spacing: 5.66,
     count: 15,
     fontSize: D,
   });
 
-  // 6 - Data de nascimento DD / MM / AAAA
-  // Slashes ficam em ~110.5mm e ~120.5mm
-  out.push({ kind: "digits", value: d.dataDD, startLeft: 103, top: 60.5, spacing: 4.0, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.dataMM, startLeft: 113, top: 60.5, spacing: 4.0, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.dataAAAA, startLeft: 123, top: 60.5, spacing: 4.0, count: 4, fontSize: D });
+  // 6 - Data de nascimento DD / MM / AAAA  (slashes a ~108 e ~119 mm)
+  out.push({ kind: "digits", value: d.dataDD, startLeft: 102, top: 55.5, spacing: 3.5, count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.dataMM, startLeft: 112.5, top: 55.5, spacing: 3.5, count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.dataAAAA, startLeft: 122, top: 55.5, spacing: 3.0, count: 4, fontSize: D });
 
-  // 7 - Sexo
-  out.push({ kind: "check", show: d.sexoMasc, left: 146.7, top: 60.5, fontSize: 10 });
-  out.push({ kind: "check", show: d.sexoFem, left: 162.5, top: 60.5, fontSize: 10 });
+  // 7 - Sexo (X dentro do quadradinho)
+  out.push({ kind: "check", show: d.sexoMasc, left: 146.5, top: 57, fontSize: 11 });
+  out.push({ kind: "check", show: d.sexoFem, left: 163.5, top: 57, fontSize: 11 });
 
   // 8 - Raça/Cor
-  out.push({ kind: "text", value: d.racaCor, left: 168, top: 60.5, width: 34, fontSize: F });
+  out.push({ kind: "text", value: d.racaCor, left: 168, top: 55.5, width: 34, fontSize: F });
 
   // 9 - Nome da mãe
-  out.push({ kind: "text", value: d.nomeMae, left: 12, top: 71, width: 125, fontSize: F });
+  out.push({ kind: "text", value: d.nomeMae, left: 12, top: 64.5, width: 125, fontSize: F });
   // 10 - DDD + Nº telefone
-  out.push({ kind: "digits", value: d.telDDD, startLeft: 141.5, top: 71, spacing: 4.2, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telNum, startLeft: 152, top: 71, spacing: 5.5, count: 9, fontSize: D });
+  out.push({ kind: "digits", value: d.telDDD, startLeft: 141.5, top: 64.5, spacing: 4.2, count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.telNum, startLeft: 152, top: 64.5, spacing: 5.5, count: 9, fontSize: D });
 
   // 11 - Nome responsável
-  out.push({ kind: "text", value: d.nomeResponsavel, left: 12, top: 80, width: 125, fontSize: F });
+  out.push({ kind: "text", value: d.nomeResponsavel, left: 12, top: 73.5, width: 125, fontSize: F });
   // 12 - DDD + Nº telefone responsável
-  out.push({ kind: "digits", value: d.telRespDDD, startLeft: 141.5, top: 80, spacing: 4.2, count: 2, fontSize: D });
-  out.push({ kind: "digits", value: d.telRespNum, startLeft: 152, top: 80, spacing: 5.5, count: 9, fontSize: D });
+  out.push({ kind: "digits", value: d.telRespDDD, startLeft: 141.5, top: 73.5, spacing: 4.2, count: 2, fontSize: D });
+  out.push({ kind: "digits", value: d.telRespNum, startLeft: 152, top: 73.5, spacing: 5.5, count: 9, fontSize: D });
 
   // 13 - Endereço
-  out.push({ kind: "text", value: d.endereco, left: 12, top: 89, width: 190, fontSize: F });
+  out.push({ kind: "text", value: d.endereco, left: 12, top: 82, width: 190, fontSize: F });
 
   // 14 - Município
-  out.push({ kind: "text", value: d.municipio, left: 12, top: 98.5, width: 117, fontSize: F });
+  out.push({ kind: "text", value: d.municipio, left: 12, top: 89, width: 117, fontSize: F });
   // 15 - Cód. IBGE (7 dígitos)
   out.push({
     kind: "digits",
     value: d.ibge,
     startLeft: 136.8,
-    top: 98.5,
+    top: 89,
     spacing: 4.23,
     count: 7,
     fontSize: D,
   });
   // 16 - UF
-  out.push({ kind: "text", value: d.uf, left: 168, top: 98.5, width: 8, fontSize: F, align: "center" });
+  out.push({ kind: "text", value: d.uf, left: 168, top: 89, width: 8, fontSize: F, align: "center" });
   // 17 - CEP (8 dígitos)
   out.push({
     kind: "digits",
     value: d.cep,
     startLeft: 179.7,
-    top: 98.5,
+    top: 89,
     spacing: 2.96,
     count: 8,
     fontSize: D,
@@ -116,6 +115,7 @@ export function buildOverlays(d: ApacLaudoData): Overlay[] {
 
   return out;
 }
+
 
 const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
