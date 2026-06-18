@@ -18,6 +18,7 @@ import {
 import type { AnyPaciente } from "@/lib/apacLaudoData";
 import { useApacLaudoData } from "@/lib/useApacLaudoData";
 import {
+  APAC_CALIBRATE,
   APAC_DEBUG,
   APAC_SVG_FIELDS,
   APAC_SVG_HEIGHT,
@@ -190,6 +191,24 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
     [imgLoaded, imgError, ibgeLoading],
   );
 
+  // Modo calibração: clique no SVG imprime as coordenadas do viewBox
+  // (sistema 2480×3509), independentemente do zoom do modal.
+  const handleCalibrationClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!APAC_CALIBRATE) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const m = svg.getScreenCTM();
+    if (!m) return;
+    const p = pt.matrixTransform(m.inverse());
+    const x = Math.round(p.x);
+    const y = Math.round(p.y);
+    // eslint-disable-next-line no-console
+    console.log(`[APAC calibrate] x=${x}  y=${y}  → { cx: ${x}, cy: ${y} }`);
+  };
+
   return (
     <div ref={rootRef} className="apac-svg-wrap" style={{ width: "100%", height: "100%" }}>
       <svg
@@ -200,7 +219,8 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
-        style={{ display: "block", background: "#fff" }}
+        onClick={APAC_CALIBRATE ? handleCalibrationClick : undefined}
+        style={{ display: "block", background: "#fff", cursor: APAC_CALIBRATE ? "crosshair" : undefined }}
       >
         <defs>
           <clipPath id="clip-patient-name">
@@ -224,9 +244,7 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
           <clipPath id="clip-municipality">
             <rect x={F.municipality.x} y={F.municipality.y} width={F.municipality.width} height={F.municipality.height} />
           </clipPath>
-          <clipPath id="clip-state">
-            <rect x={F.state.x} y={F.state.y} width={F.state.width} height={F.state.height} />
-          </clipPath>
+          {/* UF é renderizada como 2 dígitos individuais — sem clipPath. */}
         </defs>
 
         {/* Imagem oficial — base do documento. */}
@@ -282,7 +300,7 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
 
         <SvgDigits value={data.ibge} boxes={F.ibgeCode} />
 
-        <SvgFieldText value={data.uf} box={F.state} clipId="clip-state" />
+        <SvgDigits value={data.uf} boxes={F.state} />
 
         <SvgDigits value={data.cep} boxes={F.zipCode} />
 
@@ -307,7 +325,7 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
             <DebugTextBox box={F.address} id="13" />
             <DebugTextBox box={F.municipality} id="14" />
             {F.ibgeCode.map((b, i) => <DebugDigit key={`15-${i}`} box={b} id={i === 0 ? "15" : undefined} />)}
-            <DebugTextBox box={F.state} id="16" />
+            {F.state.map((b, i) => <DebugDigit key={`16-${i}`} box={b} id={i === 0 ? "16" : undefined} />)}
             {F.zipCode.map((b, i) => <DebugDigit key={`17-${i}`} box={b} id={i === 0 ? "17" : undefined} />)}
           </g>
         )}
