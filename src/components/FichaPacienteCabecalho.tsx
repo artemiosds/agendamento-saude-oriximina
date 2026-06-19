@@ -650,7 +650,7 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                       <SelectItem value="parda">Parda</SelectItem>
                       <SelectItem value="amarela">Amarela</SelectItem>
                       <SelectItem value="indigena">Indígena</SelectItem>
-                      <SelectItem value="nao_declarado">Não declarado</SelectItem>
+                      
                     </SelectContent>
                   </Select>
                 </div>

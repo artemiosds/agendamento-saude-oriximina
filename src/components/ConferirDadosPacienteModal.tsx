@@ -55,7 +55,7 @@ const RACA_COR_OPTIONS = [
   { value: "parda", label: "Parda" },
   { value: "amarela", label: "Amarela" },
   { value: "indigena", label: "Indígena" },
-  { value: "nao_declarado", label: "Não declarado" },
+  
 ];
 
 const NACIONALIDADE_OPTIONS = [
