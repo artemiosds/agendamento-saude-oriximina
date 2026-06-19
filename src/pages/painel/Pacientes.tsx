@@ -659,6 +659,9 @@ const Pacientes: React.FC = () => {
     if (!cd.bairro?.trim()) newErrors.bairro = "Bairro é obrigatório";
     if (!form.municipio?.trim()) newErrors.municipio = "Município é obrigatório";
     if (!cd.uf?.trim()) newErrors.uf = "UF é obrigatória";
+    if (!cd.nacionalidade?.trim()) newErrors.nacionalidade = "Nacionalidade é obrigatória";
+    if (!(cd.racaCor || cd.raca_cor)?.trim()) newErrors.racaCor = "Raça/Cor (IBGE) é obrigatória";
+
 
     const rawPhone = form.telefone?.trim();
     if (rawPhone) {
