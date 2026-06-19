@@ -492,6 +492,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             podeAgendarRetorno: f.pode_agendar_retorno || false,
             coren: f.coren || "",
             ativo: f.ativo ?? true,
+            customData: f.custom_data || {},
           })),
         );
       }
