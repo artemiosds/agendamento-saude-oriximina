@@ -746,6 +746,7 @@ const BpaExportar: React.FC = () => {
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [loadingProfissionais, setLoadingProfissionais] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const [results, setResults] = useState<{
@@ -817,22 +818,121 @@ const BpaExportar: React.FC = () => {
     fetchInitialData();
   }, []);
 
+  // Carrega somente profissionais que realmente possuem atendimentos
+  // finalizados na competência e unidade selecionadas. Funcionários de
+  // recepção/administrativo deixam de aparecer por serem apenas "ativos".
+  useEffect(() => {
+    let cancelado = false;
+
+    const carregarProfissionaisComAtendimento = async () => {
+      const competencia = somenteNumeros(formData.competencia);
+      const ano = Number(competencia.slice(0, 4));
+      const mes = Number(competencia.slice(4, 6));
+
+      if (competencia.length !== 6 || ano < 2000 || mes < 1 || mes > 12) {
+        setProfissionais([]);
+        setFormData((prev) => ({
+          ...prev,
+          profissional_id: "all",
+          cns_profissional: "",
+          cbo: "",
+        }));
+        return;
+      }
+
+      try {
+        setLoadingProfissionais(true);
+        const startDate = `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-01`;
+        const endDate = new Date(ano, mes, 0).toISOString().split("T")[0];
+
+        let atendimentosQuery = (supabase as any)
+          .from("prontuarios")
+          .select("profissional_id")
+          .gte("data_atendimento", startDate)
+          .lte("data_atendimento", endDate)
+          .eq("status", "finalizado")
+          .not("profissional_id", "is", null)
+          .range(0, 9999);
+
+        if (formData.unidade_id !== "all") {
+          atendimentosQuery = atendimentosQuery.eq("unidade_id", formData.unidade_id);
+        }
+
+        const { data: atendimentos, error: atendimentosError } = await atendimentosQuery;
+        if (atendimentosError) throw atendimentosError;
+
+        const profissionalIds = [
+          ...new Set((atendimentos || []).map((item: any) => item.profissional_id).filter(Boolean)),
+        ] as string[];
+
+        if (profissionalIds.length === 0) {
+          if (!cancelado) {
+            setProfissionais([]);
+            setFormData((prev) => ({
+              ...prev,
+              profissional_id: "all",
+              cns_profissional: "",
+              cbo: "",
+            }));
+          }
+          return;
+        }
+
+        const { data: funcionarios, error: funcionariosError } = await supabase
+          .from("funcionarios")
+          .select("*")
+          .in("id", profissionalIds)
+          .eq("ativo", true);
+
+        if (funcionariosError) throw funcionariosError;
+
+        if (!cancelado) {
+          const lista = [...(funcionarios || [])].sort((a: any, b: any) =>
+            String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"),
+          );
+          setProfissionais(lista);
+
+          // Se o profissional anteriormente selecionado não possui atendimento
+          // no novo filtro, volta para "Todos os profissionais com atendimento".
+          setFormData((prev) =>
+            prev.profissional_id === "all" || lista.some((p: any) => p.id === prev.profissional_id)
+              ? prev
+              : {
+                  ...prev,
+                  profissional_id: "all",
+                  cns_profissional: "",
+                  cbo: "",
+                },
+          );
+        }
+      } catch (err) {
+        console.error("Erro ao carregar profissionais com atendimento:", err);
+        if (!cancelado) {
+          setProfissionais([]);
+          toast.error("Não foi possível carregar os profissionais que realizaram atendimentos.");
+        }
+      } finally {
+        if (!cancelado) setLoadingProfissionais(false);
+      }
+    };
+
+    void carregarProfissionaisComAtendimento();
+    return () => {
+      cancelado = true;
+    };
+  }, [formData.competencia, formData.unidade_id]);
+
   const fetchInitialData = async () => {
     try {
       setLoadingData(true);
-      const [unidadesRes, profissionaisRes] = await Promise.all([
-        supabase.from("unidades").select("*").eq("ativo", true),
-        supabase.from("funcionarios").select("*").eq("ativo", true),
-      ]);
+      const unidadesRes = await supabase.from("unidades").select("*").eq("ativo", true);
 
       if (unidadesRes.error) throw unidadesRes.error;
-      if (profissionaisRes.error) throw profissionaisRes.error;
 
       setUnidades(unidadesRes.data || []);
-      setProfissionais(profissionaisRes.data || []);
     } catch (err: any) {
       console.error("Erro ao carregar dados iniciais:", err);
-      toast.error("Erro ao carregar unidades e profissionais");
+      toast.error("Erro ao carregar unidades");
     } finally {
       setLoadingData(false);
     }
@@ -842,7 +942,14 @@ const BpaExportar: React.FC = () => {
     const unidade = unidades.find((u) => u.id === unidadeId);
     const customData = unidade?.custom_data as any;
     const cnes = customData?.cnes || "";
-    setFormData((prev) => ({ ...prev, unidade_id: unidadeId, cnes }));
+    setFormData((prev) => ({
+      ...prev,
+      unidade_id: unidadeId,
+      cnes,
+      profissional_id: "all",
+      cns_profissional: "",
+      cbo: "",
+    }));
   };
 
   const handleProfissionalChange = (profId: string) => {
@@ -984,31 +1091,25 @@ const BpaExportar: React.FC = () => {
       const profIds = [...new Set(prontuarios.map((p: any) => p.profissional_id).filter(Boolean))] as string[];
       const unidadeIds = [...new Set(prontuarios.map((p: any) => p.unidade_id).filter(Boolean))] as string[];
 
-      const nomesUnicos = [
-        ...new Set(prontuarios.map((p: any) => (p.paciente_nome || "").trim()).filter(Boolean)),
-      ] as string[];
-
-      const [pacientesRes, pacientesByNameRes, funcionariosRes, unidadesRes] = await Promise.all([
+      // paciente_id é o vínculo oficial. Nome não deve ser usado para escolher
+      // outro cadastro, pois pode mudar e pode haver homônimos/duplicidades.
+      const [pacientesRes, funcionariosRes, unidadesRes] = await Promise.all([
         supabase.from("pacientes").select("*").in("id", pacienteIds),
-        nomesUnicos.length
-          ? supabase.from("pacientes").select("*").in("nome", nomesUnicos)
-          : Promise.resolve({ data: [] as any[] }),
         supabase.from("funcionarios").select("*").in("id", profIds),
         supabase.from("unidades").select("*").in("id", unidadeIds),
       ]);
 
-      const pacMap = new Map(pacientesRes.data?.map((p) => [p.id, p]));
-      // Fallback por nome: prontuários cujo paciente_id ficou órfão (duplicidade/merge)
-      // são re-vinculados ao cadastro real mais completo (CPF + CNS + nascimento).
-      const pacByNameMap = new Map<string, any>();
-      (pacientesByNameRes.data || []).forEach((p: any) => {
-        const key = chaveNomePaciente(p.nome);
-        if (!key) return;
-        const existing = pacByNameMap.get(key);
-        const score = scoreCompletudePaciente(p);
-        const existingScore = existing ? scoreCompletudePaciente(existing) : -1;
-        if (!existing || score > existingScore) pacByNameMap.set(key, p);
-      });
+      if (pacientesRes.error) {
+        throw new Error(`Erro ao consultar pacientes: ${pacientesRes.error.message}`);
+      }
+      if (funcionariosRes.error) {
+        throw new Error(`Erro ao consultar profissionais: ${funcionariosRes.error.message}`);
+      }
+      if (unidadesRes.error) {
+        throw new Error(`Erro ao consultar unidades: ${unidadesRes.error.message}`);
+      }
+
+      const pacMap = new Map((pacientesRes.data || []).map((p: any) => [String(p.id), p]));
       const funcMap = new Map(funcionariosRes.data?.map((f) => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map((u) => [u.id, u]));
 
@@ -1017,11 +1118,7 @@ const BpaExportar: React.FC = () => {
       // município cadastrado, sem ler/escrever no banco do paciente.
       const cepsParaConsulta: string[] = [];
       prontuarios.forEach((pr: any) => {
-        let pac = pacMap.get(pr.paciente_id) as any;
-        if (!pac) {
-          const k = chaveNomePaciente(pr.paciente_nome);
-          if (k) pac = pacByNameMap.get(k);
-        }
+        const pac = pacMap.get(String(pr.paciente_id)) as any;
         const cd = (pac?.custom_data as any) || {};
         const c = normalizeCep(pac?.cep || cd.cep);
         if (c) cepsParaConsulta.push(c);
@@ -1179,22 +1276,7 @@ const BpaExportar: React.FC = () => {
 
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
-        let pac = pacMap.get(pront.paciente_id) as any;
-        if (
-          !pac ||
-          !primeiroValorPreenchido(
-            pac.cpf,
-            pac.cns,
-            pac.data_nascimento,
-            (pac.custom_data as any)?.cpf,
-            (pac.custom_data as any)?.cns,
-            (pac.custom_data as any)?.data_nascimento,
-          )
-        ) {
-          const k = chaveNomePaciente(pront.paciente_nome);
-          const fallback = k ? pacByNameMap.get(k) : null;
-          if (fallback) pac = fallback;
-        }
+        const pac = pacMap.get(String(pront.paciente_id)) as any;
         const prof = funcMap.get(pront.profissional_id) as any;
         const unit = unitMap.get(pront.unidade_id) as any;
 
@@ -1220,7 +1302,34 @@ const BpaExportar: React.FC = () => {
           cbo: obterCboValido(prof),
         };
 
+        // Sem o paciente correspondente ao paciente_id do prontuário não é
+        // seguro usar outro cadastro por semelhança de nome.
+        if (!pac) {
+          criticalCount++;
+          const pacienteId = String(pront.paciente_id || "Vazio");
+          const motivo =
+            `Vínculo inválido: o prontuário aponta para o paciente_id ${pacienteId}, ` +
+            `mas esse cadastro não foi encontrado. Prontuário: ${pront.id}.`;
+          warnings.push(`${ident}: ${motivo}`);
+          details.critical.push({
+            ...itemDetail,
+            pendencia: "Vínculo de paciente inválido",
+            valor_atual: motivo,
+          });
+          return;
+        }
+
+        // O nome atual da tabela pacientes é sempre a fonte oficial. Se o
+        // prontuário ainda guardar o nome antigo, apenas registramos o ajuste.
+        if (pront.paciente_nome && chaveNomePaciente(pront.paciente_nome) !== chaveNomePaciente(pac.nome)) {
+          warnings.push(
+            `${pac.nome}: nome do prontuário estava desatualizado ` +
+              `("${pront.paciente_nome}"). Foi usado o nome atual do cadastro pelo paciente_id ${pac.id}.`,
+          );
+        }
+
         let isCritical = false;
+        const errosCadastro: string[] = [];
 
         // CNS Paciente — validação oficial (mod-11), com substituição automática
         // por outro CNS válido cadastrado, quando disponível.
@@ -1229,6 +1338,7 @@ const BpaExportar: React.FC = () => {
         const cns_pac = cnsPick.cns ? cnsPick.cns : zfill("", 15);
         if (!cnsPick.cns) {
           isCritical = true;
+          errosCadastro.push(cnsPick.original ? `CNS inválido (${cnsPick.original})` : "CNS ausente");
           stats.missingCns++;
           const detalhe = cnsPick.original
             ? `CNS original "${cnsPick.original}" reprovado na validação oficial e sem alternativa válida no cadastro.`
@@ -1268,6 +1378,7 @@ const BpaExportar: React.FC = () => {
             });
           } else {
             isCritical = true;
+            errosCadastro.push("Sexo ausente ou não reconhecido");
             stats.missingSexo++;
             warnings.push(`${ident}: Sexo do paciente não informado.`);
             details.missingSexo.push({ ...itemDetail, pendencia: "Sexo Indefinido", valor_atual: "Vazio" });
@@ -1279,6 +1390,7 @@ const BpaExportar: React.FC = () => {
         const data_nasc = formatarData(raw_nasc);
         if (data_nasc === "00000000") {
           isCritical = true;
+          errosCadastro.push(`Nascimento inválido (${raw_nasc || "vazio"})`);
           stats.invalidNascimento++;
           warnings.push(`${ident}: Data de nascimento inválida (${raw_nasc || "Vazio"}).`);
           details.invalidNascimento.push({
@@ -1301,6 +1413,7 @@ const BpaExportar: React.FC = () => {
         const municipio = munRes.codigo;
         if (!municipio || municipio.length !== 6 || municipio === "000000") {
           isCritical = true;
+          errosCadastro.push(`Município/IBGE inválido (${mun_raw || "vazio"})`);
           stats.missingMunicipio++;
           warnings.push(`${ident}: Município de residência inválido ou ausente.`);
           details.missingMunicipio.push({
@@ -1319,7 +1432,11 @@ const BpaExportar: React.FC = () => {
 
         if (isCritical) {
           criticalCount++;
-          details.critical.push({ ...itemDetail, pendencia: "Erro Crítico", valor_atual: "Dados incompletos" });
+          details.critical.push({
+            ...itemDetail,
+            pendencia: "Erro Crítico no cadastro do paciente",
+            valor_atual: errosCadastro.join(" + ") || "Motivo não identificado",
+          });
         }
 
         // Se não for crítico ou se o usuário permitiu exportar com pendências
@@ -2229,12 +2346,28 @@ const BpaExportar: React.FC = () => {
 
             <div className="space-y-2">
               <Label>Profissional</Label>
-              <Select onValueChange={handleProfissionalChange} value={formData.profissional_id}>
+              <Select
+                onValueChange={handleProfissionalChange}
+                value={formData.profissional_id}
+                disabled={
+                  loadingProfissionais ||
+                  somenteNumeros(formData.competencia).length !== 6 ||
+                  profissionais.length === 0
+                }
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o profissional" />
+                  <SelectValue
+                    placeholder={
+                      loadingProfissionais
+                        ? "Carregando profissionais..."
+                        : somenteNumeros(formData.competencia).length !== 6
+                          ? "Informe a competência"
+                          : "Nenhum profissional com atendimento"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os Profissionais</SelectItem>
+                  <SelectItem value="all">Todos com atendimento</SelectItem>
                   {profissionais.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.nome}
