@@ -62,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ufConselho: data.uf_conselho || '',
           podeAgendarRetorno: data.pode_agendar_retorno ?? false,
           coren: (data as any).coren || '',
+          customData: (data as any).custom_data || {},
         });
       }
     } catch (err) {
