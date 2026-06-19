@@ -465,7 +465,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const query = supabase
         .from("funcionarios" as any)
         .select(
-          "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo",
+          "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo,custom_data",
         );
       const { data, error } = await query;
       if (data && !error) {
