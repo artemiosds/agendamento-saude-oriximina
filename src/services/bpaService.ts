@@ -93,7 +93,21 @@ const inBatches = async <T,>(ids: string[], batchSize: number, fn: (batch: strin
 };
 
 const onlyDigits = (v: any) => String(v ?? '').replace(/\D/g, '');
-const sanitizeCid = (v: any) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+// Extrai apenas CID-10 reconhecível. A versão anterior removia caracteres e
+// cortava os quatro primeiros, podendo transformar texto como "DOR LOMBAR" em
+// um falso CID "DORL" e "F79/G70/G80" em "F79G".
+const extractCidCodes = (v: any): string[] => {
+  const texto = String(v ?? '').toUpperCase();
+  const encontrados: string[] = [];
+  const regex = /(?:^|[^A-Z0-9])([A-TV-Z][0-9]{2}(?:\.[0-9]|[0-9])?)(?=$|[^A-Z0-9])/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(texto)) !== null) {
+    const codigo = match[1].replace(/\./g, '');
+    if (!encontrados.includes(codigo)) encontrados.push(codigo);
+  }
+  return encontrados;
+};
+const sanitizeCid = (v: any) => extractCidCodes(v)[0] || '';
 const normalizeName = (s: any) => String(s ?? '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -114,8 +128,7 @@ const pushCid = (bag: string[], v: any) => {
     pushCid(bag, v.codigo || v.code || v.cid || v.cid10 || v.cid_codigo || v.value);
     return;
   }
-  const cid = sanitizeCid(v);
-  if (cid) bag.push(cid);
+  extractCidCodes(v).forEach((cid) => bag.push(cid));
 };
 
 const extractCidsFromAny = (...sources: any[]): string[] => {
@@ -751,9 +764,13 @@ export const bpaService = {
         if (!resolved.codigo_sigtap) procedimentosSemSigtap += 1;
         const cidData = resolveCidForBpaProcedure({ prontuario: pront, procedimento: rawProc, pts, paciente: pac });
         const linkCids = resolved.codigo_sigtap ? (procedimentoCidsMap.get(resolved.codigo_sigtap) || []) : [];
-        const cidUsado = cidData.cid_usado || linkCids[0] || '';
-        const cidsRelacionados = unique([...(cidData.cids_relacionados || []), ...linkCids]).filter((c) => c !== cidUsado);
-        const fonteCid = cidData.fonte_cid !== 'nao_encontrado' ? cidData.fonte_cid : (linkCids.length ? (rawProc.fonte === 'pts' ? 'pts' : 'prontuario') : 'nao_encontrado');
+        // A tabela SIGTAP informa compatibilidade, não o diagnóstico real do
+        // paciente. Nunca escolher automaticamente o primeiro CID relacionado.
+        // Só usar CID efetivamente registrado no procedimento/prontuário/PTS/paciente.
+        const cidUsado = cidData.cid_usado || '';
+        const cidsRelacionados = unique([...(cidData.cids_relacionados || []), ...linkCids])
+          .filter((c) => c && c !== cidUsado);
+        const fonteCid = cidData.fonte_cid;
 
         pushLine({
           key: `pron_${pront.id}_${resolved.procedimento_id || rawProc.procedimento_id || normalizeName(resolved.nome_procedimento)}_${cidUsado}`,
