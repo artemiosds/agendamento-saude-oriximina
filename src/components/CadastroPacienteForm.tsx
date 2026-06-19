@@ -657,7 +657,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 <div>
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Nacionalidade</Label>
                   <Select
-                    value={cd.nacionalidade || "brasileiro"}
+                    value={cd.nacionalidade || ""}
                     onValueChange={(v) => setCustom("nacionalidade", v)}
                   >
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
