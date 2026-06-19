@@ -145,8 +145,17 @@ const RelatorioAlta: React.FC = () => {
   const { pacientes, funcionarios } = useData();
   const { can } = usePermissions();
   const [modo, setModo] = useState<ModoRelatorio>("selector");
+  const [showIndividualChooser, setShowIndividualChooser] = useState(false);
 
-  /* ── common states ─── */
+  // CBO normalizado do profissional autenticado (somente dígitos)
+  const userCboNorm = String(user?.customData?.cbo_codigo ?? "").replace(/\D/g, "");
+  const isFonoaudiologo = userCboNorm === "223810";
+
+  const handleIndividualClick = () => {
+    if (isFonoaudiologo) setShowIndividualChooser(true);
+    else setModo("individual");
+  };
+
   const [version, setVersion] = useState(1);
   const [history, setHistory] = useState<VersionRecord[]>([]);
   const [isReopening, setIsReopening] = useState(false);
