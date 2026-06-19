@@ -1083,7 +1083,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
 
           <Card
             className="cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all group"
-            onClick={() => setModo("individual")}
+            onClick={handleIndividualClick}
           >
             <CardContent className="p-8 text-center space-y-4">
               <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
@@ -1099,9 +1099,65 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
             </CardContent>
           </Card>
         </div>
+
+        {/* Sub-seletor exclusivo Fonoaudiologia (CBO 223810) */}
+        <Dialog open={showIndividualChooser} onOpenChange={setShowIndividualChooser}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Escolha o modelo de Relatório Individual</DialogTitle>
+              <DialogDescription>
+                Disponível para profissionais com CBO 223810 (Fonoaudiólogo).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2">
+              <Card
+                className="cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all"
+                onClick={() => { setShowIndividualChooser(false); setModo("individual"); }}
+              >
+                <CardContent className="p-6 text-center space-y-3">
+                  <div className="w-12 h-12 mx-auto rounded-xl bg-primary/10 flex items-center justify-center">
+                    <User className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Relatório Individual Padrão</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Utilize o modelo individual já existente no sistema.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card
+                className="cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all"
+                onClick={() => { setShowIndividualChooser(false); setModo("individual_fono"); }}
+              >
+                <CardContent className="p-6 text-center space-y-3">
+                  <div className="w-12 h-12 mx-auto rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Stethoscope className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Relatório Fonoaudiológico Avaliativo 1</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Modelo avaliativo completo e exclusivo para profissionais de Fonoaudiologia.
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="text-[10px]">Versão 1</Badge>
+                </CardContent>
+              </Card>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowIndividualChooser(false)}>Cancelar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
+
+  if (modo === "individual_fono") {
+    return <RelatorioFonoAvaliativo onBack={() => setModo("selector")} />;
+  }
+
 
   /* ═══ MULTIPROFISSIONAL ═══ */
   if (modo === "multiprofissional") {
