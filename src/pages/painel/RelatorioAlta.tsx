@@ -27,6 +27,7 @@ import { openPrintDocument } from "@/lib/printLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import RelatorioFonoAvaliativo from "@/components/RelatorioFonoAvaliativo";
 
 /* ── types ─────────────────────────────────────────── */
 interface ProfSection {
