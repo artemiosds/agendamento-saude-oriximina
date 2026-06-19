@@ -71,7 +71,7 @@ interface MetaPTS {
   trabalhada?: boolean;
 }
 
-type ModoRelatorio = "selector" | "multiprofissional" | "individual";
+type ModoRelatorio = "selector" | "multiprofissional" | "individual" | "individual_fono";
 
 const MODALIDADES = [
   "Reabilitação Física", "Intelectual", "Auditiva", "Visual", "Ostomia"
