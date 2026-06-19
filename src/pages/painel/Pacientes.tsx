@@ -1062,7 +1062,7 @@ const Pacientes: React.FC = () => {
             responsavel: data.nome_responsavel || "",
             sexo: cd.sexo || "",
             naturalidade: data.naturalidade || "",
-            nacionalidade: cd.nacionalidade || "BRASILEIRA",
+            nacionalidade: cd.nacionalidade || "",
             raca_cor: cd.raca_cor || "",
             situacao_rua: !!cd.situacao_rua,
             menor_idade: !!data.menor_idade,
