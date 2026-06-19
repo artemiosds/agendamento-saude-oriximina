@@ -266,23 +266,39 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
 // que CID exibido só apareça quando for um código válido (ex.: M545, F328).
 // ============================================================================
 
-// Extrai somente o código CID de valores que também contenham uma descrição.
+// Extrai códigos CID de valores que também contenham descrição ou vários
+// diagnósticos. Preserva a ordem informada e remove apenas o ponto.
 // Exemplos aceitos:
 //   "M545"                     -> "M545"
 //   "M54.5"                    -> "M545"
 //   "M545 — Dor lombar baixa"  -> "M545"
 //   "CID: F84.0 - Autismo"     -> "F840"
-// Não transforma categorias parciais de 3 caracteres, como "M54", em um CID
-// completo e não inventa códigos quando o texto não contém um CID reconhecível.
-const extrairCodigoCid = (v: any): string => {
+//   "I64"                      -> "I64"
+//   "F79/G70/G80"              -> ["F79", "G70", "G80"]
+//
+// Importante: códigos CID de categoria com 3 caracteres podem ser completos.
+// Não acrescentamos "0" automaticamente, pois isso pode criar outro
+// diagnóstico ou um código inexistente.
+const extrairCodigosCid = (v: any): string[] => {
   const texto = String(v ?? "")
     .trim()
     .toUpperCase();
-  if (!texto) return "";
+  if (!texto) return [];
 
-  // BPA-I utiliza 4 posições para o CID. O ponto, quando presente, é removido.
-  const match = texto.match(/(?:^|[^A-Z0-9])([A-Z]\d{2}(?:\.[A-Z0-9]|[A-Z0-9]))(?=$|[^A-Z0-9])/);
-  return match ? match[1].replace(/\./g, "") : "";
+  const encontrados: string[] = [];
+  const regex = /(?:^|[^A-Z0-9])([A-Z]\d{2}(?:\.[A-Z0-9]|[A-Z0-9])?)(?=$|[^A-Z0-9])/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(texto)) !== null) {
+    const codigo = match[1].replace(/\./g, "");
+    if (!encontrados.includes(codigo)) encontrados.push(codigo);
+  }
+
+  return encontrados;
+};
+
+const extrairCodigoCid = (v: any): string => {
+  return extrairCodigosCid(v)[0] || "";
 };
 
 // Normaliza um valor qualquer para o código SIGTAP de 10 dígitos.
@@ -312,10 +328,14 @@ const cidExibicao = (v: any): string => {
   return extrairCodigoCid(v) || "—";
 };
 
-// Validação ESTRITA para o campo CID do BPA-I (4 posições fixas).
-// O BPA-I exige código com 4 caracteres (categoria + subcategoria), ex.: F840, M545.
-// Códigos com 3 caracteres (ex.: "F84") são parciais/truncados e NÃO devem ser
-// exportados — o importador SIA rejeita. Não inventamos subcategoria.
+// Normalização para o campo CID do BPA-I, que possui 4 posições fixas.
+// Aceita:
+//   - categorias CID completas de 3 caracteres, como I64 e F79;
+//   - subcategorias de 4 caracteres, como M545 e F840;
+//   - código acompanhado de descrição;
+//   - múltiplos códigos, usando o primeiro e registrando aviso na exportação.
+// O preenchimento da quarta posição é feito depois com espaço por rpad().
+// Nunca acrescenta "0" para inventar uma subcategoria.
 const validarCidBpa = (v: any): { valido: boolean; codigo: string; motivo: string; normalizado: string } => {
   const original = String(v ?? "")
     .trim()
@@ -328,15 +348,6 @@ const validarCidBpa = (v: any): { valido: boolean; codigo: string; motivo: strin
   }
 
   const compacto = original.replace(/\./g, "").replace(/\s+/g, "");
-  if (/^[A-Z]\d{2}$/.test(compacto)) {
-    return {
-      valido: false,
-      codigo: "",
-      motivo: `CID parcial/truncado "${compacto}" — exige subcategoria de 4 caracteres (ex.: ${compacto}0)`,
-      normalizado: compacto,
-    };
-  }
-
   return {
     valido: false,
     codigo: "",
@@ -1548,9 +1559,38 @@ const BpaExportar: React.FC = () => {
           // a Exportar também não inventa.
           const cidProducao = sigtapReq.exige ? producaoResolvida?.cid || "" : "";
           const cidBruto = cidProducao || pront.custom_data?.cid || pac?.cid || "";
+          const codigosCidEncontrados = extrairCodigosCid(cidBruto);
+          if (codigosCidEncontrados.length > 1) {
+            const cidEscolhido = codigosCidEncontrados[0];
+            const descartados = codigosCidEncontrados.slice(1).join(", ");
+            warnings.push(
+              `${ident}: foram encontrados vários CIDs (${codigosCidEncontrados.join(", ")}). ` +
+                `O BPA-I aceita um CID por linha; foi usado ${cidEscolhido}. ` +
+                `Não usados nesta linha: ${descartados}.`,
+            );
+            stats.autoCorrected++;
+            details.autoCorrected.push({
+              ...itemDetail,
+              pendencia: "Múltiplos CIDs normalizados",
+              valor_atual: `${String(cidBruto)} → usado ${cidEscolhido}`,
+            });
+          } else if (
+            codigosCidEncontrados.length === 1 &&
+            String(cidBruto || "")
+              .trim()
+              .toUpperCase()
+              .replace(/\./g, "") !== codigosCidEncontrados[0]
+          ) {
+            stats.autoCorrected++;
+            details.autoCorrected.push({
+              ...itemDetail,
+              pendencia: "CID normalizado automaticamente",
+              valor_atual: `${String(cidBruto)} → ${codigosCidEncontrados[0]}`,
+            });
+          }
           const ehMedico = profissionalEhMedico(prof);
-          // Validação estrita BPA-I: 4 caracteres obrigatórios. CID com 3 chars
-          // (ex.: "F84") bloqueia as profissões não médicas.
+          // O campo possui 4 posições, mas códigos CID completos de 3 caracteres
+          // são exportados com um espaço à direita (ex.: "I64 ").
           // Para médico, o CID é opcional: quando ausente ou inválido, o campo
           // é exportado em branco e a linha continua normalmente.
           let cid: string;
