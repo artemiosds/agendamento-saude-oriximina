@@ -4296,6 +4296,7 @@ export type Database = {
         }
         Returns: Json
       }
+      current_user_cbo_codigo: { Args: never; Returns: string }
       desbloquear_paciente_faltas: {
         Args: {
           p_paciente_id: string
