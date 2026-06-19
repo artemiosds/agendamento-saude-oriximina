@@ -449,7 +449,7 @@ const bytesToHex = (arr: number[] | Uint8Array, sep = " ") =>
 
 const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
   try {
-    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes.slice().buffer as ArrayBuffer);
     return bytesToHex(new Uint8Array(digest), "").toLowerCase();
   } catch {
     return "";
