@@ -23,6 +23,7 @@ export interface User {
   ufConselho?: string;
   podeAgendarRetorno?: boolean;
   coren?: string;
+  customData?: Record<string, any>;
 }
 
 export interface TriagemRecord {
