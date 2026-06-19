@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from "@/lib/printLayout";
@@ -447,15 +448,6 @@ const bytesToHex = (arr: number[] | Uint8Array, sep = " ") =>
     .map((b) => b.toString(16).toUpperCase().padStart(2, "0"))
     .join(sep);
 
-const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
-  try {
-    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes.slice().buffer as ArrayBuffer);
-    return bytesToHex(new Uint8Array(digest), "").toLowerCase();
-  } catch {
-    return "";
-  }
-};
-
 const toIsoBytes = (content: string): Uint8Array => {
   const bytes = new Uint8Array(content.length);
   for (let i = 0; i < content.length; i++) {
@@ -747,12 +739,8 @@ const buildHeaderOficial = (params: {
 };
 
 const BpaExportar: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
-  const correcaoAbertaRef = useRef<{
-    aberta: boolean;
-    categoria: string | null;
-    scrollY: number;
-  }>({ aberta: false, categoria: null, scrollY: 0 });
   const [formData, setFormData] = useState({
     competencia: "",
     unidade_id: "all",
@@ -760,8 +748,8 @@ const BpaExportar: React.FC = () => {
     profissional_id: "all",
     cns_profissional: "",
     cbo: "",
-    procedimento_padrao: "",
-    municipio_padrao: "",
+    procedimento_padrao: "0301010072",
+    municipio_padrao: "150530",
     exportar_com_pendencias: false,
   });
 
@@ -1012,8 +1000,8 @@ const BpaExportar: React.FC = () => {
       profissional_id: "all",
       cns_profissional: "",
       cbo: "",
-      procedimento_padrao: "",
-      municipio_padrao: "",
+      procedimento_padrao: "0301010072",
+      municipio_padrao: "150530",
       exportar_com_pendencias: false,
     });
     setResults(null);
@@ -1296,7 +1284,6 @@ const BpaExportar: React.FC = () => {
       const pendRows: any[] = [];
 
       let hasError = false;
-      const chavesAtendimentoProcessadas = new Set<string>();
 
       // Linhas de Produção
       prontuarios.forEach((pront: any, index: number) => {
@@ -1325,33 +1312,6 @@ const BpaExportar: React.FC = () => {
           municipio: pac?.municipio || (pac?.custom_data as any)?.municipio_ibge,
           cbo: obterCboValido(prof),
         };
-
-        // Impede produção duplicada quando a consulta devolve o mesmo
-        // prontuário mais de uma vez ou quando há registros repetidos com a
-        // mesma identidade clínica básica.
-        const chaveDuplicidade = [
-          String(pront.id || ""),
-          String(pront.paciente_id || ""),
-          String(pront.profissional_id || ""),
-          String(pront.data_atendimento || ""),
-          somenteNumeros(
-            pront.custom_data?.procedimento_sigtap ||
-              pront.custom_data?.codigo_sigtap ||
-              pront.outro_procedimento ||
-              "",
-          ),
-        ].join("|");
-        if (chavesAtendimentoProcessadas.has(chaveDuplicidade)) {
-          warnings.push(`${ident}: registro duplicado ignorado (${chaveDuplicidade}).`);
-          details.autoCorrected.push({
-            ...itemDetail,
-            pendencia: "Duplicidade removida",
-            valor_atual: chaveDuplicidade,
-          });
-          stats.autoCorrected++;
-          return;
-        }
-        chavesAtendimentoProcessadas.add(chaveDuplicidade);
 
         // Sem o paciente correspondente ao paciente_id do prontuário não é
         // seguro usar outro cadastro por semelhança de nome.
@@ -1421,26 +1381,17 @@ const BpaExportar: React.FC = () => {
           if (inferred) {
             sexo = inferred;
             stats.inferredSexo++;
-            stats.autoCorrected++;
-            warnings.push(
-              `${ident}: sexo ${inferred} inferido automaticamente pelo primeiro nome. Conferência recomendada.`,
-            );
             details.inferredSexo.push({
               ...itemDetail,
-              pendencia: "Sexo inferido automaticamente",
-              valor_atual: "Ausente no cadastro",
+              pendencia: "Sexo Inferido",
+              valor_atual: "Indefinido",
               sugestao: inferred,
-            });
-            details.autoCorrected.push({
-              ...itemDetail,
-              pendencia: "Sexo inferido pelo nome",
-              valor_atual: `Vazio → ${inferred}`,
             });
           } else {
             isCritical = true;
             errosCadastro.push("Sexo ausente ou não reconhecido");
             stats.missingSexo++;
-            warnings.push(`${ident}: Sexo do paciente não informado e não foi possível inferir pelo nome.`);
+            warnings.push(`${ident}: Sexo do paciente não informado.`);
             details.missingSexo.push({ ...itemDetail, pendencia: "Sexo Indefinido", valor_atual: "Vazio" });
           }
         }
@@ -1468,9 +1419,7 @@ const BpaExportar: React.FC = () => {
         const munRes = resolveMunicipioBpa({
           municipioCadastro: mun_raw,
           cepInfo,
-          // Município padrão não é utilizado: somente cadastro ou IBGE
-          // confirmado pelo CEP podem preencher o campo.
-          municipioPadrao: "",
+          municipioPadrao: formData.municipio_padrao,
         });
         const municipio = munRes.codigo;
         if (!municipio || municipio.length !== 6 || municipio === "000000") {
@@ -1501,25 +1450,12 @@ const BpaExportar: React.FC = () => {
           });
         }
 
-        // Modo seguro: registros com dados críticos nunca entram no TXT.
-        if (!isCritical) {
-          let pendenciaPaciente = false;
-          const motivosPendencia: string[] = [];
+        // Se não for crítico ou se o usuário permitiu exportar com pendências
+        if (!isCritical || formData.exportar_com_pendencias) {
           const unitCd = unit?.custom_data as any;
-          const cnesRaw = somenteNumeros(unitCd?.cnes || unit?.cnes || formData.cnes);
-          const cnes = cnesRaw.length === 7 ? cnesRaw : " ".repeat(7);
-          if (cnesRaw.length !== 7) {
-            pendenciaPaciente = true;
-            motivosPendencia.push("CNES da unidade inválido");
-          }
-
+          const cnes = zfill(unitCd?.cnes || unit?.cnes || formData.cnes, 7);
           const profCd = prof?.custom_data as any;
-          const cnsProfRaw = somenteNumeros(prof?.cns || profCd?.cns || formData.cns_profissional);
-          const cns_prof = isValidCnsAlgo(cnsProfRaw) ? cnsProfRaw : " ".repeat(15);
-          if (!isValidCnsAlgo(cnsProfRaw)) {
-            pendenciaPaciente = true;
-            motivosPendencia.push("CNS do profissional ausente ou inválido");
-          }
+          const cns_prof = zfill(prof?.cns || profCd?.cns || formData.cns_profissional, 15);
 
           let cbo_raw = obterCboValido(prof);
           if (!cbo_raw) {
@@ -1530,17 +1466,10 @@ const BpaExportar: React.FC = () => {
               stats.missingCbo++;
             }
           }
-          const cbo = cbo_raw.length === 6 ? cbo_raw : " ".repeat(6);
-          if (cbo_raw.length !== 6) {
-            pendenciaPaciente = true;
-            motivosPendencia.push("CBO do profissional ausente ou inválido");
-            details.missingCbo.push({
-              ...itemDetail,
-              pendencia: "CBO profissional ausente ou inválido",
-              valor_atual: cbo_raw || "Vazio",
-            });
-          }
+          const cbo = zfill(cbo_raw, 6);
 
+          let pendenciaPaciente = false;
+          const motivosPendencia: string[] = [];
           const sigtapReq = profissaoExigeSigtap(prof);
           // Origem do SIGTAP varia por profissão:
           //   psicólogo / fonoaudiólogo / nutricionista → Prontuário (campo fixo, custom_data
@@ -1615,38 +1544,9 @@ const BpaExportar: React.FC = () => {
               motivo,
             });
           }
-          // Procedimento nunca é inventado nem preenchido silenciosamente.
-          // Deve existir um SIGTAP real de exatamente 10 dígitos no prontuário,
-          // vínculo de procedimentos, PTS ou resolução do BPA-Produção.
-          const procNormalizado = somenteNumeros(proc_real);
-          let proc = " ".repeat(10);
-          if (procNormalizado.length === 10) {
-            proc = procNormalizado;
-          } else {
-            pendenciaPaciente = true;
-            motivosPendencia.push(
-              procNormalizado ? `SIGTAP inválido (${procNormalizado.length} dígitos)` : "SIGTAP ausente",
-            );
-            if (!sigtapReq.exige) {
-              stats.missingSigtap++;
-              details.missingSigtap.push({
-                ...itemDetail,
-                pendencia: procNormalizado ? "Procedimento SIGTAP Inválido" : "Procedimento SIGTAP Ausente",
-                valor_atual: procNormalizado || "Vazio",
-                profissao: sigtapReq.profissao || "não classificada",
-                profissao_categoria: sigtapReq.categoria,
-                sigtap_obrigatorio: "Sim para exportação segura",
-                fontes_consultadas: "Prontuário / Procedimentos vinculados / BPA-Produção",
-                origem_sigtap: "—",
-                campo_origem: "—",
-                motivo: "A exportação segura não utiliza procedimento padrão automático.",
-              });
-            }
-            warnings.push(
-              `${ident}: procedimento SIGTAP ${procNormalizado ? "inválido" : "ausente"}. ` +
-                `O procedimento padrão não foi aplicado automaticamente.`,
-            );
-          }
+          // Sem fallback silencioso quando a profissão exigir SIGTAP.
+          const proc = zfill(proc_real || (sigtapReq.exige ? "" : formData.procedimento_padrao), 10);
+          if (!proc_real && !sigtapReq.exige) stats.defaultProc++;
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
@@ -1659,21 +1559,20 @@ const BpaExportar: React.FC = () => {
           // a Exportar também não inventa.
           const cidProducao = sigtapReq.exige ? producaoResolvida?.cid || "" : "";
           const cidBruto = cidProducao || pront.custom_data?.cid || pac?.cid || "";
-          const ehMedico = profissionalEhMedico(prof);
           const codigosCidEncontrados = extrairCodigosCid(cidBruto);
-          const cidMultiplo = codigosCidEncontrados.length > 1;
           if (codigosCidEncontrados.length > 1) {
+            const cidEscolhido = codigosCidEncontrados[0];
+            const descartados = codigosCidEncontrados.slice(1).join(", ");
             warnings.push(
               `${ident}: foram encontrados vários CIDs (${codigosCidEncontrados.join(", ")}). ` +
-                `O BPA-I aceita um CID por linha e nenhum foi escolhido automaticamente.`,
+                `O BPA-I aceita um CID por linha; foi usado ${cidEscolhido}. ` +
+                `Não usados nesta linha: ${descartados}.`,
             );
-            const destinoDetalhe = ehMedico ? details.autoCorrected : details.critical;
-            destinoDetalhe.push({
+            stats.autoCorrected++;
+            details.autoCorrected.push({
               ...itemDetail,
-              pendencia: ehMedico
-                ? "Múltiplos CIDs médicos omitidos"
-                : "Múltiplos CIDs exigem vínculo com o procedimento",
-              valor_atual: String(cidBruto),
+              pendencia: "Múltiplos CIDs normalizados",
+              valor_atual: `${String(cidBruto)} → usado ${cidEscolhido}`,
             });
           } else if (
             codigosCidEncontrados.length === 1 &&
@@ -1689,18 +1588,13 @@ const BpaExportar: React.FC = () => {
               valor_atual: `${String(cidBruto)} → ${codigosCidEncontrados[0]}`,
             });
           }
+          const ehMedico = profissionalEhMedico(prof);
           // O campo possui 4 posições, mas códigos CID completos de 3 caracteres
           // são exportados com um espaço à direita (ex.: "I64 ").
           // Para médico, o CID é opcional: quando ausente ou inválido, o campo
           // é exportado em branco e a linha continua normalmente.
           let cid: string;
-          if (cidMultiplo) {
-            cid = "    ";
-            if (!ehMedico) {
-              pendenciaPaciente = true;
-              motivosPendencia.push("Múltiplos CIDs sem vínculo com o procedimento");
-            }
-          } else if (String(cidBruto || "").trim() === "") {
+          if (String(cidBruto || "").trim() === "") {
             // Sem CID → campo em branco (4 espaços). Não é erro por si só.
             cid = "    ";
           } else {
@@ -1729,43 +1623,22 @@ const BpaExportar: React.FC = () => {
             }
           }
 
-          const quantidadeRaw = somenteNumeros(
-            pront.custom_data?.quantidade_bpa ?? pront.custom_data?.quantidade ?? "",
-          );
-          const quantidadeNumero = Number(quantidadeRaw);
-          const quantidadeValida =
-            quantidadeRaw.length > 0 &&
-            quantidadeRaw.length <= 6 &&
-            Number.isInteger(quantidadeNumero) &&
-            quantidadeNumero > 0;
-          const quantidade = quantidadeValida ? quantidadeRaw.padStart(6, "0") : " ".repeat(6);
-          if (!quantidadeValida) {
-            pendenciaPaciente = true;
-            motivosPendencia.push("Quantidade ausente ou inválida");
-          }
-
-          const caraterRaw = somenteNumeros(pront.custom_data?.carater_atendimento ?? pront.custom_data?.carater ?? "");
-          const carater = caraterRaw.length === 2 ? caraterRaw : "  ";
-          if (caraterRaw.length !== 2) {
-            pendenciaPaciente = true;
-            motivosPendencia.push("Caráter do atendimento ausente ou inválido");
-          }
+          const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
+          const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || "01", 2);
           const autorizacao = rpad(
             somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ""),
             13,
           );
-          // Correção assistida de raça/cor. Quando o cadastro estiver vazio,
-          // aplica a regra já centralizada em bpaNormalization e registra a
-          // alteração para conferência posterior.
+          // Raça/Cor — nunca emite 99. Quando ausente / "não declarada" / inválida,
+          // aplica padrão do fluxo (04 — Amarelo) e marca correção automática.
           const racaRes = normalizeRacaCorBpa(pac?.raca_cor || pacCd.raca_cor || pacCd.racaCor);
           const raca = racaRes.codigo;
           if (racaRes.autoCorrigido) {
             stats.autoCorrected++;
-            warnings.push(`${ident}: ${racaRes.motivo}`);
             details.autoCorrected.push({
               ...itemDetail,
-              pendencia: "Raça/Cor corrigida automaticamente",
-              valor_atual: `${racaRes.valorOriginal || "Vazio"} → ${racaRes.codigo}. ${racaRes.motivo}`,
+              pendencia: "Raça/Cor → padrão Amarelo",
+              valor_atual: `${racaRes.valorOriginal || "Vazio"} → 04 (Amarelo). ${racaRes.motivo}`,
             });
           }
 
@@ -1916,7 +1789,11 @@ const BpaExportar: React.FC = () => {
             numero: String(pac?.numero || pacCdAny.numero || ""),
             bairro: String(pac?.bairro || pacCdAny.bairro || "").toUpperCase(),
             data_atendimento: formatarDataBR(pront.data_atendimento),
-            codigo_sigtap: sigtapCodigoExibicao(proc_real) || proc_real || "",
+            codigo_sigtap:
+              sigtapCodigoExibicao(proc_real || formData.procedimento_padrao) ||
+              proc_real ||
+              formData.procedimento_padrao ||
+              "",
             cid_usado: cidExibicao(cidBruto),
             _ctx: {
               profissional_nome: prof?.nome || "",
@@ -1925,14 +1802,14 @@ const BpaExportar: React.FC = () => {
               unidade_nome: unit?.nome || "",
               cnes,
               cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || "",
-              usou_padrao: false,
+              usou_padrao: !proc_real,
               origem: pront.origem || "Prontuário",
-              origem_sigtap: proc_origem || "—",
+              origem_sigtap: proc_origem || (sigtapReq.exige ? "—" : "Padrão"),
               profissao_categoria: sigtapReq.categoria || "",
             },
           };
 
-          if (pendenciaPaciente) {
+          if (pendenciaPaciente && !formData.exportar_com_pendencias) {
             criticalCount++;
             const motivosTxt = motivosPendencia.length ? motivosPendencia.join(" + ") : "Pendência";
             const apenasSigtap = motivosPendencia.length === 1 && motivosPendencia[0] === "SIGTAP obrigatório ausente";
@@ -1962,27 +1839,7 @@ const BpaExportar: React.FC = () => {
           stats,
           details,
           error:
-            "O arquivo não foi gerado porque foram detectadas pendências críticas. Corrija os dados antes de exportar.",
-          fileName: "",
-          blobUrl: null,
-          confRows: [],
-          pendRows: [],
-          headerPreview: null,
-          headerDetails: null,
-        });
-        setLoading(false);
-        return;
-      }
-
-      if (exportedCount === 0) {
-        setResults({
-          totalFound: prontuarios.length,
-          exportedCount: 0,
-          warnings,
-          criticalCount,
-          stats,
-          details,
-          error: "Nenhuma linha segura foi gerada. Corrija as pendências antes de criar o arquivo BPA-I.",
+            "O arquivo não foi gerado porque foram detectadas pendências críticas. Corrija os dados dos pacientes ou marque 'Exportar mesmo com pendências'.",
           fileName: "",
           blobUrl: null,
           confRows: [],
@@ -2028,37 +1885,8 @@ const BpaExportar: React.FC = () => {
       const blob = new Blob([total], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
       const fileName = `PA${formData.competencia}.TXT`;
-      const arquivoSha256 = await sha256Hex(total);
-
-      // Trilha técnica local, sem dados clínicos identificáveis. Permite
-      // comprovar qual arquivo foi gerado, por quem e com quais totais.
-      try {
-        const chaveHistorico = "bpa_export_history_v1";
-        const anterior = JSON.parse(localStorage.getItem(chaveHistorico) || "[]");
-        const historico = Array.isArray(anterior) ? anterior : [];
-        historico.unshift({
-          id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-          gerado_em: new Date().toISOString(),
-          usuario_id: (user as any)?.id || null,
-          usuario_nome: (user as any)?.nome || (user as any)?.usuario || null,
-          competencia: formData.competencia,
-          unidade_id: formData.unidade_id,
-          profissional_id: formData.profissional_id,
-          arquivo: fileName,
-          sha256: arquivoSha256,
-          encontrados: prontuarios.length,
-          exportados: exportedCount,
-          bloqueados: criticalCount,
-          correcoes_seguras: stats.autoCorrected,
-          versao: "BPA-SEGURO-1.0",
-        });
-        localStorage.setItem(chaveHistorico, JSON.stringify(historico.slice(0, 50)));
-      } catch (auditError) {
-        console.warn("[BPA] Não foi possível salvar o histórico local da exportação.", auditError);
-      }
 
       console.log("[BPA] Header len bytes:", headerBytes.length);
-      console.log("[BPA] SHA-256:", arquivoSha256);
       console.log("[BPA] Header HEX (50):", bytesToHex(Array.from(headerBytes).slice(0, 50)));
       console.log("[BPA] Header texto:", header);
 
@@ -2139,40 +1967,6 @@ const BpaExportar: React.FC = () => {
       setLoading(false);
     }
   };
-
-  const abrirPaginaParaCorrecao = (url: string) => {
-    correcaoAbertaRef.current = {
-      aberta: true,
-      categoria: selectedCategory,
-      scrollY: window.scrollY,
-    };
-
-    const novaAba = window.open(url, "_blank", "noopener,noreferrer");
-    if (!novaAba) {
-      correcaoAbertaRef.current.aberta = false;
-      toast.error("O navegador bloqueou a nova aba. Libere pop-ups para continuar sem perder esta tela.");
-    } else {
-      toast.info("Faça a correção na nova aba. Ao voltar, o BPA será atualizado automaticamente.");
-    }
-  };
-
-  // A página de correção abre em outra aba. Quando o usuário retorna para esta
-  // aba, a exportação é consultada novamente e volta à mesma categoria/posição.
-  useEffect(() => {
-    const atualizarAoRetornar = async () => {
-      const contexto = correcaoAbertaRef.current;
-      if (!contexto.aberta || loading || formData.competencia.length !== 6) return;
-
-      correcaoAbertaRef.current.aberta = false;
-      await handleGerar();
-      setSelectedCategory(contexto.categoria);
-      window.requestAnimationFrame(() => window.scrollTo({ top: contexto.scrollY, behavior: "auto" }));
-      toast.success("Dados atualizados após a correção.");
-    };
-
-    window.addEventListener("focus", atualizarAoRetornar);
-    return () => window.removeEventListener("focus", atualizarAoRetornar);
-  }, [loading, formData.competencia]);
 
   // ============ Excel & Impressão (Conferência BPA-I) ============
   const obterContextoCabecalho = () => {
@@ -2644,24 +2438,22 @@ const BpaExportar: React.FC = () => {
               <Input id="cbo" name="cbo" value={formData.cbo} onChange={handleChange} maxLength={6} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="procedimento_padrao">Procedimento padrão automático</Label>
+              <Label htmlFor="procedimento_padrao">Procedimento Padrão</Label>
               <Input
                 id="procedimento_padrao"
                 name="procedimento_padrao"
-                value="Desativado — usar SIGTAP real do atendimento"
-                readOnly
-                disabled
+                value={formData.procedimento_padrao}
+                onChange={handleChange}
                 maxLength={10}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="municipio_padrao">Município padrão automático</Label>
+              <Label htmlFor="municipio_padrao">Município Padrão (IBGE)</Label>
               <Input
                 id="municipio_padrao"
                 name="municipio_padrao"
-                value="Desativado — usar cadastro/CEP confirmado"
-                readOnly
-                disabled
+                value={formData.municipio_padrao}
+                onChange={handleChange}
                 maxLength={6}
               />
             </div>
@@ -2672,9 +2464,8 @@ const BpaExportar: React.FC = () => {
               <input
                 type="checkbox"
                 id="exportar_com_pendencias"
-                checked={false}
-                disabled
-                readOnly
+                checked={formData.exportar_com_pendencias}
+                onChange={(e) => setFormData((prev) => ({ ...prev, exportar_com_pendencias: e.target.checked }))}
                 className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               />
               <div className="grid gap-1.5 leading-none">
@@ -2682,11 +2473,11 @@ const BpaExportar: React.FC = () => {
                   htmlFor="exportar_com_pendencias"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  Exportação com pendências críticas desativada
+                  Exportar mesmo com pendências críticas
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  No modo seguro, linhas com CNS, sexo, nascimento, município ou outros dados obrigatórios ausentes não
-                  entram no arquivo.
+                  Marque esta opção para permitir o download mesmo que existam dados obrigatórios faltando (CNS, Sexo,
+                  Nascimento, Município).
                 </p>
               </div>
             </div>
@@ -2820,7 +2611,7 @@ const BpaExportar: React.FC = () => {
               },
               { id: "missingSigtap", label: "SIGTAP Obrigatório", count: results.stats.missingSigtap, color: "red" },
               { id: "missingCbo", label: "Sem CBO Prof.", count: results.stats.missingCbo, color: "amber" },
-              { id: "inferredSexo", label: "Sexo inferido", count: results.stats.inferredSexo, color: "blue" },
+              { id: "inferredSexo", label: "Sexo Inferido", count: results.stats.inferredSexo, color: "blue" },
               { id: "fallbackCbo", label: "CBO Fallback", count: results.stats.fallbackCbo, color: "blue" },
               {
                 id: "autoCorrected",
@@ -2863,7 +2654,7 @@ const BpaExportar: React.FC = () => {
                         : selectedCategory === "missingSexo"
                           ? "Sexo Indefinido"
                           : selectedCategory === "inferredSexo"
-                            ? "Sexo inferido automaticamente"
+                            ? "Sexo Inferido pelo Nome"
                             : selectedCategory === "missingCbo"
                               ? "Sem CBO Profissional"
                               : selectedCategory === "fallbackCbo"
@@ -2871,7 +2662,7 @@ const BpaExportar: React.FC = () => {
                                 : selectedCategory === "invalidCbo"
                                   ? "CBO Inválido"
                                   : selectedCategory === "defaultProc"
-                                    ? "Procedimento padrão desativado"
+                                    ? "Procedimento Padrão Utilizado"
                                     : selectedCategory === "invalidNascimento"
                                       ? "Data de Nascimento Inválida"
                                       : selectedCategory === "missingNacionalidade"
@@ -3021,7 +2812,7 @@ const BpaExportar: React.FC = () => {
                                   size="icon"
                                   className="h-8 w-8"
                                   title="Ver Paciente"
-                                  onClick={() => abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)}
+                                  onClick={() => navigate(`/painel/pacientes?id=${item.paciente_id}`)}
                                 >
                                   <User className="h-4 w-4" />
                                 </Button>
@@ -3032,9 +2823,7 @@ const BpaExportar: React.FC = () => {
                                   size="icon"
                                   className="h-8 w-8"
                                   title="Ver Profissional"
-                                  onClick={() =>
-                                    abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
-                                  }
+                                  onClick={() => navigate(`/painel/funcionarios?id=${item.profissional_id}`)}
                                 >
                                   <UserCog className="h-4 w-4" />
                                 </Button>
@@ -3143,10 +2932,9 @@ const BpaExportar: React.FC = () => {
                           • Total de correções: <b>{results.stats.autoCorrected}</b>
                         </div>
                         <div className="text-muted-foreground">
-                          Inclui somente correções verificáveis: uso de outro CNS válido já existente no cadastro,
-                          município confirmado pelo IBGE do CEP, normalização de CID e remoção de duplicidades. Sexo e
-                          raça/cor podem receber correção assistida e ficam registrados para conferência. Município e
-                          procedimento padrão continuam sem preenchimento silencioso.
+                          Inclui: substituição de CNS inválido por CNS válido do cadastro, ajuste de Município pelo IBGE
+                          do CEP (ViaCEP) e aplicação do padrão Amarelo quando raça/cor estiver ausente ou não
+                          declarada. Veja detalhes em "Correções Automáticas" acima.
                         </div>
                       </div>
                     )}
