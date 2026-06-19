@@ -63,6 +63,11 @@ const isSigtap = (v: any) => {
   return n.length >= 6 && n.length <= 10;
 };
 const normalizeSigtap = (v: any) => onlyDigits(v).padStart(10, "0").slice(-10);
+const normalizeSearchText = (v: any) => String(v ?? "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toUpperCase()
+  .trim();
 
 /** CID-10 oficial: 1 letra + 2 dígitos, opcional ponto + 1 dígito (ex.: M54, M54.5, Z00.0). */
 const CID10_REGEX = /^[A-TV-Z][0-9]{2}(\.?[0-9])?$/;
@@ -93,6 +98,9 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
 
   // CIDs relacionados ao procedimento escolhido
   const [cidOptions, setCidOptions] = useState<CidHit[]>([]);
+  const [cidQuery, setCidQuery] = useState("");
+  const [loadingCids, setLoadingCids] = useState(false);
+  const [cidLoadError, setCidLoadError] = useState("");
   const [cidManual, setCidManual] = useState("");
   const [selCid, setSelCid] = useState<string>("");
 
@@ -112,6 +120,9 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setHits([]);
     setSelSigtap(null);
     setCidOptions([]);
+    setCidQuery("");
+    setLoadingCids(false);
+    setCidLoadError("");
     setSelCid("");
     setCidManual("");
     setMotivo("");
@@ -185,7 +196,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     const t = setTimeout(async () => {
       setSearching(true);
       try {
-        const { data, error } = await (supabase as any).rpc("search_sigtap_and_cid", { q, lim: 40 });
+        const { data, error } = await (supabase as any).rpc("search_sigtap_and_cid", { q, lim: 100 });
         if (error) throw error;
         const procs = (data?.procedimentos || []) as any[];
         // Prioriza compatibilidade com a profissão
@@ -211,18 +222,65 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setSelSigtap(h);
     setSelCid("");
     setCidOptions([]);
+    setCidQuery("");
+    setCidManual("");
+    setCidLoadError("");
+    setLoadingCids(true);
     try {
-      const { data } = await (supabase as any)
-        .from("sigtap_procedimento_cids")
-        .select("cid_codigo, cid_descricao")
-        .eq("procedimento_codigo", h.codigo)
-        .order("cid_codigo", { ascending: true })
-        .limit(200);
-      setCidOptions(Array.isArray(data) ? data : []);
-    } catch (e) {
+      // Carrega TODOS os CIDs vinculados, sem o antigo corte de 200 linhas.
+      // Consulta variantes do código para tolerar catálogo com/sem zeros à esquerda.
+      const codigoNormalizado = normalizeSigtap(h.codigo);
+      const variantes = [...new Set([String(h.codigo || "").trim(), onlyDigits(h.codigo), codigoNormalizado].filter(Boolean))];
+      const todos: any[] = [];
+      const PAGE_SIZE = 1000;
+
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await (supabase as any)
+          .from("sigtap_procedimento_cids")
+          .select("procedimento_codigo, cid_codigo, cid_descricao")
+          .in("procedimento_codigo", variantes)
+          .order("cid_codigo", { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        const pagina = Array.isArray(data) ? data : [];
+        todos.push(...pagina);
+        if (pagina.length < PAGE_SIZE) break;
+      }
+
+      const unicos = new Map<string, CidHit>();
+      todos.forEach((row: any) => {
+        const codigo = normalizeCid(row?.cid_codigo || "");
+        if (!isValidCid10(codigo)) return;
+        if (!unicos.has(codigo)) {
+          unicos.set(codigo, {
+            cid_codigo: codigo,
+            cid_descricao: String(row?.cid_descricao || "").trim(),
+          });
+        }
+      });
+
+      setCidOptions(
+        [...unicos.values()].sort((a, b) =>
+          a.cid_codigo.localeCompare(b.cid_codigo, "pt-BR"),
+        ),
+      );
+    } catch (e: any) {
       console.error("[BPA] CIDs do procedimento:", e);
+      setCidLoadError(e?.message || "Não foi possível carregar os CIDs relacionados.");
+    } finally {
+      setLoadingCids(false);
     }
   };
+
+  const cidOptionsFiltradas = useMemo(() => {
+    const q = normalizeSearchText(cidQuery).replace(/\./g, "");
+    if (!q) return cidOptions;
+    return cidOptions.filter((c) => {
+      const codigo = normalizeSearchText(c.cid_codigo).replace(/\./g, "");
+      const descricao = normalizeSearchText(c.cid_descricao);
+      return codigo.includes(q) || descricao.includes(q);
+    });
+  }, [cidOptions, cidQuery]);
 
   const impactoCount = prontuarios.length;
   const sobrescritas = useMemo(() => {
@@ -430,29 +488,82 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         {/* CID relacionado */}
         {selSigtap && (
           <div className="space-y-2">
-            <Label>CID-10 relacionado {cidOptions.length === 0 && <span className="text-xs text-muted-foreground">(opcional — informe manualmente se necessário)</span>}</Label>
-            {cidOptions.length > 0 ? (
-              <select
-                className="w-full border rounded-md p-2 bg-background text-sm"
-                value={selCid}
-                onChange={(e) => { setSelCid(e.target.value); setCidManual(""); }}
-              >
-                <option value="">— Selecione um CID compatível —</option>
-                {cidOptions.map((c) => (
-                  <option key={c.cid_codigo} value={c.cid_codigo}>
-                    {c.cid_codigo} — {c.cid_descricao}
-                  </option>
-                ))}
-              </select>
-            ) : (
+            <Label>
+              CID-10 relacionado
+              {!loadingCids && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({cidOptions.length} compatível(is) carregado(s))
+                </span>
+              )}
+            </Label>
+
+            {loadingCids && (
+              <div className="flex items-center gap-2 rounded-md border p-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando todos os CIDs relacionados…
+              </div>
+            )}
+
+            {cidLoadError && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Falha ao consultar vínculos SIGTAP–CID</AlertTitle>
+                <AlertDescription>{cidLoadError}</AlertDescription>
+              </Alert>
+            )}
+
+            {!loadingCids && cidOptions.length > 0 && (
+              <>
+                <Input
+                  placeholder="Filtrar CID relacionado por código ou descrição…"
+                  value={cidQuery}
+                  onChange={(e) => setCidQuery(e.target.value)}
+                />
+                <select
+                  className="w-full border rounded-md p-2 bg-background text-sm"
+                  value={selCid}
+                  onChange={(e) => { setSelCid(e.target.value); setCidManual(""); }}
+                  size={Math.min(Math.max(cidOptionsFiltradas.length + 1, 4), 10)}
+                >
+                  <option value="">— Selecione um CID compatível —</option>
+                  {cidOptionsFiltradas.map((c) => (
+                    <option key={c.cid_codigo} value={c.cid_codigo}>
+                      {c.cid_codigo} — {c.cid_descricao || "Sem descrição no catálogo"}
+                    </option>
+                  ))}
+                </select>
+                {cidOptionsFiltradas.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum CID relacionado corresponde ao filtro informado.
+                  </p>
+                )}
+              </>
+            )}
+
+            {!loadingCids && cidOptions.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                O catálogo não possui CID vinculado a este procedimento. O CID é opcional; informe manualmente somente
+                se houver diagnóstico registrado no atendimento.
+              </p>
+            )}
+
+            {!loadingCids && (
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  CID manual {cidOptions.length > 0 && "(use somente se o vínculo oficial estiver incompleto)"}
+                </Label>
               <Input
                 placeholder="Ex.: M54 ou M54.5"
                 value={cidManual}
-                onChange={(e) => setCidManual(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  setCidManual(e.target.value.toUpperCase());
+                  if (e.target.value) setSelCid("");
+                }}
                 maxLength={6}
                 aria-invalid={cidInvalido}
                 className={cidInvalido ? "border-destructive" : ""}
               />
+              </div>
             )}
             {cidInvalido && (
               <p className="text-xs text-destructive">
