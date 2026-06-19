@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer } from "lucide-react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from "@/lib/printLayout";
@@ -739,8 +738,12 @@ const buildHeaderOficial = (params: {
 };
 
 const BpaExportar: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
+  const correcaoAbertaRef = useRef<{
+    aberta: boolean;
+    categoria: string | null;
+    scrollY: number;
+  }>({ aberta: false, categoria: null, scrollY: 0 });
   const [formData, setFormData] = useState({
     competencia: "",
     unidade_id: "all",
@@ -1282,6 +1285,7 @@ const BpaExportar: React.FC = () => {
       const itensControle: Array<{ procedimento: string; quantidade: string }> = [];
       const confRows: any[] = [];
       const pendRows: any[] = [];
+      const chavesAtendimentos = new Set<string>();
 
       let hasError = false;
 
@@ -1312,6 +1316,35 @@ const BpaExportar: React.FC = () => {
           municipio: pac?.municipio || (pac?.custom_data as any)?.municipio_ibge,
           cbo: obterCboValido(prof),
         };
+
+        // Remove apenas duplicidades exatas de produção: mesmo paciente,
+        // profissional, unidade, data e procedimento. O primeiro registro é
+        // mantido e os seguintes são ignorados com registro auditável.
+        const procedimentoChave = somenteNumeros(
+          pront.custom_data?.procedimento_sigtap ||
+            pront.custom_data?.codigo_sigtap ||
+            pront.outro_procedimento ||
+            formData.procedimento_padrao,
+        );
+        const chaveAtendimento = [
+          String(pront.paciente_id || ""),
+          String(pront.profissional_id || ""),
+          String(pront.unidade_id || ""),
+          String(pront.data_atendimento || "").slice(0, 10),
+          procedimentoChave,
+        ].join("|");
+
+        if (chavesAtendimentos.has(chaveAtendimento)) {
+          stats.autoCorrected++;
+          warnings.push(`${ident}: atendimento duplicado removido automaticamente.`);
+          details.autoCorrected.push({
+            ...itemDetail,
+            pendencia: "Atendimento duplicado removido",
+            valor_atual: chaveAtendimento,
+          });
+          return;
+        }
+        chavesAtendimentos.add(chaveAtendimento);
 
         // Sem o paciente correspondente ao paciente_id do prontuário não é
         // seguro usar outro cadastro por semelhança de nome.
@@ -1609,16 +1642,17 @@ const BpaExportar: React.FC = () => {
                 `${ident}: CID médico opcional ignorado (${cidVal.motivo}). A linha foi exportada sem CID.`,
               );
             } else {
+              // CID é opcional neste modo operacional. Conteúdo inválido,
+              // como "FOIO", é removido e a linha segue sem CID.
               cid = "    ";
-              pendenciaPaciente = true;
-              motivosPendencia.push("CID inválido/truncado");
               warnings.push(
-                `${ident}: ${cidVal.motivo}. Fonte: ${cidProducao ? "BPA-Produção" : pront.custom_data?.cid ? "Prontuário" : "Cadastro"}.`,
+                `${ident}: CID inválido removido automaticamente (${cidVal.motivo}). A linha foi exportada sem CID.`,
               );
-              details.critical.push({
+              stats.autoCorrected++;
+              details.autoCorrected.push({
                 ...itemDetail,
-                pendencia: `CID inválido: ${cidVal.motivo}`,
-                valor_atual: String(cidBruto),
+                pendencia: "CID inválido removido",
+                valor_atual: `${String(cidBruto)} → campo vazio`,
               });
             }
           }
@@ -1967,6 +2001,48 @@ const BpaExportar: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Abre a tela de correção em outra aba sem alterar nenhuma regra do TXT.
+  const abrirPaginaParaCorrecao = (url: string) => {
+    correcaoAbertaRef.current = {
+      aberta: true,
+      categoria: selectedCategory,
+      scrollY: window.scrollY,
+    };
+
+    const novaAba = window.open(url, "_blank");
+    if (!novaAba) {
+      correcaoAbertaRef.current.aberta = false;
+      toast.error("O navegador bloqueou a nova aba. Libere pop-ups para este sistema.");
+      return;
+    }
+
+    novaAba.opener = null;
+    toast.info("Faça a correção na nova aba. Ao retornar, a análise será atualizada.");
+  };
+
+  // Quando esta aba voltar a ficar visível, consulta novamente os dados e
+  // restaura a categoria e a posição onde o usuário estava trabalhando.
+  useEffect(() => {
+    const atualizarAoRetornar = () => {
+      const contexto = correcaoAbertaRef.current;
+      if (!contexto.aberta || document.visibilityState !== "visible") return;
+
+      correcaoAbertaRef.current.aberta = false;
+      const categoriaAnterior = contexto.categoria;
+      const posicaoAnterior = contexto.scrollY;
+
+      void handleGerar().finally(() => {
+        setSelectedCategory(categoriaAnterior);
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: posicaoAnterior, behavior: "auto" });
+        });
+      });
+    };
+
+    document.addEventListener("visibilitychange", atualizarAoRetornar);
+    return () => document.removeEventListener("visibilitychange", atualizarAoRetornar);
+  }, [formData.competencia, formData.unidade_id, formData.profissional_id]);
 
   // ============ Excel & Impressão (Conferência BPA-I) ============
   const obterContextoCabecalho = () => {
@@ -2812,7 +2888,7 @@ const BpaExportar: React.FC = () => {
                                   size="icon"
                                   className="h-8 w-8"
                                   title="Ver Paciente"
-                                  onClick={() => navigate(`/painel/pacientes?id=${item.paciente_id}`)}
+                                  onClick={() => abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)}
                                 >
                                   <User className="h-4 w-4" />
                                 </Button>
@@ -2823,7 +2899,9 @@ const BpaExportar: React.FC = () => {
                                   size="icon"
                                   className="h-8 w-8"
                                   title="Ver Profissional"
-                                  onClick={() => navigate(`/painel/funcionarios?id=${item.profissional_id}`)}
+                                  onClick={() =>
+                                    abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
+                                  }
                                 >
                                   <UserCog className="h-4 w-4" />
                                 </Button>
