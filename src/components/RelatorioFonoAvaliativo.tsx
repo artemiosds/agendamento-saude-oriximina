@@ -23,6 +23,7 @@ import {
   FONO_STEPS, FONO_AVALIATIVO_VERSION, FONO_AVALIATIVO_TIPO_REGISTRO,
   type FieldDef, type StepDef,
 } from "@/lib/fonoAvaliativoTemplate";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Props { onBack: () => void; }
 
