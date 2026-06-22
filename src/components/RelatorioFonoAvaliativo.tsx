@@ -448,8 +448,49 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         <div class="info-item"><span class="info-label">Data do Relatório</span><br/><span class="info-value">${fmtBr(dataRelatorio)}</span></div>
         <div class="info-item"><span class="info-label">Profissional</span><br/><span class="info-value">${profNome}</span></div>
         <div class="info-item"><span class="info-label">CBO / Conselho</span><br/><span class="info-value">223810 — ${conselho}</span></div>
+        <div class="info-item"><span class="info-label">Unidade</span><br/><span class="info-value">${unidadeNome}</span></div>
       </div>
     `;
+
+    // 2. Identificação do PTS
+    if (selectedPts) {
+      const pts = selectedPts;
+      body += `
+        <div class="section" style="page-break-inside:avoid">
+          <div class="section-title">2. Identificação do PTS</div>
+          <div class="field"><span class="field-label">PTS ID</span><div class="field-value">${pts.id}</div></div>
+          <div class="field"><span class="field-label">Status</span><div class="field-value">${pts.status || "—"}</div></div>
+          <div class="field"><span class="field-label">Data de criação</span><div class="field-value">${pts.created_at ? fmtBr(pts.created_at) : "—"}</div></div>
+          <div class="field"><span class="field-label">Equipe / Especialidades</span><div class="field-value">${(pts.especialidades_envolvidas || []).join(", ") || "—"}</div></div>
+          <div class="field"><span class="field-label">Objetivo geral</span><div class="field-value">${pts.objetivo_geral || "—"}</div></div>
+          <div class="field"><span class="field-label">Objetivos terapêuticos</span><div class="field-value">${pts.objetivos_terapeuticos || "—"}</div></div>
+          <div class="field"><span class="field-label">Metas (curto prazo)</span><div class="field-value">${pts.metas_curto_prazo || "—"}</div></div>
+          <div class="field"><span class="field-label">Metas (médio prazo)</span><div class="field-value">${pts.metas_medio_prazo || "—"}</div></div>
+          <div class="field"><span class="field-label">Metas (longo prazo)</span><div class="field-value">${pts.metas_longo_prazo || "—"}</div></div>
+          <div class="field"><span class="field-label">Plano de conduta</span><div class="field-value">${pts.plano_conduta || "—"}</div></div>
+        </div>`;
+    } else {
+      body += `<div class="section"><div class="section-title">2. Identificação do PTS</div><div class="field-value">Nenhum PTS vinculado encontrado para este paciente.</div></div>`;
+    }
+
+    // 3. Gestão de Tratamento
+    if (selectedCycle) {
+      const c = selectedCycle;
+      body += `
+        <div class="section" style="page-break-inside:avoid">
+          <div class="section-title">3. Gestão de Tratamento e Ciclo Terapêutico</div>
+          <div class="field"><span class="field-label">Tipo de tratamento</span><div class="field-value">${c.treatment_type || "—"}</div></div>
+          <div class="field"><span class="field-label">Especialidade</span><div class="field-value">${c.specialty || "—"}</div></div>
+          <div class="field"><span class="field-label">Status</span><div class="field-value">${c.status || "—"}</div></div>
+          <div class="field"><span class="field-label">Início</span><div class="field-value">${c.start_date ? fmtBr(c.start_date) : "—"}</div></div>
+          <div class="field"><span class="field-label">Previsão de término</span><div class="field-value">${c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—"}</div></div>
+          <div class="field"><span class="field-label">Frequência</span><div class="field-value">${c.frequency || "—"}</div></div>
+          <div class="field"><span class="field-label">Sessões realizadas</span><div class="field-value">${c.sessions_done ?? 0} / ${c.total_sessions ?? 0}</div></div>
+          <div class="field"><span class="field-label">Observações clínicas</span><div class="field-value">${c.clinical_notes || "—"}</div></div>
+        </div>`;
+    } else {
+      body += `<div class="section"><div class="section-title">3. Gestão de Tratamento e Ciclo Terapêutico</div><div class="field-value">Nenhuma gestão de tratamento vinculada encontrada para este paciente.</div></div>`;
+    }
 
     FONO_STEPS.forEach(step => {
       if (step.id === "identificacao") return;
