@@ -581,6 +581,64 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       </Card>
 
       {pacienteId && (
+        <Card>
+          <CardContent className="pt-4 space-y-4">
+            <div>
+              <Label className="text-sm font-semibold">Identificação do PTS</Label>
+              {ptsList.length === 0 ? (
+                <p className="text-xs text-muted-foreground mt-1">Nenhum PTS vinculado encontrado para este paciente.</p>
+              ) : (
+                <>
+                  <Select value={selectedPtsId} onValueChange={setSelectedPtsId}>
+                    <SelectTrigger className="h-9 text-sm mt-1"><SelectValue placeholder="Selecione o PTS" /></SelectTrigger>
+                    <SelectContent>
+                      {ptsList.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {(p.status || "—")} • {fmtBr(p.created_at)} • {(p.especialidades_envolvidas || []).join(", ") || "Sem especialidade"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedPts && (
+                    <div className="mt-2 p-2 rounded bg-muted/40 text-xs space-y-1">
+                      <div><strong>Objetivo geral:</strong> {selectedPts.objetivo_geral || "—"}</div>
+                      <div><strong>Plano de conduta:</strong> {selectedPts.plano_conduta || "—"}</div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <Separator />
+            <div>
+              <Label className="text-sm font-semibold">Gestão de Tratamento e Ciclo Terapêutico</Label>
+              {cycleList.length === 0 ? (
+                <p className="text-xs text-muted-foreground mt-1">Nenhuma gestão de tratamento vinculada encontrada para este paciente.</p>
+              ) : (
+                <>
+                  <Select value={selectedCycleId} onValueChange={setSelectedCycleId}>
+                    <SelectTrigger className="h-9 text-sm mt-1"><SelectValue placeholder="Selecione o ciclo" /></SelectTrigger>
+                    <SelectContent>
+                      {cycleList.map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {(c.treatment_type || c.specialty || "Ciclo")} • {c.status} • {fmtBr(c.start_date)} • {c.sessions_done ?? 0}/{c.total_sessions ?? 0}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedCycle && (
+                    <div className="mt-2 p-2 rounded bg-muted/40 text-xs">
+                      <strong>Observações:</strong> {selectedCycle.clinical_notes || "—"}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+
+      {pacienteId && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <Card className="lg:col-span-3">
             <CardHeader className="pb-2">
