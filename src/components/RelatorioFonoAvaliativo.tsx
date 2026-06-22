@@ -861,18 +861,42 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
             <Card>
               <CardContent className="pt-4 space-y-2">
                 <p className="text-xs text-muted-foreground">Navegação rápida</p>
-                <div className="flex flex-col gap-1 max-h-72 overflow-auto">
-                  {FONO_STEPS.map((s, i) => (
-                    <Button
-                      key={s.id}
-                      variant={i === stepIdx ? "default" : "ghost"}
-                      size="sm"
-                      className="justify-start text-xs h-8"
-                      onClick={() => setStepIdx(i)}
-                    >
-                      {s.title}
-                    </Button>
-                  ))}
+                <div className="flex flex-col gap-1 max-h-96 overflow-auto">
+                  {FONO_STEPS.map((s, i) => {
+                    // Renumbered: identificacao=1, then PTS=2 + Gestão=3 (inserted), restantes deslocados +2
+                    const displayN = i === 0 ? 1 : i + 2;
+                    const label = renumberTitle(s.title, displayN);
+                    return (
+                      <React.Fragment key={s.id}>
+                        <Button
+                          variant={i === stepIdx ? "default" : "ghost"}
+                          size="sm"
+                          className="justify-start text-xs h-8 text-left whitespace-normal"
+                          onClick={() => setStepIdx(i)}
+                        >
+                          {label}
+                        </Button>
+                        {i === 0 && (
+                          <>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="justify-start text-xs h-8 text-left whitespace-normal"
+                              onClick={() => document.getElementById("sec-pts")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                            >
+                              2. Identificação do PTS
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="justify-start text-xs h-8 text-left whitespace-normal"
+                              onClick={() => document.getElementById("sec-ciclo")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                            >
+                              3. Gestão de Tratamento e Ciclo Terapêutico
+                            </Button>
+                          </>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
