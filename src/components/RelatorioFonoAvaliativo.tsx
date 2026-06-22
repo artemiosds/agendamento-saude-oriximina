@@ -814,6 +814,9 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
                 <Button variant="ghost" size="sm" onClick={handlePrint} disabled={status !== "concluido"}>
                   <Printer className="w-4 h-4 mr-2" /> Imprimir / PDF
                 </Button>
+                <Button variant="ghost" size="sm" onClick={handleExportWord} disabled={status !== "concluido"}>
+                  <FileText className="w-4 h-4 mr-2" /> Exportar Word (.docx)
+                </Button>
               </CardContent>
             </Card>
 
