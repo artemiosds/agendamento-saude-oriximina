@@ -13,17 +13,16 @@ import { toast } from "sonner";
 /**
  * Modal isolado de correção SIGTAP/CID para a BPA-Exportar.
  *
- * Regra de aplicação (definida pelo usuário):
- *   - A correção é aplicada em LOTE para TODOS os prontuários do mesmo
- *     paciente na mesma data_atendimento, dentro da fonte correta
- *     (campo prontuarios.custom_data.{procedimento_sigtap, cid}).
- *   - NÃO altera outras datas, outros pacientes ou outras profissões.
- *   - NÃO mexe no TXT BPA-I em si — apenas garante que o código SIGTAP e CID
- *     fiquem disponíveis para que o pipeline da BPA-Exportar/BPA-Produção
- *     leia e gere o TXT corretamente na próxima geração.
- *   - Para Fisioterapia, se o usuário indicar que a origem deve ser PTS,
- *     também atualiza o vínculo PTS ativo do paciente.
- *   - Registra auditoria em notification_logs (evento: bpa_sigtap_correcao).
+ * Regra de aplicação em LOTE por paciente + competência:
+ *   - A correção é aplicada para TODOS os prontuários do mesmo paciente
+ *     dentro da MESMA COMPETÊNCIA (AAAAMM) da exportação BPA, restrita
+ *     ao mesmo profissional e unidade da pendência (regra clara).
+ *   - Atualiza prontuarios.custom_data.{procedimento_sigtap, codigo_sigtap,
+ *     procedimento_nome, cid, cid10}.
+ *   - NÃO altera outros meses, outros pacientes ou outras profissões.
+ *   - Para Fisioterapia, se solicitado, atualiza o PTS ativo do paciente.
+ *   - Registra auditoria em notification_logs (evento: bpa_sigtap_correcao)
+ *     com a lista dos prontuários afetados e valor antigo/novo.
  */
 
 export type ResolverSigtapItem = {
@@ -37,6 +36,10 @@ export type ResolverSigtapItem = {
   unidade_id?: string;
   unidade_nome?: string;
   cbo?: string;
+  /** Competência da exportação BPA no formato AAAAMM. Quando informada, a
+   *  correção é aplicada em lote a todos os prontuários do mesmo paciente
+   *  dentro do mês (mesmo profissional + mesma unidade). */
+  competencia?: string;
 };
 
 type SigtapHit = {
@@ -56,6 +59,19 @@ interface Props {
   userId?: string;
   userNome?: string;
 }
+
+/** Retorna [primeiro_dia, ultimo_dia] (YYYY-MM-DD) para uma competência AAAAMM. */
+const competenciaRange = (comp?: string): { ini: string; fim: string } | null => {
+  const n = String(comp || "").replace(/\D/g, "");
+  if (n.length !== 6) return null;
+  const ano = Number(n.slice(0, 4));
+  const mes = Number(n.slice(4, 6));
+  if (!ano || mes < 1 || mes > 12) return null;
+  const last = new Date(ano, mes, 0).getDate();
+  const mm = String(mes).padStart(2, "0");
+  const dd = String(last).padStart(2, "0");
+  return { ini: `${ano}-${mm}-01`, fim: `${ano}-${mm}-${dd}` };
+};
 
 const onlyDigits = (v: any) => String(v ?? "").replace(/\D/g, "");
 const isSigtap = (v: any) => {
