@@ -64,19 +64,25 @@ function detectImageType(url: string): "png" | "jpg" | "gif" | "bmp" {
 
 async function buildHeader(): Promise<Header> {
   const cfg = await loadDocumentConfig();
-  const logos = (cfg.logos || []).filter((l: any) => l?.enabled && l?.url);
+  const slots: { url: string; cfg: any }[] = [
+    { url: cfg.logoEsquerda, cfg: cfg.logosConfig?.esquerda },
+    { url: cfg.logoCentral, cfg: cfg.logosConfig?.central },
+    { url: cfg.logoDireita, cfg: cfg.logosConfig?.direita },
+  ].filter(s => s.url && s.cfg?.ativo);
+
   const imgRuns: ImageRun[] = [];
-  for (const logo of logos) {
-    const bytes = await fetchImageBytes(logo.url);
+  for (const slot of slots) {
+    const bytes = await fetchImageBytes(slot.url);
     if (!bytes) continue;
-    const px = Math.min(120, Math.max(30, Number(logo.size) || 80));
+    const px = Math.min(140, Math.max(30, Number(slot.cfg?.altura) || 70));
     imgRuns.push(new ImageRun({
-      type: detectImageType(logo.url) as any,
+      type: detectImageType(slot.url) as any,
       data: bytes,
       transformation: { width: px, height: px },
       altText: { title: "Logo", description: "Logo institucional", name: "logo" },
     }));
   }
+
   const headerChildren: Paragraph[] = [];
   if (imgRuns.length) {
     headerChildren.push(new Paragraph({
@@ -84,11 +90,12 @@ async function buildHeader(): Promise<Header> {
       children: imgRuns.flatMap((r, i) => i === 0 ? [r] : [new TextRun({ text: "    " }), r]),
     }));
   }
-  const inst = (cfg as any).institutionName || (cfg as any).header?.institutionName || "";
-  if (inst) headerChildren.push(new Paragraph({
-    alignment: AlignmentType.CENTER,
-    children: [new TextRun({ text: inst, bold: true, size: 22, font: FONT })],
-  }));
+  [cfg.linha1, cfg.linha2, cfg.linha3, cfg.linha4].forEach((line, i) => {
+    if (line) headerChildren.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: line, bold: i === 0, size: 22, font: FONT })],
+    }));
+  });
   if (!headerChildren.length) headerChildren.push(new Paragraph({ children: [new TextRun({ text: "" })] }));
   return new Header({ children: headerChildren });
 }
