@@ -175,6 +175,31 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
     })();
   }, [pacienteId, user?.id]);
 
+  // Triagem mais recente do paciente (para sugerir queixa)
+  const [triagem, setTriagem] = useState<any>(null);
+  useEffect(() => {
+    if (!pacienteId) { setTriagem(null); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("triage_records")
+        .select("*")
+        .eq("paciente_id", pacienteId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setTriagem(data || null);
+    })();
+  }, [pacienteId]);
+
+  // Sugerir queixa principal automaticamente (sem sobrescrever digitação manual)
+  useEffect(() => {
+    if (!pacienteId) return;
+    if (answers.queixa_principal && String(answers.queixa_principal).trim()) return;
+    const sugestao = pickQueixa([selectedPts, triagem, selectedCycle, paciente]);
+    if (sugestao) setAnswers(prev => ({ ...prev, queixa_principal: sugestao }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPtsId, selectedCycleId, triagem, pacienteId]);
+
   // Load PTS list for this patient (prioriza profissional logado)
   useEffect(() => {
     if (!pacienteId) { setPtsList([]); return; }
