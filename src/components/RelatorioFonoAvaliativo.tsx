@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
-  ArrowLeft, Save, CheckCircle, Printer, AlertCircle, ChevronLeft, ChevronRight, Stethoscope,
+  ArrowLeft, Save, CheckCircle, Printer, AlertCircle, ChevronLeft, ChevronRight, Stethoscope, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { auditService } from "@/services/auditService";
