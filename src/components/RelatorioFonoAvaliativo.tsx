@@ -14,11 +14,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
-  ArrowLeft, Save, CheckCircle, Printer, AlertCircle, ChevronLeft, ChevronRight, Stethoscope,
+  ArrowLeft, Save, CheckCircle, Printer, AlertCircle, ChevronLeft, ChevronRight, Stethoscope, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { auditService } from "@/services/auditService";
 import { openPrintDocument } from "@/lib/printLayout";
+import { exportFonoAvaliativoDocx, type ReportSection, type ReportField } from "@/lib/fonoAvaliativoDocx";
 import {
   FONO_STEPS, FONO_AVALIATIVO_VERSION, FONO_AVALIATIVO_TIPO_REGISTRO,
   type FieldDef, type StepDef,
@@ -534,6 +535,108 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
     );
   };
 
+  const buildReportSections = (): ReportSection[] => {
+    const sections: ReportSection[] = [];
+    // 2. PTS
+    if (selectedPts) {
+      const pts = selectedPts;
+      sections.push({
+        title: "2. Identificação do PTS",
+        fields: [
+          { label: "Status", value: pts.status || "—" },
+          { label: "Data de criação", value: pts.created_at ? fmtBr(pts.created_at) : "—" },
+          { label: "Equipe / Especialidades", value: (pts.especialidades_envolvidas || []).join(", ") || "—" },
+          { label: "Objetivo geral", value: pts.objetivo_geral || "—" },
+          { label: "Objetivos terapêuticos", value: pts.objetivos_terapeuticos || "—" },
+          { label: "Metas (curto prazo)", value: pts.metas_curto_prazo || "—" },
+          { label: "Metas (médio prazo)", value: pts.metas_medio_prazo || "—" },
+          { label: "Metas (longo prazo)", value: pts.metas_longo_prazo || "—" },
+          { label: "Plano de conduta", value: pts.plano_conduta || "—" },
+        ],
+      });
+    } else {
+      sections.push({ title: "2. Identificação do PTS", emptyMessage: "Nenhum PTS vinculado encontrado para este paciente." });
+    }
+    // 3. Ciclo
+    if (selectedCycle) {
+      const c = selectedCycle;
+      sections.push({
+        title: "3. Gestão de Tratamento e Ciclo Terapêutico",
+        fields: [
+          { label: "Tipo de tratamento", value: c.treatment_type || "—" },
+          { label: "Especialidade", value: c.specialty || "—" },
+          { label: "Status", value: c.status || "—" },
+          { label: "Início", value: c.start_date ? fmtBr(c.start_date) : "—" },
+          { label: "Previsão de término", value: c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—" },
+          { label: "Frequência", value: c.frequency || "—" },
+          { label: "Sessões realizadas", value: `${c.sessions_done ?? 0} / ${c.total_sessions ?? 0}` },
+          { label: "Observações clínicas", value: c.clinical_notes || "—" },
+        ],
+      });
+    } else {
+      sections.push({ title: "3. Gestão de Tratamento e Ciclo Terapêutico", emptyMessage: "Nenhuma gestão de tratamento vinculada encontrada para este paciente." });
+    }
+    // 4..N. Avaliação / Protocolos / Parecer (sections from FONO_STEPS)
+    let n = 4;
+    FONO_STEPS.forEach(step => {
+      if (step.id === "identificacao") return;
+      step.sections.forEach(sec => {
+        const fields: ReportField[] = [];
+        sec.fields.forEach(f => {
+          const v = answers[f.id];
+          if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) return;
+          let txt = "";
+          if (Array.isArray(v)) {
+            const items = v.filter(x => x !== "__other__");
+            if (v.includes("__other__") && others[f.id]) items.push(`Outros: ${others[f.id]}`);
+            txt = items.join("; ");
+          } else txt = String(v);
+          if (justifs[f.id]) txt += ` — Justificativa: ${justifs[f.id]}`;
+          if (obs[f.id]) txt += ` — Obs.: ${obs[f.id]}`;
+          fields.push({ label: f.label, value: txt });
+        });
+        if (fields.length) {
+          sections.push({ title: `${n}. ${sec.title}`, fields });
+          n++;
+        }
+      });
+    });
+    // PROC
+    sections.push({
+      title: `${n}. Pontuação PROC`,
+      fields: [
+        { label: "Habilidades comunicativas (expressiva)", value: `${answers.proc_habilidades || 0} / 70` },
+        { label: "Compreensão da linguagem oral", value: `${answers.proc_compreensao || 0} / 60` },
+        { label: "Aspectos do desenvolvimento cognitivo", value: `${answers.proc_cognitivo || 0} / 70` },
+        { label: "TOTAL", value: `${procTotal} / 200` },
+      ],
+    });
+    return sections;
+  };
+
+  const handleExportWord = async () => {
+    const errs = validate();
+    if (errs.length) { toast.error(errs[0]); return; }
+    try {
+      const profNome = user?.nome || "";
+      const conselho = funcionario
+        ? `${funcionario.tipoConselho || "CRFa"} ${funcionario.numeroConselho || ""}${funcionario.ufConselho ? "/" + funcionario.ufConselho : ""}`
+        : "CRFa —";
+      await exportFonoAvaliativoDocx({
+        pacienteNome: paciente?.nome || "",
+        dataRelatorio: fmtBr(dataRelatorio),
+        profissionalNome: profNome,
+        conselho,
+        unidadeNome,
+        sections: buildReportSections(),
+      });
+      toast.success("Arquivo .docx gerado");
+    } catch (e: any) {
+      toast.error("Falha ao gerar Word: " + (e?.message || ""));
+    }
+  };
+
+
   const step: StepDef = FONO_STEPS[stepIdx];
   const errors = validate();
 
@@ -710,6 +813,9 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
                 </Button>
                 <Button variant="ghost" size="sm" onClick={handlePrint} disabled={status !== "concluido"}>
                   <Printer className="w-4 h-4 mr-2" /> Imprimir / PDF
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handleExportWord} disabled={status !== "concluido"}>
+                  <FileText className="w-4 h-4 mr-2" /> Exportar Word (.docx)
                 </Button>
               </CardContent>
             </Card>
