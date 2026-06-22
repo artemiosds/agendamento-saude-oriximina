@@ -180,7 +180,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   useEffect(() => {
     if (!pacienteId) { setTriagem(null); return; }
     (async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("triage_records")
         .select("*")
         .eq("paciente_id", pacienteId)
