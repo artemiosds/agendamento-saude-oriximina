@@ -549,7 +549,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           <div class="section-title">3. Gestão de Tratamento e Ciclo Terapêutico</div>
           <div class="field"><span class="field-label">Tipo de tratamento</span><div class="field-value">${c.treatment_type || "—"}</div></div>
           <div class="field"><span class="field-label">Especialidade</span><div class="field-value">${c.specialty || "—"}</div></div>
-          <div class="field"><span class="field-label">Status</span><div class="field-value">${c.status || "—"}</div></div>
+          <div class="field"><span class="field-label">Status</span><div class="field-value">${statusLabel(c.status)}</div></div>
           <div class="field"><span class="field-label">Início</span><div class="field-value">${c.start_date ? fmtBr(c.start_date) : "—"}</div></div>
           <div class="field"><span class="field-label">Previsão de término</span><div class="field-value">${c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—"}</div></div>
           <div class="field"><span class="field-label">Frequência</span><div class="field-value">${c.frequency || "—"}</div></div>
