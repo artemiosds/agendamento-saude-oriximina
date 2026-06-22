@@ -47,6 +47,48 @@ const calcIdadeStr = (dn?: string, ref?: string) => {
 
 const fmtBr = (d: string) => { try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return d; } };
 
+const STATUS_LABELS: Record<string, string> = {
+  ativo: "Ativo",
+  em_andamento: "Em andamento",
+  concluido: "Concluído",
+  concluído: "Concluído",
+  cancelado: "Cancelado",
+  pausado: "Pausado",
+  rascunho: "Rascunho",
+  inativo: "Inativo",
+};
+const statusLabel = (s?: string) => {
+  if (!s) return "—";
+  const k = String(s).trim().toLowerCase();
+  return STATUS_LABELS[k] || s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
+};
+
+const pickPlanoConduta = (p: any): string => {
+  if (!p) return "";
+  const keys = ["plano_conduta", "plano_de_conduta", "conduta", "condutas", "plano_terapeutico", "planejamento", "metas", "objetivos"];
+  for (const k of keys) {
+    const v = p?.[k] ?? p?.custom_data?.[k];
+    if (v && String(v).trim()) return String(v);
+  }
+  return "";
+};
+
+const pickQueixa = (sources: any[]): string => {
+  const keys = ["queixa_principal", "queixa", "queixaPrincipal", "motivo", "objetivo_geral", "objetivos_terapeuticos", "queixa_atual"];
+  for (const src of sources) {
+    if (!src) continue;
+    for (const k of keys) {
+      const v = src?.[k] ?? src?.custom_data?.[k];
+      if (v && String(v).trim()) return String(v).trim();
+    }
+  }
+  return "";
+};
+
+// Renumbered nav (Identificação, PTS, Gestão, then evaluation steps)
+const renumberTitle = (title: string, n: number) =>
+  `${n}. ${title.replace(/^\s*\d+\.\s*/, "")}`;
+
 const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   const { user } = useAuth();
   const { pacientes, funcionarios, unidades } = useData();
@@ -132,6 +174,31 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       }
     })();
   }, [pacienteId, user?.id]);
+
+  // Triagem mais recente do paciente (para sugerir queixa)
+  const [triagem, setTriagem] = useState<any>(null);
+  useEffect(() => {
+    if (!pacienteId) { setTriagem(null); return; }
+    (async () => {
+      const { data } = await (supabase as any)
+        .from("triage_records")
+        .select("*")
+        .eq("paciente_id", pacienteId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setTriagem(data || null);
+    })();
+  }, [pacienteId]);
+
+  // Sugerir queixa principal automaticamente (sem sobrescrever digitação manual)
+  useEffect(() => {
+    if (!pacienteId) return;
+    if (answers.queixa_principal && String(answers.queixa_principal).trim()) return;
+    const sugestao = pickQueixa([selectedPts, triagem, selectedCycle, paciente]);
+    if (sugestao) setAnswers(prev => ({ ...prev, queixa_principal: sugestao }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPtsId, selectedCycleId, triagem, pacienteId]);
 
   // Load PTS list for this patient (prioriza profissional logado)
   useEffect(() => {
@@ -460,7 +527,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         <div class="section" style="page-break-inside:avoid">
           <div class="section-title">2. Identificação do PTS</div>
           <div class="field"><span class="field-label">PTS ID</span><div class="field-value">${pts.id}</div></div>
-          <div class="field"><span class="field-label">Status</span><div class="field-value">${pts.status || "—"}</div></div>
+          <div class="field"><span class="field-label">Status</span><div class="field-value">${statusLabel(pts.status)}</div></div>
           <div class="field"><span class="field-label">Data de criação</span><div class="field-value">${pts.created_at ? fmtBr(pts.created_at) : "—"}</div></div>
           <div class="field"><span class="field-label">Equipe / Especialidades</span><div class="field-value">${(pts.especialidades_envolvidas || []).join(", ") || "—"}</div></div>
           <div class="field"><span class="field-label">Objetivo geral</span><div class="field-value">${pts.objetivo_geral || "—"}</div></div>
@@ -468,7 +535,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           <div class="field"><span class="field-label">Metas (curto prazo)</span><div class="field-value">${pts.metas_curto_prazo || "—"}</div></div>
           <div class="field"><span class="field-label">Metas (médio prazo)</span><div class="field-value">${pts.metas_medio_prazo || "—"}</div></div>
           <div class="field"><span class="field-label">Metas (longo prazo)</span><div class="field-value">${pts.metas_longo_prazo || "—"}</div></div>
-          <div class="field"><span class="field-label">Plano de conduta</span><div class="field-value">${pts.plano_conduta || "—"}</div></div>
+          <div class="field"><span class="field-label">Plano de conduta</span><div class="field-value">${pickPlanoConduta(pts) || "Não informado"}</div></div>
         </div>`;
     } else {
       body += `<div class="section"><div class="section-title">2. Identificação do PTS</div><div class="field-value">Nenhum PTS vinculado encontrado para este paciente.</div></div>`;
@@ -482,7 +549,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           <div class="section-title">3. Gestão de Tratamento e Ciclo Terapêutico</div>
           <div class="field"><span class="field-label">Tipo de tratamento</span><div class="field-value">${c.treatment_type || "—"}</div></div>
           <div class="field"><span class="field-label">Especialidade</span><div class="field-value">${c.specialty || "—"}</div></div>
-          <div class="field"><span class="field-label">Status</span><div class="field-value">${c.status || "—"}</div></div>
+          <div class="field"><span class="field-label">Status</span><div class="field-value">${statusLabel(c.status)}</div></div>
           <div class="field"><span class="field-label">Início</span><div class="field-value">${c.start_date ? fmtBr(c.start_date) : "—"}</div></div>
           <div class="field"><span class="field-label">Previsão de término</span><div class="field-value">${c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—"}</div></div>
           <div class="field"><span class="field-label">Frequência</span><div class="field-value">${c.frequency || "—"}</div></div>
@@ -543,7 +610,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       sections.push({
         title: "2. Identificação do PTS",
         fields: [
-          { label: "Status", value: pts.status || "—" },
+          { label: "Status", value: statusLabel(pts.status) },
           { label: "Data de criação", value: pts.created_at ? fmtBr(pts.created_at) : "—" },
           { label: "Equipe / Especialidades", value: (pts.especialidades_envolvidas || []).join(", ") || "—" },
           { label: "Objetivo geral", value: pts.objetivo_geral || "—" },
@@ -551,7 +618,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           { label: "Metas (curto prazo)", value: pts.metas_curto_prazo || "—" },
           { label: "Metas (médio prazo)", value: pts.metas_medio_prazo || "—" },
           { label: "Metas (longo prazo)", value: pts.metas_longo_prazo || "—" },
-          { label: "Plano de conduta", value: pts.plano_conduta || "—" },
+          { label: "Plano de conduta", value: pickPlanoConduta(pts) || "Não informado" },
         ],
       });
     } else {
@@ -565,7 +632,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         fields: [
           { label: "Tipo de tratamento", value: c.treatment_type || "—" },
           { label: "Especialidade", value: c.specialty || "—" },
-          { label: "Status", value: c.status || "—" },
+          { label: "Status", value: statusLabel(c.status) },
           { label: "Início", value: c.start_date ? fmtBr(c.start_date) : "—" },
           { label: "Previsão de término", value: c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—" },
           { label: "Frequência", value: c.frequency || "—" },
@@ -684,10 +751,10 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       </Card>
 
       {pacienteId && (
-        <Card>
+        <Card id="sec-pts">
           <CardContent className="pt-4 space-y-4">
             <div>
-              <Label className="text-sm font-semibold">Identificação do PTS</Label>
+              <Label className="text-sm font-semibold">2. Identificação do PTS</Label>
               {ptsList.length === 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">Nenhum PTS vinculado encontrado para este paciente.</p>
               ) : (
@@ -697,23 +764,26 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
                     <SelectContent>
                       {ptsList.map(p => (
                         <SelectItem key={p.id} value={p.id}>
-                          {(p.status || "—")} • {fmtBr(p.created_at)} • {(p.especialidades_envolvidas || []).join(", ") || "Sem especialidade"}
+                          {statusLabel(p.status)} — {fmtBr(p.created_at)} — {(p.especialidades_envolvidas || []).join(", ") || "Sem especialidade"}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {selectedPts && (
-                    <div className="mt-2 p-2 rounded bg-muted/40 text-xs space-y-1">
-                      <div><strong>Objetivo geral:</strong> {selectedPts.objetivo_geral || "—"}</div>
-                      <div><strong>Plano de conduta:</strong> {selectedPts.plano_conduta || "—"}</div>
+                    <div className="mt-2 p-3 rounded bg-muted/40 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                      <div><span className="text-muted-foreground">Status:</span> <strong>{statusLabel(selectedPts.status)}</strong></div>
+                      <div><span className="text-muted-foreground">Data de início:</span> <strong>{selectedPts.created_at ? fmtBr(selectedPts.created_at) : "—"}</strong></div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Especialidades:</span> <strong>{(selectedPts.especialidades_envolvidas || []).join(", ") || "—"}</strong></div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Objetivo geral:</span> {selectedPts.objetivo_geral || "—"}</div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Plano de conduta:</span> {pickPlanoConduta(selectedPts) || "Não informado"}</div>
                     </div>
                   )}
                 </>
               )}
             </div>
             <Separator />
-            <div>
-              <Label className="text-sm font-semibold">Gestão de Tratamento e Ciclo Terapêutico</Label>
+            <div id="sec-ciclo">
+              <Label className="text-sm font-semibold">3. Gestão de Tratamento e Ciclo Terapêutico</Label>
               {cycleList.length === 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">Nenhuma gestão de tratamento vinculada encontrada para este paciente.</p>
               ) : (
@@ -723,14 +793,18 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
                     <SelectContent>
                       {cycleList.map(c => (
                         <SelectItem key={c.id} value={c.id}>
-                          {(c.treatment_type || c.specialty || "Ciclo")} • {c.status} • {fmtBr(c.start_date)} • {c.sessions_done ?? 0}/{c.total_sessions ?? 0}
+                          {(c.specialty || c.treatment_type || "Ciclo")} — {statusLabel(c.status)} — {fmtBr(c.start_date)} — {c.sessions_done ?? 0}/{c.total_sessions ?? 0} sessões
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {selectedCycle && (
-                    <div className="mt-2 p-2 rounded bg-muted/40 text-xs">
-                      <strong>Observações:</strong> {selectedCycle.clinical_notes || "—"}
+                    <div className="mt-2 p-3 rounded bg-muted/40 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                      <div><span className="text-muted-foreground">Especialidade:</span> <strong>{selectedCycle.specialty || "—"}</strong></div>
+                      <div><span className="text-muted-foreground">Situação:</span> <strong>{statusLabel(selectedCycle.status)}</strong></div>
+                      <div><span className="text-muted-foreground">Data de início:</span> <strong>{selectedCycle.start_date ? fmtBr(selectedCycle.start_date) : "—"}</strong></div>
+                      <div><span className="text-muted-foreground">Sessões:</span> <strong>{selectedCycle.sessions_done ?? 0} de {selectedCycle.total_sessions ?? 0}</strong></div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Observações:</span> {selectedCycle.clinical_notes || "—"}</div>
                     </div>
                   )}
                 </>
@@ -787,18 +861,42 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
             <Card>
               <CardContent className="pt-4 space-y-2">
                 <p className="text-xs text-muted-foreground">Navegação rápida</p>
-                <div className="flex flex-col gap-1 max-h-72 overflow-auto">
-                  {FONO_STEPS.map((s, i) => (
-                    <Button
-                      key={s.id}
-                      variant={i === stepIdx ? "default" : "ghost"}
-                      size="sm"
-                      className="justify-start text-xs h-8"
-                      onClick={() => setStepIdx(i)}
-                    >
-                      {s.title}
-                    </Button>
-                  ))}
+                <div className="flex flex-col gap-1 max-h-96 overflow-auto">
+                  {FONO_STEPS.map((s, i) => {
+                    // Renumbered: identificacao=1, then PTS=2 + Gestão=3 (inserted), restantes deslocados +2
+                    const displayN = i === 0 ? 1 : i + 2;
+                    const label = renumberTitle(s.title, displayN);
+                    return (
+                      <React.Fragment key={s.id}>
+                        <Button
+                          variant={i === stepIdx ? "default" : "ghost"}
+                          size="sm"
+                          className="justify-start text-xs h-8 text-left whitespace-normal"
+                          onClick={() => setStepIdx(i)}
+                        >
+                          {label}
+                        </Button>
+                        {i === 0 && (
+                          <>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="justify-start text-xs h-8 text-left whitespace-normal"
+                              onClick={() => document.getElementById("sec-pts")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                            >
+                              2. Identificação do PTS
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="justify-start text-xs h-8 text-left whitespace-normal"
+                              onClick={() => document.getElementById("sec-ciclo")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                            >
+                              3. Gestão de Tratamento e Ciclo Terapêutico
+                            </Button>
+                          </>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
