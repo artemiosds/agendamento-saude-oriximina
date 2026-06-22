@@ -48,11 +48,18 @@ const fmtBr = (d: string) => { try { return new Date(d).toLocaleDateString("pt-B
 
 const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   const { user } = useAuth();
-  const { pacientes, funcionarios } = useData();
+  const { pacientes, funcionarios, unidades } = useData();
 
   const [pacienteId, setPacienteId] = useState("");
   const paciente = useMemo(() => pacientes.find(p => p.id === pacienteId), [pacientes, pacienteId]);
   const funcionario = useMemo(() => funcionarios.find(f => f.id === user?.id), [funcionarios, user?.id]);
+
+  const unidade = useMemo(
+    () => unidades.find(u => u.id === (user?.unidadeId || funcionario?.unidadeId)),
+    [unidades, user?.unidadeId, funcionario?.unidadeId]
+  );
+  const unidadeNome =
+    unidade?.nomeExibicao || unidade?.nome || (user?.unidadeId ? "Unidade não identificada" : "—");
 
   const cboNorm = onlyDigits(user?.customData?.cbo_codigo);
   const allowed = cboNorm === "223810";
@@ -66,6 +73,14 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   const [status, setStatus] = useState<"rascunho" | "concluido">("rascunho");
   const [loading, setLoading] = useState(false);
   const [dataRelatorio, setDataRelatorio] = useState(new Date().toISOString().split("T")[0]);
+
+  // PTS & Ciclo de tratamento
+  const [ptsList, setPtsList] = useState<any[]>([]);
+  const [selectedPtsId, setSelectedPtsId] = useState<string>("");
+  const [cycleList, setCycleList] = useState<any[]>([]);
+  const [selectedCycleId, setSelectedCycleId] = useState<string>("");
+  const selectedPts = useMemo(() => ptsList.find(p => p.id === selectedPtsId), [ptsList, selectedPtsId]);
+  const selectedCycle = useMemo(() => cycleList.find(c => c.id === selectedCycleId), [cycleList, selectedCycleId]);
 
   // PROC totals
   const procTotal = useMemo(() => {
