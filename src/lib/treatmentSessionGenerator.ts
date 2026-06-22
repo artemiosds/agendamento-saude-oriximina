@@ -7,6 +7,9 @@ export const FREQUENCY_OPTIONS_NEW = [
   { value: '1x_semana', label: '1x por semana' },
   { value: '2x_semana', label: '2x por semana' },
   { value: '3x_semana', label: '3x por semana' },
+  { value: '4x_semana', label: '4x por semana' },
+  { value: '5x_semana', label: '5x por semana' },
+  { value: '6x_semana', label: '6x por semana' },
   { value: 'mensal', label: 'Mensal' },
   { value: 'manual', label: 'Manual' },
 ];
@@ -25,12 +28,15 @@ export function getMaxWeekdays(frequency: string): number {
     case '1x_semana': return 1;
     case '2x_semana': return 2;
     case '3x_semana': return 3;
+    case '4x_semana': return 4;
+    case '5x_semana': return 5;
+    case '6x_semana': return 6;
     default: return 0;
   }
 }
 
 export function isWeekdayFrequency(frequency: string): boolean {
-  return ['1x_semana', '2x_semana', '3x_semana'].includes(frequency);
+  return ['1x_semana', '2x_semana', '3x_semana', '4x_semana', '5x_semana', '6x_semana'].includes(frequency);
 }
 
 /**
