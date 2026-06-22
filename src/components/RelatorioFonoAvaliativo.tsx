@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { auditService } from "@/services/auditService";
 import { openPrintDocument } from "@/lib/printLayout";
+import { exportFonoAvaliativoDocx, type ReportSection, type ReportField } from "@/lib/fonoAvaliativoDocx";
 import {
   FONO_STEPS, FONO_AVALIATIVO_VERSION, FONO_AVALIATIVO_TIPO_REGISTRO,
   type FieldDef, type StepDef,
