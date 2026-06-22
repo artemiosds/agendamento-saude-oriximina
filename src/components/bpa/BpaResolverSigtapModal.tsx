@@ -148,7 +148,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setPtsAtivo(null);
     setValoresAtuais({});
     setProgress(null);
-    if (item?.paciente_id && item?.data_atendimento) {
+    if (item?.paciente_id && (item?.competencia || item?.data_atendimento)) {
       void carregarContexto();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
