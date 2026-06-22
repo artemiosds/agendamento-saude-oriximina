@@ -632,7 +632,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         fields: [
           { label: "Tipo de tratamento", value: c.treatment_type || "—" },
           { label: "Especialidade", value: c.specialty || "—" },
-          { label: "Status", value: c.status || "—" },
+          { label: "Status", value: statusLabel(c.status) },
           { label: "Início", value: c.start_date ? fmtBr(c.start_date) : "—" },
           { label: "Previsão de término", value: c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—" },
           { label: "Frequência", value: c.frequency || "—" },
