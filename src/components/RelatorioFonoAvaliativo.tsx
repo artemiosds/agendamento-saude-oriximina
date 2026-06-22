@@ -391,7 +391,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         tipo_registro: FONO_AVALIATIVO_TIPO_REGISTRO,
         observacoes: JSON.stringify(buildPayload()),
         status: finalize ? "concluido" : "rascunho",
-        evolucao: `Relatório Fonoaudiológico Avaliativo — Versão ${FONO_AVALIATIVO_VERSION}`,
+        evolucao: `Relatório Fonoaudiológico Avaliativo — Versão ${FONO_AVALIATIVO_VERSION} — Unidade: ${unidadeNome}${selectedPtsId ? ` — PTS vinculado` : ""}${selectedCycleId ? ` — Ciclo vinculado` : ""}`,
       };
       let result;
       if (reportId) {
