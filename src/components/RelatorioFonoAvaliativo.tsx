@@ -574,7 +574,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
               <div><span className="text-xs text-muted-foreground block">Profissional</span>{user?.nome}</div>
               <div><span className="text-xs text-muted-foreground block">CBO</span>223810 — FONOAUDIÓLOGO</div>
               <div><span className="text-xs text-muted-foreground block">Conselho</span>{funcionario?.tipoConselho || "CRFa"} {funcionario?.numeroConselho || "—"}{funcionario?.ufConselho ? "/" + funcionario.ufConselho : ""}</div>
-              <div><span className="text-xs text-muted-foreground block">Unidade</span>{user?.unidadeId || "—"}</div>
+              <div><span className="text-xs text-muted-foreground block">Unidade</span>{unidadeNome}</div>
             </div>
           )}
         </CardContent>
