@@ -2,7 +2,7 @@
 // Uses the same structured data as the print/PDF output to avoid divergence.
 import {
   Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel,
-  PageOrientation, ImageRun, Header, Footer, PageNumber, LevelFormat,
+  PageOrientation, ImageRun, Header, Footer, PageNumber,
 } from "docx";
 import { saveAs } from "file-saver";
 import { loadDocumentConfig } from "@/lib/printLayout";
