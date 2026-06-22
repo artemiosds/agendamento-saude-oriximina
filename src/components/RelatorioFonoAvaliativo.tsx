@@ -527,7 +527,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         <div class="section" style="page-break-inside:avoid">
           <div class="section-title">2. Identificação do PTS</div>
           <div class="field"><span class="field-label">PTS ID</span><div class="field-value">${pts.id}</div></div>
-          <div class="field"><span class="field-label">Status</span><div class="field-value">${pts.status || "—"}</div></div>
+          <div class="field"><span class="field-label">Status</span><div class="field-value">${statusLabel(pts.status)}</div></div>
           <div class="field"><span class="field-label">Data de criação</span><div class="field-value">${pts.created_at ? fmtBr(pts.created_at) : "—"}</div></div>
           <div class="field"><span class="field-label">Equipe / Especialidades</span><div class="field-value">${(pts.especialidades_envolvidas || []).join(", ") || "—"}</div></div>
           <div class="field"><span class="field-label">Objetivo geral</span><div class="field-value">${pts.objetivo_geral || "—"}</div></div>
@@ -535,7 +535,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           <div class="field"><span class="field-label">Metas (curto prazo)</span><div class="field-value">${pts.metas_curto_prazo || "—"}</div></div>
           <div class="field"><span class="field-label">Metas (médio prazo)</span><div class="field-value">${pts.metas_medio_prazo || "—"}</div></div>
           <div class="field"><span class="field-label">Metas (longo prazo)</span><div class="field-value">${pts.metas_longo_prazo || "—"}</div></div>
-          <div class="field"><span class="field-label">Plano de conduta</span><div class="field-value">${pts.plano_conduta || "—"}</div></div>
+          <div class="field"><span class="field-label">Plano de conduta</span><div class="field-value">${pickPlanoConduta(pts) || "Não informado"}</div></div>
         </div>`;
     } else {
       body += `<div class="section"><div class="section-title">2. Identificação do PTS</div><div class="field-value">Nenhum PTS vinculado encontrado para este paciente.</div></div>`;
