@@ -47,6 +47,48 @@ const calcIdadeStr = (dn?: string, ref?: string) => {
 
 const fmtBr = (d: string) => { try { return new Date(d).toLocaleDateString("pt-BR"); } catch { return d; } };
 
+const STATUS_LABELS: Record<string, string> = {
+  ativo: "Ativo",
+  em_andamento: "Em andamento",
+  concluido: "Concluído",
+  concluído: "Concluído",
+  cancelado: "Cancelado",
+  pausado: "Pausado",
+  rascunho: "Rascunho",
+  inativo: "Inativo",
+};
+const statusLabel = (s?: string) => {
+  if (!s) return "—";
+  const k = String(s).trim().toLowerCase();
+  return STATUS_LABELS[k] || s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
+};
+
+const pickPlanoConduta = (p: any): string => {
+  if (!p) return "";
+  const keys = ["plano_conduta", "plano_de_conduta", "conduta", "condutas", "plano_terapeutico", "planejamento", "metas", "objetivos"];
+  for (const k of keys) {
+    const v = p?.[k] ?? p?.custom_data?.[k];
+    if (v && String(v).trim()) return String(v);
+  }
+  return "";
+};
+
+const pickQueixa = (sources: any[]): string => {
+  const keys = ["queixa_principal", "queixa", "queixaPrincipal", "motivo", "objetivo_geral", "objetivos_terapeuticos", "queixa_atual"];
+  for (const src of sources) {
+    if (!src) continue;
+    for (const k of keys) {
+      const v = src?.[k] ?? src?.custom_data?.[k];
+      if (v && String(v).trim()) return String(v).trim();
+    }
+  }
+  return "";
+};
+
+// Renumbered nav (Identificação, PTS, Gestão, then evaluation steps)
+const renumberTitle = (title: string, n: number) =>
+  `${n}. ${title.replace(/^\s*\d+\.\s*/, "")}`;
+
 const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   const { user } = useAuth();
   const { pacientes, funcionarios, unidades } = useData();
