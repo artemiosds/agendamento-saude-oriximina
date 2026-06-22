@@ -454,8 +454,18 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             Resolver Procedimento SIGTAP / CID
           </DialogTitle>
           <DialogDescription>
-            Esta correção será aplicada para <b>este paciente</b> em <b>todos os atendimentos da mesma data</b>,
-            dentro da fonte correta do sistema. Não afeta outras datas nem outros pacientes.
+            {item?.competencia ? (
+              <>
+                Esta correção será aplicada em <b>lote</b> para <b>este paciente</b> em <b>todos os atendimentos
+                da competência {item.competencia.slice(4, 6)}/{item.competencia.slice(0, 4)}</b>,
+                restrita ao mesmo profissional e unidade. Não afeta outros meses nem outros pacientes.
+              </>
+            ) : (
+              <>
+                Esta correção será aplicada para <b>este paciente</b> em <b>todos os atendimentos da mesma data</b>,
+                dentro da fonte correta do sistema. Não afeta outras datas nem outros pacientes.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -463,18 +473,37 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
           <div><b>Paciente:</b> {item?.paciente_nome || "—"}</div>
           <div><b>Profissional:</b> {item?.profissional_nome || "—"} · <b>Profissão:</b> {item?.profissao || "—"}</div>
-          <div><b>Unidade:</b> {item?.unidade_nome || "—"} · <b>Data:</b> {item?.data_atendimento || "—"}</div>
+          <div>
+            <b>Unidade:</b> {item?.unidade_nome || "—"}
+            {item?.competencia
+              ? <> · <b>Competência:</b> {item.competencia.slice(4, 6)}/{item.competencia.slice(0, 4)}</>
+              : <> · <b>Data:</b> {item?.data_atendimento || "—"}</>}
+          </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
             {loadingCtx ? (
               <><Loader2 className="h-3 w-3 animate-spin" /> Carregando registros…</>
             ) : (
               <>
                 <FileText className="h-3 w-3" />
-                {prontuarios.length} prontuário(s) encontrado(s) nessa data
+                {prontuarios.length} prontuário(s) {item?.competencia ? "no mês" : "nessa data"} serão atualizados
                 {isFisio && ptsAtivo && <> · PTS vinculado: <b>{ptsAtivo.id?.slice(0, 8)}</b></>}
               </>
             )}
           </div>
+          {item?.competencia && prontuarios.length > 0 && !loadingCtx && (
+            <details className="text-xs pt-1">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                Ver datas dos atendimentos afetados ({prontuarios.length})
+              </summary>
+              <ul className="list-disc ml-5 mt-1 max-h-32 overflow-y-auto">
+                {prontuarios.map((p) => (
+                  <li key={p.id}>
+                    {p.data_atendimento} — <span className="text-muted-foreground">{p.profissional_nome || "?"}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <div className="text-xs">
             <b>Valor atual SIGTAP:</b>{" "}
             {valoresAtuais.sigtap ? <code className="bg-background px-1 rounded">{valoresAtuais.sigtap}</code> : <span className="text-muted-foreground">— vazio —</span>}
