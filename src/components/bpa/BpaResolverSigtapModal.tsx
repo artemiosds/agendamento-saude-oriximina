@@ -13,17 +13,16 @@ import { toast } from "sonner";
 /**
  * Modal isolado de correção SIGTAP/CID para a BPA-Exportar.
  *
- * Regra de aplicação (definida pelo usuário):
- *   - A correção é aplicada em LOTE para TODOS os prontuários do mesmo
- *     paciente na mesma data_atendimento, dentro da fonte correta
- *     (campo prontuarios.custom_data.{procedimento_sigtap, cid}).
- *   - NÃO altera outras datas, outros pacientes ou outras profissões.
- *   - NÃO mexe no TXT BPA-I em si — apenas garante que o código SIGTAP e CID
- *     fiquem disponíveis para que o pipeline da BPA-Exportar/BPA-Produção
- *     leia e gere o TXT corretamente na próxima geração.
- *   - Para Fisioterapia, se o usuário indicar que a origem deve ser PTS,
- *     também atualiza o vínculo PTS ativo do paciente.
- *   - Registra auditoria em notification_logs (evento: bpa_sigtap_correcao).
+ * Regra de aplicação em LOTE por paciente + competência:
+ *   - A correção é aplicada para TODOS os prontuários do mesmo paciente
+ *     dentro da MESMA COMPETÊNCIA (AAAAMM) da exportação BPA, restrita
+ *     ao mesmo profissional e unidade da pendência (regra clara).
+ *   - Atualiza prontuarios.custom_data.{procedimento_sigtap, codigo_sigtap,
+ *     procedimento_nome, cid, cid10}.
+ *   - NÃO altera outros meses, outros pacientes ou outras profissões.
+ *   - Para Fisioterapia, se solicitado, atualiza o PTS ativo do paciente.
+ *   - Registra auditoria em notification_logs (evento: bpa_sigtap_correcao)
+ *     com a lista dos prontuários afetados e valor antigo/novo.
  */
 
 export type ResolverSigtapItem = {
@@ -37,6 +36,10 @@ export type ResolverSigtapItem = {
   unidade_id?: string;
   unidade_nome?: string;
   cbo?: string;
+  /** Competência da exportação BPA no formato AAAAMM. Quando informada, a
+   *  correção é aplicada em lote a todos os prontuários do mesmo paciente
+   *  dentro do mês (mesmo profissional + mesma unidade). */
+  competencia?: string;
 };
 
 type SigtapHit = {
@@ -56,6 +59,19 @@ interface Props {
   userId?: string;
   userNome?: string;
 }
+
+/** Retorna [primeiro_dia, ultimo_dia] (YYYY-MM-DD) para uma competência AAAAMM. */
+const competenciaRange = (comp?: string): { ini: string; fim: string } | null => {
+  const n = String(comp || "").replace(/\D/g, "");
+  if (n.length !== 6) return null;
+  const ano = Number(n.slice(0, 4));
+  const mes = Number(n.slice(4, 6));
+  if (!ano || mes < 1 || mes > 12) return null;
+  const last = new Date(ano, mes, 0).getDate();
+  const mm = String(mes).padStart(2, "0");
+  const dd = String(last).padStart(2, "0");
+  return { ini: `${ano}-${mm}-01`, fim: `${ano}-${mm}-${dd}` };
+};
 
 const onlyDigits = (v: any) => String(v ?? "").replace(/\D/g, "");
 const isSigtap = (v: any) => {
@@ -132,21 +148,31 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setPtsAtivo(null);
     setValoresAtuais({});
     setProgress(null);
-    if (item?.paciente_id && item?.data_atendimento) {
+    if (item?.paciente_id && (item?.competencia || item?.data_atendimento)) {
       void carregarContexto();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const carregarContexto = async () => {
-    if (!item?.paciente_id || !item?.data_atendimento) return;
+    if (!item?.paciente_id) return;
     setLoadingCtx(true);
     try {
-      const { data: pronts } = await (supabase as any)
+      // Escopo: paciente + competência (mês) + mesmo profissional + mesma unidade.
+      // Fallback: se não vier competência, mantém comportamento antigo por data exata.
+      const range = competenciaRange(item.competencia);
+      let q: any = (supabase as any)
         .from("prontuarios")
-        .select("id, profissional_id, profissional_nome, data_atendimento, custom_data, outro_procedimento, tipo_registro")
-        .eq("paciente_id", item.paciente_id)
-        .eq("data_atendimento", item.data_atendimento);
+        .select("id, profissional_id, profissional_nome, unidade_id, data_atendimento, custom_data, outro_procedimento, tipo_registro")
+        .eq("paciente_id", item.paciente_id);
+      if (range) {
+        q = q.gte("data_atendimento", range.ini).lte("data_atendimento", range.fim);
+      } else if (item.data_atendimento) {
+        q = q.eq("data_atendimento", item.data_atendimento);
+      }
+      if (item.profissional_id) q = q.eq("profissional_id", item.profissional_id);
+      if (item.unidade_id) q = q.eq("unidade_id", item.unidade_id);
+      const { data: pronts } = await q.order("data_atendimento", { ascending: true });
       const list = Array.isArray(pronts) ? pronts : [];
       setProntuarios(list);
 
@@ -384,8 +410,10 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             profissional_nome: item.profissional_nome,
             profissao: item.profissao,
             unidade_id: item.unidade_id,
-            data_atendimento: item.data_atendimento,
-            prontuarios_afetados: prontuarios.map((p) => p.id),
+            competencia: item.competencia || null,
+            data_atendimento_origem: item.data_atendimento || null,
+            escopo: item.competencia ? "paciente+competencia+profissional+unidade" : "paciente+data",
+            prontuarios_afetados: prontuarios.map((p) => ({ id: p.id, data: p.data_atendimento })),
             pts_aplicado: !!(isFisio && aplicarPts && ptsAtivo?.id),
             pts_id: ptsAtivo?.id || null,
             sigtap_novo: newSig,
@@ -402,7 +430,10 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         console.warn("[BPA] log auditoria falhou:", e);
       }
 
-      toast.success(`SIGTAP corrigido em ${prontuarios.length} registro(s) do paciente nessa data.`);
+      const escopoTxt = item.competencia
+        ? `na competência ${item.competencia.slice(4, 6)}/${item.competencia.slice(0, 4)}`
+        : "nessa data";
+      toast.success(`SIGTAP/CID corrigido em ${prontuarios.length} registro(s) do paciente ${escopoTxt}.`);
       onResolved();
       onClose();
     } catch (e: any) {
@@ -423,8 +454,18 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             Resolver Procedimento SIGTAP / CID
           </DialogTitle>
           <DialogDescription>
-            Esta correção será aplicada para <b>este paciente</b> em <b>todos os atendimentos da mesma data</b>,
-            dentro da fonte correta do sistema. Não afeta outras datas nem outros pacientes.
+            {item?.competencia ? (
+              <>
+                Esta correção será aplicada em <b>lote</b> para <b>este paciente</b> em <b>todos os atendimentos
+                da competência {item.competencia.slice(4, 6)}/{item.competencia.slice(0, 4)}</b>,
+                restrita ao mesmo profissional e unidade. Não afeta outros meses nem outros pacientes.
+              </>
+            ) : (
+              <>
+                Esta correção será aplicada para <b>este paciente</b> em <b>todos os atendimentos da mesma data</b>,
+                dentro da fonte correta do sistema. Não afeta outras datas nem outros pacientes.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -432,18 +473,37 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
           <div><b>Paciente:</b> {item?.paciente_nome || "—"}</div>
           <div><b>Profissional:</b> {item?.profissional_nome || "—"} · <b>Profissão:</b> {item?.profissao || "—"}</div>
-          <div><b>Unidade:</b> {item?.unidade_nome || "—"} · <b>Data:</b> {item?.data_atendimento || "—"}</div>
+          <div>
+            <b>Unidade:</b> {item?.unidade_nome || "—"}
+            {item?.competencia
+              ? <> · <b>Competência:</b> {item.competencia.slice(4, 6)}/{item.competencia.slice(0, 4)}</>
+              : <> · <b>Data:</b> {item?.data_atendimento || "—"}</>}
+          </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
             {loadingCtx ? (
               <><Loader2 className="h-3 w-3 animate-spin" /> Carregando registros…</>
             ) : (
               <>
                 <FileText className="h-3 w-3" />
-                {prontuarios.length} prontuário(s) encontrado(s) nessa data
+                {prontuarios.length} prontuário(s) {item?.competencia ? "no mês" : "nessa data"} serão atualizados
                 {isFisio && ptsAtivo && <> · PTS vinculado: <b>{ptsAtivo.id?.slice(0, 8)}</b></>}
               </>
             )}
           </div>
+          {item?.competencia && prontuarios.length > 0 && !loadingCtx && (
+            <details className="text-xs pt-1">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                Ver datas dos atendimentos afetados ({prontuarios.length})
+              </summary>
+              <ul className="list-disc ml-5 mt-1 max-h-32 overflow-y-auto">
+                {prontuarios.map((p) => (
+                  <li key={p.id}>
+                    {p.data_atendimento} — <span className="text-muted-foreground">{p.profissional_nome || "?"}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <div className="text-xs">
             <b>Valor atual SIGTAP:</b>{" "}
             {valoresAtuais.sigtap ? <code className="bg-background px-1 rounded">{valoresAtuais.sigtap}</code> : <span className="text-muted-foreground">— vazio —</span>}

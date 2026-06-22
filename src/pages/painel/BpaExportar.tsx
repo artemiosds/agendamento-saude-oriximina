@@ -2864,18 +2864,19 @@ const BpaExportar: React.FC = () => {
                                   onClick={() =>
                                     setResolverModal({
                                       open: true,
-                                      item: {
-                                        paciente_id: item.paciente_id,
-                                        paciente_nome: item.paciente_nome,
-                                        profissional_id: item.profissional_id,
-                                        profissional_nome: item.profissional_nome,
-                                        profissao: item.profissao,
-                                        profissao_categoria: item.profissao_categoria,
-                                        data_atendimento: item.data_atendimento,
-                                        unidade_id: item.unidade_id,
-                                        unidade_nome: item.unidade_nome,
-                                        cbo: item.cbo,
-                                      },
+                                       item: {
+                                         paciente_id: item.paciente_id,
+                                         paciente_nome: item.paciente_nome,
+                                         profissional_id: item.profissional_id,
+                                         profissional_nome: item.profissional_nome,
+                                         profissao: item.profissao,
+                                         profissao_categoria: item.profissao_categoria,
+                                         data_atendimento: item.data_atendimento,
+                                         unidade_id: item.unidade_id,
+                                         unidade_nome: item.unidade_nome,
+                                         cbo: item.cbo,
+                                         competencia: formData.competencia,
+                                       },
                                     })
                                   }
                                 >
