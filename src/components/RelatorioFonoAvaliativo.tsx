@@ -751,10 +751,10 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       </Card>
 
       {pacienteId && (
-        <Card>
+        <Card id="sec-pts">
           <CardContent className="pt-4 space-y-4">
             <div>
-              <Label className="text-sm font-semibold">Identificação do PTS</Label>
+              <Label className="text-sm font-semibold">2. Identificação do PTS</Label>
               {ptsList.length === 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">Nenhum PTS vinculado encontrado para este paciente.</p>
               ) : (
@@ -764,23 +764,26 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
                     <SelectContent>
                       {ptsList.map(p => (
                         <SelectItem key={p.id} value={p.id}>
-                          {(p.status || "—")} • {fmtBr(p.created_at)} • {(p.especialidades_envolvidas || []).join(", ") || "Sem especialidade"}
+                          {statusLabel(p.status)} — {fmtBr(p.created_at)} — {(p.especialidades_envolvidas || []).join(", ") || "Sem especialidade"}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {selectedPts && (
-                    <div className="mt-2 p-2 rounded bg-muted/40 text-xs space-y-1">
-                      <div><strong>Objetivo geral:</strong> {selectedPts.objetivo_geral || "—"}</div>
-                      <div><strong>Plano de conduta:</strong> {selectedPts.plano_conduta || "—"}</div>
+                    <div className="mt-2 p-3 rounded bg-muted/40 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                      <div><span className="text-muted-foreground">Status:</span> <strong>{statusLabel(selectedPts.status)}</strong></div>
+                      <div><span className="text-muted-foreground">Data de início:</span> <strong>{selectedPts.created_at ? fmtBr(selectedPts.created_at) : "—"}</strong></div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Especialidades:</span> <strong>{(selectedPts.especialidades_envolvidas || []).join(", ") || "—"}</strong></div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Objetivo geral:</span> {selectedPts.objetivo_geral || "—"}</div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Plano de conduta:</span> {pickPlanoConduta(selectedPts) || "Não informado"}</div>
                     </div>
                   )}
                 </>
               )}
             </div>
             <Separator />
-            <div>
-              <Label className="text-sm font-semibold">Gestão de Tratamento e Ciclo Terapêutico</Label>
+            <div id="sec-ciclo">
+              <Label className="text-sm font-semibold">3. Gestão de Tratamento e Ciclo Terapêutico</Label>
               {cycleList.length === 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">Nenhuma gestão de tratamento vinculada encontrada para este paciente.</p>
               ) : (
@@ -790,14 +793,18 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
                     <SelectContent>
                       {cycleList.map(c => (
                         <SelectItem key={c.id} value={c.id}>
-                          {(c.treatment_type || c.specialty || "Ciclo")} • {c.status} • {fmtBr(c.start_date)} • {c.sessions_done ?? 0}/{c.total_sessions ?? 0}
+                          {(c.specialty || c.treatment_type || "Ciclo")} — {statusLabel(c.status)} — {fmtBr(c.start_date)} — {c.sessions_done ?? 0}/{c.total_sessions ?? 0} sessões
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {selectedCycle && (
-                    <div className="mt-2 p-2 rounded bg-muted/40 text-xs">
-                      <strong>Observações:</strong> {selectedCycle.clinical_notes || "—"}
+                    <div className="mt-2 p-3 rounded bg-muted/40 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                      <div><span className="text-muted-foreground">Especialidade:</span> <strong>{selectedCycle.specialty || "—"}</strong></div>
+                      <div><span className="text-muted-foreground">Situação:</span> <strong>{statusLabel(selectedCycle.status)}</strong></div>
+                      <div><span className="text-muted-foreground">Data de início:</span> <strong>{selectedCycle.start_date ? fmtBr(selectedCycle.start_date) : "—"}</strong></div>
+                      <div><span className="text-muted-foreground">Sessões:</span> <strong>{selectedCycle.sessions_done ?? 0} de {selectedCycle.total_sessions ?? 0}</strong></div>
+                      <div className="md:col-span-2"><span className="text-muted-foreground">Observações:</span> {selectedCycle.clinical_notes || "—"}</div>
                     </div>
                   )}
                 </>
