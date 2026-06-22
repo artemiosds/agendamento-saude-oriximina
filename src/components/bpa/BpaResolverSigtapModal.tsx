@@ -410,8 +410,10 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             profissional_nome: item.profissional_nome,
             profissao: item.profissao,
             unidade_id: item.unidade_id,
-            data_atendimento: item.data_atendimento,
-            prontuarios_afetados: prontuarios.map((p) => p.id),
+            competencia: item.competencia || null,
+            data_atendimento_origem: item.data_atendimento || null,
+            escopo: item.competencia ? "paciente+competencia+profissional+unidade" : "paciente+data",
+            prontuarios_afetados: prontuarios.map((p) => ({ id: p.id, data: p.data_atendimento })),
             pts_aplicado: !!(isFisio && aplicarPts && ptsAtivo?.id),
             pts_id: ptsAtivo?.id || null,
             sigtap_novo: newSig,
@@ -428,7 +430,10 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         console.warn("[BPA] log auditoria falhou:", e);
       }
 
-      toast.success(`SIGTAP corrigido em ${prontuarios.length} registro(s) do paciente nessa data.`);
+      const escopoTxt = item.competencia
+        ? `na competência ${item.competencia.slice(4, 6)}/${item.competencia.slice(0, 4)}`
+        : "nessa data";
+      toast.success(`SIGTAP/CID corrigido em ${prontuarios.length} registro(s) do paciente ${escopoTxt}.`);
       onResolved();
       onClose();
     } catch (e: any) {
