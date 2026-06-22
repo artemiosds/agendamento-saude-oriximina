@@ -112,6 +112,8 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           setObs(payload.obs || {});
           setOthers(payload.others || {});
           setJustifs(payload.justifs || {});
+          setSelectedPtsId(payload.pts_id || "");
+          setSelectedCycleId(payload.treatment_cycle_id || "");
           setDataRelatorio(data.data_atendimento || new Date().toISOString().split("T")[0]);
           toast.info("Rascunho carregado.");
         } else {
@@ -121,9 +123,48 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           setObs({});
           setOthers({});
           setJustifs({});
+          setSelectedPtsId("");
+          setSelectedCycleId("");
         }
       } finally {
         setLoading(false);
+      }
+    })();
+  }, [pacienteId, user?.id]);
+
+  // Load PTS list for this patient (prioriza profissional logado)
+  useEffect(() => {
+    if (!pacienteId) { setPtsList([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("pts")
+        .select("id,patient_id,professional_id,unit_id,status,created_at,updated_at,objetivo_geral,objetivos_terapeuticos,metas_curto_prazo,metas_medio_prazo,metas_longo_prazo,plano_conduta,especialidades_envolvidas,frequencia_planejada,custom_data")
+        .eq("patient_id", pacienteId)
+        .order("updated_at", { ascending: false });
+      const list = (data as any[]) || [];
+      setPtsList(list);
+      if (list.length && !selectedPtsId) {
+        const own = list.find(p => p.professional_id === user?.id);
+        setSelectedPtsId((own || list[0]).id);
+      }
+    })();
+  }, [pacienteId, user?.id]);
+
+  // Load Treatment Cycles for this patient
+  useEffect(() => {
+    if (!pacienteId) { setCycleList([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("treatment_cycles")
+        .select("id,patient_id,professional_id,unit_id,specialty,treatment_type,start_date,end_date_predicted,total_sessions,sessions_done,frequency,status,clinical_notes,pts_id,created_at")
+        .eq("patient_id", pacienteId)
+        .order("created_at", { ascending: false });
+      const list = (data as any[]) || [];
+      setCycleList(list);
+      if (list.length && !selectedCycleId) {
+        const own = list.find(c => c.professional_id === user?.id)
+          || list.find(c => (c.specialty || "").toLowerCase().includes("fono"));
+        setSelectedCycleId((own || list[0]).id);
       }
     })();
   }, [pacienteId, user?.id]);
