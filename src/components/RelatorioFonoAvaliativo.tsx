@@ -610,7 +610,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       sections.push({
         title: "2. Identificação do PTS",
         fields: [
-          { label: "Status", value: pts.status || "—" },
+          { label: "Status", value: statusLabel(pts.status) },
           { label: "Data de criação", value: pts.created_at ? fmtBr(pts.created_at) : "—" },
           { label: "Equipe / Especialidades", value: (pts.especialidades_envolvidas || []).join(", ") || "—" },
           { label: "Objetivo geral", value: pts.objetivo_geral || "—" },
@@ -618,7 +618,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           { label: "Metas (curto prazo)", value: pts.metas_curto_prazo || "—" },
           { label: "Metas (médio prazo)", value: pts.metas_medio_prazo || "—" },
           { label: "Metas (longo prazo)", value: pts.metas_longo_prazo || "—" },
-          { label: "Plano de conduta", value: pts.plano_conduta || "—" },
+          { label: "Plano de conduta", value: pickPlanoConduta(pts) || "Não informado" },
         ],
       });
     } else {
