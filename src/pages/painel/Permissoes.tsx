@@ -13,32 +13,108 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio } from "lucide-react";
 import { toast } from "sonner";
 
-const PERFIS = ["gestao", "recepcao", "tecnico", "enfermagem", "profissional"] as const;
+const PERFIS = ["gestao", "recepcao", "triagem", "enfermagem", "profissional"] as const;
 const PERFIL_LABELS: Record<string, string> = {
+  master: "MASTER",
   gestao: "GESTÃO",
   recepcao: "RECEPÇÃO",
-  tecnico: "TRIAGEM",
+  triagem: "TRIAGEM",
   enfermagem: "ENFERMAGEM",
   profissional: "PROFISSIONAL",
 };
 
+const ROLE_ALIASES: Record<string, string> = {
+  gestao: "gestao",
+  "gestão": "gestao",
+  gestor: "gestao",
+  coordenacao: "gestao",
+  coordenador: "gestao",
+  recepcao: "recepcao",
+  "recepção": "recepcao",
+  triagem: "triagem",
+  tecnico: "triagem",
+  tecnico_enfermagem: "enfermagem",
+  enfermagem: "enfermagem",
+  profissional: "profissional",
+  master: "master",
+};
+
+const normalizeRoleKey = (value: string) => {
+  const key = (value || "").toLowerCase().trim();
+  return ROLE_ALIASES[key] ?? key;
+};
+
+const getRoleQueryKeys = (value: string) => {
+  const key = normalizeRoleKey(value);
+  const raw = (value || "").toLowerCase().trim();
+  const legacyAliases =
+    key === "gestao" ? ["gestao", "gestor", "coordenador", "coordenacao"] :
+    key === "triagem" ? ["triagem", "tecnico"] :
+    key === "enfermagem" ? ["enfermagem", "tecnico_enfermagem"] :
+    key === "master" ? ["master"] :
+    [key];
+  return Array.from(new Set([key, raw, ...legacyAliases].filter(Boolean)));
+};
+
 const MODULOS: ModuleName[] = [
-  "pacientes", "encaminhamento", "fila", "triagem", "enfermagem",
-  "agenda", "atendimento", "prontuario", "tratamento", "relatorios", "monitoramento_sistema", "usuarios",
+  "dashboard",
+  "agenda",
+  "fila",
+  "pacientes",
+  "faltosos",
+  "atendimento",
+  "tratamento",
+  "prontuario",
+  "triagem",
+  "historico_triagem",
+  "enfermagem",
+  "avaliacao_enfermagem",
+  "pts",
+  "avaliacao_multi",
+  "relatorio_alta",
+  "relatorios",
+  "bpa_producao",
+  "bpa_exportar",
+  "encaminhamento",
+  "usuarios",
+  "unidades_salas",
+  "disponibilidade",
+  "feriados_bloqueios",
+  "logs_auditoria",
+  "monitoramento_sistema",
+  "configuracoes",
+  "permissoes",
+  "configuracoes_avancadas",
 ];
 const MODULO_LABELS: Record<ModuleName, string> = {
-  pacientes: "Pacientes",
-  encaminhamento: "Encaminhamento",
-  fila: "Fila de Espera",
-  triagem: "Triagem",
-  enfermagem: "Enfermagem",
+  dashboard: "Dashboard",
   agenda: "Agenda",
-  atendimento: "Atendimento",
+  fila: "Fila de Espera",
+  pacientes: "Pacientes",
+  faltosos: "Faltosos",
+  atendimento: "Atendimentos",
+  tratamento: "Gestão de Tratamentos",
   prontuario: "Prontuário",
-  tratamento: "Tratamento",
+  triagem: "Triagem",
+  historico_triagem: "Histórico Triagem",
+  enfermagem: "Enfermagem",
+  avaliacao_enfermagem: "Avaliação Enfermagem",
+  pts: "PTS",
+  avaliacao_multi: "Avaliação Multi",
+  relatorio_alta: "Relatório de Alta",
   relatorios: "Relatórios",
+  bpa_producao: "BPA-Produção",
+  bpa_exportar: "BPA-Exportar",
+  encaminhamento: "Encaminhamento",
+  usuarios: "Funcionários",
+  unidades_salas: "Unidades/Salas",
+  disponibilidade: "Disponibilidade",
+  feriados_bloqueios: "Feriados/Bloqueios",
+  logs_auditoria: "Logs & Auditoria",
   monitoramento_sistema: "Monitoramento",
-  usuarios: "Usuários",
+  configuracoes: "Configurações",
+  permissoes: "Permissões",
+  configuracoes_avancadas: "Config. Avançadas",
 };
 const ACTIONS: (keyof ModulePermission)[] = ["can_view", "can_create", "can_edit", "can_delete", "can_execute"];
 const ACTION_LABELS: Record<keyof ModulePermission, string> = {
@@ -92,6 +168,7 @@ const Permissoes: React.FC = () => {
   const [funcionarios, setFuncionarios] = useState<FuncOption[]>([]);
   const [searchUser, setSearchUser] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [userBaseRows, setUserBaseRows] = useState<PermRow[]>([]);
   const [userRows, setUserRows] = useState<UserPermRow[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -118,7 +195,7 @@ const Permissoes: React.FC = () => {
     const { data, error } = await (supabase as any)
       .from("permissoes")
       .select("*")
-      .eq("perfil", selectedPerfil)
+      .in("perfil", getRoleQueryKeys(selectedPerfil))
       .in("unidade_id", [selectedUnidade, ""]);
     if (error) {
       toast.error("Erro ao carregar permissões");
@@ -133,8 +210,26 @@ const Permissoes: React.FC = () => {
 
   // Carregar overrides do usuário selecionado
   const loadUser = useCallback(async () => {
-    if (!selectedUserId || !selectedUnidade) { setUserRows([]); return; }
+    if (!selectedUserId || !selectedUnidade) { setUserBaseRows([]); setUserRows([]); return; }
     setLoading(true);
+
+    const selectedFunc = funcionarios.find((f) => f.id === selectedUserId);
+    const roleKey = normalizeRoleKey(selectedFunc?.role || "recepcao");
+
+    const { data: baseData, error: baseError } = await (supabase as any)
+      .from("permissoes")
+      .select("*")
+      .in("perfil", getRoleQueryKeys(selectedFunc?.role || roleKey))
+      .in("unidade_id", [selectedUnidade, ""]);
+
+    if (baseError) {
+      toast.error("Erro ao carregar permissões-base do perfil");
+      setUserBaseRows([]);
+      setUserRows([]);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await (supabase as any)
       .from("permissoes_usuario")
       .select("*")
@@ -142,16 +237,18 @@ const Permissoes: React.FC = () => {
       .eq("unidade_id", selectedUnidade);
     if (error) {
       toast.error("Erro ao carregar exceções do usuário");
+      setUserRows([]);
       setLoading(false);
       return;
     }
+    setUserBaseRows((baseData || []) as PermRow[]);
     setUserRows((data || []) as UserPermRow[]);
     setLoading(false);
-  }, [selectedUserId, selectedUnidade]);
+  }, [funcionarios, selectedUserId, selectedUnidade]);
 
   useEffect(() => { if (tab === "individual") loadUser(); }, [loadUser, tab]);
 
-  // Realtime — quando QUALQUER permissão muda, recarrega
+  // Realtime - quando QUALQUER permissão muda, recarrega
   useEffect(() => {
     const ch = supabase
       .channel("permissoes-admin-page")
@@ -172,7 +269,10 @@ const Permissoes: React.FC = () => {
     if (selectedUnidade) list = list.filter((f) => f.unidade_id === selectedUnidade || !f.unidade_id);
     if (!q) return list.slice(0, 50);
     return list.filter((f) =>
-      f.nome.toLowerCase().includes(q) || f.usuario.toLowerCase().includes(q) || f.role.toLowerCase().includes(q)
+      f.nome.toLowerCase().includes(q)
+      || f.usuario.toLowerCase().includes(q)
+      || f.role.toLowerCase().includes(q)
+      || normalizeRoleKey(f.role).includes(q)
     ).slice(0, 50);
   }, [funcionarios, searchUser, selectedUnidade]);
 
@@ -188,7 +288,10 @@ const Permissoes: React.FC = () => {
   // ===== Helpers Perfil =====
   const getPerfilRow = (modulo: ModuleName): PermRow | undefined => {
     // prefere unidade específica, fallback global
-    return perfilRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
+    const perfilKey = normalizeRoleKey(selectedPerfil);
+    return perfilRows.find((r) => r.perfil === perfilKey && r.modulo === modulo && r.unidade_id === selectedUnidade)
+      || perfilRows.find((r) => r.perfil === perfilKey && r.modulo === modulo && r.unidade_id === "")
+      || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
       || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === "");
   };
 
@@ -196,7 +299,7 @@ const Permissoes: React.FC = () => {
     const existing = getPerfilRow(modulo);
     const baseRow: PermRow = existing
       ? { ...existing, unidade_id: selectedUnidade } // criar/atualizar para a unidade
-      : { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
+      : { perfil: normalizeRoleKey(selectedPerfil), modulo, unidade_id: selectedUnidade,
           can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false };
     const newVal = !baseRow[action];
     const updated: PermRow = { ...baseRow, [action]: newVal };
@@ -213,7 +316,7 @@ const Permissoes: React.FC = () => {
     const { error } = await (supabase as any)
       .from("permissoes")
       .upsert(
-        { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
+        { perfil: normalizeRoleKey(selectedPerfil), modulo, unidade_id: selectedUnidade,
           can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
           can_delete: updated.can_delete, can_execute: updated.can_execute },
         { onConflict: "perfil,modulo,unidade_id" }
@@ -223,38 +326,44 @@ const Permissoes: React.FC = () => {
       toast.error(`Erro: ${error.message}`);
       loadPerfil();
     } else {
-      toast.success(`${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}: ${newVal ? "ATIVADO" : "DESATIVADO"}`);
+      toast.success(`${MODULO_LABELS[modulo]} â†’ ${ACTION_LABELS[action]}: ${newVal ? "ATIVADO" : "DESATIVADO"}`);
     }
     setSaving(null);
   };
 
   // ===== Helpers Individual =====
-  const getUserRow = (modulo: ModuleName): UserPermRow | undefined =>
-    userRows.find((r) => r.modulo === modulo);
+  const selectedUserRoleKey = normalizeRoleKey(funcionarios.find((f) => f.id === selectedUserId)?.role || "recepcao");
+
+  const getUserBaseRow = (modulo: ModuleName): PermRow | undefined =>
+    userBaseRows.find((r) => r.perfil === selectedUserRoleKey && r.modulo === modulo && r.unidade_id === selectedUnidade)
+      || userBaseRows.find((r) => r.perfil === selectedUserRoleKey && r.modulo === modulo && r.unidade_id === "")
+      || userBaseRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
+      || userBaseRows.find((r) => r.modulo === modulo && r.unidade_id === "");
+
+  const getUserOverrideRow = (modulo: ModuleName): UserPermRow | undefined =>
+    userRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
+      || userRows.find((r) => r.modulo === modulo && r.unidade_id === "");
+
+  const getUserEffectiveRow = (modulo: ModuleName): (UserPermRow | PermRow | undefined) => {
+    const base = getUserBaseRow(modulo);
+    const override = getUserOverrideRow(modulo);
+    if (!override) return base;
+    return { ...(base ?? {}), ...override };
+  };
 
   const toggleUser = async (modulo: ModuleName, action: keyof ModulePermission) => {
     if (!selectedUserId) return;
-    const existing = getUserRow(modulo);
-    // base = override existente OU permissão do perfil do usuário (para clonar)
-    const userObj = funcionarios.find((f) => f.id === selectedUserId);
+    const existing = getUserOverrideRow(modulo);
+    const baseProfile = getUserBaseRow(modulo);
     let base: UserPermRow;
     if (existing) {
       base = { ...existing };
     } else {
-      // clone do perfil
-      const { data: perfilData } = await (supabase as any)
-        .from("permissoes")
-        .select("*")
-        .eq("perfil", userObj?.role || "recepcao")
-        .eq("modulo", modulo)
-        .in("unidade_id", [selectedUnidade, ""]);
-      const ref = (perfilData || []).find((r: any) => r.unidade_id === selectedUnidade)
-        || (perfilData || []).find((r: any) => r.unidade_id === "");
       base = {
         user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-        can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
-        can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
-        can_execute: ref?.can_execute ?? false,
+        can_view: baseProfile?.can_view ?? false, can_create: baseProfile?.can_create ?? false,
+        can_edit: baseProfile?.can_edit ?? false, can_delete: baseProfile?.can_delete ?? false,
+        can_execute: baseProfile?.can_execute ?? false,
       };
     }
     const newVal = !base[action];
@@ -263,7 +372,7 @@ const Permissoes: React.FC = () => {
     setSaving(key);
 
     setUserRows((prev) => {
-      const idx = prev.findIndex((r) => r.modulo === modulo);
+      const idx = prev.findIndex((r) => r.modulo === modulo && r.unidade_id === selectedUnidade);
       if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
       return [...prev, updated];
     });
@@ -281,7 +390,7 @@ const Permissoes: React.FC = () => {
       toast.error(`Erro: ${error.message}`);
       loadUser();
     } else {
-      toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}`);
+      toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} -> ${ACTION_LABELS[action]}`);
     }
     setSaving(null);
   };
@@ -297,7 +406,7 @@ const Permissoes: React.FC = () => {
       .eq("unidade_id", selectedUnidade);
     if (error) toast.error("Erro ao remover exceção");
     else toast.success(`Exceção removida: ${MODULO_LABELS[modulo]}`);
-    setUserRows((prev) => prev.filter((r) => r.modulo !== modulo));
+    setUserRows((prev) => prev.filter((r) => !(r.modulo === modulo && r.unidade_id === selectedUnidade)));
     setSaving(null);
   };
 
@@ -416,7 +525,7 @@ const Permissoes: React.FC = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por nome, usuário ou perfil…"
+                  placeholder="Buscar por nome, usuário ou perfil..."
                   className="pl-9"
                   value={searchUser}
                   onChange={(e) => setSearchUser(e.target.value)}
@@ -431,7 +540,7 @@ const Permissoes: React.FC = () => {
                       className="w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between">
                       <div>
                         <div className="font-medium text-sm">{f.nome}</div>
-                        <div className="text-xs text-muted-foreground">{f.usuario} · {PERFIL_LABELS[f.role] || f.role.toUpperCase()}</div>
+                        <div className="text-xs text-muted-foreground">{f.usuario} · {PERFIL_LABELS[normalizeRoleKey(f.role)] || f.role.toUpperCase()}</div>
                       </div>
                     </button>
                   ))}
@@ -442,10 +551,10 @@ const Permissoes: React.FC = () => {
                   <div>
                     <div className="font-medium">{selectedUser.nome}</div>
                     <div className="text-xs text-muted-foreground">
-                      {selectedUser.usuario} · Perfil base: <Badge variant="outline">{PERFIL_LABELS[selectedUser.role] || selectedUser.role}</Badge>
+                      {selectedUser.usuario} · Perfil base: <Badge variant="outline">{PERFIL_LABELS[normalizeRoleKey(selectedUser.role)] || selectedUser.role}</Badge>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => { setSelectedUserId(""); setUserRows([]); }}>Trocar</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setSelectedUserId(""); setUserBaseRows([]); setUserRows([]); }}>Trocar</Button>
                 </div>
               )}
             </CardContent>
@@ -457,8 +566,10 @@ const Permissoes: React.FC = () => {
             ) : (
               <Accordion type="multiple" className="space-y-2">
                 {MODULOS.map((modulo) => {
-                  const override = getUserRow(modulo);
-                  const activeCount = override ? ACTIONS.filter((a) => override[a]).length : 0;
+                  const override = getUserOverrideRow(modulo);
+                  const base = getUserBaseRow(modulo);
+                  const effective = getUserEffectiveRow(modulo);
+                  const activeCount = effective ? ACTIONS.filter((a) => effective[a]).length : 0;
                   return (
                     <AccordionItem key={modulo} value={modulo} className="border rounded-lg px-4">
                       <AccordionTrigger className="hover:no-underline">
@@ -482,7 +593,7 @@ const Permissoes: React.FC = () => {
                             return (
                               <label key={action} className="flex items-center gap-2 cursor-pointer">
                                 <Switch
-                                  checked={!!override?.[action]}
+                                  checked={!!effective?.[action]}
                                   onCheckedChange={() => toggleUser(modulo, action)}
                                   disabled={isLoading}
                                 />
@@ -492,6 +603,11 @@ const Permissoes: React.FC = () => {
                             );
                           })}
                         </div>
+                        {base && (
+                          <div className="pt-2 text-xs text-muted-foreground">
+                            Base do perfil: {ACTIONS.filter((a) => base[a]).length}/5 ativos
+                          </div>
+                        )}
                         {override && (
                           <div className="pt-2 border-t mt-2">
                             <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)}
@@ -516,3 +632,4 @@ const Permissoes: React.FC = () => {
 };
 
 export default Permissoes;
+
