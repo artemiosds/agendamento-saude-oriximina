@@ -155,14 +155,24 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   }, [open]);
 
   const carregarContexto = async () => {
-    if (!item?.paciente_id || !item?.data_atendimento) return;
+    if (!item?.paciente_id) return;
     setLoadingCtx(true);
     try {
-      const { data: pronts } = await (supabase as any)
+      // Escopo: paciente + competência (mês) + mesmo profissional + mesma unidade.
+      // Fallback: se não vier competência, mantém comportamento antigo por data exata.
+      const range = competenciaRange(item.competencia);
+      let q: any = (supabase as any)
         .from("prontuarios")
-        .select("id, profissional_id, profissional_nome, data_atendimento, custom_data, outro_procedimento, tipo_registro")
-        .eq("paciente_id", item.paciente_id)
-        .eq("data_atendimento", item.data_atendimento);
+        .select("id, profissional_id, profissional_nome, unidade_id, data_atendimento, custom_data, outro_procedimento, tipo_registro")
+        .eq("paciente_id", item.paciente_id);
+      if (range) {
+        q = q.gte("data_atendimento", range.ini).lte("data_atendimento", range.fim);
+      } else if (item.data_atendimento) {
+        q = q.eq("data_atendimento", item.data_atendimento);
+      }
+      if (item.profissional_id) q = q.eq("profissional_id", item.profissional_id);
+      if (item.unidade_id) q = q.eq("unidade_id", item.unidade_id);
+      const { data: pronts } = await q.order("data_atendimento", { ascending: true });
       const list = Array.isArray(pronts) ? pronts : [];
       setProntuarios(list);
 
