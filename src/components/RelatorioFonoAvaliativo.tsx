@@ -329,12 +329,48 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
     return errs;
   };
 
+  const ptsResumo = (p: any) => p ? {
+    pts_id: p.id,
+    status: p.status,
+    created_at: p.created_at,
+    professional_id: p.professional_id,
+    unit_id: p.unit_id,
+    objetivo_geral: p.objetivo_geral || "",
+    objetivos_terapeuticos: p.objetivos_terapeuticos || "",
+    metas_curto_prazo: p.metas_curto_prazo || "",
+    metas_medio_prazo: p.metas_medio_prazo || "",
+    metas_longo_prazo: p.metas_longo_prazo || "",
+    plano_conduta: p.plano_conduta || "",
+    frequencia_planejada: p.frequencia_planejada || "",
+    especialidades_envolvidas: p.especialidades_envolvidas || [],
+  } : null;
+
+  const cycleResumo = (c: any) => c ? {
+    cycle_id: c.id,
+    treatment_type: c.treatment_type,
+    specialty: c.specialty,
+    status: c.status,
+    start_date: c.start_date,
+    end_date_predicted: c.end_date_predicted,
+    total_sessions: c.total_sessions,
+    sessions_done: c.sessions_done,
+    frequency: c.frequency,
+    clinical_notes: c.clinical_notes || "",
+    pts_id: c.pts_id || null,
+  } : null;
+
   const buildPayload = () => ({
     template: FONO_AVALIATIVO_TIPO_REGISTRO,
     templateVersion: FONO_AVALIATIVO_VERSION,
     answers, obs, others, justifs,
     procTotal,
     dataRelatorio,
+    unidade_id: user?.unidadeId || "",
+    unidade_nome: unidadeNome,
+    pts_id: selectedPtsId || null,
+    pts_resumo: ptsResumo(selectedPts),
+    treatment_cycle_id: selectedCycleId || null,
+    treatment_cycle_resumo: cycleResumo(selectedCycle),
   });
 
   const handleSave = async (finalize: boolean) => {
