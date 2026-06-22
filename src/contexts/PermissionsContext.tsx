@@ -3,18 +3,34 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type ModuleName =
+  | 'dashboard'
   | 'pacientes'
+  | 'faltosos'
+  | 'atendimento'
   | 'encaminhamento'
   | 'fila'
   | 'triagem'
   | 'enfermagem'
   | 'agenda'
-  | 'atendimento'
+  | 'historico_triagem'
   | 'prontuario'
   | 'tratamento'
+  | 'pts'
+  | 'avaliacao_multi'
+  | 'avaliacao_enfermagem'
+  | 'relatorio_alta'
   | 'relatorios'
+  | 'bpa_producao'
+  | 'bpa_exportar'
   | 'monitoramento_sistema'
-  | 'usuarios';
+  | 'usuarios'
+  | 'unidades_salas'
+  | 'disponibilidade'
+  | 'feriados_bloqueios'
+  | 'logs_auditoria'
+  | 'configuracoes'
+  | 'permissoes'
+  | 'configuracoes_avancadas';
 
 export interface ModulePermission {
   can_view: boolean;
@@ -34,9 +50,56 @@ interface PermissionsContextType {
 }
 
 const ALL_MODULES: ModuleName[] = [
-  'pacientes', 'encaminhamento', 'fila', 'triagem', 'enfermagem',
-  'agenda', 'atendimento', 'prontuario', 'tratamento', 'relatorios', 'monitoramento_sistema', 'usuarios',
+  'dashboard',
+  'pacientes',
+  'faltosos',
+  'atendimento',
+  'encaminhamento',
+  'fila',
+  'triagem',
+  'historico_triagem',
+  'enfermagem',
+  'avaliacao_enfermagem',
+  'agenda',
+  'prontuario',
+  'tratamento',
+  'pts',
+  'avaliacao_multi',
+  'relatorio_alta',
+  'relatorios',
+  'bpa_producao',
+  'bpa_exportar',
+  'monitoramento_sistema',
+  'usuarios',
+  'unidades_salas',
+  'disponibilidade',
+  'feriados_bloqueios',
+  'logs_auditoria',
+  'configuracoes',
+  'permissoes',
+  'configuracoes_avancadas',
 ];
+
+const ROLE_ALIASES: Record<string, string> = {
+  gestao: 'gestao',
+  'gestão': 'gestao',
+  gestor: 'gestao',
+  coordenacao: 'gestao',
+  coordenador: 'gestao',
+  recepcao: 'recepcao',
+  'recepção': 'recepcao',
+  triagem: 'triagem',
+  tecnico: 'triagem',
+  tecnico_enfermagem: 'enfermagem',
+  enfermagem: 'enfermagem',
+  profissional: 'profissional',
+  master: 'master',
+};
+
+const normalizeRole = (value: string) => {
+  const key = (value || '').toLowerCase().trim();
+  return ROLE_ALIASES[key] ?? key;
+};
 
 const defaultPerm: ModulePermission = {
   can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
@@ -47,20 +110,7 @@ const fullPerm: ModulePermission = {
 };
 
 const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
-  gestor: {
-    pacientes:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    encaminhamento: { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    fila:           { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    agenda:         { can_view: true,  can_create: true,  can_edit: true,  can_delete: true,  can_execute: true  },
-    atendimento:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    prontuario:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    tratamento:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    relatorios:     { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: true  },
-    usuarios:       { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: false },
-  },
-  coordenador: {
+  gestao: {
     pacientes:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
     encaminhamento: { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
     fila:           { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
@@ -99,20 +149,7 @@ const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
     relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
     usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
   },
-  tecnico_enfermagem: {
-    pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    encaminhamento: { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    fila:           { can_view: true,  can_create: false, can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    agenda:         { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    atendimento:    { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    prontuario:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    tratamento:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-  },
-  tecnico: {
+  triagem: {
     pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
     encaminhamento: { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
     fila:           { can_view: true,  can_create: false, can_edit: true,  can_delete: false, can_execute: true  },
@@ -169,12 +206,14 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setLoading(true);
 
     try {
-      // AuthContext já buscou o role da tabela 'funcionarios' — usar diretamente
-      const role = (user.role || '').toLowerCase().trim();
+      // AuthContext já buscou o role da tabela 'funcionarios' - usar diretamente
+      const rawRole = (user.role || '').toLowerCase().trim();
+      const role = normalizeRole(rawRole);
+      const profileKeys = Array.from(new Set([role, rawRole].filter(Boolean)));
 
       // role resolved from AuthContext
 
-      if (!role) {
+      if (!rawRole) {
         console.warn('[Permissions] Role vazio');
         setPermissions(buildFullMap({}));
         setLoading(false);
@@ -196,12 +235,12 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const { data: perfilData, error: perfilErr } = await (supabase as any)
         .from('permissoes')
         .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
-        .eq('perfil', role)
+        .in('perfil', profileKeys)
         .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
 
       if (perfilErr) {
         console.error('[Permissions] Erro perfil:', perfilErr);
-        setPermissions(buildFullMap(DEFAULT_PERMISSIONS_BY_ROLE[role] ?? {}));
+        setPermissions(buildFullMap(DEFAULT_PERMISSIONS_BY_ROLE[role] ?? DEFAULT_PERMISSIONS_BY_ROLE[rawRole] ?? {}));
         setLoading(false);
         return;
       }
@@ -213,9 +252,9 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         .eq('user_id', user.id)
         .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
 
-      // Sem dados de perfil — semear defaults globais (unidade_id='')
+      // Sem dados de perfil â€” semear defaults globais (unidade_id='')
       if (!perfilData || perfilData.length === 0) {
-        const defaults = DEFAULT_PERMISSIONS_BY_ROLE[role];
+        const defaults = DEFAULT_PERMISSIONS_BY_ROLE[role] ?? DEFAULT_PERMISSIONS_BY_ROLE[rawRole];
         if (defaults) {
           const inserts = ALL_MODULES.map((m) => ({
             perfil: role,
@@ -250,7 +289,9 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
             can_execute: pick.can_execute ?? false,
           };
         } else {
-          map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) ?? defaultPerm;
+          map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m])
+            ?? (DEFAULT_PERMISSIONS_BY_ROLE[rawRole]?.[m])
+            ?? defaultPerm;
         }
       });
       setPermissions(buildFullMap(map));
@@ -297,3 +338,4 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     </PermissionsContext.Provider>
   );
 };
+
