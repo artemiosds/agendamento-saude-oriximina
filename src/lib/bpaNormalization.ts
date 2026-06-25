@@ -195,8 +195,31 @@ export function normalizeCep(cepRaw: any): string {
  * Consulta o ViaCEP para uma lista de CEPs únicos e devolve um Map cep→info.
  * Falhas individuais não interrompem o lote.
  */
-const VIACEP_TIMEOUT_MS = 4000;
-const VIACEP_CHUNK_SIZE = 20;
+const VIACEP_TIMEOUT_MS = 2500;
+const VIACEP_CHUNK_SIZE = 50;
+const VIACEP_CACHE_KEY = "bpa_viacep_cache_v1";
+const VIACEP_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 dias
+
+type CepCacheEntry = { info: CepInfo | null; ts: number };
+
+function loadCepCache(): Record<string, CepCacheEntry> {
+  try {
+    if (typeof localStorage === "undefined") return {};
+    const raw = localStorage.getItem(VIACEP_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCepCache(cache: Record<string, CepCacheEntry>): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(VIACEP_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* quota cheia/SSR — ignora */
+  }
+}
 
 async function fetchOneCep(cep: string): Promise<CepInfo | null> {
   const ctrl = new AbortController();
@@ -222,14 +245,37 @@ export async function fetchCepInfoMap(ceps: string[]): Promise<Map<string, CepIn
   const unicos = Array.from(new Set(ceps.map(onlyDigits).filter(c => c.length === 8)));
   if (unicos.length === 0) return out;
 
-  for (let i = 0; i < unicos.length; i += VIACEP_CHUNK_SIZE) {
-    const chunk = unicos.slice(i, i + VIACEP_CHUNK_SIZE);
-    const results = await Promise.all(chunk.map(fetchOneCep));
-    results.forEach((info) => { if (info) out.set(info.cep, info); });
+  const cache = loadCepCache();
+  const now = Date.now();
+  const aBuscar: string[] = [];
+
+  for (const cep of unicos) {
+    const entry = cache[cep];
+    if (entry && now - entry.ts < VIACEP_CACHE_TTL_MS) {
+      if (entry.info) out.set(cep, entry.info);
+    } else {
+      aBuscar.push(cep);
+    }
   }
+
+  if (aBuscar.length === 0) return out;
+
+  let cacheDirty = false;
+  for (let i = 0; i < aBuscar.length; i += VIACEP_CHUNK_SIZE) {
+    const chunk = aBuscar.slice(i, i + VIACEP_CHUNK_SIZE);
+    const results = await Promise.all(chunk.map(fetchOneCep));
+    results.forEach((info, idx) => {
+      const cep = chunk[idx];
+      cache[cep] = { info, ts: now };
+      cacheDirty = true;
+      if (info) out.set(cep, info);
+    });
+  }
+  if (cacheDirty) saveCepCache(cache);
 
   return out;
 }
+
 
 /**
  * Resolve município IBGE (6 dígitos) usando:
