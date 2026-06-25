@@ -1127,17 +1127,21 @@ const BpaExportar: React.FC = () => {
       // BPA-I, carregamos triage_records do período e convertemos em registros
       // sintéticos compatíveis com o pipeline existente (mesma estrutura usada
       // por prontuarios). O SIGTAP padrão de triagem vem de system_config.
+      // (e) Leitura única de system_config.bpa_config — antes era chamado 2x.
       let triagemSigtapDefault = "";
+      let bpaConfigValue: any = {};
       try {
         const { data: cfgRowTr } = await (supabase as any)
           .from("system_config")
           .select("value")
           .eq("key", "bpa_config")
           .maybeSingle();
-        triagemSigtapDefault = String((cfgRowTr?.value || {}).bpa_triagem_sigtap || "").replace(/\D/g, "");
+        bpaConfigValue = cfgRowTr?.value || {};
+        triagemSigtapDefault = String(bpaConfigValue.bpa_triagem_sigtap || "").replace(/\D/g, "");
       } catch {
         /* sem config → cai no procedimento padrão da exportação */
       }
+
 
       let triagemQuery = (supabase as any)
         .from("triage_records")
