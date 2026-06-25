@@ -180,7 +180,7 @@ const Relatorios: React.FC = () => {
   const funcionariosMap = useMemo(() => new Map((funcionarios || []).map((f: any) => [f.id, f])), [funcionarios]);
   const pacientesMap = useMemo(() => new Map((pacientes || []).map((p: any) => [p.id, p])), [pacientes]);
   const profissionaisMap = useMemo(() => new Map((profissionais || []).map((p: any) => [p.id, p])), [profissionais]);
-  const categoriasMap = useMemo(() => new Map(CATEGORIAS.map((c: any) => [c.key, c])), []);
+  // categoriasMap declared after CATEGORIAS to avoid TDZ — see below.
 
   const loadReportData = useCallback(async (isAutoRefresh = false) => {
     if (isFetching) return;
@@ -561,6 +561,10 @@ const Relatorios: React.FC = () => {
     { key: 'odontologia', icon: Stethoscope, label: 'Odontologia', cor: '#0E7490', bgLight: '#ECFEFF',
       termos: ['odontologo', 'odontologa', 'odontologia', 'odontopediatra', 'odontopediatria', 'dentista'] },
   ];
+
+  const categoriasMap = useMemo(() => new Map(CATEGORIAS.map((c: any) => [c.key, c])), []);
+
+
 
   const profissionalPertenceCategoria = (profissao: string, cat: typeof CATEGORIAS[0]) => {
     const norm = normalizarProfissao(profissao);
