@@ -1369,18 +1369,8 @@ const BpaExportar: React.FC = () => {
         }
       >();
       try {
-        let triagemSigtapPadrao = "";
-        try {
-          const { data: cfgRow } = await (supabase as any)
-            .from("system_config")
-            .select("value")
-            .eq("key", "bpa_config")
-            .maybeSingle();
-          const cfg = cfgRow?.value || {};
-          triagemSigtapPadrao = String(cfg.bpa_triagem_sigtap || "").replace(/\D/g, "");
-        } catch {
-          /* ignora — não bloqueia resolução */
-        }
+        // (e) Reaproveita bpaConfigValue já carregado acima — sem nova ida ao banco.
+        const triagemSigtapPadrao = String(bpaConfigValue?.bpa_triagem_sigtap || "").replace(/\D/g, "");
 
         const linhasProducaoSvc = await bpaService.resolveBpaProcedimentosECids({
           competencia: formData.competencia,
@@ -1388,6 +1378,7 @@ const BpaExportar: React.FC = () => {
           profissionalId: formData.profissional_id !== "all" ? formData.profissional_id : undefined,
           triagemSigtapPadrao,
         });
+
         for (const ln of linhasProducaoSvc) {
           if (!ln.prontuario_id) continue;
           const atual = producaoByPront.get(ln.prontuario_id);
