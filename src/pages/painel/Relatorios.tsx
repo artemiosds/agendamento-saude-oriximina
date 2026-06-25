@@ -806,22 +806,95 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    const topCids = Object.entries(cidFrequency)
-      .map(([cid, count]) => ({ 
-        cid, 
-        count, 
-        descricao: cid10Descriptions[cid] || "Descrição não carregada" 
+    const totalPatients = patientsList.length || 1;
+    const topCidsAll = Object.entries(cidFrequency)
+      .map(([cid, count]) => ({
+        cid,
+        count,
+        descricao: cid10Descriptions[cid] || "Descrição não carregada",
+        percent: +((count / totalPatients) * 100).toFixed(1),
       }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+      .sort((a, b) => b.count - a.count);
+    const topCids = topCidsAll.slice(0, 10);
+    const topCids20 = topCidsAll.slice(0, 20);
+
+    // ===== Sexo =====
+    const sexoCount = { masculino: 0, feminino: 0, naoInformado: 0 };
+    // ===== Faixa etária =====
+    const faixas = [
+      { name: '0-3 anos', min: 0, max: 3, count: 0 },
+      { name: '4-6 anos', min: 4, max: 6, count: 0 },
+      { name: '7-12 anos', min: 7, max: 12, count: 0 },
+      { name: '13-17 anos', min: 13, max: 17, count: 0 },
+      { name: '18-59 anos', min: 18, max: 59, count: 0 },
+      { name: '60+ anos', min: 60, max: 200, count: 0 },
+    ];
+    let semIdade = 0;
+    const today = new Date();
+    patientsList.forEach(p => {
+      const pac: any = pacMap.get(p.id);
+      const sx = normalizeSexo(pac?.custom_data?.sexo || (pac as any)?.sexo);
+      if (sx === 'masculino') sexoCount.masculino++;
+      else if (sx === 'feminino') sexoCount.feminino++;
+      else sexoCount.naoInformado++;
+
+      const dn = pac?.dataNascimento || pac?.data_nascimento;
+      if (dn) {
+        const d = new Date(dn);
+        if (!isNaN(d.getTime())) {
+          let age = today.getFullYear() - d.getFullYear();
+          const m = today.getMonth() - d.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+          const f = faixas.find(fx => age >= fx.min && age <= fx.max);
+          if (f) f.count++; else semIdade++;
+        } else semIdade++;
+      } else semIdade++;
+    });
+    const sexoDist = [
+      { name: 'Masculino', value: sexoCount.masculino },
+      { name: 'Feminino', value: sexoCount.feminino },
+      { name: 'Não informado', value: sexoCount.naoInformado },
+    ];
+    const faixaEtariaDist = faixas.map(f => ({ name: f.name, value: f.count }));
+
+    // ===== Evolução temporal (diagnósticos por mês) =====
+    const monthCount: Record<string, number> = {};
+    prontuariosFull.forEach(pr => {
+      if (!pr.cid_codigo || !pr.data_atendimento) return;
+      const key = String(pr.data_atendimento).slice(0, 7); // YYYY-MM
+      const n = pr.cid_codigo.split(/[,;\s]+/).filter(Boolean).length || 0;
+      monthCount[key] = (monthCount[key] || 0) + n;
+    });
+    const evolucaoTemporal = Object.entries(monthCount)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, value]) => ({ month, value }));
+
+    // ===== Múltiplos CIDs =====
+    const comMulti = patientsList.filter(p => p.cids.size > 1);
+    const totalCidsSoma = patientsList.reduce((acc, p) => acc + p.cids.size, 0);
+    const mediaCidPorPaciente = patientsList.length ? +(totalCidsSoma / patientsList.length).toFixed(2) : 0;
+
+    // ===== Deficiência Múltipla (>= 2 categorias PCD) =====
+    const PCD_CATS = new Set(['TEA / Autismo', 'Pessoa Surda', 'Deficiência Auditiva', 'Deficiência Visual', 'Deficiência Física', 'Deficiência Intelectual']);
+    const deficienciaMultipla = patientsList.filter(p => {
+      let n = 0;
+      p.categories.forEach(c => { if (PCD_CATS.has(c)) n++; });
+      return n >= 2;
+    }).length;
 
     const kpis = {
       totalPacientesComCID: patientsList.length,
       tea: byCategory['TEA / Autismo']?.pacientes || 0,
       surdez: (byCategory['Pessoa Surda']?.pacientes || 0) + (byCategory['Deficiência Auditiva']?.pacientes || 0),
+      auditiva: byCategory['Deficiência Auditiva']?.pacientes || 0,
+      visual: byCategory['Deficiência Visual']?.pacientes || 0,
       fisica: byCategory['Deficiência Física']?.pacientes || 0,
       intelectual: byCategory['Deficiência Intelectual']?.pacientes || 0,
-      multiplosCids: patientsList.filter(p => p.cids.size > 1).length,
+      multipla: deficienciaMultipla,
+      multiplosCids: comMulti.length,
+      multiplosCidsPercent: patientsList.length ? +((comMulti.length / patientsList.length) * 100).toFixed(1) : 0,
+      mediaCidPorPaciente,
+      semIdade,
       totalAtendimentos: patientsList.reduce((acc, p) => acc + p.atendimentos, 0),
       totalProcedimentos: patientsList.reduce((acc, p) => acc + p.procedimentos.size, 0)
     };
@@ -830,9 +903,14 @@ const Relatorios: React.FC = () => {
       patients: patientsList,
       byCategory: Object.values(byCategory).sort((a, b) => b.pacientes - a.pacientes),
       topCids,
+      topCids20,
+      sexoDist,
+      faixaEtariaDist,
+      evolucaoTemporal,
       kpis
     };
   }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions, clinicalSearch]);
+
 
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
