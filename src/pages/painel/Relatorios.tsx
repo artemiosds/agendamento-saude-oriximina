@@ -2692,7 +2692,7 @@ ${dataRows}
           // ===== CONTEÚDO =====
           H1('Escopo do Relatório'),
           P('Os indicadores e tabelas a seguir refletem exatamente os filtros abaixo aplicados no momento da geração deste documento.'),
-          mkTable(['Campo', 'Valor Aplicado'], Object.entries(esc.escopo).map(([k, v]) => [k, v])),
+          mkTable(['Campo', 'Valor Aplicado'], Object.entries(esc.escopo).map(([k, v]) => [String(k), String(v)])),
 
           H1('1. Introdução'), P(intro),
           H1('2. Metodologia'), P(metodologia),
