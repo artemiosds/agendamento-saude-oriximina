@@ -3194,7 +3194,10 @@ const BpaExportar: React.FC = () => {
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
                     Detalhes da pendência:{" "}
-                    {selectedCategory === "critical"
+                    {selectedCategory === "all"
+                      ? "Todos os Registros da Competência"
+                      : selectedCategory === "critical"
+
                       ? "Pendências Críticas (Bloqueantes)"
                       : selectedCategory === "missingCns"
                         ? "Sem CNS Paciente"
