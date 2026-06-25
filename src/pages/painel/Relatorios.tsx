@@ -208,7 +208,7 @@ const Relatorios: React.FC = () => {
         const PAGE_SIZE = 1000;
         
         while (true) {
-          let query = (supabase.from(table as any) as any).select('*').range(from, from + PAGE_SIZE - 1);
+          let query = (supabase.from(table as any) as any).select('*').order('id', { ascending: true }).range(from, from + PAGE_SIZE - 1);
           
           if (dateField) {
             if (dateFrom) {
