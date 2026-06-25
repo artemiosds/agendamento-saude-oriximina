@@ -1613,6 +1613,17 @@ const BpaExportar: React.FC = () => {
           origem: pront.tipo_registro === "agenda_sem_prontuario" ? "AGENDA_SEM_PRONTUARIO" : undefined,
         };
 
+        // Lista mestre: TODOS os registros da competência (com ou sem pendência).
+        // Permite ao usuário abrir o modal e adicionar Procedimentos Aditivos
+        // mesmo em prontuários considerados "limpos".
+        stats.all++;
+        details.all.push({
+          ...itemDetail,
+          pendencia: "Sem pendência",
+          valor_atual: "Registro válido",
+        });
+
+
         // Remove apenas duplicidades exatas de atendimento: mesmo paciente,
         // profissional, unidade e data. Múltiplos procedimentos do mesmo
         // atendimento NÃO são duplicidade — viram múltiplas linhas BPA-I.
