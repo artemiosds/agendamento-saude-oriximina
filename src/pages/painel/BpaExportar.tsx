@@ -816,6 +816,7 @@ const BpaExportar: React.FC = () => {
     warnings: string[];
     criticalCount: number;
     stats: {
+      all: number;
       missingCns: number;
       missingSexo: number;
       inferredSexo: number;
@@ -831,6 +832,7 @@ const BpaExportar: React.FC = () => {
       autoCorrected: number;
     };
     details: {
+      all: any[];
       missingCns: any[];
       missingSexo: any[];
       inferredSexo: any[];
@@ -846,6 +848,7 @@ const BpaExportar: React.FC = () => {
       autoCorrected: any[];
       critical: any[];
     };
+
     error: string | null;
     fileName: string;
     confRows: any[];
@@ -1123,6 +1126,7 @@ const BpaExportar: React.FC = () => {
     setLoading(true);
     const warnings: string[] = [];
     const stats = {
+      all: 0,
       missingCns: 0,
       missingSexo: 0,
       inferredSexo: 0,
@@ -1139,6 +1143,7 @@ const BpaExportar: React.FC = () => {
     };
 
     const details = {
+      all: [] as any[],
       missingCns: [] as any[],
       missingSexo: [] as any[],
       inferredSexo: [] as any[],
@@ -1154,6 +1159,7 @@ const BpaExportar: React.FC = () => {
       autoCorrected: [] as any[],
       critical: [] as any[],
     };
+
 
     try {
       const { competencia } = formData;
@@ -1606,6 +1612,17 @@ const BpaExportar: React.FC = () => {
           agendamento_id: pront.agendamento_id || null,
           origem: pront.tipo_registro === "agenda_sem_prontuario" ? "AGENDA_SEM_PRONTUARIO" : undefined,
         };
+
+        // Lista mestre: TODOS os registros da competência (com ou sem pendência).
+        // Permite ao usuário abrir o modal e adicionar Procedimentos Aditivos
+        // mesmo em prontuários considerados "limpos".
+        stats.all++;
+        details.all.push({
+          ...itemDetail,
+          pendencia: "Sem pendência",
+          valor_atual: "Registro válido",
+        });
+
 
         // Remove apenas duplicidades exatas de atendimento: mesmo paciente,
         // profissional, unidade e data. Múltiplos procedimentos do mesmo
@@ -3115,8 +3132,10 @@ const BpaExportar: React.FC = () => {
             </Card>
 
             {[
+              { id: "all", label: "Todos os Registros", count: results.stats.all, color: "slate" },
               { id: "critical", label: "Pendên. Críticas", count: results.criticalCount, color: "red" },
               { id: "missingCns", label: "Sem CNS Pac.", count: results.stats.missingCns, color: "amber" },
+
               { id: "missingSexo", label: "Sexo Indef.", count: results.stats.missingSexo, color: "amber" },
               {
                 id: "invalidNascimento",
@@ -3175,7 +3194,10 @@ const BpaExportar: React.FC = () => {
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
                     Detalhes da pendência:{" "}
-                    {selectedCategory === "critical"
+                    {selectedCategory === "all"
+                      ? "Todos os Registros da Competência"
+                      : selectedCategory === "critical"
+
                       ? "Pendências Críticas (Bloqueantes)"
                       : selectedCategory === "missingCns"
                         ? "Sem CNS Paciente"
@@ -3307,12 +3329,14 @@ const BpaExportar: React.FC = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2 flex-wrap">
-                              {selectedCategory === "missingSigtap" && item.paciente_id && item.data_atendimento && (
+                              {(selectedCategory === "missingSigtap" || selectedCategory === "all" || selectedCategory === "critical") &&
+                                item.paciente_id &&
+                                item.data_atendimento && (
                                 <Button
                                   variant="default"
                                   size="sm"
                                   className="h-8"
-                                  title="Resolver pendência selecionando um SIGTAP da tabela oficial"
+                                  title="Corrigir SIGTAP/CID ou adicionar Procedimento Aditivo por competência"
                                   onClick={() =>
                                     setResolverModal({
                                       open: true,
@@ -3338,9 +3362,12 @@ const BpaExportar: React.FC = () => {
                                 >
                                   {(item as any).origem === "AGENDA_SEM_PRONTUARIO"
                                     ? "Corrigir Produção (Agenda)"
-                                    : "Resolver SIGTAP"}
+                                    : selectedCategory === "all"
+                                      ? "Corrigir / Adicionar"
+                                      : "Resolver SIGTAP"}
                                 </Button>
                               )}
+
                               {item.paciente_id && (
                                 <Button
                                   variant="outline"
