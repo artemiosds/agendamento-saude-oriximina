@@ -2559,7 +2559,8 @@ ${dataRows}
           `, filtered.length > 0)}
 
           ${renderSection("21. Considerações Finais", `
-            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período. Observa-se um volume operacional ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
+            <p>${analiseExecutiva}</p>
+            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período, dentro do escopo de filtros aplicado. Observa-se um volume operacional ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
           `)}
 
           <div style="margin-top: 60px;">
