@@ -1400,7 +1400,9 @@ const BpaExportar: React.FC = () => {
       // Alguns prontuários gravam o procedimento somente na tabela vinculada
       // prontuario_procedimentos -> procedimentos.codigo_sigtap, sem espelhar em
       // custom_data. Carregamos isso para evitar falso "SIGTAP ausente".
-      const prontIdsAll = prontuarios.map((p: any) => p.id).filter((id: any) => id && !String(id).startsWith("triagem:"));
+      const prontIdsAll = prontuarios
+        .map((p: any) => p.id)
+        .filter((id: any) => id && !String(id).startsWith("triagem:") && !String(id).startsWith("agenda:"));
       const sigtapPorProntuario = new Map<string, string[]>();
       if (prontIdsAll.length > 0) {
         const { data: ppRows } = await (supabase as any)
