@@ -2570,10 +2570,8 @@ ${dataRows}
       `;
 
       if (format === 'pdf') {
-        const fullHtml = buildDocumentShell("Relatório Institucional Completo", bodyHtml, config, {
-          "Unidade": un,
-          "Profissional": profFilter,
-          "Período": periodo,
+        const fullHtml = buildDocumentShell(tituloDinamico, bodyHtml, config, {
+          ...esc.escopo,
           "Tipo": "Relatório ABNT"
         });
         printViaIframe(fullHtml);
