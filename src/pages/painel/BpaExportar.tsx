@@ -3132,8 +3132,10 @@ const BpaExportar: React.FC = () => {
             </Card>
 
             {[
+              { id: "all", label: "Todos os Registros", count: results.stats.all, color: "slate" },
               { id: "critical", label: "Pendên. Críticas", count: results.criticalCount, color: "red" },
               { id: "missingCns", label: "Sem CNS Pac.", count: results.stats.missingCns, color: "amber" },
+
               { id: "missingSexo", label: "Sexo Indef.", count: results.stats.missingSexo, color: "amber" },
               {
                 id: "invalidNascimento",
