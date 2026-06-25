@@ -130,6 +130,9 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   const [aplicarPts, setAplicarPts] = useState(false);
   const [adicionarExtra, setAdicionarExtra] = useState(false);
 
+  // Aditivos por competência (pacientes.custom_data.bpa_aditivos)
+  const [aditivos, setAditivos] = useState<Array<{ codigo: string; nome?: string; cid?: string; competencia?: string; added_at?: string; added_by_nome?: string }>>([]);
+  const [savingAditivo, setSavingAditivo] = useState(false);
 
   // Progresso de gravação em lote
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -153,6 +156,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setAplicarPts(false);
     setAdicionarExtra(false);
     setProntuarios([]);
+    setAditivos([]);
 
     setPtsList([]);
     setPtsAtivo(null);
@@ -266,6 +270,25 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         if (curSig && curCid) break;
       }
       setValoresAtuais({ sigtap: curSig, cid: curCid });
+
+      // Carrega aditivos por competência salvos em pacientes.custom_data.bpa_aditivos
+      try {
+        const { data: pacRow } = await (supabase as any)
+          .from("pacientes")
+          .select("custom_data")
+          .eq("id", item.paciente_id)
+          .maybeSingle();
+        const todos = Array.isArray(pacRow?.custom_data?.bpa_aditivos) ? pacRow.custom_data.bpa_aditivos : [];
+        const compAtual = String(item.competencia || "").replace(/\D/g, "");
+        const filtrados = todos.filter((a: any) => {
+          const c = String(a?.competencia || "").replace(/\D/g, "");
+          if (!compAtual) return true;
+          return !c || c === "*" || c === compAtual;
+        });
+        setAditivos(filtrados);
+      } catch (e) {
+        console.warn("[BPA] aditivos load:", e);
+      }
     } catch (e: any) {
       toast.error("Falha ao carregar contexto: " + (e?.message || "erro"));
     } finally {
@@ -392,6 +415,102 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     motivo.trim().length >= 3 &&
     impactoCount > 0 &&
     !cidInvalido;
+
+  // === Aditivos por competência (pacientes.custom_data.bpa_aditivos) ===
+  const persistirAditivos = async (lista: any[]) => {
+    if (!item?.paciente_id) return;
+    const { data: pacRow, error: errSel } = await (supabase as any)
+      .from("pacientes")
+      .select("custom_data")
+      .eq("id", item.paciente_id)
+      .maybeSingle();
+    if (errSel) throw errSel;
+    const cdAtual = (pacRow?.custom_data as any) || {};
+    // Mantém aditivos de outras competências intactos
+    const compAtual = String(item.competencia || "").replace(/\D/g, "");
+    const todos = Array.isArray(cdAtual.bpa_aditivos) ? cdAtual.bpa_aditivos : [];
+    const outrosMeses = todos.filter((a: any) => {
+      const c = String(a?.competencia || "").replace(/\D/g, "");
+      if (!compAtual) return false;
+      return c && c !== "*" && c !== compAtual;
+    });
+    const novo = { ...cdAtual, bpa_aditivos: [...outrosMeses, ...lista] };
+    const { error } = await (supabase as any).from("pacientes").update({ custom_data: novo }).eq("id", item.paciente_id);
+    if (error) throw error;
+  };
+
+  const handleAddAditivo = async () => {
+    if (!selSigtap || !item?.competencia) return;
+    setSavingAditivo(true);
+    try {
+      const novoCod = normalizeSigtap(selSigtap.codigo);
+      const novoCid = cidEscolhidoRaw ? normalizeCid(cidEscolhidoRaw) : "";
+      if (cidInvalido) {
+        toast.error("CID-10 inválido para o aditivo.");
+        return;
+      }
+      if (aditivos.some((a) => normalizeSigtap(a.codigo) === novoCod)) {
+        toast.info("Este procedimento já consta como aditivo nesta competência.");
+        return;
+      }
+      const nova = [
+        ...aditivos,
+        {
+          codigo: novoCod,
+          nome: selSigtap.nome,
+          cid: novoCid || undefined,
+          competencia: String(item.competencia).replace(/\D/g, ""),
+          added_at: new Date().toISOString(),
+          added_by_id: userId || null,
+          added_by_nome: userNome || null,
+        },
+      ];
+      await persistirAditivos(nova);
+      setAditivos(nova as any);
+
+      // Auditoria
+      try {
+        await (supabase as any).from("notification_logs").insert({
+          canal: "sistema",
+          evento: "bpa_aditivo_adicionado",
+          status: "pendente",
+          payload: {
+            paciente_id: item.paciente_id,
+            paciente_nome: item.paciente_nome,
+            competencia: item.competencia,
+            codigo_sigtap: novoCod,
+            sigtap_nome: selSigtap.nome,
+            cid: novoCid || null,
+            user_id: userId || null,
+            user_nome: userNome || null,
+          },
+        });
+      } catch (_e) { /* noop */ }
+
+      toast.success(`Aditivo ${novoCod} cadastrado para ${item.competencia.slice(4,6)}/${item.competencia.slice(0,4)}.`);
+      onResolved();
+    } catch (e: any) {
+      toast.error("Falha ao salvar aditivo: " + (e?.message || "erro"));
+    } finally {
+      setSavingAditivo(false);
+    }
+  };
+
+  const handleRemoveAditivo = async (codigo: string) => {
+    setSavingAditivo(true);
+    try {
+      const cod = normalizeSigtap(codigo);
+      const nova = aditivos.filter((a) => normalizeSigtap(a.codigo) !== cod);
+      await persistirAditivos(nova);
+      setAditivos(nova);
+      toast.success("Aditivo removido.");
+      onResolved();
+    } catch (e: any) {
+      toast.error("Falha ao remover aditivo: " + (e?.message || "erro"));
+    } finally {
+      setSavingAditivo(false);
+    }
+  };
 
   const handleSalvar = async () => {
     if (!item || !selSigtap) return;
@@ -767,6 +886,65 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             </p>
           </div>
         )}
+
+        {/* Procedimentos Aditivos por Competência */}
+        {!isAgendaMode && item?.competencia && (
+          <div className="space-y-2 rounded-md border p-3 bg-emerald-50/40">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-emerald-900">
+                  Procedimentos Aditivos por Competência
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Configurados para o paciente em <b>{item.competencia.slice(4,6)}/{item.competencia.slice(0,4)}</b>.
+                  Cada aditivo gera <b>uma linha BPA-I extra por sessão</b> exportada, sem alterar o prontuário clínico.
+                  Deduplicação automática contra os procedimentos já presentes.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                type="button"
+                variant="secondary"
+                disabled={!selSigtap || savingAditivo || cidInvalido}
+                onClick={handleAddAditivo}
+              >
+                {savingAditivo ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                {selSigtap ? `Adicionar ${normalizeSigtap(selSigtap.codigo)} como Aditivo` : "Selecione um SIGTAP acima"}
+              </Button>
+            </div>
+
+            {aditivos.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                Nenhum aditivo cadastrado para esta competência.
+              </p>
+            ) : (
+              <ul className="text-xs space-y-1 max-h-40 overflow-y-auto">
+                {aditivos.map((a) => (
+                  <li
+                    key={a.codigo}
+                    className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1"
+                  >
+                    <span>
+                      <code className="font-mono text-primary">{a.codigo}</code>
+                      {a.nome ? <> — {a.nome}</> : null}
+                      {a.cid ? <> · CID <code className="font-mono">{a.cid}</code></> : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-destructive hover:underline"
+                      disabled={savingAditivo}
+                      onClick={() => handleRemoveAditivo(a.codigo)}
+                    >
+                      remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+
 
 
 

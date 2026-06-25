@@ -1378,6 +1378,29 @@ const BpaExportar: React.FC = () => {
       const funcMap = new Map(funcionariosRes.data?.map((f) => [f.id, f]));
       const unitMap = new Map(unidadesRes.data?.map((u) => [u.id, u]));
 
+      // === Procedimentos Aditivos por Competência ===
+      // Lê pacientes.custom_data.bpa_aditivos[] e indexa por paciente_id,
+      // filtrando pela competência atual (ou "*" = todas as competências).
+      // Cada aditivo gera 1 linha BPA-I extra por sessão exportada do paciente.
+      const aditivosByPaciente = new Map<string, Array<{ codigo: string; nome?: string; cid?: string }>>();
+      const competenciaAtual = String(formData.competencia || "").replace(/\D/g, "");
+      pacMap.forEach((pac: any, pid: string) => {
+        const lista = Array.isArray(pac?.custom_data?.bpa_aditivos) ? pac.custom_data.bpa_aditivos : [];
+        const filtrados: Array<{ codigo: string; nome?: string; cid?: string }> = [];
+        const vistos = new Set<string>();
+        for (const a of lista) {
+          const comp = String(a?.competencia || "").replace(/\D/g, "");
+          if (comp && comp !== "*" && comp !== competenciaAtual) continue;
+          const cod = somenteNumeros(a?.codigo || a?.codigo_sigtap || "");
+          if (!cod || cod.length < 6 || cod.length > 10) continue;
+          const codNorm = cod.padStart(10, "0").slice(-10);
+          if (vistos.has(codNorm)) continue;
+          vistos.add(codNorm);
+          filtrados.push({ codigo: codNorm, nome: a?.nome, cid: a?.cid });
+        }
+        if (filtrados.length) aditivosByPaciente.set(pid, filtrados);
+      });
+
       // === Pré-carrega informações de CEP (ViaCEP) para validar município/IBGE ===
       // (c) Só consulta CEPs de pacientes cujo município_ibge está faltando/inválido.
       // Quando o cadastro já tem IBGE de 6 dígitos, pulamos a chamada externa —
@@ -1835,6 +1858,13 @@ const BpaExportar: React.FC = () => {
               addCodigo(c, "Padrão (Téc. Enfermagem)");
             }
           }
+          // 4.6) Procedimentos Aditivos por Competência (configurados em
+          // pacientes.custom_data.bpa_aditivos). Somam-se aos clínicos — geram
+          // 1 linha BPA-I extra por sessão. Set já garante deduplicação.
+          const aditivosPac = pront.paciente_id ? aditivosByPaciente.get(String(pront.paciente_id)) || [] : [];
+          for (const a of aditivosPac) {
+            addCodigo(a.codigo, "Aditivo (competência)");
+          }
           // 5) Procedimentos padrão do form (lista vazia e profissão NÃO exige).
           if (codigosParaExportar.length === 0 && !sigtapReq.exige) {
             for (const c of procedimentosPadraoList) {
@@ -2153,6 +2183,9 @@ const BpaExportar: React.FC = () => {
                 data_atendimento: formatarDataBR(pront.data_atendimento),
                 codigo_sigtap:
                   sigtapCodigoExibicao(procEntry.codigo) || procEntry.codigo || formData.procedimento_padrao || "",
+                tipo_procedimento: String(procEntry.origem || "").startsWith("Aditivo")
+                  ? "Procedimento Aditivo"
+                  : "Procedimento Clínico",
                 cid_usado: cidExibicao(cidBruto),
                 _ctx: {
                   profissional_nome: prof?.nome || "",
@@ -2416,6 +2449,7 @@ const BpaExportar: React.FC = () => {
         "bairro",
         "data_atendimento",
         "codigo_sigtap",
+        "tipo_procedimento",
         "origem_sigtap",
         "cid_usado",
       ];
@@ -2430,6 +2464,7 @@ const BpaExportar: React.FC = () => {
         "BAIRRO",
         "ATENDIMENTO",
         "SIGTAP",
+        "TIPO",
         "ORIGEM SIGTAP",
         "CID",
       ];
@@ -2460,7 +2495,8 @@ const BpaExportar: React.FC = () => {
         { wch: 20 },
         { wch: 12 },
         { wch: 12 },
-        { wch: 12 },
+        { wch: 18 },
+        { wch: 14 },
         { wch: 10 },
       ];
       // Mesclar as linhas institucionais para visual mais limpo
