@@ -224,7 +224,7 @@ const Relatorios: React.FC = () => {
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
             if (filterStatus !== 'all') query = query.eq('status', filterStatus);
             if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
-            if (filterSetor !== 'all') query = query.eq('setor_id', filterSetor);
+            if (filterSetor !== 'all') query = query.eq('tipo', filterSetor);
           } else if (table === 'prontuarios') {
             if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
@@ -428,11 +428,36 @@ const Relatorios: React.FC = () => {
   }, [consolidatedData]);
 
   const tempoStats = useMemo(() => {
-    // We don't have atendimentosDB anymore, we use agendamentos with durations if exists or mock 0 for now
-    // In this system durations usually come from 'atendimentos' table but user said 'atendimentos if exist'
-    // Let's check if we have duration in agendamentos or prontuarios
-    return { totalAtendimentos: stats.concluidos, tempoMedio: 0, totalMinutos: 0 };
-  }, [stats.concluidos]);
+    // Considera apenas atendimentos concluídos com duração resolvível
+    const toMin = (t: string) => {
+      const [h, m] = (t || '').split(':').map(n => parseInt(n, 10));
+      if (Number.isNaN(h) || Number.isNaN(m)) return null;
+      return h * 60 + m;
+    };
+    const duracoes: number[] = [];
+    consolidatedData.forEach((d: any) => {
+      const concluido = d.status === 'concluido' || d.hasProntuario;
+      if (!concluido) return;
+      let dur: number | null = null;
+      if (typeof d.duracao_minutos === 'number' && d.duracao_minutos > 0) {
+        dur = d.duracao_minutos;
+      } else if (d.hora_inicio && d.hora_fim) {
+        const ini = toMin(d.hora_inicio);
+        const fim = toMin(d.hora_fim);
+        if (ini != null && fim != null && fim > ini) dur = fim - ini;
+      }
+      if (dur && dur > 0 && dur < 600) duracoes.push(dur);
+    });
+    const total = duracoes.reduce((s, n) => s + n, 0);
+    const tempoMedio = duracoes.length ? Math.round(total / duracoes.length) : 0;
+    return {
+      totalAtendimentos: stats.concluidos,
+      tempoMedio,
+      tempoMinimo: duracoes.length ? Math.min(...duracoes) : 0,
+      tempoMaximo: duracoes.length ? Math.max(...duracoes) : 0,
+      totalMinutos: total,
+    };
+  }, [consolidatedData, stats.concluidos]);
 
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
@@ -897,7 +922,13 @@ const Relatorios: React.FC = () => {
       map[label] = 0;
     }
     consolidatedData.forEach(d => {
-      const hourKey = (d.hora || '').substring(0, 2);
+      // Fallback: hora_inicio → hora → timestamp da data
+      let raw: string = (d as any).hora_inicio || d.hora || '';
+      if (!raw && d.data) {
+        const dt = new Date(d.data);
+        if (!Number.isNaN(dt.getTime())) raw = `${String(dt.getHours()).padStart(2, '0')}:00`;
+      }
+      const hourKey = (raw || '').substring(0, 2);
       const h = parseInt(hourKey);
       if (h >= 7 && h <= 18) {
         const label = `${String(h).padStart(2, '0')}:00`;
@@ -1520,13 +1551,7 @@ ${dataRows}
         <h2>Relatório por Município</h2>
         <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
 
-    } else if (type === 'municipios') {
-      const muniRows = cap(municipioReport).map(m =>
-        `<tr><td>${m.municipio}</td><td>${m.pacientesCount}</td><td>${m.atendimentos}</td><td>${m.concluidos}</td><td>${m.pendentes}</td><td>${m.faltas}</td><td>${m.cancelados}</td><td>${m.remarcados}</td><td>${m.retornos}</td><td>${m.taxaComparecimento}%</td><td>${m.taxaFalta}%</td></tr>`
-      ).join('');
-      body = `${summaryBlock}
-        <h2>Relatório por Município</h2>
-        <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
+
 
     } else if (type === 'faltas') {
       const rows = cap(faltasReport).map(f =>
@@ -2233,32 +2258,131 @@ ${dataRows}
         printViaIframe(fullHtml);
         toast.success("Relatório gerado", { description: "O documento foi preparado para impressão/PDF." });
       } else {
-        // Simple DOCX fallback for complete report
+        // DOCX institucional completo (espelha as seções do PDF)
+        const H1 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 120 } });
+        const P = (t: string) => new Paragraph({ children: [new TextRun(t || '-')], alignment: AlignmentType.JUSTIFIED, spacing: { after: 120 } });
+        const cellBorder = { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF' };
+        const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
+        const mkCell = (text: string, opts: { bold?: boolean; bg?: string } = {}) =>
+          new TableCell({
+            borders: cellBorders,
+            shading: opts.bg ? { fill: opts.bg, type: 'clear' as any, color: 'auto' } : undefined,
+            margins: { top: 60, bottom: 60, left: 80, right: 80 },
+            children: [new Paragraph({ children: [new TextRun({ text: String(text ?? '-'), bold: !!opts.bold, size: 18 })] })],
+          });
+        const mkTable = (headers: string[], rows: (string | number)[][]) => {
+          const colCount = headers.length;
+          const colW = Math.floor(9000 / colCount);
+          return new Table({
+            width: { size: 9000, type: WidthType.DXA },
+            columnWidths: Array(colCount).fill(colW),
+            rows: [
+              new TableRow({ children: headers.map(h => mkCell(h, { bold: true, bg: 'E8EEF4' })) }),
+              ...rows.slice(0, 60).map(r => new TableRow({ children: r.map(c => mkCell(String(c ?? '-'))) })),
+            ],
+          });
+        };
+
+        const indicadoresRows: (string | number)[][] = [
+          ['Total de Agendamentos', (stats as any).total ?? (stats as any).totalAgendamentos ?? 0],
+          ['Concluídos', stats.concluidos],
+          ['Faltas', stats.faltas],
+          ['Cancelados', stats.cancelados],
+          ['Remarcados', stats.remarcados],
+          ['Retornos', stats.retornos],
+          ['Taxa de Comparecimento', `${stats.taxaComparecimento}%`],
+          ['Taxa de Falta', `${stats.taxaFalta}%`],
+          ['Tempo Médio', `${tempoStats.tempoMedio} min`],
+          ['Tempo Mínimo', `${tempoStats.tempoMinimo} min`],
+          ['Tempo Máximo', `${tempoStats.tempoMaximo} min`],
+          ['Total de Minutos', `${tempoStats.totalMinutos} min`],
+        ];
+
+        const sections: any[] = [
+          // Capa
+          new Paragraph({ text: 'RELATÓRIO GERENCIAL DE ATENDIMENTOS', heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
+          new Paragraph({ text: 'CENTRO ESPECIALIZADO EM REABILITAÇÃO II', alignment: AlignmentType.CENTER }),
+          new Paragraph({ text: 'Oriximiná – Pará', alignment: AlignmentType.CENTER }),
+          new Paragraph({ text: `Período: ${periodo}`, alignment: AlignmentType.CENTER }),
+          new Paragraph({ text: `Unidade: ${un}  |  Profissional: ${profFilter}`, alignment: AlignmentType.CENTER }),
+          new Paragraph({ text: `Emitido em ${new Date().toLocaleString('pt-BR')}`, alignment: AlignmentType.CENTER, spacing: { after: 400 } }),
+
+          // Sumário (textual)
+          H1('Sumário'),
+          ...['1. Introdução','2. Metodologia','3. Indicadores Gerais','4. Produtividade por Profissional','5. Relatório por Município','6. Fila de Espera','7. Triagem','8. Análise Clínica','9. Tratamentos','10. Conclusão','11. Recomendações'].map(t => new Paragraph({ children: [new TextRun(t)] })),
+
+          H1('1. Introdução'), P(intro),
+          H1('2. Metodologia'), P(metodologia),
+
+          H1('3. Indicadores Gerais'),
+          mkTable(['Indicador', 'Valor'], indicadoresRows),
+
+          H1('4. Produtividade por Profissional'),
+          mkTable(
+            ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Tempo Médio', 'Taxa'],
+            porProfissional.map((p: any) => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`])
+          ),
+
+          H1('5. Relatório por Município'),
+          mkTable(
+            ['Município', 'Pacientes', 'Atendimentos', 'Concluídos', 'Faltas', 'Comparecim.'],
+            municipioReport.map((m: any) => [m.municipio, m.pacientesCount, m.atendimentos, m.concluidos, m.faltas, `${m.taxaComparecimento}%`])
+          ),
+
+          H1('6. Fila de Espera'),
+          mkTable(
+            ['Posição', 'Paciente', 'Setor', 'Prioridade', 'Status', 'Chegada'],
+            (filaReport?.items || []).map((f: any) => [f.posicao, f.paciente_nome, f.setor, f.prioridade, f.status, f.hora_chegada])
+          ),
+
+          H1('7. Triagem'),
+          mkTable(
+            ['Indicador', 'Valor'],
+            [
+              ['Total de Triagens', (triagemReport as any)?.total ?? 0],
+              ['Aguardando', (triagemReport as any)?.aguardando ?? 0],
+              ['Concluídas', (triagemReport as any)?.concluidas ?? 0],
+            ]
+          ),
+
+          H1('8. Análise Clínica'),
+          mkTable(
+            ['CID', 'Descrição', 'Quantidade'],
+            ((clinicalReport as any)?.topCids || (clinicalReport as any)?.cids || []).slice(0, 20).map((c: any) => [c.codigo || c.cid || '-', c.descricao || '-', c.quantidade ?? c.total ?? 0])
+          ),
+
+          H1('9. Tratamentos'),
+          mkTable(
+            ['Indicador', 'Valor'],
+            [
+              ['Ciclos Ativos', (treatmentStats as any)?.ciclosAtivos ?? (treatmentStats as any)?.ativos ?? 0],
+              ['Sessões Totais', (treatmentStats as any)?.sessoesTotais ?? (treatmentStats as any)?.total ?? 0],
+              ['Sessões Concluídas', (treatmentStats as any)?.sessoesConcluidas ?? (treatmentStats as any)?.concluidas ?? 0],
+            ]
+          ),
+
+          H1('10. Conclusão'), P(analiseExecutiva),
+
+          H1('11. Recomendações'),
+          P('• Reforçar confirmação por WhatsApp para reduzir faltas.'),
+          P('• Revisar filas críticas e ampliar equipe nas especialidades com maior demanda.'),
+          P('• Monitorar continuamente os indicadores de absenteísmo e tempo médio de atendimento.'),
+
+          new Paragraph({ text: '', spacing: { after: 600 } }),
+          new Paragraph({ text: '_______________________________________', alignment: AlignmentType.CENTER }),
+          new Paragraph({ text: user?.nome || 'Responsável Técnico', alignment: AlignmentType.CENTER }),
+        ];
+
         const doc = new Document({
           sections: [{
-            properties: {},
-            children: [
-              new Paragraph({ text: "RELATÓRIO INSTITUCIONAL DE GESTÃO E PRODUTIVIDADE", heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
-              new Paragraph({ text: `Período: ${periodo} | Unidade: ${un}`, alignment: AlignmentType.CENTER }),
-              new Paragraph({ text: "", spacing: { after: 400 } }),
-              new Paragraph({ text: "1. Introdução", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: intro, alignment: AlignmentType.JUSTIFIED }),
-              new Paragraph({ text: "2. Metodologia", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: metodologia, alignment: AlignmentType.JUSTIFIED }),
-              new Paragraph({ text: "3. Resumo Executivo", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: analiseExecutiva, alignment: AlignmentType.JUSTIFIED }),
-              new Paragraph({ text: "4. Conclusão", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: "Este é um resumo estruturado. Para o relatório institucional completo com todas as 21 seções, tabelas e formatação ABNT, utilize a exportação via PDF/Imprimir.", alignment: AlignmentType.JUSTIFIED }),
-              new Paragraph({ text: "", spacing: { after: 600 } }),
-              new Paragraph({ text: "_______________________________________", alignment: AlignmentType.CENTER }),
-              new Paragraph({ text: user?.nome || "Responsável", alignment: AlignmentType.CENTER }),
-            ],
+            properties: { page: { margin: { top: 1701, right: 1134, bottom: 1134, left: 1701 } } },
+            children: sections,
           }],
         });
 
         const buffer = await Packer.toBlob(doc);
         saveAs(buffer, `Relatorio_Completo_${new Date().toISOString().split('T')[0]}.docx`);
-        toast.success("Documento Word gerado", { description: "O download foi iniciado." });
+        toast.success('Documento Word gerado', { description: 'O download foi iniciado.' });
       }
     } catch (err) {
       console.error("[exportCompleteReport] erro:", err);
