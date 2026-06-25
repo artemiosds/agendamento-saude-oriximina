@@ -1928,89 +1928,6 @@ const BpaExportar: React.FC = () => {
             40,
           );
           const ineEquipe = fixedDigits(unidadeCd.ine || pront.custom_data?.ine_equipe || "", 10);
-          const folhaBpa = Math.floor(exportedCount / 20) + 1;
-          const sequenciaFolha = (exportedCount % 20) + 1;
-
-          // Montagem do Layout oficial BPA-I: Registro 03 com 338 caracteres antes do CRLF
-          let l = "";
-          l += "03"; // 001-002 - Tipo Registro
-          l += cnes; // 003-009 - CNES
-          l += zfill(competencia, 6); // 010-015 - Competência
-          l += cns_prof; // 016-030 - CNS Profissional
-          l += cbo; // 031-036 - CBO
-          l += data_atend; // 037-044 - Data Atendimento
-          l += zfill(folhaBpa, 3); // 045-047 - Folha BPA
-          l += zfill(sequenciaFolha, 2); // 048-049 - Sequência na folha
-          l += proc; // 050-059 - Procedimento SIGTAP
-          l += cns_pac; // 060-074 - CNS Paciente
-          l += sexo; // 075-075 - Sexo
-          l += municipio; // 076-081 - Município IBGE
-          l += cid; // 082-085 - CID
-          l += idade; // 086-088 - Idade
-          l += quantidade; // 089-094 - Quantidade
-          l += carater; // 095-096 - Caráter atendimento
-          l += autorizacao; // 097-109 - Autorização
-          l += "BPA"; // 110-112 - Origem
-          l += rpad(nome_pac, 30); // 113-142 - Nome paciente
-          l += data_nasc; // 143-150 - Data nascimento
-          l += raca; // 151-152 - Raça/cor
-          l += etnia; // 153-156 - Etnia
-          l += nacionalidade; // 157-159 - Nacionalidade
-          l += servico; // 160-162 - Serviço
-          l += classificacao; // 163-165 - Classificação
-          l += sequenciaEquipe; // 166-173 - Sequência equipe
-          l += areaEquipe; // 174-177 - Área equipe
-          l += cnpj; // 178-191 - CNPJ
-          l += cep; // 192-199 - CEP paciente
-          l += codigoLogradouro; // 200-202 - Código logradouro
-          l += endereco; // 203-232 - Endereço
-          l += complemento; // 233-242 - Complemento
-          l += numero; // 243-247 - Número
-          l += bairro; // 248-277 - Bairro
-          l += telefone; // 278-288 - Telefone
-          l += email; // 289-328 - E-mail
-          l += ineEquipe; // 329-338 - INE equipe
-
-          l = l.padEnd(BPA_I_RECORD_LENGTH, " ").slice(0, BPA_I_RECORD_LENGTH);
-
-          if (l.length !== BPA_I_RECORD_LENGTH) {
-            hasError = true;
-            warnings.push(`${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`);
-          }
-
-          // Row de conferência (Excel/Impressão) — só inclui o que realmente entrou no TXT
-          const pacCdAny = (pac?.custom_data as any) || {};
-          const rowConf = {
-            paciente_nome: String(pac?.nome || pront.paciente_nome || "").toUpperCase(),
-            paciente_cns: cns_pac_raw,
-            data_nascimento: formatarDataBR(raw_nasc),
-            sexo,
-            tipo_logradouro: tipoLogradouroTextoBpa(pac),
-            logradouro: String(
-              pac?.logradouro || pac?.endereco || pacCdAny.logradouro || pacCdAny.endereco || "",
-            ).toUpperCase(),
-            numero: String(pac?.numero || pacCdAny.numero || ""),
-            bairro: String(pac?.bairro || pacCdAny.bairro || "").toUpperCase(),
-            data_atendimento: formatarDataBR(pront.data_atendimento),
-            codigo_sigtap:
-              sigtapCodigoExibicao(proc_real || formData.procedimento_padrao) ||
-              proc_real ||
-              formData.procedimento_padrao ||
-              "",
-            cid_usado: cidExibicao(cidBruto),
-            _ctx: {
-              profissional_nome: prof?.nome || "",
-              cns_prof,
-              cbo,
-              unidade_nome: unit?.nome || "",
-              cnes,
-              cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || "",
-              usou_padrao: !proc_real,
-              origem: pront.origem || "Prontuário",
-              origem_sigtap: proc_origem || (sigtapReq.exige ? "—" : "Padrão"),
-              profissao_categoria: sigtapReq.categoria || "",
-            },
-          };
 
           if (pendenciaPaciente && !formData.exportar_com_pendencias) {
             criticalCount++;
@@ -2025,10 +1942,106 @@ const BpaExportar: React.FC = () => {
                 : `Pendência mista: ${motivosTxt}`;
             details.critical.push({ ...itemDetail, pendencia: rotulo, valor_atual: motivosTxt });
           } else {
-            linhasProducao.push(l);
-            itensControle.push({ procedimento: proc, quantidade });
-            exportedCount++;
-            confRows.push(rowConf);
+            // Novo loop: emite UMA linha BPA-I por SIGTAP encontrado no atendimento.
+            // Se a profissão exige SIGTAP e a lista está vazia, nada é emitido
+            // (a pendência já foi registrada acima quando exportar_com_pendencias=false).
+            const listaParaEmitir =
+              codigosParaExportar.length > 0
+                ? codigosParaExportar
+                : sigtapReq.exige
+                  ? []
+                  : [{ codigo: somenteNumeros(formData.procedimento_padrao) || "", origem: "Padrão (form)" }];
+
+            for (const procEntry of listaParaEmitir) {
+              const proc = zfill(procEntry.codigo, 10);
+              const folhaBpa = Math.floor(exportedCount / 20) + 1;
+              const sequenciaFolha = (exportedCount % 20) + 1;
+
+              // Montagem do Layout oficial BPA-I: Registro 03 com 338 caracteres antes do CRLF
+              let l = "";
+              l += "03"; // 001-002 - Tipo Registro
+              l += cnes; // 003-009 - CNES
+              l += zfill(competencia, 6); // 010-015 - Competência
+              l += cns_prof; // 016-030 - CNS Profissional
+              l += cbo; // 031-036 - CBO
+              l += data_atend; // 037-044 - Data Atendimento
+              l += zfill(folhaBpa, 3); // 045-047 - Folha BPA
+              l += zfill(sequenciaFolha, 2); // 048-049 - Sequência na folha
+              l += proc; // 050-059 - Procedimento SIGTAP
+              l += cns_pac; // 060-074 - CNS Paciente
+              l += sexo; // 075-075 - Sexo
+              l += municipio; // 076-081 - Município IBGE
+              l += cid; // 082-085 - CID
+              l += idade; // 086-088 - Idade
+              l += quantidade; // 089-094 - Quantidade
+              l += carater; // 095-096 - Caráter atendimento
+              l += autorizacao; // 097-109 - Autorização
+              l += "BPA"; // 110-112 - Origem
+              l += rpad(nome_pac, 30); // 113-142 - Nome paciente
+              l += data_nasc; // 143-150 - Data nascimento
+              l += raca; // 151-152 - Raça/cor
+              l += etnia; // 153-156 - Etnia
+              l += nacionalidade; // 157-159 - Nacionalidade
+              l += servico; // 160-162 - Serviço
+              l += classificacao; // 163-165 - Classificação
+              l += sequenciaEquipe; // 166-173 - Sequência equipe
+              l += areaEquipe; // 174-177 - Área equipe
+              l += cnpj; // 178-191 - CNPJ
+              l += cep; // 192-199 - CEP paciente
+              l += codigoLogradouro; // 200-202 - Código logradouro
+              l += endereco; // 203-232 - Endereço
+              l += complemento; // 233-242 - Complemento
+              l += numero; // 243-247 - Número
+              l += bairro; // 248-277 - Bairro
+              l += telefone; // 278-288 - Telefone
+              l += email; // 289-328 - E-mail
+              l += ineEquipe; // 329-338 - INE equipe
+
+              l = l.padEnd(BPA_I_RECORD_LENGTH, " ").slice(0, BPA_I_RECORD_LENGTH);
+
+              if (l.length !== BPA_I_RECORD_LENGTH) {
+                hasError = true;
+                warnings.push(
+                  `${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`,
+                );
+              }
+
+              const pacCdAny = (pac?.custom_data as any) || {};
+              const rowConf = {
+                paciente_nome: String(pac?.nome || pront.paciente_nome || "").toUpperCase(),
+                paciente_cns: cns_pac_raw,
+                data_nascimento: formatarDataBR(raw_nasc),
+                sexo,
+                tipo_logradouro: tipoLogradouroTextoBpa(pac),
+                logradouro: String(
+                  pac?.logradouro || pac?.endereco || pacCdAny.logradouro || pacCdAny.endereco || "",
+                ).toUpperCase(),
+                numero: String(pac?.numero || pacCdAny.numero || ""),
+                bairro: String(pac?.bairro || pacCdAny.bairro || "").toUpperCase(),
+                data_atendimento: formatarDataBR(pront.data_atendimento),
+                codigo_sigtap:
+                  sigtapCodigoExibicao(procEntry.codigo) || procEntry.codigo || formData.procedimento_padrao || "",
+                cid_usado: cidExibicao(cidBruto),
+                _ctx: {
+                  profissional_nome: prof?.nome || "",
+                  cns_prof,
+                  cbo,
+                  unidade_nome: unit?.nome || "",
+                  cnes,
+                  cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || "",
+                  usou_padrao: !procEntry.codigo || procEntry.origem === "Padrão (form)",
+                  origem: pront.origem || "Prontuário",
+                  origem_sigtap: proc_origem || (sigtapReq.exige ? "—" : "Padrão"),
+                  origem_sigtap_real: procEntry.origem,
+                  profissao_categoria: sigtapReq.categoria || "",
+                },
+              };
+
+              linhasProducao.push(l);
+              itensControle.push({ procedimento: proc, quantidade });
+              exportedCount++;
+              confRows.push(rowConf);
+            }
           }
         }
       });
