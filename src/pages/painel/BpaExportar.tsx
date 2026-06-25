@@ -898,13 +898,14 @@ const BpaExportar: React.FC = () => {
                 .from("agendamentos")
                 .select("id, unidade_id")
                 .in("id", agIds);
-              const agMap = new Map((agsRows || []).map((a: any) => [a.id, a]));
+              const agMap = new Map<string, any>((agsRows || []).map((a: any) => [a.id, a]));
               trIds = (triagensFiltro || [])
                 .filter((t: any) => {
                   const ag = agMap.get(t.agendamento_id);
                   return ag && ag.unidade_id === formData.unidade_id;
                 })
                 .map((t: any) => t.tecnico_id);
+
             }
           }
           tecnicoIdsTriagem = trIds;
