@@ -768,6 +768,36 @@ const BpaExportar: React.FC = () => {
     exportar_com_pendencias: false,
   });
 
+  // Listas de procedimentos SIGTAP padrão (multi). Persistência em localStorage.
+  // - procedimentosPadraoList: usado quando o profissional NÃO exige SIGTAP e
+  //   nenhum código foi localizado no prontuário.
+  // - procedimentosTecnicoEnfList: usado quando CBO === 322205 (Técnico de Enfermagem).
+  const LS_KEY_PADRAO = "bpa_procedimentos_padrao_v1";
+  const LS_KEY_TEC_ENF = "bpa_procedimentos_tec_enf_v1";
+  const loadList = (key: string, fallback: string[]): string[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.map((s) => String(s).replace(/\D/g, "")).filter((s) => s.length >= 6 && s.length <= 10);
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const [procedimentosPadraoList, setProcedimentosPadraoList] = useState<string[]>(() =>
+    loadList(LS_KEY_PADRAO, ["0301010072"]),
+  );
+  const [procedimentosTecnicoEnfList, setProcedimentosTecnicoEnfList] = useState<string[]>(() =>
+    loadList(LS_KEY_TEC_ENF, ["0301100030", "0301100021", "0301100013"]),
+  );
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY_PADRAO, JSON.stringify(procedimentosPadraoList)); } catch {}
+  }, [procedimentosPadraoList]);
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY_TEC_ENF, JSON.stringify(procedimentosTecnicoEnfList)); } catch {}
+  }, [procedimentosTecnicoEnfList]);
+
   const [unidades, setUnidades] = useState<any[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
