@@ -3632,11 +3632,15 @@ const Tratamentos: React.FC = () => {
                   <Input
                     type="number"
                     min={1}
+                    max={200}
                     value={newCycle.total_sessions}
-                    onChange={(e) => setNewCycle((p) => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value) || 1;
+                      setNewCycle((p) => ({ ...p, total_sessions: Math.min(200, Math.max(1, v)) }));
+                    }}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Controla a quantidade exata de sessões geradas.
+                    Controla a quantidade exata de sessões geradas (máximo 200).
                   </p>
                 </div>
               </div>
