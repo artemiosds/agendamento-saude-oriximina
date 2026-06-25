@@ -2194,15 +2194,36 @@ ${dataRows}
     try {
       const config = await loadDocumentConfig();
       const carimbo = user?.id ? await loadCarimbo(user.id) : null;
-      const un = filterUnit !== 'all' ? unidadesMap.get(filterUnit)?.nome : 'Todas as Unidades';
-      const profFilter = filterProf !== 'all' ? profissionaisMap.get(filterProf)?.nome : 'Todos os Profissionais';
-      const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
-      
-      const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão institucional.`;
-      
-      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando os filtros de unidade, profissional e período selecionados. A análise utiliza indicadores de produtividade, taxa de absenteísmo, fluxo de pacientes por município e análises clínicas baseadas em CID-10 e categorias de reabilitação.`;
-      
-      const analiseExecutiva = `No período analisado, foram registrados um total de ${stats.total} agendamentos. Destes, ${stats.concluidos} atendimentos foram efetivamente concluídos, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total). O sistema também registrou ${clinicalReport.kpis.totalPacientesComCID} pacientes com diagnósticos clínicos ativos, sendo ${clinicalReport.kpis.tea} casos de TEA.`;
+      const esc = buildEscopo();
+      const un = esc.un;
+      const profFilter = esc.prof;
+      const periodo = esc.periodo;
+      const tituloDinamico = esc.titulo;
+
+      const intro = `Este documento apresenta o ${tituloDinamico}, referente ao período de ${periodo}. ` +
+        `Os dados consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, ` +
+        `restritos ao escopo definido pelos filtros aplicados (unidade: ${esc.un}; profissional: ${esc.prof}; especialidade: ${esc.especialidade}; município: ${esc.municipio}; status: ${esc.status}), ` +
+        `servindo como base para análise de desempenho e tomada de decisão institucional.`;
+
+      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando exatamente os filtros listados na seção “Escopo do Relatório”. ` +
+        `A análise utiliza indicadores de produtividade, taxa de absenteísmo, fluxo de pacientes por município e análises clínicas baseadas em CID-10 e categorias de reabilitação.`;
+
+      const analiseExecutiva = `No período de ${periodo}, foram realizados ${stats.concluidos} atendimentos ${esc.conclusaoSujeito}, ` +
+        `a partir de ${stats.total} agendamentos registrados, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. ` +
+        `As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total). ` +
+        `Foram identificados ${clinicalReport.kpis.totalPacientesComCID} pacientes com diagnósticos clínicos ativos, sendo ${clinicalReport.kpis.tea} casos de TEA.`;
+
+      const escopoHtmlRows = Object.entries(esc.escopo).map(([k, v]) =>
+        `<tr><td style="padding:4px 10px; border:1px solid #cbd5e1; font-weight:bold; width:35%;">${k}</td><td style="padding:4px 10px; border:1px solid #cbd5e1;">${v}</td></tr>`
+      ).join('');
+      const escopoHtml = `
+        <section class="section" style="page-break-after: always;">
+          <h2>Escopo do Relatório</h2>
+          <p>Os indicadores, tabelas e análises a seguir refletem exatamente os filtros abaixo aplicados no momento da geração deste documento.</p>
+          <table style="width:100%; border-collapse:collapse; font-size:11pt; margin-top:8px;">
+            <tbody>${escopoHtmlRows}</tbody>
+          </table>
+        </section>`;
 
       const renderSection = (title: string, content: string, hasData: boolean = true) => `
         <section class="section">
