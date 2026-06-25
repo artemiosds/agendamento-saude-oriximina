@@ -399,12 +399,13 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       toast.error("CID-10 inválido. Use o formato oficial (ex.: M54, M54.5, Z00.0).");
       return;
     }
-    if (sobrescritas.length > 0) {
+    if (sobrescritas.length > 0 && !adicionarExtra) {
       const ok = window.confirm(
         `Atenção: ${sobrescritas.length} registro(s) já possuem valor diferente preenchido e serão SOBRESCRITOS.\n\nDeseja prosseguir?`,
       );
       if (!ok) return;
     }
+
     setSaving(true);
     setProgress({ done: 0, total: prontuarios.length });
     try {
