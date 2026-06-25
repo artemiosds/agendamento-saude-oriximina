@@ -1742,7 +1742,10 @@ const BpaExportar: React.FC = () => {
               valor_atual: `${String(cidBruto)} → ${codigosCidEncontrados[0]}`,
             });
           }
-          const ehMedico = profissionalEhMedico(prof);
+          // Técnico de Enfermagem (CBO 322205) também tem CID opcional, igual ao médico.
+          const cboEfetivo = obterCboValido(prof);
+          const ehTecnicoEnfermagem = cboEfetivo === "322205";
+          const ehMedico = profissionalEhMedico(prof) || ehTecnicoEnfermagem;
           // O campo possui 4 posições, mas códigos CID completos de 3 caracteres
           // são exportados com um espaço à direita (ex.: "I64 ").
           // Para médico, o CID é opcional: quando ausente ou inválido, o campo
