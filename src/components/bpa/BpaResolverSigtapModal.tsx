@@ -160,13 +160,62 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  const isAgendaMode = item?.origem === "agenda_sem_prontuario";
+
   const carregarContexto = async () => {
     if (!item?.paciente_id) return;
     setLoadingCtx(true);
     try {
-      // Escopo: paciente + competência (mês) + mesmo profissional + mesma unidade.
-      // Fallback: se não vier competência, mantém comportamento antigo por data exata.
       const range = competenciaRange(item.competencia);
+
+      if (isAgendaMode) {
+        // Carrega agendamentos com presença confirmada do paciente na competência,
+        // restritos ao mesmo profissional e unidade. NÃO toca em prontuarios/PTS.
+        const STATUS_PRESENCA = [
+          "concluido",
+          "confirmado_chegada",
+          "aguardando_atendimento",
+          "em_atendimento",
+        ];
+        let q: any = (supabase as any)
+          .from("agendamentos")
+          .select("id, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
+          .eq("paciente_id", item.paciente_id)
+          .in("status", STATUS_PRESENCA);
+        if (range) q = q.gte("data", range.ini).lte("data", range.fim);
+        else if (item.data_atendimento) q = q.eq("data", item.data_atendimento);
+        if (item.profissional_id) q = q.eq("profissional_id", item.profissional_id);
+        if (item.unidade_id) q = q.eq("unidade_id", item.unidade_id);
+        const { data: ags } = await q.order("data", { ascending: true });
+        // Mapeia para a mesma estrutura usada pelo restante do modal
+        const list = (Array.isArray(ags) ? ags : []).map((a: any) => ({
+          id: a.id,
+          profissional_id: a.profissional_id,
+          profissional_nome: a.profissional_nome,
+          unidade_id: a.unidade_id,
+          data_atendimento: a.data,
+          custom_data: a.custom_data || {},
+          _agendamento: true,
+        }));
+        setProntuarios(list);
+        setPtsList([]);
+        setPtsAtivo(null);
+
+        // Valor atual a partir do bpa_manual já salvo
+        let curSig = "";
+        let curCid = "";
+        for (const p of list) {
+          const manual = (p.custom_data as any)?.bpa_manual || {};
+          if (!curSig && isSigtap(manual.sigtap)) curSig = normalizeSigtap(manual.sigtap);
+          if (!curCid && manual.cid) curCid = String(manual.cid);
+          if (curSig && curCid) break;
+        }
+        setValoresAtuais({ sigtap: curSig, cid: curCid });
+        return;
+      }
+
+      // Escopo padrão (prontuários): paciente + competência (mês) + mesmo profissional + mesma unidade.
+      // Fallback: se não vier competência, mantém comportamento antigo por data exata.
       let q: any = (supabase as any)
         .from("prontuarios")
         .select("id, profissional_id, profissional_nome, unidade_id, data_atendimento, custom_data, outro_procedimento, tipo_registro")
