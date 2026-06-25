@@ -906,21 +906,32 @@ const BpaExportar: React.FC = () => {
         const startDate = `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-01`;
         const endDate = new Date(ano, mes, 0).toISOString().split("T")[0];
 
-        let atendimentosQuery = (supabase as any)
-          .from("prontuarios")
-          .select("profissional_id")
-          .gte("data_atendimento", startDate)
-          .lte("data_atendimento", endDate)
-          .eq("status", "finalizado")
-          .not("profissional_id", "is", null)
-          .range(0, 9999);
-
-        if (formData.unidade_id !== "all") {
-          atendimentosQuery = atendimentosQuery.eq("unidade_id", formData.unidade_id);
+        // Paginação recursiva: PostgREST limita a resposta (padrão 1000 linhas)
+        // mesmo com .range(0, 9999). Sem isso, profissionais cujos registros
+        // ficam além das primeiras N linhas (ordenação interna do servidor)
+        // somem da lista. Ex.: médicos com prontuários em datas posteriores.
+        const PAGE = 1000;
+        let atendimentos: any[] = [];
+        for (let offset = 0; ; offset += PAGE) {
+          let q = (supabase as any)
+            .from("prontuarios")
+            .select("profissional_id")
+            .gte("data_atendimento", startDate)
+            .lte("data_atendimento", endDate)
+            .eq("status", "finalizado")
+            .not("profissional_id", "is", null)
+            .range(offset, offset + PAGE - 1);
+          if (formData.unidade_id !== "all") {
+            q = q.eq("unidade_id", formData.unidade_id);
+          }
+          const { data: pageRows, error: pageErr } = await q;
+          if (pageErr) throw pageErr;
+          const rows = pageRows || [];
+          atendimentos = atendimentos.concat(rows);
+          if (rows.length < PAGE) break;
+          if (offset > 200000) break; // hard safety
         }
 
-        const { data: atendimentos, error: atendimentosError } = await atendimentosQuery;
-        if (atendimentosError) throw atendimentosError;
 
         // Também inclui Técnicos de Enfermagem (CBO 322205) que registraram
         // triagens no período. Triagens não geram prontuário, então sem essa
