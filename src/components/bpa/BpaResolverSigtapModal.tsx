@@ -130,6 +130,9 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   const [aplicarPts, setAplicarPts] = useState(false);
   const [adicionarExtra, setAdicionarExtra] = useState(false);
 
+  // Aditivos por competência (pacientes.custom_data.bpa_aditivos)
+  const [aditivos, setAditivos] = useState<Array<{ codigo: string; nome?: string; cid?: string; competencia?: string; added_at?: string; added_by_nome?: string }>>([]);
+  const [savingAditivo, setSavingAditivo] = useState(false);
 
   // Progresso de gravação em lote
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
