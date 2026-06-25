@@ -1489,9 +1489,26 @@ const Relatorios: React.FC = () => {
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
       });
     } else if (type === 'clinico') {
-      headers = ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'];
-      rows = clinicalReport.byCategory.map(c => [c.name, c.pacientes.toString(), c.atendimentos.toString(), c.procedimentos.toString()]);
+      headers = ['Bloco', 'Item', 'Quantidade', 'Percentual'];
+      const tot = clinicalReport.kpis.totalPacientesComCID || 1;
+      const blocks: string[][] = [];
+      blocks.push(['KPI', 'Total com CID', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
+      blocks.push(['KPI', 'TEA/Autismo', String(clinicalReport.kpis.tea), `${((clinicalReport.kpis.tea/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Física', String(clinicalReport.kpis.fisica), `${((clinicalReport.kpis.fisica/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Intelectual', String(clinicalReport.kpis.intelectual), `${((clinicalReport.kpis.intelectual/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Auditiva', String(clinicalReport.kpis.auditiva), `${((clinicalReport.kpis.auditiva/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Visual', String(clinicalReport.kpis.visual), `${((clinicalReport.kpis.visual/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Múltipla', String(clinicalReport.kpis.multipla), `${((clinicalReport.kpis.multipla/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Múltiplos CIDs', String(clinicalReport.kpis.multiplosCids), `${clinicalReport.kpis.multiplosCidsPercent}%`]);
+      blocks.push(['KPI', 'Média CID/paciente', String(clinicalReport.kpis.mediaCidPorPaciente), '-']);
+      clinicalReport.byCategory.forEach(c => blocks.push(['Categoria', c.name, String(c.pacientes), `${((c.pacientes/tot)*100).toFixed(1)}%`]));
+      clinicalReport.topCids20.forEach((c, i) => blocks.push([`Top CID ${i+1}`, `${c.cid} — ${c.descricao}`, String(c.count), `${c.percent}%`]));
+      clinicalReport.sexoDist.forEach(s => blocks.push(['Sexo', s.name, String(s.value), `${((s.value/tot)*100).toFixed(1)}%`]));
+      clinicalReport.faixaEtariaDist.forEach(f => blocks.push(['Faixa Etária', f.name, String(f.value), `${((f.value/tot)*100).toFixed(1)}%`]));
+      clinicalReport.evolucaoTemporal.forEach(e => blocks.push(['Evolução Mensal', e.month, String(e.value), '-']));
+      rows = blocks;
     }
+
 
 
     // Build XML Spreadsheet (Excel-compatible)
