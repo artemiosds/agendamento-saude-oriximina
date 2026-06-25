@@ -766,6 +766,7 @@ const BpaExportar: React.FC = () => {
     procedimento_padrao: "0301010072",
     municipio_padrao: "150530",
     exportar_com_pendencias: false,
+    incluir_agenda_sem_prontuario: false,
   });
 
   // Listas de procedimentos SIGTAP padrão (multi). Persistência em localStorage.
@@ -1089,6 +1090,7 @@ const BpaExportar: React.FC = () => {
       procedimento_padrao: "0301010072",
       municipio_padrao: "150530",
       exportar_com_pendencias: false,
+      incluir_agenda_sem_prontuario: false,
     });
     setResults(null);
     setSelectedCategory(null);
@@ -1245,10 +1247,88 @@ const BpaExportar: React.FC = () => {
       const triagensInseridas = prontuariosTriagem.filter(
         (t) => !chavesPront.has(`${t.paciente_id}|${t.profissional_id}|${String(t.data_atendimento).slice(0, 10)}`),
       );
-      const prontuarios = [...((prontuariosOriginais as any[]) || []), ...triagensInseridas];
+      const prontuarios: any[] = [...((prontuariosOriginais as any[]) || []), ...triagensInseridas];
 
+      // === Inclusão de pacientes da AGENDA sem prontuário ===
+      // Sempre injeta agendamentos com presença confirmada que já tenham
+      // produção manual (custom_data.bpa_manual) salva — assim, após corrigir
+      // uma vez, a exportação seguinte reaproveita automaticamente o SIGTAP/CID.
+      // Quando o checkbox "Incluir pacientes da Agenda sem prontuário" estiver
+      // ligado, também traz os agendamentos AINDA sem bpa_manual para que o
+      // usuário possa corrigir pelo mesmo modal. Não cria prontuário nem PTS.
+      try {
+        const STATUS_PRESENCA = [
+          "concluido",
+          "confirmado_chegada",
+          "aguardando_atendimento",
+          "em_atendimento",
+        ];
+        let agQuery = (supabase as any)
+          .from("agendamentos")
+          .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
+          .gte("data", startDate)
+          .lte("data", endDate)
+          .in("status", STATUS_PRESENCA)
+          .range(0, 9999);
+        if (formData.unidade_id !== "all") agQuery = agQuery.eq("unidade_id", formData.unidade_id);
+        if (formData.profissional_id !== "all") agQuery = agQuery.eq("profissional_id", formData.profissional_id);
+        const { data: agsRows, error: agsErr } = await agQuery;
+        if (agsErr) throw agsErr;
+
+        // Chaves de prontuário/triagem já cobertos: mesmo paciente+profissional+data
+        const cobertos = new Set<string>(
+          (prontuarios as any[]).map(
+            (p) => `${p.paciente_id}|${p.profissional_id}|${String(p.data_atendimento).slice(0, 10)}`,
+          ),
+        );
+        const incluirSemBpa = !!formData.incluir_agenda_sem_prontuario;
+        const sinteticos = ((agsRows as any[]) || [])
+          .filter((a) => a?.paciente_id && a?.profissional_id && a?.unidade_id && a?.data)
+          .filter(
+            (a) =>
+              !cobertos.has(
+                `${a.paciente_id}|${a.profissional_id}|${String(a.data).slice(0, 10)}`,
+              ),
+          )
+          .map((a) => {
+            const cd = (a.custom_data as any) || {};
+            const manual = (cd.bpa_manual as any) || null;
+            const sigtapManual = manual?.sigtap ? String(manual.sigtap).replace(/\D/g, "") : "";
+            const cidManual = manual?.cid ? String(manual.cid).toUpperCase() : "";
+            return {
+              id: `agenda:${a.id}`,
+              agendamento_id: a.id,
+              paciente_id: a.paciente_id,
+              paciente_nome: a.paciente_nome || "",
+              profissional_id: a.profissional_id,
+              profissional_nome: a.profissional_nome || "",
+              unidade_id: a.unidade_id,
+              data_atendimento: String(a.data).slice(0, 10),
+              status: "finalizado",
+              tipo_registro: "agenda_sem_prontuario",
+              hipotese: "",
+              procedimentos_texto: "",
+              outro_procedimento: "",
+              origem: "AGENDA_SEM_PRONTUARIO",
+              custom_data: {
+                procedimento_sigtap: sigtapManual,
+                cid: cidManual,
+                bpa_manual: manual,
+              },
+              _hasManual: !!sigtapManual,
+            };
+          })
+          .filter((s) => s._hasManual || incluirSemBpa);
+
+        if (sinteticos.length > 0) {
+          prontuarios.push(...sinteticos);
+        }
+      } catch (e) {
+        console.warn("[BPA-Exportar] falha ao injetar agenda sem prontuário:", e);
+      }
 
       if (!prontuarios || prontuarios.length === 0) {
+
         setResults({
           totalFound: 0,
           exportedCount: 0,
@@ -1320,7 +1400,9 @@ const BpaExportar: React.FC = () => {
       // Alguns prontuários gravam o procedimento somente na tabela vinculada
       // prontuario_procedimentos -> procedimentos.codigo_sigtap, sem espelhar em
       // custom_data. Carregamos isso para evitar falso "SIGTAP ausente".
-      const prontIdsAll = prontuarios.map((p: any) => p.id).filter((id: any) => id && !String(id).startsWith("triagem:"));
+      const prontIdsAll = prontuarios
+        .map((p: any) => p.id)
+        .filter((id: any) => id && !String(id).startsWith("triagem:") && !String(id).startsWith("agenda:"));
       const sigtapPorProntuario = new Map<string, string[]>();
       if (prontIdsAll.length > 0) {
         const { data: ppRows } = await (supabase as any)
@@ -1482,6 +1564,9 @@ const BpaExportar: React.FC = () => {
           sexo: pac?.sexo,
           municipio: pac?.municipio || (pac?.custom_data as any)?.municipio_ibge,
           cbo: obterCboValido(prof),
+          tipo_registro: pront.tipo_registro,
+          agendamento_id: pront.agendamento_id || null,
+          origem: pront.tipo_registro === "agenda_sem_prontuario" ? "AGENDA_SEM_PRONTUARIO" : undefined,
         };
 
         // Remove apenas duplicidades exatas de atendimento: mesmo paciente,
@@ -2848,7 +2933,30 @@ const BpaExportar: React.FC = () => {
                   Marque esta opção para permitir o download mesmo que existam dados obrigatórios faltando (CNS, Sexo,
                   Nascimento, Município).
                 </p>
+            </div>
+
+            <div className="flex items-center space-x-2 border p-3 rounded-md bg-amber-50/40">
+              <input
+                type="checkbox"
+                id="incluir_agenda_sem_prontuario"
+                checked={formData.incluir_agenda_sem_prontuario}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, incluir_agenda_sem_prontuario: e.target.checked }))
+                }
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label htmlFor="incluir_agenda_sem_prontuario" className="text-sm font-medium leading-none">
+                  Incluir pacientes da Agenda sem prontuário
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Localiza atendimentos com presença confirmada que não possuem prontuário/PTS e permite cadastrar
+                  SIGTAP/CID manualmente (origem: AGENDA_SEM_PRONTUARIO). Produções manuais já salvas sempre
+                  são reaproveitadas automaticamente nas próximas exportações.
+                </p>
               </div>
+            </div>
+
             </div>
 
             <div className="flex gap-4">
@@ -3169,11 +3277,17 @@ const BpaExportar: React.FC = () => {
                                          unidade_nome: item.unidade_nome,
                                          cbo: item.cbo,
                                          competencia: formData.competencia,
+                                         origem: (item as any).origem === "AGENDA_SEM_PRONTUARIO"
+                                           ? "agenda_sem_prontuario"
+                                           : undefined,
+                                         agendamento_id: (item as any).agendamento_id || undefined,
                                        },
                                     })
                                   }
                                 >
-                                  Resolver SIGTAP
+                                  {(item as any).origem === "AGENDA_SEM_PRONTUARIO"
+                                    ? "Corrigir Produção (Agenda)"
+                                    : "Resolver SIGTAP"}
                                 </Button>
                               )}
                               {item.paciente_id && (
