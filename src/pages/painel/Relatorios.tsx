@@ -26,6 +26,7 @@ import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { ChartCard } from '@/components/ChartCard';
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID } from '@/data/clinicalCategories';
+import { normalizeSexo } from '@/lib/utils/sexo-normalization';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
@@ -805,22 +806,95 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    const topCids = Object.entries(cidFrequency)
-      .map(([cid, count]) => ({ 
-        cid, 
-        count, 
-        descricao: cid10Descriptions[cid] || "Descrição não carregada" 
+    const totalPatients = patientsList.length || 1;
+    const topCidsAll = Object.entries(cidFrequency)
+      .map(([cid, count]) => ({
+        cid,
+        count,
+        descricao: cid10Descriptions[cid] || "Descrição não carregada",
+        percent: +((count / totalPatients) * 100).toFixed(1),
       }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+      .sort((a, b) => b.count - a.count);
+    const topCids = topCidsAll.slice(0, 10);
+    const topCids20 = topCidsAll.slice(0, 20);
+
+    // ===== Sexo =====
+    const sexoCount = { masculino: 0, feminino: 0, naoInformado: 0 };
+    // ===== Faixa etária =====
+    const faixas = [
+      { name: '0-3 anos', min: 0, max: 3, count: 0 },
+      { name: '4-6 anos', min: 4, max: 6, count: 0 },
+      { name: '7-12 anos', min: 7, max: 12, count: 0 },
+      { name: '13-17 anos', min: 13, max: 17, count: 0 },
+      { name: '18-59 anos', min: 18, max: 59, count: 0 },
+      { name: '60+ anos', min: 60, max: 200, count: 0 },
+    ];
+    let semIdade = 0;
+    const today = new Date();
+    patientsList.forEach(p => {
+      const pac: any = pacMap.get(p.id);
+      const sx = normalizeSexo(pac?.custom_data?.sexo || (pac as any)?.sexo);
+      if (sx === 'masculino') sexoCount.masculino++;
+      else if (sx === 'feminino') sexoCount.feminino++;
+      else sexoCount.naoInformado++;
+
+      const dn = pac?.dataNascimento || pac?.data_nascimento;
+      if (dn) {
+        const d = new Date(dn);
+        if (!isNaN(d.getTime())) {
+          let age = today.getFullYear() - d.getFullYear();
+          const m = today.getMonth() - d.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+          const f = faixas.find(fx => age >= fx.min && age <= fx.max);
+          if (f) f.count++; else semIdade++;
+        } else semIdade++;
+      } else semIdade++;
+    });
+    const sexoDist = [
+      { name: 'Masculino', value: sexoCount.masculino },
+      { name: 'Feminino', value: sexoCount.feminino },
+      { name: 'Não informado', value: sexoCount.naoInformado },
+    ];
+    const faixaEtariaDist = faixas.map(f => ({ name: f.name, value: f.count }));
+
+    // ===== Evolução temporal (diagnósticos por mês) =====
+    const monthCount: Record<string, number> = {};
+    prontuariosFull.forEach(pr => {
+      if (!pr.cid_codigo || !pr.data_atendimento) return;
+      const key = String(pr.data_atendimento).slice(0, 7); // YYYY-MM
+      const n = pr.cid_codigo.split(/[,;\s]+/).filter(Boolean).length || 0;
+      monthCount[key] = (monthCount[key] || 0) + n;
+    });
+    const evolucaoTemporal = Object.entries(monthCount)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, value]) => ({ month, value }));
+
+    // ===== Múltiplos CIDs =====
+    const comMulti = patientsList.filter(p => p.cids.size > 1);
+    const totalCidsSoma = patientsList.reduce((acc, p) => acc + p.cids.size, 0);
+    const mediaCidPorPaciente = patientsList.length ? +(totalCidsSoma / patientsList.length).toFixed(2) : 0;
+
+    // ===== Deficiência Múltipla (>= 2 categorias PCD) =====
+    const PCD_CATS = new Set(['TEA / Autismo', 'Pessoa Surda', 'Deficiência Auditiva', 'Deficiência Visual', 'Deficiência Física', 'Deficiência Intelectual']);
+    const deficienciaMultipla = patientsList.filter(p => {
+      let n = 0;
+      p.categories.forEach(c => { if (PCD_CATS.has(c)) n++; });
+      return n >= 2;
+    }).length;
 
     const kpis = {
       totalPacientesComCID: patientsList.length,
       tea: byCategory['TEA / Autismo']?.pacientes || 0,
       surdez: (byCategory['Pessoa Surda']?.pacientes || 0) + (byCategory['Deficiência Auditiva']?.pacientes || 0),
+      auditiva: byCategory['Deficiência Auditiva']?.pacientes || 0,
+      visual: byCategory['Deficiência Visual']?.pacientes || 0,
       fisica: byCategory['Deficiência Física']?.pacientes || 0,
       intelectual: byCategory['Deficiência Intelectual']?.pacientes || 0,
-      multiplosCids: patientsList.filter(p => p.cids.size > 1).length,
+      multipla: deficienciaMultipla,
+      multiplosCids: comMulti.length,
+      multiplosCidsPercent: patientsList.length ? +((comMulti.length / patientsList.length) * 100).toFixed(1) : 0,
+      mediaCidPorPaciente,
+      semIdade,
       totalAtendimentos: patientsList.reduce((acc, p) => acc + p.atendimentos, 0),
       totalProcedimentos: patientsList.reduce((acc, p) => acc + p.procedimentos.size, 0)
     };
@@ -829,9 +903,14 @@ const Relatorios: React.FC = () => {
       patients: patientsList,
       byCategory: Object.values(byCategory).sort((a, b) => b.pacientes - a.pacientes),
       topCids,
+      topCids20,
+      sexoDist,
+      faixaEtariaDist,
+      evolucaoTemporal,
       kpis
     };
   }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions, clinicalSearch]);
+
 
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
@@ -1337,9 +1416,26 @@ const Relatorios: React.FC = () => {
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || ''];
       });
     } else if (type === 'clinico') {
-      headers = ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'];
-      rows = clinicalReport.byCategory.map(c => [c.name, c.pacientes.toString(), c.atendimentos.toString(), c.procedimentos.toString()]);
+      headers = ['Bloco', 'Item', 'Quantidade', 'Percentual'];
+      const tot = clinicalReport.kpis.totalPacientesComCID || 1;
+      const blocks: string[][] = [];
+      blocks.push(['KPI', 'Total com CID', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
+      blocks.push(['KPI', 'TEA/Autismo', String(clinicalReport.kpis.tea), `${((clinicalReport.kpis.tea/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Física', String(clinicalReport.kpis.fisica), `${((clinicalReport.kpis.fisica/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Intelectual', String(clinicalReport.kpis.intelectual), `${((clinicalReport.kpis.intelectual/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Auditiva', String(clinicalReport.kpis.auditiva), `${((clinicalReport.kpis.auditiva/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Visual', String(clinicalReport.kpis.visual), `${((clinicalReport.kpis.visual/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Múltipla', String(clinicalReport.kpis.multipla), `${((clinicalReport.kpis.multipla/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Múltiplos CIDs', String(clinicalReport.kpis.multiplosCids), `${clinicalReport.kpis.multiplosCidsPercent}%`]);
+      blocks.push(['KPI', 'Média CID/paciente', String(clinicalReport.kpis.mediaCidPorPaciente), '-']);
+      clinicalReport.byCategory.forEach(c => blocks.push(['Categoria', c.name, String(c.pacientes), `${((c.pacientes/tot)*100).toFixed(1)}%`]));
+      clinicalReport.topCids20.forEach((c, i) => blocks.push([`Top CID ${i+1}`, `${c.cid} — ${c.descricao}`, String(c.count), `${c.percent}%`]));
+      clinicalReport.sexoDist.forEach(s => blocks.push(['Sexo', s.name, String(s.value), `${((s.value/tot)*100).toFixed(1)}%`]));
+      clinicalReport.faixaEtariaDist.forEach(f => blocks.push(['Faixa Etária', f.name, String(f.value), `${((f.value/tot)*100).toFixed(1)}%`]));
+      clinicalReport.evolucaoTemporal.forEach(e => blocks.push(['Evolução Mensal', e.month, String(e.value), '-']));
+      rows = blocks;
     }
+
 
 
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
@@ -1393,9 +1489,26 @@ const Relatorios: React.FC = () => {
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
       });
     } else if (type === 'clinico') {
-      headers = ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'];
-      rows = clinicalReport.byCategory.map(c => [c.name, c.pacientes.toString(), c.atendimentos.toString(), c.procedimentos.toString()]);
+      headers = ['Bloco', 'Item', 'Quantidade', 'Percentual'];
+      const tot = clinicalReport.kpis.totalPacientesComCID || 1;
+      const blocks: string[][] = [];
+      blocks.push(['KPI', 'Total com CID', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
+      blocks.push(['KPI', 'TEA/Autismo', String(clinicalReport.kpis.tea), `${((clinicalReport.kpis.tea/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Física', String(clinicalReport.kpis.fisica), `${((clinicalReport.kpis.fisica/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Intelectual', String(clinicalReport.kpis.intelectual), `${((clinicalReport.kpis.intelectual/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Auditiva', String(clinicalReport.kpis.auditiva), `${((clinicalReport.kpis.auditiva/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Visual', String(clinicalReport.kpis.visual), `${((clinicalReport.kpis.visual/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Def. Múltipla', String(clinicalReport.kpis.multipla), `${((clinicalReport.kpis.multipla/tot)*100).toFixed(1)}%`]);
+      blocks.push(['KPI', 'Múltiplos CIDs', String(clinicalReport.kpis.multiplosCids), `${clinicalReport.kpis.multiplosCidsPercent}%`]);
+      blocks.push(['KPI', 'Média CID/paciente', String(clinicalReport.kpis.mediaCidPorPaciente), '-']);
+      clinicalReport.byCategory.forEach(c => blocks.push(['Categoria', c.name, String(c.pacientes), `${((c.pacientes/tot)*100).toFixed(1)}%`]));
+      clinicalReport.topCids20.forEach((c, i) => blocks.push([`Top CID ${i+1}`, `${c.cid} — ${c.descricao}`, String(c.count), `${c.percent}%`]));
+      clinicalReport.sexoDist.forEach(s => blocks.push(['Sexo', s.name, String(s.value), `${((s.value/tot)*100).toFixed(1)}%`]));
+      clinicalReport.faixaEtariaDist.forEach(f => blocks.push(['Faixa Etária', f.name, String(f.value), `${((f.value/tot)*100).toFixed(1)}%`]));
+      clinicalReport.evolucaoTemporal.forEach(e => blocks.push(['Evolução Mensal', e.month, String(e.value), '-']));
+      rows = blocks;
     }
+
 
 
     // Build XML Spreadsheet (Excel-compatible)
@@ -1521,9 +1634,26 @@ ${dataRows}
       } else if (type === 'fila') {
         addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidadesMap.get(f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
       } else if (type === 'clinico') {
+        const k = clinicalReport.kpis;
+        const tot = k.totalPacientesComCID || 1;
+        addTable('Indicadores CER II', ['Indicador', 'Quantidade', '% sobre total'], [
+          ['Total com CID', k.totalPacientesComCID, '100%'],
+          ['TEA / Autismo', k.tea, `${((k.tea/tot)*100).toFixed(1)}%`],
+          ['Deficiência Física', k.fisica, `${((k.fisica/tot)*100).toFixed(1)}%`],
+          ['Deficiência Intelectual', k.intelectual, `${((k.intelectual/tot)*100).toFixed(1)}%`],
+          ['Deficiência Auditiva', k.auditiva, `${((k.auditiva/tot)*100).toFixed(1)}%`],
+          ['Deficiência Visual', k.visual, `${((k.visual/tot)*100).toFixed(1)}%`],
+          ['Deficiência Múltipla', k.multipla, `${((k.multipla/tot)*100).toFixed(1)}%`],
+          ['Pacientes com Múltiplos CIDs', k.multiplosCids, `${k.multiplosCidsPercent}%`],
+          ['Média de CID por paciente', k.mediaCidPorPaciente, '-'],
+        ]);
         addTable('Análise Clínica por Categoria', ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'], cap(clinicalReport.byCategory).map(c => [c.name, c.pacientes, c.atendimentos, c.procedimentos]));
-        addTable('CIDs Mais Frequentes', ['Código CID-10', 'Descrição', 'Frequência (Pacientes)'], cap(clinicalReport.topCids).map(c => [c.cid, c.descricao, c.count]));
+        addTable('Top 20 CID-10', ['#', 'Código', 'Descrição', 'Quantidade', '%'], cap(clinicalReport.topCids20).map((c, i) => [i + 1, c.cid, c.descricao, c.count, `${c.percent}%`]));
+        addTable('Distribuição por Sexo', ['Sexo', 'Pacientes', '%'], clinicalReport.sexoDist.map(s => [s.name, s.value, `${((s.value/tot)*100).toFixed(1)}%`]));
+        addTable('Distribuição por Faixa Etária', ['Faixa', 'Pacientes', '%'], clinicalReport.faixaEtariaDist.map(f => [f.name, f.value, `${((f.value/tot)*100).toFixed(1)}%`]));
+        addTable('Evolução Temporal dos Diagnósticos', ['Mês', 'Diagnósticos'], cap(clinicalReport.evolucaoTemporal).map(e => [e.month, e.value]));
       }
+
 
 
       if (truncated) {
@@ -3961,14 +4091,16 @@ th{background:#f1f5f9;font-weight:600;}
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2">
             {[
               { label: 'Total com CID', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
               { label: 'TEA/Autismo', value: clinicalReport.kpis.tea, icon: Brain, color: 'text-indigo-600' },
-              { label: 'Surdez/Aud.', value: clinicalReport.kpis.surdez, icon: Ear, color: 'text-blue-600' },
+              { label: 'Def. Auditiva', value: clinicalReport.kpis.auditiva, icon: Ear, color: 'text-blue-600' },
+              { label: 'Def. Visual', value: clinicalReport.kpis.visual, icon: Activity, color: 'text-amber-600' },
               { label: 'Def. Física', value: clinicalReport.kpis.fisica, icon: Dumbbell, color: 'text-green-600' },
               { label: 'Def. Intelectual', value: clinicalReport.kpis.intelectual, icon: Brain, color: 'text-purple-600' },
-              { label: 'Múltiplos CIDs', value: clinicalReport.kpis.multiplosCids, icon: ListOrdered, color: 'text-orange-600' },
+              { label: 'Def. Múltipla', value: clinicalReport.kpis.multipla, icon: Users2, color: 'text-rose-600' },
+              { label: `Múlt. CIDs (${clinicalReport.kpis.multiplosCidsPercent}%)`, value: clinicalReport.kpis.multiplosCids, icon: ListOrdered, color: 'text-orange-600' },
               { label: 'Atendimentos', value: clinicalReport.kpis.totalAtendimentos, icon: CalendarDays, color: 'text-slate-600' },
               { label: 'Procedimentos', value: clinicalReport.kpis.totalProcedimentos, icon: ClipboardList, color: 'text-slate-600' },
             ].map(k => (
@@ -3981,6 +4113,7 @@ th{background:#f1f5f9;font-weight:600;}
               </Card>
             ))}
           </div>
+
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Card className="shadow-card border-0">
@@ -4028,6 +4161,128 @@ th{background:#f1f5f9;font-weight:600;}
               </CardContent>
             </Card>
           </div>
+
+          {/* Top 20 CID-10 */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <ListOrdered className="w-4 h-4 text-primary" /> Top 20 CID-10
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">#</th>
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">Código</th>
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">Descrição</th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">Quantidade</th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clinicalReport.topCids20.map((c, i) => (
+                      <tr key={c.cid} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-1.5 px-3 text-muted-foreground">{i + 1}</td>
+                        <td className="py-1.5 px-3 font-bold text-primary">{c.cid}</td>
+                        <td className="py-1.5 px-3">{c.descricao}</td>
+                        <td className="py-1.5 px-3 text-center font-medium">{c.count}</td>
+                        <td className="py-1.5 px-3 text-center text-muted-foreground">{c.percent}%</td>
+                      </tr>
+                    ))}
+                    {clinicalReport.topCids20.length === 0 && (
+                      <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">Sem dados</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sexo + Faixa Etária */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" /> Distribuição por Sexo
+                </h3>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={clinicalReport.sexoDist} dataKey="value" nameKey="name" outerRadius={90} label={(e: any) => `${e.name}: ${e.value}`}>
+                      {clinicalReport.sexoDist.map((_, i) => (
+                        <Cell key={i} fill={['#3b82f6', '#ec4899', '#94a3b8'][i % 3]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" /> Distribuição por Faixa Etária
+                </h3>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={clinicalReport.faixaEtariaDist}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="hsl(199, 89%, 38%)" radius={[4, 4, 0, 0]} name="Pacientes" />
+                  </BarChart>
+                </ResponsiveContainer>
+                {clinicalReport.kpis.semIdade > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-2">Sem data de nascimento: {clinicalReport.kpis.semIdade}</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Evolução Temporal + Múltiplos CIDs */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <Card className="shadow-card border-0 lg:col-span-2">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" /> Evolução Temporal dos Diagnósticos
+                </h3>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={clinicalReport.evolucaoTemporal}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="value" stroke="hsl(168, 60%, 42%)" strokeWidth={2} dot name="Diagnósticos" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5 space-y-3">
+                <h3 className="font-semibold font-display text-foreground flex items-center gap-2">
+                  <ListOrdered className="w-4 h-4 text-primary" /> Pacientes com Múltiplos CIDs
+                </h3>
+                <div className="space-y-2 pt-2">
+                  <div className="flex justify-between border-b pb-2">
+                    <span className="text-sm text-muted-foreground">Quantidade</span>
+                    <span className="text-2xl font-bold text-primary">{clinicalReport.kpis.multiplosCids}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span className="text-sm text-muted-foreground">Percentual</span>
+                    <span className="text-2xl font-bold text-orange-600">{clinicalReport.kpis.multiplosCidsPercent}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Média CID/paciente</span>
+                    <span className="text-2xl font-bold text-indigo-600">{clinicalReport.kpis.mediaCidPorPaciente}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+
 
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
