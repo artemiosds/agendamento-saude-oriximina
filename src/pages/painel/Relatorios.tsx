@@ -2284,7 +2284,7 @@ ${dataRows}
         };
 
         const indicadoresRows: (string | number)[][] = [
-          ['Total de Agendamentos', stats.totalAgendamentos],
+          ['Total de Agendamentos', (stats as any).total ?? (stats as any).totalAgendamentos ?? 0],
           ['Concluídos', stats.concluidos],
           ['Faltas', stats.faltas],
           ['Cancelados', stats.cancelados],
