@@ -2028,8 +2028,63 @@ ${dataRows}
         </section>
       `;
 
+      // ABNT cover + folha de rosto + sumário (apenas para PDF)
+      const anoMes = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+      const responsavelNome = user?.nome || 'Responsável Técnico';
+      const responsavelCargo = user?.cargo || user?.profissao || '';
+      const capaHtml = `
+        <section style="height: 247mm; display: flex; flex-direction: column; justify-content: space-between; text-align: center; page-break-after: always; font-family: 'Times New Roman', Times, serif;">
+          <div>
+            <p style="font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">Prefeitura Municipal de Oriximiná – PA</p>
+            <p style="font-size: 13pt; font-weight: bold; text-transform: uppercase;">Secretaria Municipal de Saúde</p>
+            <p style="font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-top: 4px;">Centro Especializado em Reabilitação – CER II</p>
+          </div>
+          <div>
+            <h1 style="font-size: 18pt; font-weight: bold; text-transform: uppercase; margin-bottom: 24px;">Relatório Gerencial<br/>de Atendimentos</h1>
+            <p style="font-size: 13pt;">Unidade: <strong>${un}</strong></p>
+            <p style="font-size: 13pt;">Período de referência: <strong>${periodo}</strong></p>
+            <p style="font-size: 12pt; margin-top: 8px;">Profissional/Filtro: ${profFilter}</p>
+          </div>
+          <div>
+            <p style="font-size: 12pt; font-weight: bold;">Oriximiná – Pará</p>
+            <p style="font-size: 12pt; font-weight: bold;">${anoMes}</p>
+          </div>
+        </section>
+        <section style="height: 247mm; display: flex; flex-direction: column; text-align: center; page-break-after: always; font-family: 'Times New Roman', Times, serif;">
+          <div style="margin-top: 30mm;">
+            <p style="font-size: 12pt; font-weight: bold; text-transform: uppercase;">${responsavelNome}</p>
+          </div>
+          <div style="margin: auto 0;">
+            <h2 style="font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-bottom: 14px;">Relatório Gerencial de Atendimentos</h2>
+            <p style="font-size: 12pt; max-width: 130mm; margin: 0 auto; text-align: justify; text-indent: 1.25cm;">
+              Documento institucional emitido pelo Centro Especializado em Reabilitação – CER II
+              da Secretaria Municipal de Saúde de Oriximiná/PA, contendo a consolidação dos
+              atendimentos, indicadores de produtividade, fluxo de pacientes e análise clínica
+              referentes ao período de ${periodo}.
+            </p>
+          </div>
+          <div style="margin-bottom: 10mm;">
+            <p style="font-size: 12pt;">Responsável Técnico: ${responsavelNome}${responsavelCargo ? ' – ' + responsavelCargo : ''}</p>
+            <p style="font-size: 12pt; font-weight: bold; margin-top: 18mm;">Oriximiná – Pará</p>
+            <p style="font-size: 12pt; font-weight: bold;">${anoMes}</p>
+          </div>
+        </section>
+        <section style="page-break-after: always; font-family: 'Times New Roman', Times, serif;">
+          <h2 style="text-align: center; font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 18px;">Sumário</h2>
+          <ol style="list-style: none; padding: 0; font-size: 12pt; line-height: 1.8;">
+            ${['Introdução','Metodologia','Resumo Executivo','Indicadores Gerais por Categoria','Atendimentos por Período','Horários de Pico','Novos vs Retorno','Produtividade por Profissional','Faltas e Absenteísmo','Pacientes Atendidos','Fila de Espera','Triagem','Enfermagem','Avaliação Multiprofissional','Projeto Terapêutico Singular','Tratamentos','Análise Clínica','Análise Geográfica','Mapa de Atendimento','Relatório Detalhado','Considerações Finais'].map((t,i) => `
+              <li style="display:flex; justify-content: space-between; border-bottom: 1px dotted #94a3b8; padding: 2px 0;">
+                <span>${i+1}. ${t}</span><span>${i+4}</span>
+              </li>
+            `).join('')}
+          </ol>
+        </section>
+      `;
+
       const bodyHtml = `
-        <div style="text-align: justify;">
+        ${capaHtml}
+        <div style="text-align: justify; font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5;">
+
           ${renderSection("1. Introdução", `<p>${intro}</p>`)}
           ${renderSection("2. Metodologia", `<p>${metodologia}</p>`)}
           
