@@ -416,6 +416,102 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     impactoCount > 0 &&
     !cidInvalido;
 
+  // === Aditivos por competência (pacientes.custom_data.bpa_aditivos) ===
+  const persistirAditivos = async (lista: any[]) => {
+    if (!item?.paciente_id) return;
+    const { data: pacRow, error: errSel } = await (supabase as any)
+      .from("pacientes")
+      .select("custom_data")
+      .eq("id", item.paciente_id)
+      .maybeSingle();
+    if (errSel) throw errSel;
+    const cdAtual = (pacRow?.custom_data as any) || {};
+    // Mantém aditivos de outras competências intactos
+    const compAtual = String(item.competencia || "").replace(/\D/g, "");
+    const todos = Array.isArray(cdAtual.bpa_aditivos) ? cdAtual.bpa_aditivos : [];
+    const outrosMeses = todos.filter((a: any) => {
+      const c = String(a?.competencia || "").replace(/\D/g, "");
+      if (!compAtual) return false;
+      return c && c !== "*" && c !== compAtual;
+    });
+    const novo = { ...cdAtual, bpa_aditivos: [...outrosMeses, ...lista] };
+    const { error } = await (supabase as any).from("pacientes").update({ custom_data: novo }).eq("id", item.paciente_id);
+    if (error) throw error;
+  };
+
+  const handleAddAditivo = async () => {
+    if (!selSigtap || !item?.competencia) return;
+    setSavingAditivo(true);
+    try {
+      const novoCod = normalizeSigtap(selSigtap.codigo);
+      const novoCid = cidEscolhidoRaw ? normalizeCid(cidEscolhidoRaw) : "";
+      if (cidInvalido) {
+        toast.error("CID-10 inválido para o aditivo.");
+        return;
+      }
+      if (aditivos.some((a) => normalizeSigtap(a.codigo) === novoCod)) {
+        toast.info("Este procedimento já consta como aditivo nesta competência.");
+        return;
+      }
+      const nova = [
+        ...aditivos,
+        {
+          codigo: novoCod,
+          nome: selSigtap.nome,
+          cid: novoCid || undefined,
+          competencia: String(item.competencia).replace(/\D/g, ""),
+          added_at: new Date().toISOString(),
+          added_by_id: userId || null,
+          added_by_nome: userNome || null,
+        },
+      ];
+      await persistirAditivos(nova);
+      setAditivos(nova as any);
+
+      // Auditoria
+      try {
+        await (supabase as any).from("notification_logs").insert({
+          canal: "sistema",
+          evento: "bpa_aditivo_adicionado",
+          status: "pendente",
+          payload: {
+            paciente_id: item.paciente_id,
+            paciente_nome: item.paciente_nome,
+            competencia: item.competencia,
+            codigo_sigtap: novoCod,
+            sigtap_nome: selSigtap.nome,
+            cid: novoCid || null,
+            user_id: userId || null,
+            user_nome: userNome || null,
+          },
+        });
+      } catch (_e) { /* noop */ }
+
+      toast.success(`Aditivo ${novoCod} cadastrado para ${item.competencia.slice(4,6)}/${item.competencia.slice(0,4)}.`);
+      onResolved();
+    } catch (e: any) {
+      toast.error("Falha ao salvar aditivo: " + (e?.message || "erro"));
+    } finally {
+      setSavingAditivo(false);
+    }
+  };
+
+  const handleRemoveAditivo = async (codigo: string) => {
+    setSavingAditivo(true);
+    try {
+      const cod = normalizeSigtap(codigo);
+      const nova = aditivos.filter((a) => normalizeSigtap(a.codigo) !== cod);
+      await persistirAditivos(nova);
+      setAditivos(nova);
+      toast.success("Aditivo removido.");
+      onResolved();
+    } catch (e: any) {
+      toast.error("Falha ao remover aditivo: " + (e?.message || "erro"));
+    } finally {
+      setSavingAditivo(false);
+    }
+  };
+
   const handleSalvar = async () => {
     if (!item || !selSigtap) return;
     if (cidInvalido) {
