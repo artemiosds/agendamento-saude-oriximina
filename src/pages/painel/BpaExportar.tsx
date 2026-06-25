@@ -2850,7 +2850,30 @@ const BpaExportar: React.FC = () => {
                   Marque esta opção para permitir o download mesmo que existam dados obrigatórios faltando (CNS, Sexo,
                   Nascimento, Município).
                 </p>
+            </div>
+
+            <div className="flex items-center space-x-2 border p-3 rounded-md bg-amber-50/40">
+              <input
+                type="checkbox"
+                id="incluir_agenda_sem_prontuario"
+                checked={formData.incluir_agenda_sem_prontuario}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, incluir_agenda_sem_prontuario: e.target.checked }))
+                }
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label htmlFor="incluir_agenda_sem_prontuario" className="text-sm font-medium leading-none">
+                  Incluir pacientes da Agenda sem prontuário
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Localiza atendimentos com presença confirmada que não possuem prontuário/PTS e permite cadastrar
+                  SIGTAP/CID manualmente (origem: AGENDA_SEM_PRONTUARIO). Produções manuais já salvas sempre
+                  são reaproveitadas automaticamente nas próximas exportações.
+                </p>
               </div>
+            </div>
+
             </div>
 
             <div className="flex gap-4">
