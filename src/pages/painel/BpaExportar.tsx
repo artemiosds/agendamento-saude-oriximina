@@ -875,9 +875,50 @@ const BpaExportar: React.FC = () => {
         const { data: atendimentos, error: atendimentosError } = await atendimentosQuery;
         if (atendimentosError) throw atendimentosError;
 
+        // Também inclui Técnicos de Enfermagem (CBO 322205) que registraram
+        // triagens no período. Triagens não geram prontuário, então sem essa
+        // união os técnicos sumiriam do filtro de profissionais.
+        let tecnicoIdsTriagem: string[] = [];
+        try {
+          let triagensQuery = (supabase as any)
+            .from("triage_records")
+            .select("tecnico_id, agendamento_id, criado_em")
+            .gte("criado_em", `${startDate}T00:00:00`)
+            .lte("criado_em", `${endDate}T23:59:59`)
+            .not("tecnico_id", "is", null)
+            .range(0, 9999);
+          const { data: triagensFiltro } = await triagensQuery;
+          let trIds = (triagensFiltro || []).map((t: any) => t.tecnico_id).filter(Boolean);
+          if (formData.unidade_id !== "all" && (triagensFiltro || []).length) {
+            const agIds = [
+              ...new Set((triagensFiltro || []).map((t: any) => t.agendamento_id).filter(Boolean)),
+            ] as string[];
+            if (agIds.length) {
+              const { data: agsRows } = await (supabase as any)
+                .from("agendamentos")
+                .select("id, unidade_id")
+                .in("id", agIds);
+              const agMap = new Map<string, any>((agsRows || []).map((a: any) => [a.id, a]));
+              trIds = (triagensFiltro || [])
+                .filter((t: any) => {
+                  const ag = agMap.get(t.agendamento_id);
+                  return ag && ag.unidade_id === formData.unidade_id;
+                })
+                .map((t: any) => t.tecnico_id);
+
+            }
+          }
+          tecnicoIdsTriagem = trIds;
+        } catch (e) {
+          console.warn("[BPA-Exportar] falha ao incluir técnicos de triagem no filtro:", e);
+        }
+
         const profissionalIds = [
-          ...new Set((atendimentos || []).map((item: any) => item.profissional_id).filter(Boolean)),
+          ...new Set(
+            [...(atendimentos || []).map((item: any) => item.profissional_id), ...tecnicoIdsTriagem].filter(Boolean),
+          ),
         ] as string[];
+
 
         if (profissionalIds.length === 0) {
           if (!cancelado) {
@@ -1077,9 +1118,89 @@ const BpaExportar: React.FC = () => {
         query = query.eq("profissional_id", formData.profissional_id);
       }
 
-      const { data: prontuarios, error: pError } = await query;
+      const { data: prontuariosOriginais, error: pError } = await query;
 
       if (pError) throw pError;
+
+      // === Inclusão dos Técnicos de Enfermagem (CBO 322205) ===
+      // Triagens não geram prontuário. Para que técnicos apareçam na exportação
+      // BPA-I, carregamos triage_records do período e convertemos em registros
+      // sintéticos compatíveis com o pipeline existente (mesma estrutura usada
+      // por prontuarios). O SIGTAP padrão de triagem vem de system_config.
+      let triagemSigtapDefault = "";
+      try {
+        const { data: cfgRowTr } = await (supabase as any)
+          .from("system_config")
+          .select("value")
+          .eq("key", "bpa_config")
+          .maybeSingle();
+        triagemSigtapDefault = String((cfgRowTr?.value || {}).bpa_triagem_sigtap || "").replace(/\D/g, "");
+      } catch {
+        /* sem config → cai no procedimento padrão da exportação */
+      }
+
+      let triagemQuery = (supabase as any)
+        .from("triage_records")
+        .select("id, agendamento_id, tecnico_id, criado_em")
+        .gte("criado_em", `${startDate}T00:00:00`)
+        .lte("criado_em", `${endDate}T23:59:59`)
+        .not("tecnico_id", "is", null)
+        .range(0, 9999);
+      if (formData.profissional_id !== "all") {
+        triagemQuery = triagemQuery.eq("tecnico_id", formData.profissional_id);
+      }
+      const { data: triagensPeriodo } = await triagemQuery;
+      const agIdsTriagem = [
+        ...new Set(((triagensPeriodo as any[]) || []).map((t) => t.agendamento_id).filter(Boolean)),
+      ] as string[];
+      const agsTriagemMap = new Map<string, any>();
+      if (agIdsTriagem.length > 0) {
+        const { data: agsTr } = await (supabase as any)
+          .from("agendamentos")
+          .select("id, paciente_id, paciente_nome, unidade_id, data")
+          .in("id", agIdsTriagem);
+        (agsTr || []).forEach((a: any) => agsTriagemMap.set(a.id, a));
+      }
+
+      const prontuariosTriagem = ((triagensPeriodo as any[]) || [])
+        .map((t: any) => {
+          const ag = t.agendamento_id ? agsTriagemMap.get(t.agendamento_id) : null;
+          const unidadeIdTr = ag?.unidade_id || (formData.unidade_id !== "all" ? formData.unidade_id : null);
+          if (formData.unidade_id !== "all" && unidadeIdTr !== formData.unidade_id) return null;
+          if (!ag?.paciente_id) return null;
+          const dataAtend = (ag?.data || String(t.criado_em || "").slice(0, 10)) as string;
+          return {
+            id: `triagem:${t.id}`,
+            paciente_id: ag.paciente_id,
+            paciente_nome: ag.paciente_nome || "",
+            profissional_id: t.tecnico_id,
+            profissional_nome: "",
+            unidade_id: unidadeIdTr,
+            data_atendimento: dataAtend,
+            status: "finalizado",
+            tipo_registro: "triagem",
+            hipotese: "",
+            procedimentos_texto: "",
+            outro_procedimento: "",
+            origem: "Triagem",
+            custom_data: {
+              procedimento_sigtap: triagemSigtapDefault || "",
+            },
+          };
+        })
+        .filter(Boolean) as any[];
+
+      // Evita duplicidade caso já exista prontuário para mesmo paciente/profissional/data.
+      const chavesPront = new Set(
+        ((prontuariosOriginais as any[]) || []).map(
+          (p) => `${p.paciente_id}|${p.profissional_id}|${String(p.data_atendimento).slice(0, 10)}`,
+        ),
+      );
+      const triagensInseridas = prontuariosTriagem.filter(
+        (t) => !chavesPront.has(`${t.paciente_id}|${t.profissional_id}|${String(t.data_atendimento).slice(0, 10)}`),
+      );
+      const prontuarios = [...((prontuariosOriginais as any[]) || []), ...triagensInseridas];
+
 
       if (!prontuarios || prontuarios.length === 0) {
         setResults({
@@ -1148,7 +1269,7 @@ const BpaExportar: React.FC = () => {
       // Alguns prontuários gravam o procedimento somente na tabela vinculada
       // prontuario_procedimentos -> procedimentos.codigo_sigtap, sem espelhar em
       // custom_data. Carregamos isso para evitar falso "SIGTAP ausente".
-      const prontIdsAll = prontuarios.map((p: any) => p.id).filter(Boolean);
+      const prontIdsAll = prontuarios.map((p: any) => p.id).filter((id: any) => id && !String(id).startsWith("triagem:"));
       const sigtapPorProntuario = new Map<string, string>();
       if (prontIdsAll.length > 0) {
         const { data: ppRows } = await (supabase as any)
