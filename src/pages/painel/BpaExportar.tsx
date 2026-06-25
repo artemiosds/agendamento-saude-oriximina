@@ -2183,6 +2183,9 @@ const BpaExportar: React.FC = () => {
                 data_atendimento: formatarDataBR(pront.data_atendimento),
                 codigo_sigtap:
                   sigtapCodigoExibicao(procEntry.codigo) || procEntry.codigo || formData.procedimento_padrao || "",
+                tipo_procedimento: String(procEntry.origem || "").startsWith("Aditivo")
+                  ? "Procedimento Aditivo"
+                  : "Procedimento Clínico",
                 cid_usado: cidExibicao(cidBruto),
                 _ctx: {
                   profissional_nome: prof?.nome || "",
