@@ -711,9 +711,14 @@ const Tratamentos: React.FC = () => {
 
 
     // Total de sessões é o controle principal para TODAS as frequências
-    const totalSessions = Math.max(1, parseInt(String(newCycle.total_sessions)) || 0);
+    const MAX_SESSIONS = 200;
+    const totalSessions = parseInt(String(newCycle.total_sessions)) || 0;
     if (!totalSessions || totalSessions < 1) {
       toast.error("Informe o total de sessões (mínimo 1).");
+      return;
+    }
+    if (totalSessions > MAX_SESSIONS) {
+      toast.error(`Total de sessões excede o limite permitido (máximo ${MAX_SESSIONS}).`);
       return;
     }
     if (isWeekdayFrequency(newCycle.frequency)) {
