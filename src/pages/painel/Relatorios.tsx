@@ -24,7 +24,7 @@ import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { ChartCard } from '@/components/ChartCard';
-import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
+// Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID } from '@/data/clinicalCategories';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
@@ -329,27 +329,14 @@ const Relatorios: React.FC = () => {
     loadReportData();
   };
 
-  // Realtime subscription for auto-refresh
-  useRealtimeSubscription({
-    tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
-    onchange: () => {
-      console.log("[Relatórios] Mudança detectada, atualizando...");
-      loadReportData(true);
-    },
-    enabled: true,
-    debounceMs: 5000,
-  });
-
-  // Update "last updated" label every 10s
+  // Snapshot estático: sem realtime, sem auto-refresh.
+  // Atualizar o rótulo "Última atualização" sempre que lastUpdated mudar.
   useEffect(() => {
-    const interval = setInterval(() => {
-      const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
-      if (diffSec < 10) setLastUpdatedLabel('agora');
-      else if (diffSec < 60) setLastUpdatedLabel(`há ${diffSec}s`);
-      else if (diffSec < 3600) setLastUpdatedLabel(`há ${Math.floor(diffSec / 60)}min`);
-      else setLastUpdatedLabel(`há ${Math.floor(diffSec / 3600)}h`);
-    }, 10000);
-    return () => clearInterval(interval);
+    const d = lastUpdated;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setLastUpdatedLabel(
+      `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
   }, [lastUpdated]);
 
   const filtered = useMemo(() => {
@@ -2309,10 +2296,10 @@ ${dataRows}
           <div className="h-8 w-px bg-border mx-1 hidden sm:block" />
 
           <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
-            <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
+            <RefreshCw className="w-3 h-3" /> Última atualização: {lastUpdatedLabel}
           </span>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={handleRefresh}>
-            <RefreshCw className="w-4 h-4 mr-1" />{isFetching ? 'Buscando...' : 'Atualizar'}
+            <RefreshCw className="w-4 h-4 mr-1" />{isFetching ? 'Buscando...' : 'Atualizar Dados'}
           </Button>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
