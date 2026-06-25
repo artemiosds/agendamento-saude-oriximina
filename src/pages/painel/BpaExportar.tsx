@@ -1858,6 +1858,13 @@ const BpaExportar: React.FC = () => {
               addCodigo(c, "Padrão (Téc. Enfermagem)");
             }
           }
+          // 4.6) Procedimentos Aditivos por Competência (configurados em
+          // pacientes.custom_data.bpa_aditivos). Somam-se aos clínicos — geram
+          // 1 linha BPA-I extra por sessão. Set já garante deduplicação.
+          const aditivosPac = pront.paciente_id ? aditivosByPaciente.get(String(pront.paciente_id)) || [] : [];
+          for (const a of aditivosPac) {
+            addCodigo(a.codigo, "Aditivo (competência)");
+          }
           // 5) Procedimentos padrão do form (lista vazia e profissão NÃO exige).
           if (codigosParaExportar.length === 0 && !sigtapReq.exige) {
             for (const c of procedimentosPadraoList) {
