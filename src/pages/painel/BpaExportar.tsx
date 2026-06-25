@@ -816,6 +816,7 @@ const BpaExportar: React.FC = () => {
     warnings: string[];
     criticalCount: number;
     stats: {
+      all: number;
       missingCns: number;
       missingSexo: number;
       inferredSexo: number;
@@ -831,6 +832,7 @@ const BpaExportar: React.FC = () => {
       autoCorrected: number;
     };
     details: {
+      all: any[];
       missingCns: any[];
       missingSexo: any[];
       inferredSexo: any[];
@@ -846,6 +848,7 @@ const BpaExportar: React.FC = () => {
       autoCorrected: any[];
       critical: any[];
     };
+
     error: string | null;
     fileName: string;
     confRows: any[];
