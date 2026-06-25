@@ -1551,13 +1551,7 @@ ${dataRows}
         <h2>Relatório por Município</h2>
         <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
 
-    } else if (type === 'municipios') {
-      const muniRows = cap(municipioReport).map(m =>
-        `<tr><td>${m.municipio}</td><td>${m.pacientesCount}</td><td>${m.atendimentos}</td><td>${m.concluidos}</td><td>${m.pendentes}</td><td>${m.faltas}</td><td>${m.cancelados}</td><td>${m.remarcados}</td><td>${m.retornos}</td><td>${m.taxaComparecimento}%</td><td>${m.taxaFalta}%</td></tr>`
-      ).join('');
-      body = `${summaryBlock}
-        <h2>Relatório por Município</h2>
-        <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
+
 
     } else if (type === 'faltas') {
       const rows = cap(faltasReport).map(f =>
