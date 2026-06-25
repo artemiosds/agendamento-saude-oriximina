@@ -3329,12 +3329,14 @@ const BpaExportar: React.FC = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2 flex-wrap">
-                              {selectedCategory === "missingSigtap" && item.paciente_id && item.data_atendimento && (
+                              {(selectedCategory === "missingSigtap" || selectedCategory === "all" || selectedCategory === "critical") &&
+                                item.paciente_id &&
+                                item.data_atendimento && (
                                 <Button
                                   variant="default"
                                   size="sm"
                                   className="h-8"
-                                  title="Resolver pendência selecionando um SIGTAP da tabela oficial"
+                                  title="Corrigir SIGTAP/CID ou adicionar Procedimento Aditivo por competência"
                                   onClick={() =>
                                     setResolverModal({
                                       open: true,
@@ -3360,9 +3362,12 @@ const BpaExportar: React.FC = () => {
                                 >
                                   {(item as any).origem === "AGENDA_SEM_PRONTUARIO"
                                     ? "Corrigir Produção (Agenda)"
-                                    : "Resolver SIGTAP"}
+                                    : selectedCategory === "all"
+                                      ? "Corrigir / Adicionar"
+                                      : "Resolver SIGTAP"}
                                 </Button>
                               )}
+
                               {item.paciente_id && (
                                 <Button
                                   variant="outline"
