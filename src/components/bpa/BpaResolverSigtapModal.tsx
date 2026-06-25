@@ -40,6 +40,12 @@ export type ResolverSigtapItem = {
    *  correção é aplicada em lote a todos os prontuários do mesmo paciente
    *  dentro do mês (mesmo profissional + mesma unidade). */
   competencia?: string;
+  /** Quando "agenda_sem_prontuario", a correção grava em agendamentos.custom_data.bpa_manual
+   *  (não cria prontuário nem PTS). */
+  origem?: "prontuario" | "agenda_sem_prontuario";
+  /** Id do agendamento alvo (opcional — quando não passado, o modal carrega
+   *  todos os agendamentos com presença confirmada do paciente na competência). */
+  agendamento_id?: string;
 };
 
 type SigtapHit = {
