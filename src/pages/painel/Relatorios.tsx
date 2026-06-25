@@ -470,8 +470,8 @@ const Relatorios: React.FC = () => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     
     consolidatedData.forEach(d => {
-      const func = funcionarios.find(f => f.id === d.profissionalId);
-      const un = unidades.find(u => u.id === d.unidadeId);
+      const func = funcionariosMap.get(d.profissionalId);
+      const un = unidadesMap.get(d.unidadeId);
       const key = d.profissionalId || d.profissionalNome || 'Não Identificado';
       
       if (!map[key]) {
@@ -508,7 +508,7 @@ const Relatorios: React.FC = () => {
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
       .filter(d => {
         if (filterCargoProd === 'all') return true;
-        const cat = CATEGORIAS.find(c => c.key === filterCargoProd);
+        const cat = categoriasMap.get(filterCargoProd);
         if (!cat) return true;
         return profissionalPertenceCategoria(d.profissao, cat);
       })
@@ -618,7 +618,7 @@ const Relatorios: React.FC = () => {
   const porUnidade = useMemo(() => {
     const map: Record<string, { nome: string; total: number; concluidos: number; faltas: number; cancelados: number }> = {};
     consolidatedData.forEach(d => {
-      const un = unidades.find(u => u.id === d.unidadeId);
+      const un = unidadesMap.get(d.unidadeId);
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { nome: name, total: 0, concluidos: 0, faltas: 0, cancelados: 0 };
       map[name].total++;
@@ -634,8 +634,8 @@ const Relatorios: React.FC = () => {
     const faltaAgs = consolidatedData.filter(d => d.status === 'falta');
     const porPaciente: Record<string, { nome: string; email: string; telefone: string; profissional: string; unidade: string; datas: string[]; total: number }> = {};
     faltaAgs.forEach(d => {
-      const pac = pacientes.find(p => p.id === d.pacienteId);
-      const un = unidades.find(u => u.id === d.unidadeId);
+      const pac = pacientesMap.get(d.pacienteId);
+      const un = unidadesMap.get(d.unidadeId);
       const key = d.pacienteId || d.pacienteNome;
       if (!porPaciente[key]) porPaciente[key] = { nome: d.pacienteNome, email: pac?.email || '', telefone: pac?.telefone || '', profissional: d.profissionalNome, unidade: un?.nome || '', datas: [], total: 0 };
       porPaciente[key].datas.push(d.data);
@@ -648,7 +648,7 @@ const Relatorios: React.FC = () => {
   const pacientesReport = useMemo(() => {
     const pacIds = new Set(consolidatedData.map(d => d.pacienteId));
     return Array.from(pacIds).map(pid => {
-      const pac = pacientes.find(p => p.id === pid);
+      const pac = pacientesMap.get(pid);
       const ags = consolidatedData.filter(d => d.pacienteId === pid);
       const concluidos = ags.filter(d => d.status === 'concluido' || d.hasProntuario).length;
       const faltas = ags.filter(d => d.status === 'falta').length;
@@ -860,7 +860,7 @@ const Relatorios: React.FC = () => {
     // Por técnico
     const porTecnico: Record<string, { id: string; nome: string; total: number; confirmadas: number; pendentes: number }> = {};
     filteredTriagens.forEach(t => {
-      const tec = funcionarios.find(f => f.id === t.tecnico_id);
+      const tec = funcionariosMap.get(t.tecnico_id);
       const nome = tec?.nome || 'Desconhecido';
       if (!porTecnico[t.tecnico_id]) porTecnico[t.tecnico_id] = { id: t.tecnico_id, nome, total: 0, confirmadas: 0, pendentes: 0 };
       porTecnico[t.tecnico_id].total++;
@@ -1062,7 +1062,7 @@ const Relatorios: React.FC = () => {
   const faltasPorUnidade = useMemo(() => {
     const map: Record<string, { name: string; value: number }> = {};
     consolidatedData.filter(d => d.status === 'falta').forEach(d => {
-      const un = unidades.find(u => u.id === d.unidadeId);
+      const un = unidadesMap.get(d.unidadeId);
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { name, value: 0 };
       map[name].value++;
@@ -1108,7 +1108,7 @@ const Relatorios: React.FC = () => {
     filteredProcs.forEach(p => {
       byProc[p.proc_nome || 'Desconhecido'] = (byProc[p.proc_nome || 'Desconhecido'] || 0) + 1;
       byProf[p.prof_nome || 'Desconhecido'] = (byProf[p.prof_nome || 'Desconhecido'] || 0) + 1;
-      const un = unidades.find(u => u.id === p.unidade_id);
+      const un = unidadesMap.get(p.unidade_id);
       byUnit[un?.nome || 'Desconhecida'] = (byUnit[un?.nome || 'Desconhecida'] || 0) + 1;
     });
     return {
@@ -1158,7 +1158,7 @@ const Relatorios: React.FC = () => {
     // By professional
     const byProf: Record<string, { nome: string; ativos: number; finalizados: number; sessoes: number }> = {};
     filteredCycles.forEach(c => {
-      const prof = funcionarios.find(f => f.id === c.professional_id);
+      const prof = funcionariosMap.get(c.professional_id);
       const nome = prof?.nome || 'Desconhecido';
       if (!byProf[c.professional_id]) byProf[c.professional_id] = { nome, ativos: 0, finalizados: 0, sessoes: 0 };
       if (c.status === 'em_andamento') byProf[c.professional_id].ativos++;
@@ -1169,7 +1169,7 @@ const Relatorios: React.FC = () => {
     // By unit
     const byUnit: Record<string, { nome: string; total: number; ativos: number }> = {};
     filteredCycles.forEach(c => {
-      const un = unidades.find(u => u.id === c.unit_id);
+      const un = unidadesMap.get(c.unit_id);
       const nome = un?.nome || 'Desconhecida';
       if (!byUnit[c.unit_id]) byUnit[c.unit_id] = { nome, total: 0, ativos: 0 };
       byUnit[c.unit_id].total++;
@@ -1245,7 +1245,7 @@ const Relatorios: React.FC = () => {
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
       rows = filtered.map(a => {
-        const un = unidades.find(u => u.id === a.unidadeId);
+        const un = unidadesMap.get(a.unidadeId);
         // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
         return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
       });
@@ -1280,7 +1280,7 @@ const Relatorios: React.FC = () => {
     } else if (type === 'fila') {
       headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada', 'Hora Chamada'];
       rows = filaReport.items.map(f => {
-        const un = unidades.find(u => u.id === f.unidade_id);
+        const un = unidadesMap.get(f.unidade_id);
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || ''];
       });
     } else if (type === 'clinico') {
@@ -1305,7 +1305,7 @@ const Relatorios: React.FC = () => {
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
       rows = consolidatedData.map(d => {
-        const un = unidades.find(u => u.id === d.unidadeId);
+        const un = unidadesMap.get(d.unidadeId);
         return [d.data, d.hora || '-', d.pacienteNome, d.profissionalNome, un?.nome || '', d.tipo, statusLabels[d.status] || d.status, d.origem || ''];
       });
     } else if (type === 'municipios') {
@@ -1336,7 +1336,7 @@ const Relatorios: React.FC = () => {
     } else if (type === 'fila') {
       headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada'];
       rows = filaReport.items.map(f => {
-        const un = unidades.find(u => u.id === f.unidade_id);
+        const un = unidadesMap.get(f.unidade_id);
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
       });
     } else if (type === 'clinico') {
@@ -1402,8 +1402,8 @@ ${dataRows}
       const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera', clinico: 'Relatório de Análise Clínica' };
       const title = titleMap[type] || 'Relatório';
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
-      const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
+      const un = filterUnit !== 'all' ? unidadesMap.get(filterUnit)?.nome : 'Todas';
+      const prof = filterProf !== 'all' ? profissionaisMap.get(filterProf)?.nome : 'Todos';
       const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
       const generatedAt = new Date().toLocaleString('pt-BR');
       const ROW_LIMIT = 3000;
@@ -1454,7 +1454,7 @@ ${dataRows}
       };
 
       if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(consolidatedData).map(a => [a.data || '', a.hora || '-', a.pacienteNome || '', a.profissionalNome || '', unidades.find(u => u.id === a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
+        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(consolidatedData).map(a => [a.data || '', a.hora || '-', a.pacienteNome || '', a.profissionalNome || '', unidadesMap.get(a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
@@ -1466,7 +1466,7 @@ ${dataRows}
       } else if (type === 'pacientes') {
         addTable('Relatório de Pacientes', ['Paciente', 'E-mail', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'], cap(pacientesReport).map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos, p.concluidos, p.faltas, p.retornos, p.ultimaConsulta]));
       } else if (type === 'fila') {
-        addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidades.find(u => u.id === f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
+        addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidadesMap.get(f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
       } else if (type === 'clinico') {
         addTable('Análise Clínica por Categoria', ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'], cap(clinicalReport.byCategory).map(c => [c.name, c.pacientes, c.atendimentos, c.procedimentos]));
         addTable('CIDs Mais Frequentes', ['Código CID-10', 'Descrição', 'Frequência (Pacientes)'], cap(clinicalReport.topCids).map(c => [c.cid, c.descricao, c.count]));
@@ -1503,8 +1503,8 @@ ${dataRows}
       }
       const loadingId = toast.loading('Gerando PDF...', { description: 'Preparando documento para impressão / salvar como PDF.' });
       await new Promise(r => requestAnimationFrame(() => r(null))); // yield UI
-    const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
-    const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
+    const un = filterUnit !== 'all' ? unidadesMap.get(filterUnit)?.nome : 'Todas';
+    const prof = filterProf !== 'all' ? profissionaisMap.get(filterProf)?.nome : 'Todos';
     const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
 
     let body = '';
@@ -1532,7 +1532,7 @@ ${dataRows}
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       const rows = cap(consolidatedData).map(a => {
-        const unName = unidades.find(u => u.id === a.unidadeId)?.nome || '';
+        const unName = unidadesMap.get(a.unidadeId)?.nome || '';
         return `<tr><td>${a.data}</td><td>${a.hora || '-'}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
       }).join('');
       const prodRows = cap(porProfissional).map(p =>
@@ -1576,7 +1576,7 @@ ${dataRows}
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
     } else if (type === 'fila') {
       const filaRows = cap(filaReport.items).map(f => {
-        const unName = unidades.find(u => u.id === f.unidade_id)?.nome || '';
+        const unName = unidadesMap.get(f.unidade_id)?.nome || '';
         return `<tr><td>${f.posicao}</td><td>${f.paciente_nome}</td><td>${unName}</td><td>${f.setor}</td><td>${f.prioridade}</td><td>${f.status}</td><td>${f.hora_chegada}</td><td>${f.hora_chamada || '-'}</td></tr>`;
       }).join('');
       body = `
@@ -1958,8 +1958,8 @@ ${dataRows}
     try {
       const config = await loadDocumentConfig();
       const carimbo = user?.id ? await loadCarimbo(user.id) : null;
-      const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas as Unidades';
-      const profFilter = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos os Profissionais';
+      const un = filterUnit !== 'all' ? unidadesMap.get(filterUnit)?.nome : 'Todas as Unidades';
+      const profFilter = filterProf !== 'all' ? profissionaisMap.get(filterProf)?.nome : 'Todos os Profissionais';
       const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
       
       const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão institucional.`;
@@ -2694,7 +2694,7 @@ ${dataRows}
             {categoriaCards.map(c => {
               const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
               const isActive = filterCargoProd === c.key;
-              const catDef = CATEGORIAS.find(cat => cat.key === c.key);
+              const catDef = categoriasMap.get(c.key);
               const IconComp = catDef?.icon || Stethoscope;
               const bgLight = catDef?.bgLight || '#F8FAFC';
               return (
@@ -3269,7 +3269,7 @@ th{background:#f1f5f9;font-weight:600;}
                   </thead>
                   <tbody>
                     {consolidatedData.slice(0, 200).map(d => {
-                      const un = unidades.find(u => u.id === d.unidadeId);
+                      const un = unidadesMap.get(d.unidadeId);
                       return (
                         <tr key={d.id} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-2 px-2 text-foreground">{d.data}</td>
