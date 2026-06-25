@@ -270,6 +270,25 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         if (curSig && curCid) break;
       }
       setValoresAtuais({ sigtap: curSig, cid: curCid });
+
+      // Carrega aditivos por competência salvos em pacientes.custom_data.bpa_aditivos
+      try {
+        const { data: pacRow } = await (supabase as any)
+          .from("pacientes")
+          .select("custom_data")
+          .eq("id", item.paciente_id)
+          .maybeSingle();
+        const todos = Array.isArray(pacRow?.custom_data?.bpa_aditivos) ? pacRow.custom_data.bpa_aditivos : [];
+        const compAtual = String(item.competencia || "").replace(/\D/g, "");
+        const filtrados = todos.filter((a: any) => {
+          const c = String(a?.competencia || "").replace(/\D/g, "");
+          if (!compAtual) return true;
+          return !c || c === "*" || c === compAtual;
+        });
+        setAditivos(filtrados);
+      } catch (e) {
+        console.warn("[BPA] aditivos load:", e);
+      }
     } catch (e: any) {
       toast.error("Falha ao carregar contexto: " + (e?.message || "erro"));
     } finally {
