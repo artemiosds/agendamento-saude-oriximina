@@ -224,7 +224,7 @@ const Relatorios: React.FC = () => {
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
             if (filterStatus !== 'all') query = query.eq('status', filterStatus);
             if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
-            if (filterSetor !== 'all') query = query.eq('setor_id', filterSetor);
+            if (filterSetor !== 'all') query = query.eq('tipo', filterSetor);
           } else if (table === 'prontuarios') {
             if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
