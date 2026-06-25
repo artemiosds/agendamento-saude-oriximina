@@ -3277,11 +3277,17 @@ const BpaExportar: React.FC = () => {
                                          unidade_nome: item.unidade_nome,
                                          cbo: item.cbo,
                                          competencia: formData.competencia,
+                                         origem: (item as any).origem === "AGENDA_SEM_PRONTUARIO"
+                                           ? "agenda_sem_prontuario"
+                                           : undefined,
+                                         agendamento_id: (item as any).agendamento_id || undefined,
                                        },
                                     })
                                   }
                                 >
-                                  Resolver SIGTAP
+                                  {(item as any).origem === "AGENDA_SEM_PRONTUARIO"
+                                    ? "Corrigir Produção (Agenda)"
+                                    : "Resolver SIGTAP"}
                                 </Button>
                               )}
                               {item.paciente_id && (
