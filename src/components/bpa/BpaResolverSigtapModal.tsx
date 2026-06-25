@@ -128,6 +128,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
 
   const [motivo, setMotivo] = useState("");
   const [aplicarPts, setAplicarPts] = useState(false);
+  const [adicionarExtra, setAdicionarExtra] = useState(false);
+
 
   // Progresso de gravação em lote
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
