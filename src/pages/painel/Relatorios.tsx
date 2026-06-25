@@ -1373,10 +1373,60 @@ const Relatorios: React.FC = () => {
     return { total, ativos, concluidos };
   }, [ptsData, filterUnit]);
 
+  // === ESCOPO DINÂMICO DO RELATÓRIO ===
+  // Contextualiza títulos, conclusão e cabeçalhos com base nos filtros aplicados.
+  const buildEscopo = useCallback(() => {
+    const unObj = filterUnit !== 'all' ? unidadesMap.get(filterUnit) : null;
+    const un = (unObj as any)?.nome || 'Todas';
+    const profObj: any = filterProf !== 'all' ? profissionaisMap.get(filterProf) : null;
+    const prof = profObj?.nome || 'Todos';
+    const especialidade = profObj
+      ? (profObj.especialidade || profObj.cargo || profObj.profissao || 'Não informada')
+      : (filterTipo !== 'all' ? filterTipo : 'Todas');
+    const status = filterStatus !== 'all' ? (statusLabels[filterStatus] || filterStatus) : 'Todos';
+    const setor = filterSetor !== 'all' ? filterSetor : 'Todos';
+    const tipo = filterTipo !== 'all' ? filterTipo : 'Todos';
+    const municipio = 'Todos'; // sem filtro global por município
+    const periodo = (dateFrom && dateTo)
+      ? `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`
+      : dateFrom ? `a partir de ${formatDateBR(dateFrom)}`
+      : dateTo ? `até ${formatDateBR(dateTo)}`
+      : 'Todo o período';
+
+    let titulo = 'Relatório Institucional CER II';
+    let conclusaoSujeito = 'pelo CER II';
+    if (filterProf !== 'all' && profObj) {
+      titulo = `Relatório de Produtividade Profissional — ${prof}`;
+      conclusaoSujeito = `pelo(a) profissional ${prof}`;
+    } else if (filterTipo !== 'all') {
+      titulo = `Relatório da Especialidade de ${tipo}`;
+      conclusaoSujeito = `na especialidade de ${tipo}`;
+    } else if (filterSetor !== 'all') {
+      titulo = `Relatório do Setor ${setor}`;
+      conclusaoSujeito = `no setor ${setor}`;
+    } else if (filterUnit !== 'all') {
+      titulo = `Relatório Assistencial — ${un}`;
+      conclusaoSujeito = `pela unidade ${un}`;
+    }
+
+    const escopo: Record<string, string> = {
+      'Período': periodo,
+      'Unidade': un,
+      'Profissional': prof,
+      'Especialidade': especialidade,
+      'Município': municipio,
+      'Status': status,
+      'Setor': setor,
+      'Tipo': tipo,
+    };
+    return { titulo, conclusaoSujeito, escopo, periodo, un, prof, especialidade, municipio, status, setor, tipo };
+  }, [filterUnit, filterProf, filterStatus, filterSetor, filterTipo, dateFrom, dateTo, unidadesMap, profissionaisMap]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
     const filename = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.csv`;
+
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
@@ -1442,13 +1492,20 @@ const Relatorios: React.FC = () => {
 
 
 
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const esc = buildEscopo();
+    const escopoLines = [
+      ['ESCOPOS APLICADOS'],
+      ...Object.entries(esc.escopo).map(([k, v]) => [k, String(v)]),
+      [`Gerado em`, new Date().toLocaleString('pt-BR')],
+      [''],
+    ];
+    const csv = [...escopoLines, headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, buildEscopo, municipioReport, clinicalReport]);
 
   // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
@@ -2137,6 +2194,9 @@ ${dataRows}
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
   };
 
+
+
+
   const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
 
 
@@ -2145,15 +2205,36 @@ ${dataRows}
     try {
       const config = await loadDocumentConfig();
       const carimbo = user?.id ? await loadCarimbo(user.id) : null;
-      const un = filterUnit !== 'all' ? unidadesMap.get(filterUnit)?.nome : 'Todas as Unidades';
-      const profFilter = filterProf !== 'all' ? profissionaisMap.get(filterProf)?.nome : 'Todos os Profissionais';
-      const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
-      
-      const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão institucional.`;
-      
-      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando os filtros de unidade, profissional e período selecionados. A análise utiliza indicadores de produtividade, taxa de absenteísmo, fluxo de pacientes por município e análises clínicas baseadas em CID-10 e categorias de reabilitação.`;
-      
-      const analiseExecutiva = `No período analisado, foram registrados um total de ${stats.total} agendamentos. Destes, ${stats.concluidos} atendimentos foram efetivamente concluídos, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total). O sistema também registrou ${clinicalReport.kpis.totalPacientesComCID} pacientes com diagnósticos clínicos ativos, sendo ${clinicalReport.kpis.tea} casos de TEA.`;
+      const esc = buildEscopo();
+      const un = esc.un;
+      const profFilter = esc.prof;
+      const periodo = esc.periodo;
+      const tituloDinamico = esc.titulo;
+
+      const intro = `Este documento apresenta o ${tituloDinamico}, referente ao período de ${periodo}. ` +
+        `Os dados consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, ` +
+        `restritos ao escopo definido pelos filtros aplicados (unidade: ${esc.un}; profissional: ${esc.prof}; especialidade: ${esc.especialidade}; município: ${esc.municipio}; status: ${esc.status}), ` +
+        `servindo como base para análise de desempenho e tomada de decisão institucional.`;
+
+      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando exatamente os filtros listados na seção “Escopo do Relatório”. ` +
+        `A análise utiliza indicadores de produtividade, taxa de absenteísmo, fluxo de pacientes por município e análises clínicas baseadas em CID-10 e categorias de reabilitação.`;
+
+      const analiseExecutiva = `No período de ${periodo}, foram realizados ${stats.concluidos} atendimentos ${esc.conclusaoSujeito}, ` +
+        `a partir de ${stats.total} agendamentos registrados, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. ` +
+        `As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total). ` +
+        `Foram identificados ${clinicalReport.kpis.totalPacientesComCID} pacientes com diagnósticos clínicos ativos, sendo ${clinicalReport.kpis.tea} casos de TEA.`;
+
+      const escopoHtmlRows = Object.entries(esc.escopo).map(([k, v]) =>
+        `<tr><td style="padding:4px 10px; border:1px solid #cbd5e1; font-weight:bold; width:35%;">${k}</td><td style="padding:4px 10px; border:1px solid #cbd5e1;">${v}</td></tr>`
+      ).join('');
+      const escopoHtml = `
+        <section class="section" style="page-break-after: always;">
+          <h2>Escopo do Relatório</h2>
+          <p>Os indicadores, tabelas e análises a seguir refletem exatamente os filtros abaixo aplicados no momento da geração deste documento.</p>
+          <table style="width:100%; border-collapse:collapse; font-size:11pt; margin-top:8px;">
+            <tbody>${escopoHtmlRows}</tbody>
+          </table>
+        </section>`;
 
       const renderSection = (title: string, content: string, hasData: boolean = true) => `
         <section class="section">
@@ -2174,7 +2255,7 @@ ${dataRows}
             <p style="font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-top: 4px;">Centro Especializado em Reabilitação – CER II</p>
           </div>
           <div>
-            <h1 style="font-size: 18pt; font-weight: bold; text-transform: uppercase; margin-bottom: 24px;">Relatório Gerencial<br/>de Atendimentos</h1>
+            <h1 style="font-size: 18pt; font-weight: bold; text-transform: uppercase; margin-bottom: 24px;">${tituloDinamico}</h1>
             <p style="font-size: 13pt;">Unidade: <strong>${un}</strong></p>
             <p style="font-size: 13pt;">Período de referência: <strong>${periodo}</strong></p>
             <p style="font-size: 12pt; margin-top: 8px;">Profissional/Filtro: ${profFilter}</p>
@@ -2217,6 +2298,7 @@ ${dataRows}
 
       const bodyHtml = `
         ${capaHtml}
+        ${escopoHtml}
         <div style="text-align: justify; font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5;">
 
           ${renderSection("1. Introdução", `<p>${intro}</p>`)}
@@ -2488,7 +2570,8 @@ ${dataRows}
           `, filtered.length > 0)}
 
           ${renderSection("21. Considerações Finais", `
-            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período. Observa-se um volume operacional ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
+            <p>${analiseExecutiva}</p>
+            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período, dentro do escopo de filtros aplicado. Observa-se um volume operacional ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
           `)}
 
           <div style="margin-top: 60px;">
@@ -2498,10 +2581,8 @@ ${dataRows}
       `;
 
       if (format === 'pdf') {
-        const fullHtml = buildDocumentShell("Relatório Institucional Completo", bodyHtml, config, {
-          "Unidade": un,
-          "Profissional": profFilter,
-          "Período": periodo,
+        const fullHtml = buildDocumentShell(tituloDinamico, bodyHtml, config, {
+          ...esc.escopo,
           "Tipo": "Relatório ABNT"
         });
         printViaIframe(fullHtml);
@@ -2563,7 +2644,7 @@ ${dataRows}
           Center('SECRETARIA MUNICIPAL DE SAÚDE', { bold: true, size: 26, upper: true }),
           Center('CENTRO ESPECIALIZADO EM REABILITAÇÃO – CER II', { bold: true, size: 24, upper: true, spacing: 400 }),
           ...Spacer(6),
-          Center('RELATÓRIO GERENCIAL DE ATENDIMENTOS', { bold: true, size: 36, upper: true, spacing: 400 }),
+          Center(tituloDinamico, { bold: true, size: 36, upper: true, spacing: 400 }),
           ...Spacer(2),
           Center(`Unidade: ${un}`, { size: 26 }),
           Center(`Período de referência: ${periodo}`, { size: 26 }),
@@ -2576,7 +2657,7 @@ ${dataRows}
           // ===== FOLHA DE ROSTO =====
           Center(responsavelNome, { bold: true, size: 24, upper: true, spacing: 400 }),
           ...Spacer(10),
-          Center('RELATÓRIO GERENCIAL DE ATENDIMENTOS', { bold: true, size: 30, upper: true, spacing: 300 }),
+          Center(tituloDinamico, { bold: true, size: 30, upper: true, spacing: 300 }),
           ...Spacer(2),
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
@@ -2609,6 +2690,10 @@ ${dataRows}
           PageBreakP(),
 
           // ===== CONTEÚDO =====
+          H1('Escopo do Relatório'),
+          P('Os indicadores e tabelas a seguir refletem exatamente os filtros abaixo aplicados no momento da geração deste documento.'),
+          mkTable(['Campo', 'Valor Aplicado'], Object.entries(esc.escopo).map(([k, v]) => [String(k), String(v)])),
+
           H1('1. Introdução'), P(intro),
           H1('2. Metodologia'), P(metodologia),
 
@@ -2700,7 +2785,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
+  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais, buildEscopo, filtered, tempoStats]);
 
 
   return (
