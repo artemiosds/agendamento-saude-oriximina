@@ -1253,12 +1253,16 @@ const BpaExportar: React.FC = () => {
       const unitMap = new Map(unidadesRes.data?.map((u) => [u.id, u]));
 
       // === Pré-carrega informações de CEP (ViaCEP) para validar município/IBGE ===
-      // Faz um único batch antes do loop: corrige CEPs cujo IBGE diverge do
-      // município cadastrado, sem ler/escrever no banco do paciente.
+      // (c) Só consulta CEPs de pacientes cujo município_ibge está faltando/inválido.
+      // Quando o cadastro já tem IBGE de 6 dígitos, pulamos a chamada externa —
+      // isso elimina o gargalo principal nas execuções repetidas.
       const cepsParaConsulta: string[] = [];
       prontuarios.forEach((pr: any) => {
         const pac = pacMap.get(String(pr.paciente_id)) as any;
         const cd = (pac?.custom_data as any) || {};
+        const munCadastro = somenteNumeros(pac?.municipio || cd?.municipio_ibge || "").slice(0, 6);
+        const cadastroValido = munCadastro.length === 6 && munCadastro !== "000000";
+        if (cadastroValido) return; // não precisa consultar ViaCEP
         const c = normalizeCep(pac?.cep || cd.cep);
         if (c) cepsParaConsulta.push(c);
       });
@@ -1268,6 +1272,7 @@ const BpaExportar: React.FC = () => {
       } catch (e) {
         console.warn("[BPA-Exportar] ViaCEP indisponível — município será resolvido pelo cadastro/padrão.", e);
       }
+
 
       // === Carga de SIGTAP via prontuario_procedimentos (todas as profissões) ===
       // Alguns prontuários gravam o procedimento somente na tabela vinculada
