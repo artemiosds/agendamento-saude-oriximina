@@ -2449,6 +2449,7 @@ const BpaExportar: React.FC = () => {
         "bairro",
         "data_atendimento",
         "codigo_sigtap",
+        "tipo_procedimento",
         "origem_sigtap",
         "cid_usado",
       ];
@@ -2463,6 +2464,7 @@ const BpaExportar: React.FC = () => {
         "BAIRRO",
         "ATENDIMENTO",
         "SIGTAP",
+        "TIPO",
         "ORIGEM SIGTAP",
         "CID",
       ];
