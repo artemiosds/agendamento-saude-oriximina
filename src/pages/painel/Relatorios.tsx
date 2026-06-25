@@ -1192,6 +1192,59 @@ const Relatorios: React.FC = () => {
     };
   }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
 
+  // === BLOCK 3: EXECUTIVE DASHBOARD KPIs ===
+  const executiveKpis = useMemo(() => {
+    const total = stats.total || 0;
+    const efetivos = total - stats.cancelados;
+    const taxaComparecimento = efetivos > 0 ? Math.round((stats.concluidos / efetivos) * 100) : 0;
+    const taxaFalta = efetivos > 0 ? Math.round((stats.faltas / efetivos) * 100) : 0;
+    const taxaCancelamento = total > 0 ? Math.round((stats.cancelados / total) * 100) : 0;
+    const taxaRetorno = total > 0 ? Math.round((stats.retornos / total) * 100) : 0;
+
+    const pacientesUnicos = new Set(consolidatedData.map((d: any) => d.pacienteId).filter(Boolean)).size;
+    const profissionaisAtivos = new Set(consolidatedData.map((d: any) => d.profissionalId).filter(Boolean)).size;
+    const unidadesAtivas = new Set(consolidatedData.map((d: any) => d.unidadeId).filter(Boolean)).size;
+
+    // Fila — tempo médio de espera (chegada→chamada) em minutos
+    const espTempos: number[] = [];
+    (filaReport.items || []).forEach((f: any) => {
+      if (!f.hora_chegada || !f.hora_chamada) return;
+      const toMin = (t: string) => { const [h,m] = (t||'').split(':').map(Number); return Number.isFinite(h) && Number.isFinite(m) ? h*60+m : null; };
+      const a = toMin(f.hora_chegada), b = toMin(f.hora_chamada);
+      if (a != null && b != null && b > a) espTempos.push(b - a);
+    });
+    const tempoEsperaMedio = espTempos.length ? Math.round(espTempos.reduce((s,n)=>s+n,0)/espTempos.length) : 0;
+
+    // Triagem: taxa de confirmação
+    const triagemTotal = triagemReport.total || 0;
+    const taxaConfirmacaoTriagem = triagemTotal > 0 ? Math.round(((triagemReport.confirmadas || 0) / triagemTotal) * 100) : 0;
+
+    // Tratamentos
+    const ciclosAtivos = treatmentStats.ativos || 0;
+    const taxaConclusaoCiclos = treatmentStats.total > 0 ? Math.round((treatmentStats.finalizados / treatmentStats.total) * 100) : 0;
+
+    // Ocupação aproximada: concluidos / efetivos
+    const taxaOcupacao = efetivos > 0 ? Math.round(((stats.concluidos + stats.emAtendimento) / efetivos) * 100) : 0;
+
+    // Tendência: média diária no período
+    const dias = (() => {
+      if (!dateFrom || !dateTo) return 1;
+      const d = (new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / 86400000 + 1;
+      return Math.max(1, Math.round(d));
+    })();
+    const mediaDiaria = total > 0 ? Math.round(total / dias) : 0;
+
+    return {
+      total, pacientesUnicos, profissionaisAtivos, unidadesAtivas,
+      taxaComparecimento, taxaFalta, taxaCancelamento, taxaRetorno, taxaOcupacao,
+      tempoMedio: tempoStats.tempoMedio, tempoEsperaMedio,
+      ciclosAtivos, taxaConclusaoCiclos, taxaAbandono: treatmentStats.taxaAbandono,
+      filaAguardando: filaReport.aguardando, filaTotal: filaReport.total,
+      triagemTotal, taxaConfirmacaoTriagem,
+      mediaDiaria, dias,
+    };
+  }, [stats, consolidatedData, filaReport, triagemReport, treatmentStats, tempoStats, dateFrom, dateTo]);
+
   // === NURSING EVALUATIONS REPORT ===
   const nursingReport = useMemo(() => {
     const filteredNursing = nursingEvals.filter((n: any) => {
