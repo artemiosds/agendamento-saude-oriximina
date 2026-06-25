@@ -78,7 +78,7 @@ const Relatorios: React.FC = () => {
   const { pacientes, funcionarios, unidades, salas, fila } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('geral');
+  const [activeTab, setActiveTab] = useState('executivo');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
   const [filterCargoProd, setFilterCargoProd] = useState('all');
   const [prodViewMode, setProdViewMode] = useState<'tabela' | 'grafico'>('tabela');
@@ -1191,6 +1191,59 @@ const Relatorios: React.FC = () => {
       byType: Object.entries(byType).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
     };
   }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
+
+  // === BLOCK 3: EXECUTIVE DASHBOARD KPIs ===
+  const executiveKpis = useMemo(() => {
+    const total = stats.total || 0;
+    const efetivos = total - stats.cancelados;
+    const taxaComparecimento = efetivos > 0 ? Math.round((stats.concluidos / efetivos) * 100) : 0;
+    const taxaFalta = efetivos > 0 ? Math.round((stats.faltas / efetivos) * 100) : 0;
+    const taxaCancelamento = total > 0 ? Math.round((stats.cancelados / total) * 100) : 0;
+    const taxaRetorno = total > 0 ? Math.round((stats.retornos / total) * 100) : 0;
+
+    const pacientesUnicos = new Set(consolidatedData.map((d: any) => d.pacienteId).filter(Boolean)).size;
+    const profissionaisAtivos = new Set(consolidatedData.map((d: any) => d.profissionalId).filter(Boolean)).size;
+    const unidadesAtivas = new Set(consolidatedData.map((d: any) => d.unidadeId).filter(Boolean)).size;
+
+    // Fila — tempo médio de espera (chegada→chamada) em minutos
+    const espTempos: number[] = [];
+    (filaReport.items || []).forEach((f: any) => {
+      if (!f.hora_chegada || !f.hora_chamada) return;
+      const toMin = (t: string) => { const [h,m] = (t||'').split(':').map(Number); return Number.isFinite(h) && Number.isFinite(m) ? h*60+m : null; };
+      const a = toMin(f.hora_chegada), b = toMin(f.hora_chamada);
+      if (a != null && b != null && b > a) espTempos.push(b - a);
+    });
+    const tempoEsperaMedio = espTempos.length ? Math.round(espTempos.reduce((s,n)=>s+n,0)/espTempos.length) : 0;
+
+    // Triagem: taxa de confirmação
+    const triagemTotal = triagemReport.total || 0;
+    const taxaConfirmacaoTriagem = triagemTotal > 0 ? Math.round(((triagemReport.confirmadas || 0) / triagemTotal) * 100) : 0;
+
+    // Tratamentos
+    const ciclosAtivos = treatmentStats.ativos || 0;
+    const taxaConclusaoCiclos = treatmentStats.total > 0 ? Math.round((treatmentStats.finalizados / treatmentStats.total) * 100) : 0;
+
+    // Ocupação aproximada: concluidos / efetivos
+    const taxaOcupacao = efetivos > 0 ? Math.round(((stats.concluidos + stats.emAtendimento) / efetivos) * 100) : 0;
+
+    // Tendência: média diária no período
+    const dias = (() => {
+      if (!dateFrom || !dateTo) return 1;
+      const d = (new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / 86400000 + 1;
+      return Math.max(1, Math.round(d));
+    })();
+    const mediaDiaria = total > 0 ? Math.round(total / dias) : 0;
+
+    return {
+      total, pacientesUnicos, profissionaisAtivos, unidadesAtivas,
+      taxaComparecimento, taxaFalta, taxaCancelamento, taxaRetorno, taxaOcupacao,
+      tempoMedio: tempoStats.tempoMedio, tempoEsperaMedio,
+      ciclosAtivos, taxaConclusaoCiclos, taxaAbandono: treatmentStats.taxaAbandono,
+      filaAguardando: filaReport.aguardando, filaTotal: filaReport.total,
+      triagemTotal, taxaConfirmacaoTriagem,
+      mediaDiaria, dias,
+    };
+  }, [stats, consolidatedData, filaReport, triagemReport, treatmentStats, tempoStats, dateFrom, dateTo]);
 
   // === NURSING EVALUATIONS REPORT ===
   const nursingReport = useMemo(() => {
@@ -2525,6 +2578,7 @@ ${dataRows}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
           {[
+            { value: 'executivo', label: '⭐ Dashboard Executivo' },
             { value: 'geral', label: 'Geral' },
             { value: 'produtividade', label: 'Produtividade' },
             { value: 'procedimentos', label: 'Procedimentos' },
@@ -2555,6 +2609,104 @@ ${dataRows}
             </button>
           ))}
         </TabsList>
+
+        {/* === DASHBOARD EXECUTIVO (Bloco 3) === */}
+        <TabsContent value="executivo" className="space-y-5 mt-4">
+          {(() => {
+            const k = executiveKpis;
+            const kpiCards: { label: string; value: string | number; suffix?: string; icon: any; color: string; bg: string; hint?: string }[] = [
+              { label: 'Total de Atendimentos', value: k.total, icon: CalendarDays, color: '#1B3A5C', bg: '#EEF2F7', hint: `${k.mediaDiaria}/dia · ${k.dias} dia(s)` },
+              { label: 'Pacientes Únicos', value: k.pacientesUnicos, icon: Users, color: '#0E7490', bg: '#ECFEFF' },
+              { label: 'Taxa de Comparecimento', value: k.taxaComparecimento, suffix: '%', icon: UserCheck, color: '#0F766E', bg: '#ECFDF5' },
+              { label: 'Taxa de Falta', value: k.taxaFalta, suffix: '%', icon: AlertTriangle, color: '#B45309', bg: '#FFFBEB' },
+              { label: 'Taxa de Cancelamento', value: k.taxaCancelamento, suffix: '%', icon: AlertTriangle, color: '#9CA3AF', bg: '#F3F4F6' },
+              { label: 'Taxa de Retorno', value: k.taxaRetorno, suffix: '%', icon: RefreshCw, color: '#3A6B9A', bg: '#EEF3F9' },
+              { label: 'Tempo Médio (min)', value: k.tempoMedio, icon: Clock, color: '#7C3AED', bg: '#F5F3FF', hint: 'por atendimento concluído' },
+              { label: 'Espera Média Fila (min)', value: k.tempoEsperaMedio, icon: Clock, color: '#DB2777', bg: '#FDF2F8', hint: 'chegada → chamada' },
+              { label: 'Profissionais Ativos', value: k.profissionaisAtivos, icon: Stethoscope, color: '#1B3A5C', bg: '#EEF2F7' },
+              { label: 'Unidades Ativas', value: k.unidadesAtivas, icon: MapPin, color: '#0E7490', bg: '#ECFEFF' },
+              { label: 'Ciclos em Andamento', value: k.ciclosAtivos, icon: Activity, color: '#14B8A6', bg: '#F0FDFA', hint: `${k.taxaConclusaoCiclos}% concluídos` },
+              { label: 'Taxa de Abandono Trat.', value: k.taxaAbandono, suffix: '%', icon: TrendingUp, color: '#DC2626', bg: '#FEF2F2' },
+            ];
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {kpiCards.map(c => {
+                  const Icon = c.icon;
+                  return (
+                    <Card key={c.label} className="border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)] rounded-2xl">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: c.bg }}>
+                            <Icon className="w-5 h-5" style={{ color: c.color }} />
+                          </div>
+                        </div>
+                        <p className="text-2xl font-bold text-foreground leading-none">{c.value}{c.suffix || ''}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+                        {c.hint && <p className="text-[10px] text-muted-foreground/80 mt-0.5">{c.hint}</p>}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <Card className="border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)] rounded-2xl lg:col-span-2">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground text-[16px] mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" /> Evolução de Atendimentos
+                </h3>
+                {timelineGrouped.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={timelineGrouped}>
+                      <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="#14b8a6" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="faltas" name="Faltas" stroke="#f97316" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="#94a3b8" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Sem dados no período</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)] rounded-2xl">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground text-[16px] mb-4 flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-primary" /> Distribuição por Status
+                </h3>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      {statusData.map((entry, i) => <Cell key={`exec-status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)] rounded-2xl">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground text-[16px] mb-4 flex items-center gap-2">
+                <Info className="w-5 h-5 text-primary" /> Resumo Operacional
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div><p className="text-muted-foreground">Fila Aguardando</p><p className="text-xl font-semibold text-foreground">{executiveKpis.filaAguardando} <span className="text-xs text-muted-foreground">/ {executiveKpis.filaTotal}</span></p></div>
+                <div><p className="text-muted-foreground">Triagens no Período</p><p className="text-xl font-semibold text-foreground">{executiveKpis.triagemTotal}</p><p className="text-[11px] text-muted-foreground">{executiveKpis.taxaConfirmacaoTriagem}% confirmadas</p></div>
+                <div><p className="text-muted-foreground">Taxa de Ocupação</p><p className="text-xl font-semibold text-foreground">{executiveKpis.taxaOcupacao}%</p></div>
+                <div><p className="text-muted-foreground">Em Atendimento Agora</p><p className="text-xl font-semibold text-foreground">{stats.emAtendimento}</p></div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* === GERAL === */}
         <TabsContent value="geral" className="space-y-5 mt-4">
