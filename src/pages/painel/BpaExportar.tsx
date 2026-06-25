@@ -766,6 +766,7 @@ const BpaExportar: React.FC = () => {
     procedimento_padrao: "0301010072",
     municipio_padrao: "150530",
     exportar_com_pendencias: false,
+    incluir_agenda_sem_prontuario: false,
   });
 
   // Listas de procedimentos SIGTAP padrão (multi). Persistência em localStorage.
