@@ -750,6 +750,26 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
           </div>
         )}
 
+        {/* Modo Procedimento Extra (não sobrescreve — soma à lista exportada) */}
+        {!isAgendaMode && selSigtap && (
+          <div className="space-y-1 rounded-md border p-3 bg-blue-50/40">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={adicionarExtra}
+                onChange={(e) => setAdicionarExtra(e.target.checked)}
+              />
+              Adicionar Procedimento Extra
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Quando ativo, o procedimento escolhido <b>não substitui</b> o SIGTAP já preenchido no prontuário/PTS.
+              Ele é <b>somado</b> à lista exportada (gera uma linha BPA-I adicional por sessão na competência).
+            </p>
+          </div>
+        )}
+
+
+
         {/* Seleção de PTS para Fisio (quando houver mais de um ativo) */}
         {isFisio && ptsList.length > 0 && (
           <div className="space-y-2 rounded-md border p-3 bg-muted/20">
