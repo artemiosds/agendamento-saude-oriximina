@@ -174,6 +174,13 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentosFull]);
 
+  // Block 2 — Performance: O(1) lookup maps replace repeated .find() scans
+  const unidadesMap = useMemo(() => new Map((unidades || []).map((u: any) => [u.id, u])), [unidades]);
+  const funcionariosMap = useMemo(() => new Map((funcionarios || []).map((f: any) => [f.id, f])), [funcionarios]);
+  const pacientesMap = useMemo(() => new Map((pacientes || []).map((p: any) => [p.id, p])), [pacientes]);
+  const profissionaisMap = useMemo(() => new Map((profissionais || []).map((p: any) => [p.id, p])), [profissionais]);
+  const categoriasMap = useMemo(() => new Map(CATEGORIAS.map((c: any) => [c.key, c])), []);
+
   const loadReportData = useCallback(async (isAutoRefresh = false) => {
     if (isFetching) return;
     setIsFetching(true);
