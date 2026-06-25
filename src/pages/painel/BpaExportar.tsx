@@ -254,6 +254,9 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
     ["custom_data.procedimentos", cd.procedimentos],
     ["custom_data.procedimentos_realizados", cd.procedimentos_realizados],
     ["custom_data.sigtap_lista", cd.sigtap_lista],
+    // Procedimentos EXTRAS adicionados manualmente via BPA-Exportar (somam-se
+    // aos códigos do prontuário/PTS sem substituí-los).
+    ["custom_data.procedimentos_extras", cd.procedimentos_extras],
   ];
   for (const [campo, arr] of arrays) {
     if (Array.isArray(arr)) {
@@ -264,6 +267,7 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
   }
   return resultado;
 };
+
 
 // Wrapper de compatibilidade: retorna o primeiro código encontrado.
 const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string } => {
