@@ -3695,18 +3695,7 @@ const Tratamentos: React.FC = () => {
                 </div>
               </div>
 
-                <div>
-                  <span className="text-muted-foreground">Previsão término: </span>
-                  <strong>
-                    {(() => {
-                      const total = newCycle.frequency === 'manual' ? newCycle.total_sessions : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
-                      const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
-                      const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total, ranges);
-                      return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
-                    })()}
-                  </strong>
-                </div>
-              </div>
+
 
               {newCycle.patient_id && ptsDisponiveis.length > 0 && (
                 <div>
