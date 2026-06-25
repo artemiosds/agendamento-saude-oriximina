@@ -2578,6 +2578,7 @@ ${dataRows}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
           {[
+            { value: 'executivo', label: '⭐ Dashboard Executivo' },
             { value: 'geral', label: 'Geral' },
             { value: 'produtividade', label: 'Produtividade' },
             { value: 'procedimentos', label: 'Procedimentos' },
