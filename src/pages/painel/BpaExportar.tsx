@@ -2738,15 +2738,83 @@ const BpaExportar: React.FC = () => {
               <Label htmlFor="cbo">CBO (Fallback)</Label>
               <Input id="cbo" name="cbo" value={formData.cbo} onChange={handleChange} maxLength={6} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="procedimento_padrao">Procedimento Padrão</Label>
-              <Input
-                id="procedimento_padrao"
-                name="procedimento_padrao"
-                value={formData.procedimento_padrao}
-                onChange={handleChange}
-                maxLength={10}
-              />
+            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+              <Label>Procedimentos Padrão</Label>
+              <p className="text-xs text-muted-foreground">
+                Lista de SIGTAPs usada quando a profissão NÃO exige SIGTAP e o prontuário não traz código. Cada código gera 1 linha BPA-I.
+              </p>
+              <div className="space-y-2">
+                {procedimentosPadraoList.map((cod, idx) => (
+                  <div key={`pad-${idx}`} className="flex items-center gap-2">
+                    <Input
+                      value={cod}
+                      maxLength={10}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setProcedimentosPadraoList((prev) => prev.map((p, i) => (i === idx ? v : p)));
+                      }}
+                      placeholder="0000000000"
+                      className="font-mono max-w-[200px]"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setProcedimentosPadraoList((prev) => prev.filter((_, i) => i !== idx))}
+                      aria-label="Remover"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setProcedimentosPadraoList((prev) => [...prev, ""])}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Adicionar Procedimento
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+              <Label>Procedimentos Padrão (Técnico de Enfermagem · CBO 322205)</Label>
+              <p className="text-xs text-muted-foreground">
+                Quando o profissional for Técnico de Enfermagem (CBO 322205), o sistema gera 1 linha BPA-I para cada procedimento desta lista.
+              </p>
+              <div className="space-y-2">
+                {procedimentosTecnicoEnfList.map((cod, idx) => (
+                  <div key={`tec-${idx}`} className="flex items-center gap-2">
+                    <Input
+                      value={cod}
+                      maxLength={10}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setProcedimentosTecnicoEnfList((prev) => prev.map((p, i) => (i === idx ? v : p)));
+                      }}
+                      placeholder="0000000000"
+                      className="font-mono max-w-[200px]"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setProcedimentosTecnicoEnfList((prev) => prev.filter((_, i) => i !== idx))}
+                      aria-label="Remover"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setProcedimentosTecnicoEnfList((prev) => [...prev, ""])}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Adicionar Procedimento
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="municipio_padrao">Município Padrão (IBGE)</Label>
