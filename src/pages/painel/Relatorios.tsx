@@ -2634,7 +2634,7 @@ ${dataRows}
           Center('SECRETARIA MUNICIPAL DE SAÚDE', { bold: true, size: 26, upper: true }),
           Center('CENTRO ESPECIALIZADO EM REABILITAÇÃO – CER II', { bold: true, size: 24, upper: true, spacing: 400 }),
           ...Spacer(6),
-          Center('RELATÓRIO GERENCIAL DE ATENDIMENTOS', { bold: true, size: 36, upper: true, spacing: 400 }),
+          Center(tituloDinamico, { bold: true, size: 36, upper: true, spacing: 400 }),
           ...Spacer(2),
           Center(`Unidade: ${un}`, { size: 26 }),
           Center(`Período de referência: ${periodo}`, { size: 26 }),
