@@ -428,11 +428,36 @@ const Relatorios: React.FC = () => {
   }, [consolidatedData]);
 
   const tempoStats = useMemo(() => {
-    // We don't have atendimentosDB anymore, we use agendamentos with durations if exists or mock 0 for now
-    // In this system durations usually come from 'atendimentos' table but user said 'atendimentos if exist'
-    // Let's check if we have duration in agendamentos or prontuarios
-    return { totalAtendimentos: stats.concluidos, tempoMedio: 0, totalMinutos: 0 };
-  }, [stats.concluidos]);
+    // Considera apenas atendimentos concluídos com duração resolvível
+    const toMin = (t: string) => {
+      const [h, m] = (t || '').split(':').map(n => parseInt(n, 10));
+      if (Number.isNaN(h) || Number.isNaN(m)) return null;
+      return h * 60 + m;
+    };
+    const duracoes: number[] = [];
+    consolidatedData.forEach((d: any) => {
+      const concluido = d.status === 'concluido' || d.hasProntuario;
+      if (!concluido) return;
+      let dur: number | null = null;
+      if (typeof d.duracao_minutos === 'number' && d.duracao_minutos > 0) {
+        dur = d.duracao_minutos;
+      } else if (d.hora_inicio && d.hora_fim) {
+        const ini = toMin(d.hora_inicio);
+        const fim = toMin(d.hora_fim);
+        if (ini != null && fim != null && fim > ini) dur = fim - ini;
+      }
+      if (dur && dur > 0 && dur < 600) duracoes.push(dur);
+    });
+    const total = duracoes.reduce((s, n) => s + n, 0);
+    const tempoMedio = duracoes.length ? Math.round(total / duracoes.length) : 0;
+    return {
+      totalAtendimentos: stats.concluidos,
+      tempoMedio,
+      tempoMinimo: duracoes.length ? Math.min(...duracoes) : 0,
+      tempoMaximo: duracoes.length ? Math.max(...duracoes) : 0,
+      totalMinutos: total,
+    };
+  }, [consolidatedData, stats.concluidos]);
 
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
