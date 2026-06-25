@@ -78,7 +78,7 @@ const Relatorios: React.FC = () => {
   const { pacientes, funcionarios, unidades, salas, fila } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('geral');
+  const [activeTab, setActiveTab] = useState('executivo');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
   const [filterCargoProd, setFilterCargoProd] = useState('all');
   const [prodViewMode, setProdViewMode] = useState<'tabela' | 'grafico'>('tabela');
