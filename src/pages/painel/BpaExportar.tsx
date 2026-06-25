@@ -1329,7 +1329,7 @@ const BpaExportar: React.FC = () => {
         const prof = funcMap.get(pr.profissional_id) as any;
         const cat = profissaoExigeSigtap(prof).categoria;
         const inProntCd = extrairSigtapDoProntuario(pr).codigo;
-        const inVinculado = sigtapPorProntuario.get(pr.id) || "";
+        const inVinculado = (sigtapPorProntuario.get(pr.id) || []).length > 0;
         if (cat === "fisioterap" && !inProntCd && !inVinculado && pr.paciente_id) {
           fisioPatientIds.add(String(pr.paciente_id));
         }
