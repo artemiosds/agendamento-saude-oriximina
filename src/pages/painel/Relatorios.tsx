@@ -1634,9 +1634,26 @@ ${dataRows}
       } else if (type === 'fila') {
         addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidadesMap.get(f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
       } else if (type === 'clinico') {
+        const k = clinicalReport.kpis;
+        const tot = k.totalPacientesComCID || 1;
+        addTable('Indicadores CER II', ['Indicador', 'Quantidade', '% sobre total'], [
+          ['Total com CID', k.totalPacientesComCID, '100%'],
+          ['TEA / Autismo', k.tea, `${((k.tea/tot)*100).toFixed(1)}%`],
+          ['Deficiência Física', k.fisica, `${((k.fisica/tot)*100).toFixed(1)}%`],
+          ['Deficiência Intelectual', k.intelectual, `${((k.intelectual/tot)*100).toFixed(1)}%`],
+          ['Deficiência Auditiva', k.auditiva, `${((k.auditiva/tot)*100).toFixed(1)}%`],
+          ['Deficiência Visual', k.visual, `${((k.visual/tot)*100).toFixed(1)}%`],
+          ['Deficiência Múltipla', k.multipla, `${((k.multipla/tot)*100).toFixed(1)}%`],
+          ['Pacientes com Múltiplos CIDs', k.multiplosCids, `${k.multiplosCidsPercent}%`],
+          ['Média de CID por paciente', k.mediaCidPorPaciente, '-'],
+        ]);
         addTable('Análise Clínica por Categoria', ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'], cap(clinicalReport.byCategory).map(c => [c.name, c.pacientes, c.atendimentos, c.procedimentos]));
-        addTable('CIDs Mais Frequentes', ['Código CID-10', 'Descrição', 'Frequência (Pacientes)'], cap(clinicalReport.topCids).map(c => [c.cid, c.descricao, c.count]));
+        addTable('Top 20 CID-10', ['#', 'Código', 'Descrição', 'Quantidade', '%'], cap(clinicalReport.topCids20).map((c, i) => [i + 1, c.cid, c.descricao, c.count, `${c.percent}%`]));
+        addTable('Distribuição por Sexo', ['Sexo', 'Pacientes', '%'], clinicalReport.sexoDist.map(s => [s.name, s.value, `${((s.value/tot)*100).toFixed(1)}%`]));
+        addTable('Distribuição por Faixa Etária', ['Faixa', 'Pacientes', '%'], clinicalReport.faixaEtariaDist.map(f => [f.name, f.value, `${((f.value/tot)*100).toFixed(1)}%`]));
+        addTable('Evolução Temporal dos Diagnósticos', ['Mês', 'Diagnósticos'], cap(clinicalReport.evolucaoTemporal).map(e => [e.month, e.value]));
       }
+
 
 
       if (truncated) {
