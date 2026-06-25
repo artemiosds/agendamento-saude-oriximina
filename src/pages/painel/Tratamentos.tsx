@@ -3623,14 +3623,16 @@ const Tratamentos: React.FC = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Duração (meses)</Label>
+                  <Label>Total de sessões *</Label>
                   <Input
                     type="number"
                     min={1}
-                    max={24}
-                    value={newCycle.duration_months}
-                    onChange={(e) => setNewCycle((p) => ({ ...p, duration_months: parseInt(e.target.value) || 1 }))}
+                    value={newCycle.total_sessions}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))}
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Controla a quantidade exata de sessões geradas.
+                  </p>
                 </div>
               </div>
 
@@ -3663,18 +3665,6 @@ const Tratamentos: React.FC = () => {
                 </div>
               )}
 
-              {newCycle.frequency === 'manual' && (
-                <div>
-                  <Label>Sessões Previstas</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={newCycle.total_sessions}
-                    onChange={(e) => setNewCycle((p) => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))}
-                  />
-                </div>
-              )}
-
               <div>
                 <Label>Data de Início</Label>
                 <Input
@@ -3686,13 +3676,25 @@ const Tratamentos: React.FC = () => {
 
               <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
                 <div>
-                  <span className="text-muted-foreground">Sessões previstas: </span>
+                  <span className="text-muted-foreground">Total de sessões: </span>
+                  <strong>{newCycle.total_sessions}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Previsão da última sessão: </span>
                   <strong>
-                    {newCycle.frequency === 'manual'
-                      ? newCycle.total_sessions
-                      : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays)}
+                    {(() => {
+                      const total = Math.max(1, newCycle.total_sessions || 0);
+                      const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
+                      const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total, ranges);
+                      return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+                    })()}
                   </strong>
                 </div>
+                <div className="text-xs text-muted-foreground">
+                  Status inicial das sessões: Aguardando Agendamento
+                </div>
+              </div>
+
                 <div>
                   <span className="text-muted-foreground">Previsão término: </span>
                   <strong>
