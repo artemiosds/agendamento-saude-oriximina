@@ -4040,14 +4040,16 @@ th{background:#f1f5f9;font-weight:600;}
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2">
             {[
               { label: 'Total com CID', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
               { label: 'TEA/Autismo', value: clinicalReport.kpis.tea, icon: Brain, color: 'text-indigo-600' },
-              { label: 'Surdez/Aud.', value: clinicalReport.kpis.surdez, icon: Ear, color: 'text-blue-600' },
+              { label: 'Def. Auditiva', value: clinicalReport.kpis.auditiva, icon: Ear, color: 'text-blue-600' },
+              { label: 'Def. Visual', value: clinicalReport.kpis.visual, icon: Activity, color: 'text-amber-600' },
               { label: 'Def. Física', value: clinicalReport.kpis.fisica, icon: Dumbbell, color: 'text-green-600' },
               { label: 'Def. Intelectual', value: clinicalReport.kpis.intelectual, icon: Brain, color: 'text-purple-600' },
-              { label: 'Múltiplos CIDs', value: clinicalReport.kpis.multiplosCids, icon: ListOrdered, color: 'text-orange-600' },
+              { label: 'Def. Múltipla', value: clinicalReport.kpis.multipla, icon: Users2, color: 'text-rose-600' },
+              { label: `Múlt. CIDs (${clinicalReport.kpis.multiplosCidsPercent}%)`, value: clinicalReport.kpis.multiplosCids, icon: ListOrdered, color: 'text-orange-600' },
               { label: 'Atendimentos', value: clinicalReport.kpis.totalAtendimentos, icon: CalendarDays, color: 'text-slate-600' },
               { label: 'Procedimentos', value: clinicalReport.kpis.totalProcedimentos, icon: ClipboardList, color: 'text-slate-600' },
             ].map(k => (
@@ -4060,6 +4062,7 @@ th{background:#f1f5f9;font-weight:600;}
               </Card>
             ))}
           </div>
+
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Card className="shadow-card border-0">
