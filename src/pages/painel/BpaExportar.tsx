@@ -213,8 +213,8 @@ const fontesSigtapParaCategoria = (cat: CategoriaSigtap): string[] => {
 // codigo_sigtap, sigtap, procedimento, procedimento_codigo) e arrays dinâmicos
 // (procedimentos[], procedimentos_realizados[], sigtap[]). Retorna o primeiro
 // código de 10 dígitos válido encontrado e o nome do campo de origem.
-const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string } => {
-  if (!pront) return { codigo: "", campo: "" };
+const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; campo: string }> => {
+  if (!pront) return [];
   const cd = pront.custom_data || {};
   const pickCodigo = (v: any): string => {
     if (v === null || v === undefined) return "";
@@ -230,6 +230,14 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
     }
     return "";
   };
+  const resultado: Array<{ codigo: string; campo: string }> = [];
+  const vistos = new Set<string>();
+  const push = (codigo: string, campo: string) => {
+    if (codigo && !vistos.has(codigo)) {
+      vistos.add(codigo);
+      resultado.push({ codigo, campo });
+    }
+  };
   const candidatosSimples: Array<[string, any]> = [
     ["custom_data.procedimento_sigtap", cd.procedimento_sigtap],
     ["custom_data.codigo_sigtap", cd.codigo_sigtap],
@@ -240,8 +248,7 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
     ["procedimentos_texto", pront.procedimentos_texto],
   ];
   for (const [campo, v] of candidatosSimples) {
-    const code = pickCodigo(v);
-    if (code) return { codigo: code, campo };
+    push(pickCodigo(v), campo);
   }
   const arrays: Array<[string, any]> = [
     ["custom_data.procedimentos", cd.procedimentos],
@@ -251,12 +258,17 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
   for (const [campo, arr] of arrays) {
     if (Array.isArray(arr)) {
       for (const item of arr) {
-        const code = pickCodigo(item);
-        if (code) return { codigo: code, campo: `${campo}[]` };
+        push(pickCodigo(item), `${campo}[]`);
       }
     }
   }
-  return { codigo: "", campo: "" };
+  return resultado;
+};
+
+// Wrapper de compatibilidade: retorna o primeiro código encontrado.
+const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string } => {
+  const todos = extrairTodosSigtapDoProntuario(pront);
+  return todos[0] || { codigo: "", campo: "" };
 };
 
 // ============================================================================
