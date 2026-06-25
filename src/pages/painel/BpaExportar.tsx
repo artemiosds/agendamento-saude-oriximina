@@ -1638,8 +1638,10 @@ const BpaExportar: React.FC = () => {
           //   psicólogo / fonoaudiólogo / nutricionista → Prontuário (campo fixo, custom_data
           //     ou tabela vinculada prontuario_procedimentos)
           //   fisioterapeuta → as fontes acima e, se ausente, PTS ativo do paciente
-          const sigtapEmCustom = extrairSigtapDoProntuario(pront);
-          const sigtapVinculado = sigtapPorProntuario.get(pront.id) || "";
+          const sigtapTodos = extrairTodosSigtapDoProntuario(pront);
+          const sigtapEmCustom = sigtapTodos[0] || { codigo: "", campo: "" };
+          const sigtapVinculadoList = sigtapPorProntuario.get(pront.id) || [];
+          const sigtapVinculado = sigtapVinculadoList[0] || "";
           let proc_real = "";
           let proc_origem: "Prontuário" | "Procedimentos vinculados" | "PTS" | "" = "";
           let proc_campo = "";
@@ -1667,9 +1669,6 @@ const BpaExportar: React.FC = () => {
           }
 
           // === Override unificado com BPA-Produção (Psico/Fono/Fisio/Nutri) ===
-          // Para essas profissões, se o BPA-Produção resolveu o SIGTAP com sua lógica
-          // oficial (campos diretos + catálogo + procedimentos vinculados + PTS), usamos
-          // esse código como fonte primária — eliminando divergências Exportar vs Produção.
           const producaoResolvida = sigtapReq.exige ? producaoByPront.get(pront.id) : undefined;
           if (producaoResolvida?.codigo_sigtap && producaoResolvida.codigo_sigtap !== proc_real) {
             proc_real = producaoResolvida.codigo_sigtap;
@@ -1682,9 +1681,41 @@ const BpaExportar: React.FC = () => {
             proc_campo = `bpaService:${producaoResolvida.fonte_resolucao || "resolvido"}`;
           }
 
+          // === Coleta consolidada de TODOS os procedimentos a exportar ===
+          // Suporta múltiplos SIGTAPs no mesmo atendimento (ex.: Fisio + Psico
+          // em prontuários distintos OU vários procedimentos do mesmo prontuário).
+          const codigosParaExportar: Array<{ codigo: string; origem: string }> = [];
+          const codigosVistos = new Set<string>();
+          const addCodigo = (codigo: string, origem: string) => {
+            const c = somenteNumeros(codigo);
+            if (!c || codigosVistos.has(c)) return;
+            codigosVistos.add(c);
+            codigosParaExportar.push({ codigo: c, origem });
+          };
+          // 1) Todos os SIGTAPs do prontuário (custom_data, campos fixos, arrays).
+          for (const t of sigtapTodos) addCodigo(t.codigo, `Prontuário:${t.campo}`);
+          // 2) Todos os SIGTAPs vinculados (prontuario_procedimentos).
+          for (const c of sigtapVinculadoList) addCodigo(c, "Procedimentos vinculados");
+          // 3) Resolução do BPA-Produção (apenas se ainda não houver nada).
+          if (codigosParaExportar.length === 0 && sigtapReq.exige && producaoResolvida?.codigo_sigtap) {
+            addCodigo(
+              producaoResolvida.codigo_sigtap,
+              `bpaService:${producaoResolvida.fonte_resolucao || "resolvido"}`,
+            );
+          }
+          // 4) PTS (apenas Fisio e lista ainda vazia).
+          if (codigosParaExportar.length === 0 && sigtapReq.categoria === "fisioterap" && pront.paciente_id) {
+            const ptsCode = ptsSigtapByPatient.get(String(pront.paciente_id));
+            if (ptsCode) addCodigo(ptsCode, "PTS");
+          }
+          // 5) Procedimento padrão do form (lista vazia e profissão NÃO exige).
+          if (codigosParaExportar.length === 0 && !sigtapReq.exige && formData.procedimento_padrao) {
+            addCodigo(formData.procedimento_padrao, "Padrão (form)");
+          }
+
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
-          if (!proc_real && sigtapReq.exige) {
+          if (codigosParaExportar.length === 0 && sigtapReq.exige) {
             pendenciaPaciente = true;
             motivosPendencia.push("SIGTAP obrigatório ausente");
             stats.missingSigtap++;
@@ -1707,8 +1738,11 @@ const BpaExportar: React.FC = () => {
               motivo,
             });
           }
-          // Sem fallback silencioso quando a profissão exigir SIGTAP.
-          const proc = zfill(proc_real || (sigtapReq.exige ? "" : formData.procedimento_padrao), 10);
+          if (codigosParaExportar.length > 1) {
+            warnings.push(
+              `${ident}: ${codigosParaExportar.length} procedimentos SIGTAP encontrados para este atendimento — geradas ${codigosParaExportar.length} linhas BPA-I.`,
+            );
+          }
           if (!proc_real && !sigtapReq.exige) stats.defaultProc++;
 
           const data_atend = formatarData(pront.data_atendimento);
