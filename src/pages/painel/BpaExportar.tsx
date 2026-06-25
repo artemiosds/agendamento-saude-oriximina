@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer } from "lucide-react";
+import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
@@ -767,6 +767,36 @@ const BpaExportar: React.FC = () => {
     municipio_padrao: "150530",
     exportar_com_pendencias: false,
   });
+
+  // Listas de procedimentos SIGTAP padrão (multi). Persistência em localStorage.
+  // - procedimentosPadraoList: usado quando o profissional NÃO exige SIGTAP e
+  //   nenhum código foi localizado no prontuário.
+  // - procedimentosTecnicoEnfList: usado quando CBO === 322205 (Técnico de Enfermagem).
+  const LS_KEY_PADRAO = "bpa_procedimentos_padrao_v1";
+  const LS_KEY_TEC_ENF = "bpa_procedimentos_tec_enf_v1";
+  const loadList = (key: string, fallback: string[]): string[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.map((s) => String(s).replace(/\D/g, "")).filter((s) => s.length >= 6 && s.length <= 10);
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const [procedimentosPadraoList, setProcedimentosPadraoList] = useState<string[]>(() =>
+    loadList(LS_KEY_PADRAO, ["0301010072"]),
+  );
+  const [procedimentosTecnicoEnfList, setProcedimentosTecnicoEnfList] = useState<string[]>(() =>
+    loadList(LS_KEY_TEC_ENF, ["0301100030", "0301100021", "0301100013"]),
+  );
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY_PADRAO, JSON.stringify(procedimentosPadraoList)); } catch {}
+  }, [procedimentosPadraoList]);
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY_TEC_ENF, JSON.stringify(procedimentosTecnicoEnfList)); } catch {}
+  }, [procedimentosTecnicoEnfList]);
 
   const [unidades, setUnidades] = useState<any[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
@@ -1708,9 +1738,22 @@ const BpaExportar: React.FC = () => {
             const ptsCode = ptsSigtapByPatient.get(String(pront.paciente_id));
             if (ptsCode) addCodigo(ptsCode, "PTS");
           }
-          // 5) Procedimento padrão do form (lista vazia e profissão NÃO exige).
-          if (codigosParaExportar.length === 0 && !sigtapReq.exige && formData.procedimento_padrao) {
-            addCodigo(formData.procedimento_padrao, "Padrão (form)");
+          // 4.5) Técnico de Enfermagem (CBO 322205): injeta toda a lista de
+          // procedimentos cadastrados — gera 1 linha BPA-I para cada código.
+          const cboParaInjecao = obterCboValido(prof);
+          if (cboParaInjecao === "322205" && codigosParaExportar.length === 0) {
+            for (const c of procedimentosTecnicoEnfList) {
+              addCodigo(c, "Padrão (Téc. Enfermagem)");
+            }
+          }
+          // 5) Procedimentos padrão do form (lista vazia e profissão NÃO exige).
+          if (codigosParaExportar.length === 0 && !sigtapReq.exige) {
+            for (const c of procedimentosPadraoList) {
+              addCodigo(c, "Padrão (form)");
+            }
+            if (codigosParaExportar.length === 0 && formData.procedimento_padrao) {
+              addCodigo(formData.procedimento_padrao, "Padrão (form)");
+            }
           }
 
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
@@ -2695,15 +2738,83 @@ const BpaExportar: React.FC = () => {
               <Label htmlFor="cbo">CBO (Fallback)</Label>
               <Input id="cbo" name="cbo" value={formData.cbo} onChange={handleChange} maxLength={6} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="procedimento_padrao">Procedimento Padrão</Label>
-              <Input
-                id="procedimento_padrao"
-                name="procedimento_padrao"
-                value={formData.procedimento_padrao}
-                onChange={handleChange}
-                maxLength={10}
-              />
+            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+              <Label>Procedimentos Padrão</Label>
+              <p className="text-xs text-muted-foreground">
+                Lista de SIGTAPs usada quando a profissão NÃO exige SIGTAP e o prontuário não traz código. Cada código gera 1 linha BPA-I.
+              </p>
+              <div className="space-y-2">
+                {procedimentosPadraoList.map((cod, idx) => (
+                  <div key={`pad-${idx}`} className="flex items-center gap-2">
+                    <Input
+                      value={cod}
+                      maxLength={10}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setProcedimentosPadraoList((prev) => prev.map((p, i) => (i === idx ? v : p)));
+                      }}
+                      placeholder="0000000000"
+                      className="font-mono max-w-[200px]"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setProcedimentosPadraoList((prev) => prev.filter((_, i) => i !== idx))}
+                      aria-label="Remover"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setProcedimentosPadraoList((prev) => [...prev, ""])}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Adicionar Procedimento
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+              <Label>Procedimentos Padrão (Técnico de Enfermagem · CBO 322205)</Label>
+              <p className="text-xs text-muted-foreground">
+                Quando o profissional for Técnico de Enfermagem (CBO 322205), o sistema gera 1 linha BPA-I para cada procedimento desta lista.
+              </p>
+              <div className="space-y-2">
+                {procedimentosTecnicoEnfList.map((cod, idx) => (
+                  <div key={`tec-${idx}`} className="flex items-center gap-2">
+                    <Input
+                      value={cod}
+                      maxLength={10}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setProcedimentosTecnicoEnfList((prev) => prev.map((p, i) => (i === idx ? v : p)));
+                      }}
+                      placeholder="0000000000"
+                      className="font-mono max-w-[200px]"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setProcedimentosTecnicoEnfList((prev) => prev.filter((_, i) => i !== idx))}
+                      aria-label="Remover"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setProcedimentosTecnicoEnfList((prev) => [...prev, ""])}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Adicionar Procedimento
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="municipio_padrao">Município Padrão (IBGE)</Label>
