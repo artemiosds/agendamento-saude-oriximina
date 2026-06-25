@@ -562,6 +562,10 @@ const Relatorios: React.FC = () => {
       termos: ['odontologo', 'odontologa', 'odontologia', 'odontopediatra', 'odontopediatria', 'dentista'] },
   ];
 
+  const categoriasMap = useMemo(() => new Map(CATEGORIAS.map((c: any) => [c.key, c])), []);
+
+
+
   const profissionalPertenceCategoria = (profissao: string, cat: typeof CATEGORIAS[0]) => {
     const norm = normalizarProfissao(profissao);
     return cat.termos.some(termo => norm.includes(termo));
