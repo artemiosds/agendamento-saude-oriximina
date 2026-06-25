@@ -710,9 +710,19 @@ const Tratamentos: React.FC = () => {
     const pac = pacientes.find((p) => p.id === newCycle.patient_id);
 
 
-    const totalSessions = newCycle.frequency === 'manual'
-      ? newCycle.total_sessions
-      : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
+    // Total de sessões é o controle principal para TODAS as frequências
+    const totalSessions = Math.max(1, parseInt(String(newCycle.total_sessions)) || 0);
+    if (!totalSessions || totalSessions < 1) {
+      toast.error("Informe o total de sessões (mínimo 1).");
+      return;
+    }
+    if (isWeekdayFrequency(newCycle.frequency)) {
+      const need = getMaxWeekdays(newCycle.frequency);
+      if (newCycle.weekdays.length !== need) {
+        toast.error(`Selecione exatamente ${need} dia(s) da semana para esta frequência.`);
+        return;
+      }
+    }
 
     const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
     const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges);
