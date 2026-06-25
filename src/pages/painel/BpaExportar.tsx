@@ -1738,9 +1738,22 @@ const BpaExportar: React.FC = () => {
             const ptsCode = ptsSigtapByPatient.get(String(pront.paciente_id));
             if (ptsCode) addCodigo(ptsCode, "PTS");
           }
-          // 5) Procedimento padrão do form (lista vazia e profissão NÃO exige).
-          if (codigosParaExportar.length === 0 && !sigtapReq.exige && formData.procedimento_padrao) {
-            addCodigo(formData.procedimento_padrao, "Padrão (form)");
+          // 4.5) Técnico de Enfermagem (CBO 322205): injeta toda a lista de
+          // procedimentos cadastrados — gera 1 linha BPA-I para cada código.
+          const cboParaInjecao = obterCboValido(prof);
+          if (cboParaInjecao === "322205" && codigosParaExportar.length === 0) {
+            for (const c of procedimentosTecnicoEnfList) {
+              addCodigo(c, "Padrão (Téc. Enfermagem)");
+            }
+          }
+          // 5) Procedimentos padrão do form (lista vazia e profissão NÃO exige).
+          if (codigosParaExportar.length === 0 && !sigtapReq.exige) {
+            for (const c of procedimentosPadraoList) {
+              addCodigo(c, "Padrão (form)");
+            }
+            if (codigosParaExportar.length === 0 && formData.procedimento_padrao) {
+              addCodigo(formData.procedimento_padrao, "Padrão (form)");
+            }
           }
 
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
