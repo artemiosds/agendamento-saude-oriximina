@@ -1123,6 +1123,7 @@ const BpaExportar: React.FC = () => {
     setLoading(true);
     const warnings: string[] = [];
     const stats = {
+      all: 0,
       missingCns: 0,
       missingSexo: 0,
       inferredSexo: 0,
@@ -1139,6 +1140,7 @@ const BpaExportar: React.FC = () => {
     };
 
     const details = {
+      all: [] as any[],
       missingCns: [] as any[],
       missingSexo: [] as any[],
       inferredSexo: [] as any[],
@@ -1154,6 +1156,7 @@ const BpaExportar: React.FC = () => {
       autoCorrected: [] as any[],
       critical: [] as any[],
     };
+
 
     try {
       const { competencia } = formData;
