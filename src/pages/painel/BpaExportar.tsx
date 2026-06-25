@@ -1454,21 +1454,14 @@ const BpaExportar: React.FC = () => {
           cbo: obterCboValido(prof),
         };
 
-        // Remove apenas duplicidades exatas de produção: mesmo paciente,
-        // profissional, unidade, data e procedimento. O primeiro registro é
-        // mantido e os seguintes são ignorados com registro auditável.
-        const procedimentoChave = somenteNumeros(
-          pront.custom_data?.procedimento_sigtap ||
-            pront.custom_data?.codigo_sigtap ||
-            pront.outro_procedimento ||
-            formData.procedimento_padrao,
-        );
+        // Remove apenas duplicidades exatas de atendimento: mesmo paciente,
+        // profissional, unidade e data. Múltiplos procedimentos do mesmo
+        // atendimento NÃO são duplicidade — viram múltiplas linhas BPA-I.
         const chaveAtendimento = [
           String(pront.paciente_id || ""),
           String(pront.profissional_id || ""),
           String(pront.unidade_id || ""),
           String(pront.data_atendimento || "").slice(0, 10),
-          procedimentoChave,
         ].join("|");
 
         if (chavesAtendimentos.has(chaveAtendimento)) {
