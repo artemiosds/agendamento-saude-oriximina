@@ -1291,7 +1291,7 @@ const BpaExportar: React.FC = () => {
       // prontuario_procedimentos -> procedimentos.codigo_sigtap, sem espelhar em
       // custom_data. Carregamos isso para evitar falso "SIGTAP ausente".
       const prontIdsAll = prontuarios.map((p: any) => p.id).filter((id: any) => id && !String(id).startsWith("triagem:"));
-      const sigtapPorProntuario = new Map<string, string>();
+      const sigtapPorProntuario = new Map<string, string[]>();
       if (prontIdsAll.length > 0) {
         const { data: ppRows } = await (supabase as any)
           .from("prontuario_procedimentos")
@@ -1310,9 +1310,13 @@ const BpaExportar: React.FC = () => {
           });
         }
         (ppRows || []).forEach((r: any) => {
-          if (sigtapPorProntuario.has(r.prontuario_id)) return;
           const code = codigoPorProcId.get(r.procedimento_id);
-          if (code) sigtapPorProntuario.set(r.prontuario_id, code);
+          if (!code) return;
+          const lista = sigtapPorProntuario.get(r.prontuario_id) || [];
+          if (!lista.includes(code)) {
+            lista.push(code);
+            sigtapPorProntuario.set(r.prontuario_id, lista);
+          }
         });
       }
 
