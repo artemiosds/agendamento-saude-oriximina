@@ -2647,7 +2647,7 @@ ${dataRows}
           // ===== FOLHA DE ROSTO =====
           Center(responsavelNome, { bold: true, size: 24, upper: true, spacing: 400 }),
           ...Spacer(10),
-          Center('RELATÓRIO GERENCIAL DE ATENDIMENTOS', { bold: true, size: 30, upper: true, spacing: 300 }),
+          Center(tituloDinamico, { bold: true, size: 30, upper: true, spacing: 300 }),
           ...Spacer(2),
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
