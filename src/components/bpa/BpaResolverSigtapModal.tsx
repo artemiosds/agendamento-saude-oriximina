@@ -436,6 +436,39 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             .update({ custom_data: cd })
             .eq("id", p.id);
           if (error) throw error;
+        } else if (adicionarExtra) {
+          // MODO EXTRA: soma o procedimento à lista custom_data.procedimentos_extras
+          // sem substituir o SIGTAP/CID já preenchido no prontuário/PTS.
+          const extrasAtuais: any[] = Array.isArray(cd.procedimentos_extras) ? [...cd.procedimentos_extras] : [];
+          const jaTem = extrasAtuais.some((x) => normalizeSigtap(x?.codigo || x?.codigo_sigtap || x) === newSig);
+          if (!jaTem) {
+            extrasAtuais.push({
+              codigo: newSig,
+              codigo_sigtap: newSig,
+              nome: selSigtap.nome,
+              cid: newCid || null,
+              aplicado_em: new Date().toISOString(),
+              aplicado_por_id: userId || null,
+              aplicado_por_nome: userNome || null,
+              motivo,
+              origem: "bpa_exportar_procedimento_extra",
+            });
+          }
+          cd.procedimentos_extras = extrasAtuais;
+          // CID unificado: se o prontuário ainda não tem CID e o usuário informou,
+          // preenche (sem sobrescrever um CID já existente).
+          if (newCid && !(cd.cid || cd.cid10 || cd.cid_principal)) {
+            cd.cid = newCid;
+            cd.cid10 = newCid;
+          }
+          const { error } = await (supabase as any)
+            .from("prontuarios")
+            .update({
+              custom_data: cd,
+              motivo_alteracao: `BPA-Exportar (extra): ${motivo}`,
+            })
+            .eq("id", p.id);
+          if (error) throw error;
         } else {
           cd.procedimento_sigtap = newSig;
           cd.codigo_sigtap = newSig;
@@ -460,6 +493,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             .eq("id", p.id);
           if (error) throw error;
         }
+
         done += 1;
         setProgress({ done, total: prontuarios.length });
       }
