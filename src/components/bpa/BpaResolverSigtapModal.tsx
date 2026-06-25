@@ -407,32 +407,55 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       const newSig = normalizeSigtap(selSigtap.codigo);
       const newCid = cidEscolhidoRaw ? normalizeCid(cidEscolhidoRaw) : "";
 
-      // Update each prontuario.custom_data of (paciente, data)
+      // Update each prontuario.custom_data of (paciente, data) — ou agendamento.custom_data quando modo agenda
       let done = 0;
       for (const p of prontuarios) {
         const cd = { ...(p.custom_data || {}) };
-        cd.procedimento_sigtap = newSig;
-        cd.codigo_sigtap = newSig;
-        cd.procedimento_nome = selSigtap.nome;
-        if (newCid) {
-          cd.cid = newCid;
-          cd.cid10 = newCid;
+        if (isAgendaMode) {
+          cd.bpa_manual = {
+            origem: "AGENDA_SEM_PRONTUARIO",
+            sigtap: newSig,
+            sigtap_nome: selSigtap.nome,
+            cid: newCid || null,
+            agendamento_id: p.id,
+            paciente_id: item.paciente_id,
+            profissional_id: p.profissional_id || item.profissional_id,
+            unidade_id: p.unidade_id || item.unidade_id,
+            competencia: item.competencia || null,
+            aplicado_em: new Date().toISOString(),
+            aplicado_por_id: userId || null,
+            aplicado_por_nome: userNome || null,
+            motivo,
+          };
+          const { error } = await (supabase as any)
+            .from("agendamentos")
+            .update({ custom_data: cd })
+            .eq("id", p.id);
+          if (error) throw error;
+        } else {
+          cd.procedimento_sigtap = newSig;
+          cd.codigo_sigtap = newSig;
+          cd.procedimento_nome = selSigtap.nome;
+          if (newCid) {
+            cd.cid = newCid;
+            cd.cid10 = newCid;
+          }
+          cd.bpa_correcao = {
+            aplicado_em: new Date().toISOString(),
+            aplicado_por_id: userId || null,
+            aplicado_por_nome: userNome || null,
+            motivo,
+            origem: "bpa_exportar_resolver_sigtap",
+          };
+          const { error } = await (supabase as any)
+            .from("prontuarios")
+            .update({
+              custom_data: cd,
+              motivo_alteracao: `BPA-Exportar: ${motivo}`,
+            })
+            .eq("id", p.id);
+          if (error) throw error;
         }
-        cd.bpa_correcao = {
-          aplicado_em: new Date().toISOString(),
-          aplicado_por_id: userId || null,
-          aplicado_por_nome: userNome || null,
-          motivo,
-          origem: "bpa_exportar_resolver_sigtap",
-        };
-        const { error } = await (supabase as any)
-          .from("prontuarios")
-          .update({
-            custom_data: cd,
-            motivo_alteracao: `BPA-Exportar: ${motivo}`,
-          })
-          .eq("id", p.id);
-        if (error) throw error;
         done += 1;
         setProgress({ done, total: prontuarios.length });
       }
