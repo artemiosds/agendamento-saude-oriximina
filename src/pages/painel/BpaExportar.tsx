@@ -2495,7 +2495,8 @@ const BpaExportar: React.FC = () => {
         { wch: 20 },
         { wch: 12 },
         { wch: 12 },
-        { wch: 12 },
+        { wch: 18 },
+        { wch: 14 },
         { wch: 10 },
       ];
       // Mesclar as linhas institucionais para visual mais limpo
