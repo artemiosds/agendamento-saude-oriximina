@@ -4111,6 +4111,128 @@ th{background:#f1f5f9;font-weight:600;}
             </Card>
           </div>
 
+          {/* Top 20 CID-10 */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <ListOrdered className="w-4 h-4 text-primary" /> Top 20 CID-10
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">#</th>
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">Código</th>
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">Descrição</th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">Quantidade</th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clinicalReport.topCids20.map((c, i) => (
+                      <tr key={c.cid} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-1.5 px-3 text-muted-foreground">{i + 1}</td>
+                        <td className="py-1.5 px-3 font-bold text-primary">{c.cid}</td>
+                        <td className="py-1.5 px-3">{c.descricao}</td>
+                        <td className="py-1.5 px-3 text-center font-medium">{c.count}</td>
+                        <td className="py-1.5 px-3 text-center text-muted-foreground">{c.percent}%</td>
+                      </tr>
+                    ))}
+                    {clinicalReport.topCids20.length === 0 && (
+                      <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">Sem dados</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sexo + Faixa Etária */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" /> Distribuição por Sexo
+                </h3>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={clinicalReport.sexoDist} dataKey="value" nameKey="name" outerRadius={90} label={(e: any) => `${e.name}: ${e.value}`}>
+                      {clinicalReport.sexoDist.map((_, i) => (
+                        <Cell key={i} fill={['#3b82f6', '#ec4899', '#94a3b8'][i % 3]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" /> Distribuição por Faixa Etária
+                </h3>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={clinicalReport.faixaEtariaDist}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="hsl(199, 89%, 38%)" radius={[4, 4, 0, 0]} name="Pacientes" />
+                  </BarChart>
+                </ResponsiveContainer>
+                {clinicalReport.kpis.semIdade > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-2">Sem data de nascimento: {clinicalReport.kpis.semIdade}</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Evolução Temporal + Múltiplos CIDs */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <Card className="shadow-card border-0 lg:col-span-2">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" /> Evolução Temporal dos Diagnósticos
+                </h3>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={clinicalReport.evolucaoTemporal}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="value" stroke="hsl(168, 60%, 42%)" strokeWidth={2} dot name="Diagnósticos" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5 space-y-3">
+                <h3 className="font-semibold font-display text-foreground flex items-center gap-2">
+                  <ListOrdered className="w-4 h-4 text-primary" /> Pacientes com Múltiplos CIDs
+                </h3>
+                <div className="space-y-2 pt-2">
+                  <div className="flex justify-between border-b pb-2">
+                    <span className="text-sm text-muted-foreground">Quantidade</span>
+                    <span className="text-2xl font-bold text-primary">{clinicalReport.kpis.multiplosCids}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span className="text-sm text-muted-foreground">Percentual</span>
+                    <span className="text-2xl font-bold text-orange-600">{clinicalReport.kpis.multiplosCidsPercent}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Média CID/paciente</span>
+                    <span className="text-2xl font-bold text-indigo-600">{clinicalReport.kpis.mediaCidPorPaciente}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
