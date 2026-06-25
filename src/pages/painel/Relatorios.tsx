@@ -1442,13 +1442,20 @@ const Relatorios: React.FC = () => {
 
 
 
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const esc = buildEscopo();
+    const escopoLines = [
+      ['ESCOPOS APLICADOS'],
+      ...Object.entries(esc.escopo).map(([k, v]) => [k, String(v)]),
+      [`Gerado em`, new Date().toLocaleString('pt-BR')],
+      [''],
+    ];
+    const csv = [...escopoLines, headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, buildEscopo, municipioReport, clinicalReport]);
 
   // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
