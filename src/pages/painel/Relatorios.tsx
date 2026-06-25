@@ -2137,6 +2137,55 @@ ${dataRows}
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
   };
 
+  // === ESCOPO DINÂMICO DO RELATÓRIO ===
+  // Contextualiza títulos, conclusão e cabeçalhos com base nos filtros aplicados.
+  const buildEscopo = useCallback(() => {
+    const unObj = filterUnit !== 'all' ? unidadesMap.get(filterUnit) : null;
+    const un = unObj?.nome || 'Todas';
+    const profObj: any = filterProf !== 'all' ? profissionaisMap.get(filterProf) : null;
+    const prof = profObj?.nome || 'Todos';
+    const especialidade = profObj
+      ? (profObj.especialidade || profObj.cargo || profObj.profissao || 'Não informada')
+      : (filterTipo !== 'all' ? filterTipo : 'Todas');
+    const status = filterStatus !== 'all' ? (statusLabels[filterStatus] || filterStatus) : 'Todos';
+    const setor = filterSetor !== 'all' ? filterSetor : 'Todos';
+    const tipo = filterTipo !== 'all' ? filterTipo : 'Todos';
+    const municipio = 'Todos'; // sem filtro global por município
+    const periodo = (dateFrom && dateTo)
+      ? `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`
+      : dateFrom ? `a partir de ${formatDateBR(dateFrom)}`
+      : dateTo ? `até ${formatDateBR(dateTo)}`
+      : 'Todo o período';
+
+    let titulo = 'Relatório Institucional CER II';
+    let conclusaoSujeito = 'pelo CER II';
+    if (filterProf !== 'all' && profObj) {
+      titulo = `Relatório de Produtividade Profissional — ${prof}`;
+      conclusaoSujeito = `pelo(a) profissional ${prof}`;
+    } else if (filterTipo !== 'all') {
+      titulo = `Relatório da Especialidade de ${tipo}`;
+      conclusaoSujeito = `na especialidade de ${tipo}`;
+    } else if (filterSetor !== 'all') {
+      titulo = `Relatório do Setor ${setor}`;
+      conclusaoSujeito = `no setor ${setor}`;
+    } else if (filterUnit !== 'all') {
+      titulo = `Relatório Assistencial — ${un}`;
+      conclusaoSujeito = `pela unidade ${un}`;
+    }
+
+    const escopo: Record<string, string> = {
+      'Período': periodo,
+      'Unidade': un,
+      'Profissional': prof,
+      'Especialidade': especialidade,
+      'Município': municipio,
+      'Status': status,
+      'Setor': setor,
+      'Tipo': tipo,
+    };
+    return { titulo, conclusaoSujeito, escopo, periodo, un, prof, especialidade, municipio, status, setor, tipo };
+  }, [filterUnit, filterProf, filterStatus, filterSetor, filterTipo, dateFrom, dateTo, unidadesMap, profissionaisMap]);
+
   const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
 
 
