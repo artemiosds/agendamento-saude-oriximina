@@ -887,6 +887,65 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
           </div>
         )}
 
+        {/* Procedimentos Aditivos por Competência */}
+        {!isAgendaMode && item?.competencia && (
+          <div className="space-y-2 rounded-md border p-3 bg-emerald-50/40">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-emerald-900">
+                  Procedimentos Aditivos por Competência
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Configurados para o paciente em <b>{item.competencia.slice(4,6)}/{item.competencia.slice(0,4)}</b>.
+                  Cada aditivo gera <b>uma linha BPA-I extra por sessão</b> exportada, sem alterar o prontuário clínico.
+                  Deduplicação automática contra os procedimentos já presentes.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                type="button"
+                variant="secondary"
+                disabled={!selSigtap || savingAditivo || cidInvalido}
+                onClick={handleAddAditivo}
+              >
+                {savingAditivo ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                {selSigtap ? `Adicionar ${normalizeSigtap(selSigtap.codigo)} como Aditivo` : "Selecione um SIGTAP acima"}
+              </Button>
+            </div>
+
+            {aditivos.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                Nenhum aditivo cadastrado para esta competência.
+              </p>
+            ) : (
+              <ul className="text-xs space-y-1 max-h-40 overflow-y-auto">
+                {aditivos.map((a) => (
+                  <li
+                    key={a.codigo}
+                    className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1"
+                  >
+                    <span>
+                      <code className="font-mono text-primary">{a.codigo}</code>
+                      {a.nome ? <> — {a.nome}</> : null}
+                      {a.cid ? <> · CID <code className="font-mono">{a.cid}</code></> : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-destructive hover:underline"
+                      disabled={savingAditivo}
+                      onClick={() => handleRemoveAditivo(a.codigo)}
+                    >
+                      remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+
+
 
 
         {/* Seleção de PTS para Fisio (quando houver mais de um ativo) */}
