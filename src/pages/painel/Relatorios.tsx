@@ -922,7 +922,13 @@ const Relatorios: React.FC = () => {
       map[label] = 0;
     }
     consolidatedData.forEach(d => {
-      const hourKey = (d.hora || '').substring(0, 2);
+      // Fallback: hora_inicio → hora → timestamp da data
+      let raw: string = (d as any).hora_inicio || d.hora || '';
+      if (!raw && d.data) {
+        const dt = new Date(d.data);
+        if (!Number.isNaN(dt.getTime())) raw = `${String(dt.getHours()).padStart(2, '0')}:00`;
+      }
+      const hourKey = (raw || '').substring(0, 2);
       const h = parseInt(hourKey);
       if (h >= 7 && h <= 18) {
         const label = `${String(h).padStart(2, '0')}:00`;
