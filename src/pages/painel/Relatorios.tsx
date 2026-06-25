@@ -329,27 +329,14 @@ const Relatorios: React.FC = () => {
     loadReportData();
   };
 
-  // Realtime subscription for auto-refresh
-  useRealtimeSubscription({
-    tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
-    onchange: () => {
-      console.log("[Relatórios] Mudança detectada, atualizando...");
-      loadReportData(true);
-    },
-    enabled: true,
-    debounceMs: 5000,
-  });
-
-  // Update "last updated" label every 10s
+  // Snapshot estático: sem realtime, sem auto-refresh.
+  // Atualizar o rótulo "Última atualização" sempre que lastUpdated mudar.
   useEffect(() => {
-    const interval = setInterval(() => {
-      const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
-      if (diffSec < 10) setLastUpdatedLabel('agora');
-      else if (diffSec < 60) setLastUpdatedLabel(`há ${diffSec}s`);
-      else if (diffSec < 3600) setLastUpdatedLabel(`há ${Math.floor(diffSec / 60)}min`);
-      else setLastUpdatedLabel(`há ${Math.floor(diffSec / 3600)}h`);
-    }, 10000);
-    return () => clearInterval(interval);
+    const d = lastUpdated;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setLastUpdatedLabel(
+      `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
   }, [lastUpdated]);
 
   const filtered = useMemo(() => {
