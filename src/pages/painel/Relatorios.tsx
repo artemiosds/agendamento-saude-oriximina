@@ -2413,19 +2413,68 @@ ${dataRows}
           ['Total de Minutos', `${tempoStats.totalMinutos} min`],
         ];
 
+        const PageBreakP = () => new Paragraph({ children: [new TextRun({ text: '', break: 1 })], pageBreakBefore: true });
+        const Center = (text: string, opts: { bold?: boolean; size?: number; upper?: boolean; spacing?: number } = {}) =>
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: opts.spacing ?? 120, line: 360 },
+            children: [new TextRun({ text: opts.upper ? text.toUpperCase() : text, bold: opts.bold, size: opts.size ?? 24, font: 'Arial' })],
+          });
+        const Spacer = (n: number = 1) => Array.from({ length: n }, () => new Paragraph({ children: [new TextRun('')], spacing: { line: 360 } }));
+
         const sections: any[] = [
-          // Capa
-          new Paragraph({ text: 'RELATÓRIO GERENCIAL DE ATENDIMENTOS', heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
-          new Paragraph({ text: 'CENTRO ESPECIALIZADO EM REABILITAÇÃO II', alignment: AlignmentType.CENTER }),
-          new Paragraph({ text: 'Oriximiná – Pará', alignment: AlignmentType.CENTER }),
-          new Paragraph({ text: `Período: ${periodo}`, alignment: AlignmentType.CENTER }),
-          new Paragraph({ text: `Unidade: ${un}  |  Profissional: ${profFilter}`, alignment: AlignmentType.CENTER }),
-          new Paragraph({ text: `Emitido em ${new Date().toLocaleString('pt-BR')}`, alignment: AlignmentType.CENTER, spacing: { after: 400 } }),
+          // ===== CAPA ABNT =====
+          ...Spacer(1),
+          Center('PREFEITURA MUNICIPAL DE ORIXIMINÁ – PA', { bold: true, size: 28, upper: true }),
+          Center('SECRETARIA MUNICIPAL DE SAÚDE', { bold: true, size: 26, upper: true }),
+          Center('CENTRO ESPECIALIZADO EM REABILITAÇÃO – CER II', { bold: true, size: 24, upper: true, spacing: 400 }),
+          ...Spacer(6),
+          Center('RELATÓRIO GERENCIAL DE ATENDIMENTOS', { bold: true, size: 36, upper: true, spacing: 400 }),
+          ...Spacer(2),
+          Center(`Unidade: ${un}`, { size: 26 }),
+          Center(`Período de referência: ${periodo}`, { size: 26 }),
+          Center(`Filtro de profissional: ${profFilter}`, { size: 24, spacing: 400 }),
+          ...Spacer(8),
+          Center('Oriximiná – Pará', { bold: true, size: 24 }),
+          Center(anoMes, { bold: true, size: 24 }),
+          PageBreakP(),
 
-          // Sumário (textual)
-          H1('Sumário'),
-          ...['1. Introdução','2. Metodologia','3. Indicadores Gerais','4. Produtividade por Profissional','5. Relatório por Município','6. Fila de Espera','7. Triagem','8. Análise Clínica','9. Tratamentos','10. Conclusão','11. Recomendações'].map(t => new Paragraph({ children: [new TextRun(t)] })),
+          // ===== FOLHA DE ROSTO =====
+          Center(responsavelNome, { bold: true, size: 24, upper: true, spacing: 400 }),
+          ...Spacer(10),
+          Center('RELATÓRIO GERENCIAL DE ATENDIMENTOS', { bold: true, size: 30, upper: true, spacing: 300 }),
+          ...Spacer(2),
+          new Paragraph({
+            alignment: AlignmentType.JUSTIFIED,
+            indent: { left: 4500 },
+            spacing: { line: 360, after: 200 },
+            children: [new TextRun({
+              text: `Documento institucional emitido pelo Centro Especializado em Reabilitação – CER II da Secretaria Municipal de Saúde de Oriximiná/PA, contendo a consolidação dos atendimentos, indicadores de produtividade, fluxo de pacientes e análise clínica referentes ao período de ${periodo}.`,
+              size: 22, font: 'Arial',
+            })],
+          }),
+          ...Spacer(8),
+          Center(`Responsável Técnico: ${responsavelNome}${responsavelCargo ? ' – ' + responsavelCargo : ''}`, { size: 22 }),
+          ...Spacer(4),
+          Center('Oriximiná – Pará', { bold: true, size: 24 }),
+          Center(anoMes, { bold: true, size: 24 }),
+          PageBreakP(),
 
+          // ===== SUMÁRIO =====
+          Center('SUMÁRIO', { bold: true, size: 28, upper: true, spacing: 300 }),
+          ...['1. Introdução','2. Metodologia','3. Indicadores Gerais','4. Produtividade por Profissional','5. Relatório por Município','6. Fila de Espera','7. Triagem','8. Análise Clínica','9. Tratamentos','10. Conclusão','11. Recomendações'].map(t =>
+            new Paragraph({
+              spacing: { line: 360, after: 80 },
+              tabStops: [{ type: 'right' as any, position: 9000, leader: 'dot' as any }],
+              children: [
+                new TextRun({ text: t, size: 22, font: 'Arial' }),
+                new TextRun({ text: '\t', size: 22, font: 'Arial' }),
+              ],
+            })
+          ),
+          PageBreakP(),
+
+          // ===== CONTEÚDO =====
           H1('1. Introdução'), P(intro),
           H1('2. Metodologia'), P(metodologia),
 
@@ -2485,15 +2534,27 @@ ${dataRows}
 
           new Paragraph({ text: '', spacing: { after: 600 } }),
           new Paragraph({ text: '_______________________________________', alignment: AlignmentType.CENTER }),
-          new Paragraph({ text: user?.nome || 'Responsável Técnico', alignment: AlignmentType.CENTER }),
+          new Paragraph({ text: responsavelNome, alignment: AlignmentType.CENTER }),
+          responsavelCargo ? new Paragraph({ text: responsavelCargo, alignment: AlignmentType.CENTER }) : new Paragraph({ text: '' }),
         ];
 
         const doc = new Document({
+          styles: {
+            default: {
+              document: { run: { font: 'Arial', size: 24 }, paragraph: { spacing: { line: 360 } } },
+            },
+            paragraphStyles: [
+              { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+                run: { size: 28, bold: true, font: 'Arial' },
+                paragraph: { spacing: { before: 240, after: 120, line: 360 }, outlineLevel: 0 } },
+            ],
+          },
           sections: [{
             properties: { page: { margin: { top: 1701, right: 1134, bottom: 1134, left: 1701 } } },
             children: sections,
           }],
         });
+
 
         const buffer = await Packer.toBlob(doc);
         saveAs(buffer, `Relatorio_Completo_${new Date().toISOString().split('T')[0]}.docx`);
