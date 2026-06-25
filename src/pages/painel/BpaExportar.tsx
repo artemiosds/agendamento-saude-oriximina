@@ -1127,17 +1127,21 @@ const BpaExportar: React.FC = () => {
       // BPA-I, carregamos triage_records do período e convertemos em registros
       // sintéticos compatíveis com o pipeline existente (mesma estrutura usada
       // por prontuarios). O SIGTAP padrão de triagem vem de system_config.
+      // (e) Leitura única de system_config.bpa_config — antes era chamado 2x.
       let triagemSigtapDefault = "";
+      let bpaConfigValue: any = {};
       try {
         const { data: cfgRowTr } = await (supabase as any)
           .from("system_config")
           .select("value")
           .eq("key", "bpa_config")
           .maybeSingle();
-        triagemSigtapDefault = String((cfgRowTr?.value || {}).bpa_triagem_sigtap || "").replace(/\D/g, "");
+        bpaConfigValue = cfgRowTr?.value || {};
+        triagemSigtapDefault = String(bpaConfigValue.bpa_triagem_sigtap || "").replace(/\D/g, "");
       } catch {
         /* sem config → cai no procedimento padrão da exportação */
       }
+
 
       let triagemQuery = (supabase as any)
         .from("triage_records")
@@ -1249,12 +1253,16 @@ const BpaExportar: React.FC = () => {
       const unitMap = new Map(unidadesRes.data?.map((u) => [u.id, u]));
 
       // === Pré-carrega informações de CEP (ViaCEP) para validar município/IBGE ===
-      // Faz um único batch antes do loop: corrige CEPs cujo IBGE diverge do
-      // município cadastrado, sem ler/escrever no banco do paciente.
+      // (c) Só consulta CEPs de pacientes cujo município_ibge está faltando/inválido.
+      // Quando o cadastro já tem IBGE de 6 dígitos, pulamos a chamada externa —
+      // isso elimina o gargalo principal nas execuções repetidas.
       const cepsParaConsulta: string[] = [];
       prontuarios.forEach((pr: any) => {
         const pac = pacMap.get(String(pr.paciente_id)) as any;
         const cd = (pac?.custom_data as any) || {};
+        const munCadastro = somenteNumeros(pac?.municipio || cd?.municipio_ibge || "").slice(0, 6);
+        const cadastroValido = munCadastro.length === 6 && munCadastro !== "000000";
+        if (cadastroValido) return; // não precisa consultar ViaCEP
         const c = normalizeCep(pac?.cep || cd.cep);
         if (c) cepsParaConsulta.push(c);
       });
@@ -1264,6 +1272,7 @@ const BpaExportar: React.FC = () => {
       } catch (e) {
         console.warn("[BPA-Exportar] ViaCEP indisponível — município será resolvido pelo cadastro/padrão.", e);
       }
+
 
       // === Carga de SIGTAP via prontuario_procedimentos (todas as profissões) ===
       // Alguns prontuários gravam o procedimento somente na tabela vinculada
@@ -1360,18 +1369,8 @@ const BpaExportar: React.FC = () => {
         }
       >();
       try {
-        let triagemSigtapPadrao = "";
-        try {
-          const { data: cfgRow } = await (supabase as any)
-            .from("system_config")
-            .select("value")
-            .eq("key", "bpa_config")
-            .maybeSingle();
-          const cfg = cfgRow?.value || {};
-          triagemSigtapPadrao = String(cfg.bpa_triagem_sigtap || "").replace(/\D/g, "");
-        } catch {
-          /* ignora — não bloqueia resolução */
-        }
+        // (e) Reaproveita bpaConfigValue já carregado acima — sem nova ida ao banco.
+        const triagemSigtapPadrao = String(bpaConfigValue?.bpa_triagem_sigtap || "").replace(/\D/g, "");
 
         const linhasProducaoSvc = await bpaService.resolveBpaProcedimentosECids({
           competencia: formData.competencia,
@@ -1379,6 +1378,7 @@ const BpaExportar: React.FC = () => {
           profissionalId: formData.profissional_id !== "all" ? formData.profissional_id : undefined,
           triagemSigtapPadrao,
         });
+
         for (const ln of linhasProducaoSvc) {
           if (!ln.prontuario_id) continue;
           const atual = producaoByPront.get(ln.prontuario_id);
