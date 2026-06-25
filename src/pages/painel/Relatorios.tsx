@@ -2287,6 +2287,7 @@ ${dataRows}
 
       const bodyHtml = `
         ${capaHtml}
+        ${escopoHtml}
         <div style="text-align: justify; font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5;">
 
           ${renderSection("1. Introdução", `<p>${intro}</p>`)}
