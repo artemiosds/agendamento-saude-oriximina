@@ -875,9 +875,49 @@ const BpaExportar: React.FC = () => {
         const { data: atendimentos, error: atendimentosError } = await atendimentosQuery;
         if (atendimentosError) throw atendimentosError;
 
+        // Também inclui Técnicos de Enfermagem (CBO 322205) que registraram
+        // triagens no período. Triagens não geram prontuário, então sem essa
+        // união os técnicos sumiriam do filtro de profissionais.
+        let tecnicoIdsTriagem: string[] = [];
+        try {
+          let triagensQuery = (supabase as any)
+            .from("triage_records")
+            .select("tecnico_id, agendamento_id, criado_em")
+            .gte("criado_em", `${startDate}T00:00:00`)
+            .lte("criado_em", `${endDate}T23:59:59`)
+            .not("tecnico_id", "is", null)
+            .range(0, 9999);
+          const { data: triagensFiltro } = await triagensQuery;
+          let trIds = (triagensFiltro || []).map((t: any) => t.tecnico_id).filter(Boolean);
+          if (formData.unidade_id !== "all" && (triagensFiltro || []).length) {
+            const agIds = [
+              ...new Set((triagensFiltro || []).map((t: any) => t.agendamento_id).filter(Boolean)),
+            ] as string[];
+            if (agIds.length) {
+              const { data: agsRows } = await (supabase as any)
+                .from("agendamentos")
+                .select("id, unidade_id")
+                .in("id", agIds);
+              const agMap = new Map((agsRows || []).map((a: any) => [a.id, a]));
+              trIds = (triagensFiltro || [])
+                .filter((t: any) => {
+                  const ag = agMap.get(t.agendamento_id);
+                  return ag && ag.unidade_id === formData.unidade_id;
+                })
+                .map((t: any) => t.tecnico_id);
+            }
+          }
+          tecnicoIdsTriagem = trIds;
+        } catch (e) {
+          console.warn("[BPA-Exportar] falha ao incluir técnicos de triagem no filtro:", e);
+        }
+
         const profissionalIds = [
-          ...new Set((atendimentos || []).map((item: any) => item.profissional_id).filter(Boolean)),
+          ...new Set(
+            [...(atendimentos || []).map((item: any) => item.profissional_id), ...tecnicoIdsTriagem].filter(Boolean),
+          ),
         ] as string[];
+
 
         if (profissionalIds.length === 0) {
           if (!cancelado) {
