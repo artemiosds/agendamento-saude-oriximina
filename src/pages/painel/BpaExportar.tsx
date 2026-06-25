@@ -1564,6 +1564,9 @@ const BpaExportar: React.FC = () => {
           sexo: pac?.sexo,
           municipio: pac?.municipio || (pac?.custom_data as any)?.municipio_ibge,
           cbo: obterCboValido(prof),
+          tipo_registro: pront.tipo_registro,
+          agendamento_id: pront.agendamento_id || null,
+          origem: pront.tipo_registro === "agenda_sem_prontuario" ? "AGENDA_SEM_PRONTUARIO" : undefined,
         };
 
         // Remove apenas duplicidades exatas de atendimento: mesmo paciente,
