@@ -2244,7 +2244,7 @@ ${dataRows}
             <p style="font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-top: 4px;">Centro Especializado em Reabilitação – CER II</p>
           </div>
           <div>
-            <h1 style="font-size: 18pt; font-weight: bold; text-transform: uppercase; margin-bottom: 24px;">Relatório Gerencial<br/>de Atendimentos</h1>
+            <h1 style="font-size: 18pt; font-weight: bold; text-transform: uppercase; margin-bottom: 24px;">${tituloDinamico}</h1>
             <p style="font-size: 13pt;">Unidade: <strong>${un}</strong></p>
             <p style="font-size: 13pt;">Período de referência: <strong>${periodo}</strong></p>
             <p style="font-size: 12pt; margin-top: 8px;">Profissional/Filtro: ${profFilter}</p>
