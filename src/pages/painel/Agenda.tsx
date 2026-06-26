@@ -1825,25 +1825,27 @@ const Agenda: React.FC = () => {
           console.error("Erro ao atualizar sessão de tratamento:", err);
         }
 
-        logAction({
-          acao: "registrar_falta",
-          entidade: "agendamento",
-          entidadeId: ag.id,
-          modulo: "agenda",
-          user,
-          pacienteId: ag.pacienteId,
-          pacienteNome: ag.pacienteNome,
-          profissionalId: ag.profissionalId,
-          profissionalNome: ag.profissionalNome,
-          agendamentoId: ag.id,
-          detalhes: {
-            tipo_falta: dados.tipoFalta,
-            documento: dados.documento || "",
-            descricao: dados.descricao || "",
-            anexo_url: dados.anexoUrl || "",
-            origem: "agenda_profissional_acao_falta"
-          },
-        }).catch((e) => console.error("[Agenda][Falta] logAction:", e));
+        try {
+          logAction({
+            acao: "registrar_falta",
+            entidade: "agendamento",
+            entidadeId: ag.id,
+            modulo: "agenda",
+            user,
+            pacienteId: ag.pacienteId,
+            pacienteNome: ag.pacienteNome,
+            profissionalId: ag.profissionalId,
+            profissionalNome: ag.profissionalNome,
+            agendamentoId: ag.id,
+            detalhes: {
+              tipo_falta: dados.tipoFalta,
+              documento: dados.documento || "",
+              descricao: dados.descricao || "",
+              anexo_url: dados.anexoUrl || "",
+              origem: "agenda_profissional_acao_falta"
+            },
+          });
+        } catch (e) { console.error("[Agenda][Falta] logAction:", e); }
 
         const paciente = pacientes.find((p) => p.id === ag.pacienteId);
         const unidade = unidades.find((u) => u.id === ag.unidadeId);
