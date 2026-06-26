@@ -519,7 +519,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       if (justifs[f.id]) txt += ` — Justificativa: ${justifs[f.id]}`;
       if (obs[f.id]) txt += ` — Obs.: ${obs[f.id]}`;
       const label = cleanLabel(f.label);
-      const long = f.kind === "textarea" || txt.length > 60 || /\n/.test(txt);
+      const long = f.kind === "textarea" || txt.length > 110 || /\n/.test(txt);
       return { label, value: txt, long };
     };
 
