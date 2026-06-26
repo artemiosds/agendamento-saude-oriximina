@@ -497,13 +497,12 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
     const cleanLabel = (label: string): string => {
-      let l = label
-        .replace(/\s*\(SELECIONE[^)]*\)/i, "")
-        .replace(/\s*\(ex\.:[^)]*\)/i, "")
-        .replace(/\s*\(única\)/i, "")
-        .replace(/\s*\(texto livre\)/i, "")
-        .trim();
-      if (/^selecione/i.test(l)) return ""; // pure placeholder → hide
+      // Strip ALL parenthetical instructions ("(ex.: ...)", "(única)", "(SELECIONE...)",
+      // "(texto livre)", "(UNICA)", "(justificar)", etc.) — these are author hints,
+      // not data for the printed document.
+      let l = label.replace(/\s*\([^)]*\)/g, "").trim();
+      // Pure placeholders ("Selecione", "Selecione um", "Selecionar") → hide entirely
+      if (/^selecion(e|ar)\b/i.test(l)) return "";
       return l;
     };
 
