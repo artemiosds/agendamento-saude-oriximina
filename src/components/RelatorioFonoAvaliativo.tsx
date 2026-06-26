@@ -497,13 +497,12 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
     const cleanLabel = (label: string): string => {
-      let l = label
-        .replace(/\s*\(SELECIONE[^)]*\)/i, "")
-        .replace(/\s*\(ex\.:[^)]*\)/i, "")
-        .replace(/\s*\(única\)/i, "")
-        .replace(/\s*\(texto livre\)/i, "")
-        .trim();
-      if (/^selecione/i.test(l)) return ""; // pure placeholder → hide
+      // Strip ALL parenthetical instructions ("(ex.: ...)", "(única)", "(SELECIONE...)",
+      // "(texto livre)", "(UNICA)", "(justificar)", etc.) — these are author hints,
+      // not data for the printed document.
+      let l = label.replace(/\s*\([^)]*\)/g, "").trim();
+      // Pure placeholders ("Selecione", "Selecione um", "Selecionar") → hide entirely
+      if (/^selecion(e|ar)\b/i.test(l)) return "";
       return l;
     };
 
@@ -520,7 +519,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       if (justifs[f.id]) txt += ` — Justificativa: ${justifs[f.id]}`;
       if (obs[f.id]) txt += ` — Obs.: ${obs[f.id]}`;
       const label = cleanLabel(f.label);
-      const long = f.kind === "textarea" || txt.length > 60 || /\n/.test(txt);
+      const long = f.kind === "textarea" || txt.length > 110 || /\n/.test(txt);
       return { label, value: txt, long };
     };
 
@@ -732,13 +731,8 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   };
 
   const cleanLabelDocx = (label: string): string => {
-    let l = label
-      .replace(/\s*\(SELECIONE[^)]*\)/i, "")
-      .replace(/\s*\(ex\.:[^)]*\)/i, "")
-      .replace(/\s*\(única\)/i, "")
-      .replace(/\s*\(texto livre\)/i, "")
-      .trim();
-    if (/^selecione/i.test(l)) return "";
+    let l = label.replace(/\s*\([^)]*\)/g, "").trim();
+    if (/^selecion(e|ar)\b/i.test(l)) return "";
     return l;
   };
 
