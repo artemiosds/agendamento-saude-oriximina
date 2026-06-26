@@ -493,100 +493,229 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
       ? `${funcionario.tipoConselho || "CRFa"} ${funcionario.numeroConselho || ""}${funcionario.ufConselho ? "/" + funcionario.ufConselho : ""}`
       : "CRFa —";
 
-    const renderAnswer = (f: FieldDef): string => {
+    const escapeHtml = (s: string) =>
+      String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const cleanLabel = (label: string): string => {
+      let l = label
+        .replace(/\s*\(SELECIONE[^)]*\)/i, "")
+        .replace(/\s*\(ex\.:[^)]*\)/i, "")
+        .replace(/\s*\(única\)/i, "")
+        .replace(/\s*\(texto livre\)/i, "")
+        .trim();
+      if (/^selecione/i.test(l)) return ""; // pure placeholder → hide
+      return l;
+    };
+
+    type AnsItem = { label: string; value: string; long: boolean };
+    const getAnswer = (f: FieldDef): AnsItem | null => {
       const v = answers[f.id];
-      if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) return "";
+      if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) return null;
       let txt = "";
       if (Array.isArray(v)) {
         const items = v.filter(x => x !== "__other__");
         if (v.includes("__other__") && others[f.id]) items.push(`Outros: ${others[f.id]}`);
         txt = items.join("; ");
       } else txt = String(v);
-      let extra = "";
-      if (justifs[f.id]) extra += ` — Justificativa: ${justifs[f.id]}`;
-      if (obs[f.id]) extra += ` — Obs.: ${obs[f.id]}`;
-      return `<div class="field"><span class="field-label">${f.label}</span><div class="field-value">${txt}${extra}</div></div>`;
+      if (justifs[f.id]) txt += ` — Justificativa: ${justifs[f.id]}`;
+      if (obs[f.id]) txt += ` — Obs.: ${obs[f.id]}`;
+      const label = cleanLabel(f.label);
+      const long = f.kind === "textarea" || txt.length > 60 || /\n/.test(txt);
+      return { label, value: txt, long };
     };
 
-    let body = `
-      <div class="info-grid">
-        <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
-        <div class="info-item"><span class="info-label">Nascimento / Idade</span><br/><span class="info-value">${fmtBr(p.dataNascimento)} (${calcIdadeStr(p.dataNascimento, dataRelatorio)})</span></div>
-        <div class="info-item"><span class="info-label">Queixa principal</span><br/><span class="info-value">${answers.queixa_principal || "—"}</span></div>
-        <div class="info-item"><span class="info-label">Data do Relatório</span><br/><span class="info-value">${fmtBr(dataRelatorio)}</span></div>
-        <div class="info-item"><span class="info-label">Profissional</span><br/><span class="info-value">${profNome}</span></div>
-        <div class="info-item"><span class="info-label">CBO / Conselho</span><br/><span class="info-value">223810 — ${conselho}</span></div>
-        <div class="info-item"><span class="info-label">Unidade</span><br/><span class="info-value">${unidadeNome}</span></div>
-      </div>
-    `;
+    const renderItems = (items: AnsItem[]): string => {
+      if (!items.length) return "";
+      // group long items first as full-width, short ones in 2-col grid
+      const shorts = items.filter(i => !i.long);
+      const longs = items.filter(i => i.long);
+      let html = "";
+      if (shorts.length) {
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-bottom:4px">`;
+        shorts.forEach(it => {
+          html += `<div style="border-bottom:1px dotted #cbd5e1;padding:2px 0">
+            ${it.label ? `<span style="font-size:8.5px;color:#475569;text-transform:uppercase;font-weight:700;letter-spacing:.2px">${escapeHtml(it.label)}</span> ` : ""}
+            <span style="font-size:10.5px;color:#0f172a">${escapeHtml(it.value)}</span>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+      longs.forEach(it => {
+        html += `<div style="margin:4px 0">
+          ${it.label ? `<div style="font-size:8.5px;color:#475569;text-transform:uppercase;font-weight:700;letter-spacing:.2px;margin-bottom:2px">${escapeHtml(it.label)}</div>` : ""}
+          <div style="font-size:10.5px;color:#0f172a;line-height:1.45;white-space:pre-wrap">${escapeHtml(it.value)}</div>
+        </div>`;
+      });
+      return html;
+    };
 
-    // 2. Identificação do PTS
+    const sectionBox = (title: string, inner: string, opts?: { highlight?: boolean }) => {
+      if (!inner) return "";
+      const bg = opts?.highlight ? "#f0f9ff" : "#fafafa";
+      const border = opts?.highlight ? "#1e3a5f" : "#cbd5e1";
+      return `<div style="border:1px solid ${border};border-radius:4px;padding:8px 10px;margin-bottom:8px;page-break-inside:avoid;background:${bg}">
+        <div style="font-size:10.5px;font-weight:700;color:#fff;background:#1e3a5f;margin:-8px -10px 8px;padding:4px 10px;border-radius:3px 3px 0 0;text-transform:uppercase;letter-spacing:.5px">■ ${escapeHtml(title)}</div>
+        ${inner}
+      </div>`;
+    };
+
+    // Header: identification table (2 columns)
+    const idRows: [string, string][] = [
+      ["Paciente", p.nome || "—"],
+      ["Data do Relatório", fmtBr(dataRelatorio)],
+      ["Data de Nascimento", fmtBr(p.dataNascimento)],
+      ["Idade", calcIdadeStr(p.dataNascimento, dataRelatorio) || "—"],
+      ["Profissional", profNome],
+      ["CBO / Conselho", `223810 — ${conselho}`],
+      ["Unidade", unidadeNome],
+      ["Queixa principal", String(answers.queixa_principal || "—")],
+    ];
+    let body = sectionBox("Identificação", `
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+        ${idRows.map((r, i) => i % 2 === 0
+          ? `<tr style="background:${(i / 2) % 2 === 0 ? "#fff" : "#f1f5f9"}">
+              <td style="padding:4px 8px;width:18%;font-weight:700;color:#475569;text-transform:uppercase;font-size:8.5px;border:1px solid #e2e8f0">${escapeHtml(r[0])}</td>
+              <td style="padding:4px 8px;width:32%;border:1px solid #e2e8f0">${escapeHtml(r[1])}</td>
+              ${idRows[i + 1] ? `
+                <td style="padding:4px 8px;width:18%;font-weight:700;color:#475569;text-transform:uppercase;font-size:8.5px;border:1px solid #e2e8f0">${escapeHtml(idRows[i + 1][0])}</td>
+                <td style="padding:4px 8px;width:32%;border:1px solid #e2e8f0">${escapeHtml(idRows[i + 1][1])}</td>
+              ` : `<td colspan="2" style="border:1px solid #e2e8f0"></td>`}
+            </tr>` : "").join("")}
+      </table>
+    `);
+
+    // 2. PTS
     if (selectedPts) {
       const pts = selectedPts;
-      body += `
-        <div class="section" style="page-break-inside:avoid">
-          <div class="section-title">2. Identificação do PTS</div>
-          <div class="field"><span class="field-label">PTS ID</span><div class="field-value">${pts.id}</div></div>
-          <div class="field"><span class="field-label">Status</span><div class="field-value">${statusLabel(pts.status)}</div></div>
-          <div class="field"><span class="field-label">Data de criação</span><div class="field-value">${pts.created_at ? fmtBr(pts.created_at) : "—"}</div></div>
-          <div class="field"><span class="field-label">Equipe / Especialidades</span><div class="field-value">${(pts.especialidades_envolvidas || []).join(", ") || "—"}</div></div>
-          <div class="field"><span class="field-label">Objetivo geral</span><div class="field-value">${pts.objetivo_geral || "—"}</div></div>
-          <div class="field"><span class="field-label">Objetivos terapêuticos</span><div class="field-value">${pts.objetivos_terapeuticos || "—"}</div></div>
-          <div class="field"><span class="field-label">Metas (curto prazo)</span><div class="field-value">${pts.metas_curto_prazo || "—"}</div></div>
-          <div class="field"><span class="field-label">Metas (médio prazo)</span><div class="field-value">${pts.metas_medio_prazo || "—"}</div></div>
-          <div class="field"><span class="field-label">Metas (longo prazo)</span><div class="field-value">${pts.metas_longo_prazo || "—"}</div></div>
-          <div class="field"><span class="field-label">Plano de conduta</span><div class="field-value">${pickPlanoConduta(pts) || "Não informado"}</div></div>
-        </div>`;
-    } else {
-      body += `<div class="section"><div class="section-title">2. Identificação do PTS</div><div class="field-value">Nenhum PTS vinculado encontrado para este paciente.</div></div>`;
+      const items: AnsItem[] = [
+        { label: "Status", value: statusLabel(pts.status), long: false },
+        { label: "Criado em", value: pts.created_at ? fmtBr(pts.created_at) : "—", long: false },
+        { label: "Equipe", value: (pts.especialidades_envolvidas || []).join(", ") || "—", long: false },
+        { label: "Frequência planejada", value: pts.frequencia_planejada || "—", long: false },
+        { label: "Objetivo geral", value: pts.objetivo_geral || "—", long: true },
+        { label: "Objetivos terapêuticos", value: pts.objetivos_terapeuticos || "—", long: true },
+        { label: "Metas (curto prazo)", value: pts.metas_curto_prazo || "—", long: true },
+        { label: "Metas (médio prazo)", value: pts.metas_medio_prazo || "—", long: true },
+        { label: "Metas (longo prazo)", value: pts.metas_longo_prazo || "—", long: true },
+        { label: "Plano de conduta", value: pickPlanoConduta(pts) || "Não informado", long: true },
+      ];
+      body += sectionBox("2. Identificação do PTS", renderItems(items));
     }
 
-    // 3. Gestão de Tratamento
+    // 3. Ciclo
     if (selectedCycle) {
       const c = selectedCycle;
-      body += `
-        <div class="section" style="page-break-inside:avoid">
-          <div class="section-title">3. Gestão de Tratamento e Ciclo Terapêutico</div>
-          <div class="field"><span class="field-label">Tipo de tratamento</span><div class="field-value">${c.treatment_type || "—"}</div></div>
-          <div class="field"><span class="field-label">Especialidade</span><div class="field-value">${c.specialty || "—"}</div></div>
-          <div class="field"><span class="field-label">Status</span><div class="field-value">${statusLabel(c.status)}</div></div>
-          <div class="field"><span class="field-label">Início</span><div class="field-value">${c.start_date ? fmtBr(c.start_date) : "—"}</div></div>
-          <div class="field"><span class="field-label">Previsão de término</span><div class="field-value">${c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—"}</div></div>
-          <div class="field"><span class="field-label">Frequência</span><div class="field-value">${c.frequency || "—"}</div></div>
-          <div class="field"><span class="field-label">Sessões realizadas</span><div class="field-value">${c.sessions_done ?? 0} / ${c.total_sessions ?? 0}</div></div>
-          <div class="field"><span class="field-label">Observações clínicas</span><div class="field-value">${c.clinical_notes || "—"}</div></div>
-        </div>`;
-    } else {
-      body += `<div class="section"><div class="section-title">3. Gestão de Tratamento e Ciclo Terapêutico</div><div class="field-value">Nenhuma gestão de tratamento vinculada encontrada para este paciente.</div></div>`;
+      const items: AnsItem[] = [
+        { label: "Tipo", value: c.treatment_type || "—", long: false },
+        { label: "Especialidade", value: c.specialty || "—", long: false },
+        { label: "Status", value: statusLabel(c.status), long: false },
+        { label: "Frequência", value: c.frequency || "—", long: false },
+        { label: "Início", value: c.start_date ? fmtBr(c.start_date) : "—", long: false },
+        { label: "Previsão de término", value: c.end_date_predicted ? fmtBr(c.end_date_predicted) : "—", long: false },
+        { label: "Sessões", value: `${c.sessions_done ?? 0} / ${c.total_sessions ?? 0}`, long: false },
+        { label: "Observações clínicas", value: c.clinical_notes || "—", long: true },
+      ];
+      body += sectionBox("3. Gestão de Tratamento e Ciclo Terapêutico", renderItems(items));
     }
 
+    // Evaluation steps (skip identificacao, parecer/conclusao — handled separately)
+    let secNum = 4;
     FONO_STEPS.forEach(step => {
-      if (step.id === "identificacao") return;
-      let stepHtml = "";
+      if (step.id === "identificacao" || step.id === "parecer" || step.id === "conclusao") return;
       step.sections.forEach(sec => {
-        let secHtml = "";
-        sec.fields.forEach(f => { secHtml += renderAnswer(f); });
-        if (secHtml) stepHtml += `<div class="section" style="page-break-inside:avoid"><div class="section-title">${sec.title}</div>${secHtml}</div>`;
+        const items = sec.fields.map(getAnswer).filter((x): x is AnsItem => !!x);
+        if (!items.length) return;
+        body += sectionBox(`${secNum}. ${sec.title}`, renderItems(items));
+        secNum++;
       });
-      if (stepHtml) body += stepHtml;
     });
 
-    // PROC
-    body += `
-      <div class="section" style="page-break-inside:avoid">
-        <div class="section-title">Pontuação PROC</div>
-        <div class="field"><span class="field-label">Habilidades comunicativas (expressiva)</span><div class="field-value">${answers.proc_habilidades || 0} / 70</div></div>
-        <div class="field"><span class="field-label">Compreensão da linguagem oral</span><div class="field-value">${answers.proc_compreensao || 0} / 60</div></div>
-        <div class="field"><span class="field-label">Aspectos do desenvolvimento cognitivo</span><div class="field-value">${answers.proc_cognitivo || 0} / 70</div></div>
-        <div class="field"><span class="field-label">TOTAL</span><div class="field-value"><strong>${procTotal} / 200</strong></div></div>
-      </div>
-    `;
+    // PROC table
+    const procRows = [
+      { area: "Habilidades comunicativas (expressiva)", prev: 70, ob: Number(answers.proc_habilidades || 0) },
+      { area: "Compreensão da linguagem oral", prev: 60, ob: Number(answers.proc_compreensao || 0) },
+      { area: "Aspectos do desenvolvimento cognitivo", prev: 70, ob: Number(answers.proc_cognitivo || 0) },
+    ];
+    const procTbl = `
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+        <thead><tr style="background:#1e3a5f;color:#fff">
+          <th style="padding:5px 8px;text-align:left;border:1px solid #1e3a5f">Área Avaliada</th>
+          <th style="padding:5px 8px;text-align:center;border:1px solid #1e3a5f;width:90px">Prevista</th>
+          <th style="padding:5px 8px;text-align:center;border:1px solid #1e3a5f;width:90px">Obtida</th>
+          <th style="padding:5px 8px;text-align:center;border:1px solid #1e3a5f;width:80px">%</th>
+        </tr></thead>
+        <tbody>
+          ${procRows.map((r, i) => `<tr style="background:${i % 2 ? "#f8fafc" : "#fff"}">
+            <td style="padding:5px 8px;border:1px solid #cbd5e1">${escapeHtml(r.area)}</td>
+            <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:center">${r.prev}</td>
+            <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:center">${r.ob}</td>
+            <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:center">${r.prev ? Math.round((r.ob / r.prev) * 100) : 0}%</td>
+          </tr>`).join("")}
+          <tr style="background:#e2e8f0;font-weight:700">
+            <td style="padding:5px 8px;border:1px solid #cbd5e1">TOTAL</td>
+            <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:center">200</td>
+            <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:center">${procTotal}</td>
+            <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:center">${Math.round((procTotal / 200) * 100)}%</td>
+          </tr>
+        </tbody>
+      </table>`;
+    body += sectionBox(`${secNum}. Pontuação PROC (Zorzi)`, procTbl);
+    secNum++;
+
+    // Parecer (highlighted)
+    if (answers.parecer && String(answers.parecer).trim()) {
+      body += `<div style="border:2px solid #1e3a5f;border-radius:6px;padding:12px 14px;margin:10px 0;page-break-inside:avoid;background:#f0f9ff">
+        <div style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1px;text-align:center;border-bottom:1px solid #1e3a5f;padding-bottom:4px;margin-bottom:8px">
+          ${secNum}. Parecer Fonoaudiológico
+        </div>
+        <div style="font-size:11px;line-height:1.55;color:#0f172a;white-space:pre-wrap;text-align:justify">${escapeHtml(String(answers.parecer))}</div>
+      </div>`;
+      secNum++;
+    }
+
+    // Recomendações (objetivos + orientacoes)
+    const recItems: string[] = [];
+    const objArr: string[] = Array.isArray(answers.objetivos_terapeuticos) ? answers.objetivos_terapeuticos : [];
+    objArr.filter(x => x !== "__other__").forEach(o => recItems.push(o));
+    if (objArr.includes("__other__") && others.objetivos_terapeuticos) recItems.push(others.objetivos_terapeuticos);
+    const orientArr: string[] = Array.isArray(answers.orientacoes_escola_lista) ? answers.orientacoes_escola_lista : [];
+    const orientList = orientArr.filter(x => x !== "__other__");
+    if (orientArr.includes("__other__") && others.orientacoes_escola_lista) orientList.push(others.orientacoes_escola_lista);
+    const orientTexto = answers.orientacoes_escola_texto;
+
+    if (recItems.length || orientList.length || (orientTexto && String(orientTexto).trim())) {
+      let inner = "";
+      if (recItems.length) {
+        inner += `<div style="margin-bottom:6px"><div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:3px">Objetivos Terapêuticos</div>
+          <ul style="margin:0;padding-left:18px;font-size:10.5px;line-height:1.45">${recItems.map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>`;
+      }
+      if (orientList.length) {
+        inner += `<div style="margin-bottom:6px"><div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:3px">Orientações à Instituição de Ensino</div>
+          <ul style="margin:0;padding-left:18px;font-size:10.5px;line-height:1.45">${orientList.map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>`;
+      }
+      if (orientTexto && String(orientTexto).trim()) {
+        inner += `<div style="font-size:10.5px;line-height:1.45;white-space:pre-wrap;color:#0f172a">${escapeHtml(String(orientTexto))}</div>`;
+      }
+      body += sectionBox(`${secNum}. Recomendações`, inner, { highlight: true });
+      secNum++;
+    }
+
+    // Conclusão (highlighted box)
+    if (answers.conclusao && String(answers.conclusao).trim()) {
+      body += `<div style="border:2px solid #1e3a5f;border-radius:6px;padding:12px 14px;margin:10px 0;page-break-inside:avoid;background:#f0f9ff">
+        <div style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1px;text-align:center;border-bottom:1px solid #1e3a5f;padding-bottom:4px;margin-bottom:8px">
+          ${secNum}. Conclusão Fonoaudiológica
+        </div>
+        <div style="font-size:11px;line-height:1.55;color:#0f172a;white-space:pre-wrap;text-align:justify">${escapeHtml(String(answers.conclusao))}</div>
+      </div>`;
+    }
 
     body += `
-      <div class="signature" style="margin-top:60px">
-        <div class="signature-line"></div>
-        <div class="name">${profNome}</div>
-        <div class="role">Fonoaudiólogo(a) — CBO 223810 — ${conselho}</div>
+      <div style="margin-top:50px;text-align:center;page-break-inside:avoid">
+        <div style="border-top:1px solid #1e293b;width:60%;margin:0 auto 4px;padding-top:30px"></div>
+        <div style="font-size:11px;font-weight:700">${escapeHtml(profNome)}</div>
+        <div style="font-size:10px;color:#475569">Fonoaudiólogo(a) — CBO 223810 — ${escapeHtml(conselho)}</div>
+        <div style="font-size:9.5px;color:#64748b;margin-top:4px">${escapeHtml(unidadeNome)} • ${fmtBr(dataRelatorio)}</div>
       </div>
     `;
     return body;
@@ -602,9 +731,19 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
     );
   };
 
+  const cleanLabelDocx = (label: string): string => {
+    let l = label
+      .replace(/\s*\(SELECIONE[^)]*\)/i, "")
+      .replace(/\s*\(ex\.:[^)]*\)/i, "")
+      .replace(/\s*\(única\)/i, "")
+      .replace(/\s*\(texto livre\)/i, "")
+      .trim();
+    if (/^selecione/i.test(l)) return "";
+    return l;
+  };
+
   const buildReportSections = (): ReportSection[] => {
     const sections: ReportSection[] = [];
-    // 2. PTS
     if (selectedPts) {
       const pts = selectedPts;
       sections.push({
@@ -621,10 +760,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           { label: "Plano de conduta", value: pickPlanoConduta(pts) || "Não informado" },
         ],
       });
-    } else {
-      sections.push({ title: "2. Identificação do PTS", emptyMessage: "Nenhum PTS vinculado encontrado para este paciente." });
     }
-    // 3. Ciclo
     if (selectedCycle) {
       const c = selectedCycle;
       sections.push({
@@ -640,13 +776,10 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           { label: "Observações clínicas", value: c.clinical_notes || "—" },
         ],
       });
-    } else {
-      sections.push({ title: "3. Gestão de Tratamento e Ciclo Terapêutico", emptyMessage: "Nenhuma gestão de tratamento vinculada encontrada para este paciente." });
     }
-    // 4..N. Avaliação / Protocolos / Parecer (sections from FONO_STEPS)
-    let n = 4;
+    let n = Math.max(sections.length + 2, 4);
     FONO_STEPS.forEach(step => {
-      if (step.id === "identificacao") return;
+      if (step.id === "identificacao" || step.id === "parecer" || step.id === "conclusao") return;
       step.sections.forEach(sec => {
         const fields: ReportField[] = [];
         sec.fields.forEach(f => {
@@ -660,7 +793,8 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           } else txt = String(v);
           if (justifs[f.id]) txt += ` — Justificativa: ${justifs[f.id]}`;
           if (obs[f.id]) txt += ` — Obs.: ${obs[f.id]}`;
-          fields.push({ label: f.label, value: txt });
+          const label = cleanLabelDocx(f.label);
+          fields.push({ label: label || "•", value: txt });
         });
         if (fields.length) {
           sections.push({ title: `${n}. ${sec.title}`, fields });
@@ -668,16 +802,56 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         }
       });
     });
-    // PROC
+    const procRows = [
+      ["Habilidades comunicativas (expressiva)", "70", String(answers.proc_habilidades || 0), `${Math.round(((Number(answers.proc_habilidades) || 0) / 70) * 100)}%`],
+      ["Compreensão da linguagem oral", "60", String(answers.proc_compreensao || 0), `${Math.round(((Number(answers.proc_compreensao) || 0) / 60) * 100)}%`],
+      ["Aspectos do desenvolvimento cognitivo", "70", String(answers.proc_cognitivo || 0), `${Math.round(((Number(answers.proc_cognitivo) || 0) / 70) * 100)}%`],
+      ["TOTAL", "200", String(procTotal), `${Math.round((procTotal / 200) * 100)}%`],
+    ];
     sections.push({
-      title: `${n}. Pontuação PROC`,
-      fields: [
-        { label: "Habilidades comunicativas (expressiva)", value: `${answers.proc_habilidades || 0} / 70` },
-        { label: "Compreensão da linguagem oral", value: `${answers.proc_compreensao || 0} / 60` },
-        { label: "Aspectos do desenvolvimento cognitivo", value: `${answers.proc_cognitivo || 0} / 70` },
-        { label: "TOTAL", value: `${procTotal} / 200` },
-      ],
+      title: `${n}. Pontuação PROC (Zorzi)`,
+      table: { headers: ["Área Avaliada", "Prevista", "Obtida", "%"], rows: procRows },
     });
+    n++;
+
+    if (answers.parecer && String(answers.parecer).trim()) {
+      sections.push({
+        title: `${n}. Parecer Fonoaudiológico`,
+        paragraphs: [String(answers.parecer)],
+        highlight: true,
+      });
+      n++;
+    }
+
+    const objArr: string[] = Array.isArray(answers.objetivos_terapeuticos) ? answers.objetivos_terapeuticos : [];
+    const objList = objArr.filter(x => x !== "__other__");
+    if (objArr.includes("__other__") && others.objetivos_terapeuticos) objList.push(others.objetivos_terapeuticos);
+    const orientArr: string[] = Array.isArray(answers.orientacoes_escola_lista) ? answers.orientacoes_escola_lista : [];
+    const orientList = orientArr.filter(x => x !== "__other__");
+    if (orientArr.includes("__other__") && others.orientacoes_escola_lista) orientList.push(others.orientacoes_escola_lista);
+    const orientTexto = answers.orientacoes_escola_texto;
+    if (objList.length || orientList.length || (orientTexto && String(orientTexto).trim())) {
+      const paragraphs: string[] = [];
+      if (objList.length) {
+        paragraphs.push("Objetivos Terapêuticos:");
+        objList.forEach(o => paragraphs.push(`• ${o}`));
+      }
+      if (orientList.length) {
+        paragraphs.push("Orientações à Instituição de Ensino:");
+        orientList.forEach(o => paragraphs.push(`• ${o}`));
+      }
+      if (orientTexto && String(orientTexto).trim()) paragraphs.push(String(orientTexto));
+      sections.push({ title: `${n}. Recomendações`, paragraphs, highlight: true });
+      n++;
+    }
+
+    if (answers.conclusao && String(answers.conclusao).trim()) {
+      sections.push({
+        title: `${n}. Conclusão Fonoaudiológica`,
+        paragraphs: [String(answers.conclusao)],
+        highlight: true,
+      });
+    }
     return sections;
   };
 
