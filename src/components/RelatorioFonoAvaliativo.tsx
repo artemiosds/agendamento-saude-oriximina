@@ -731,13 +731,8 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   };
 
   const cleanLabelDocx = (label: string): string => {
-    let l = label
-      .replace(/\s*\(SELECIONE[^)]*\)/i, "")
-      .replace(/\s*\(ex\.:[^)]*\)/i, "")
-      .replace(/\s*\(única\)/i, "")
-      .replace(/\s*\(texto livre\)/i, "")
-      .trim();
-    if (/^selecione/i.test(l)) return "";
+    let l = label.replace(/\s*\([^)]*\)/g, "").trim();
+    if (/^selecion(e|ar)\b/i.test(l)) return "";
     return l;
   };
 
