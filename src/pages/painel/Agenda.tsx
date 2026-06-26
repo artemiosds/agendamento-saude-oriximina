@@ -1781,108 +1781,115 @@ const Agenda: React.FC = () => {
       }).eq("id", ag.id);
 
       if (updateError) throw updateError;
-      
-      await updateAgendamento(ag.id, { status: "falta" as any });
 
-    // Update linked treatment session
-    try {
-      const { data: linkedSession } = await (supabase as any)
-        .from("treatment_sessions")
-        .select("id, cycle_id, status")
-        .eq("appointment_id", ag.id)
-        .in("status", ["pendente", "agendada"])
-        .maybeSingle();
+      // Fecha o modal imediatamente e mostra sucesso — restante roda em background
+      toast.success(`Falta registrada para ${ag.pacienteNome}.`);
+      setFaltaTarget(null);
 
-      if (linkedSession) {
-        await (supabase as any)
-          .from("treatment_sessions")
-          .update({
-            status: "falta",
-            absence_type: dados.tipoFalta,
+      // Atualiza estado local sem refetch pesado
+      updateAgendamento(ag.id, { status: "falta" as any }).catch((e) =>
+        console.error("[Agenda][Falta] updateAgendamento local:", e)
+      );
+
+      // Side-effects não bloqueantes
+      (async () => {
+        try {
+          const { data: linkedSession } = await (supabase as any)
+            .from("treatment_sessions")
+            .select("id, cycle_id, status")
+            .eq("appointment_id", ag.id)
+            .in("status", ["pendente", "agendada"])
+            .maybeSingle();
+
+          if (linkedSession) {
+            await (supabase as any)
+              .from("treatment_sessions")
+              .update({
+                status: "falta",
+                absence_type: dados.tipoFalta,
+                tipo_falta: dados.tipoFalta,
+                falta_justificativa: dados.descricao || dados.documento || null,
+                clinical_notes: JSON.stringify({
+                  tipo: "falta",
+                  tipo_falta: dados.tipoFalta,
+                  documento: dados.documento || null,
+                  descricao: dados.descricao || null,
+                  anexo_url: dados.anexoUrl || null,
+                  registrado_em: new Date().toISOString(),
+                  registrado_por: user?.nome || "Sistema",
+                }),
+              })
+              .eq("id", linkedSession.id);
+          }
+        } catch (err) {
+          console.error("Erro ao atualizar sessão de tratamento:", err);
+        }
+
+        logAction({
+          acao: "registrar_falta",
+          entidade: "agendamento",
+          entidadeId: ag.id,
+          modulo: "agenda",
+          user,
+          pacienteId: ag.pacienteId,
+          pacienteNome: ag.pacienteNome,
+          profissionalId: ag.profissionalId,
+          profissionalNome: ag.profissionalNome,
+          agendamentoId: ag.id,
+          detalhes: {
             tipo_falta: dados.tipoFalta,
-            falta_justificativa: dados.descricao || dados.documento || null,
-            clinical_notes: JSON.stringify({
-              tipo: "falta",
-              tipo_falta: dados.tipoFalta,
-              documento: dados.documento || null,
-              descricao: dados.descricao || null,
-              anexo_url: dados.anexoUrl || null,
-              registrado_em: new Date().toISOString(),
-              registrado_por: user?.nome || "Sistema",
-            }),
-          })
-          .eq("id", linkedSession.id);
-      }
-    } catch (err) {
-      console.error("Erro ao atualizar sessão de tratamento:", err);
-    }
+            documento: dados.documento || "",
+            descricao: dados.descricao || "",
+            anexo_url: dados.anexoUrl || "",
+            origem: "agenda_profissional_acao_falta"
+          },
+        }).catch((e) => console.error("[Agenda][Falta] logAction:", e));
 
-    await logAction({
-      acao: "registrar_falta",
-      entidade: "agendamento",
-      entidadeId: ag.id,
-      modulo: "agenda",
-      user,
-      pacienteId: ag.pacienteId,
-      pacienteNome: ag.pacienteNome,
-      profissionalId: ag.profissionalId,
-      profissionalNome: ag.profissionalNome,
-      agendamentoId: ag.id,
-      detalhes: {
-        tipo_falta: dados.tipoFalta,
-        documento: dados.documento || "",
-        descricao: dados.descricao || "",
-        anexo_url: dados.anexoUrl || "",
-        origem: "agenda_profissional_acao_falta"
-      },
-    });
+        const paciente = pacientes.find((p) => p.id === ag.pacienteId);
+        const unidade = unidades.find((u) => u.id === ag.unidadeId);
+        notify({
+          evento: "nao_compareceu" as any,
+          paciente_nome: ag.pacienteNome,
+          telefone: paciente?.telefone || "",
+          email: paciente?.email || "",
+          data_consulta: ag.data,
+          hora_consulta: ag.hora,
+          unidade: unidade?.nome || "",
+          profissional: ag.profissionalNome,
+          tipo_atendimento: ag.tipo,
+          status_agendamento: "falta",
+          id_agendamento: ag.id,
+          observacoes: dados.descricao || "",
+        }).catch((e) => console.error("[Agenda][Falta] notify:", e));
 
+        handleVagaLiberada(
+          {
+            id: ag.id,
+            data: ag.data,
+            hora: ag.hora,
+            profissionalId: ag.profissionalId,
+            profissionalNome: ag.profissionalNome,
+            unidadeId: ag.unidadeId,
+            salaId: ag.salaId,
+            tipo: ag.tipo,
+          },
+          "falta",
+          user,
+        ).catch((e) => console.error("[Agenda][Falta] handleVagaLiberada:", e));
 
-    const paciente = pacientes.find((p) => p.id === ag.pacienteId);
-    const unidade = unidades.find((u) => u.id === ag.unidadeId);
-    await notify({
-      evento: "nao_compareceu" as any,
-      paciente_nome: ag.pacienteNome,
-      telefone: paciente?.telefone || "",
-      email: paciente?.email || "",
-      data_consulta: ag.data,
-      hora_consulta: ag.hora,
-      unidade: unidade?.nome || "",
-      profissional: ag.profissionalNome,
-      tipo_atendimento: ag.tipo,
-      status_agendamento: "falta",
-      id_agendamento: ag.id,
-      observacoes: dados.descricao || "",
-    });
-    // WhatsApp: handled via notify webhook hook
+        try {
+          await (supabase as any).rpc('atualizar_status_falta', {
+            p_paciente_id: ag.pacienteId,
+            p_profissional_id: ag.profissionalId
+          });
+        } catch (err) {
+          console.error('[Agenda][Falta] Erro ao atualizar status falta no RPC:', err);
+        }
 
-    await handleVagaLiberada(
-      {
-        id: ag.id,
-        data: ag.data,
-        hora: ag.hora,
-        profissionalId: ag.profissionalId,
-        profissionalNome: ag.profissionalNome,
-        unidadeId: ag.unidadeId,
-        salaId: ag.salaId,
-        tipo: ag.tipo,
-      },
-      "falta",
-      user,
-    );
-
-    // Atualiza status FALTOSO/BLOQUEADO do paciente
-    try {
-      await (supabase as any).rpc('atualizar_status_falta', { 
-        p_paciente_id: ag.pacienteId,
-        p_profissional_id: ag.profissionalId
-      });
-    } catch (err) { 
-      console.error('[Agenda][Falta] Erro ao atualizar status falta no RPC:', err); 
-    }
-
-    await Promise.all([refreshAgendamentos(), refreshFila()]);
-    toast.success(`Falta registrada para ${ag.pacienteNome}.`);
+        Promise.all([refreshAgendamentos(), refreshFila()]).catch((e) =>
+          console.error("[Agenda][Falta] refresh:", e)
+        );
+      })();
     } catch (err: any) {
       console.error("[Agenda][Falta] Erro ao registrar falta", {
         pacienteId: ag.pacienteId,
