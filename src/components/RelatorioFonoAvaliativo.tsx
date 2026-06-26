@@ -731,9 +731,19 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
     );
   };
 
+  const cleanLabelDocx = (label: string): string => {
+    let l = label
+      .replace(/\s*\(SELECIONE[^)]*\)/i, "")
+      .replace(/\s*\(ex\.:[^)]*\)/i, "")
+      .replace(/\s*\(única\)/i, "")
+      .replace(/\s*\(texto livre\)/i, "")
+      .trim();
+    if (/^selecione/i.test(l)) return "";
+    return l;
+  };
+
   const buildReportSections = (): ReportSection[] => {
     const sections: ReportSection[] = [];
-    // 2. PTS
     if (selectedPts) {
       const pts = selectedPts;
       sections.push({
@@ -750,10 +760,7 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           { label: "Plano de conduta", value: pickPlanoConduta(pts) || "Não informado" },
         ],
       });
-    } else {
-      sections.push({ title: "2. Identificação do PTS", emptyMessage: "Nenhum PTS vinculado encontrado para este paciente." });
     }
-    // 3. Ciclo
     if (selectedCycle) {
       const c = selectedCycle;
       sections.push({
@@ -769,13 +776,10 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           { label: "Observações clínicas", value: c.clinical_notes || "—" },
         ],
       });
-    } else {
-      sections.push({ title: "3. Gestão de Tratamento e Ciclo Terapêutico", emptyMessage: "Nenhuma gestão de tratamento vinculada encontrada para este paciente." });
     }
-    // 4..N. Avaliação / Protocolos / Parecer (sections from FONO_STEPS)
-    let n = 4;
+    let n = Math.max(sections.length + 2, 4);
     FONO_STEPS.forEach(step => {
-      if (step.id === "identificacao") return;
+      if (step.id === "identificacao" || step.id === "parecer" || step.id === "conclusao") return;
       step.sections.forEach(sec => {
         const fields: ReportField[] = [];
         sec.fields.forEach(f => {
@@ -789,7 +793,8 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
           } else txt = String(v);
           if (justifs[f.id]) txt += ` — Justificativa: ${justifs[f.id]}`;
           if (obs[f.id]) txt += ` — Obs.: ${obs[f.id]}`;
-          fields.push({ label: f.label, value: txt });
+          const label = cleanLabelDocx(f.label);
+          fields.push({ label: label || "•", value: txt });
         });
         if (fields.length) {
           sections.push({ title: `${n}. ${sec.title}`, fields });
@@ -797,16 +802,56 @@ const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
         }
       });
     });
-    // PROC
+    const procRows = [
+      ["Habilidades comunicativas (expressiva)", "70", String(answers.proc_habilidades || 0), `${Math.round(((Number(answers.proc_habilidades) || 0) / 70) * 100)}%`],
+      ["Compreensão da linguagem oral", "60", String(answers.proc_compreensao || 0), `${Math.round(((Number(answers.proc_compreensao) || 0) / 60) * 100)}%`],
+      ["Aspectos do desenvolvimento cognitivo", "70", String(answers.proc_cognitivo || 0), `${Math.round(((Number(answers.proc_cognitivo) || 0) / 70) * 100)}%`],
+      ["TOTAL", "200", String(procTotal), `${Math.round((procTotal / 200) * 100)}%`],
+    ];
     sections.push({
-      title: `${n}. Pontuação PROC`,
-      fields: [
-        { label: "Habilidades comunicativas (expressiva)", value: `${answers.proc_habilidades || 0} / 70` },
-        { label: "Compreensão da linguagem oral", value: `${answers.proc_compreensao || 0} / 60` },
-        { label: "Aspectos do desenvolvimento cognitivo", value: `${answers.proc_cognitivo || 0} / 70` },
-        { label: "TOTAL", value: `${procTotal} / 200` },
-      ],
+      title: `${n}. Pontuação PROC (Zorzi)`,
+      table: { headers: ["Área Avaliada", "Prevista", "Obtida", "%"], rows: procRows },
     });
+    n++;
+
+    if (answers.parecer && String(answers.parecer).trim()) {
+      sections.push({
+        title: `${n}. Parecer Fonoaudiológico`,
+        paragraphs: [String(answers.parecer)],
+        highlight: true,
+      });
+      n++;
+    }
+
+    const objArr: string[] = Array.isArray(answers.objetivos_terapeuticos) ? answers.objetivos_terapeuticos : [];
+    const objList = objArr.filter(x => x !== "__other__");
+    if (objArr.includes("__other__") && others.objetivos_terapeuticos) objList.push(others.objetivos_terapeuticos);
+    const orientArr: string[] = Array.isArray(answers.orientacoes_escola_lista) ? answers.orientacoes_escola_lista : [];
+    const orientList = orientArr.filter(x => x !== "__other__");
+    if (orientArr.includes("__other__") && others.orientacoes_escola_lista) orientList.push(others.orientacoes_escola_lista);
+    const orientTexto = answers.orientacoes_escola_texto;
+    if (objList.length || orientList.length || (orientTexto && String(orientTexto).trim())) {
+      const paragraphs: string[] = [];
+      if (objList.length) {
+        paragraphs.push("Objetivos Terapêuticos:");
+        objList.forEach(o => paragraphs.push(`• ${o}`));
+      }
+      if (orientList.length) {
+        paragraphs.push("Orientações à Instituição de Ensino:");
+        orientList.forEach(o => paragraphs.push(`• ${o}`));
+      }
+      if (orientTexto && String(orientTexto).trim()) paragraphs.push(String(orientTexto));
+      sections.push({ title: `${n}. Recomendações`, paragraphs, highlight: true });
+      n++;
+    }
+
+    if (answers.conclusao && String(answers.conclusao).trim()) {
+      sections.push({
+        title: `${n}. Conclusão Fonoaudiológica`,
+        paragraphs: [String(answers.conclusao)],
+        highlight: true,
+      });
+    }
     return sections;
   };
 
