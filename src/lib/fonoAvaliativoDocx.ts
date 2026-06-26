@@ -3,12 +3,21 @@
 import {
   Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel,
   PageOrientation, ImageRun, Header, Footer, PageNumber,
+  Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
 } from "docx";
 import { saveAs } from "file-saver";
 import { loadDocumentConfig } from "@/lib/printLayout";
 
 export interface ReportField { label: string; value: string }
-export interface ReportSection { title: string; fields?: ReportField[]; paragraphs?: string[]; emptyMessage?: string }
+export interface ReportTable { headers: string[]; rows: string[][] }
+export interface ReportSection {
+  title: string;
+  fields?: ReportField[];
+  paragraphs?: string[];
+  table?: ReportTable;
+  highlight?: boolean;
+  emptyMessage?: string;
+}
 export interface FonoDocxInput {
   pacienteNome: string;
   dataRelatorio: string; // dd/mm/yyyy
