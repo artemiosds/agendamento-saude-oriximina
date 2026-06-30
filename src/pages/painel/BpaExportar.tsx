@@ -3388,6 +3388,42 @@ const BpaExportar: React.FC = () => {
                                 </Button>
                               )}
 
+                              {(selectedCategory === "missingCns" ||
+                                selectedCategory === "missingSexo" ||
+                                selectedCategory === "inferredSexo" ||
+                                selectedCategory === "invalidNascimento" ||
+                                selectedCategory === "missingMunicipio" ||
+                                selectedCategory === "missingNacionalidade" ||
+                                selectedCategory === "missingLogradouro") &&
+                                item.paciente_id && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8"
+                                  title="Abrir cadastro do paciente para corrigir o dado pendente"
+                                  onClick={() => abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)}
+                                >
+                                  Corrigir Cadastro
+                                </Button>
+                              )}
+
+                              {(selectedCategory === "missingCbo" ||
+                                selectedCategory === "fallbackCbo" ||
+                                selectedCategory === "invalidCbo") &&
+                                item.profissional_id && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8"
+                                  title="Abrir cadastro do profissional para corrigir o CBO"
+                                  onClick={() =>
+                                    abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
+                                  }
+                                >
+                                  Corrigir CBO
+                                </Button>
+                              )}
+
                               {item.paciente_id && (
                                 <Button
                                   variant="outline"
