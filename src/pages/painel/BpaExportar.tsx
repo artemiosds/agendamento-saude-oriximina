@@ -3235,6 +3235,26 @@ const BpaExportar: React.FC = () => {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
+                    variant="default"
+                    className="h-8"
+                    title="Reprocessar a análise agora (após correções)"
+                    disabled={loading}
+                    onClick={() => {
+                      const categoriaAnterior = selectedCategory;
+                      const posicaoAnterior = window.scrollY;
+                      void handleGerar().finally(() => {
+                        setSelectedCategory(categoriaAnterior);
+                        window.requestAnimationFrame(() => {
+                          window.scrollTo({ top: posicaoAnterior, behavior: "auto" });
+                        });
+                      });
+                    }}
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                    Reprocessar
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="outline"
                     className="h-8"
                     onClick={() => {
