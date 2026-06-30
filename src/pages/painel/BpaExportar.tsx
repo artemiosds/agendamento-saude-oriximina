@@ -1283,6 +1283,8 @@ const BpaExportar: React.FC = () => {
           "confirmado_chegada",
           "aguardando_atendimento",
           "em_atendimento",
+          "falta",
+          "paciente_faltou",
         ];
         let agQuery = (supabase as any)
           .from("agendamentos")
