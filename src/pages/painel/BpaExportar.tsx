@@ -3621,25 +3621,137 @@ const BpaExportar: React.FC = () => {
                 </div>
               )}
 
-              {results.warnings.length > 0 && !selectedCategory && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-amber-700 flex items-center gap-2">
-                      <AlertCircle className="h-5 w-5" />
-                      Avisos e Pendências ({results.warnings.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="max-h-60 overflow-y-auto space-y-1 text-sm text-muted-foreground font-mono bg-slate-50 p-4 rounded border">
-                      {results.warnings.map((w, i) => (
-                        <div key={i} className="border-b border-slate-200 last:border-0 py-1">
-                          {w}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {results.warnings.length > 0 && !selectedCategory && (() => {
+                const allItems = results.details.all || [];
+                const byNome = new Map<string, any>();
+                for (const it of allItems) {
+                  const k = String(it.paciente_nome || "").trim().toLocaleUpperCase("pt-BR");
+                  if (k && !byNome.has(k)) byNome.set(k, it);
+                }
+                const classify = (msg: string) => {
+                  const m = msg.toLowerCase();
+                  if (/duplicad/.test(m)) return "duplicate";
+                  if (/desatualizad|nome do prontu/.test(m)) return "info";
+                  if (/sigtap|procediment/.test(m)) return "sigtap";
+                  if (/\bcbo\b/.test(m)) return "cbo";
+                  if (/cns|sexo|nascimento|munic|nacionalidade|logradouro|raça|raca|etnia|cep/.test(m)) return "cadastro";
+                  return "info";
+                };
+                const enriched = results.warnings.map((w, i) => {
+                  const colon = w.indexOf(":");
+                  const nome = colon > 0 ? w.slice(0, colon).trim() : "";
+                  const item = nome ? byNome.get(nome.toLocaleUpperCase("pt-BR")) : undefined;
+                  return { i, msg: w, nome, item, kind: classify(w) };
+                });
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-amber-700 flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5" />
+                        Avisos e Pendências ({results.warnings.length})
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-auto h-8"
+                          onClick={() => { void handleGerar(); }}
+                          disabled={loading}
+                        >
+                          <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                          Reprocessar
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="max-h-80 overflow-y-auto rounded border bg-slate-50">
+                        <Table>
+                          <TableHeader className="bg-slate-100 sticky top-0">
+                            <TableRow>
+                              <TableHead className="w-[55%]">Aviso</TableHead>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead className="text-right">Ação</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {enriched.map(({ i, msg, item, kind }) => (
+                              <TableRow key={i}>
+                                <TableCell className="text-xs font-mono align-top py-2">{msg}</TableCell>
+                                <TableCell className="text-xs uppercase align-top py-2">
+                                  {kind === "duplicate" ? "Duplicata" :
+                                   kind === "cadastro" ? "Cadastro" :
+                                   kind === "cbo" ? "CBO" :
+                                   kind === "sigtap" ? "SIGTAP" : "Informativo"}
+                                </TableCell>
+                                <TableCell className="text-right align-top py-2">
+                                  <div className="flex justify-end gap-1 flex-wrap">
+                                    {item?.paciente_id && (kind === "cadastro" || kind === "info" || kind === "duplicate") && (
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        className="h-7"
+                                        onClick={() => abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)}
+                                      >
+                                        Corrigir Cadastro
+                                      </Button>
+                                    )}
+                                    {item?.profissional_id && kind === "cbo" && (
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        className="h-7"
+                                        onClick={() => abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)}
+                                      >
+                                        Corrigir CBO
+                                      </Button>
+                                    )}
+                                    {item?.paciente_id && item?.data_atendimento && (kind === "sigtap" || kind === "duplicate" || kind === "info") && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7"
+                                        onClick={() =>
+                                          setResolverModal({
+                                            open: true,
+                                            item: {
+                                              paciente_id: item.paciente_id,
+                                              paciente_nome: item.paciente_nome,
+                                              profissional_id: item.profissional_id,
+                                              profissional_nome: item.profissional_nome,
+                                              profissao: item.profissao,
+                                              profissao_categoria: item.profissao_categoria,
+                                              data_atendimento: item.data_atendimento,
+                                              unidade_id: item.unidade_id,
+                                              unidade_nome: item.unidade_nome,
+                                              cbo: item.cbo,
+                                              competencia: formData.competencia,
+                                            },
+                                          })
+                                        }
+                                      >
+                                        Resolver / Aditivos
+                                      </Button>
+                                    )}
+                                    {item && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7"
+                                        title="Ver na lista de todos os registros"
+                                        onClick={() => setSelectedCategory("all")}
+                                      >
+                                        Ver
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </>
           )}
         </div>
