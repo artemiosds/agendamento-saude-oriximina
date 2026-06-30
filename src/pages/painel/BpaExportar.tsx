@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer, Plus, Trash2 } from "lucide-react";
+import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer, Plus, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
@@ -3235,6 +3235,26 @@ const BpaExportar: React.FC = () => {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
+                    variant="default"
+                    className="h-8"
+                    title="Reprocessar a análise agora (após correções)"
+                    disabled={loading}
+                    onClick={() => {
+                      const categoriaAnterior = selectedCategory;
+                      const posicaoAnterior = window.scrollY;
+                      void handleGerar().finally(() => {
+                        setSelectedCategory(categoriaAnterior);
+                        window.requestAnimationFrame(() => {
+                          window.scrollTo({ top: posicaoAnterior, behavior: "auto" });
+                        });
+                      });
+                    }}
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                    Reprocessar
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="outline"
                     className="h-8"
                     onClick={() => {
@@ -3365,6 +3385,42 @@ const BpaExportar: React.FC = () => {
                                     : selectedCategory === "all"
                                       ? "Corrigir / Adicionar"
                                       : "Resolver SIGTAP"}
+                                </Button>
+                              )}
+
+                              {(selectedCategory === "missingCns" ||
+                                selectedCategory === "missingSexo" ||
+                                selectedCategory === "inferredSexo" ||
+                                selectedCategory === "invalidNascimento" ||
+                                selectedCategory === "missingMunicipio" ||
+                                selectedCategory === "missingNacionalidade" ||
+                                selectedCategory === "missingLogradouro") &&
+                                item.paciente_id && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8"
+                                  title="Abrir cadastro do paciente para corrigir o dado pendente"
+                                  onClick={() => abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)}
+                                >
+                                  Corrigir Cadastro
+                                </Button>
+                              )}
+
+                              {(selectedCategory === "missingCbo" ||
+                                selectedCategory === "fallbackCbo" ||
+                                selectedCategory === "invalidCbo") &&
+                                item.profissional_id && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8"
+                                  title="Abrir cadastro do profissional para corrigir o CBO"
+                                  onClick={() =>
+                                    abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
+                                  }
+                                >
+                                  Corrigir CBO
                                 </Button>
                               )}
 
