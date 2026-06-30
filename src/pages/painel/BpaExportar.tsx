@@ -3390,41 +3390,60 @@ const BpaExportar: React.FC = () => {
                                 </Button>
                               )}
 
-                              {(selectedCategory === "missingCns" ||
-                                selectedCategory === "missingSexo" ||
-                                selectedCategory === "inferredSexo" ||
-                                selectedCategory === "invalidNascimento" ||
-                                selectedCategory === "missingMunicipio" ||
-                                selectedCategory === "missingNacionalidade" ||
-                                selectedCategory === "missingLogradouro") &&
-                                item.paciente_id && (
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  className="h-8"
-                                  title="Abrir cadastro do paciente para corrigir o dado pendente"
-                                  onClick={() => abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)}
-                                >
-                                  Corrigir Cadastro
-                                </Button>
-                              )}
-
-                              {(selectedCategory === "missingCbo" ||
-                                selectedCategory === "fallbackCbo" ||
-                                selectedCategory === "invalidCbo") &&
-                                item.profissional_id && (
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  className="h-8"
-                                  title="Abrir cadastro do profissional para corrigir o CBO"
-                                  onClick={() =>
-                                    abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
-                                  }
-                                >
-                                  Corrigir CBO
-                                </Button>
-                              )}
+                              {(() => {
+                                const pend = String(item.pendencia || "").toLowerCase();
+                                const isPacienteCadCat =
+                                  selectedCategory === "missingCns" ||
+                                  selectedCategory === "missingSexo" ||
+                                  selectedCategory === "inferredSexo" ||
+                                  selectedCategory === "invalidNascimento" ||
+                                  selectedCategory === "missingMunicipio" ||
+                                  selectedCategory === "missingNacionalidade" ||
+                                  selectedCategory === "missingLogradouro";
+                                const isCboCat =
+                                  selectedCategory === "missingCbo" ||
+                                  selectedCategory === "fallbackCbo" ||
+                                  selectedCategory === "invalidCbo";
+                                const isAggregate =
+                                  selectedCategory === "all" || selectedCategory === "critical";
+                                const pendPaciente =
+                                  /cns|sexo|nascimento|munic|nacionalidade|logradouro|raça|raca|etnia|cep/.test(pend);
+                                const pendCbo = /cbo/.test(pend);
+                                const showCadastro =
+                                  item.paciente_id && (isPacienteCadCat || (isAggregate && pendPaciente));
+                                const showCbo =
+                                  item.profissional_id && (isCboCat || (isAggregate && pendCbo));
+                                return (
+                                  <>
+                                    {showCadastro && (
+                                      <Button
+                                        variant="default"
+                                        size="sm"
+                                        className="h-8"
+                                        title="Abrir cadastro do paciente para corrigir o dado pendente"
+                                        onClick={() =>
+                                          abrirPaginaParaCorrecao(`/painel/pacientes?id=${item.paciente_id}`)
+                                        }
+                                      >
+                                        Corrigir Cadastro
+                                      </Button>
+                                    )}
+                                    {showCbo && (
+                                      <Button
+                                        variant="default"
+                                        size="sm"
+                                        className="h-8"
+                                        title="Abrir cadastro do profissional para corrigir o CBO"
+                                        onClick={() =>
+                                          abrirPaginaParaCorrecao(`/painel/funcionarios?id=${item.profissional_id}`)
+                                        }
+                                      >
+                                        Corrigir CBO
+                                      </Button>
+                                    )}
+                                  </>
+                                );
+                              })()}
 
                               {item.paciente_id && (
                                 <Button
