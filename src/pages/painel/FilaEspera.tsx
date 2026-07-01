@@ -65,6 +65,7 @@ import { checkPatientDuplicity } from "@/lib/paciente-duplicity";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { getManchesterConfig } from "@/lib/manchesterProtocol";
+import FilaEsperaItemRow from "./fila/FilaEsperaItemRow";
 
 const ABSENCE_REASONS = [
   { value: "saude", label: "Problema de Saúde" },
