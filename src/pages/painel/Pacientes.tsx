@@ -1156,6 +1156,38 @@ const Pacientes: React.FC = () => {
     setFichaData(null);
   };
 
+  // Refs para handlers estáveis passados ao PacienteItemCard memoizado.
+  const handleOpenFichaRef = useRef(handleOpenFicha);
+  const openApacLaudoRef = useRef(openApacLaudo);
+  const openFilaDialogRef = useRef(openFilaDialog);
+  const openEditRef = useRef(openEdit);
+  const handleDeleteRef = useRef(handleDelete);
+  handleOpenFichaRef.current = handleOpenFicha;
+  openApacLaudoRef.current = openApacLaudo;
+  openFilaDialogRef.current = openFilaDialog;
+  openEditRef.current = openEdit;
+  handleDeleteRef.current = handleDelete;
+
+  const stableImprimirFicha = useCallback((p: any) => handleOpenFichaRef.current(p, 'completa'), []);
+  const stableImprimirLaudoApac = useCallback((p: any) => openApacLaudoRef.current(p), []);
+  const stableAddFila = useCallback((p: any) => openFilaDialogRef.current(p), []);
+  const stableOpenDetalhe = useCallback((p: any) => {
+    setDetalhePaciente(p);
+    setDetalheOpen(true);
+  }, []);
+  const stableVerProntuarios = useCallback((p: any) => {
+    navigate(`/painel/prontuario?pacienteId=${p.id}&pacienteNome=${encodeURIComponent(p.nome)}`);
+  }, [navigate]);
+  const stableEditar = useCallback((p: any) => openEditRef.current(p), []);
+  const stableDelete = useCallback((p: any) => handleDeleteRef.current(p), []);
+
+  const unidadesById = useMemo(() => {
+    const map = new Map<string, any>();
+    unidades.forEach((u) => map.set(u.id, u));
+    return map;
+  }, [unidades]);
+
+
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader
