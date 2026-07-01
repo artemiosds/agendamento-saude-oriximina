@@ -47,6 +47,7 @@ import "@/styles/ficha-impressao.css";
 import ApacLaudoModal from "@/components/pacientes/ApacLaudoModal";
 import { FileSignature } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import PacienteItemCard from "./pacientes/PacienteItemCard";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 
 interface FichaDados {
