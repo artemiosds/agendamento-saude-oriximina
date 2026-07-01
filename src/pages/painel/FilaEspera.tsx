@@ -1140,6 +1140,88 @@ const FilaEspera: React.FC = () => {
     return pacientes.filter((paciente) => paciente.nome.toLowerCase().includes(query)).slice(0, 5);
   }, [pacientes, form.pacienteNome, form.pacienteId]);
 
+  // Refs para handlers estáveis passados ao FilaEsperaItemRow memoizado.
+  const confirmarEncaixeRef = useRef(confirmarEncaixe);
+  const expirarReservaRef = useRef(expirarReserva);
+  const updateFilaRef = useRef(updateFila);
+  const removeFromFilaRef = useRef(removeFromFila);
+  const notifyRef = useRef(notify);
+  const openAbsenceModalRef = useRef(openAbsenceModal);
+  const openRescheduleModalRef = useRef(openRescheduleModal);
+  const openEditRef = useRef(openEdit);
+  const pacienteMapRef = useRef(pacienteMap);
+  const unitMapRef = useRef(unitMap);
+  const employeeMapRef = useRef(employeeMap);
+  confirmarEncaixeRef.current = confirmarEncaixe;
+  expirarReservaRef.current = expirarReserva;
+  updateFilaRef.current = updateFila;
+  removeFromFilaRef.current = removeFromFila;
+  notifyRef.current = notify;
+  openAbsenceModalRef.current = openAbsenceModal;
+  openRescheduleModalRef.current = openRescheduleModal;
+  openEditRef.current = openEdit;
+  pacienteMapRef.current = pacienteMap;
+  unitMapRef.current = unitMap;
+  employeeMapRef.current = employeeMap;
+
+  const stableConfirmarEncaixe = useCallback(
+    (f: any, slot: any) => confirmarEncaixeRef.current(f.id, slot, user),
+    [user],
+  );
+  const stableExpirarReserva = useCallback(
+    (f: any, slot: any) => expirarReservaRef.current(f.id, slot, user),
+    [user],
+  );
+  const stableChamar = useCallback(async (f: any) => {
+    await updateFilaRef.current(f.id, {
+      status: "chamado",
+      horaChamada: new Date().toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    });
+    const pac = pacienteMapRef.current.get(f.pacienteId);
+    const unidadeN = unitMapRef.current.get(f.unidadeId);
+    const prof = f.profissionalId ? employeeMapRef.current.get(f.profissionalId) : null;
+    await notifyRef.current({
+      evento: "fila_chamada",
+      paciente_nome: f.pacienteNome,
+      telefone: pac?.telefone || "",
+      email: pac?.email || "",
+      data_consulta: new Date().toISOString().split("T")[0],
+      hora_consulta: new Date().toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      unidade: unidadeN?.nome || "",
+      profissional: prof?.nome || "",
+      tipo_atendimento: "Chamada da Fila",
+      status_agendamento: "chamado",
+      id_agendamento: "",
+    });
+    toast.info("Paciente chamado!");
+  }, []);
+  const stableIniciar = useCallback(
+    (f: any) => updateFilaRef.current(f.id, { status: "em_atendimento" }),
+    [],
+  );
+  const stableFinalizar = useCallback(
+    (f: any) => updateFilaRef.current(f.id, { status: "atendido" }),
+    [],
+  );
+  const stableMarcarFalta = useCallback((f: any) => openAbsenceModalRef.current(f), []);
+  const stableReagendar = useCallback((f: any) => openRescheduleModalRef.current(f), []);
+  const stableDetalhes = useCallback((f: any) => {
+    setDetalheFila(f);
+    setDetalheOpen(true);
+  }, []);
+  const stableEditar = useCallback((f: any) => openEditRef.current(f), []);
+  const stableRemover = useCallback(async (f: any) => {
+    await removeFromFilaRef.current(f.id);
+    toast.success("Removido da fila!");
+  }, []);
+
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
