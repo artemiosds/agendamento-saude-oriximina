@@ -47,6 +47,7 @@ import "@/styles/ficha-impressao.css";
 import ApacLaudoModal from "@/components/pacientes/ApacLaudoModal";
 import { FileSignature } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import PacienteItemCard from "./pacientes/PacienteItemCard";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 
 interface FichaDados {
@@ -1156,6 +1157,38 @@ const Pacientes: React.FC = () => {
     setFichaData(null);
   };
 
+  // Refs para handlers estáveis passados ao PacienteItemCard memoizado.
+  const handleOpenFichaRef = useRef(handleOpenFicha);
+  const openApacLaudoRef = useRef(openApacLaudo);
+  const openFilaDialogRef = useRef(openFilaDialog);
+  const openEditRef = useRef(openEdit);
+  const handleDeleteRef = useRef(handleDelete);
+  handleOpenFichaRef.current = handleOpenFicha;
+  openApacLaudoRef.current = openApacLaudo;
+  openFilaDialogRef.current = openFilaDialog;
+  openEditRef.current = openEdit;
+  handleDeleteRef.current = handleDelete;
+
+  const stableImprimirFicha = useCallback((p: any) => handleOpenFichaRef.current(p, 'completa'), []);
+  const stableImprimirLaudoApac = useCallback((p: any) => openApacLaudoRef.current(p), []);
+  const stableAddFila = useCallback((p: any) => openFilaDialogRef.current(p), []);
+  const stableOpenDetalhe = useCallback((p: any) => {
+    setDetalhePaciente(p);
+    setDetalheOpen(true);
+  }, []);
+  const stableVerProntuarios = useCallback((p: any) => {
+    navigate(`/painel/prontuario?pacienteId=${p.id}&pacienteNome=${encodeURIComponent(p.nome)}`);
+  }, [navigate]);
+  const stableEditar = useCallback((p: any) => openEditRef.current(p), []);
+  const stableDelete = useCallback((p: any) => handleDeleteRef.current(p), []);
+
+  const unidadesById = useMemo(() => {
+    const map = new Map<string, any>();
+    unidades.forEach((u) => map.set(u.id, u));
+    return map;
+  }, [unidades]);
+
+
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader
@@ -1394,154 +1427,29 @@ const Pacientes: React.FC = () => {
         {filtered.slice(0, visibleCount).map((p) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
-
+          const unidadeNome =
+            unidadesById.get(filaEntry?.unidadeId || user?.unidadeId || "")?.nome || "";
           return (
-            <Card key={p.id} className="shadow-card border-0 hover:shadow-elevated transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-foreground">{p.nome}</h3>
-                      {naFila && (
-                        <Badge
-                          variant="outline"
-                          className="bg-warning/10 text-warning border-warning/30 text-[10px] px-1.5 py-0"
-                        >
-                          <Clock className="w-3 h-3 mr-0.5" /> FILA DE ESPERA
-                        </Badge>
-                      )}
-                      {pacientesDemandaReprimida.has(p.id) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
-                        >
-                          <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{p.cpf || "Sem CPF"}</p>
-                    {p.cns && (
-                      <p className="text-xs text-muted-foreground mt-0.5">CNS: {formatCNS(p.cns)}</p>
-                    )}
-                    {naFila && filaEntry && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Entrada: {filaEntry.horaChegada} •{" "}
-                        {filaEntry.prioridade !== "normal" ? filaEntry.prioridade : ""}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-1 flex-wrap">
-                    <ContactActionButton
-                      phone={p.telefone}
-                      patientName={p.nome}
-                      unitName={unidades.find((u) => u.id === (filaEntry?.unidadeId || user?.unidadeId))?.nome}
-                    />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      onClick={() => handleOpenFicha(p, 'completa')}
-                      title="Imprimir Ficha"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      onClick={() => openApacLaudo(p)}
-                      title="Imprimir Laudo APAC"
-                    >
-                      <FileSignature className="w-3.5 h-3.5" />
-                    </Button>
-                    {canAddToFila && !naFila && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 text-warning"
-                        onClick={() => openFilaDialog(p)}
-                        title="Adicionar à fila"
-                      >
-                        <Users className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      onClick={() => {
-                        setDetalhePaciente(p);
-                        setDetalheOpen(true);
-                      }}
-                      title="Detalhes"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      onClick={() =>
-                        navigate(`/painel/prontuario?pacienteId=${p.id}&pacienteNome=${encodeURIComponent(p.nome)}`)
-                      }
-                      title="Ver Prontuários"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(p)}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    {canDelete && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir paciente?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Excluir {p.nome}? Será verificado se há agendamentos ativos vinculados. Esta ação é
-                              irreversível e será registrada em log.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(p)}
-                              className="bg-destructive text-destructive-foreground"
-                            >
-                              Excluir
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 sm:gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
-                  <span className="flex items-center gap-1 min-w-0">
-                    <Phone className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">{p.telefone}</span>
-                  </span>
-                  {p.email && (
-                    <span className="flex items-center gap-1 min-w-0">
-                      <Mail className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{p.email}</span>
-                    </span>
-                  )}
-                </div>
-                {(p.descricaoClinica || p.cid) && (
-                  <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
-                    {p.descricaoClinica && <p>🩺 {p.descricaoClinica}</p>}
-                    {p.cid && <p>CID: {p.cid}</p>}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <PacienteItemCard
+              key={p.id}
+              paciente={p}
+              naFila={naFila}
+              filaEntry={filaEntry}
+              demandaReprimida={pacientesDemandaReprimida.has(p.id)}
+              unidadeNome={unidadeNome}
+              canAddToFila={canAddToFila}
+              canDelete={canDelete}
+              onImprimirFicha={stableImprimirFicha}
+              onImprimirLaudoApac={stableImprimirLaudoApac}
+              onAddFila={stableAddFila}
+              onOpenDetalhe={stableOpenDetalhe}
+              onVerProntuarios={stableVerProntuarios}
+              onEditar={stableEditar}
+              onDelete={stableDelete}
+            />
           );
         })}
+
       </div>
       {visibleCount < filtered.length && (
         <div className="flex justify-center pt-2">

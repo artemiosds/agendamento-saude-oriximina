@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
+import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -2811,10 +2812,11 @@ const Agenda: React.FC = () => {
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Paciente</Label>
                       <div className="relative">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
+                        <DebouncedInput
                           placeholder="Buscar paciente, CPF, CNS..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
+                          debounceMs={300}
                           className="pl-10 h-11 text-sm font-medium bg-muted/20 border-muted focus:bg-background transition-all"
                         />
                       </div>
