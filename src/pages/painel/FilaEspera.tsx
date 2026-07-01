@@ -65,6 +65,7 @@ import { checkPatientDuplicity } from "@/lib/paciente-duplicity";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { getManchesterConfig } from "@/lib/manchesterProtocol";
+import FilaEsperaItemRow from "./fila/FilaEsperaItemRow";
 
 const ABSENCE_REASONS = [
   { value: "saude", label: "Problema de Saúde" },
@@ -1140,6 +1141,88 @@ const FilaEspera: React.FC = () => {
     return pacientes.filter((paciente) => paciente.nome.toLowerCase().includes(query)).slice(0, 5);
   }, [pacientes, form.pacienteNome, form.pacienteId]);
 
+  // Refs para handlers estáveis passados ao FilaEsperaItemRow memoizado.
+  const confirmarEncaixeRef = useRef(confirmarEncaixe);
+  const expirarReservaRef = useRef(expirarReserva);
+  const updateFilaRef = useRef(updateFila);
+  const removeFromFilaRef = useRef(removeFromFila);
+  const notifyRef = useRef(notify);
+  const openAbsenceModalRef = useRef(openAbsenceModal);
+  const openRescheduleModalRef = useRef(openRescheduleModal);
+  const openEditRef = useRef(openEdit);
+  const pacienteMapRef = useRef(pacienteMap);
+  const unitMapRef = useRef(unitMap);
+  const employeeMapRef = useRef(employeeMap);
+  confirmarEncaixeRef.current = confirmarEncaixe;
+  expirarReservaRef.current = expirarReserva;
+  updateFilaRef.current = updateFila;
+  removeFromFilaRef.current = removeFromFila;
+  notifyRef.current = notify;
+  openAbsenceModalRef.current = openAbsenceModal;
+  openRescheduleModalRef.current = openRescheduleModal;
+  openEditRef.current = openEdit;
+  pacienteMapRef.current = pacienteMap;
+  unitMapRef.current = unitMap;
+  employeeMapRef.current = employeeMap;
+
+  const stableConfirmarEncaixe = useCallback(
+    (f: any, slot: any) => confirmarEncaixeRef.current(f.id, slot, user),
+    [user],
+  );
+  const stableExpirarReserva = useCallback(
+    (f: any, slot: any) => expirarReservaRef.current(f.id, slot, user),
+    [user],
+  );
+  const stableChamar = useCallback(async (f: any) => {
+    await updateFilaRef.current(f.id, {
+      status: "chamado",
+      horaChamada: new Date().toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    });
+    const pac = pacienteMapRef.current.get(f.pacienteId);
+    const unidadeN = unitMapRef.current.get(f.unidadeId);
+    const prof = f.profissionalId ? employeeMapRef.current.get(f.profissionalId) : null;
+    await notifyRef.current({
+      evento: "fila_chamada",
+      paciente_nome: f.pacienteNome,
+      telefone: pac?.telefone || "",
+      email: pac?.email || "",
+      data_consulta: new Date().toISOString().split("T")[0],
+      hora_consulta: new Date().toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      unidade: unidadeN?.nome || "",
+      profissional: prof?.nome || "",
+      tipo_atendimento: "Chamada da Fila",
+      status_agendamento: "chamado",
+      id_agendamento: "",
+    });
+    toast.info("Paciente chamado!");
+  }, []);
+  const stableIniciar = useCallback(
+    (f: any) => updateFilaRef.current(f.id, { status: "em_atendimento" }),
+    [],
+  );
+  const stableFinalizar = useCallback(
+    (f: any) => updateFilaRef.current(f.id, { status: "atendido" }),
+    [],
+  );
+  const stableMarcarFalta = useCallback((f: any) => openAbsenceModalRef.current(f), []);
+  const stableReagendar = useCallback((f: any) => openRescheduleModalRef.current(f), []);
+  const stableDetalhes = useCallback((f: any) => {
+    setDetalheFila(f);
+    setDetalheOpen(true);
+  }, []);
+  const stableEditar = useCallback((f: any) => openEditRef.current(f), []);
+  const stableRemover = useCallback(async (f: any) => {
+    await removeFromFilaRef.current(f.id);
+    toast.success("Removido da fila!");
+  }, []);
+
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -2002,295 +2085,47 @@ const FilaEspera: React.FC = () => {
             const waitMin = getWaitMinutes(f, now);
             const waitColor = getWaitColor(waitMin, f.prioridade);
             const manchesterRisco = getManchesterConfig((f as any).classificacaoRisco);
+            const profLabel = prof
+              ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}`
+              : "Qualquer profissional";
+            const statusInfo = statusLabels[f.status];
             return (
-              <Card
+              <FilaEsperaItemRow
                 key={f.id}
-                className={cn("shadow-card border-0 transition-all", isChamado && "ring-2 ring-primary/30")}
-                style={{
-                  borderLeft: manchesterRisco
-                    ? `6px solid ${manchesterRisco.color}`
-                    : isActive && waitMin > 60
-                      ? "6px solid hsl(var(--destructive))"
-                      : isActive && waitMin >= 30
-                        ? "6px solid hsl(var(--warning))"
-                        : isActive
-                          ? "6px solid hsl(var(--success))"
-                          : undefined,
-                }}
-              >
-                <CardContent className="p-3 sm:p-4 flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="flex flex-col items-center gap-1 shrink-0">
-                      <div
-                        className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
-                          isActive ? `${waitColor.bg} ${waitColor.text}` : "gradient-primary text-primary-foreground",
-                        )}
-                      >
-                        {pageStart + i + 1}
-                      </div>
-                      {isActive && (
-                        <span
-                          className={cn(
-                            "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
-                            waitColor.bg,
-                            waitColor.text,
-                          )}
-                        >
-                          {formatWaitTime(waitMin)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-foreground">{resolvePaciente(f.pacienteId, f.pacienteNome)}</p>
-                        {f.origemCadastro === "demanda_reprimida" && (
-                          <Badge
-                            variant="outline"
-                            className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
-                          >
-                            <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
-                          </Badge>
-                        )}
-                        {manchesterRisco && (
-                          <Badge
-                            className={`text-white text-[10px] px-1.5 py-0 ${manchesterRisco.pulse ? "animate-[pulse-manchester_1.5s_infinite]" : ""}`}
-                            style={{ backgroundColor: manchesterRisco.color }}
-                          >
-                            {manchesterRisco.subtitle}
-                          </Badge>
-                        )}
-                        {isActive && (
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full",
-                              waitColor.bg,
-                              waitColor.text,
-                            )}
-                          >
-                            <Clock className="w-3 h-3" />
-                            {f.prioridade === "urgente" ? "URGENTE" : `Espera: ${formatWaitTime(waitMin)}`}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {unidade?.nome || f.setor} •{" "}
-                        {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}` : "Qualquer profissional"}{" "}
-                        • Chegou: {f.horaChegada}
-                      </p>
-                      {absenceHistory[f.pacienteId] && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive cursor-help mt-0.5">
-                                <TriangleAlert className="w-3 h-3" /> Falta anterior
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-xs">
-                              <p className="font-semibold text-sm">Última falta: {absenceHistory[f.pacienteId].date}</p>
-                              <p className="text-sm">Motivo: {absenceHistory[f.pacienteId].reason}</p>
-                              {absenceHistory[f.pacienteId].obs && (
-                                <p className="text-sm text-muted-foreground">{absenceHistory[f.pacienteId].obs}</p>
-                              )}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      {f.dataSolicitacaoOriginal && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          📅 Solicitação original: {f.dataSolicitacaoOriginal}
-                        </p>
-                      )}
-                      {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">📋 {f.observacoes}</p>}
-                      {f.descricaoClinica && (
-                        <p className="text-xs text-muted-foreground mt-0.5">🩺 {f.descricaoClinica}</p>
-                      )}
-                      {f.cid && <p className="text-xs text-muted-foreground mt-0.5">CID: {f.cid}</p>}
-                      {isChamado && reservaTime && !reservaTime.expired && (
-                        <div className="flex items-center gap-1 mt-1 text-xs font-medium text-primary">
-                          <Timer className="w-3 h-3" />
-                          Reserva: {reservaTime.minutes}:{String(reservaTime.seconds).padStart(2, "0")} restantes —
-                          Vaga: {reservaTime.slot.hora} com {reservaTime.slot.profissionalNome}
-                        </div>
-                      )}
-                      {isChamado && reservaTime && reservaTime.expired && (
-                        <div className="flex items-center gap-1 mt-1 text-xs font-medium text-destructive">
-                          <Timer className="w-3 h-3" />
-                          Reserva expirada!
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <ContactActionButton
-                      phone={pacienteMap.get(f.pacienteId)?.telefone}
-                      patientName={f.pacienteNome}
-                      unitName={unidade?.nome}
-                    />
-                    <Badge className={cn("shrink-0", prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
-                      {prioridadeLabel[f.prioridade] || f.prioridade}
-                    </Badge>
-                    <span
-                      className={cn(
-                        "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
-                        statusLabels[f.status]?.color,
-                      )}
-                    >
-                      {statusLabels[f.status]?.label}
-                    </span>
-                  </div>
-                  {canManage && (
-                    <div className="flex gap-1 shrink-0 flex-wrap">
-                      {isChamado && reservaTime?.slot && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="h-8 bg-success text-success-foreground hover:bg-success/90"
-                          onClick={() => confirmarEncaixe(f.id, reservaTime.slot, user)}
-                          title="Confirmar Encaixe"
-                        >
-                          <CheckCircle className="w-4 h-4 mr-1" /> Confirmar
-                        </Button>
-                      )}
-                      {isChamado && reservaTime?.slot && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => expirarReserva(f.id, reservaTime.slot, user)}
-                          title="Expirar Reserva / Chamar Próximo"
-                        >
-                          <ArrowRight className="w-4 h-4 mr-1" /> Próximo
-                        </Button>
-                      )}
-                      {!isChamado && f.status === "aguardando" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8"
-                          onClick={async () => {
-                            await updateFila(f.id, {
-                              status: "chamado",
-                              horaChamada: new Date().toLocaleTimeString("pt-BR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }),
-                            });
-                            const pac = pacienteMap.get(f.pacienteId);
-                            const unidadeN = unitMap.get(f.unidadeId);
-                            await notify({
-                              evento: "fila_chamada",
-                              paciente_nome: f.pacienteNome,
-                              telefone: pac?.telefone || "",
-                              email: pac?.email || "",
-                              data_consulta: new Date().toISOString().split("T")[0],
-                              hora_consulta: new Date().toLocaleTimeString("pt-BR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }),
-                              unidade: unidadeN?.nome || "",
-                              profissional: prof?.nome || "",
-                              tipo_atendimento: "Chamada da Fila",
-                              status_agendamento: "chamado",
-                              id_agendamento: "",
-                            });
-                            toast.info("Paciente chamado!");
-                          }}
-                          title="Chamar"
-                        >
-                          <Bell className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {f.status !== "encaixado" &&
-                        f.status !== "atendido" &&
-                        f.status !== "cancelado" &&
-                        !isChamado && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8"
-                              onClick={() => updateFila(f.id, { status: "em_atendimento" })}
-                              title="Iniciar"
-                            >
-                              <Play className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8"
-                              onClick={() => updateFila(f.id, { status: "atendido" })}
-                              title="Finalizar"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8"
-                              onClick={() => openAbsenceModal(f)}
-                              title="Marcar Falta"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8"
-                              onClick={() => openRescheduleModal(f)}
-                              title="Reagendar"
-                            >
-                              <CalendarClock className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8"
-                        onClick={() => {
-                          setDetalheFila(f);
-                          setDetalheOpen(true);
-                        }}
-                        title="Detalhes"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-8" onClick={() => openEdit(f)} title="Editar">
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="h-8 text-destructive" title="Remover">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Remover da fila?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Tem certeza que deseja remover {resolvePaciente(f.pacienteId, f.pacienteNome)} da fila?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={async () => {
-                                await removeFromFila(f.id);
-                                toast.success("Removido da fila!");
-                              }}
-                            >
-                              Remover
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                f={f}
+                numero={pageStart + i + 1}
+                pacienteNomeResolved={resolvePaciente(f.pacienteId, f.pacienteNome)}
+                pacienteTelefone={pacienteMap.get(f.pacienteId)?.telefone}
+                profLabel={profLabel}
+                unidadeNome={unidade?.nome || ""}
+                isChamado={isChamado}
+                isActive={isActive}
+                waitMin={waitMin}
+                waitBgClass={waitColor.bg}
+                waitTextClass={waitColor.text}
+                waitLabel={formatWaitTime(waitMin)}
+                reservaTime={reservaTime as any}
+                manchesterRisco={manchesterRisco as any}
+                absenceInfo={absenceHistory[f.pacienteId]}
+                prioridadeBadgeClass={prioridadeColors[f.prioridade] || prioridadeColors.normal}
+                prioridadeLabelText={prioridadeLabel[f.prioridade] || f.prioridade}
+                statusLabelText={statusInfo?.label || f.status}
+                statusLabelClass={statusInfo?.color || ""}
+                canManage={canManage}
+                onConfirmarEncaixe={stableConfirmarEncaixe}
+                onExpirarReserva={stableExpirarReserva}
+                onChamar={stableChamar}
+                onIniciar={stableIniciar}
+                onFinalizar={stableFinalizar}
+                onMarcarFalta={stableMarcarFalta}
+                onReagendar={stableReagendar}
+                onDetalhes={stableDetalhes}
+                onEditar={stableEditar}
+                onRemover={stableRemover}
+              />
             );
           })
+
         )}
       </div>
 
