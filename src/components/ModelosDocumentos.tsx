@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense, useCallback } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import DOMPurify from 'dompurify';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
