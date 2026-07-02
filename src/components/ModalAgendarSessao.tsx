@@ -219,7 +219,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const prevMonth = () => setViewMonth(p => p.month === 0 ? { year: p.year - 1, month: 11 } : { year: p.year, month: p.month - 1 });
   const nextMonth = () => setViewMonth(p => p.month === 11 ? { year: p.year + 1, month: 0 } : { year: p.year, month: p.month + 1 });
 
-  const canGoPrev = viewMonth.year > parseInt(todayStr.substring(0, 4)) || (viewMonth.year === parseInt(todayStr.substring(0, 4)) && viewMonth.month > parseInt(todayStr.substring(5, 7)) - 1);
+  const canGoPrev = isMaster || mode === 'remarcar' || viewMonth.year > parseInt(todayStr.substring(0, 4)) || (viewMonth.year === parseInt(todayStr.substring(0, 4)) && viewMonth.month > parseInt(todayStr.substring(5, 7)) - 1);
 
   const handleConfirm = async () => {
     if (!selectedDate || !selectedHora) {
