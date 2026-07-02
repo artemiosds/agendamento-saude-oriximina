@@ -182,6 +182,13 @@ const profissaoExigeSigtap = (prof: any): { exige: boolean; profissao: string; c
       break;
     }
   }
+  if (!categoria) {
+    const cbo = obterCboValido(prof);
+    if (cbo.startsWith("2515")) categoria = "psicolog";
+    else if (cbo.startsWith("2238")) categoria = "fonoaudiolog";
+    else if (cbo.startsWith("2236")) categoria = "fisioterap";
+    else if (cbo.startsWith("2237")) categoria = "nutricion";
+  }
   return { exige: !!categoria, profissao, categoria };
 };
 
