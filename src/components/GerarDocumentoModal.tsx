@@ -27,6 +27,7 @@ interface Props {
   profissional?: { id?: string; nome: string; profissao: string; numero_conselho: string; tipo_conselho: string; uf_conselho: string };
   unidade?: string;
   dataAtendimento?: string;
+  templateId?: string;
 }
 
 const ENCAMINHAMENTO_TIPOS = ['encaminhamento', 'guia de encaminhamento'];
