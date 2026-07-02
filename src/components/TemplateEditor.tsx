@@ -412,6 +412,14 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleBold().run()} title="Negrito"><Bold className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleItalic().run()} title="Itálico"><Italic className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleUnderline().run()} title="Sublinhado"><UnderlineIcon className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleStrike().run()} title="Riscado"><Strikethrough className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { editor?.chain().focus().unsetMark('superscript').toggleMark('subscript').run(); }} title="Subscrito"><SubIcon className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { editor?.chain().focus().unsetMark('subscript').toggleMark('superscript').run(); }} title="Sobrescrito"><SupIcon className="w-4 h-4" /></Button>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().undo().run()} title="Desfazer"><Undo2 className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().redo().run()} title="Refazer"><Redo2 className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={doCopy} title="Copiar seleção"><FileText className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={doPastePlain} title="Colar sem formatação"><Upload className="w-4 h-4" /></Button>
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} title="Título 1"><Heading1 className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} title="Título 2"><Heading2 className="w-4 h-4" /></Button>
@@ -420,6 +428,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Lista"><List className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Lista numerada"><ListOrdered className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Tabela"><TableIcon className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertHR} title="Linha horizontal"><Minus className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertPageBreak} title="Quebra de página"><SeparatorHorizontal className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertSpacer} title="Espaçador"><AlignVerticalSpaceAround className="w-4 h-4" /></Button>
             <Separator orientation="vertical" className="h-6 mx-1" />
             {/* Alinhamento */}
             <Button size="icon" variant={editor?.isActive({ textAlign: 'left' }) ? 'secondary' : 'ghost'} className="h-8 w-8" onClick={() => editor?.chain().focus().setTextAlign('left').run()} title="Alinhar à esquerda"><AlignLeft className="w-4 h-4" /></Button>
@@ -436,11 +447,24 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
                 else editor.chain().focus().setFontFamily(v).run();
               }}
             >
-              <SelectTrigger className="h-8 w-[150px] gap-1 text-xs"><Type className="w-3.5 h-3.5" /> <SelectValue placeholder="Fonte" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[140px] gap-1 text-xs"><Type className="w-3.5 h-3.5" /> <SelectValue placeholder="Fonte" /></SelectTrigger>
               <SelectContent>
-                {FONT_FAMILIES.map(f => <SelectItem key={f.label} value={f.value || '__default__'} onSelect={undefined as any}>{f.label}</SelectItem>)}
+                {FONT_FAMILIES.map(f => <SelectItem key={f.label} value={f.value || '__default__'}>{f.label}</SelectItem>)}
               </SelectContent>
             </Select>
+            {/* Tamanho */}
+            <Select value="" onValueChange={setFontSize}>
+              <SelectTrigger className="h-8 w-[90px] gap-1 text-xs"><SelectValue placeholder="Tam." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__default__">Padrão</SelectItem>
+                {FONT_SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {/* Cor */}
+            <label className="inline-flex items-center gap-1 border rounded h-8 px-2 text-xs cursor-pointer bg-background" title="Cor do texto">
+              <Palette className="w-3.5 h-3.5" />
+              <input type="color" className="w-5 h-5 border-0 bg-transparent p-0 cursor-pointer" onChange={e => setColor(e.target.value)} />
+            </label>
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Select onValueChange={applyCondition}>
               <SelectTrigger className="h-8 w-auto gap-1 text-xs"><ShieldQuestion className="w-3.5 h-3.5" /> <SelectValue placeholder="Bloco condicional" /></SelectTrigger>
