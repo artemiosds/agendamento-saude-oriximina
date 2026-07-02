@@ -146,6 +146,17 @@ export function applyTemplateValues(
   return out;
 }
 
+/** Converte aliases legados para o token oficial ao abrir/editar templates. */
+export function normalizeTemplateAliases(content: string): string {
+  let out = content || '';
+  for (const def of ALL_TEMPLATE_VARIABLES) {
+    (def.aliases || []).forEach(alias => {
+      out = out.replace(new RegExp(`\\{\\{\\s*${escapeRegExp(alias)}\\s*\\}\\}`, 'g'), def.token);
+    });
+  }
+  return out;
+}
+
 /** Substitui variáveis conhecidas por valores de exemplo no preview. */
 export function applyExampleValues(content: string, overrides: Record<string, string | number | null | undefined> = {}): string {
   return applyTemplateValues(content, { ...TEMPLATE_EXAMPLE_VALUES, ...overrides });
