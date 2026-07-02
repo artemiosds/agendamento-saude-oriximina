@@ -2158,20 +2158,17 @@ const BpaExportar: React.FC = () => {
               );
             }
           }
-          // 4) PTS: fallback para Fisio; complemento profundo para CBOs que
-          // permitem múltiplos SIGTAP no mesmo atendimento.
-          if (
-            pront.paciente_id &&
-            (codigosColetados.length === 0 || permiteMultiplosSigtap) &&
-            (sigtapReq.categoria === "fisioterap" || permiteMultiplosSigtap)
-          ) {
+          // 4) PTS: SEMPRE mescla com o prontuário (sem lógica de fallback).
+          // Consolida procedimentos das duas fontes em um único array e
+          // deduplica apenas depois. Aplica-se a todos os CBOs habilitados.
+          if (pront.paciente_id) {
             ptsConsultado = true;
             const ptsKeyProf = [String(pront.paciente_id), String(pront.profissional_id || "")].join("|");
             const ptsCodesProfissional = ptsSigtapByPatientProf.get(ptsKeyProf) || [];
             const ptsCodesPaciente = ptsSigtapByPatient.get(String(pront.paciente_id)) || [];
-            const ptsCodesAplicaveis = permiteMultiplosSigtap
-              ? Array.from(new Set([...ptsCodesProfissional, ...ptsCodesPaciente]))
-              : (ptsCodesProfissional.length ? ptsCodesProfissional : ptsCodesPaciente);
+            const ptsCodesAplicaveis = Array.from(
+              new Set([...ptsCodesProfissional, ...ptsCodesPaciente]),
+            );
             for (const ptsCode of ptsCodesAplicaveis) {
               addCodigo(ptsCode, "PTS");
             }
