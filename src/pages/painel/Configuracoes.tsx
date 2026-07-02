@@ -500,7 +500,7 @@ const Configuracoes: React.FC = () => {
           <div className="space-y-6">
             <ConfigImpressaoDocumentos />
             <Separator />
-            <ModelosDocumentos />
+            <TemplateEditor />
             <Separator />
             <CarimboConfig />
           </div>
