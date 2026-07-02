@@ -391,6 +391,22 @@ const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProc
     if (!texto) return;
     [...texto.matchAll(/\b\d{6,10}\b/g)].forEach((m) => add(rawProcFromAny(m[0], 'prontuario')));
   };
+  const addDeepProcedureFields = (src: any) => {
+    const visitar = (valor: any, chavePai = '') => {
+      if (valor === null || valor === undefined) return;
+      const chaveProc = /(sigtap|proced|proc_)/i.test(chavePai);
+      if (Array.isArray(valor)) {
+        valor.forEach((item) => visitar(item, chavePai));
+        return;
+      }
+      if (typeof valor === 'object') {
+        Object.entries(valor).forEach(([chave, item]) => visitar(item, `${chavePai}.${chave}`));
+        return;
+      }
+      if (chaveProc) addCodesFromText(valor);
+    };
+    visitar(src);
+  };
   related.forEach(add);
   realizados.forEach((p) => {
     const exists = out.some((x) => x.procedimento_id && x.procedimento_id === p.procedimento_id);
@@ -419,6 +435,9 @@ const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProc
   addFromAny(prontuario?.procedimentos_texto);
   addCodesFromText(prontuario?.procedimentos_texto);
   addCodesFromText(prontuario?.outro_procedimento);
+  addDeepProcedureFields(cd);
+  addDeepProcedureFields(dados);
+  addDeepProcedureFields(metadata);
   const seen = new Set<string>();
   return out.filter((p) => {
     const key = `${p.procedimento_id || ''}|${onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo)}|${normalizeName(p.nome_procedimento || p.nome || p.descricao)}`;
