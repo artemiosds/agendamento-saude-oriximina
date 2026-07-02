@@ -480,9 +480,42 @@ const Auditoria: React.FC = () => {
           `acao_legivel.ilike.%${term}%`,
         ];
         if (pacienteIds.length > 0) {
-          const inList = `(${pacienteIds.join(',')})`;
-          orParts.push(`paciente_id.in.${inList}`);
-          orParts.push(`entidade_id.in.${inList}`);
+          // Also collect agendamento/prontuario/documento IDs vinculated to these patients,
+          // so logs that only reference those child entities are included.
+          let agIds: string[] = [];
+          let prIds: string[] = [];
+          let docIds: string[] = [];
+          try {
+            const [{ data: ags }, { data: prs }, { data: docs }] = await Promise.all([
+              supabase.from('agendamentos').select('id').in('paciente_id', pacienteIds).limit(2000),
+              supabase.from('prontuarios').select('id').in('paciente_id', pacienteIds).limit(2000),
+              supabase.from('documentos_gerados').select('id').in('paciente_id', pacienteIds).limit(2000),
+            ]);
+            agIds = (ags || []).map((r: any) => r.id).filter(Boolean);
+            prIds = (prs || []).map((r: any) => r.id).filter(Boolean);
+            docIds = (docs || []).map((r: any) => r.id).filter(Boolean);
+          } catch (e) {
+            console.warn('related lookup failed', e);
+          }
+
+          const pacList = `(${pacienteIds.join(',')})`;
+          orParts.push(`paciente_id.in.${pacList}`);
+          orParts.push(`entidade_id.in.${pacList}`);
+          if (agIds.length > 0) {
+            const l = `(${agIds.join(',')})`;
+            orParts.push(`agendamento_id.in.${l}`);
+            orParts.push(`entidade_id.in.${l}`);
+          }
+          if (prIds.length > 0) {
+            const l = `(${prIds.join(',')})`;
+            orParts.push(`prontuario_id.in.${l}`);
+            orParts.push(`entidade_id.in.${l}`);
+          }
+          if (docIds.length > 0) {
+            const l = `(${docIds.join(',')})`;
+            orParts.push(`documento_id.in.${l}`);
+            orParts.push(`entidade_id.in.${l}`);
+          }
         }
         query = query.or(orParts.join(','));
       }
