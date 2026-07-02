@@ -200,8 +200,8 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       p_conteudo: html,
       p_ativo: true,
       p_perfis_permitidos: ['master', 'profissional', 'coordenador', 'gestao'],
-      p_tipo_modelo: 'UNIDADE',
-      p_unidade_id: user?.unidadeId || '',
+      p_tipo_modelo: templateId ? null : 'UNIDADE',
+      p_unidade_id: templateId ? null : (user?.unidadeId || ''),
       p_blocos_clinicos: { campos_manuais: camposManuais },
       p_versoes: [],
     });
