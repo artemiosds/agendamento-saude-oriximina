@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-import { Mark, mergeAttributes } from '@tiptap/core';
+import { Mark, Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
@@ -27,6 +27,9 @@ import {
   List, ListOrdered, Table as TableIcon, Plus, Save, Eye, X,
   Type, Calendar, CheckSquare, ShieldQuestion, Trash2, Pencil, FileText, Loader2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
+  Strikethrough, Subscript as SubIcon, Superscript as SupIcon, Undo2, Redo2, Minus,
+  FileImage, PenLine, QrCode, Barcode, Upload, Clock, Hash, DollarSign, Mail, Link as LinkIcon,
+  Phone, MapPin, IdCard, CircleDot, AlignVerticalSpaceAround, SeparatorHorizontal, Palette,
 } from 'lucide-react';
 
 const FONT_FAMILIES = [
@@ -40,16 +43,46 @@ const FONT_FAMILIES = [
   { label: 'Tahoma', value: 'Tahoma, sans-serif' },
 ];
 
+const FONT_SIZES = ['10px', '11px', '12px', '13px', '14px', '16px', '18px', '20px', '24px', '28px', '32px'];
+
 // -------- Types --------
 type Categoria = 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
 const CATEGORIAS: Categoria[] = ['Cadastro', 'Clínico', 'Regulação', 'CER'];
 
+type ManualFieldType =
+  | 'texto' | 'textarea' | 'checkbox' | 'radio' | 'data' | 'hora' | 'datahora'
+  | 'numero' | 'moeda' | 'cpf' | 'cns' | 'telefone' | 'cep' | 'email' | 'url'
+  | 'assinatura' | 'imagem' | 'upload' | 'qrcode' | 'barcode';
+
 interface ManualField {
   key: string;
   label: string;
-  type: 'texto' | 'checkbox' | 'data';
+  type: ManualFieldType;
   options?: string[];
 }
+
+const FIELD_TYPES: { type: ManualFieldType; label: string; icon: any; needsOptions?: boolean }[] = [
+  { type: 'texto', label: 'Campo texto', icon: Type },
+  { type: 'textarea', label: 'Textarea', icon: AlignLeft },
+  { type: 'numero', label: 'Campo número', icon: Hash },
+  { type: 'moeda', label: 'Campo moeda', icon: DollarSign },
+  { type: 'cpf', label: 'Campo CPF', icon: IdCard },
+  { type: 'cns', label: 'Campo CNS', icon: IdCard },
+  { type: 'telefone', label: 'Campo telefone', icon: Phone },
+  { type: 'cep', label: 'Campo CEP', icon: MapPin },
+  { type: 'email', label: 'Campo e-mail', icon: Mail },
+  { type: 'url', label: 'Campo URL', icon: LinkIcon },
+  { type: 'data', label: 'Campo Data', icon: Calendar },
+  { type: 'hora', label: 'Campo Hora', icon: Clock },
+  { type: 'datahora', label: 'Data/Hora', icon: Calendar },
+  { type: 'checkbox', label: 'Checkbox', icon: CheckSquare, needsOptions: true },
+  { type: 'radio', label: 'Radio Button', icon: CircleDot, needsOptions: true },
+  { type: 'assinatura', label: 'Assinatura', icon: PenLine },
+  { type: 'imagem', label: 'Imagem', icon: FileImage },
+  { type: 'upload', label: 'Upload', icon: Upload },
+  { type: 'qrcode', label: 'Código QR', icon: QrCode },
+  { type: 'barcode', label: 'Código de barras', icon: Barcode },
+];
 
 interface CondicaoOption { value: string; label: string; }
 const CONDITIONS: CondicaoOption[] = [
