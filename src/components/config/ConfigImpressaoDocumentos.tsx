@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Upload, ImageIcon, Trash2, Eye, FileText } from 'lucide-react';
-import ModelosDocumentos from '@/components/ModelosDocumentos';
+import TemplateEditor from '@/components/TemplateEditor';
 import CarimboConfig from '@/components/CarimboConfig';
 import { toast } from 'sonner';
 import { Slider } from '@/components/ui/slider';
