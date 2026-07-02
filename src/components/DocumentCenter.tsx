@@ -66,7 +66,7 @@ const DocumentCenter: React.FC<Props> = ({
   const [cat, setCat] = useState<Categoria>('Todos');
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
-  const [gerarOpen, setGerarOpen] = useState(false);
+  const [gerarTemplateId, setGerarTemplateId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
