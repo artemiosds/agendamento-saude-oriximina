@@ -2082,8 +2082,16 @@ const BpaExportar: React.FC = () => {
           const addCodigo = (codigo: string, origem: string, cid?: string) => {
             const c = somenteNumeros(codigo);
             const cidNorm = extrairCodigoCid(cid);
+            if (!c) return;
+            const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
+            if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
+              codigosVistos.delete(`${c}|`);
+              codigosParaExportar.splice(indiceMesmoCodigoSemCid, 1);
+            } else if (!cidNorm && codigosParaExportar.some((item) => item.codigo === c)) {
+              return;
+            }
             const chave = `${c}|${cidNorm}`;
-            if (!c || codigosVistos.has(chave)) return;
+            if (codigosVistos.has(chave)) return;
             codigosVistos.add(chave);
             codigosParaExportar.push({ codigo: c, origem, cid: cidNorm });
           };
