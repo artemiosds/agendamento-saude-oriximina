@@ -8,7 +8,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 import DOMPurify from 'dompurify';
-import { applyExampleValues, TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
+import { applyExampleValues, normalizeTemplateAliases, TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -133,7 +133,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       const meta = (data.blocos_clinicos as any) || {};
       setCamposManuais(meta.campos_manuais || []);
       if (editor) {
-        editor.commands.setContent(data.conteudo || '<p></p>');
+        editor.commands.setContent(normalizeTemplateAliases(data.conteudo || '<p></p>'));
         setDirty(false);
       }
       setLoading(false);
@@ -192,7 +192,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     if (!nome.trim()) { toast.error('Informe o nome do documento'); return; }
     if (!editor) return;
     setSaving(true);
-    const html = editor.getHTML();
+    const html = normalizeTemplateAliases(editor.getHTML());
     const payload: any = {
       nome: nome.trim(),
       tipo: categoria,
