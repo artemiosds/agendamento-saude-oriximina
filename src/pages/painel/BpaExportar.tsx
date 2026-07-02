@@ -1948,8 +1948,14 @@ const BpaExportar: React.FC = () => {
           ].join("|");
           const sigtapSessaoList = sigtapPorSessaoTratamento.get(chaveSessaoTratamento) || [];
           const sigtapSessao = sigtapSessaoList[0] || "";
+          const chaveHistoricoProntuario = [String(pront.paciente_id || ""), String(pront.profissional_id || "")].join("|");
+          const dataProntuarioAtual = String(pront.data_atendimento || "").slice(0, 10);
+          const sigtapHistoricoList = (sigtapHistoricoPorPacienteProf.get(chaveHistoricoProntuario) || [])
+            .filter((item) => !dataProntuarioAtual || item.data <= dataProntuarioAtual)
+            .map((item) => item.codigo);
+          const sigtapHistorico = sigtapHistoricoList[0] || "";
           let proc_real = "";
-          let proc_origem: "Prontuário" | "Procedimentos vinculados" | "Sessão de Tratamento" | "PTS" | "" = "";
+          let proc_origem: "Prontuário" | "Procedimentos vinculados" | "Sessão de Tratamento" | "Histórico do Prontuário" | "PTS" | "" = "";
           let proc_campo = "";
           if (sigtapEmCustom.codigo) {
             proc_real = sigtapEmCustom.codigo;
@@ -1963,6 +1969,10 @@ const BpaExportar: React.FC = () => {
             proc_real = sigtapSessao;
             proc_origem = "Sessão de Tratamento";
             proc_campo = "treatment_sessions.procedure_done";
+          } else if (sigtapHistorico) {
+            proc_real = sigtapHistorico;
+            proc_origem = "Histórico do Prontuário";
+            proc_campo = "prontuario_procedimentos histórico";
           }
           const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria);
           let ptsConsultado = false;
@@ -2008,6 +2018,10 @@ const BpaExportar: React.FC = () => {
           for (const c of sigtapVinculadoList) addCodigo(c, "Procedimentos vinculados");
           // 2.5) SIGTAPs vinculados à sessão recorrente do mesmo paciente/profissional/data.
           for (const c of sigtapSessaoList) addCodigo(c, "Sessão de Tratamento");
+          // 2.6) Histórico clínico do mesmo paciente/profissional até a data do atendimento.
+          if (codigosParaExportar.length === 0) {
+            for (const c of sigtapHistoricoList) addCodigo(c, "Histórico do Prontuário");
+          }
           // 3) Resolução do BPA-Produção (apenas se ainda não houver nada).
           if (codigosParaExportar.length === 0 && sigtapReq.exige && producaoResolvida?.codigo_sigtap) {
             addCodigo(
