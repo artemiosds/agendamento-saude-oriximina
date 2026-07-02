@@ -535,12 +535,12 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div>
-                <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Número</Label>
+                <Label>Número</Label>
                 <Input
                   value={cd.numero || ""}
                   onChange={(e) => setCustom("numero", e.target.value.replace(/[^\dA-Za-z\/\-]/g, "").toUpperCase())}
-                  placeholder="Nº"
-                  inputMode="numeric"
+                  placeholder="Nº (deixe vazio para S/N)"
+                  inputMode="text"
                 />
                 {errors.numero && <p className="text-xs text-destructive mt-1">{errors.numero}</p>}
               </div>
