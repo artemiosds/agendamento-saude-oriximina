@@ -124,6 +124,55 @@ const ConditionalMark = Mark.create({
   },
 });
 
+// Subscript / Superscript
+const SubMark = Mark.create({
+  name: 'subscript',
+  parseHTML() { return [{ tag: 'sub' }]; },
+  renderHTML() { return ['sub', 0]; },
+});
+const SupMark = Mark.create({
+  name: 'superscript',
+  parseHTML() { return [{ tag: 'sup' }]; },
+  renderHTML() { return ['sup', 0]; },
+});
+
+// Extended TextStyle attributes (color + fontSize)
+const TextStyleExt = TextStyle.extend({
+  addAttributes() {
+    return {
+      ...(this.parent?.() || {}),
+      color: {
+        default: null,
+        parseHTML: el => (el as HTMLElement).style.color || null,
+        renderHTML: attrs => attrs.color ? { style: `color:${attrs.color}` } : {},
+      },
+      fontSize: {
+        default: null,
+        parseHTML: el => (el as HTMLElement).style.fontSize || null,
+        renderHTML: attrs => attrs.fontSize ? { style: `font-size:${attrs.fontSize}` } : {},
+      },
+    };
+  },
+});
+
+// Page break + Spacer nodes
+const PageBreakNode = Node.create({
+  name: 'pageBreak', group: 'block', atom: true, selectable: true,
+  parseHTML() { return [{ tag: 'div[data-page-break]' }]; },
+  renderHTML() {
+    return ['div', { 'data-page-break': 'true', class: 'tpl-page-break', style: 'page-break-after:always;border-top:2px dashed #94a3b8;margin:8px 0;height:0;' }];
+  },
+});
+const SpacerNode = Node.create({
+  name: 'spacer', group: 'block', atom: true, selectable: true,
+  addAttributes() { return { size: { default: '16px' } }; },
+  parseHTML() { return [{ tag: 'div[data-spacer]' }]; },
+  renderHTML({ HTMLAttributes }) {
+    const size = HTMLAttributes.size || '16px';
+    return ['div', { 'data-spacer': 'true', style: `height:${size};` }];
+  },
+});
+
 // -------- Editor Panel --------
 interface EditorPanelProps {
   templateId?: string | null;
