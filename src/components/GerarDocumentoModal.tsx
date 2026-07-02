@@ -181,26 +181,79 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       }
       return val;
     };
+    // Pega valor priorizando props → DB → vazio
+    const pick = (...keys: string[]): string => {
+      for (const k of keys) {
+        const fromProps = (paciente as any)?.[k];
+        if (fromProps !== undefined && fromProps !== null && String(fromProps).trim() !== '') return String(fromProps);
+        const fromExtra = pacienteExtra?.[k];
+        if (fromExtra !== undefined && fromExtra !== null && String(fromExtra).trim() !== '') return String(fromExtra);
+      }
+      return '';
+    };
+
+    // Endereço composto inteligente (usa endereco livre OU monta a partir de logradouro/numero/complemento)
+    const enderecoLivre = pick('endereco');
+    const logradouro = [pick('tipo_logradouro'), pick('logradouro')].filter(Boolean).join(' ').trim();
+    const numero = pick('numero');
+    const complemento = pick('complemento');
+    const enderecoComposto = enderecoLivre
+      || [logradouro, numero && `nº ${numero}`, complemento].filter(Boolean).join(', ');
+
+    // Idade calculada
+    const dn = pick('data_nascimento');
+    let idade = '';
+    if (dn) {
+      const d = new Date(dn);
+      if (!isNaN(d.getTime())) {
+        const hj = new Date();
+        let a = hj.getFullYear() - d.getFullYear();
+        const mm = hj.getMonth() - d.getMonth();
+        if (mm < 0 || (mm === 0 && hj.getDate() < d.getDate())) a--;
+        idade = String(a);
+      }
+    }
+
+    const cnsVal = pick('cns');
     const values: Record<string, string> = {
-      nome_paciente: paciente?.nome || '—',
-      cpf: paciente?.cpf || pacienteExtra?.cpf || '—',
-      cns: paciente?.cns || pacienteExtra?.cns || '—',
-      cartao_sus: paciente?.cns || pacienteExtra?.cns || '—',
-      endereco: paciente?.endereco || pacienteExtra?.endereco || '—',
-      bairro: paciente?.bairro || pacienteExtra?.bairro || '—',
-      telefone: paciente?.telefone || pacienteExtra?.telefone || '—',
-      data_nascimento: formatIfDate(paciente?.data_nascimento || pacienteExtra?.data_nascimento || '') || '—',
-      nome_mae: paciente?.nome_mae || pacienteExtra?.nome_mae || '—',
+      // Espelha TODAS as colunas do paciente (permite qualquer {{coluna}} do template)
+      ...(pacienteExtra || {}),
+      nome_paciente: pick('nome') || '—',
+      nome: pick('nome') || '—',
+      cpf: pick('cpf') || '—',
+      cns: cnsVal || '—',
+      cartao_sus: cnsVal || '—',
+      endereco: enderecoComposto || '—',
+      logradouro: logradouro || '—',
+      numero: numero || '—',
+      complemento: complemento || '—',
+      bairro: pick('bairro') || '—',
+      cep: pick('cep') || '—',
+      municipio: pick('municipio') || '—',
+      uf: pick('uf') || '—',
+      telefone: pick('telefone') || '—',
+      telefone_secundario: pick('telefone_secundario') || '—',
+      email: pick('email') || '—',
+      sexo: pick('sexo') || '—',
+      raca_cor: pick('raca_cor') || '—',
+      naturalidade: [pick('naturalidade'), pick('naturalidade_uf')].filter(Boolean).join('/') || '—',
+      data_nascimento: formatIfDate(dn) || '—',
+      idade: idade || '—',
+      nome_mae: pick('nome_mae') || '—',
+      nome_responsavel: pick('nome_responsavel') || '—',
+      cpf_responsavel: pick('cpf_responsavel') || '—',
+      ubs_origem: pick('ubs_origem') || '—',
       data_atendimento: dataAtendimento || hoje,
       carimbo_profissional: carimboInlineHtml,
       profissional: profissional?.nome || user?.nome || '—',
-      cid: campos.cid || paciente?.cid || pacienteExtra?.cid || '—',
-      especialidade: paciente?.especialidade_destino || pacienteExtra?.especialidade_destino || '—',
-      especialidade_destino: campos.especialidade_destino || paciente?.especialidade_destino || pacienteExtra?.especialidade_destino || '—',
+      cid: campos.cid || pick('cid') || '—',
+      especialidade: pick('especialidade_destino') || '—',
+      especialidade_destino: campos.especialidade_destino || pick('especialidade_destino') || '—',
       unidade: docConfig?.linha2 || docConfig?.linha1 || unidade || 'CER II Oriximiná',
       data_hoje: hoje,
       data_atual: hoje,
     };
+
     Object.entries(campos).forEach(([k, v]) => {
       values[k] = v ? formatIfDate(v) : '—';
     });
