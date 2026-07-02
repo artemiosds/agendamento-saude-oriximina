@@ -2088,35 +2088,45 @@ const BpaExportar: React.FC = () => {
           // === Coleta consolidada de TODOS os procedimentos a exportar ===
           // Suporta múltiplos SIGTAPs no mesmo atendimento (ex.: Fisio + Psico
           // em prontuários distintos OU vários procedimentos do mesmo prontuário).
-          const codigosParaExportar: Array<{ codigo: string; origem: string; cid?: string }> = [];
-          const codigosVistos = new Set<string>();
+          const codigosColetados: Array<{ codigo: string; origem: string; cid?: string }> = [];
           const dedupeSomentePorCodigo = permiteMultiplosSigtap;
           const addCodigo = (codigo: string, origem: string, cid?: string) => {
             const c = sigtapCodigoExibicao(codigo);
             const cidNorm = extrairCodigoCid(cid);
             if (!c) return;
+            codigosColetados.push({ codigo: c, origem, cid: cidNorm });
+          };
+          const consolidarCodigosColetados = () => {
+            const codigosParaExportar: Array<{ codigo: string; origem: string; cid?: string }> = [];
+            const codigosVistos = new Set<string>();
+            for (const item of codigosColetados) {
+              const c = item.codigo;
+              const cidNorm = item.cid || "";
+              if (!c) continue;
             if (dedupeSomentePorCodigo) {
               const indiceMesmoCodigo = codigosParaExportar.findIndex((item) => item.codigo === c);
               if (indiceMesmoCodigo >= 0) {
                 if (cidNorm && !codigosParaExportar[indiceMesmoCodigo].cid) {
-                  codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem, cid: cidNorm };
+                  codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem: item.origem, cid: cidNorm };
                 }
-                return;
+                continue;
               }
-              codigosParaExportar.push({ codigo: c, origem, cid: cidNorm });
-              return;
+              codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
+              continue;
             }
             const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
             if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
               codigosVistos.delete(`${c}|`);
               codigosParaExportar.splice(indiceMesmoCodigoSemCid, 1);
             } else if (!cidNorm && codigosParaExportar.some((item) => item.codigo === c)) {
-              return;
+              continue;
             }
             const chave = `${c}|${cidNorm}`;
-            if (codigosVistos.has(chave)) return;
+            if (codigosVistos.has(chave)) continue;
             codigosVistos.add(chave);
-            codigosParaExportar.push({ codigo: c, origem, cid: cidNorm });
+            codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
+            }
+            return codigosParaExportar;
           };
           // 1) Todos os SIGTAPs do prontuário (custom_data, campos fixos, arrays).
           for (const t of sigtapTodos) addCodigo(t.codigo, `Prontuário:${t.campo}`);
@@ -2129,7 +2139,7 @@ const BpaExportar: React.FC = () => {
           // 2.5) SIGTAPs vinculados à sessão recorrente do mesmo paciente/profissional/data.
           for (const c of sigtapSessaoList) addCodigo(c, "Sessão de Tratamento");
           // 2.6) Histórico clínico do mesmo paciente/profissional até a data do atendimento.
-          if (codigosParaExportar.length === 0) {
+          if (codigosColetados.length === 0) {
             if (sigtapHistoricoItens.length) {
               for (const item of sigtapHistoricoItens) addCodigo(item.codigo, "Histórico do Prontuário", item.cid);
             } else {
@@ -2151,7 +2161,7 @@ const BpaExportar: React.FC = () => {
           // permitem múltiplos SIGTAP no mesmo atendimento.
           if (
             pront.paciente_id &&
-            (codigosParaExportar.length === 0 || permiteMultiplosSigtap) &&
+            (codigosColetados.length === 0 || permiteMultiplosSigtap) &&
             (sigtapReq.categoria === "fisioterap" || permiteMultiplosSigtap)
           ) {
             ptsConsultado = true;
@@ -2169,7 +2179,7 @@ const BpaExportar: React.FC = () => {
           // 4.5) Técnico de Enfermagem (CBO 322205): injeta toda a lista de
           // procedimentos cadastrados — gera 1 linha BPA-I para cada código.
           const cboParaInjecao = obterCboValido(prof);
-          if (cboParaInjecao === "322205" && codigosParaExportar.length === 0) {
+          if (cboParaInjecao === "322205" && codigosColetados.length === 0) {
             for (const c of procedimentosTecnicoEnfList) {
               addCodigo(c, "Padrão (Téc. Enfermagem)");
             }
@@ -2182,14 +2192,16 @@ const BpaExportar: React.FC = () => {
             addCodigo(a.codigo, "Aditivo (competência)");
           }
           // 5) Procedimentos padrão do form (lista vazia e profissão NÃO exige).
-          if (codigosParaExportar.length === 0 && !sigtapReq.exige) {
+          if (codigosColetados.length === 0 && !sigtapReq.exige) {
             for (const c of procedimentosPadraoList) {
               addCodigo(c, "Padrão (form)");
             }
-            if (codigosParaExportar.length === 0 && formData.procedimento_padrao) {
+            if (codigosColetados.length === 0 && formData.procedimento_padrao) {
               addCodigo(formData.procedimento_padrao, "Padrão (form)");
             }
           }
+
+          const codigosParaExportar = consolidarCodigosColetados();
 
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
