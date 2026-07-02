@@ -195,7 +195,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       endereco: paciente?.endereco || pacienteExtra?.endereco || '—',
       bairro: paciente?.bairro || pacienteExtra?.bairro || '—',
       telefone: paciente?.telefone || pacienteExtra?.telefone || '—',
-      data_nascimento: paciente?.data_nascimento || pacienteExtra?.data_nascimento || '—',
+      data_nascimento: formatIfDate(paciente?.data_nascimento || pacienteExtra?.data_nascimento || '') || '—',
       nome_mae: paciente?.nome_mae || pacienteExtra?.nome_mae || '—',
       data_atendimento: dataAtendimento || hoje,
       carimbo_profissional: carimboInlineHtml,
