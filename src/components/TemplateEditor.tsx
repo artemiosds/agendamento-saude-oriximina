@@ -502,11 +502,16 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
           <Separator />
 
           <section>
-            <h4 className="text-xs font-semibold uppercase text-primary mb-2">Campos Manuais</h4>
-            <div className="grid grid-cols-1 gap-1.5 mb-2">
-              <Button size="sm" variant="outline" className="gap-1 justify-start h-8" onClick={() => setAddFieldOpen('texto')}><Type className="w-3.5 h-3.5" /> + Campo de texto livre</Button>
-              <Button size="sm" variant="outline" className="gap-1 justify-start h-8" onClick={() => setAddFieldOpen('checkbox')}><CheckSquare className="w-3.5 h-3.5" /> + Checkbox</Button>
-              <Button size="sm" variant="outline" className="gap-1 justify-start h-8" onClick={() => setAddFieldOpen('data')}><Calendar className="w-3.5 h-3.5" /> + Campo de data</Button>
+            <h4 className="text-xs font-semibold uppercase text-primary mb-2">Componentes / Campos Manuais</h4>
+            <div className="grid grid-cols-2 gap-1.5 mb-2">
+              {FIELD_TYPES.map(ft => {
+                const Icon = ft.icon;
+                return (
+                  <Button key={ft.type} size="sm" variant="outline" className="gap-1 justify-start h-8 text-[11px] px-2" onClick={() => setAddFieldOpen(ft.type)}>
+                    <Icon className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{ft.label}</span>
+                  </Button>
+                );
+              })}
             </div>
             {camposManuais.length > 0 && (
               <div className="space-y-1">
