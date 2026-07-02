@@ -212,8 +212,10 @@ const profissionalEhMedico = (prof: any): boolean => {
 };
 
 // Fontes consultadas para o SIGTAP de acordo com a categoria da profissão.
-const fontesSigtapParaCategoria = (cat: CategoriaSigtap): string[] => {
-  if (cat === "fisioterap") return ["Prontuário", "Procedimentos vinculados", "PTS"];
+const fontesSigtapParaCategoria = (cat: CategoriaSigtap, prof?: any): string[] => {
+  if (profissionalPermiteMultiplosSigtap(prof) || cat === "fisioterap") {
+    return ["Prontuário", "Procedimentos vinculados", "Produção BPA", "PTS"];
+  }
   if (cat) return ["Prontuário", "Procedimentos vinculados"];
   return [];
 };
@@ -2053,7 +2055,7 @@ const BpaExportar: React.FC = () => {
             proc_origem = "Histórico do Prontuário";
             proc_campo = "prontuario_procedimentos histórico";
           }
-          const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria);
+          const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria, prof);
           let ptsConsultado = false;
           let ptsEncontrado = 0;
           if (!proc_real && sigtapReq.categoria === "fisioterap" && pront.paciente_id) {
@@ -2407,7 +2409,9 @@ const BpaExportar: React.FC = () => {
                 ? ""
                 : procEntry.cid || cidProducaoLinha || pront.custom_data?.cid || pac?.cid || "";
               const { cid } = normalizarCidLinha(cidBrutoLinha);
-              const chaveLinhaBpa = [chaveAtendimento, proc, cid].join("|");
+              const chaveLinhaBpa = profissionalPermiteMultiplosSigtap(prof)
+                ? [chaveAtendimento, proc].join("|")
+                : [chaveAtendimento, proc, cid].join("|");
               if (chavesLinhasBpa.has(chaveLinhaBpa)) {
                 stats.autoCorrected++;
                 details.autoCorrected.push({
