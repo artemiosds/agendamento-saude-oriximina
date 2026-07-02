@@ -2071,11 +2071,14 @@ const BpaExportar: React.FC = () => {
           const sigtapSessaoList = sigtapPorSessaoTratamento.get(chaveSessaoTratamento) || [];
           const chaveHistoricoProntuario = [String(pront.paciente_id || ""), String(pront.profissional_id || "")].join("|");
           const dataProntuarioAtual = String(pront.data_atendimento || "").slice(0, 10);
-          const usarHistoricoProntuario = pront.tipo_registro === "agenda_sem_prontuario" || String(pront.id || "").startsWith("agenda:");
-          const sigtapHistoricoItens = usarHistoricoProntuario
-            ? (sigtapHistoricoPorPacienteProf.get(chaveHistoricoProntuario) || [])
-                .filter((item) => !dataProntuarioAtual || item.data <= dataProntuarioAtual)
-            : [];
+          // Reutilização automática por competência (AAAAMM): a base histórica
+          // fica restrita ao intervalo startDate..endDate e é usada como
+          // sugestão editável quando o registro atual não trouxer SIGTAP/CID.
+          // Cada item carrega o CID vinculado, então o preenchimento automático
+          // cobre tanto o procedimento quanto o CID sem afetar outros campos.
+          const sigtapHistoricoItens = (sigtapHistoricoPorPacienteProf.get(chaveHistoricoProntuario) || [])
+            .filter((item) => item.data >= startDate && item.data <= endDate)
+            .filter((item) => !dataProntuarioAtual || item.data <= dataProntuarioAtual);
           const sigtapHistoricoList = sigtapHistoricoItens.length
             ? sigtapHistoricoItens.map((item) => item.codigo)
             : [];
