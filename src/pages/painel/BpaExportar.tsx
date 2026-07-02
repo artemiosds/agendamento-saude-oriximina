@@ -1489,17 +1489,24 @@ const BpaExportar: React.FC = () => {
       const prontIdsAll = prontuarios
         .map((p: any) => p.id)
         .filter((id: any) => id && !String(id).startsWith("triagem:") && !String(id).startsWith("agenda:"));
+      const sigtapItensPorProntuario = new Map<string, Array<{ codigo: string; cid?: string }>>();
       const sigtapPorProntuario = new Map<string, string[]>();
       if (prontIdsAll.length > 0) {
         const { data: ppRows } = await (supabase as any)
           .from("prontuario_procedimentos")
-          .select("prontuario_id, procedimento_id")
+          .select("prontuario_id, procedimento_id, cids_selecionados")
           .in("prontuario_id", prontIdsAll);
         const procIds = [...new Set((ppRows || []).map((r: any) => r.procedimento_id).filter(Boolean))] as string[];
         const codigoPorProcId = await resolverCodigosSigtapPorProcedimentoId(procIds);
         (ppRows || []).forEach((r: any) => {
           const code = codigoPorProcId.get(String(r.procedimento_id));
           if (!code) return;
+          const cid = extrairCodigoCid(r.cids_selecionados);
+          const itens = sigtapItensPorProntuario.get(r.prontuario_id) || [];
+          if (!itens.some((item) => item.codigo === code && (item.cid || "") === cid)) {
+            itens.push({ codigo: code, cid });
+            sigtapItensPorProntuario.set(r.prontuario_id, itens);
+          }
           const lista = sigtapPorProntuario.get(r.prontuario_id) || [];
           if (!lista.includes(code)) {
             lista.push(code);
@@ -1560,7 +1567,7 @@ const BpaExportar: React.FC = () => {
       // Para atendimentos sintéticos da Agenda sem prontuário no dia, evita falso
       // "SIGTAP Ausente" reaproveitando procedimentos SIGTAP autênticos já
       // vinculados ao prontuário do mesmo paciente/profissional antes da data.
-      const sigtapHistoricoPorPacienteProf = new Map<string, Array<{ data: string; codigo: string }>>();
+      const sigtapHistoricoPorPacienteProf = new Map<string, Array<{ data: string; codigo: string; cid?: string }>>();
       try {
         const histProntuarios: any[] = [];
         const PAGE = 1000;
@@ -1588,7 +1595,7 @@ const BpaExportar: React.FC = () => {
           const batch = histIds.slice(i, i + 500);
           const { data: rows } = await (supabase as any)
             .from("prontuario_procedimentos")
-            .select("prontuario_id, procedimento_id")
+            .select("prontuario_id, procedimento_id, cids_selecionados")
             .in("prontuario_id", batch);
           ppHistRows.push(...(rows || []));
         }
@@ -1600,10 +1607,11 @@ const BpaExportar: React.FC = () => {
           const prontHist = histById.get(String(r.prontuario_id));
           const code = codigoPorProcHist.get(String(r.procedimento_id));
           if (!prontHist || !code) return;
+          const cid = extrairCodigoCid(r.cids_selecionados);
           const key = [String(prontHist.paciente_id), String(prontHist.profissional_id)].join("|");
           const lista = sigtapHistoricoPorPacienteProf.get(key) || [];
-          if (!lista.some((item) => item.data === String(prontHist.data_atendimento).slice(0, 10) && item.codigo === code)) {
-            lista.push({ data: String(prontHist.data_atendimento).slice(0, 10), codigo: code });
+          if (!lista.some((item) => item.data === String(prontHist.data_atendimento).slice(0, 10) && item.codigo === code && (item.cid || "") === cid)) {
+            lista.push({ data: String(prontHist.data_atendimento).slice(0, 10), codigo: code, cid });
             lista.sort((a, b) => b.data.localeCompare(a.data));
             sigtapHistoricoPorPacienteProf.set(key, lista);
           }
@@ -1667,14 +1675,14 @@ const BpaExportar: React.FC = () => {
       // Sem lógica paralela: se o BPA-Produção encontra, a Exportar também encontra.
       const producaoByPront = new Map<
         string,
-        {
+        Array<{
           codigo_sigtap: string;
           cid: string;
           fonte_procedimento: string;
           fonte_cid: string;
           fonte_resolucao: string;
           status: string;
-        }
+        }>
       >();
       try {
         // (e) Reaproveita bpaConfigValue já carregado acima — sem nova ida ao banco.
@@ -1689,18 +1697,19 @@ const BpaExportar: React.FC = () => {
 
         for (const ln of linhasProducaoSvc) {
           if (!ln.prontuario_id) continue;
-          const atual = producaoByPront.get(ln.prontuario_id);
-          const scoreNew = (ln.codigo_sigtap ? 2 : 0) + (ln.status_bpa === "ok" ? 1 : 0);
-          const scoreOld = atual ? (atual.codigo_sigtap ? 2 : 0) + (atual.status === "ok" ? 1 : 0) : -1;
-          if (scoreNew > scoreOld) {
-            producaoByPront.set(ln.prontuario_id, {
-              codigo_sigtap: ln.codigo_sigtap || "",
-              cid: ln.cid || "",
-              fonte_procedimento: ln.fonte_procedimento || "",
-              fonte_cid: ln.fonte_cid || "",
-              fonte_resolucao: ln.fonte_resolucao || "",
-              status: ln.status_bpa || "",
-            });
+          const item = {
+            codigo_sigtap: ln.codigo_sigtap || "",
+            cid: ln.cid || "",
+            fonte_procedimento: ln.fonte_procedimento || "",
+            fonte_cid: ln.fonte_cid || "",
+            fonte_resolucao: ln.fonte_resolucao || "",
+            status: ln.status_bpa || "",
+          };
+          const lista = producaoByPront.get(ln.prontuario_id) || [];
+          const chave = `${item.codigo_sigtap}|${item.cid}|${item.fonte_resolucao}`;
+          if (!lista.some((atual) => `${atual.codigo_sigtap}|${atual.cid}|${atual.fonte_resolucao}` === chave)) {
+            lista.push(item);
+            producaoByPront.set(ln.prontuario_id, lista);
           }
         }
         console.log("[BPA-Exportar] resoluções herdadas do BPA-Produção:", producaoByPront.size);
