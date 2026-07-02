@@ -323,6 +323,7 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
   for (const codigo of pickCodigosEmCamposDeProcedimento(cd)) push(codigo, "custom_data profundo");
   for (const codigo of pickCodigosEmCamposDeProcedimento(dados)) push(codigo, "dados profundo");
   for (const codigo of pickCodigosEmCamposDeProcedimento(metadata)) push(codigo, "metadata profundo");
+  for (const codigo of pickCodigosEmCamposDeProcedimento(pront)) push(codigo, "prontuário JSON completo");
   return resultado;
 };
 
