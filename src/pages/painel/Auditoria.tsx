@@ -452,7 +452,40 @@ const Auditoria: React.FC = () => {
       if (filterStatus) query = query.eq('status', filterStatus);
       if (filterUnidade) query = query.eq('unidade_id', filterUnidade);
       if (search) {
-        query = query.or(`user_nome.ilike.%${search}%,acao.ilike.%${search}%,entidade.ilike.%${search}%,entidade_id.ilike.%${search}%,paciente_nome.ilike.%${search}%,profissional_nome.ilike.%${search}%,acao_legivel.ilike.%${search}%`);
+        const term = search.trim();
+        const digits = term.replace(/\D/g, '');
+        // Look up patient IDs matching the search term (name, cpf or cns)
+        // so we can also match logs where only paciente_id / entidade_id / agendamento_id are stored.
+        let pacienteIds: string[] = [];
+        try {
+          let pq = supabase.from('pacientes').select('id').limit(50);
+          if (digits.length >= 3) {
+            pq = pq.or(`nome.ilike.%${term}%,cpf.ilike.%${digits}%,cns.ilike.%${digits}%,telefone.ilike.%${digits}%`);
+          } else {
+            pq = pq.ilike('nome', `%${term}%`);
+          }
+          const { data: pac } = await pq;
+          pacienteIds = (pac || []).map((p: any) => p.id).filter(Boolean);
+        } catch (e) {
+          console.warn('paciente lookup failed', e);
+        }
+
+        const orParts = [
+          `user_nome.ilike.%${term}%`,
+          `acao.ilike.%${term}%`,
+          `entidade.ilike.%${term}%`,
+          `entidade_id.ilike.%${term}%`,
+          `entidade_nome.ilike.%${term}%`,
+          `paciente_nome.ilike.%${term}%`,
+          `profissional_nome.ilike.%${term}%`,
+          `acao_legivel.ilike.%${term}%`,
+        ];
+        if (pacienteIds.length > 0) {
+          const inList = `(${pacienteIds.join(',')})`;
+          orParts.push(`paciente_id.in.${inList}`);
+          orParts.push(`entidade_id.in.${inList}`);
+        }
+        query = query.or(orParts.join(','));
       }
 
 
