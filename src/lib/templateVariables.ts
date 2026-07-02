@@ -1,18 +1,14 @@
 /**
- * Catálogo central de variáveis dinâmicas usadas em modelos de documentos
- * clínicos (Atestado, Receita, Declaração, Encaminhamento, Laudo, Relatório).
- *
- * Padrão: {{namespace.campo}} ou {{campo_legado}}.
- * A lista é usada pelo Editor de Modelos (botão "Inserir variável") e pelo
- * preview/print para amostrar valores fictícios. A substituição real ocorre
- * no GerarDocumentoModal a partir do paciente/profissional/atendimento reais.
+ * Catálogo central de variáveis dinâmicas usadas em modelos de documentos.
+ * A mesma lista alimenta os editores, previews e a geração real do documento.
  */
 
 export interface TemplateVariableDef {
-  key: string;       // sem chaves: "paciente.nome"
-  token: string;     // com chaves: "{{paciente.nome}}"
+  key: string;
+  token: string;
   label: string;
   example: string;
+  aliases?: string[];
 }
 
 export interface TemplateVariableGroup {
@@ -20,29 +16,35 @@ export interface TemplateVariableGroup {
   variables: TemplateVariableDef[];
 }
 
-const v = (key: string, label: string, example: string): TemplateVariableDef => ({
+const v = (key: string, label: string, example: string, aliases: string[] = []): TemplateVariableDef => ({
   key,
   token: `{{${key}}}`,
   label,
   example,
+  aliases,
 });
 
 export const TEMPLATE_VARIABLE_GROUPS: TemplateVariableGroup[] = [
   {
     group: 'Paciente',
     variables: [
-      v('nome_paciente', 'Nome completo', 'JOÃO DA SILVA SANTOS'),
+      v('nome_paciente', 'Nome completo', 'JOÃO DA SILVA SANTOS', ['paciente_nome']),
       v('cpf', 'CPF', '123.456.789-00'),
-      v('cns', 'Cartão SUS (CNS)', '123 4567 8901 2345'),
+      v('cartao_sus', 'Cartão SUS', '123 4567 8901 2345', ['cns']),
       v('data_nascimento', 'Data de nascimento', '01/01/1990'),
+      v('nome_mae', 'Nome da mãe', 'MARIA DOS SANTOS'),
       v('cid', 'CID-10 principal', 'F84.0'),
+      v('endereco', 'Endereço', 'Rua Exemplo, 123'),
+      v('bairro', 'Bairro', 'Centro'),
+      v('telefone', 'Telefone', '(93) 90000-0000'),
+      v('especialidade', 'Especialidade', 'Fisioterapia'),
+      v('especialidade_destino', 'Especialidade destino', 'Neurologia'),
     ],
   },
   {
     group: 'Profissional',
     variables: [
-      v('profissional', 'Nome do profissional', 'Dra. Maria Santos'),
-      v('especialidade', 'Especialidade', 'Fisioterapia'),
+      v('profissional', 'Nome do profissional', 'Dra. Maria Santos', ['profissional_logado']),
       v('carimbo_profissional', 'Carimbo digital/imagem', '[bloco de carimbo]'),
     ],
   },
@@ -50,9 +52,8 @@ export const TEMPLATE_VARIABLE_GROUPS: TemplateVariableGroup[] = [
     group: 'Atendimento',
     variables: [
       v('data_atendimento', 'Data do atendimento', new Date().toLocaleDateString('pt-BR')),
-      v('data_hoje', 'Data de hoje', new Date().toLocaleDateString('pt-BR')),
-      v('unidade', 'Unidade de saúde', 'CER II Oriximiná'),
-      v('especialidade_destino', 'Especialidade destino', 'Neurologia'),
+      v('data_hoje', 'Data de hoje', new Date().toLocaleDateString('pt-BR'), ['data_atual']),
+      v('unidade', 'Unidade de saúde', 'CER II Oriximiná', ['nome_unidade']),
     ],
   },
   {
@@ -67,8 +68,8 @@ export const TEMPLATE_VARIABLE_GROUPS: TemplateVariableGroup[] = [
   {
     group: 'Declaração / Comparecimento',
     variables: [
-      v('horario_entrada', 'Horário de entrada', '08:00'),
-      v('horario_saida', 'Horário de saída', '09:30'),
+      v('horario_entrada', 'Horário de entrada', '08:00', ['hora_entrada']),
+      v('horario_saida', 'Horário de saída', '09:30', ['hora_saida']),
       v('finalidade', 'Finalidade', 'Consulta'),
       v('motivo_falta', 'Motivo da falta', 'Doença na família'),
       v('data_falta', 'Data da falta', new Date().toLocaleDateString('pt-BR')),
@@ -112,14 +113,40 @@ export const TEMPLATE_VARIABLE_GROUPS: TemplateVariableGroup[] = [
 export const ALL_TEMPLATE_VARIABLES: TemplateVariableDef[] =
   TEMPLATE_VARIABLE_GROUPS.flatMap(g => g.variables);
 
-/**
- * Substitui todas as variáveis conhecidas por seus valores de exemplo.
- * Usado no preview do editor.
- */
-export function applyExampleValues(content: string): string {
-  let out = content;
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export const TEMPLATE_EXAMPLE_VALUES: Record<string, string> = ALL_TEMPLATE_VARIABLES.reduce((acc, def) => {
+  acc[def.key] = def.example;
+  (def.aliases || []).forEach(alias => { acc[alias] = def.example; });
+  return acc;
+}, {} as Record<string, string>);
+
+/** Substitui variáveis oficiais e aliases legados pelo mesmo valor. */
+export function applyTemplateValues(
+  content: string,
+  values: Record<string, string | number | null | undefined>,
+): string {
+  let out = content || '';
+  const replacements = new Map<string, string>();
+
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) replacements.set(key, String(value));
+  });
+
   for (const def of ALL_TEMPLATE_VARIABLES) {
-    out = out.replace(new RegExp(`\\{\\{${def.key}\\}\\}`, 'g'), def.example);
+    const knownKeys = [def.key, ...(def.aliases || [])];
+    const value = knownKeys.map(key => replacements.get(key)).find(item => item !== undefined);
+    if (value !== undefined) knownKeys.forEach(key => replacements.set(key, value));
   }
+
+  replacements.forEach((value, key) => {
+    out = out.replace(new RegExp(`\\{\\{\\s*${escapeRegExp(key)}\\s*\\}\\}`, 'g'), value || '—');
+  });
+
   return out;
+}
+
+/** Substitui variáveis conhecidas por valores de exemplo no preview. */
+export function applyExampleValues(content: string, overrides: Record<string, string | number | null | undefined> = {}): string {
+  return applyTemplateValues(content, { ...TEMPLATE_EXAMPLE_VALUES, ...overrides });
 }
