@@ -361,9 +361,19 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     html = html.replace(/\{\{([\w_]+)\}\}/g, (_m, k) => {
       const manual = camposManuais.find(f => f.key === k);
       if (manual) {
-        if (manual.type === 'checkbox') return `[${(manual.options || []).join(' / ')}]`;
-        if (manual.type === 'data') return '__/__/____';
-        return `[${manual.label}]`;
+        switch (manual.type) {
+          case 'checkbox': return `[${(manual.options || []).join(' / ')}]`;
+          case 'radio': return (manual.options || []).map(o => `( ) ${o}`).join(' &nbsp; ');
+          case 'data': return '__/__/____';
+          case 'hora': return '__:__';
+          case 'datahora': return '__/__/____ __:__';
+          case 'assinatura': return '__________________________';
+          case 'imagem':
+          case 'upload': return `[${manual.label} — anexar]`;
+          case 'qrcode': return '[ QR ]';
+          case 'barcode': return '[ ||||| ]';
+          default: return `[${manual.label}]`;
+        }
       }
       return `{{${k}}}`;
     });
