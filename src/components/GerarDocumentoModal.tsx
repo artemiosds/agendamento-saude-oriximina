@@ -17,12 +17,13 @@ import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip 
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, type DocumentConfig } from '@/lib/printLayout';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData, type SignatureData } from '@/lib/documentSignature';
+import { applyTemplateValues } from '@/lib/templateVariables';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  paciente?: { id?: string; nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string; endereco?: string; bairro?: string; telefone?: string };
+  paciente?: { id?: string; nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string; endereco?: string; bairro?: string; telefone?: string; nome_mae?: string };
   profissional?: { id?: string; nome: string; profissao: string; numero_conselho: string; tipo_conselho: string; uf_conselho: string };
   unidade?: string;
   dataAtendimento?: string;
@@ -83,7 +84,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [medicamentos, setMedicamentos] = useState<MedicamentoRow[]>([emptyMedicamento()]);
   const [exibirCid, setExibirCid] = useState(false);
-  const [pacienteExtra, setPacienteExtra] = useState<{ endereco?: string; bairro?: string; telefone?: string; cns?: string } | null>(null);
+  const [pacienteExtra, setPacienteExtra] = useState<{ endereco?: string; bairro?: string; telefone?: string; cns?: string; nome_mae?: string } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -98,15 +99,15 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const loadPacienteExtra = async () => {
     if (!paciente?.id) { setPacienteExtra(null); return; }
     // Só busca se algum campo faltar no props
-    if (paciente.endereco && paciente.bairro && paciente.telefone) {
+    if (paciente.endereco && paciente.bairro && paciente.telefone && paciente.nome_mae) {
       setPacienteExtra({
-        endereco: paciente.endereco, bairro: paciente.bairro, telefone: paciente.telefone, cns: paciente.cns,
+        endereco: paciente.endereco, bairro: paciente.bairro, telefone: paciente.telefone, cns: paciente.cns, nome_mae: paciente.nome_mae,
       });
       return;
     }
     const { data } = await supabase
       .from('pacientes')
-      .select('endereco, bairro, telefone, cns')
+      .select('endereco, bairro, telefone, cns, nome_mae')
       .eq('id', paciente.id)
       .maybeSingle();
     if (data) setPacienteExtra(data as any);
@@ -178,24 +179,6 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   })();
 
   const substituir = (conteudo: string): string => {
-    let text = conteudo
-      .replace(/\{\{nome_paciente\}\}/g, paciente?.nome || '—')
-      .replace(/\{\{cpf\}\}/g, paciente?.cpf || '—')
-      .replace(/\{\{cns\}\}/g, paciente?.cns || pacienteExtra?.cns || '—')
-      .replace(/\{\{cartao_sus\}\}/g, paciente?.cns || pacienteExtra?.cns || '—')
-      .replace(/\{\{endereco\}\}/g, paciente?.endereco || pacienteExtra?.endereco || '—')
-      .replace(/\{\{bairro\}\}/g, paciente?.bairro || pacienteExtra?.bairro || '—')
-      .replace(/\{\{telefone\}\}/g, paciente?.telefone || pacienteExtra?.telefone || '—')
-      .replace(/\{\{data_nascimento\}\}/g, paciente?.data_nascimento || '—')
-      .replace(/\{\{data_atendimento\}\}/g, dataAtendimento || hoje)
-      .replace(/\{\{carimbo_profissional\}\}/g, carimboInlineHtml)
-      .replace(/\{\{profissional\}\}/g, profissional?.nome || '—')
-      .replace(/\{\{cid\}\}/g, paciente?.cid || '—')
-      .replace(/\{\{especialidade\}\}/g, paciente?.especialidade_destino || '—')
-      .replace(/\{\{unidade\}\}/g, docConfig?.linha2 || docConfig?.linha1 || unidade || 'CER II Oriximiná')
-      .replace(/\{\{data_hoje\}\}/g, hoje);
-
-    // Extended variables from campos (datas yyyy-mm-dd → dd/mm/yyyy)
     const formatIfDate = (val: string) => {
       if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
         const [y, m, d] = val.split('-');
@@ -203,18 +186,38 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       }
       return val;
     };
+    const values: Record<string, string> = {
+      nome_paciente: paciente?.nome || '—',
+      cpf: paciente?.cpf || '—',
+      cns: paciente?.cns || pacienteExtra?.cns || '—',
+      cartao_sus: paciente?.cns || pacienteExtra?.cns || '—',
+      endereco: paciente?.endereco || pacienteExtra?.endereco || '—',
+      bairro: paciente?.bairro || pacienteExtra?.bairro || '—',
+      telefone: paciente?.telefone || pacienteExtra?.telefone || '—',
+      data_nascimento: paciente?.data_nascimento || '—',
+      nome_mae: paciente?.nome_mae || pacienteExtra?.nome_mae || '—',
+      data_atendimento: dataAtendimento || hoje,
+      carimbo_profissional: carimboInlineHtml,
+      profissional: profissional?.nome || user?.nome || '—',
+      cid: campos.cid || paciente?.cid || '—',
+      especialidade: paciente?.especialidade_destino || '—',
+      especialidade_destino: campos.especialidade_destino || paciente?.especialidade_destino || '—',
+      unidade: docConfig?.linha2 || docConfig?.linha1 || unidade || 'CER II Oriximiná',
+      data_hoje: hoje,
+      data_atual: hoje,
+    };
     Object.entries(campos).forEach(([k, v]) => {
-      const out = v ? formatIfDate(v) : '—';
-      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), out);
+      values[k] = v ? formatIfDate(v) : '—';
     });
 
     // Medicamentos
     if (medicamentos.length > 0 && medicamentos[0].medicamento) {
-      const medList = medicamentos
+      values.medicamentos = medicamentos
         .filter(m => m.medicamento)
         .map((m, i) => `${i + 1}. ${m.medicamento} — ${m.dosagem}, ${m.via}, ${m.frequencia}, ${m.duracao}${m.observacao ? ` (${m.observacao})` : ''}`)
         .join('\n');
-      text = text.replace(/\{\{medicamentos\}\}/g, medList);
+    } else {
+      values.medicamentos = '—';
     }
 
     // Campos manuais do template (blocos_clinicos.campos_manuais)
@@ -223,20 +226,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     manuais.forEach(f => {
       if (f.type === 'checkbox' && Array.isArray(f.options)) {
         const marcadas = (campos[f.key] || '').split('|').filter(Boolean);
-        const rendered = f.options
+        values[f.key] = f.options
           .map(opt => `${marcadas.includes(opt) ? '(X)' : '(&nbsp;&nbsp;)'} ${opt}`)
           .join(' &nbsp; ');
         const outros = campos[`${f.key}__outros`] || '';
         const outrosHtml = outros ? ` &nbsp; <u>${outros}</u>` : '';
-        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), rendered + outrosHtml);
+        values[f.key] += outrosHtml;
       } else if (f.type === 'data') {
-        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), formatIfDate(campos[f.key] || '') || '__/__/____');
+        values[f.key] = formatIfDate(campos[f.key] || '') || '__/__/____';
       } else {
-        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), campos[f.key] || '______________');
+        values[f.key] = campos[f.key] || '______________';
       }
     });
 
-    return text;
+    return applyTemplateValues(conteudo, values);
   };
 
 
