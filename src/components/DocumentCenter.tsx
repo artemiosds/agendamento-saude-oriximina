@@ -22,6 +22,9 @@ interface PacienteLite {
   cid?: string | null;
   telefone?: string | null;
   endereco?: string | null;
+  bairro?: string | null;
+  nomeMae?: string | null;
+  nome_mae?: string | null;
   especialidadeDestino?: string | null;
   unidadeId?: string | null;
 }
@@ -145,6 +148,10 @@ const DocumentCenter: React.FC<Props> = ({
     data_nascimento: paciente.dataNascimento || '',
     cid: paciente.cid || '',
     especialidade_destino: paciente.especialidadeDestino || '',
+    endereco: paciente.endereco || '',
+    bairro: paciente.bairro || '',
+    telefone: paciente.telefone || '',
+    nome_mae: paciente.nomeMae || paciente.nome_mae || '',
   } : undefined;
 
   return (
