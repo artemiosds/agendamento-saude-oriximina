@@ -2109,7 +2109,7 @@ const BpaExportar: React.FC = () => {
           }
           const endereco = fixedText(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco, 30);
           const complemento = fixedText(pac?.complemento || pacCd.complemento, 10);
-          const numero = rpad(limparTexto(pac?.numero || pacCd.numero), 5);
+          const numero = rpad(limparTexto(pac?.numero || pacCd.numero) || "S/N", 5);
           const bairro = fixedText(pac?.bairro || pacCd.bairro, 30);
           const telefone = fixedDigits(pac?.telefone || pacCd.telefone, 11);
           const email = rpad(
