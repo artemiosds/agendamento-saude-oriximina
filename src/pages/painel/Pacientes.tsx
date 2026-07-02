@@ -1576,6 +1576,17 @@ const Pacientes: React.FC = () => {
         );
       })()}
 
+      {/* DocumentCenter - central de documentos do paciente */}
+      <DocumentCenter
+        open={documentCenterOpen}
+        onOpenChange={setDocumentCenterOpen}
+        paciente={detalhePaciente as any}
+        onOpenFichaCompleta={() => detalhePaciente && handleOpenFicha(detalhePaciente as any, 'completa')}
+        onOpenFichaSoDados={() => detalhePaciente && handleOpenFicha(detalhePaciente as any, 'dados_pessoais')}
+        onOpenApac={() => detalhePaciente && openApacLaudo(detalhePaciente as any)}
+      />
+
+
       {/* Dialog de impressão da ficha */}
       <Dialog open={fichaOpen} onOpenChange={(open) => { if (!open) { setFichaOpen(false); setFichaData(null); } }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
