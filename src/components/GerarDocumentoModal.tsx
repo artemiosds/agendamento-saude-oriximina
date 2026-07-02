@@ -83,15 +83,34 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [medicamentos, setMedicamentos] = useState<MedicamentoRow[]>([emptyMedicamento()]);
   const [exibirCid, setExibirCid] = useState(false);
+  const [pacienteExtra, setPacienteExtra] = useState<{ endereco?: string; bairro?: string; telefone?: string; cns?: string } | null>(null);
 
   useEffect(() => {
     if (open) {
       loadModelos();
       loadCarimbo();
       loadDocConfig();
+      loadPacienteExtra();
       resetFields();
     }
   }, [open]);
+
+  const loadPacienteExtra = async () => {
+    if (!paciente?.id) { setPacienteExtra(null); return; }
+    // Só busca se algum campo faltar no props
+    if (paciente.endereco && paciente.bairro && paciente.telefone) {
+      setPacienteExtra({
+        endereco: paciente.endereco, bairro: paciente.bairro, telefone: paciente.telefone, cns: paciente.cns,
+      });
+      return;
+    }
+    const { data } = await supabase
+      .from('pacientes')
+      .select('endereco, bairro, telefone, cns')
+      .eq('id', paciente.id)
+      .maybeSingle();
+    if (data) setPacienteExtra(data as any);
+  };
 
   const loadDocConfig = async () => {
     const cfg = await loadDocumentConfig();
