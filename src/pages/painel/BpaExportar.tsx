@@ -1489,37 +1489,9 @@ const BpaExportar: React.FC = () => {
           .select("prontuario_id, procedimento_id")
           .in("prontuario_id", prontIdsAll);
         const procIds = [...new Set((ppRows || []).map((r: any) => r.procedimento_id).filter(Boolean))] as string[];
-        const codigoPorProcId = new Map<string, string>();
-        if (procIds.length > 0) {
-          // Fonte 1: tabela local `procedimentos` (cadastros internos).
-          const { data: procRows } = await (supabase as any)
-            .from("procedimentos")
-            .select("id, codigo_sigtap")
-            .in("id", procIds);
-          (procRows || []).forEach((p: any) => {
-            const code = somenteNumeros(p.codigo_sigtap || "");
-            if (code) codigoPorProcId.set(p.id, code);
-          });
-          // Fonte 2: `sigtap_procedimentos` (catálogo oficial SIGTAP). O
-          // Prontuário grava o `id` do SIGTAP diretamente em
-          // prontuario_procedimentos.procedimento_id quando o profissional
-          // escolhe do catálogo — sem espelhar em `procedimentos`. Sem essa
-          // fonte, o BPA-Exportar acusava "SIGTAP Ausente" mesmo com códigos
-          // selecionados no Prontuário.
-          const faltantes = procIds.filter((id) => !codigoPorProcId.has(id));
-          if (faltantes.length > 0) {
-            const { data: sigRows } = await (supabase as any)
-              .from("sigtap_procedimentos")
-              .select("id, codigo")
-              .in("id", faltantes);
-            (sigRows || []).forEach((p: any) => {
-              const code = somenteNumeros(p.codigo || "");
-              if (code) codigoPorProcId.set(p.id, code);
-            });
-          }
-        }
+        const codigoPorProcId = await resolverCodigosSigtapPorProcedimentoId(procIds);
         (ppRows || []).forEach((r: any) => {
-          const code = codigoPorProcId.get(r.procedimento_id);
+          const code = codigoPorProcId.get(String(r.procedimento_id));
           if (!code) return;
           const lista = sigtapPorProntuario.get(r.prontuario_id) || [];
           if (!lista.includes(code)) {
@@ -1527,6 +1499,54 @@ const BpaExportar: React.FC = () => {
             sigtapPorProntuario.set(r.prontuario_id, lista);
           }
         });
+      }
+
+      // === Fallback profundo via sessões/ciclos de tratamento ===
+      // Alguns atendimentos de ciclo ficam na agenda/prontuário, mas o
+      // procedimento executado do dia está em treatment_sessions.procedure_done.
+      // Indexamos por paciente+profissional+data para reaproveitar somente no
+      // atendimento correspondente, sem alterar o fluxo de geração.
+      const sigtapPorSessaoTratamento = new Map<string, string[]>();
+      try {
+        let sessQuery = (supabase as any)
+          .from("treatment_sessions")
+          .select("id, cycle_id, patient_id, professional_id, scheduled_date, status, procedure_done")
+          .in("patient_id", pacienteIds)
+          .gte("scheduled_date", startDate)
+          .lte("scheduled_date", endDate)
+          .not("status", "in", "(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)")
+          .range(0, 9999);
+        if (formData.profissional_id !== "all") {
+          sessQuery = sessQuery.eq("professional_id", formData.profissional_id);
+        }
+        const { data: sessoesRows } = await sessQuery;
+        const sessoes = (sessoesRows || []).filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
+        const cycleIds = [...new Set(sessoes.map((s: any) => s.cycle_id).filter(Boolean))] as string[];
+        const cycleMap = new Map<string, any>();
+        if (cycleIds.length > 0) {
+          const { data: cyclesRows } = await (supabase as any)
+            .from("treatment_cycles")
+            .select("id, unit_id")
+            .in("id", cycleIds);
+          (cyclesRows || []).forEach((c: any) => cycleMap.set(String(c.id), c));
+        }
+
+        const procIdsSessao = sessoes.map((s: any) => s.procedure_done).filter(Boolean);
+        const codigoPorProcSessao = await resolverCodigosSigtapPorProcedimentoId(procIdsSessao);
+        sessoes.forEach((s: any) => {
+          const cycle = s.cycle_id ? cycleMap.get(String(s.cycle_id)) : null;
+          if (formData.unidade_id !== "all" && cycle?.unit_id && cycle.unit_id !== formData.unidade_id) return;
+          const code = codigoPorProcSessao.get(String(s.procedure_done));
+          if (!code) return;
+          const key = [String(s.patient_id), String(s.professional_id), String(s.scheduled_date).slice(0, 10)].join("|");
+          const lista = sigtapPorSessaoTratamento.get(key) || [];
+          if (!lista.includes(code)) {
+            lista.push(code);
+            sigtapPorSessaoTratamento.set(key, lista);
+          }
+        });
+      } catch (e) {
+        console.warn("[BPA-Exportar] falha ao consultar procedimentos de sessões de tratamento:", e);
       }
 
       // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
