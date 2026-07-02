@@ -164,6 +164,7 @@ function resolveLogoUrl(configUrl: string, fallback: string): string {
 export function buildInstitutionalCSS(config?: DocumentConfig): string {
   const t = config?.tipografia || DEFAULT_TYPOGRAPHY;
   const m = config?.margens || DEFAULT_MARGINS;
+  const footerSpace = config?.mostrarRodape === false ? 0 : 24;
   const fontFamily =
     t.fonte === 'Times New Roman' ? `'Times New Roman', Times, serif`
     : t.fonte === 'Calibri' ? `Calibri, 'Segoe UI', Arial, sans-serif`
@@ -172,6 +173,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   return `
 <style>
+  :root { --doc-footer-space: ${footerSpace}mm; }
   @page {
     size: A4;
     margin: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
@@ -180,13 +182,12 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: ${fontFamily};
-    padding: 0;
+    padding: 0 0 var(--doc-footer-space);
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
     line-height: 1.1;
     min-height: calc(297mm - ${m.superior + m.inferior}mm);
-    display: flex;
-    flex-direction: column;
+    position: relative;
   }
 
   /* HEADER */
@@ -269,7 +270,6 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .doc-content {
     text-align: ${t.alinhamento};
     font-size: ${t.tamanhoBase}pt;
-    flex: 1 0 auto;
   }
 
   /* SECTIONS */
@@ -358,20 +358,25 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .signature.pos-right .assinatura-img,
   .signature.pos-right .carimbo-img { margin-right: 0; margin-left: auto; }
 
-  /* FOOTER — fica no final da página sem sobrepor o conteúdo */
+  /* FOOTER — reservado no fluxo e preso no rodapé inferior do documento */
   .doc-footer {
-    margin-top: auto;
-    padding-top: 6px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 12mm;
+    padding-top: 4px;
     border-top: 1px solid #cbd5e1;
     font-size: 7.5pt;
     color: #64748b;
+    background: #fff;
     break-inside: avoid;
     page-break-inside: avoid;
-    flex-shrink: 0;
+    overflow: hidden;
   }
-  .doc-footer .footer-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .doc-footer .footer-row > div { overflow-wrap: anywhere; }
-  .doc-footer .footer-address { text-align: center; font-size: 7pt; color: #94a3b8; margin-top: 2px; }
+  .doc-footer .footer-line { text-align: center; line-height: 1.25; overflow-wrap: anywhere; }
+  .doc-footer .footer-extra { margin-top: 1px; }
+  .doc-footer .footer-address { text-align: center; font-size: 7pt; color: #94a3b8; margin-top: 2px; line-height: 1.2; overflow-wrap: anywhere; }
 
   /* TABLES */
   table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
@@ -379,10 +384,10 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
   @media print {
-    body { background: #fff; margin: 0; min-height: calc(297mm - ${m.superior + m.inferior}mm); }
+    body { background: #fff; margin: 0; min-height: calc(297mm - ${m.superior + m.inferior}mm); padding-bottom: var(--doc-footer-space); position: relative; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
     .doc-header, .signature { page-break-inside: avoid; }
-    .doc-footer { position: static; margin-top: auto; background: #fff; }
+    .doc-footer { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; }
 
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
@@ -446,13 +451,11 @@ export function docFooter(config: DocumentConfig, extraInfo?: string): string {
   if (config.mostrarRodape === false) return '';
   const now = new Date().toLocaleString('pt-BR');
   const rodape = config.rodapeTexto || '';
+  const extraLine = [rodape, extraInfo, now].filter(Boolean).join(' · ');
   return `
     <div class="doc-footer">
-      <div class="footer-row">
-        <div>${config.linha1}${config.linha2 ? ' — ' + config.linha2 : ''}</div>
-        <div>${rodape} ${extraInfo || ''}</div>
-        <div>${now}</div>
-      </div>
+      <div class="footer-line">${config.linha1}${config.linha2 ? ' — ' + config.linha2 : ''}</div>
+      ${extraLine ? `<div class="footer-line footer-extra">${extraLine}</div>` : ''}
       ${config.rodapeEndereco ? `<div class="footer-address">${config.rodapeEndereco}</div>` : ''}
     </div>`;
 }
