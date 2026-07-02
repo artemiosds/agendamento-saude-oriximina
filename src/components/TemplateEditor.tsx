@@ -251,13 +251,14 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     }).insertContent(' ').run();
   };
 
-  const addManualField = (type: ManualField['type']) => {
+  const addManualField = (type: ManualFieldType) => {
     if (!newFieldLabel.trim()) { toast.error('Informe o rótulo do campo'); return; }
     const key = `${type}_${Date.now().toString(36)}`;
-    const options = type === 'checkbox'
+    const needsOptions = type === 'checkbox' || type === 'radio';
+    const options = needsOptions
       ? newFieldOptions.split(',').map(o => o.trim()).filter(Boolean)
       : undefined;
-    if (type === 'checkbox' && (!options || options.length === 0)) {
+    if (needsOptions && (!options || options.length === 0)) {
       toast.error('Informe ao menos uma opção separada por vírgula');
       return;
     }
@@ -268,6 +269,30 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     setNewFieldLabel('');
     setNewFieldOptions('');
     setDirty(true);
+  };
+
+  // Insert block/inline helpers for editor components
+  const insertHR = () => editor?.chain().focus().setHorizontalRule().run();
+  const insertPageBreak = () => editor?.chain().focus().insertContent({ type: 'pageBreak' }).run();
+  const insertSpacer = () => editor?.chain().focus().insertContent({ type: 'spacer', attrs: { size: '24px' } }).run();
+  const setColor = (color: string) => {
+    if (!editor) return;
+    editor.chain().focus().setMark('textStyle', { color }).run();
+  };
+  const setFontSize = (size: string) => {
+    if (!editor) return;
+    if (!size || size === '__default__') editor.chain().focus().setMark('textStyle', { fontSize: null }).run();
+    else editor.chain().focus().setMark('textStyle', { fontSize: size }).run();
+  };
+  const doCopy = async () => {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    const text = editor.state.doc.textBetween(from, to, '\n');
+    if (text) { try { await navigator.clipboard.writeText(text); toast.success('Copiado'); } catch { toast.error('Falha ao copiar'); } }
+  };
+  const doPastePlain = async () => {
+    if (!editor) return;
+    try { const t = await navigator.clipboard.readText(); editor.chain().focus().insertContent(t).run(); } catch { toast.error('Sem permissão de leitura da área de transferência'); }
   };
 
   const removeManualField = (key: string) => {
