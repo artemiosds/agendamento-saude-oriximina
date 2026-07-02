@@ -155,7 +155,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
 
   const getDayStatus = (dateStr: string) => {
     const isPast = dateStr < todayStr;
-    if (isPast && !isMaster) return 'past' as const;
+    const allowPast = isMaster || mode === 'remarcar';
+    if (isPast && !allowPast) return 'past' as const;
     const isSuggested = dateStr === suggestedDate;
     const conflict = conflictMap[dateStr];
     const hasSameProf = conflict?.sameProf && conflict.sameProf.length > 0;
@@ -173,8 +174,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     if (isSuggested) return 'suggested' as const;
     // Available
     if (availableSet.has(dateStr)) return 'available' as const;
-    // In remarcar mode, allow all future dates even without availability slots
-    if (mode === 'remarcar' && !isPast) return 'available' as const;
+    // In remarcar mode, allow all dates (including past) even without availability slots
+    if (mode === 'remarcar') return 'available' as const;
     return 'unavailable' as const;
   };
 
@@ -218,7 +219,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const prevMonth = () => setViewMonth(p => p.month === 0 ? { year: p.year - 1, month: 11 } : { year: p.year, month: p.month - 1 });
   const nextMonth = () => setViewMonth(p => p.month === 11 ? { year: p.year + 1, month: 0 } : { year: p.year, month: p.month + 1 });
 
-  const canGoPrev = viewMonth.year > parseInt(todayStr.substring(0, 4)) || (viewMonth.year === parseInt(todayStr.substring(0, 4)) && viewMonth.month > parseInt(todayStr.substring(5, 7)) - 1);
+  const canGoPrev = isMaster || mode === 'remarcar' || viewMonth.year > parseInt(todayStr.substring(0, 4)) || (viewMonth.year === parseInt(todayStr.substring(0, 4)) && viewMonth.month > parseInt(todayStr.substring(5, 7)) - 1);
 
   const handleConfirm = async () => {
     if (!selectedDate || !selectedHora) {
