@@ -29,6 +29,7 @@ import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import ContactActionButton from "@/components/ContactActionButton";
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import PacienteDetalheModal, { PSecao, PCampo, AlergiasBlock, formatCPF, formatCNS, formatTelefoneBR, formatarDataBR } from "@/components/PacienteDetalheModal";
+import DocumentCenter from "@/components/DocumentCenter";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import { toast } from "sonner";
 import { calculatePatientPendingFields } from "@/lib/paciente-validation";
@@ -319,6 +320,7 @@ const Pacientes: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [detalheOpen, setDetalheOpen] = useState(false);
+  const [documentCenterOpen, setDocumentCenterOpen] = useState(false);
   const [detalhePaciente, setDetalhePaciente] = useState<(typeof pacientes)[0] | null>(null);
 
   // Print ficha state
@@ -1518,31 +1520,14 @@ const Pacientes: React.FC = () => {
               variant="outline"
               size="sm"
               className="w-full min-w-0"
-              onClick={() => handleOpenFicha(detalhePaciente, 'completa')}
+              onClick={() => setDocumentCenterOpen(true)}
             >
-              <Printer className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Ficha Completa</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full min-w-0"
-              onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
-            >
-              <Printer className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Imprimir Só Dados</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full min-w-0"
-              onClick={() => openApacLaudo(detalhePaciente)}
-            >
-              <FileSignature className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Laudo APAC</span>
+              <FileText className="w-4 h-4 mr-1.5" />
+              <span className="truncate">Documentos</span>
             </Button>
           </div>
         );
+
 
         return (
           <PacienteDetalheModal
@@ -1591,6 +1576,17 @@ const Pacientes: React.FC = () => {
           </PacienteDetalheModal>
         );
       })()}
+
+      {/* DocumentCenter - central de documentos do paciente */}
+      <DocumentCenter
+        open={documentCenterOpen}
+        onOpenChange={setDocumentCenterOpen}
+        paciente={detalhePaciente as any}
+        onOpenFichaCompleta={() => detalhePaciente && handleOpenFicha(detalhePaciente as any, 'completa')}
+        onOpenFichaSoDados={() => detalhePaciente && handleOpenFicha(detalhePaciente as any, 'dados_pessoais')}
+        onOpenApac={() => detalhePaciente && openApacLaudo(detalhePaciente as any)}
+      />
+
 
       {/* Dialog de impressão da ficha */}
       <Dialog open={fichaOpen} onOpenChange={(open) => { if (!open) { setFichaOpen(false); setFichaData(null); } }}>
