@@ -132,7 +132,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         .order('nome');
       if (error) throw error;
       const all = (data || []) as unknown as DocumentTemplate[];
-      setModelos(all.filter(m => m.perfis_permitidos.includes(user?.role || '')));
+      const filtered = all.filter(m => m.perfis_permitidos.includes(user?.role || ''));
+      setModelos(filtered);
+      if (templateId && filtered.some(m => m.id === templateId)) {
+        setTimeout(() => handleSelect(templateId), 0);
+      }
     } catch (e) { console.error(e); }
   };
 
