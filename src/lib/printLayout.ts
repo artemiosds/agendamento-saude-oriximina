@@ -195,6 +195,9 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     flex-direction: column;
     position: relative;
   }
+  .doc-page > .doc-content {
+    flex: 1 1 auto;
+  }
 
   /* HEADER */
   .doc-header {
@@ -274,7 +277,6 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   /* CONTENT */
   .doc-content {
-    flex: 1 1 auto;
     text-align: ${t.alinhamento};
     font-size: ${t.tamanhoBase}pt;
   }
@@ -395,7 +397,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     .doc-page { min-height: var(--doc-page-height); display: flex; flex-direction: column; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
     .doc-header, .signature, .doc-footer { page-break-inside: avoid; break-inside: avoid; }
-    .doc-content { flex: 1 1 auto; }
+    .doc-page > .doc-content { flex: 1 1 auto; }
     .doc-footer { position: static; margin-top: auto; background: #fff; }
 
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
