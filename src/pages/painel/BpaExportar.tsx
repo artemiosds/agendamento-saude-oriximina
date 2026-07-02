@@ -1507,7 +1507,13 @@ const BpaExportar: React.FC = () => {
         const codigoPorProcId = await resolverCodigosSigtapPorProcedimentoId(procIds);
         (ppRows || []).forEach((r: any) => {
           const code = codigoPorProcId.get(String(r.procedimento_id));
-          if (!code) return;
+          if (!code) {
+            console.warn(
+              `[BPA-Exportar] procedimento_id ${r.procedimento_id || "vazio"} sem código SIGTAP resolvido ` +
+                `(prontuario_id ${r.prontuario_id || "vazio"}).`,
+            );
+            return;
+          }
           const cid = extrairCodigoCid(r.cids_selecionados);
           const itens = sigtapItensPorProntuario.get(r.prontuario_id) || [];
           if (!itens.some((item) => item.codigo === code && (item.cid || "") === cid)) {
