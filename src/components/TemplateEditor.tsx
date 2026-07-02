@@ -210,7 +210,8 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       setSaving(false);
       return;
     }
-    if (!data?.id) {
+    const saved = Array.isArray(data) ? data[0] : data;
+    if (!saved?.id) {
       toast.error('Template não foi salvo. Tente novamente ou verifique sua permissão.');
       setSaving(false);
       return;
