@@ -114,6 +114,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     extensions: [
       StarterKit,
       Underline,
+      TextStyle,
+      FontFamily.configure({ types: ['textStyle'] }),
+      TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right', 'justify'] }),
       Table.configure({ resizable: false }),
       TableRow, TableHeader, TableCell,
       VariableMark,
