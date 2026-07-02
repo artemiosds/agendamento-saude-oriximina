@@ -166,7 +166,8 @@ const ModelosDocumentos: React.FC = () => {
         p_versoes: versoes as any,
       });
       if (error) throw error;
-      if (!data?.id) {
+      const saved = Array.isArray(data) ? data[0] : data;
+      if (!saved?.id) {
         throw new Error('O backend não confirmou o salvamento do modelo.');
       }
       toast.success('Modelo salvo!');
