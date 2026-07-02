@@ -307,7 +307,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const buildHtmlBody = (signatureHtml: string) => {
     // Content may already be rich HTML from TipTap or plain text
     const raw = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
-    const html = stripConditionalBlocks(raw, paciente?.data_nascimento);
+    const html = stripConditionalBlocks(raw, paciente?.data_nascimento || pacienteExtra?.data_nascimento);
     const carimboHtml = formatCarimboBlock(carimbo);
     return `
       <div class="content-block" style="margin-top:20px;">
