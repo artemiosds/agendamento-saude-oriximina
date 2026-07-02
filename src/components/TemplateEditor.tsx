@@ -193,45 +193,30 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     if (!editor) return;
     setSaving(true);
     const html = normalizeTemplateAliases(editor.getHTML());
-    const payload: any = {
-      nome: nome.trim(),
-      tipo: categoria,
-      conteudo: html,
-      ativo: true,
-      blocos_clinicos: { campos_manuais: camposManuais },
-      updated_at: new Date().toISOString(),
-    };
-    if (templateId) {
-      const { data, error } = await supabase
-        .from('document_templates')
-        .update(payload)
-        .eq('id', templateId)
-        .select('id');
-      if (error) { toast.error('Erro ao salvar: ' + error.message); setSaving(false); return; }
-      if (!data || data.length === 0) {
-        toast.error('Sem permissão para alterar este template (RLS). Verifique se ele pertence à sua unidade / foi criado por você.');
-        setSaving(false);
-        return;
-      }
-      toast.success('Template atualizado');
-    } else {
-      payload.criado_por = user?.id || '';
-      payload.criado_por_nome = user?.nome || '';
-      payload.tipo_modelo = 'UNIDADE';
-      payload.unidade_id = user?.unidadeId || '';
-      const { data, error } = await supabase
-        .from('document_templates')
-        .insert(payload)
-        .select('id')
-        .maybeSingle();
-      if (error) { toast.error('Erro ao criar: ' + error.message); setSaving(false); return; }
-      if (!data) {
-        toast.error('Template não foi criado (RLS bloqueou a inserção).');
-        setSaving(false);
-        return;
-      }
-      toast.success('Template criado');
+    const { data, error } = await (supabase as any).rpc('save_document_template', {
+      p_template_id: templateId || null,
+      p_nome: nome.trim(),
+      p_tipo: categoria,
+      p_conteudo: html,
+      p_ativo: true,
+      p_perfis_permitidos: templateId ? null : ['master', 'profissional', 'coordenador', 'gestao'],
+      p_tipo_modelo: templateId ? null : 'UNIDADE',
+      p_unidade_id: templateId ? null : (user?.unidadeId || ''),
+      p_blocos_clinicos: { campos_manuais: camposManuais },
+      p_versoes: templateId ? null : [],
+    });
+    if (error) {
+      toast.error('Erro ao salvar template: ' + error.message);
+      setSaving(false);
+      return;
     }
+    const saved = Array.isArray(data) ? data[0] : data;
+    if (!saved?.id) {
+      toast.error('Template não foi salvo. Tente novamente ou verifique sua permissão.');
+      setSaving(false);
+      return;
+    }
+    toast.success(templateId ? 'Template atualizado' : 'Template criado');
 
     setDirty(false);
     setSaving(false);

@@ -145,33 +145,30 @@ const ModelosDocumentos: React.FC = () => {
     setSaving(true);
     try {
       const isNew = !current.id || !modelos.some(m => m.id === current.id);
-      const payload = {
-        nome: current.nome,
-        tipo: current.tipo,
-        conteudo: normalizeTemplateAliases(current.conteudo),
-        ativo: current.ativo,
-        perfis_permitidos: current.perfis_permitidos,
-        tipo_modelo: isGlobalAdmin && current.tipo_modelo === 'GLOBAL' ? 'GLOBAL' : current.tipo_modelo,
-        unidade_id: current.tipo_modelo === 'GLOBAL' ? '' : (current.unidade_id || user?.unidadeId || ''),
-        criado_por: current.criado_por || user?.id || '',
-        criado_por_nome: current.criado_por_nome || user?.nome || '',
-        versoes: current.versoes as any,
-        blocos_clinicos: current.blocos_clinicos as any,
-      };
-
-      if (isNew) {
-        const { error } = await supabase.from('document_templates').insert(payload);
-        if (error) throw error;
-      } else {
-        // Version history
+      let versoes = current.versoes || [];
+      if (!isNew) {
         const old = modelos.find(m => m.id === current.id);
-        if (old && old.conteudo !== current.conteudo) {
-          const versoes = [...(current.versoes || [])];
-          versoes.unshift({ conteudo: old.conteudo, salvo_em: old.updated_at });
-          payload.versoes = versoes.slice(0, 5) as any;
+        if (old && normalizeTemplateAliases(old.conteudo) !== normalizeTemplateAliases(current.conteudo)) {
+          versoes = [{ conteudo: old.conteudo, salvo_em: old.updated_at }, ...versoes].slice(0, 5);
         }
-        const { error } = await supabase.from('document_templates').update(payload).eq('id', current.id);
-        if (error) throw error;
+      }
+
+      const { data, error } = await (supabase as any).rpc('save_document_template', {
+        p_template_id: isNew ? null : current.id,
+        p_nome: current.nome.trim(),
+        p_tipo: current.tipo,
+        p_conteudo: normalizeTemplateAliases(current.conteudo),
+        p_ativo: current.ativo,
+        p_perfis_permitidos: current.perfis_permitidos,
+        p_tipo_modelo: isGlobalAdmin && current.tipo_modelo === 'GLOBAL' ? 'GLOBAL' : current.tipo_modelo,
+        p_unidade_id: current.tipo_modelo === 'GLOBAL' ? '' : (current.unidade_id || user?.unidadeId || ''),
+        p_blocos_clinicos: current.blocos_clinicos as any,
+        p_versoes: versoes as any,
+      });
+      if (error) throw error;
+      const saved = Array.isArray(data) ? data[0] : data;
+      if (!saved?.id) {
+        throw new Error('O backend não confirmou o salvamento do modelo.');
       }
       toast.success('Modelo salvo!');
       setEditOpen(false);
@@ -191,7 +188,25 @@ const ModelosDocumentos: React.FC = () => {
   };
 
   const handleToggle = async (id: string, ativo: boolean) => {
-    await supabase.from('document_templates').update({ ativo }).eq('id', id);
+    const modelo = modelos.find(m => m.id === id);
+    if (!modelo) return;
+    const { data, error } = await (supabase as any).rpc('save_document_template', {
+      p_template_id: id,
+      p_nome: modelo.nome,
+      p_tipo: modelo.tipo,
+      p_conteudo: normalizeTemplateAliases(modelo.conteudo || '<p></p>'),
+      p_ativo: ativo,
+      p_perfis_permitidos: modelo.perfis_permitidos,
+      p_tipo_modelo: modelo.tipo_modelo,
+      p_unidade_id: modelo.unidade_id || '',
+      p_blocos_clinicos: modelo.blocos_clinicos as any,
+      p_versoes: modelo.versoes as any,
+    });
+    const saved = Array.isArray(data) ? data[0] : data;
+    if (error || !saved?.id) {
+      toast.error('Erro ao alterar status do modelo: ' + (error?.message || 'salvamento não confirmado'));
+      return;
+    }
     loadModelos();
   };
 

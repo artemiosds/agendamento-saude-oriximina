@@ -4428,6 +4428,42 @@ export type Database = {
         }
         Returns: Json
       }
+      save_document_template: {
+        Args: {
+          p_ativo?: boolean
+          p_blocos_clinicos?: Json
+          p_conteudo?: string
+          p_nome?: string
+          p_perfis_permitidos?: string[]
+          p_template_id?: string
+          p_tipo?: string
+          p_tipo_modelo?: string
+          p_unidade_id?: string
+          p_versoes?: Json
+        }
+        Returns: {
+          ativo: boolean
+          blocos_clinicos: Json
+          conteudo: string
+          created_at: string
+          criado_por: string
+          criado_por_nome: string
+          id: string
+          nome: string
+          perfis_permitidos: string[]
+          tipo: string
+          tipo_modelo: string
+          unidade_id: string | null
+          updated_at: string
+          versoes: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "document_templates"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       search_patients: {
         Args: { p_limit?: number; p_search: string; p_unit_id?: string }
         Returns: {
