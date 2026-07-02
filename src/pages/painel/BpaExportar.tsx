@@ -1549,6 +1549,62 @@ const BpaExportar: React.FC = () => {
         console.warn("[BPA-Exportar] falha ao consultar procedimentos de sessões de tratamento:", e);
       }
 
+      // === Fallback histórico do Prontuário por paciente+profissional ===
+      // Para atendimentos sintéticos da Agenda sem prontuário no dia, evita falso
+      // "SIGTAP Ausente" reaproveitando procedimentos SIGTAP autênticos já
+      // vinculados ao prontuário do mesmo paciente/profissional antes da data.
+      const sigtapHistoricoPorPacienteProf = new Map<string, Array<{ data: string; codigo: string }>>();
+      try {
+        const histProntuarios: any[] = [];
+        const PAGE = 1000;
+        for (let offset = 0; ; offset += PAGE) {
+          let histQuery = (supabase as any)
+            .from("prontuarios")
+            .select("id, paciente_id, profissional_id, data_atendimento")
+            .in("paciente_id", pacienteIds)
+            .in("profissional_id", profIds)
+            .eq("status", "finalizado")
+            .lte("data_atendimento", endDate)
+            .range(offset, offset + PAGE - 1);
+          if (formData.unidade_id !== "all") histQuery = histQuery.eq("unidade_id", formData.unidade_id);
+          const { data: histRows, error: histErr } = await histQuery;
+          if (histErr) throw histErr;
+          const rows = histRows || [];
+          histProntuarios.push(...rows);
+          if (rows.length < PAGE) break;
+        }
+
+        const histIds = histProntuarios.map((p) => p.id).filter(Boolean);
+        const histById = new Map(histProntuarios.map((p) => [String(p.id), p]));
+        const ppHistRows: any[] = [];
+        for (let i = 0; i < histIds.length; i += 500) {
+          const batch = histIds.slice(i, i + 500);
+          const { data: rows } = await (supabase as any)
+            .from("prontuario_procedimentos")
+            .select("prontuario_id, procedimento_id")
+            .in("prontuario_id", batch);
+          ppHistRows.push(...(rows || []));
+        }
+
+        const codigoPorProcHist = await resolverCodigosSigtapPorProcedimentoId(
+          ppHistRows.map((r) => r.procedimento_id).filter(Boolean),
+        );
+        ppHistRows.forEach((r) => {
+          const prontHist = histById.get(String(r.prontuario_id));
+          const code = codigoPorProcHist.get(String(r.procedimento_id));
+          if (!prontHist || !code) return;
+          const key = [String(prontHist.paciente_id), String(prontHist.profissional_id)].join("|");
+          const lista = sigtapHistoricoPorPacienteProf.get(key) || [];
+          if (!lista.some((item) => item.data === String(prontHist.data_atendimento).slice(0, 10) && item.codigo === code)) {
+            lista.push({ data: String(prontHist.data_atendimento).slice(0, 10), codigo: code });
+            lista.sort((a, b) => b.data.localeCompare(a.data));
+            sigtapHistoricoPorPacienteProf.set(key, lista);
+          }
+        });
+      } catch (e) {
+        console.warn("[BPA-Exportar] falha ao consultar histórico de procedimentos do prontuário:", e);
+      }
+
       // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
       // Para Psicóloga, Fonoaudiólogo(a) e Nutricionista o SIGTAP vem somente do Prontuário.
       // Para Fisioterapeuta, se o Prontuário não tiver SIGTAP, buscamos no PTS ativo do paciente.
