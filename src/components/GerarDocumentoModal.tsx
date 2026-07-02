@@ -22,7 +22,7 @@ import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  paciente?: { id?: string; nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string };
+  paciente?: { id?: string; nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string; endereco?: string; bairro?: string; telefone?: string };
   profissional?: { id?: string; nome: string; profissao: string; numero_conselho: string; tipo_conselho: string; uf_conselho: string };
   unidade?: string;
   dataAtendimento?: string;
@@ -83,15 +83,34 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [medicamentos, setMedicamentos] = useState<MedicamentoRow[]>([emptyMedicamento()]);
   const [exibirCid, setExibirCid] = useState(false);
+  const [pacienteExtra, setPacienteExtra] = useState<{ endereco?: string; bairro?: string; telefone?: string; cns?: string } | null>(null);
 
   useEffect(() => {
     if (open) {
       loadModelos();
       loadCarimbo();
       loadDocConfig();
+      loadPacienteExtra();
       resetFields();
     }
   }, [open]);
+
+  const loadPacienteExtra = async () => {
+    if (!paciente?.id) { setPacienteExtra(null); return; }
+    // Só busca se algum campo faltar no props
+    if (paciente.endereco && paciente.bairro && paciente.telefone) {
+      setPacienteExtra({
+        endereco: paciente.endereco, bairro: paciente.bairro, telefone: paciente.telefone, cns: paciente.cns,
+      });
+      return;
+    }
+    const { data } = await supabase
+      .from('pacientes')
+      .select('endereco, bairro, telefone, cns')
+      .eq('id', paciente.id)
+      .maybeSingle();
+    if (data) setPacienteExtra(data as any);
+  };
 
   const loadDocConfig = async () => {
     const cfg = await loadDocumentConfig();
@@ -162,7 +181,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     let text = conteudo
       .replace(/\{\{nome_paciente\}\}/g, paciente?.nome || '—')
       .replace(/\{\{cpf\}\}/g, paciente?.cpf || '—')
-      .replace(/\{\{cns\}\}/g, paciente?.cns || '—')
+      .replace(/\{\{cns\}\}/g, paciente?.cns || pacienteExtra?.cns || '—')
+      .replace(/\{\{cartao_sus\}\}/g, paciente?.cns || pacienteExtra?.cns || '—')
+      .replace(/\{\{endereco\}\}/g, paciente?.endereco || pacienteExtra?.endereco || '—')
+      .replace(/\{\{bairro\}\}/g, paciente?.bairro || pacienteExtra?.bairro || '—')
+      .replace(/\{\{telefone\}\}/g, paciente?.telefone || pacienteExtra?.telefone || '—')
       .replace(/\{\{data_nascimento\}\}/g, paciente?.data_nascimento || '—')
       .replace(/\{\{data_atendimento\}\}/g, dataAtendimento || hoje)
       .replace(/\{\{carimbo_profissional\}\}/g, carimboInlineHtml)
