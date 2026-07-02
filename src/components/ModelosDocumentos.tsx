@@ -188,7 +188,25 @@ const ModelosDocumentos: React.FC = () => {
   };
 
   const handleToggle = async (id: string, ativo: boolean) => {
-    await supabase.from('document_templates').update({ ativo }).eq('id', id);
+    const modelo = modelos.find(m => m.id === id);
+    if (!modelo) return;
+    const { data, error } = await (supabase as any).rpc('save_document_template', {
+      p_template_id: id,
+      p_nome: modelo.nome,
+      p_tipo: modelo.tipo,
+      p_conteudo: normalizeTemplateAliases(modelo.conteudo || '<p></p>'),
+      p_ativo: ativo,
+      p_perfis_permitidos: modelo.perfis_permitidos,
+      p_tipo_modelo: modelo.tipo_modelo,
+      p_unidade_id: modelo.unidade_id || '',
+      p_blocos_clinicos: modelo.blocos_clinicos as any,
+      p_versoes: modelo.versoes as any,
+    });
+    const saved = Array.isArray(data) ? data[0] : data;
+    if (error || !saved?.id) {
+      toast.error('Erro ao alterar status do modelo: ' + (error?.message || 'salvamento não confirmado'));
+      return;
+    }
     loadModelos();
   };
 
