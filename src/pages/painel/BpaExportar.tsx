@@ -1957,9 +1957,12 @@ const BpaExportar: React.FC = () => {
           const sigtapSessao = sigtapSessaoList[0] || "";
           const chaveHistoricoProntuario = [String(pront.paciente_id || ""), String(pront.profissional_id || "")].join("|");
           const dataProntuarioAtual = String(pront.data_atendimento || "").slice(0, 10);
-          const sigtapHistoricoList = (sigtapHistoricoPorPacienteProf.get(chaveHistoricoProntuario) || [])
-            .filter((item) => !dataProntuarioAtual || item.data <= dataProntuarioAtual)
-            .map((item) => item.codigo);
+          const usarHistoricoProntuario = pront.tipo_registro === "agenda_sem_prontuario" || String(pront.id || "").startsWith("agenda:");
+          const sigtapHistoricoList = usarHistoricoProntuario
+            ? (sigtapHistoricoPorPacienteProf.get(chaveHistoricoProntuario) || [])
+                .filter((item) => !dataProntuarioAtual || item.data <= dataProntuarioAtual)
+                .map((item) => item.codigo)
+            : [];
           const sigtapHistorico = sigtapHistoricoList[0] || "";
           let proc_real = "";
           let proc_origem: "Prontuário" | "Procedimentos vinculados" | "Sessão de Tratamento" | "Histórico do Prontuário" | "PTS" | "" = "";
