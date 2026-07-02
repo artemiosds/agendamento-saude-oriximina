@@ -8,6 +8,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 import DOMPurify from 'dompurify';
+import { applyExampleValues, normalizeTemplateAliases, TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -27,39 +28,6 @@ import {
 // -------- Types --------
 type Categoria = 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
 const CATEGORIAS: Categoria[] = ['Cadastro', 'Clínico', 'Regulação', 'CER'];
-
-const PACIENTE_VARS = [
-  { key: 'nome_paciente', label: 'Nome do paciente' },
-  { key: 'cpf', label: 'CPF' },
-  { key: 'cid', label: 'CID' },
-  { key: 'cartao_sus', label: 'Cartão SUS' },
-  { key: 'endereco', label: 'Endereço' },
-  { key: 'bairro', label: 'Bairro' },
-  { key: 'telefone', label: 'Telefone' },
-  { key: 'data_nascimento', label: 'Data de nascimento' },
-  { key: 'nome_mae', label: 'Nome da mãe' },
-];
-
-const SISTEMA_VARS = [
-  { key: 'data_atual', label: 'Data atual' },
-  { key: 'profissional_logado', label: 'Profissional logado' },
-  { key: 'nome_unidade', label: 'Nome da unidade' },
-];
-
-const PREVIEW_VALUES: Record<string, string> = {
-  nome_paciente: 'Maria Silva (exemplo)',
-  cpf: '000.000.000-00',
-  cid: 'F32.0',
-  cartao_sus: '000 0000 0000 0000',
-  endereco: 'Rua Exemplo, 123',
-  bairro: 'Centro',
-  telefone: '(93) 90000-0000',
-  data_nascimento: '01/01/2000',
-  nome_mae: 'Ana Silva',
-  data_atual: new Date().toLocaleDateString('pt-BR'),
-  profissional_logado: 'Dr. Exemplo',
-  nome_unidade: 'Unidade Exemplo',
-};
 
 interface ManualField {
   key: string;
@@ -165,7 +133,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       const meta = (data.blocos_clinicos as any) || {};
       setCamposManuais(meta.campos_manuais || []);
       if (editor) {
-        editor.commands.setContent(data.conteudo || '<p></p>');
+        editor.commands.setContent(normalizeTemplateAliases(data.conteudo || '<p></p>'));
         setDirty(false);
       }
       setLoading(false);
@@ -224,7 +192,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     if (!nome.trim()) { toast.error('Informe o nome do documento'); return; }
     if (!editor) return;
     setSaving(true);
-    const html = editor.getHTML();
+    const html = normalizeTemplateAliases(editor.getHTML());
     const payload: any = {
       nome: nome.trim(),
       tipo: categoria,
@@ -259,10 +227,8 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
   // -------- Preview --------
   const renderPreview = (): string => {
     if (!editor) return '';
-    let html = editor.getHTML();
-    // Substitui variáveis por valores fictícios
+    let html = applyExampleValues(editor.getHTML());
     html = html.replace(/\{\{([\w_]+)\}\}/g, (_m, k) => {
-      if (PREVIEW_VALUES[k]) return PREVIEW_VALUES[k];
       const manual = camposManuais.find(f => f.key === k);
       if (manual) {
         if (manual.type === 'checkbox') return `[${(manual.options || []).join(' / ')}]`;
@@ -339,22 +305,24 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
 
         {/* Right: variables sidebar */}
         <aside className="space-y-4 border rounded-md p-3 bg-card/50 max-h-[600px] overflow-y-auto">
-          <section>
-            <h4 className="text-xs font-semibold uppercase text-primary mb-2">Dados do Paciente</h4>
-            <div className="flex flex-wrap gap-1.5">
-              {PACIENTE_VARS.map(v => (
-                <button
-                  key={v.key}
-                  type="button"
-                  onClick={() => insertVariable(v.key)}
-                  className="text-xs px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                  title={`Inserir {{${v.key}}}`}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          </section>
+          {TEMPLATE_VARIABLE_GROUPS.map(group => (
+            <section key={group.group}>
+              <h4 className="text-xs font-semibold uppercase text-primary mb-2">{group.group}</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {group.variables.map(variable => (
+                  <button
+                    key={variable.key}
+                    type="button"
+                    onClick={() => insertVariable(variable.key)}
+                    className="text-xs px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                    title={`Inserir ${variable.token}`}
+                  >
+                    {variable.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
 
           <Separator />
 
@@ -386,23 +354,6 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             )}
           </section>
 
-          <Separator />
-
-          <section>
-            <h4 className="text-xs font-semibold uppercase text-primary mb-2">Sistema</h4>
-            <div className="flex flex-wrap gap-1.5">
-              {SISTEMA_VARS.map(v => (
-                <button
-                  key={v.key}
-                  type="button"
-                  onClick={() => insertVariable(v.key)}
-                  className="text-xs px-2 py-1 rounded bg-accent hover:bg-accent/70 transition-colors"
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          </section>
         </aside>
       </div>
 

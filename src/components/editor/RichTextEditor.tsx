@@ -12,80 +12,13 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Heading1, Heading2, Heading3,
   Table as TableIcon, Highlighter, Undo, Redo, Variable, Minus,
 } from 'lucide-react';
-
-const VARIAVEIS_CATEGORIAS = [
-  {
-    label: 'Paciente',
-    items: [
-      { tag: '{{nome_paciente}}', desc: 'Nome' },
-      { tag: '{{cpf}}', desc: 'CPF' },
-      { tag: '{{cns}}', desc: 'CNS' },
-      { tag: '{{data_nascimento}}', desc: 'Data nasc.' },
-      { tag: '{{cid}}', desc: 'CID' },
-      { tag: '{{especialidade}}', desc: 'Especialidade' },
-    ],
-  },
-  {
-    label: 'Atendimento',
-    items: [
-      { tag: '{{data_atendimento}}', desc: 'Data atendimento' },
-      { tag: '{{profissional}}', desc: 'Profissional' },
-      { tag: '{{carimbo_profissional}}', desc: 'Carimbo profissional' },
-      { tag: '{{data_hoje}}', desc: 'Data de hoje' },
-      { tag: '{{hora_entrada}}', desc: 'Hora entrada' },
-      { tag: '{{hora_saida}}', desc: 'Hora saída' },
-    ],
-  },
-  {
-    label: 'Declaração / Comparecimento',
-    items: [
-      { tag: '{{horario_entrada}}', desc: 'Horário entrada' },
-      { tag: '{{horario_saida}}', desc: 'Horário saída' },
-      { tag: '{{finalidade}}', desc: 'Finalidade' },
-      { tag: '{{motivo_falta}}', desc: 'Motivo da falta' },
-      { tag: '{{data_falta}}', desc: 'Data da falta' },
-      { tag: '{{profissional_agendado}}', desc: 'Profissional agendado' },
-    ],
-  },
-  {
-    label: 'Documento',
-    items: [
-      { tag: '{{dias_afastamento}}', desc: 'Dias afastamento' },
-      { tag: '{{data_inicio}}', desc: 'Data início' },
-      { tag: '{{data_fim}}', desc: 'Data fim' },
-      { tag: '{{medicamentos}}', desc: 'Medicamentos' },
-      { tag: '{{especialidade_destino}}', desc: 'Espec. destino' },
-      { tag: '{{unidade_destino}}', desc: 'Unidade destino' },
-      { tag: '{{motivo}}', desc: 'Motivo' },
-      { tag: '{{observacoes}}', desc: 'Observações' },
-      { tag: '{{prioridade}}', desc: 'Prioridade' },
-      { tag: '{{validade_receita}}', desc: 'Validade receita' },
-      { tag: '{{objetivo}}', desc: 'Objetivo' },
-      { tag: '{{historico}}', desc: 'Histórico' },
-      { tag: '{{exame_fisico}}', desc: 'Exame físico' },
-      { tag: '{{conclusao}}', desc: 'Conclusão' },
-      { tag: '{{recomendacoes}}', desc: 'Recomendações' },
-      { tag: '{{queixa_principal}}', desc: 'Queixa principal' },
-      { tag: '{{evolucao_clinica}}', desc: 'Evolução clínica' },
-      { tag: '{{conduta}}', desc: 'Conduta' },
-      { tag: '{{plano}}', desc: 'Plano' },
-      { tag: '{{orientacoes}}', desc: 'Orientações' },
-      { tag: '{{finalidade}}', desc: 'Finalidade' },
-    ],
-  },
-  {
-    label: 'Unidade',
-    items: [
-      { tag: '{{unidade}}', desc: 'Unidade de saúde' },
-    ],
-  },
-];
 
 interface Props {
   content: string;
@@ -241,20 +174,20 @@ const RichTextEditor: React.FC<Props> = ({ content, onChange, placeholder, class
             </PopoverTrigger>
             <PopoverContent className="w-80 max-h-[400px] overflow-y-auto p-3" align="start">
               <div className="space-y-3">
-                {VARIAVEIS_CATEGORIAS.map(cat => (
-                  <div key={cat.label}>
-                    <p className="text-xs font-bold text-muted-foreground uppercase mb-1.5">{cat.label}</p>
+                {TEMPLATE_VARIABLE_GROUPS.map(cat => (
+                  <div key={cat.group}>
+                    <p className="text-xs font-bold text-muted-foreground uppercase mb-1.5">{cat.group}</p>
                     <div className="flex flex-wrap gap-1">
-                      {cat.items.map(v => (
+                      {cat.variables.map(v => (
                         <Button
-                          key={v.tag}
+                          key={v.key}
                           variant="outline"
                           size="sm"
                           className="text-[10px] h-6 px-1.5 font-mono"
-                          onClick={() => insertVariable(v.tag)}
-                          title={v.desc}
+                          onClick={() => insertVariable(v.token)}
+                          title={v.label}
                         >
-                          {v.tag}
+                          {v.token}
                         </Button>
                       ))}
                     </div>
