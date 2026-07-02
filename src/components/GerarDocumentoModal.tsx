@@ -43,6 +43,31 @@ const emptyMedicamento = (): MedicamentoRow => ({
   medicamento: '', dosagem: '', via: 'oral', frequencia: '', duracao: '', observacao: ''
 });
 
+/**
+ * Remove blocos condicionais data-cond="menor_18" quando o paciente tem >= 18 anos.
+ * Genérico: aplica a qualquer template que use essa marcação. Preserva o restante do HTML.
+ * Se data_nascimento estiver ausente/invalida, mantém o bloco (fail-safe: mostrar campos vazios).
+ */
+const stripConditionalBlocks = (html: string, dataNascimento?: string | null): string => {
+  if (!html || !dataNascimento) return html;
+  const dn = new Date(dataNascimento);
+  if (isNaN(dn.getTime())) return html;
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - dn.getFullYear();
+  const m = hoje.getMonth() - dn.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < dn.getDate())) idade--;
+  if (idade < 18) return html;
+  // Remove elementos com data-cond="menor_18" e todo seu conteúdo interno.
+  try {
+    const doc = new DOMParser().parseFromString(`<div id="__root__">${html}</div>`, 'text/html');
+    doc.querySelectorAll('[data-cond="menor_18"]').forEach(el => el.remove());
+    return doc.getElementById('__root__')?.innerHTML ?? html;
+  } catch {
+    return html.replace(/<([a-zA-Z][\w-]*)([^>]*)data-cond=["']menor_18["']([^>]*)>[\s\S]*?<\/\1>/g, '');
+  }
+};
+
+
 const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento }) => {
   const { user } = useAuth();
   const { funcionarios } = useData();
@@ -234,7 +259,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const buildHtmlBody = (signatureHtml: string) => {
     // Content may already be rich HTML from TipTap or plain text
-    const html = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
+    const raw = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
+    const html = stripConditionalBlocks(raw, paciente?.data_nascimento);
     const carimboHtml = formatCarimboBlock(carimbo);
     return `
       <div class="content-block" style="margin-top:20px;">
@@ -246,6 +272,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       </div>
     `;
   };
+
 
   const handleSaveDraft = async () => {
     if (!selected) return;
@@ -627,7 +654,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                       dangerouslySetInnerHTML={{
                         __html: buildInstitutionalCSS() + docHeader(selected.tipo, docConfig) +
                           '<div class="doc-content" style="padding:0 20px;">' +
-                          conteudoFinal.replace(/\n/g, '<br/>') +
+                          stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento) +
                           '</div>' + docFooter(docConfig)
                       }}
                     />
