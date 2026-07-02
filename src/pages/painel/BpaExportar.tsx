@@ -1709,7 +1709,7 @@ const BpaExportar: React.FC = () => {
             .in("pts_id", ptsIds);
           const sigByPts = new Map<string, string[]>();
           (sigRows || []).forEach((s: any) => {
-            const code = somenteNumeros(s.procedimento_codigo || "");
+            const code = sigtapCodigoExibicao(s.procedimento_codigo || "");
             if (!code) return;
             const lista = sigByPts.get(s.pts_id) || [];
             if (!lista.includes(code)) {
@@ -2090,7 +2090,7 @@ const BpaExportar: React.FC = () => {
           const codigosVistos = new Set<string>();
           const dedupeSomentePorCodigo = profissionalPermiteMultiplosSigtap(prof);
           const addCodigo = (codigo: string, origem: string, cid?: string) => {
-            const c = somenteNumeros(codigo);
+            const c = sigtapCodigoExibicao(codigo);
             const cidNorm = extrairCodigoCid(cid);
             if (!c) return;
             if (dedupeSomentePorCodigo) {
