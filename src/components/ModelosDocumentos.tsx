@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { FileText, Plus, Pencil, Trash2, Eye, Copy, Loader2, Printer, Search, Globe, Building2, UserIcon, Filter } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, type DocumentConfig } from '@/lib/printLayout';
+import { applyExampleValues } from '@/lib/templateVariables';
 
 const RichTextEditor = lazy(() => import('@/components/editor/RichTextEditor'));
 
@@ -67,40 +68,14 @@ const TIPO_MODELO_LABELS = {
 
 const substituirVariaveis = (conteudo: string, config?: DocumentConfig): string => {
   const hoje = new Date().toLocaleDateString('pt-BR');
-  return conteudo
-    .replace(/\{\{nome_paciente\}\}/g, 'João da Silva')
-    .replace(/\{\{cpf\}\}/g, '123.456.789-00')
-    .replace(/\{\{cns\}\}/g, '123 4567 8901 2345')
-    .replace(/\{\{data_nascimento\}\}/g, '01/01/1990')
-    .replace(/\{\{data_atendimento\}\}/g, hoje)
-    .replace(/\{\{profissional\}\}/g, 'Dr. Maria Santos')
-    .replace(/\{\{cid\}\}/g, 'F84.0')
-    .replace(/\{\{especialidade\}\}/g, 'Fisioterapia')
-    .replace(/\{\{unidade\}\}/g, config?.linha2 || config?.linha1 || 'CER II Oriximiná')
-    .replace(/\{\{data_hoje\}\}/g, hoje)
-    .replace(/\{\{dias_afastamento\}\}/g, '3')
-    .replace(/\{\{data_inicio\}\}/g, hoje)
-    .replace(/\{\{data_fim\}\}/g, hoje)
-    .replace(/\{\{hora_entrada\}\}/g, '08:00')
-    .replace(/\{\{hora_saida\}\}/g, '09:30')
-    .replace(/\{\{medicamentos\}\}/g, '1. Paracetamol 500mg — Oral, 8/8h, 5 dias')
-    .replace(/\{\{especialidade_destino\}\}/g, 'Neurologia')
-    .replace(/\{\{unidade_destino\}\}/g, 'Hospital Regional')
-    .replace(/\{\{motivo\}\}/g, 'Avaliação complementar')
-    .replace(/\{\{observacoes\}\}/g, 'Sem observações adicionais')
-    .replace(/\{\{prioridade\}\}/g, 'Eletivo')
-    .replace(/\{\{validade_receita\}\}/g, hoje)
-    .replace(/\{\{objetivo\}\}/g, 'Avaliação funcional')
-    .replace(/\{\{historico\}\}/g, 'Histórico relevante do paciente')
-    .replace(/\{\{exame_fisico\}\}/g, 'Exame físico normal')
-    .replace(/\{\{conclusao\}\}/g, 'Paciente apto')
-    .replace(/\{\{recomendacoes\}\}/g, 'Manter acompanhamento')
-    .replace(/\{\{queixa_principal\}\}/g, 'Dor lombar')
-    .replace(/\{\{evolucao_clinica\}\}/g, 'Melhora progressiva')
-    .replace(/\{\{conduta\}\}/g, 'Exercícios terapêuticos')
-    .replace(/\{\{plano\}\}/g, 'Continuar tratamento semanal')
-    .replace(/\{\{orientacoes\}\}/g, 'Tomar conforme prescrição')
-    .replace(/\{\{finalidade\}\}/g, 'Consulta');
+  const unidade = config?.linha2 || config?.linha1 || 'CER II Oriximiná';
+  return applyExampleValues(conteudo, {
+    data_atendimento: hoje,
+    data_hoje: hoje,
+    data_atual: hoje,
+    unidade,
+    nome_unidade: unidade,
+  });
 };
 
 const ModelosDocumentos: React.FC = () => {
