@@ -319,6 +319,7 @@ const Pacientes: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [detalheOpen, setDetalheOpen] = useState(false);
+  const [documentCenterOpen, setDocumentCenterOpen] = useState(false);
   const [detalhePaciente, setDetalhePaciente] = useState<(typeof pacientes)[0] | null>(null);
 
   // Print ficha state
