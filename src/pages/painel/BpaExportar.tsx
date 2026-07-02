@@ -268,6 +268,25 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
     return [];
   };
 
+  const pickCodigosEmCamposDeProcedimento = (v: any): string[] => {
+    const out: string[] = [];
+    const visitar = (valor: any, chavePai = "") => {
+      if (valor === null || valor === undefined) return;
+      const chaveProc = /(sigtap|proced|proc_)/i.test(chavePai);
+      if (Array.isArray(valor)) {
+        valor.forEach((item) => visitar(item, chavePai));
+        return;
+      }
+      if (typeof valor === "object") {
+        Object.entries(valor).forEach(([chave, item]) => visitar(item, `${chavePai}.${chave}`));
+        return;
+      }
+      if (chaveProc) out.push(...pickCodigos(valor));
+    };
+    visitar(v);
+    return out;
+  };
+
   const resultado: Array<{ codigo: string; campo: string }> = [];
   const vistos = new Set<string>();
   const push = (codigo: string, campo: string) => {
@@ -301,6 +320,9 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
   for (const [campo, valor] of fontes) {
     for (const codigo of pickCodigos(valor)) push(codigo, campo);
   }
+  for (const codigo of pickCodigosEmCamposDeProcedimento(cd)) push(codigo, "custom_data profundo");
+  for (const codigo of pickCodigosEmCamposDeProcedimento(dados)) push(codigo, "dados profundo");
+  for (const codigo of pickCodigosEmCamposDeProcedimento(metadata)) push(codigo, "metadata profundo");
   return resultado;
 };
 
