@@ -194,8 +194,28 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       text = text.replace(/\{\{medicamentos\}\}/g, medList);
     }
 
+    // Campos manuais do template (blocos_clinicos.campos_manuais)
+    const manuais: Array<{ key: string; label: string; type: string; options?: string[] }> =
+      (selected?.blocos_clinicos as any)?.campos_manuais || [];
+    manuais.forEach(f => {
+      if (f.type === 'checkbox' && Array.isArray(f.options)) {
+        const marcadas = (campos[f.key] || '').split('|').filter(Boolean);
+        const rendered = f.options
+          .map(opt => `${marcadas.includes(opt) ? '(X)' : '(&nbsp;&nbsp;)'} ${opt}`)
+          .join(' &nbsp; ');
+        const outros = campos[`${f.key}__outros`] || '';
+        const outrosHtml = outros ? ` &nbsp; <u>${outros}</u>` : '';
+        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), rendered + outrosHtml);
+      } else if (f.type === 'data') {
+        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), formatIfDate(campos[f.key] || '') || '__/__/____');
+      } else {
+        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), campos[f.key] || '______________');
+      }
+    });
+
     return text;
   };
+
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
