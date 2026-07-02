@@ -2103,28 +2103,28 @@ const BpaExportar: React.FC = () => {
               const c = item.codigo;
               const cidNorm = item.cid || "";
               if (!c) continue;
-            if (dedupeSomentePorCodigo) {
-              const indiceMesmoCodigo = codigosParaExportar.findIndex((item) => item.codigo === c);
-              if (indiceMesmoCodigo >= 0) {
-                if (cidNorm && !codigosParaExportar[indiceMesmoCodigo].cid) {
-                  codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem: item.origem, cid: cidNorm };
+              if (dedupeSomentePorCodigo) {
+                const indiceMesmoCodigo = codigosParaExportar.findIndex((item) => item.codigo === c);
+                if (indiceMesmoCodigo >= 0) {
+                  if (cidNorm && !codigosParaExportar[indiceMesmoCodigo].cid) {
+                    codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem: item.origem, cid: cidNorm };
+                  }
+                  continue;
                 }
+                codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
                 continue;
               }
+              const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
+              if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
+                codigosVistos.delete(`${c}|`);
+                codigosParaExportar.splice(indiceMesmoCodigoSemCid, 1);
+              } else if (!cidNorm && codigosParaExportar.some((item) => item.codigo === c)) {
+                continue;
+              }
+              const chave = `${c}|${cidNorm}`;
+              if (codigosVistos.has(chave)) continue;
+              codigosVistos.add(chave);
               codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
-              continue;
-            }
-            const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
-            if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
-              codigosVistos.delete(`${c}|`);
-              codigosParaExportar.splice(indiceMesmoCodigoSemCid, 1);
-            } else if (!cidNorm && codigosParaExportar.some((item) => item.codigo === c)) {
-              continue;
-            }
-            const chave = `${c}|${cidNorm}`;
-            if (codigosVistos.has(chave)) continue;
-            codigosVistos.add(chave);
-            codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
             }
             return codigosParaExportar;
           };
