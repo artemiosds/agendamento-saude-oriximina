@@ -26,7 +26,19 @@ import {
   Bold, Italic, UnderlineIcon, Heading1, Heading2, Heading3,
   List, ListOrdered, Table as TableIcon, Plus, Save, Eye, X,
   Type, Calendar, CheckSquare, ShieldQuestion, Trash2, Pencil, FileText, Loader2,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
 } from 'lucide-react';
+
+const FONT_FAMILIES = [
+  { label: 'Padrão', value: '' },
+  { label: 'Arial', value: 'Arial, sans-serif' },
+  { label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
+  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Courier New', value: '"Courier New", monospace' },
+  { label: 'Verdana', value: 'Verdana, sans-serif' },
+  { label: 'Tahoma', value: 'Tahoma, sans-serif' },
+];
 
 // -------- Types --------
 type Categoria = 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
