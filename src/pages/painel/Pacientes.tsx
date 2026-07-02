@@ -29,6 +29,7 @@ import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import ContactActionButton from "@/components/ContactActionButton";
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import PacienteDetalheModal, { PSecao, PCampo, AlergiasBlock, formatCPF, formatCNS, formatTelefoneBR, formatarDataBR } from "@/components/PacienteDetalheModal";
+import DocumentCenter from "@/components/DocumentCenter";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import { toast } from "sonner";
 import { calculatePatientPendingFields } from "@/lib/paciente-validation";
