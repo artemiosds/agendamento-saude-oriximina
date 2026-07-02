@@ -184,6 +184,9 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
     line-height: 1.1;
+    min-height: calc(297mm - ${m.superior + m.inferior}mm);
+    display: flex;
+    flex-direction: column;
   }
 
   /* HEADER */
@@ -266,6 +269,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .doc-content {
     text-align: ${t.alinhamento};
     font-size: ${t.tamanhoBase}pt;
+    flex: 1 0 auto;
   }
 
   /* SECTIONS */
@@ -354,15 +358,19 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .signature.pos-right .assinatura-img,
   .signature.pos-right .carimbo-img { margin-right: 0; margin-left: auto; }
 
-  /* FOOTER — fixado na base da página impressa */
+  /* FOOTER — fica no final da página sem sobrepor o conteúdo */
   .doc-footer {
-    margin-top: 20px;
+    margin-top: auto;
     padding-top: 6px;
     border-top: 1px solid #cbd5e1;
     font-size: 7.5pt;
     color: #64748b;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    flex-shrink: 0;
   }
-  .doc-footer .footer-row { display: flex; justify-content: space-between; align-items: center; }
+  .doc-footer .footer-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .doc-footer .footer-row > div { overflow-wrap: anywhere; }
   .doc-footer .footer-address { text-align: center; font-size: 7pt; color: #94a3b8; margin-top: 2px; }
 
   /* TABLES */
@@ -371,22 +379,10 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
   @media print {
-    body { background: #fff; margin: 0; }
+    body { background: #fff; margin: 0; min-height: calc(297mm - ${m.superior + m.inferior}mm); }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
     .doc-header, .signature { page-break-inside: avoid; }
-
-    /* Rodapé sempre no pé da página impressa (não flutuando no meio) */
-    .doc-footer {
-      position: fixed;
-      left: 12mm;
-      right: 12mm;
-      bottom: 8mm;
-      margin-top: 0;
-      background: #fff;
-      page-break-inside: avoid;
-    }
-    /* Reserva espaço para o rodapé fixo não sobrepor o conteúdo */
-    body { padding-bottom: 28mm; }
+    .doc-footer { position: static; margin-top: auto; background: #fff; }
 
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
