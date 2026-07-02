@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { FileText, Plus, Pencil, Trash2, Eye, Copy, Loader2, Printer, Search, Globe, Building2, UserIcon, Filter } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, type DocumentConfig } from '@/lib/printLayout';
-import { applyExampleValues } from '@/lib/templateVariables';
+import { applyExampleValues, normalizeTemplateAliases } from '@/lib/templateVariables';
 
 const RichTextEditor = lazy(() => import('@/components/editor/RichTextEditor'));
 
@@ -134,7 +134,7 @@ const ModelosDocumentos: React.FC = () => {
   };
 
   const openEdit = (m: DocumentTemplate) => {
-    setCurrent({ ...m, versoes: m.versoes || [] });
+    setCurrent({ ...m, conteudo: normalizeTemplateAliases(m.conteudo || ''), versoes: m.versoes || [] });
     setEditOpen(true);
   };
 
@@ -148,7 +148,7 @@ const ModelosDocumentos: React.FC = () => {
       const payload = {
         nome: current.nome,
         tipo: current.tipo,
-        conteudo: current.conteudo,
+        conteudo: normalizeTemplateAliases(current.conteudo),
         ativo: current.ativo,
         perfis_permitidos: current.perfis_permitidos,
         tipo_modelo: isGlobalAdmin && current.tipo_modelo === 'GLOBAL' ? 'GLOBAL' : current.tipo_modelo,
