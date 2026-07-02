@@ -173,7 +173,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   return `
 <style>
-  :root { --doc-footer-space: ${footerSpace}mm; }
+  :root { --doc-footer-space: ${footerSpace}mm; --doc-page-height: calc(297mm - ${m.superior + m.inferior}mm); }
   @page {
     size: A4;
     margin: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
@@ -186,7 +186,11 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
     line-height: 1.1;
-    min-height: calc(297mm - ${m.superior + m.inferior}mm);
+    min-height: var(--doc-page-height);
+  }
+  .doc-page {
+    width: 100%;
+    min-height: var(--doc-page-height);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -270,7 +274,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   /* CONTENT */
   .doc-content {
-    flex: 1 0 auto;
+    flex: 1 1 auto;
     text-align: ${t.alinhamento};
     font-size: ${t.tamanhoBase}pt;
   }
@@ -387,10 +391,11 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
   @media print {
-    body { background: #fff; margin: 0; min-height: calc(297mm - ${m.superior + m.inferior}mm); padding: 0; display: flex; flex-direction: column; position: relative; }
+    body { background: #fff; margin: 0; min-height: var(--doc-page-height); padding: 0; }
+    .doc-page { min-height: var(--doc-page-height); display: flex; flex-direction: column; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
     .doc-header, .signature, .doc-footer { page-break-inside: avoid; break-inside: avoid; }
-    .doc-content { flex: 1 0 auto; }
+    .doc-content { flex: 1 1 auto; }
     .doc-footer { position: static; margin-top: auto; background: #fff; }
 
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -562,12 +567,14 @@ export function buildDocumentShell(
   ${css}
 </head>
 <body>
-  ${docHeader(title, config)}
-  ${metaHtml}
-  <div class="doc-content">
-    ${bodyHtml}
+  <div class="doc-page">
+    ${docHeader(title, config)}
+    ${metaHtml}
+    <div class="doc-content">
+      ${bodyHtml}
+    </div>
+    ${docFooter(config)}
   </div>
-  ${docFooter(config)}
 </body>
 </html>`;
 }
