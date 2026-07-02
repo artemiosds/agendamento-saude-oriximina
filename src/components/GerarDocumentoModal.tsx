@@ -181,7 +181,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     let text = conteudo
       .replace(/\{\{nome_paciente\}\}/g, paciente?.nome || '—')
       .replace(/\{\{cpf\}\}/g, paciente?.cpf || '—')
-      .replace(/\{\{cns\}\}/g, paciente?.cns || '—')
+      .replace(/\{\{cns\}\}/g, paciente?.cns || pacienteExtra?.cns || '—')
+      .replace(/\{\{cartao_sus\}\}/g, paciente?.cns || pacienteExtra?.cns || '—')
+      .replace(/\{\{endereco\}\}/g, paciente?.endereco || pacienteExtra?.endereco || '—')
+      .replace(/\{\{bairro\}\}/g, paciente?.bairro || pacienteExtra?.bairro || '—')
+      .replace(/\{\{telefone\}\}/g, paciente?.telefone || pacienteExtra?.telefone || '—')
       .replace(/\{\{data_nascimento\}\}/g, paciente?.data_nascimento || '—')
       .replace(/\{\{data_atendimento\}\}/g, dataAtendimento || hoje)
       .replace(/\{\{carimbo_profissional\}\}/g, carimboInlineHtml)
