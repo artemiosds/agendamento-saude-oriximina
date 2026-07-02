@@ -230,11 +230,12 @@ const DocumentCenter: React.FC<Props> = ({
         </DialogContent>
       </Dialog>
 
-      {gerarOpen && pacienteGerar && (
+      {gerarTemplateId && pacienteGerar && (
         <GerarDocumentoModal
-          open={gerarOpen}
-          onOpenChange={setGerarOpen}
+          open={!!gerarTemplateId}
+          onOpenChange={(o) => { if (!o) setGerarTemplateId(undefined); }}
           paciente={pacienteGerar}
+          templateId={gerarTemplateId}
         />
       )}
     </>
