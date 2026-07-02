@@ -1885,8 +1885,15 @@ const BpaExportar: React.FC = () => {
           const sigtapEmCustom = sigtapTodos[0] || { codigo: "", campo: "" };
           const sigtapVinculadoList = sigtapPorProntuario.get(pront.id) || [];
           const sigtapVinculado = sigtapVinculadoList[0] || "";
+          const chaveSessaoTratamento = [
+            String(pront.paciente_id || ""),
+            String(pront.profissional_id || ""),
+            String(pront.data_atendimento || "").slice(0, 10),
+          ].join("|");
+          const sigtapSessaoList = sigtapPorSessaoTratamento.get(chaveSessaoTratamento) || [];
+          const sigtapSessao = sigtapSessaoList[0] || "";
           let proc_real = "";
-          let proc_origem: "Prontuário" | "Procedimentos vinculados" | "PTS" | "" = "";
+          let proc_origem: "Prontuário" | "Procedimentos vinculados" | "Sessão de Tratamento" | "PTS" | "" = "";
           let proc_campo = "";
           if (sigtapEmCustom.codigo) {
             proc_real = sigtapEmCustom.codigo;
@@ -1896,6 +1903,10 @@ const BpaExportar: React.FC = () => {
             proc_real = sigtapVinculado;
             proc_origem = "Procedimentos vinculados";
             proc_campo = "prontuario_procedimentos";
+          } else if (sigtapSessao) {
+            proc_real = sigtapSessao;
+            proc_origem = "Sessão de Tratamento";
+            proc_campo = "treatment_sessions.procedure_done";
           }
           const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria);
           let ptsConsultado = false;
@@ -1939,6 +1950,8 @@ const BpaExportar: React.FC = () => {
           for (const t of sigtapTodos) addCodigo(t.codigo, `Prontuário:${t.campo}`);
           // 2) Todos os SIGTAPs vinculados (prontuario_procedimentos).
           for (const c of sigtapVinculadoList) addCodigo(c, "Procedimentos vinculados");
+          // 2.5) SIGTAPs vinculados à sessão recorrente do mesmo paciente/profissional/data.
+          for (const c of sigtapSessaoList) addCodigo(c, "Sessão de Tratamento");
           // 3) Resolução do BPA-Produção (apenas se ainda não houver nada).
           if (codigosParaExportar.length === 0 && sigtapReq.exige && producaoResolvida?.codigo_sigtap) {
             addCodigo(
@@ -1983,7 +1996,7 @@ const BpaExportar: React.FC = () => {
             motivosPendencia.push("SIGTAP obrigatório ausente");
             stats.missingSigtap++;
             const fontesTxt = fontesConsultadas.length ? fontesConsultadas.join(" / ") : "Prontuário";
-            const motivo = `Profissão "${sigtapReq.profissao || "indefinida"}" exige SIGTAP. Fontes consultadas: ${fontesTxt}. Nenhum código localizado em campo fixo, custom_data, seção dinâmica, prontuario_procedimentos${sigtapReq.categoria === "fisioterap" ? " ou PTS ativo" : ""}.`;
+            const motivo = `Profissão "${sigtapReq.profissao || "indefinida"}" exige SIGTAP. Fontes consultadas: ${fontesTxt}. Nenhum código localizado em campo fixo, custom_data, seção dinâmica, prontuario_procedimentos, treatment_sessions.procedure_done${sigtapReq.categoria === "fisioterap" ? " ou PTS ativo" : ""}.`;
             warnings.push(`${ident}: ${motivo}`);
             details.missingSigtap.push({
               ...itemDetail,
