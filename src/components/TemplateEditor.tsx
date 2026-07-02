@@ -202,18 +202,37 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       updated_at: new Date().toISOString(),
     };
     if (templateId) {
-      const { error } = await supabase.from('document_templates').update(payload).eq('id', templateId);
+      const { data, error } = await supabase
+        .from('document_templates')
+        .update(payload)
+        .eq('id', templateId)
+        .select('id');
       if (error) { toast.error('Erro ao salvar: ' + error.message); setSaving(false); return; }
+      if (!data || data.length === 0) {
+        toast.error('Sem permissão para alterar este template (RLS). Verifique se ele pertence à sua unidade / foi criado por você.');
+        setSaving(false);
+        return;
+      }
       toast.success('Template atualizado');
     } else {
       payload.criado_por = user?.id || '';
       payload.criado_por_nome = user?.nome || '';
       payload.tipo_modelo = 'UNIDADE';
       payload.unidade_id = user?.unidadeId || '';
-      const { error } = await supabase.from('document_templates').insert(payload);
+      const { data, error } = await supabase
+        .from('document_templates')
+        .insert(payload)
+        .select('id')
+        .maybeSingle();
       if (error) { toast.error('Erro ao criar: ' + error.message); setSaving(false); return; }
+      if (!data) {
+        toast.error('Template não foi criado (RLS bloqueou a inserção).');
+        setSaving(false);
+        return;
+      }
       toast.success('Template criado');
     }
+
     setDirty(false);
     setSaving(false);
     onDone();
