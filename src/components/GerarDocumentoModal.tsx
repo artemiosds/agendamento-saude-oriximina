@@ -84,7 +84,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [medicamentos, setMedicamentos] = useState<MedicamentoRow[]>([emptyMedicamento()]);
   const [exibirCid, setExibirCid] = useState(false);
-  const [pacienteExtra, setPacienteExtra] = useState<{ endereco?: string; bairro?: string; telefone?: string; cns?: string; nome_mae?: string } | null>(null);
+  const [pacienteExtra, setPacienteExtra] = useState<{ cpf?: string; cns?: string; data_nascimento?: string; cid?: string; especialidade_destino?: string; endereco?: string; bairro?: string; telefone?: string; nome_mae?: string } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -99,15 +99,16 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const loadPacienteExtra = async () => {
     if (!paciente?.id) { setPacienteExtra(null); return; }
     // Só busca se algum campo faltar no props
-    if (paciente.endereco && paciente.bairro && paciente.telefone && paciente.nome_mae) {
+    if (paciente.cpf && paciente.cns && paciente.data_nascimento && paciente.endereco && paciente.bairro && paciente.telefone && paciente.nome_mae) {
       setPacienteExtra({
-        endereco: paciente.endereco, bairro: paciente.bairro, telefone: paciente.telefone, cns: paciente.cns, nome_mae: paciente.nome_mae,
+        cpf: paciente.cpf, cns: paciente.cns, data_nascimento: paciente.data_nascimento, cid: paciente.cid, especialidade_destino: paciente.especialidade_destino,
+        endereco: paciente.endereco, bairro: paciente.bairro, telefone: paciente.telefone, nome_mae: paciente.nome_mae,
       });
       return;
     }
     const { data } = await supabase
       .from('pacientes')
-      .select('endereco, bairro, telefone, cns, nome_mae')
+      .select('cpf, cns, data_nascimento, cid, especialidade_destino, endereco, bairro, telefone, nome_mae')
       .eq('id', paciente.id)
       .maybeSingle();
     if (data) setPacienteExtra(data as any);
@@ -188,20 +189,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     };
     const values: Record<string, string> = {
       nome_paciente: paciente?.nome || '—',
-      cpf: paciente?.cpf || '—',
+      cpf: paciente?.cpf || pacienteExtra?.cpf || '—',
       cns: paciente?.cns || pacienteExtra?.cns || '—',
       cartao_sus: paciente?.cns || pacienteExtra?.cns || '—',
       endereco: paciente?.endereco || pacienteExtra?.endereco || '—',
       bairro: paciente?.bairro || pacienteExtra?.bairro || '—',
       telefone: paciente?.telefone || pacienteExtra?.telefone || '—',
-      data_nascimento: paciente?.data_nascimento || '—',
+      data_nascimento: paciente?.data_nascimento || pacienteExtra?.data_nascimento || '—',
       nome_mae: paciente?.nome_mae || pacienteExtra?.nome_mae || '—',
       data_atendimento: dataAtendimento || hoje,
       carimbo_profissional: carimboInlineHtml,
       profissional: profissional?.nome || user?.nome || '—',
-      cid: campos.cid || paciente?.cid || '—',
-      especialidade: paciente?.especialidade_destino || '—',
-      especialidade_destino: campos.especialidade_destino || paciente?.especialidade_destino || '—',
+      cid: campos.cid || paciente?.cid || pacienteExtra?.cid || '—',
+      especialidade: paciente?.especialidade_destino || pacienteExtra?.especialidade_destino || '—',
+      especialidade_destino: campos.especialidade_destino || paciente?.especialidade_destino || pacienteExtra?.especialidade_destino || '—',
       unidade: docConfig?.linha2 || docConfig?.linha1 || unidade || 'CER II Oriximiná',
       data_hoje: hoje,
       data_atual: hoje,
