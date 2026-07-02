@@ -84,7 +84,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [medicamentos, setMedicamentos] = useState<MedicamentoRow[]>([emptyMedicamento()]);
   const [exibirCid, setExibirCid] = useState(false);
-  const [pacienteExtra, setPacienteExtra] = useState<{ cpf?: string; cns?: string; data_nascimento?: string; cid?: string; especialidade_destino?: string; endereco?: string; bairro?: string; telefone?: string; nome_mae?: string } | null>(null);
+  const [pacienteExtra, setPacienteExtra] = useState<Record<string, any> | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -98,21 +98,15 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const loadPacienteExtra = async () => {
     if (!paciente?.id) { setPacienteExtra(null); return; }
-    // Só busca se algum campo faltar no props
-    if (paciente.cpf && paciente.cns && paciente.data_nascimento && paciente.endereco && paciente.bairro && paciente.telefone && paciente.nome_mae) {
-      setPacienteExtra({
-        cpf: paciente.cpf, cns: paciente.cns, data_nascimento: paciente.data_nascimento, cid: paciente.cid, especialidade_destino: paciente.especialidade_destino,
-        endereco: paciente.endereco, bairro: paciente.bairro, telefone: paciente.telefone, nome_mae: paciente.nome_mae,
-      });
-      return;
-    }
+    // Busca todos os campos do paciente para que qualquer variável do template seja resolvida
     const { data } = await supabase
       .from('pacientes')
-      .select('cpf, cns, data_nascimento, cid, especialidade_destino, endereco, bairro, telefone, nome_mae')
+      .select('*')
       .eq('id', paciente.id)
       .maybeSingle();
     if (data) setPacienteExtra(data as any);
   };
+
 
   const loadDocConfig = async () => {
     const cfg = await loadDocumentConfig();
