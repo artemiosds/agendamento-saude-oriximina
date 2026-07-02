@@ -406,8 +406,11 @@ const Tratamentos: React.FC = () => {
       }
     }
     
+    const wasFirst = firstLoadRef.current;
     firstLoadRef.current = false;
-    loadData(false);
+    // Primeiro load: com spinner. Re-loads (busca/filtros/paginação): silencioso
+    // para não desmontar o input de busca e causar perda de foco a cada tecla.
+    loadData(!wasFirst);
   }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm, currentPage, loadData]);
 
   // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
