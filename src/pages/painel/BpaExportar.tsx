@@ -275,6 +275,46 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
   return todos[0] || { codigo: "", campo: "" };
 };
 
+const resolverCodigosSigtapPorProcedimentoId = async (procedimentoIds: any[]): Promise<Map<string, string>> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const entradas = [...new Set(procedimentoIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  const ids = entradas.filter((id) => uuidRegex.test(id));
+  const codigoPorProcId = new Map<string, string>();
+  const BATCH = 500;
+
+  entradas.forEach((entrada) => {
+    const code = sigtapCodigoExibicao(entrada);
+    if (code) codigoPorProcId.set(entrada, code);
+  });
+
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH);
+    const { data: procRows } = await (supabase as any)
+      .from("procedimentos")
+      .select("id, codigo_sigtap")
+      .in("id", batch);
+    (procRows || []).forEach((p: any) => {
+      const code = sigtapCodigoExibicao(p.codigo_sigtap || "");
+      if (code) codigoPorProcId.set(String(p.id), code);
+    });
+  }
+
+  const faltantes = ids.filter((id) => !codigoPorProcId.has(id));
+  for (let i = 0; i < faltantes.length; i += BATCH) {
+    const batch = faltantes.slice(i, i + BATCH);
+    const { data: sigRows } = await (supabase as any)
+      .from("sigtap_procedimentos")
+      .select("id, codigo")
+      .in("id", batch);
+    (sigRows || []).forEach((p: any) => {
+      const code = sigtapCodigoExibicao(p.codigo || "");
+      if (code) codigoPorProcId.set(String(p.id), code);
+    });
+  }
+
+  return codigoPorProcId;
+};
+
 // ============================================================================
 // Helpers de EXIBIÇÃO (Excel/PDF/Diagnóstico) — NÃO mexem no TXT BPA-I.
 // Garantem que SIGTAP apareça sempre como código numérico (igual ao TXT) e
@@ -1456,37 +1496,9 @@ const BpaExportar: React.FC = () => {
           .select("prontuario_id, procedimento_id")
           .in("prontuario_id", prontIdsAll);
         const procIds = [...new Set((ppRows || []).map((r: any) => r.procedimento_id).filter(Boolean))] as string[];
-        const codigoPorProcId = new Map<string, string>();
-        if (procIds.length > 0) {
-          // Fonte 1: tabela local `procedimentos` (cadastros internos).
-          const { data: procRows } = await (supabase as any)
-            .from("procedimentos")
-            .select("id, codigo_sigtap")
-            .in("id", procIds);
-          (procRows || []).forEach((p: any) => {
-            const code = somenteNumeros(p.codigo_sigtap || "");
-            if (code) codigoPorProcId.set(p.id, code);
-          });
-          // Fonte 2: `sigtap_procedimentos` (catálogo oficial SIGTAP). O
-          // Prontuário grava o `id` do SIGTAP diretamente em
-          // prontuario_procedimentos.procedimento_id quando o profissional
-          // escolhe do catálogo — sem espelhar em `procedimentos`. Sem essa
-          // fonte, o BPA-Exportar acusava "SIGTAP Ausente" mesmo com códigos
-          // selecionados no Prontuário.
-          const faltantes = procIds.filter((id) => !codigoPorProcId.has(id));
-          if (faltantes.length > 0) {
-            const { data: sigRows } = await (supabase as any)
-              .from("sigtap_procedimentos")
-              .select("id, codigo")
-              .in("id", faltantes);
-            (sigRows || []).forEach((p: any) => {
-              const code = somenteNumeros(p.codigo || "");
-              if (code) codigoPorProcId.set(p.id, code);
-            });
-          }
-        }
+        const codigoPorProcId = await resolverCodigosSigtapPorProcedimentoId(procIds);
         (ppRows || []).forEach((r: any) => {
-          const code = codigoPorProcId.get(r.procedimento_id);
+          const code = codigoPorProcId.get(String(r.procedimento_id));
           if (!code) return;
           const lista = sigtapPorProntuario.get(r.prontuario_id) || [];
           if (!lista.includes(code)) {
@@ -1494,6 +1506,110 @@ const BpaExportar: React.FC = () => {
             sigtapPorProntuario.set(r.prontuario_id, lista);
           }
         });
+      }
+
+      // === Fallback profundo via sessões/ciclos de tratamento ===
+      // Alguns atendimentos de ciclo ficam na agenda/prontuário, mas o
+      // procedimento executado do dia está em treatment_sessions.procedure_done.
+      // Indexamos por paciente+profissional+data para reaproveitar somente no
+      // atendimento correspondente, sem alterar o fluxo de geração.
+      const sigtapPorSessaoTratamento = new Map<string, string[]>();
+      try {
+        let sessQuery = (supabase as any)
+          .from("treatment_sessions")
+          .select("id, cycle_id, patient_id, professional_id, scheduled_date, status, procedure_done")
+          .in("patient_id", pacienteIds)
+          .gte("scheduled_date", startDate)
+          .lte("scheduled_date", endDate)
+          .not("status", "in", "(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)")
+          .range(0, 9999);
+        if (formData.profissional_id !== "all") {
+          sessQuery = sessQuery.eq("professional_id", formData.profissional_id);
+        }
+        const { data: sessoesRows } = await sessQuery;
+        const sessoes = (sessoesRows || []).filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
+        const cycleIds = [...new Set(sessoes.map((s: any) => s.cycle_id).filter(Boolean))] as string[];
+        const cycleMap = new Map<string, any>();
+        if (cycleIds.length > 0) {
+          const { data: cyclesRows } = await (supabase as any)
+            .from("treatment_cycles")
+            .select("id, unit_id")
+            .in("id", cycleIds);
+          (cyclesRows || []).forEach((c: any) => cycleMap.set(String(c.id), c));
+        }
+
+        const procIdsSessao = sessoes.map((s: any) => s.procedure_done).filter(Boolean);
+        const codigoPorProcSessao = await resolverCodigosSigtapPorProcedimentoId(procIdsSessao);
+        sessoes.forEach((s: any) => {
+          const cycle = s.cycle_id ? cycleMap.get(String(s.cycle_id)) : null;
+          if (formData.unidade_id !== "all" && cycle?.unit_id && cycle.unit_id !== formData.unidade_id) return;
+          const code = codigoPorProcSessao.get(String(s.procedure_done));
+          if (!code) return;
+          const key = [String(s.patient_id), String(s.professional_id), String(s.scheduled_date).slice(0, 10)].join("|");
+          const lista = sigtapPorSessaoTratamento.get(key) || [];
+          if (!lista.includes(code)) {
+            lista.push(code);
+            sigtapPorSessaoTratamento.set(key, lista);
+          }
+        });
+      } catch (e) {
+        console.warn("[BPA-Exportar] falha ao consultar procedimentos de sessões de tratamento:", e);
+      }
+
+      // === Fallback histórico do Prontuário por paciente+profissional ===
+      // Para atendimentos sintéticos da Agenda sem prontuário no dia, evita falso
+      // "SIGTAP Ausente" reaproveitando procedimentos SIGTAP autênticos já
+      // vinculados ao prontuário do mesmo paciente/profissional antes da data.
+      const sigtapHistoricoPorPacienteProf = new Map<string, Array<{ data: string; codigo: string }>>();
+      try {
+        const histProntuarios: any[] = [];
+        const PAGE = 1000;
+        for (let offset = 0; ; offset += PAGE) {
+          let histQuery = (supabase as any)
+            .from("prontuarios")
+            .select("id, paciente_id, profissional_id, data_atendimento")
+            .in("paciente_id", pacienteIds)
+            .in("profissional_id", profIds)
+            .eq("status", "finalizado")
+            .lte("data_atendimento", endDate)
+            .range(offset, offset + PAGE - 1);
+          if (formData.unidade_id !== "all") histQuery = histQuery.eq("unidade_id", formData.unidade_id);
+          const { data: histRows, error: histErr } = await histQuery;
+          if (histErr) throw histErr;
+          const rows = histRows || [];
+          histProntuarios.push(...rows);
+          if (rows.length < PAGE) break;
+        }
+
+        const histIds = histProntuarios.map((p) => p.id).filter(Boolean);
+        const histById = new Map(histProntuarios.map((p) => [String(p.id), p]));
+        const ppHistRows: any[] = [];
+        for (let i = 0; i < histIds.length; i += 500) {
+          const batch = histIds.slice(i, i + 500);
+          const { data: rows } = await (supabase as any)
+            .from("prontuario_procedimentos")
+            .select("prontuario_id, procedimento_id")
+            .in("prontuario_id", batch);
+          ppHistRows.push(...(rows || []));
+        }
+
+        const codigoPorProcHist = await resolverCodigosSigtapPorProcedimentoId(
+          ppHistRows.map((r) => r.procedimento_id).filter(Boolean),
+        );
+        ppHistRows.forEach((r) => {
+          const prontHist = histById.get(String(r.prontuario_id));
+          const code = codigoPorProcHist.get(String(r.procedimento_id));
+          if (!prontHist || !code) return;
+          const key = [String(prontHist.paciente_id), String(prontHist.profissional_id)].join("|");
+          const lista = sigtapHistoricoPorPacienteProf.get(key) || [];
+          if (!lista.some((item) => item.data === String(prontHist.data_atendimento).slice(0, 10) && item.codigo === code)) {
+            lista.push({ data: String(prontHist.data_atendimento).slice(0, 10), codigo: code });
+            lista.sort((a, b) => b.data.localeCompare(a.data));
+            sigtapHistoricoPorPacienteProf.set(key, lista);
+          }
+        });
+      } catch (e) {
+        console.warn("[BPA-Exportar] falha ao consultar histórico de procedimentos do prontuário:", e);
       }
 
       // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
@@ -1832,8 +1948,24 @@ const BpaExportar: React.FC = () => {
           const sigtapEmCustom = sigtapTodos[0] || { codigo: "", campo: "" };
           const sigtapVinculadoList = sigtapPorProntuario.get(pront.id) || [];
           const sigtapVinculado = sigtapVinculadoList[0] || "";
+          const chaveSessaoTratamento = [
+            String(pront.paciente_id || ""),
+            String(pront.profissional_id || ""),
+            String(pront.data_atendimento || "").slice(0, 10),
+          ].join("|");
+          const sigtapSessaoList = sigtapPorSessaoTratamento.get(chaveSessaoTratamento) || [];
+          const sigtapSessao = sigtapSessaoList[0] || "";
+          const chaveHistoricoProntuario = [String(pront.paciente_id || ""), String(pront.profissional_id || "")].join("|");
+          const dataProntuarioAtual = String(pront.data_atendimento || "").slice(0, 10);
+          const usarHistoricoProntuario = pront.tipo_registro === "agenda_sem_prontuario" || String(pront.id || "").startsWith("agenda:");
+          const sigtapHistoricoList = usarHistoricoProntuario
+            ? (sigtapHistoricoPorPacienteProf.get(chaveHistoricoProntuario) || [])
+                .filter((item) => !dataProntuarioAtual || item.data <= dataProntuarioAtual)
+                .map((item) => item.codigo)
+            : [];
+          const sigtapHistorico = sigtapHistoricoList[0] || "";
           let proc_real = "";
-          let proc_origem: "Prontuário" | "Procedimentos vinculados" | "PTS" | "" = "";
+          let proc_origem: "Prontuário" | "Procedimentos vinculados" | "Sessão de Tratamento" | "Histórico do Prontuário" | "PTS" | "" = "";
           let proc_campo = "";
           if (sigtapEmCustom.codigo) {
             proc_real = sigtapEmCustom.codigo;
@@ -1843,6 +1975,14 @@ const BpaExportar: React.FC = () => {
             proc_real = sigtapVinculado;
             proc_origem = "Procedimentos vinculados";
             proc_campo = "prontuario_procedimentos";
+          } else if (sigtapSessao) {
+            proc_real = sigtapSessao;
+            proc_origem = "Sessão de Tratamento";
+            proc_campo = "treatment_sessions.procedure_done";
+          } else if (sigtapHistorico) {
+            proc_real = sigtapHistorico;
+            proc_origem = "Histórico do Prontuário";
+            proc_campo = "prontuario_procedimentos histórico";
           }
           const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria);
           let ptsConsultado = false;
@@ -1886,6 +2026,12 @@ const BpaExportar: React.FC = () => {
           for (const t of sigtapTodos) addCodigo(t.codigo, `Prontuário:${t.campo}`);
           // 2) Todos os SIGTAPs vinculados (prontuario_procedimentos).
           for (const c of sigtapVinculadoList) addCodigo(c, "Procedimentos vinculados");
+          // 2.5) SIGTAPs vinculados à sessão recorrente do mesmo paciente/profissional/data.
+          for (const c of sigtapSessaoList) addCodigo(c, "Sessão de Tratamento");
+          // 2.6) Histórico clínico do mesmo paciente/profissional até a data do atendimento.
+          if (codigosParaExportar.length === 0) {
+            for (const c of sigtapHistoricoList) addCodigo(c, "Histórico do Prontuário");
+          }
           // 3) Resolução do BPA-Produção (apenas se ainda não houver nada).
           if (codigosParaExportar.length === 0 && sigtapReq.exige && producaoResolvida?.codigo_sigtap) {
             addCodigo(
@@ -1930,7 +2076,7 @@ const BpaExportar: React.FC = () => {
             motivosPendencia.push("SIGTAP obrigatório ausente");
             stats.missingSigtap++;
             const fontesTxt = fontesConsultadas.length ? fontesConsultadas.join(" / ") : "Prontuário";
-            const motivo = `Profissão "${sigtapReq.profissao || "indefinida"}" exige SIGTAP. Fontes consultadas: ${fontesTxt}. Nenhum código localizado em campo fixo, custom_data, seção dinâmica, prontuario_procedimentos${sigtapReq.categoria === "fisioterap" ? " ou PTS ativo" : ""}.`;
+            const motivo = `Profissão "${sigtapReq.profissao || "indefinida"}" exige SIGTAP. Fontes consultadas: ${fontesTxt}. Nenhum código localizado em campo fixo, custom_data, seção dinâmica, prontuario_procedimentos, treatment_sessions.procedure_done${sigtapReq.categoria === "fisioterap" ? " ou PTS ativo" : ""}.`;
             warnings.push(`${ident}: ${motivo}`);
             details.missingSigtap.push({
               ...itemDetail,
