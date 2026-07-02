@@ -1772,6 +1772,7 @@ const BpaExportar: React.FC = () => {
       const confRows: any[] = [];
       const pendRows: any[] = [];
       const chavesAtendimentos = new Set<string>();
+      const chavesLinhasBpa = new Set<string>();
 
       let hasError = false;
 
@@ -1828,16 +1829,12 @@ const BpaExportar: React.FC = () => {
         ].join("|");
 
         if (chavesAtendimentos.has(chaveAtendimento)) {
-          stats.autoCorrected++;
-          warnings.push(`${ident}: atendimento duplicado removido automaticamente.`);
-          details.autoCorrected.push({
-            ...itemDetail,
-            pendencia: "Atendimento duplicado removido",
-            valor_atual: chaveAtendimento,
-          });
-          return;
+          warnings.push(
+            `${ident}: outro prontuário no mesmo paciente/profissional/unidade/data foi consolidado por linha BPA-I.`,
+          );
+        } else {
+          chavesAtendimentos.add(chaveAtendimento);
         }
-        chavesAtendimentos.add(chaveAtendimento);
 
         // Sem o paciente correspondente ao paciente_id do prontuário não é
         // seguro usar outro cadastro por semelhança de nome.
@@ -2383,6 +2380,17 @@ const BpaExportar: React.FC = () => {
                 ? ""
                 : procEntry.cid || cidProducaoLinha || pront.custom_data?.cid || pac?.cid || "";
               const { cid } = normalizarCidLinha(cidBrutoLinha);
+              const chaveLinhaBpa = [chaveAtendimento, proc, cid].join("|");
+              if (chavesLinhasBpa.has(chaveLinhaBpa)) {
+                stats.autoCorrected++;
+                details.autoCorrected.push({
+                  ...itemDetail,
+                  pendencia: "Linha BPA-I duplicada removida",
+                  valor_atual: `${proc}${cid ? ` / CID ${cid.trim()}` : ""}`,
+                });
+                continue;
+              }
+              chavesLinhasBpa.add(chaveLinhaBpa);
               const folhaBpa = Math.floor(exportedCount / 20) + 1;
               const sequenciaFolha = (exportedCount % 20) + 1;
 
