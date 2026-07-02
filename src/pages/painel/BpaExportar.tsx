@@ -1818,9 +1818,9 @@ const BpaExportar: React.FC = () => {
         });
 
 
-        // Remove apenas duplicidades exatas de atendimento: mesmo paciente,
-        // profissional, unidade e data. Múltiplos procedimentos do mesmo
-        // atendimento NÃO são duplicidade — viram múltiplas linhas BPA-I.
+        // Consolida atendimentos iguais sem descartar prontuários antes da
+        // leitura dos procedimentos. A deduplicação acontece só no nível da
+        // linha BPA-I: mesmo paciente/profissional/unidade/data + SIGTAP + CID.
         const chaveAtendimento = [
           String(pront.paciente_id || ""),
           String(pront.profissional_id || ""),
