@@ -276,9 +276,16 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
 };
 
 const resolverCodigosSigtapPorProcedimentoId = async (procedimentoIds: any[]): Promise<Map<string, string>> => {
-  const ids = [...new Set(procedimentoIds.map((id) => String(id || "")).filter(Boolean))];
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const entradas = [...new Set(procedimentoIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  const ids = entradas.filter((id) => uuidRegex.test(id));
   const codigoPorProcId = new Map<string, string>();
   const BATCH = 500;
+
+  entradas.forEach((entrada) => {
+    const code = sigtapCodigoExibicao(entrada);
+    if (code) codigoPorProcId.set(entrada, code);
+  });
 
   for (let i = 0; i < ids.length; i += BATCH) {
     const batch = ids.slice(i, i + BATCH);
