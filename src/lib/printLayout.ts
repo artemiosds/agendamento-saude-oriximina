@@ -270,6 +270,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   /* CONTENT */
   .doc-content {
+    flex: 1 0 auto;
     text-align: ${t.alinhamento};
     font-size: ${t.tamanhoBase}pt;
   }
@@ -359,11 +360,6 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .signature.pos-right .signature-line { margin-right: 0; margin-left: auto; }
   .signature.pos-right .assinatura-img,
   .signature.pos-right .carimbo-img { margin-right: 0; margin-left: auto; }
-
-  .doc-content {
-    flex: 1 0 auto;
-    text-align: ${t.alinhamento};
-  }
 
   /* FOOTER — reservado no fluxo e empurrado para o rodapé inferior do documento */
   .doc-footer {
