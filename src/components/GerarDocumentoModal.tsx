@@ -22,7 +22,7 @@ import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  paciente?: { id?: string; nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string };
+  paciente?: { id?: string; nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string; endereco?: string; bairro?: string; telefone?: string };
   profissional?: { id?: string; nome: string; profissao: string; numero_conselho: string; tipo_conselho: string; uf_conselho: string };
   unidade?: string;
   dataAtendimento?: string;
