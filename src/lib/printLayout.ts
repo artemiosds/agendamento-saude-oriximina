@@ -164,7 +164,9 @@ function resolveLogoUrl(configUrl: string, fallback: string): string {
 export function buildInstitutionalCSS(config?: DocumentConfig): string {
   const t = config?.tipografia || DEFAULT_TYPOGRAPHY;
   const m = config?.margens || DEFAULT_MARGINS;
-  const footerSpace = config?.mostrarRodape === false ? 0 : 16;
+  const footerSpace = config?.mostrarRodape === false ? 0 : 18;
+  const footerGap = footerSpace > 0 ? 6 : 0;
+  const printBottomMargin = m.inferior + footerSpace + footerGap;
   const fontFamily =
     t.fonte === 'Times New Roman' ? `'Times New Roman', Times, serif`
     : t.fonte === 'Calibri' ? `Calibri, 'Segoe UI', Arial, sans-serif`
@@ -173,14 +175,19 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   return `
 <style>
-  :root { --doc-footer-space: ${footerSpace}mm; --doc-page-height: calc(297mm - ${m.superior + m.inferior}mm); }
+  :root { 
+    --doc-footer-space: ${footerSpace}mm; 
+    --doc-footer-gap: ${footerGap}mm;
+    --doc-page-height: calc(297mm - ${m.superior + m.inferior}mm); 
+    --doc-print-bottom-margin: ${printBottomMargin}mm;
+  }
   @page {
     size: A4;
-    margin: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
+    margin: ${m.superior}mm ${m.direita}mm ${printBottomMargin}mm ${m.esquerda}mm;
     @bottom-center { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #666; }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body.doc-print-document {
+  .doc-print-document {
     padding: 0;
     min-height: var(--doc-page-height);
     background: #fff;
@@ -198,6 +205,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   }
   .doc-page > .doc-content {
     flex: 1 1 auto;
+    min-height: 0;
   }
 
   /* HEADER */
@@ -368,7 +376,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .signature.pos-right .assinatura-img,
   .signature.pos-right .carimbo-img { margin-right: 0; margin-left: auto; }
 
-  /* FOOTER — reservado no fluxo e empurrado para o rodapé inferior do documento */
+  /* FOOTER — no preview fica no fluxo; na impressão fica fixo na margem inferior reservada */
   .doc-footer {
     position: static;
     flex: 0 0 auto;
@@ -394,22 +402,35 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
   @media screen {
-    body.doc-print-document {
+    .doc-print-document {
       min-height: 297mm;
       padding: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
     }
-    body.doc-print-document .doc-page {
+    .doc-print-document .doc-page {
       min-height: var(--doc-page-height);
     }
   }
 
   @media print {
-    body.doc-print-document { background: #fff; margin: 0; min-height: var(--doc-page-height); padding: 0; }
-    .doc-page { min-height: var(--doc-page-height); display: flex; flex-direction: column; }
+    html, body { background: #fff; margin: 0; padding: 0; width: 210mm; }
+    .doc-print-document { background: #fff; margin: 0; min-height: auto; padding: 0 !important; display: block; }
+    .doc-page { min-height: auto; display: block; position: static; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
     .doc-header, .signature, .doc-footer { page-break-inside: avoid; break-inside: avoid; }
-    .doc-page > .doc-content { flex: 1 1 auto; }
-    .doc-footer { position: static; margin-top: auto; background: #fff; }
+    .doc-page > .doc-content { display: block; min-height: 0; padding-bottom: 0; }
+    .doc-footer { 
+      position: fixed; 
+      left: ${m.esquerda}mm; 
+      right: ${m.direita}mm; 
+      bottom: ${Math.max(4, Math.min(10, Math.round(m.inferior / 2)))}mm; 
+      width: auto;
+      min-height: var(--doc-footer-space); 
+      max-height: var(--doc-footer-space);
+      margin: 0;
+      padding-top: 4px;
+      background: #fff; 
+      z-index: 10;
+    }
 
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
