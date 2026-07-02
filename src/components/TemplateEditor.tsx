@@ -3,6 +3,9 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import { Mark, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { FontFamily } from '@tiptap/extension-font-family';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
@@ -23,7 +26,19 @@ import {
   Bold, Italic, UnderlineIcon, Heading1, Heading2, Heading3,
   List, ListOrdered, Table as TableIcon, Plus, Save, Eye, X,
   Type, Calendar, CheckSquare, ShieldQuestion, Trash2, Pencil, FileText, Loader2,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
 } from 'lucide-react';
+
+const FONT_FAMILIES = [
+  { label: 'Padrão', value: '' },
+  { label: 'Arial', value: 'Arial, sans-serif' },
+  { label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
+  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Courier New', value: '"Courier New", monospace' },
+  { label: 'Verdana', value: 'Verdana, sans-serif' },
+  { label: 'Tahoma', value: 'Tahoma, sans-serif' },
+];
 
 // -------- Types --------
 type Categoria = 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
@@ -99,6 +114,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     extensions: [
       StarterKit,
       Underline,
+      TextStyle,
+      FontFamily.configure({ types: ['textStyle'] }),
+      TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right', 'justify'] }),
       Table.configure({ resizable: false }),
       TableRow, TableHeader, TableCell,
       VariableMark,
@@ -294,6 +312,27 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Lista"><List className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Lista numerada"><ListOrdered className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Tabela"><TableIcon className="w-4 h-4" /></Button>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            {/* Alinhamento */}
+            <Button size="icon" variant={editor?.isActive({ textAlign: 'left' }) ? 'secondary' : 'ghost'} className="h-8 w-8" onClick={() => editor?.chain().focus().setTextAlign('left').run()} title="Alinhar à esquerda"><AlignLeft className="w-4 h-4" /></Button>
+            <Button size="icon" variant={editor?.isActive({ textAlign: 'center' }) ? 'secondary' : 'ghost'} className="h-8 w-8" onClick={() => editor?.chain().focus().setTextAlign('center').run()} title="Centralizar"><AlignCenter className="w-4 h-4" /></Button>
+            <Button size="icon" variant={editor?.isActive({ textAlign: 'right' }) ? 'secondary' : 'ghost'} className="h-8 w-8" onClick={() => editor?.chain().focus().setTextAlign('right').run()} title="Alinhar à direita"><AlignRight className="w-4 h-4" /></Button>
+            <Button size="icon" variant={editor?.isActive({ textAlign: 'justify' }) ? 'secondary' : 'ghost'} className="h-8 w-8" onClick={() => editor?.chain().focus().setTextAlign('justify').run()} title="Justificar"><AlignJustify className="w-4 h-4" /></Button>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            {/* Fonte */}
+            <Select
+              value=""
+              onValueChange={(v) => {
+                if (!editor) return;
+                if (!v || v === '__default__') editor.chain().focus().unsetFontFamily().run();
+                else editor.chain().focus().setFontFamily(v).run();
+              }}
+            >
+              <SelectTrigger className="h-8 w-[150px] gap-1 text-xs"><Type className="w-3.5 h-3.5" /> <SelectValue placeholder="Fonte" /></SelectTrigger>
+              <SelectContent>
+                {FONT_FAMILIES.map(f => <SelectItem key={f.label} value={f.value || '__default__'} onSelect={undefined as any}>{f.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Select onValueChange={applyCondition}>
               <SelectTrigger className="h-8 w-auto gap-1 text-xs"><ShieldQuestion className="w-3.5 h-3.5" /> <SelectValue placeholder="Bloco condicional" /></SelectTrigger>
