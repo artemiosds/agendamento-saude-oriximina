@@ -2316,6 +2316,15 @@ const BpaExportar: React.FC = () => {
 
             for (const procEntry of listaParaEmitir) {
               const proc = zfill(procEntry.codigo, 10);
+              const cidProducaoLinha = sigtapReq.exige && !ehTecnicoEnfermagem
+                ? producaoResolvidaList.find((ln) => somenteNumeros(ln.codigo_sigtap) === somenteNumeros(procEntry.codigo))?.cid ||
+                  producaoResolvida?.cid ||
+                  ""
+                : "";
+              const cidBrutoLinha = ehTecnicoEnfermagem
+                ? ""
+                : procEntry.cid || cidProducaoLinha || pront.custom_data?.cid || pac?.cid || "";
+              const { cid } = normalizarCidLinha(cidBrutoLinha);
               const folhaBpa = Math.floor(exportedCount / 20) + 1;
               const sequenciaFolha = (exportedCount % 20) + 1;
 
@@ -2386,7 +2395,7 @@ const BpaExportar: React.FC = () => {
                 tipo_procedimento: String(procEntry.origem || "").startsWith("Aditivo")
                   ? "Procedimento Aditivo"
                   : "Procedimento Clínico",
-                cid_usado: cidExibicao(cidBruto),
+                cid_usado: cidExibicao(cidBrutoLinha),
                 _ctx: {
                   profissional_nome: prof?.nome || "",
                   cns_prof,
