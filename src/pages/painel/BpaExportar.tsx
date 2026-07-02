@@ -223,20 +223,44 @@ const fontesSigtapParaCategoria = (cat: CategoriaSigtap): string[] => {
 const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; campo: string }> => {
   if (!pront) return [];
   const cd = pront.custom_data || {};
-  const pickCodigo = (v: any): string => {
-    if (v === null || v === undefined) return "";
-    if (typeof v === "string" || typeof v === "number") {
-      const n = somenteNumeros(v);
-      if (n.length >= 6 && n.length <= 10) return n.padStart(10, "0").slice(-10);
-      return "";
-    }
-    if (typeof v === "object") {
-      const cand =
-        v.codigo_sigtap || v.codigo || v.sigtap || v.procedimento_sigtap || v.procedimento_codigo || v.procedimento;
-      return pickCodigo(cand);
-    }
+  const dados = pront.dados || cd.dados || {};
+  const metadata = pront.metadata || cd.metadata || {};
+
+  const normalizarCodigo = (v: any): string => {
+    const n = somenteNumeros(v);
+    if (n.length >= 6 && n.length <= 10) return n.padStart(10, "0").slice(-10);
     return "";
   };
+
+  const pickCodigos = (v: any): string[] => {
+    if (v === null || v === undefined) return [];
+    if (Array.isArray(v)) return v.flatMap((item) => pickCodigos(item));
+    if (typeof v === "number") return [normalizarCodigo(v)].filter(Boolean);
+    if (typeof v === "string") {
+      const direto = normalizarCodigo(v);
+      if (direto) return [direto];
+      return [...v.matchAll(/\b\d{6,10}\b/g)].map((m) => normalizarCodigo(m[0])).filter(Boolean);
+    }
+    if (typeof v === "object") {
+      const candidatos = [
+        v.codigo_sigtap,
+        v.sigtap_codigo,
+        v.sigtap,
+        v.procedimento_sigtap,
+        v.procedimento_codigo,
+        v.co_procedimento,
+        v.cod_procedimento,
+        v.codigo,
+        v.procedimento,
+        v.procedimentos,
+        v.procedimentos_sigtap,
+        v.procedimentos_realizados,
+      ];
+      return candidatos.flatMap((cand) => pickCodigos(cand));
+    }
+    return [];
+  };
+
   const resultado: Array<{ codigo: string; campo: string }> = [];
   const vistos = new Set<string>();
   const push = (codigo: string, campo: string) => {
@@ -245,32 +269,30 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
       resultado.push({ codigo, campo });
     }
   };
-  const candidatosSimples: Array<[string, any]> = [
+  const fontes: Array<[string, any]> = [
     ["custom_data.procedimento_sigtap", cd.procedimento_sigtap],
     ["custom_data.codigo_sigtap", cd.codigo_sigtap],
     ["custom_data.sigtap", cd.sigtap],
     ["custom_data.procedimento_codigo", cd.procedimento_codigo],
     ["custom_data.procedimento", cd.procedimento],
+    ["custom_data.procedimentos", cd.procedimentos],
+    ["custom_data.procedimentos_realizados", cd.procedimentos_realizados],
+    ["custom_data.procedimentosSelecionados", cd.procedimentosSelecionados],
+    ["custom_data.procedimentos_sigtap", cd.procedimentos_sigtap],
+    ["custom_data.sigtap_lista", cd.sigtap_lista],
+    ["custom_data.procedimentos_extras", cd.procedimentos_extras],
+    ["dados.procedimentos", dados.procedimentos],
+    ["dados.procedimentos_realizados", dados.procedimentos_realizados],
+    ["metadata.procedimentos", metadata.procedimentos],
+    ["procedimentos", pront.procedimentos],
+    ["procedimentos_realizados", pront.procedimentos_realizados],
+    ["procedimentosSelecionados", pront.procedimentosSelecionados],
+    ["procedimentos_sigtap", pront.procedimentos_sigtap],
     ["outro_procedimento", pront.outro_procedimento],
     ["procedimentos_texto", pront.procedimentos_texto],
   ];
-  for (const [campo, v] of candidatosSimples) {
-    push(pickCodigo(v), campo);
-  }
-  const arrays: Array<[string, any]> = [
-    ["custom_data.procedimentos", cd.procedimentos],
-    ["custom_data.procedimentos_realizados", cd.procedimentos_realizados],
-    ["custom_data.sigtap_lista", cd.sigtap_lista],
-    // Procedimentos EXTRAS adicionados manualmente via BPA-Exportar (somam-se
-    // aos códigos do prontuário/PTS sem substituí-los).
-    ["custom_data.procedimentos_extras", cd.procedimentos_extras],
-  ];
-  for (const [campo, arr] of arrays) {
-    if (Array.isArray(arr)) {
-      for (const item of arr) {
-        push(pickCodigo(item), `${campo}[]`);
-      }
-    }
+  for (const [campo, valor] of fontes) {
+    for (const codigo of pickCodigos(valor)) push(codigo, campo);
   }
   return resultado;
 };
@@ -1216,23 +1238,29 @@ const BpaExportar: React.FC = () => {
       const startDate = `${ano}-${mes}-01`;
       const endDate = new Date(parseInt(ano), parseInt(mes), 0).toISOString().split("T")[0];
 
-      let query = (supabase as any)
-        .from("prontuarios")
-        .select("*")
-        .gte("data_atendimento", startDate)
-        .lte("data_atendimento", endDate)
-        .eq("status", "finalizado");
+      const prontuariosOriginais: any[] = [];
+      const PAGE = 1000;
+      for (let offset = 0; ; offset += PAGE) {
+        let query = (supabase as any)
+          .from("prontuarios")
+          .select("*")
+          .gte("data_atendimento", startDate)
+          .lte("data_atendimento", endDate)
+          .eq("status", "finalizado")
+          .range(offset, offset + PAGE - 1);
 
-      if (formData.unidade_id !== "all") {
-        query = query.eq("unidade_id", formData.unidade_id);
+        if (formData.unidade_id !== "all") {
+          query = query.eq("unidade_id", formData.unidade_id);
+        }
+        if (formData.profissional_id !== "all") {
+          query = query.eq("profissional_id", formData.profissional_id);
+        }
+
+        const { data: pageRows, error: pError } = await query;
+        if (pError) throw pError;
+        prontuariosOriginais.push(...(pageRows || []));
+        if (!pageRows || pageRows.length < PAGE) break;
       }
-      if (formData.profissional_id !== "all") {
-        query = query.eq("profissional_id", formData.profissional_id);
-      }
-
-      const { data: prontuariosOriginais, error: pError } = await query;
-
-      if (pError) throw pError;
 
       // === Inclusão dos Técnicos de Enfermagem (CBO 322205) ===
       // Triagens não geram prontuário. Para que técnicos apareçam na exportação
@@ -1636,7 +1664,7 @@ const BpaExportar: React.FC = () => {
       // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
       // Para Psicóloga, Fonoaudiólogo(a) e Nutricionista o SIGTAP vem somente do Prontuário.
       // Para Fisioterapeuta, se o Prontuário não tiver SIGTAP, buscamos no PTS ativo do paciente.
-      const ptsSigtapByPatient = new Map<string, string>();
+      const ptsSigtapByPatient = new Map<string, string[]>();
       const fisioPatientIds = new Set<string>();
       prontuarios.forEach((pr: any) => {
         const prof = funcMap.get(pr.profissional_id) as any;
@@ -1670,14 +1698,19 @@ const BpaExportar: React.FC = () => {
             .from("pts_sigtap")
             .select("pts_id, procedimento_codigo")
             .in("pts_id", ptsIds);
-          const sigByPts = new Map<string, string>();
+          const sigByPts = new Map<string, string[]>();
           (sigRows || []).forEach((s: any) => {
             const code = somenteNumeros(s.procedimento_codigo || "");
-            if (code && !sigByPts.has(s.pts_id)) sigByPts.set(s.pts_id, code);
+            if (!code) return;
+            const lista = sigByPts.get(s.pts_id) || [];
+            if (!lista.includes(code)) {
+              lista.push(code);
+              sigByPts.set(s.pts_id, lista);
+            }
           });
           ptsByPatient.forEach((pts, pid) => {
-            const code = sigByPts.get(pts.id);
-            if (code) ptsSigtapByPatient.set(pid, code);
+            const codes = sigByPts.get(pts.id) || [];
+            if (codes.length) ptsSigtapByPatient.set(pid, codes);
           });
         }
       }
@@ -2016,7 +2049,7 @@ const BpaExportar: React.FC = () => {
           let ptsEncontrado = 0;
           if (!proc_real && sigtapReq.categoria === "fisioterap" && pront.paciente_id) {
             ptsConsultado = true;
-            const ptsCode = ptsSigtapByPatient.get(String(pront.paciente_id));
+            const ptsCode = (ptsSigtapByPatient.get(String(pront.paciente_id)) || [])[0];
             if (ptsCode) {
               proc_real = ptsCode;
               proc_origem = "PTS";
@@ -2070,8 +2103,9 @@ const BpaExportar: React.FC = () => {
               for (const c of sigtapHistoricoList) addCodigo(c, "Histórico do Prontuário");
             }
           }
-          // 3) Resolução do BPA-Produção (apenas se ainda não houver nada).
-          if (codigosParaExportar.length === 0 && sigtapReq.exige && producaoResolvidaList.length > 0) {
+          // 3) Resolução do BPA-Produção: soma itens profundos não capturados
+          // acima, sem substituir/diminuir os códigos já encontrados.
+          if (sigtapReq.exige && producaoResolvidaList.length > 0) {
             for (const ln of producaoResolvidaList) {
               addCodigo(
                 ln.codigo_sigtap,
@@ -2082,8 +2116,9 @@ const BpaExportar: React.FC = () => {
           }
           // 4) PTS (apenas Fisio e lista ainda vazia).
           if (codigosParaExportar.length === 0 && sigtapReq.categoria === "fisioterap" && pront.paciente_id) {
-            const ptsCode = ptsSigtapByPatient.get(String(pront.paciente_id));
-            if (ptsCode) addCodigo(ptsCode, "PTS");
+            for (const ptsCode of ptsSigtapByPatient.get(String(pront.paciente_id)) || []) {
+              addCodigo(ptsCode, "PTS");
+            }
           }
           // 4.5) Técnico de Enfermagem (CBO 322205): injeta toda a lista de
           // procedimentos cadastrados — gera 1 linha BPA-I para cada código.
