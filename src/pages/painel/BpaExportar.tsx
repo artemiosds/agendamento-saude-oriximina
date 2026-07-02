@@ -154,6 +154,9 @@ const obterCboValido = (prof: any): string => {
   return "";
 };
 
+const CBOS_MULTIPLOS_SIGTAP = new Set(["223810", "251510", "223710"]);
+const profissionalPermiteMultiplosSigtap = (prof: any): boolean => CBOS_MULTIPLOS_SIGTAP.has(obterCboValido(prof));
+
 // Profissões que EXIGEM procedimento SIGTAP válido para BPA-I.
 // Médico e demais perfis NÃO são bloqueados por ausência de SIGTAP.
 // Categoria define a origem de busca do SIGTAP:
@@ -209,8 +212,10 @@ const profissionalEhMedico = (prof: any): boolean => {
 };
 
 // Fontes consultadas para o SIGTAP de acordo com a categoria da profissão.
-const fontesSigtapParaCategoria = (cat: CategoriaSigtap): string[] => {
-  if (cat === "fisioterap") return ["Prontuário", "Procedimentos vinculados", "PTS"];
+const fontesSigtapParaCategoria = (cat: CategoriaSigtap, prof?: any): string[] => {
+  if (profissionalPermiteMultiplosSigtap(prof) || cat === "fisioterap") {
+    return ["Prontuário", "Procedimentos vinculados", "Produção BPA", "PTS"];
+  }
   if (cat) return ["Prontuário", "Procedimentos vinculados"];
   return [];
 };
@@ -263,6 +268,25 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
     return [];
   };
 
+  const pickCodigosEmCamposDeProcedimento = (v: any): string[] => {
+    const out: string[] = [];
+    const visitar = (valor: any, chavePai = "") => {
+      if (valor === null || valor === undefined) return;
+      const chaveProc = /(sigtap|proced|proc_)/i.test(chavePai);
+      if (Array.isArray(valor)) {
+        valor.forEach((item) => visitar(item, chavePai));
+        return;
+      }
+      if (typeof valor === "object") {
+        Object.entries(valor).forEach(([chave, item]) => visitar(item, `${chavePai}.${chave}`));
+        return;
+      }
+      if (chaveProc) out.push(...pickCodigos(valor));
+    };
+    visitar(v);
+    return out;
+  };
+
   const resultado: Array<{ codigo: string; campo: string }> = [];
   const vistos = new Set<string>();
   const push = (codigo: string, campo: string) => {
@@ -296,6 +320,9 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
   for (const [campo, valor] of fontes) {
     for (const codigo of pickCodigos(valor)) push(codigo, campo);
   }
+  for (const codigo of pickCodigosEmCamposDeProcedimento(cd)) push(codigo, "custom_data profundo");
+  for (const codigo of pickCodigosEmCamposDeProcedimento(dados)) push(codigo, "dados profundo");
+  for (const codigo of pickCodigosEmCamposDeProcedimento(metadata)) push(codigo, "metadata profundo");
   return resultado;
 };
 
@@ -1663,38 +1690,41 @@ const BpaExportar: React.FC = () => {
         console.warn("[BPA-Exportar] falha ao consultar histórico de procedimentos do prontuário:", e);
       }
 
-      // === Carga de SIGTAP do PTS (apenas para Fisioterapeuta) ===
-      // Para Psicóloga, Fonoaudiólogo(a) e Nutricionista o SIGTAP vem somente do Prontuário.
-      // Para Fisioterapeuta, se o Prontuário não tiver SIGTAP, buscamos no PTS ativo do paciente.
+      // === Carga de SIGTAP do PTS ===
+      // Fisioterapia usa PTS como fallback. CBOs multiprocedimento (223810,
+      // 251510, 223710) também consultam PTS como fonte profunda complementar,
+      // pois podem registrar mais de um SIGTAP no mesmo atendimento.
       const ptsSigtapByPatient = new Map<string, string[]>();
-      const fisioPatientIds = new Set<string>();
+      const ptsSigtapByPatientProf = new Map<string, string[]>();
+      const ptsPatientIds = new Set<string>();
       prontuarios.forEach((pr: any) => {
         const prof = funcMap.get(pr.profissional_id) as any;
         const cat = profissaoExigeSigtap(prof).categoria;
         const inProntCd = extrairSigtapDoProntuario(pr).codigo;
         const inVinculado = (sigtapPorProntuario.get(pr.id) || []).length > 0;
-        if (cat === "fisioterap" && !inProntCd && !inVinculado && pr.paciente_id) {
-          fisioPatientIds.add(String(pr.paciente_id));
+        const permiteMultiplos = profissionalPermiteMultiplosSigtap(prof);
+        if (pr.paciente_id && (permiteMultiplos || (cat === "fisioterap" && !inProntCd && !inVinculado))) {
+          ptsPatientIds.add(String(pr.paciente_id));
         }
       });
-      if (fisioPatientIds.size > 0) {
-        const ids = Array.from(fisioPatientIds);
+      if (ptsPatientIds.size > 0) {
+        const ids = Array.from(ptsPatientIds);
         const { data: ptsRows } = await (supabase as any)
           .from("pts")
-          .select("id, patient_id, status, updated_at")
+          .select("id, patient_id, professional_id, unit_id, status, updated_at")
           .in("patient_id", ids);
         const ativos = (ptsRows || []).filter((r: any) => {
           const s = String(r.status || "").toLowerCase();
           return s === "ativo" || s === "em_andamento" || s === "em andamento" || !s;
         });
-        const ptsByPatient = new Map<string, any>();
+        const ptsByPatient = new Map<string, any[]>();
         ativos.forEach((r: any) => {
-          const ex = ptsByPatient.get(String(r.patient_id));
-          if (!ex || new Date(r.updated_at || 0) > new Date(ex.updated_at || 0)) {
-            ptsByPatient.set(String(r.patient_id), r);
-          }
+          const lista = ptsByPatient.get(String(r.patient_id)) || [];
+          lista.push(r);
+          lista.sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+          ptsByPatient.set(String(r.patient_id), lista);
         });
-        const ptsIds = Array.from(ptsByPatient.values()).map((r: any) => r.id);
+        const ptsIds = Array.from(ptsByPatient.values()).flat().map((r: any) => r.id);
         if (ptsIds.length > 0) {
           const { data: sigRows } = await (supabase as any)
             .from("pts_sigtap")
@@ -1702,7 +1732,7 @@ const BpaExportar: React.FC = () => {
             .in("pts_id", ptsIds);
           const sigByPts = new Map<string, string[]>();
           (sigRows || []).forEach((s: any) => {
-            const code = somenteNumeros(s.procedimento_codigo || "");
+            const code = sigtapCodigoExibicao(s.procedimento_codigo || "");
             if (!code) return;
             const lista = sigByPts.get(s.pts_id) || [];
             if (!lista.includes(code)) {
@@ -1710,8 +1740,22 @@ const BpaExportar: React.FC = () => {
               sigByPts.set(s.pts_id, lista);
             }
           });
-          ptsByPatient.forEach((pts, pid) => {
-            const codes = sigByPts.get(pts.id) || [];
+          ptsByPatient.forEach((ptsList, pid) => {
+            const codes: string[] = [];
+            for (const pts of ptsList) {
+              const codesPts = sigByPts.get(pts.id) || [];
+              for (const code of codesPts) {
+                if (!codes.includes(code)) codes.push(code);
+              }
+              if (pts.professional_id && codesPts.length) {
+                const keyProf = [String(pid), String(pts.professional_id)].join("|");
+                const listaProf = ptsSigtapByPatientProf.get(keyProf) || [];
+                for (const code of codesPts) {
+                  if (!listaProf.includes(code)) listaProf.push(code);
+                }
+                ptsSigtapByPatientProf.set(keyProf, listaProf);
+              }
+            }
             if (codes.length) ptsSigtapByPatient.set(pid, codes);
           });
         }
@@ -2043,7 +2087,7 @@ const BpaExportar: React.FC = () => {
             proc_origem = "Histórico do Prontuário";
             proc_campo = "prontuario_procedimentos histórico";
           }
-          const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria);
+          const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria, prof);
           let ptsConsultado = false;
           let ptsEncontrado = 0;
           if (!proc_real && sigtapReq.categoria === "fisioterap" && pront.paciente_id) {
@@ -2076,10 +2120,22 @@ const BpaExportar: React.FC = () => {
           // em prontuários distintos OU vários procedimentos do mesmo prontuário).
           const codigosParaExportar: Array<{ codigo: string; origem: string; cid?: string }> = [];
           const codigosVistos = new Set<string>();
+          const dedupeSomentePorCodigo = profissionalPermiteMultiplosSigtap(prof);
           const addCodigo = (codigo: string, origem: string, cid?: string) => {
-            const c = somenteNumeros(codigo);
+            const c = sigtapCodigoExibicao(codigo);
             const cidNorm = extrairCodigoCid(cid);
             if (!c) return;
+            if (dedupeSomentePorCodigo) {
+              const indiceMesmoCodigo = codigosParaExportar.findIndex((item) => item.codigo === c);
+              if (indiceMesmoCodigo >= 0) {
+                if (cidNorm && !codigosParaExportar[indiceMesmoCodigo].cid) {
+                  codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem, cid: cidNorm };
+                }
+                return;
+              }
+              codigosParaExportar.push({ codigo: c, origem, cid: cidNorm });
+              return;
+            }
             const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
             if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
               codigosVistos.delete(`${c}|`);
@@ -2121,9 +2177,20 @@ const BpaExportar: React.FC = () => {
               );
             }
           }
-          // 4) PTS (apenas Fisio e lista ainda vazia).
-          if (codigosParaExportar.length === 0 && sigtapReq.categoria === "fisioterap" && pront.paciente_id) {
-            for (const ptsCode of ptsSigtapByPatient.get(String(pront.paciente_id)) || []) {
+          // 4) PTS: fallback para Fisio; complemento profundo para CBOs que
+          // permitem múltiplos SIGTAP no mesmo atendimento.
+          if (
+            pront.paciente_id &&
+            (codigosParaExportar.length === 0 || profissionalPermiteMultiplosSigtap(prof)) &&
+            (sigtapReq.categoria === "fisioterap" || profissionalPermiteMultiplosSigtap(prof))
+          ) {
+            const ptsKeyProf = [String(pront.paciente_id), String(pront.profissional_id || "")].join("|");
+            const ptsCodesProfissional = ptsSigtapByPatientProf.get(ptsKeyProf) || [];
+            const ptsCodesPaciente = ptsSigtapByPatient.get(String(pront.paciente_id)) || [];
+            const ptsCodesAplicaveis = ptsCodesProfissional.length || codigosParaExportar.length > 0
+              ? ptsCodesProfissional
+              : ptsCodesPaciente;
+            for (const ptsCode of ptsCodesAplicaveis) {
               addCodigo(ptsCode, "PTS");
             }
           }
@@ -2380,7 +2447,9 @@ const BpaExportar: React.FC = () => {
                 ? ""
                 : procEntry.cid || cidProducaoLinha || pront.custom_data?.cid || pac?.cid || "";
               const { cid } = normalizarCidLinha(cidBrutoLinha);
-              const chaveLinhaBpa = [chaveAtendimento, proc, cid].join("|");
+              const chaveLinhaBpa = profissionalPermiteMultiplosSigtap(prof)
+                ? [chaveAtendimento, proc].join("|")
+                : [chaveAtendimento, proc, cid].join("|");
               if (chavesLinhasBpa.has(chaveLinhaBpa)) {
                 stats.autoCorrected++;
                 details.autoCorrected.push({
