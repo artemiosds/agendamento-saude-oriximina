@@ -194,8 +194,28 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       text = text.replace(/\{\{medicamentos\}\}/g, medList);
     }
 
+    // Campos manuais do template (blocos_clinicos.campos_manuais)
+    const manuais: Array<{ key: string; label: string; type: string; options?: string[] }> =
+      (selected?.blocos_clinicos as any)?.campos_manuais || [];
+    manuais.forEach(f => {
+      if (f.type === 'checkbox' && Array.isArray(f.options)) {
+        const marcadas = (campos[f.key] || '').split('|').filter(Boolean);
+        const rendered = f.options
+          .map(opt => `${marcadas.includes(opt) ? '(X)' : '(&nbsp;&nbsp;)'} ${opt}`)
+          .join(' &nbsp; ');
+        const outros = campos[`${f.key}__outros`] || '';
+        const outrosHtml = outros ? ` &nbsp; <u>${outros}</u>` : '';
+        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), rendered + outrosHtml);
+      } else if (f.type === 'data') {
+        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), formatIfDate(campos[f.key] || '') || '__/__/____');
+      } else {
+        text = text.replace(new RegExp(`\\{\\{${f.key}\\}\\}`, 'g'), campos[f.key] || '______________');
+      }
+    });
+
     return text;
   };
+
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
@@ -631,7 +651,51 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               {/* Type-specific fields */}
               {renderTypeSpecificFields()}
 
+              {/* Campos manuais do template (checkbox, texto, data) */}
+              {(() => {
+                const manuais: Array<{ key: string; label: string; type: string; options?: string[] }> =
+                  (selected.blocos_clinicos as any)?.campos_manuais || [];
+                if (manuais.length === 0) return null;
+                return (
+                  <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+                    <h4 className="font-semibold text-xs uppercase text-primary">Campos do documento</h4>
+                    {manuais.map(f => {
+                      if (f.type === 'checkbox' && f.options) {
+                        const marcadas = (campos[f.key] || '').split('|').filter(Boolean);
+                        const toggle = (opt: string, on: boolean) => {
+                          const next = on ? [...marcadas, opt] : marcadas.filter(x => x !== opt);
+                          updateCampo(f.key, next.join('|'));
+                        };
+                        return (
+                          <div key={f.key} className="space-y-1.5">
+                            <Label className="text-xs font-semibold">{f.label}</Label>
+                            <div className="flex flex-wrap gap-3">
+                              {f.options.map(opt => (
+                                <label key={opt} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                  <Checkbox checked={marcadas.includes(opt)} onCheckedChange={v => toggle(opt, !!v)} />
+                                  {opt}
+                                </label>
+                              ))}
+                            </div>
+                            <Field
+                              label="Outros (especificar)"
+                              value={campos[`${f.key}__outros`] || ''}
+                              onChange={v => updateCampo(`${f.key}__outros`, v)}
+                            />
+                          </div>
+                        );
+                      }
+                      if (f.type === 'data') {
+                        return <Field key={f.key} label={f.label} value={campos[f.key] || ''} onChange={v => updateCampo(f.key, v)} type="date" />;
+                      }
+                      return <Field key={f.key} label={f.label} value={campos[f.key] || ''} onChange={v => updateCampo(f.key, v)} />;
+                    })}
+                  </div>
+                );
+              })()}
+
               <Separator />
+
 
               {/* Editable raw HTML — hidden for cleaner UX on Declaração/Relatório de Evolução */}
               {!(tipoLower.includes('declaraç') || tipoLower.includes('comparecimento') || tipoLower.includes('evoluç') || tipoLower.includes('relatório')) && (
