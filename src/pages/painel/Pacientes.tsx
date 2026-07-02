@@ -1518,31 +1518,14 @@ const Pacientes: React.FC = () => {
               variant="outline"
               size="sm"
               className="w-full min-w-0"
-              onClick={() => handleOpenFicha(detalhePaciente, 'completa')}
+              onClick={() => setDocumentCenterOpen(true)}
             >
-              <Printer className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Ficha Completa</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full min-w-0"
-              onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
-            >
-              <Printer className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Imprimir Só Dados</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full min-w-0"
-              onClick={() => openApacLaudo(detalhePaciente)}
-            >
-              <FileSignature className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Laudo APAC</span>
+              <FileText className="w-4 h-4 mr-1.5" />
+              <span className="truncate">Documentos</span>
             </Button>
           </div>
         );
+
 
         return (
           <PacienteDetalheModal
