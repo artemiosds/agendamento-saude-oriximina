@@ -354,7 +354,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .signature.pos-right .assinatura-img,
   .signature.pos-right .carimbo-img { margin-right: 0; margin-left: auto; }
 
-  /* FOOTER */
+  /* FOOTER — fixado na base da página impressa */
   .doc-footer {
     margin-top: 20px;
     padding-top: 6px;
@@ -371,11 +371,26 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
   @media print {
-    body { background: #fff; }
+    body { background: #fff; margin: 0; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
-    .doc-header, .signature, .doc-footer { page-break-inside: avoid; }
+    .doc-header, .signature { page-break-inside: avoid; }
+
+    /* Rodapé sempre no pé da página impressa (não flutuando no meio) */
+    .doc-footer {
+      position: fixed;
+      left: 12mm;
+      right: 12mm;
+      bottom: 8mm;
+      margin-top: 0;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+    /* Reserva espaço para o rodapé fixo não sobrepor o conteúdo */
+    body { padding-bottom: 28mm; }
+
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
+
 </style>`;
 }
 
