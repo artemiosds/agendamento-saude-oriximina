@@ -297,7 +297,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       base = campos.situacao === 'faltou' ? DECL_FALTOU_HTML : DECL_COMPARECEU_HTML;
     }
     setConteudoFinal(substituir(base));
-  }, [campos, medicamentos, carimbo, selectedId]);
+  }, [campos, medicamentos, carimbo, selectedId, pacienteExtra, docConfig, dataAtendimento, paciente, profissional, unidade, user?.nome]);
 
   const selected = modelos.find(x => x.id === selectedId);
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
