@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-import { Mark, mergeAttributes } from '@tiptap/core';
+import { Mark, Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
@@ -27,6 +27,9 @@ import {
   List, ListOrdered, Table as TableIcon, Plus, Save, Eye, X,
   Type, Calendar, CheckSquare, ShieldQuestion, Trash2, Pencil, FileText, Loader2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
+  Strikethrough, Subscript as SubIcon, Superscript as SupIcon, Undo2, Redo2, Minus,
+  FileImage, PenLine, QrCode, Barcode, Upload, Clock, Hash, DollarSign, Mail, Link as LinkIcon,
+  Phone, MapPin, IdCard, CircleDot, AlignVerticalSpaceAround, SeparatorHorizontal, Palette,
 } from 'lucide-react';
 
 const FONT_FAMILIES = [
@@ -40,16 +43,46 @@ const FONT_FAMILIES = [
   { label: 'Tahoma', value: 'Tahoma, sans-serif' },
 ];
 
+const FONT_SIZES = ['10px', '11px', '12px', '13px', '14px', '16px', '18px', '20px', '24px', '28px', '32px'];
+
 // -------- Types --------
 type Categoria = 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
 const CATEGORIAS: Categoria[] = ['Cadastro', 'Clínico', 'Regulação', 'CER'];
 
+type ManualFieldType =
+  | 'texto' | 'textarea' | 'checkbox' | 'radio' | 'data' | 'hora' | 'datahora'
+  | 'numero' | 'moeda' | 'cpf' | 'cns' | 'telefone' | 'cep' | 'email' | 'url'
+  | 'assinatura' | 'imagem' | 'upload' | 'qrcode' | 'barcode';
+
 interface ManualField {
   key: string;
   label: string;
-  type: 'texto' | 'checkbox' | 'data';
+  type: ManualFieldType;
   options?: string[];
 }
+
+const FIELD_TYPES: { type: ManualFieldType; label: string; icon: any; needsOptions?: boolean }[] = [
+  { type: 'texto', label: 'Campo texto', icon: Type },
+  { type: 'textarea', label: 'Textarea', icon: AlignLeft },
+  { type: 'numero', label: 'Campo número', icon: Hash },
+  { type: 'moeda', label: 'Campo moeda', icon: DollarSign },
+  { type: 'cpf', label: 'Campo CPF', icon: IdCard },
+  { type: 'cns', label: 'Campo CNS', icon: IdCard },
+  { type: 'telefone', label: 'Campo telefone', icon: Phone },
+  { type: 'cep', label: 'Campo CEP', icon: MapPin },
+  { type: 'email', label: 'Campo e-mail', icon: Mail },
+  { type: 'url', label: 'Campo URL', icon: LinkIcon },
+  { type: 'data', label: 'Campo Data', icon: Calendar },
+  { type: 'hora', label: 'Campo Hora', icon: Clock },
+  { type: 'datahora', label: 'Data/Hora', icon: Calendar },
+  { type: 'checkbox', label: 'Checkbox', icon: CheckSquare, needsOptions: true },
+  { type: 'radio', label: 'Radio Button', icon: CircleDot, needsOptions: true },
+  { type: 'assinatura', label: 'Assinatura', icon: PenLine },
+  { type: 'imagem', label: 'Imagem', icon: FileImage },
+  { type: 'upload', label: 'Upload', icon: Upload },
+  { type: 'qrcode', label: 'Código QR', icon: QrCode },
+  { type: 'barcode', label: 'Código de barras', icon: Barcode },
+];
 
 interface CondicaoOption { value: string; label: string; }
 const CONDITIONS: CondicaoOption[] = [
@@ -91,6 +124,55 @@ const ConditionalMark = Mark.create({
   },
 });
 
+// Subscript / Superscript
+const SubMark = Mark.create({
+  name: 'subscript',
+  parseHTML() { return [{ tag: 'sub' }]; },
+  renderHTML() { return ['sub', 0]; },
+});
+const SupMark = Mark.create({
+  name: 'superscript',
+  parseHTML() { return [{ tag: 'sup' }]; },
+  renderHTML() { return ['sup', 0]; },
+});
+
+// Extended TextStyle attributes (color + fontSize)
+const TextStyleExt = TextStyle.extend({
+  addAttributes() {
+    return {
+      ...(this.parent?.() || {}),
+      color: {
+        default: null,
+        parseHTML: el => (el as HTMLElement).style.color || null,
+        renderHTML: attrs => attrs.color ? { style: `color:${attrs.color}` } : {},
+      },
+      fontSize: {
+        default: null,
+        parseHTML: el => (el as HTMLElement).style.fontSize || null,
+        renderHTML: attrs => attrs.fontSize ? { style: `font-size:${attrs.fontSize}` } : {},
+      },
+    };
+  },
+});
+
+// Page break + Spacer nodes
+const PageBreakNode = Node.create({
+  name: 'pageBreak', group: 'block', atom: true, selectable: true,
+  parseHTML() { return [{ tag: 'div[data-page-break]' }]; },
+  renderHTML() {
+    return ['div', { 'data-page-break': 'true', class: 'tpl-page-break', style: 'page-break-after:always;border-top:2px dashed #94a3b8;margin:8px 0;height:0;' }];
+  },
+});
+const SpacerNode = Node.create({
+  name: 'spacer', group: 'block', atom: true, selectable: true,
+  addAttributes() { return { size: { default: '16px' } }; },
+  parseHTML() { return [{ tag: 'div[data-spacer]' }]; },
+  renderHTML({ HTMLAttributes }) {
+    const size = HTMLAttributes.size || '16px';
+    return ['div', { 'data-spacer': 'true', style: `height:${size};` }];
+  },
+});
+
 // -------- Editor Panel --------
 interface EditorPanelProps {
   templateId?: string | null;
@@ -114,11 +196,12 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     extensions: [
       StarterKit,
       Underline,
-      TextStyle,
+      TextStyleExt,
       FontFamily.configure({ types: ['textStyle'] }),
       TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right', 'justify'] }),
       Table.configure({ resizable: false }),
       TableRow, TableHeader, TableCell,
+      SubMark, SupMark, PageBreakNode, SpacerNode,
       VariableMark,
       ConditionalMark,
     ],
@@ -168,13 +251,14 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     }).insertContent(' ').run();
   };
 
-  const addManualField = (type: ManualField['type']) => {
+  const addManualField = (type: ManualFieldType) => {
     if (!newFieldLabel.trim()) { toast.error('Informe o rótulo do campo'); return; }
     const key = `${type}_${Date.now().toString(36)}`;
-    const options = type === 'checkbox'
+    const needsOptions = type === 'checkbox' || type === 'radio';
+    const options = needsOptions
       ? newFieldOptions.split(',').map(o => o.trim()).filter(Boolean)
       : undefined;
-    if (type === 'checkbox' && (!options || options.length === 0)) {
+    if (needsOptions && (!options || options.length === 0)) {
       toast.error('Informe ao menos uma opção separada por vírgula');
       return;
     }
@@ -185,6 +269,30 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     setNewFieldLabel('');
     setNewFieldOptions('');
     setDirty(true);
+  };
+
+  // Insert block/inline helpers for editor components
+  const insertHR = () => editor?.chain().focus().setHorizontalRule().run();
+  const insertPageBreak = () => editor?.chain().focus().insertContent({ type: 'pageBreak' }).run();
+  const insertSpacer = () => editor?.chain().focus().insertContent({ type: 'spacer', attrs: { size: '24px' } }).run();
+  const setColor = (color: string) => {
+    if (!editor) return;
+    editor.chain().focus().setMark('textStyle', { color }).run();
+  };
+  const setFontSize = (size: string) => {
+    if (!editor) return;
+    if (!size || size === '__default__') editor.chain().focus().setMark('textStyle', { fontSize: null }).run();
+    else editor.chain().focus().setMark('textStyle', { fontSize: size }).run();
+  };
+  const doCopy = async () => {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    const text = editor.state.doc.textBetween(from, to, '\n');
+    if (text) { try { await navigator.clipboard.writeText(text); toast.success('Copiado'); } catch { toast.error('Falha ao copiar'); } }
+  };
+  const doPastePlain = async () => {
+    if (!editor) return;
+    try { const t = await navigator.clipboard.readText(); editor.chain().focus().insertContent(t).run(); } catch { toast.error('Sem permissão de leitura da área de transferência'); }
   };
 
   const removeManualField = (key: string) => {
@@ -253,9 +361,19 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     html = html.replace(/\{\{([\w_]+)\}\}/g, (_m, k) => {
       const manual = camposManuais.find(f => f.key === k);
       if (manual) {
-        if (manual.type === 'checkbox') return `[${(manual.options || []).join(' / ')}]`;
-        if (manual.type === 'data') return '__/__/____';
-        return `[${manual.label}]`;
+        switch (manual.type) {
+          case 'checkbox': return `[${(manual.options || []).join(' / ')}]`;
+          case 'radio': return (manual.options || []).map(o => `( ) ${o}`).join(' &nbsp; ');
+          case 'data': return '__/__/____';
+          case 'hora': return '__:__';
+          case 'datahora': return '__/__/____ __:__';
+          case 'assinatura': return '__________________________';
+          case 'imagem':
+          case 'upload': return `[${manual.label} — anexar]`;
+          case 'qrcode': return '[ QR ]';
+          case 'barcode': return '[ ||||| ]';
+          default: return `[${manual.label}]`;
+        }
       }
       return `{{${k}}}`;
     });
@@ -304,6 +422,14 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleBold().run()} title="Negrito"><Bold className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleItalic().run()} title="Itálico"><Italic className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleUnderline().run()} title="Sublinhado"><UnderlineIcon className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleStrike().run()} title="Riscado"><Strikethrough className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { editor?.chain().focus().unsetMark('superscript').toggleMark('subscript').run(); }} title="Subscrito"><SubIcon className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { editor?.chain().focus().unsetMark('subscript').toggleMark('superscript').run(); }} title="Sobrescrito"><SupIcon className="w-4 h-4" /></Button>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().undo().run()} title="Desfazer"><Undo2 className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().redo().run()} title="Refazer"><Redo2 className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={doCopy} title="Copiar seleção"><FileText className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={doPastePlain} title="Colar sem formatação"><Upload className="w-4 h-4" /></Button>
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} title="Título 1"><Heading1 className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} title="Título 2"><Heading2 className="w-4 h-4" /></Button>
@@ -312,6 +438,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Lista"><List className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Lista numerada"><ListOrdered className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Tabela"><TableIcon className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertHR} title="Linha horizontal"><Minus className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertPageBreak} title="Quebra de página"><SeparatorHorizontal className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertSpacer} title="Espaçador"><AlignVerticalSpaceAround className="w-4 h-4" /></Button>
             <Separator orientation="vertical" className="h-6 mx-1" />
             {/* Alinhamento */}
             <Button size="icon" variant={editor?.isActive({ textAlign: 'left' }) ? 'secondary' : 'ghost'} className="h-8 w-8" onClick={() => editor?.chain().focus().setTextAlign('left').run()} title="Alinhar à esquerda"><AlignLeft className="w-4 h-4" /></Button>
@@ -328,11 +457,24 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
                 else editor.chain().focus().setFontFamily(v).run();
               }}
             >
-              <SelectTrigger className="h-8 w-[150px] gap-1 text-xs"><Type className="w-3.5 h-3.5" /> <SelectValue placeholder="Fonte" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[140px] gap-1 text-xs"><Type className="w-3.5 h-3.5" /> <SelectValue placeholder="Fonte" /></SelectTrigger>
               <SelectContent>
-                {FONT_FAMILIES.map(f => <SelectItem key={f.label} value={f.value || '__default__'} onSelect={undefined as any}>{f.label}</SelectItem>)}
+                {FONT_FAMILIES.map(f => <SelectItem key={f.label} value={f.value || '__default__'}>{f.label}</SelectItem>)}
               </SelectContent>
             </Select>
+            {/* Tamanho */}
+            <Select value="" onValueChange={setFontSize}>
+              <SelectTrigger className="h-8 w-[90px] gap-1 text-xs"><SelectValue placeholder="Tam." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__default__">Padrão</SelectItem>
+                {FONT_SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {/* Cor */}
+            <label className="inline-flex items-center gap-1 border rounded h-8 px-2 text-xs cursor-pointer bg-background" title="Cor do texto">
+              <Palette className="w-3.5 h-3.5" />
+              <input type="color" className="w-5 h-5 border-0 bg-transparent p-0 cursor-pointer" onChange={e => setColor(e.target.value)} />
+            </label>
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Select onValueChange={applyCondition}>
               <SelectTrigger className="h-8 w-auto gap-1 text-xs"><ShieldQuestion className="w-3.5 h-3.5" /> <SelectValue placeholder="Bloco condicional" /></SelectTrigger>
@@ -370,11 +512,16 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
           <Separator />
 
           <section>
-            <h4 className="text-xs font-semibold uppercase text-primary mb-2">Campos Manuais</h4>
-            <div className="grid grid-cols-1 gap-1.5 mb-2">
-              <Button size="sm" variant="outline" className="gap-1 justify-start h-8" onClick={() => setAddFieldOpen('texto')}><Type className="w-3.5 h-3.5" /> + Campo de texto livre</Button>
-              <Button size="sm" variant="outline" className="gap-1 justify-start h-8" onClick={() => setAddFieldOpen('checkbox')}><CheckSquare className="w-3.5 h-3.5" /> + Checkbox</Button>
-              <Button size="sm" variant="outline" className="gap-1 justify-start h-8" onClick={() => setAddFieldOpen('data')}><Calendar className="w-3.5 h-3.5" /> + Campo de data</Button>
+            <h4 className="text-xs font-semibold uppercase text-primary mb-2">Componentes / Campos Manuais</h4>
+            <div className="grid grid-cols-2 gap-1.5 mb-2">
+              {FIELD_TYPES.map(ft => {
+                const Icon = ft.icon;
+                return (
+                  <Button key={ft.type} size="sm" variant="outline" className="gap-1 justify-start h-8 text-[11px] px-2" onClick={() => setAddFieldOpen(ft.type)}>
+                    <Icon className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{ft.label}</span>
+                  </Button>
+                );
+              })}
             </div>
             {camposManuais.length > 0 && (
               <div className="space-y-1">
@@ -413,7 +560,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       <Dialog open={!!addFieldOpen} onOpenChange={(o) => { if (!o) setAddFieldOpen(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo campo — {addFieldOpen === 'texto' ? 'Texto livre' : addFieldOpen === 'checkbox' ? 'Checkbox' : 'Data'}</DialogTitle>
+            <DialogTitle>Novo campo — {FIELD_TYPES.find(f => f.type === addFieldOpen)?.label || addFieldOpen}</DialogTitle>
             <DialogDescription>Defina o rótulo que aparecerá na hora de gerar o documento.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -421,10 +568,10 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
               <Label>Rótulo</Label>
               <Input value={newFieldLabel} onChange={e => setNewFieldLabel(e.target.value)} placeholder="Ex.: Observações" autoFocus />
             </div>
-            {addFieldOpen === 'checkbox' && (
+            {(addFieldOpen === 'checkbox' || addFieldOpen === 'radio') && (
               <div className="space-y-1.5">
                 <Label>Opções (separadas por vírgula)</Label>
-                <Textarea value={newFieldOptions} onChange={e => setNewFieldOptions(e.target.value)} placeholder="Psicologia, Fonoaudiologia, Fisioterapia" rows={2} />
+                <Textarea value={newFieldOptions} onChange={e => setNewFieldOptions(e.target.value)} placeholder="Opção 1, Opção 2, Opção 3" rows={2} />
               </div>
             )}
           </div>
