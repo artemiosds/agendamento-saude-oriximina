@@ -70,7 +70,7 @@ const stripConditionalBlocks = (html: string, dataNascimento?: string | null): s
 };
 
 
-const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento }) => {
+const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento, templateId }) => {
   const { user } = useAuth();
   const { funcionarios } = useData();
   const [docConfig, setDocConfig] = useState<DocumentConfig | null>(null);
