@@ -173,23 +173,31 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   return `
 <style>
-  :root { --doc-footer-space: ${footerSpace}mm; }
+  :root { --doc-footer-space: ${footerSpace}mm; --doc-page-height: calc(297mm - ${m.superior + m.inferior}mm); }
   @page {
     size: A4;
     margin: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
     @bottom-center { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #666; }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: ${fontFamily};
+  body.doc-print-document {
     padding: 0;
+    min-height: var(--doc-page-height);
+    background: #fff;
+  }
+  .doc-page {
+    font-family: ${fontFamily};
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
     line-height: 1.1;
-    min-height: calc(297mm - ${m.superior + m.inferior}mm);
+    width: 100%;
+    min-height: var(--doc-page-height);
     display: flex;
     flex-direction: column;
     position: relative;
+  }
+  .doc-page > .doc-content {
+    flex: 1 1 auto;
   }
 
   /* HEADER */
@@ -270,7 +278,6 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
   /* CONTENT */
   .doc-content {
-    flex: 1 0 auto;
     text-align: ${t.alinhamento};
     font-size: ${t.tamanhoBase}pt;
   }
@@ -386,11 +393,22 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th, td { border: 1px solid #cbd5e1; padding: 4px 6px; text-align: left; font-size: 8.5pt; }
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
+  @media screen {
+    body.doc-print-document {
+      min-height: 297mm;
+      padding: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
+    }
+    body.doc-print-document .doc-page {
+      min-height: var(--doc-page-height);
+    }
+  }
+
   @media print {
-    body { background: #fff; margin: 0; min-height: calc(297mm - ${m.superior + m.inferior}mm); padding: 0; display: flex; flex-direction: column; position: relative; }
+    body.doc-print-document { background: #fff; margin: 0; min-height: var(--doc-page-height); padding: 0; }
+    .doc-page { min-height: var(--doc-page-height); display: flex; flex-direction: column; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
     .doc-header, .signature, .doc-footer { page-break-inside: avoid; break-inside: avoid; }
-    .doc-content { flex: 1 0 auto; }
+    .doc-page > .doc-content { flex: 1 1 auto; }
     .doc-footer { position: static; margin-top: auto; background: #fff; }
 
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -561,13 +579,15 @@ export function buildDocumentShell(
   <title>${title} — ${config.linha1}</title>
   ${css}
 </head>
-<body>
-  ${docHeader(title, config)}
-  ${metaHtml}
-  <div class="doc-content">
-    ${bodyHtml}
+<body class="doc-print-document">
+  <div class="doc-page">
+    ${docHeader(title, config)}
+    ${metaHtml}
+    <div class="doc-content">
+      ${bodyHtml}
+    </div>
+    ${docFooter(config)}
   </div>
-  ${docFooter(config)}
 </body>
 </html>`;
 }
