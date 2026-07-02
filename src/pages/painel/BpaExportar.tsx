@@ -275,6 +275,39 @@ const extrairSigtapDoProntuario = (pront: any): { codigo: string; campo: string 
   return todos[0] || { codigo: "", campo: "" };
 };
 
+const resolverCodigosSigtapPorProcedimentoId = async (procedimentoIds: any[]): Promise<Map<string, string>> => {
+  const ids = [...new Set(procedimentoIds.map((id) => String(id || "")).filter(Boolean))];
+  const codigoPorProcId = new Map<string, string>();
+  const BATCH = 500;
+
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH);
+    const { data: procRows } = await (supabase as any)
+      .from("procedimentos")
+      .select("id, codigo_sigtap")
+      .in("id", batch);
+    (procRows || []).forEach((p: any) => {
+      const code = sigtapCodigoExibicao(p.codigo_sigtap || "");
+      if (code) codigoPorProcId.set(String(p.id), code);
+    });
+  }
+
+  const faltantes = ids.filter((id) => !codigoPorProcId.has(id));
+  for (let i = 0; i < faltantes.length; i += BATCH) {
+    const batch = faltantes.slice(i, i + BATCH);
+    const { data: sigRows } = await (supabase as any)
+      .from("sigtap_procedimentos")
+      .select("id, codigo")
+      .in("id", batch);
+    (sigRows || []).forEach((p: any) => {
+      const code = sigtapCodigoExibicao(p.codigo || "");
+      if (code) codigoPorProcId.set(String(p.id), code);
+    });
+  }
+
+  return codigoPorProcId;
+};
+
 // ============================================================================
 // Helpers de EXIBIÇÃO (Excel/PDF/Diagnóstico) — NÃO mexem no TXT BPA-I.
 // Garantem que SIGTAP apareça sempre como código numérico (igual ao TXT) e
