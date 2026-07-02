@@ -654,7 +654,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                       dangerouslySetInnerHTML={{
                         __html: buildInstitutionalCSS() + docHeader(selected.tipo, docConfig) +
                           '<div class="doc-content" style="padding:0 20px;">' +
-                          conteudoFinal.replace(/\n/g, '<br/>') +
+                          stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento) +
                           '</div>' + docFooter(docConfig)
                       }}
                     />
