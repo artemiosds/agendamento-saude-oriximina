@@ -66,7 +66,7 @@ const DocumentCenter: React.FC<Props> = ({
   const [cat, setCat] = useState<Categoria>('Todos');
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
-  const [gerarOpen, setGerarOpen] = useState(false);
+  const [gerarTemplateId, setGerarTemplateId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -127,7 +127,7 @@ const DocumentCenter: React.FC<Props> = ({
     if (item.builtin === 'ficha_completa') { onOpenChange(false); onOpenFichaCompleta(); return; }
     if (item.builtin === 'ficha_dados')    { onOpenChange(false); onOpenFichaSoDados(); return; }
     if (item.builtin === 'apac')           { onOpenChange(false); onOpenApac(); return; }
-    setGerarOpen(true);
+    setGerarTemplateId(item.id);
   };
 
   const handleEditar = (_item: DocumentItem) => {
@@ -159,7 +159,7 @@ const DocumentCenter: React.FC<Props> = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className="p-0 gap-0 flex flex-col border-0 bg-background overflow-hidden"
-          style={{ width: '95vw', maxWidth: '560px', maxHeight: '85vh', borderRadius: '20px' }}
+          style={{ width: '95vw', maxWidth: '640px', maxHeight: '85vh', borderRadius: '20px' }}
         >
           <DialogHeader className="border-b border-border/70 p-4 space-y-3">
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
@@ -202,7 +202,7 @@ const DocumentCenter: React.FC<Props> = ({
                     {item.icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{item.nome}</div>
+                    <div className="text-sm font-medium break-words leading-snug" title={item.nome}>{item.nome}</div>
                     <Badge variant="outline" className="mt-0.5 text-[10px] px-1.5 py-0 h-4">{item.categoria}</Badge>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
@@ -230,11 +230,12 @@ const DocumentCenter: React.FC<Props> = ({
         </DialogContent>
       </Dialog>
 
-      {gerarOpen && pacienteGerar && (
+      {gerarTemplateId && pacienteGerar && (
         <GerarDocumentoModal
-          open={gerarOpen}
-          onOpenChange={setGerarOpen}
+          open={!!gerarTemplateId}
+          onOpenChange={(o) => { if (!o) setGerarTemplateId(undefined); }}
           paciente={pacienteGerar}
+          templateId={gerarTemplateId}
         />
       )}
     </>

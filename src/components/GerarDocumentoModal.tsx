@@ -27,6 +27,7 @@ interface Props {
   profissional?: { id?: string; nome: string; profissao: string; numero_conselho: string; tipo_conselho: string; uf_conselho: string };
   unidade?: string;
   dataAtendimento?: string;
+  templateId?: string;
 }
 
 const ENCAMINHAMENTO_TIPOS = ['encaminhamento', 'guia de encaminhamento'];
@@ -69,7 +70,7 @@ const stripConditionalBlocks = (html: string, dataNascimento?: string | null): s
 };
 
 
-const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento }) => {
+const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento, templateId }) => {
   const { user } = useAuth();
   const { funcionarios } = useData();
   const [docConfig, setDocConfig] = useState<DocumentConfig | null>(null);
@@ -131,7 +132,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         .order('nome');
       if (error) throw error;
       const all = (data || []) as unknown as DocumentTemplate[];
-      setModelos(all.filter(m => m.perfis_permitidos.includes(user?.role || '')));
+      const filtered = all.filter(m => m.perfis_permitidos.includes(user?.role || ''));
+      setModelos(filtered);
+      if (templateId && filtered.some(m => m.id === templateId)) {
+        setTimeout(() => handleSelect(templateId), 0);
+      }
     } catch (e) { console.error(e); }
   };
 
