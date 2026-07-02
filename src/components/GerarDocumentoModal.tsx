@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2 } from 'lucide-react';
+import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, type DocumentConfig } from '@/lib/printLayout';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData, type SignatureData } from '@/lib/documentSignature';
@@ -315,6 +315,35 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       toast.success('📝 Rascunho salvo!');
     } catch (e: any) {
       toast.error('Erro: ' + e.message);
+    }
+    setSalvando(false);
+  };
+
+  const handleAnexarProntuario = async () => {
+    if (!selected || !paciente?.id) {
+      toast.error('Selecione um paciente e um modelo');
+      return;
+    }
+    setSalvando(true);
+    try {
+      const body = buildHtmlBody('');
+      const { error } = await supabase.from('documentos_gerados').insert({
+        paciente_id: paciente.id,
+        paciente_nome: paciente?.nome || '',
+        profissional_id: profissional?.id || user?.id || '',
+        profissional_nome: profissional?.nome || user?.nome || '',
+        tipo_documento: selected.tipo,
+        conteudo_original: conteudoFinal,
+        conteudo_html: body,
+        campos_formulario: { ...campos, medicamentos, _anexado_em: new Date().toISOString() } as any,
+        modelo_id: selected.id,
+        unidade_id: unidade || '',
+        status: 'anexado',
+      });
+      if (error) throw error;
+      toast.success('📎 Documento anexado ao histórico do prontuário');
+    } catch (e: any) {
+      toast.error('Erro ao anexar: ' + e.message);
     }
     setSalvando(false);
   };
@@ -759,6 +788,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
             <>
               <Button variant="secondary" onClick={handleSaveDraft} disabled={salvando} className="gap-1.5">
                 <Save className="w-4 h-4" /> Salvar Rascunho
+              </Button>
+              <Button variant="outline" onClick={handleAnexarProntuario} disabled={salvando} className="gap-1.5" title="Salva uma cópia do documento no histórico do prontuário do paciente, para respaldo.">
+                <Paperclip className="w-4 h-4" /> Anexar ao Prontuário
               </Button>
               <Button
                 onClick={handleSignAndFinalize}
