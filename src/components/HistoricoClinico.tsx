@@ -327,23 +327,25 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
     }
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${docTitle}</title>${css}</head>
-      <body>
-        ${docHeader(docTitle, config)}
-        ${docMeta({
-          Paciente: pacienteNome,
-          Data: formatDateBR(item.data_atendimento),
-          Profissional: item.profissional_nome || "—"
-        })}
-        <div class="doc-content">
-          ${contentHtml}
-        </div>
-        <div style="margin-top:60px;">
-          <div style="width: 300px; border-top: 1px solid #000; margin: 0 auto; text-align: center; padding-top: 5px;">
-            <strong>${item.profissional_nome || "—"}</strong><br/>
-            <span style="font-size: 9pt;">Assinatura do Profissional</span>
+      <body class="doc-print-document">
+        <div class="doc-page">
+          ${docHeader(docTitle, config)}
+          ${docMeta({
+            Paciente: pacienteNome,
+            Data: formatDateBR(item.data_atendimento),
+            Profissional: item.profissional_nome || "—"
+          })}
+          <div class="doc-content">
+            ${contentHtml}
+            <div style="margin-top:60px;">
+              <div style="width: 300px; border-top: 1px solid #000; margin: 0 auto; text-align: center; padding-top: 5px;">
+                <strong>${item.profissional_nome || "—"}</strong><br/>
+                <span style="font-size: 9pt;">Assinatura do Profissional</span>
+              </div>
+            </div>
           </div>
+          ${docFooter(config)}
         </div>
-        ${docFooter(config)}
       </body></html>`;
   };
 
