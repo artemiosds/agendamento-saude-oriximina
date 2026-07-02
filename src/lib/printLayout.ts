@@ -164,7 +164,7 @@ function resolveLogoUrl(configUrl: string, fallback: string): string {
 export function buildInstitutionalCSS(config?: DocumentConfig): string {
   const t = config?.tipografia || DEFAULT_TYPOGRAPHY;
   const m = config?.margens || DEFAULT_MARGINS;
-  const footerSpace = config?.mostrarRodape === false ? 0 : 24;
+  const footerSpace = config?.mostrarRodape === false ? 0 : 16;
   const fontFamily =
     t.fonte === 'Times New Roman' ? `'Times New Roman', Times, serif`
     : t.fonte === 'Calibri' ? `Calibri, 'Segoe UI', Arial, sans-serif`
@@ -182,11 +182,13 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: ${fontFamily};
-    padding: 0 0 var(--doc-footer-space);
+    padding: 0;
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
     line-height: 1.1;
     min-height: calc(297mm - ${m.superior + m.inferior}mm);
+    display: flex;
+    flex-direction: column;
     position: relative;
   }
 
@@ -358,14 +360,19 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .signature.pos-right .assinatura-img,
   .signature.pos-right .carimbo-img { margin-right: 0; margin-left: auto; }
 
-  /* FOOTER — reservado no fluxo e preso no rodapé inferior do documento */
+  .doc-content {
+    flex: 1 0 auto;
+    text-align: ${t.alinhamento};
+  }
+
+  /* FOOTER — reservado no fluxo e empurrado para o rodapé inferior do documento */
   .doc-footer {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    min-height: 12mm;
-    padding-top: 4px;
+    position: static;
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: var(--doc-footer-space);
+    margin-top: auto;
+    padding-top: 5px;
     border-top: 1px solid #cbd5e1;
     font-size: 7.5pt;
     color: #64748b;
@@ -384,10 +391,11 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
   @media print {
-    body { background: #fff; margin: 0; min-height: calc(297mm - ${m.superior + m.inferior}mm); padding-bottom: var(--doc-footer-space); position: relative; }
+    body { background: #fff; margin: 0; min-height: calc(297mm - ${m.superior + m.inferior}mm); padding: 0; display: flex; flex-direction: column; position: relative; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
-    .doc-header, .signature { page-break-inside: avoid; }
-    .doc-footer { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; }
+    .doc-header, .signature, .doc-footer { page-break-inside: avoid; break-inside: avoid; }
+    .doc-content { flex: 1 0 auto; }
+    .doc-footer { position: static; margin-top: auto; background: #fff; }
 
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
