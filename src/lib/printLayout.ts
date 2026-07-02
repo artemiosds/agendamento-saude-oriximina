@@ -180,15 +180,16 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     @bottom-center { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #666; }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: ${fontFamily};
+  body.doc-print-document {
     padding: 0;
+    min-height: var(--doc-page-height);
+    background: #fff;
+  }
+  .doc-page {
+    font-family: ${fontFamily};
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
     line-height: 1.1;
-    min-height: var(--doc-page-height);
-  }
-  .doc-page {
     width: 100%;
     min-height: var(--doc-page-height);
     display: flex;
@@ -392,8 +393,18 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   th, td { border: 1px solid #cbd5e1; padding: 4px 6px; text-align: left; font-size: 8.5pt; }
   th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
 
+  @media screen {
+    body.doc-print-document {
+      min-height: 297mm;
+      padding: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
+    }
+    body.doc-print-document .doc-page {
+      min-height: var(--doc-page-height);
+    }
+  }
+
   @media print {
-    body { background: #fff; margin: 0; min-height: var(--doc-page-height); padding: 0; }
+    body.doc-print-document { background: #fff; margin: 0; min-height: var(--doc-page-height); padding: 0; }
     .doc-page { min-height: var(--doc-page-height); display: flex; flex-direction: column; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
     .doc-header, .signature, .doc-footer { page-break-inside: avoid; break-inside: avoid; }
@@ -568,7 +579,7 @@ export function buildDocumentShell(
   <title>${title} — ${config.linha1}</title>
   ${css}
 </head>
-<body>
+<body class="doc-print-document">
   <div class="doc-page">
     ${docHeader(title, config)}
     ${metaHtml}
