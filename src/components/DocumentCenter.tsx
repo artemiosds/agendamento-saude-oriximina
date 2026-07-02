@@ -127,7 +127,7 @@ const DocumentCenter: React.FC<Props> = ({
     if (item.builtin === 'ficha_completa') { onOpenChange(false); onOpenFichaCompleta(); return; }
     if (item.builtin === 'ficha_dados')    { onOpenChange(false); onOpenFichaSoDados(); return; }
     if (item.builtin === 'apac')           { onOpenChange(false); onOpenApac(); return; }
-    setGerarOpen(true);
+    setGerarTemplateId(item.id);
   };
 
   const handleEditar = (_item: DocumentItem) => {
