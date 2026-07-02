@@ -438,6 +438,7 @@ const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProc
   addDeepProcedureFields(cd);
   addDeepProcedureFields(dados);
   addDeepProcedureFields(metadata);
+  addDeepProcedureFields(prontuario);
   const seen = new Set<string>();
   return out.filter((p) => {
     const key = `${p.procedimento_id || ''}|${onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo)}|${normalizeName(p.nome_procedimento || p.nome || p.descricao)}`;

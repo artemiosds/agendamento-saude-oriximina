@@ -323,6 +323,7 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
   for (const codigo of pickCodigosEmCamposDeProcedimento(cd)) push(codigo, "custom_data profundo");
   for (const codigo of pickCodigosEmCamposDeProcedimento(dados)) push(codigo, "dados profundo");
   for (const codigo of pickCodigosEmCamposDeProcedimento(metadata)) push(codigo, "metadata profundo");
+  for (const codigo of pickCodigosEmCamposDeProcedimento(pront)) push(codigo, "prontuário JSON completo");
   return resultado;
 };
 
@@ -1556,10 +1557,20 @@ const BpaExportar: React.FC = () => {
       const sigtapItensPorProntuario = new Map<string, Array<{ codigo: string; cid?: string }>>();
       const sigtapPorProntuario = new Map<string, string[]>();
       if (prontIdsAll.length > 0) {
-        const { data: ppRows } = await (supabase as any)
-          .from("prontuario_procedimentos")
-          .select("prontuario_id, procedimento_id, cids_selecionados")
-          .in("prontuario_id", prontIdsAll);
+        const ppRows: any[] = [];
+        for (let i = 0; i < prontIdsAll.length; i += 500) {
+          const batch = prontIdsAll.slice(i, i + 500);
+          for (let offset = 0; ; offset += PAGE) {
+            const { data: rows, error: ppErr } = await (supabase as any)
+              .from("prontuario_procedimentos")
+              .select("prontuario_id, procedimento_id, cids_selecionados")
+              .in("prontuario_id", batch)
+              .range(offset, offset + PAGE - 1);
+            if (ppErr) throw ppErr;
+            ppRows.push(...(rows || []));
+            if (!rows || rows.length < PAGE) break;
+          }
+        }
         const procIds = [...new Set((ppRows || []).map((r: any) => r.procedimento_id).filter(Boolean))] as string[];
         const codigoPorProcId = await resolverCodigosSigtapPorProcedimentoId(procIds);
         (ppRows || []).forEach((r: any) => {
@@ -1663,11 +1674,15 @@ const BpaExportar: React.FC = () => {
         const ppHistRows: any[] = [];
         for (let i = 0; i < histIds.length; i += 500) {
           const batch = histIds.slice(i, i + 500);
-          const { data: rows } = await (supabase as any)
-            .from("prontuario_procedimentos")
-            .select("prontuario_id, procedimento_id, cids_selecionados")
-            .in("prontuario_id", batch);
-          ppHistRows.push(...(rows || []));
+          for (let offset = 0; ; offset += PAGE) {
+            const { data: rows } = await (supabase as any)
+              .from("prontuario_procedimentos")
+              .select("prontuario_id, procedimento_id, cids_selecionados")
+              .in("prontuario_id", batch)
+              .range(offset, offset + PAGE - 1);
+            ppHistRows.push(...(rows || []));
+            if (!rows || rows.length < PAGE) break;
+          }
         }
 
         const codigoPorProcHist = await resolverCodigosSigtapPorProcedimentoId(
@@ -2042,20 +2057,18 @@ const BpaExportar: React.FC = () => {
           //   psicólogo / fonoaudiólogo / nutricionista → Prontuário (campo fixo, custom_data
           //     ou tabela vinculada prontuario_procedimentos)
           //   fisioterapeuta → as fontes acima e, se ausente, PTS ativo do paciente
+          const permiteMultiplosSigtap = profissionalPermiteMultiplosSigtap(prof);
           const sigtapTodos = extrairTodosSigtapDoProntuario(pront);
-          const sigtapEmCustom = sigtapTodos[0] || { codigo: "", campo: "" };
           const sigtapVinculadoItens = sigtapItensPorProntuario.get(pront.id) || [];
           const sigtapVinculadoList = sigtapVinculadoItens.length
             ? sigtapVinculadoItens.map((item) => item.codigo)
             : sigtapPorProntuario.get(pront.id) || [];
-          const sigtapVinculado = sigtapVinculadoList[0] || "";
           const chaveSessaoTratamento = [
             String(pront.paciente_id || ""),
             String(pront.profissional_id || ""),
             String(pront.data_atendimento || "").slice(0, 10),
           ].join("|");
           const sigtapSessaoList = sigtapPorSessaoTratamento.get(chaveSessaoTratamento) || [];
-          const sigtapSessao = sigtapSessaoList[0] || "";
           const chaveHistoricoProntuario = [String(pront.paciente_id || ""), String(pront.profissional_id || "")].join("|");
           const dataProntuarioAtual = String(pront.data_atendimento || "").slice(0, 10);
           const usarHistoricoProntuario = pront.tipo_registro === "agenda_sem_prontuario" || String(pront.id || "").startsWith("agenda:");
@@ -2066,87 +2079,55 @@ const BpaExportar: React.FC = () => {
           const sigtapHistoricoList = sigtapHistoricoItens.length
             ? sigtapHistoricoItens.map((item) => item.codigo)
             : [];
-          const sigtapHistorico = sigtapHistoricoList[0] || "";
-          let proc_real = "";
-          let proc_origem: "Prontuário" | "Procedimentos vinculados" | "Sessão de Tratamento" | "Histórico do Prontuário" | "PTS" | "" = "";
-          let proc_campo = "";
-          if (sigtapEmCustom.codigo) {
-            proc_real = sigtapEmCustom.codigo;
-            proc_origem = "Prontuário";
-            proc_campo = sigtapEmCustom.campo;
-          } else if (sigtapVinculado) {
-            proc_real = sigtapVinculado;
-            proc_origem = "Procedimentos vinculados";
-            proc_campo = "prontuario_procedimentos";
-          } else if (sigtapSessao) {
-            proc_real = sigtapSessao;
-            proc_origem = "Sessão de Tratamento";
-            proc_campo = "treatment_sessions.procedure_done";
-          } else if (sigtapHistorico) {
-            proc_real = sigtapHistorico;
-            proc_origem = "Histórico do Prontuário";
-            proc_campo = "prontuario_procedimentos histórico";
-          }
           const fontesConsultadas = fontesSigtapParaCategoria(sigtapReq.categoria, prof);
           let ptsConsultado = false;
           let ptsEncontrado = 0;
-          if (!proc_real && sigtapReq.categoria === "fisioterap" && pront.paciente_id) {
-            ptsConsultado = true;
-            const ptsCode = (ptsSigtapByPatient.get(String(pront.paciente_id)) || [])[0];
-            if (ptsCode) {
-              proc_real = ptsCode;
-              proc_origem = "PTS";
-              proc_campo = "pts_sigtap";
-              ptsEncontrado = 1;
-            }
-          }
 
           // === Override unificado com BPA-Produção (Psico/Fono/Fisio/Nutri) ===
           const producaoResolvidaList = sigtapReq.exige ? producaoByPront.get(pront.id) || [] : [];
-          const producaoResolvida = producaoResolvidaList.find((ln) => ln.codigo_sigtap) || producaoResolvidaList[0];
-          if (producaoResolvida?.codigo_sigtap && producaoResolvida.codigo_sigtap !== proc_real) {
-            proc_real = producaoResolvida.codigo_sigtap;
-            proc_origem = producaoResolvida.fonte_procedimento === "pts" ? "PTS" : "Prontuário";
-            proc_campo = `bpaService:${producaoResolvida.fonte_resolucao || "resolvido"}`;
-            if (producaoResolvida.fonte_procedimento === "pts") ptsEncontrado = Math.max(ptsEncontrado, 1);
-          } else if (!proc_real && producaoResolvida?.codigo_sigtap) {
-            proc_real = producaoResolvida.codigo_sigtap;
-            proc_origem = producaoResolvida.fonte_procedimento === "pts" ? "PTS" : "Prontuário";
-            proc_campo = `bpaService:${producaoResolvida.fonte_resolucao || "resolvido"}`;
-          }
 
           // === Coleta consolidada de TODOS os procedimentos a exportar ===
           // Suporta múltiplos SIGTAPs no mesmo atendimento (ex.: Fisio + Psico
           // em prontuários distintos OU vários procedimentos do mesmo prontuário).
-          const codigosParaExportar: Array<{ codigo: string; origem: string; cid?: string }> = [];
-          const codigosVistos = new Set<string>();
-          const dedupeSomentePorCodigo = profissionalPermiteMultiplosSigtap(prof);
+          const codigosColetados: Array<{ codigo: string; origem: string; cid?: string }> = [];
+          const dedupeSomentePorCodigo = permiteMultiplosSigtap;
           const addCodigo = (codigo: string, origem: string, cid?: string) => {
             const c = sigtapCodigoExibicao(codigo);
             const cidNorm = extrairCodigoCid(cid);
             if (!c) return;
-            if (dedupeSomentePorCodigo) {
-              const indiceMesmoCodigo = codigosParaExportar.findIndex((item) => item.codigo === c);
-              if (indiceMesmoCodigo >= 0) {
-                if (cidNorm && !codigosParaExportar[indiceMesmoCodigo].cid) {
-                  codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem, cid: cidNorm };
+            codigosColetados.push({ codigo: c, origem, cid: cidNorm });
+          };
+          const consolidarCodigosColetados = () => {
+            const codigosParaExportar: Array<{ codigo: string; origem: string; cid?: string }> = [];
+            const codigosVistos = new Set<string>();
+            for (const item of codigosColetados) {
+              const c = item.codigo;
+              const cidNorm = item.cid || "";
+              if (!c) continue;
+              if (dedupeSomentePorCodigo) {
+                const indiceMesmoCodigo = codigosParaExportar.findIndex((item) => item.codigo === c);
+                if (indiceMesmoCodigo >= 0) {
+                  if (cidNorm && !codigosParaExportar[indiceMesmoCodigo].cid) {
+                    codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem: item.origem, cid: cidNorm };
+                  }
+                  continue;
                 }
-                return;
+                codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
+                continue;
               }
-              codigosParaExportar.push({ codigo: c, origem, cid: cidNorm });
-              return;
+              const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
+              if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
+                codigosVistos.delete(`${c}|`);
+                codigosParaExportar.splice(indiceMesmoCodigoSemCid, 1);
+              } else if (!cidNorm && codigosParaExportar.some((item) => item.codigo === c)) {
+                continue;
+              }
+              const chave = `${c}|${cidNorm}`;
+              if (codigosVistos.has(chave)) continue;
+              codigosVistos.add(chave);
+              codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
             }
-            const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
-            if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
-              codigosVistos.delete(`${c}|`);
-              codigosParaExportar.splice(indiceMesmoCodigoSemCid, 1);
-            } else if (!cidNorm && codigosParaExportar.some((item) => item.codigo === c)) {
-              return;
-            }
-            const chave = `${c}|${cidNorm}`;
-            if (codigosVistos.has(chave)) return;
-            codigosVistos.add(chave);
-            codigosParaExportar.push({ codigo: c, origem, cid: cidNorm });
+            return codigosParaExportar;
           };
           // 1) Todos os SIGTAPs do prontuário (custom_data, campos fixos, arrays).
           for (const t of sigtapTodos) addCodigo(t.codigo, `Prontuário:${t.campo}`);
@@ -2159,7 +2140,7 @@ const BpaExportar: React.FC = () => {
           // 2.5) SIGTAPs vinculados à sessão recorrente do mesmo paciente/profissional/data.
           for (const c of sigtapSessaoList) addCodigo(c, "Sessão de Tratamento");
           // 2.6) Histórico clínico do mesmo paciente/profissional até a data do atendimento.
-          if (codigosParaExportar.length === 0) {
+          if (codigosColetados.length === 0) {
             if (sigtapHistoricoItens.length) {
               for (const item of sigtapHistoricoItens) addCodigo(item.codigo, "Histórico do Prontuário", item.cid);
             } else {
@@ -2181,23 +2162,25 @@ const BpaExportar: React.FC = () => {
           // permitem múltiplos SIGTAP no mesmo atendimento.
           if (
             pront.paciente_id &&
-            (codigosParaExportar.length === 0 || profissionalPermiteMultiplosSigtap(prof)) &&
-            (sigtapReq.categoria === "fisioterap" || profissionalPermiteMultiplosSigtap(prof))
+            (codigosColetados.length === 0 || permiteMultiplosSigtap) &&
+            (sigtapReq.categoria === "fisioterap" || permiteMultiplosSigtap)
           ) {
+            ptsConsultado = true;
             const ptsKeyProf = [String(pront.paciente_id), String(pront.profissional_id || "")].join("|");
             const ptsCodesProfissional = ptsSigtapByPatientProf.get(ptsKeyProf) || [];
             const ptsCodesPaciente = ptsSigtapByPatient.get(String(pront.paciente_id)) || [];
-            const ptsCodesAplicaveis = ptsCodesProfissional.length || codigosParaExportar.length > 0
-              ? ptsCodesProfissional
-              : ptsCodesPaciente;
+            const ptsCodesAplicaveis = permiteMultiplosSigtap
+              ? Array.from(new Set([...ptsCodesProfissional, ...ptsCodesPaciente]))
+              : (ptsCodesProfissional.length ? ptsCodesProfissional : ptsCodesPaciente);
             for (const ptsCode of ptsCodesAplicaveis) {
               addCodigo(ptsCode, "PTS");
             }
+            ptsEncontrado = ptsCodesAplicaveis.length;
           }
           // 4.5) Técnico de Enfermagem (CBO 322205): injeta toda a lista de
           // procedimentos cadastrados — gera 1 linha BPA-I para cada código.
           const cboParaInjecao = obterCboValido(prof);
-          if (cboParaInjecao === "322205" && codigosParaExportar.length === 0) {
+          if (cboParaInjecao === "322205" && codigosColetados.length === 0) {
             for (const c of procedimentosTecnicoEnfList) {
               addCodigo(c, "Padrão (Téc. Enfermagem)");
             }
@@ -2210,14 +2193,16 @@ const BpaExportar: React.FC = () => {
             addCodigo(a.codigo, "Aditivo (competência)");
           }
           // 5) Procedimentos padrão do form (lista vazia e profissão NÃO exige).
-          if (codigosParaExportar.length === 0 && !sigtapReq.exige) {
+          if (codigosColetados.length === 0 && !sigtapReq.exige) {
             for (const c of procedimentosPadraoList) {
               addCodigo(c, "Padrão (form)");
             }
-            if (codigosParaExportar.length === 0 && formData.procedimento_padrao) {
+            if (codigosColetados.length === 0 && formData.procedimento_padrao) {
               addCodigo(formData.procedimento_padrao, "Padrão (form)");
             }
           }
+
+          const codigosParaExportar = consolidarCodigosColetados();
 
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
@@ -2249,7 +2234,7 @@ const BpaExportar: React.FC = () => {
               `${ident}: ${codigosParaExportar.length} procedimentos SIGTAP encontrados para este atendimento — geradas ${codigosParaExportar.length} linhas BPA-I.`,
             );
           }
-          if (!proc_real && !sigtapReq.exige) stats.defaultProc++;
+          if (codigosParaExportar.length === 0 && !sigtapReq.exige) stats.defaultProc++;
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
@@ -2440,7 +2425,6 @@ const BpaExportar: React.FC = () => {
               const proc = zfill(procEntry.codigo, 10);
               const cidProducaoLinha = sigtapReq.exige && !ehTecnicoEnfermagem
                 ? producaoResolvidaList.find((ln) => somenteNumeros(ln.codigo_sigtap) === somenteNumeros(procEntry.codigo))?.cid ||
-                  producaoResolvida?.cid ||
                   ""
                 : "";
               const cidBrutoLinha = ehTecnicoEnfermagem
@@ -2540,7 +2524,7 @@ const BpaExportar: React.FC = () => {
                   cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || "",
                   usou_padrao: !procEntry.codigo || procEntry.origem === "Padrão (form)",
                   origem: pront.origem || "Prontuário",
-                  origem_sigtap: proc_origem || (sigtapReq.exige ? "—" : "Padrão"),
+                  origem_sigtap: procEntry.origem || (sigtapReq.exige ? "—" : "Padrão"),
                   origem_sigtap_real: procEntry.origem,
                   profissao_categoria: sigtapReq.categoria || "",
                 },
