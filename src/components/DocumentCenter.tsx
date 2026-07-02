@@ -57,7 +57,7 @@ const DocumentCenter: React.FC<Props> = ({
 }) => {
   const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
-  const canManage = hasPermission(['master', 'coordenacao']);
+  const canManage = hasPermission(['master', 'coordenador']);
 
   const [busca, setBusca] = useState('');
   const [cat, setCat] = useState<Categoria>('Todos');
