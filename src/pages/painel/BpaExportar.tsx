@@ -2134,81 +2134,59 @@ const BpaExportar: React.FC = () => {
           const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || "");
           const pacCd = (pac?.custom_data as any) || {};
           const unidadeCd = unitCd || {};
-          // CID: para Psico/Fono/Fisio/Nutri, reutilizar a resolução do BPA-Produção
-          // (mesma função: bpaService.resolveBpaProcedimentosECids → resolveCidForBpaProcedure)
-          // como fonte primária. Sem fallback inventado: se o BPA-Produção não achou,
-          // a Exportar também não inventa.
-          // Técnico de Enfermagem (CBO 322205): CID sempre em branco, igual aos médicos.
+          // CID: cada linha BPA-I pode carregar o CID vinculado ao procedimento.
+          // Quando houver múltiplos procedimentos no mesmo atendimento, o CID não
+          // deve ser reduzido ao primeiro item encontrado no prontuário.
           const cboEfetivo = obterCboValido(prof);
           const ehTecnicoEnfermagem = cboEfetivo === "322205";
           const ehMedico = profissionalEhMedico(prof) || ehTecnicoEnfermagem;
-          const cidProducao = sigtapReq.exige && !ehTecnicoEnfermagem ? producaoResolvida?.cid || "" : "";
-          const cidBruto = ehTecnicoEnfermagem
-            ? ""
-            : cidProducao || pront.custom_data?.cid || pac?.cid || "";
-          const codigosCidEncontrados = extrairCodigosCid(cidBruto);
-          if (codigosCidEncontrados.length > 1) {
-            const cidEscolhido = codigosCidEncontrados[0];
-            const descartados = codigosCidEncontrados.slice(1).join(", ");
-            warnings.push(
-              `${ident}: foram encontrados vários CIDs (${codigosCidEncontrados.join(", ")}). ` +
-                `O BPA-I aceita um CID por linha; foi usado ${cidEscolhido}. ` +
-                `Não usados nesta linha: ${descartados}.`,
-            );
-            stats.autoCorrected++;
-            details.autoCorrected.push({
-              ...itemDetail,
-              pendencia: "Múltiplos CIDs normalizados",
-              valor_atual: `${String(cidBruto)} → usado ${cidEscolhido}`,
-            });
-          } else if (
-            codigosCidEncontrados.length === 1 &&
-            String(cidBruto || "")
-              .trim()
-              .toUpperCase()
-              .replace(/\./g, "") !== codigosCidEncontrados[0]
-          ) {
-            stats.autoCorrected++;
-            details.autoCorrected.push({
-              ...itemDetail,
-              pendencia: "CID normalizado automaticamente",
-              valor_atual: `${String(cidBruto)} → ${codigosCidEncontrados[0]}`,
-            });
-          }
-          // O campo possui 4 posições, mas códigos CID completos de 3 caracteres
-          // são exportados com um espaço à direita (ex.: "I64 ").
-          // Para médico, o CID é opcional: quando ausente ou inválido, o campo
-          // é exportado em branco e a linha continua normalmente.
-          let cid: string;
-          if (String(cidBruto || "").trim() === "") {
-            // Sem CID → campo em branco (4 espaços). Não é erro por si só.
-            cid = "    ";
-          } else {
-            const cidVal = validarCidBpa(cidBruto);
-            if (cidVal.valido) {
-              cid = rpad(cidVal.codigo, 4);
-            } else if (ehMedico) {
-              // BPA-I médico não exige CID. Não inventar nem exportar valor
-              // inválido; apenas manter as quatro posições em branco.
-              cid = "    ";
+          const normalizarCidLinha = (cidBruto: any): { cid: string; cidBruto: any } => {
+            const codigosCidEncontrados = extrairCodigosCid(cidBruto);
+            if (codigosCidEncontrados.length > 1) {
+              const cidEscolhido = codigosCidEncontrados[0];
+              const descartados = codigosCidEncontrados.slice(1).join(", ");
               warnings.push(
-                `${ident}: CID médico opcional ignorado (${cidVal.motivo}). A linha foi exportada sem CID.`,
-              );
-            } else {
-              // CID é opcional neste modo operacional. Conteúdo inválido,
-              // como "FOIO", é removido e a linha segue sem CID.
-              cid = "    ";
-              warnings.push(
-                `${ident}: CID inválido removido automaticamente (${cidVal.motivo}). A linha foi exportada sem CID.`,
+                `${ident}: foram encontrados vários CIDs (${codigosCidEncontrados.join(", ")}). ` +
+                  `O BPA-I aceita um CID por linha; foi usado ${cidEscolhido}. ` +
+                  `Não usados nesta linha: ${descartados}.`,
               );
               stats.autoCorrected++;
               details.autoCorrected.push({
                 ...itemDetail,
-                pendencia: "CID inválido removido",
-                valor_atual: `${String(cidBruto)} → campo vazio`,
+                pendencia: "Múltiplos CIDs normalizados",
+                valor_atual: `${String(cidBruto)} → usado ${cidEscolhido}`,
+              });
+            } else if (
+              codigosCidEncontrados.length === 1 &&
+              String(cidBruto || "")
+                .trim()
+                .toUpperCase()
+                .replace(/\./g, "") !== codigosCidEncontrados[0]
+            ) {
+              stats.autoCorrected++;
+              details.autoCorrected.push({
+                ...itemDetail,
+                pendencia: "CID normalizado automaticamente",
+                valor_atual: `${String(cidBruto)} → ${codigosCidEncontrados[0]}`,
               });
             }
-          }
+
+            if (String(cidBruto || "").trim() === "") return { cid: "    ", cidBruto };
+            const cidVal = validarCidBpa(cidBruto);
+            if (cidVal.valido) return { cid: rpad(cidVal.codigo, 4), cidBruto };
+            if (ehMedico) {
+              warnings.push(`${ident}: CID médico opcional ignorado (${cidVal.motivo}). A linha foi exportada sem CID.`);
+              return { cid: "    ", cidBruto };
+            }
+            warnings.push(`${ident}: CID inválido removido automaticamente (${cidVal.motivo}). A linha foi exportada sem CID.`);
+            stats.autoCorrected++;
+            details.autoCorrected.push({
+              ...itemDetail,
+              pendencia: "CID inválido removido",
+              valor_atual: `${String(cidBruto)} → campo vazio`,
+            });
+            return { cid: "    ", cidBruto };
+          };
 
           const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || "01", 2);
