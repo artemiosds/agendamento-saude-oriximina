@@ -324,7 +324,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
               value=""
               onValueChange={(v) => {
                 if (!editor) return;
-                if (!v) editor.chain().focus().unsetFontFamily().run();
+                if (!v || v === '__default__') editor.chain().focus().unsetFontFamily().run();
                 else editor.chain().focus().setFontFamily(v).run();
               }}
             >
