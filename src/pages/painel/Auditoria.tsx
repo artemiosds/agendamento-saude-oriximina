@@ -475,7 +475,6 @@ const Auditoria: React.FC = () => {
           `acao.ilike.%${term}%`,
           `entidade.ilike.%${term}%`,
           `entidade_id.ilike.%${term}%`,
-          `entidade_nome.ilike.%${term}%`,
           `paciente_nome.ilike.%${term}%`,
           `profissional_nome.ilike.%${term}%`,
           `acao_legivel.ilike.%${term}%`,
