@@ -255,6 +255,8 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
         v.procedimentos,
         v.procedimentos_sigtap,
         v.procedimentos_realizados,
+        v.sigtap_lista,
+        v.procedimentos_extras,
       ];
       return candidatos.flatMap((cand) => pickCodigos(cand));
     }
