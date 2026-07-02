@@ -202,7 +202,7 @@ const DocumentCenter: React.FC<Props> = ({
                     {item.icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{item.nome}</div>
+                    <div className="text-sm font-medium break-words leading-snug" title={item.nome}>{item.nome}</div>
                     <Badge variant="outline" className="mt-0.5 text-[10px] px-1.5 py-0 h-4">{item.categoria}</Badge>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
