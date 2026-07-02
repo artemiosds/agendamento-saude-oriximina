@@ -182,12 +182,24 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       return val;
     };
     // Pega valor priorizando props → DB → vazio
+    const cd: Record<string, any> = (pacienteExtra as any)?.custom_data || {};
     const pick = (...keys: string[]): string => {
+      // Gera variantes camelCase <-> snake_case para compatibilizar com custom_data
+      const variants = (k: string) => {
+        const set = new Set<string>([k]);
+        set.add(k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())); // snake -> camel
+        set.add(k.replace(/([A-Z])/g, '_$1').toLowerCase());        // camel -> snake
+        return Array.from(set);
+      };
       for (const k of keys) {
-        const fromProps = (paciente as any)?.[k];
-        if (fromProps !== undefined && fromProps !== null && String(fromProps).trim() !== '') return String(fromProps);
-        const fromExtra = pacienteExtra?.[k];
-        if (fromExtra !== undefined && fromExtra !== null && String(fromExtra).trim() !== '') return String(fromExtra);
+        for (const kv of variants(k)) {
+          const fromProps = (paciente as any)?.[kv];
+          if (fromProps !== undefined && fromProps !== null && String(fromProps).trim() !== '') return String(fromProps);
+          const fromExtra = (pacienteExtra as any)?.[kv];
+          if (fromExtra !== undefined && fromExtra !== null && String(fromExtra).trim() !== '') return String(fromExtra);
+          const fromCustom = cd?.[kv];
+          if (fromCustom !== undefined && fromCustom !== null && String(fromCustom).trim() !== '') return String(fromCustom);
+        }
       }
       return '';
     };
