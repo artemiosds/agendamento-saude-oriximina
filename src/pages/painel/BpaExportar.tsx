@@ -1458,6 +1458,7 @@ const BpaExportar: React.FC = () => {
         const procIds = [...new Set((ppRows || []).map((r: any) => r.procedimento_id).filter(Boolean))] as string[];
         const codigoPorProcId = new Map<string, string>();
         if (procIds.length > 0) {
+          // Fonte 1: tabela local `procedimentos` (cadastros internos).
           const { data: procRows } = await (supabase as any)
             .from("procedimentos")
             .select("id, codigo_sigtap")
@@ -1466,6 +1467,23 @@ const BpaExportar: React.FC = () => {
             const code = somenteNumeros(p.codigo_sigtap || "");
             if (code) codigoPorProcId.set(p.id, code);
           });
+          // Fonte 2: `sigtap_procedimentos` (catálogo oficial SIGTAP). O
+          // Prontuário grava o `id` do SIGTAP diretamente em
+          // prontuario_procedimentos.procedimento_id quando o profissional
+          // escolhe do catálogo — sem espelhar em `procedimentos`. Sem essa
+          // fonte, o BPA-Exportar acusava "SIGTAP Ausente" mesmo com códigos
+          // selecionados no Prontuário.
+          const faltantes = procIds.filter((id) => !codigoPorProcId.has(id));
+          if (faltantes.length > 0) {
+            const { data: sigRows } = await (supabase as any)
+              .from("sigtap_procedimentos")
+              .select("id, codigo")
+              .in("id", faltantes);
+            (sigRows || []).forEach((p: any) => {
+              const code = somenteNumeros(p.codigo || "");
+              if (code) codigoPorProcId.set(p.id, code);
+            });
+          }
         }
         (ppRows || []).forEach((r: any) => {
           const code = codigoPorProcId.get(r.procedimento_id);
