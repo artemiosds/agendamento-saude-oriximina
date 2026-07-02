@@ -25,7 +25,7 @@ import {
   Stethoscope, Activity, Monitor, Network
 } from 'lucide-react';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
-import ModelosDocumentos from '@/components/ModelosDocumentos';
+import TemplateEditor from '@/components/TemplateEditor';
 import CarimboConfig from '@/components/CarimboConfig';
 import { Stamp } from 'lucide-react';
 import { toast } from 'sonner';
@@ -500,7 +500,7 @@ const Configuracoes: React.FC = () => {
           <div className="space-y-6">
             <ConfigImpressaoDocumentos />
             <Separator />
-            <ModelosDocumentos />
+            <TemplateEditor />
             <Separator />
             <CarimboConfig />
           </div>
