@@ -550,7 +550,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       <Dialog open={!!addFieldOpen} onOpenChange={(o) => { if (!o) setAddFieldOpen(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo campo — {addFieldOpen === 'texto' ? 'Texto livre' : addFieldOpen === 'checkbox' ? 'Checkbox' : 'Data'}</DialogTitle>
+            <DialogTitle>Novo campo — {FIELD_TYPES.find(f => f.type === addFieldOpen)?.label || addFieldOpen}</DialogTitle>
             <DialogDescription>Defina o rótulo que aparecerá na hora de gerar o documento.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -558,10 +558,10 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
               <Label>Rótulo</Label>
               <Input value={newFieldLabel} onChange={e => setNewFieldLabel(e.target.value)} placeholder="Ex.: Observações" autoFocus />
             </div>
-            {addFieldOpen === 'checkbox' && (
+            {(addFieldOpen === 'checkbox' || addFieldOpen === 'radio') && (
               <div className="space-y-1.5">
                 <Label>Opções (separadas por vírgula)</Label>
-                <Textarea value={newFieldOptions} onChange={e => setNewFieldOptions(e.target.value)} placeholder="Psicologia, Fonoaudiologia, Fisioterapia" rows={2} />
+                <Textarea value={newFieldOptions} onChange={e => setNewFieldOptions(e.target.value)} placeholder="Opção 1, Opção 2, Opção 3" rows={2} />
               </div>
             )}
           </div>
