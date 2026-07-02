@@ -159,7 +159,7 @@ const DocumentCenter: React.FC<Props> = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className="p-0 gap-0 flex flex-col border-0 bg-background overflow-hidden"
-          style={{ width: '95vw', maxWidth: '560px', maxHeight: '85vh', borderRadius: '20px' }}
+          style={{ width: '95vw', maxWidth: '640px', maxHeight: '85vh', borderRadius: '20px' }}
         >
           <DialogHeader className="border-b border-border/70 p-4 space-y-3">
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
