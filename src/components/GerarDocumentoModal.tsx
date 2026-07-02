@@ -341,11 +341,14 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     if (!m) return;
     const tLower = m.tipo.toLowerCase();
     let base = m.conteudo;
-    if (tLower.includes('declaraç') || tLower.includes('comparecimento')) {
+    // Só cai no HTML embutido se o template estiver vazio (retrocompatibilidade).
+    // Se o Master salvou um conteúdo próprio no "Editar template", ele SEMPRE prevalece.
+    if ((tLower.includes('declaraç') || tLower.includes('comparecimento')) && !base?.trim()) {
       base = campos.situacao === 'faltou' ? DECL_FALTOU_HTML : DECL_COMPARECEU_HTML;
     }
     setConteudoFinal(substituir(base));
   }, [campos, medicamentos, carimbo, selectedId, pacienteExtra, docConfig, dataAtendimento, paciente, profissional, unidade, user?.nome]);
+
 
   const selected = modelos.find(x => x.id === selectedId);
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
