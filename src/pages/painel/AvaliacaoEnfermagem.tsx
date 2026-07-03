@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
+import { useFila } from '@/contexts/FilaContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,7 +80,8 @@ interface PacienteResumo {
 const AvaliacaoEnfermagem: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { logAction, refreshFila } = useData();
+  const { logAction } = useOperacional();
+  const { refreshFila } = useFila();
   const [fila, setFila] = useState<FilaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);

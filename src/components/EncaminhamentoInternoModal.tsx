@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 
@@ -31,7 +31,7 @@ interface Props {
 
 const EncaminhamentoInternoModal: React.FC<Props> = ({ open, onOpenChange, paciente, onSent }) => {
   const { user } = useAuth();
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
 
   const [especialidade, setEspecialidade] = useState<string>('');
   const [profissionalId, setProfissionalId] = useState<string>('');

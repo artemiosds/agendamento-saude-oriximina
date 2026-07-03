@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,8 @@ const renumberTitle = (title: string, n: number) =>
 
 const RelatorioFonoAvaliativo: React.FC<Props> = ({ onBack }) => {
   const { user } = useAuth();
-  const { pacientes, funcionarios, unidades } = useData();
+  const { pacientes } = usePacientes();
+  const { funcionarios, unidades } = useOperacional();
 
   const [pacienteId, setPacienteId] = useState("");
   const paciente = useMemo(() => pacientes.find(p => p.id === pacienteId), [pacientes, pacienteId]);

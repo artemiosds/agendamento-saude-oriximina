@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -119,7 +119,7 @@ const normalizeForAbntPrint = (html: string): string => {
 
 const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento, templateId }) => {
   const { user } = useAuth();
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
   const [docConfig, setDocConfig] = useState<DocumentConfig | null>(null);
   const [modelos, setModelos] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState('');
