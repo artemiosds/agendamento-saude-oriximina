@@ -52,18 +52,18 @@ export interface DocumentConfig {
 }
 
 const DEFAULT_TYPOGRAPHY: DocumentTypography = {
-  fonte: 'Arial',
-  tamanhoBase: 9.5,
-  tamanhoTitulo: 11,
-  espacamento: 1.05, 
+  fonte: 'Times New Roman',
+  tamanhoBase: 12,
+  tamanhoTitulo: 14,
+  espacamento: 1.5,
   alinhamento: 'justify',
 };
 
 const DEFAULT_MARGINS: DocumentMargins = {
-  superior: 15,
-  inferior: 15,
-  esquerda: 15,
-  direita: 15,
+  superior: 30,
+  inferior: 20,
+  esquerda: 30,
+  direita: 20,
 };
 
 const defaultSlot = (altura: number, ativo = true): LogoSlotConfig => ({ altura, redonda: false, ativo });
@@ -227,14 +227,17 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .doc-print-document {
     padding: 0;
     background: #fff;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   .doc-page {
     font-family: ${fontFamily};
     color: #1a1a1a;
     font-size: ${t.tamanhoBase}pt;
-    line-height: 1.1;
+    line-height: ${t.espacamento};
     width: 100%;
     position: relative;
+    overflow: visible;
   }
 
   /* HEADER */
@@ -317,6 +320,146 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .doc-content {
     text-align: ${t.alinhamento};
     font-size: ${t.tamanhoBase}pt;
+    line-height: ${t.espacamento};
+    overflow: visible;
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+  }
+
+  .doc-content p,
+  .doc-content div,
+  .doc-content li,
+  .doc-content td,
+  .doc-content th {
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  .doc-content p {
+    margin: 0 0 8pt;
+    orphans: 3;
+    widows: 3;
+  }
+
+  .doc-content ul,
+  .doc-content ol {
+    margin: 0 0 8pt 18pt;
+    padding: 0;
+  }
+
+  .doc-content img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .doc-content [style*="white-space: nowrap"],
+  .doc-content [style*="white-space:nowrap"] {
+    white-space: normal !important;
+  }
+
+  /* Bloco textual ABNT para documentos clínicos enviados/impressos. */
+  .doc-abnt {
+    font-family: 'Times New Roman', Times, serif !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+    text-align: justify !important;
+    color: #111827;
+  }
+
+  .doc-abnt .abnt-text,
+  .doc-abnt .abnt-text p,
+  .doc-abnt .abnt-text div,
+  .doc-abnt .abnt-text span,
+  .doc-abnt .abnt-text li {
+    font-family: 'Times New Roman', Times, serif !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  .doc-abnt .abnt-text p {
+    text-indent: 1.25cm;
+    margin: 0 0 6pt;
+  }
+
+  .doc-abnt .abnt-text h1,
+  .doc-abnt .abnt-text h2,
+  .doc-abnt .abnt-text h3,
+  .doc-abnt .abnt-text h4,
+  .doc-abnt .abnt-text table p,
+  .doc-abnt .abnt-text .no-indent {
+    text-indent: 0;
+  }
+
+  .doc-abnt .abnt-text table {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  .doc-abnt .abnt-text tr,
+  .doc-abnt .abnt-text thead,
+  .doc-abnt .abnt-text tbody {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .content-block {
+    margin-top: 12pt;
+  }
+
+  .doc-sign-footer {
+    margin-top: 28pt;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .e-signature-box {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 7pt 9pt;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8pt;
+    line-height: 1.35;
+    color: #334155;
+    background: #f8fafc;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .e-signature-box .sig-title {
+    font-weight: 700;
+    color: #0c4a6e;
+    margin-bottom: 3pt;
+  }
+
+  .e-signature-box .sig-legal {
+    margin-top: 3pt;
+    color: #64748b;
+  }
+
+  .carimbo-digital {
+    display: inline-block;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 7pt 12pt;
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    line-height: 1.35;
+  }
+
+  .carimbo-digital .carimbo-nome {
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .carimbo-digital .carimbo-info {
+    color: #334155;
   }
 
   /* SECTIONS */
@@ -438,7 +581,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     .doc-print-document { background: #fff; margin: 0; padding: 0 !important; display: block; }
     .doc-page { display: block; position: static; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
-    .doc-header, .signature { page-break-inside: avoid; break-inside: avoid; }
+    .doc-header, .signature, .doc-sign-footer, .e-signature-box, .carimbo-digital { page-break-inside: avoid; break-inside: avoid; }
     /* O rodapé HTML fica apenas no preview de tela; na impressão é substituído
        pelos @bottom-* boxes do @page (evita sobreposição multi-página). */
     .doc-footer { display: none !important; }
@@ -645,12 +788,14 @@ export function printViaIframe(html: string): void {
     iframe.setAttribute('aria-hidden', 'true');
     iframe.setAttribute('data-print-iframe', '1');
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
+    iframe.style.left = '-10000px';
+    iframe.style.top = '0';
+    iframe.style.width = '210mm';
+    iframe.style.height = '297mm';
     iframe.style.border = '0';
     iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    iframe.style.zIndex = '-1';
     iframe.srcdoc = html;
     document.body.appendChild(iframe);
 
@@ -663,12 +808,15 @@ export function printViaIframe(html: string): void {
       try { document.body.removeChild(iframe); } catch {}
     };
 
-    const triggerPrint = () => {
+    const triggerPrint = async () => {
       if (printed) return;
       printed = true;
       try {
         const win = iframe.contentWindow;
         if (!win) { cleanup(); return; }
+        const doc = iframe.contentDocument as any;
+        try { if (doc?.fonts?.ready) await doc.fonts.ready; } catch {}
+        await new Promise<void>(resolve => win.requestAnimationFrame(() => win.requestAnimationFrame(() => resolve())));
         win.focus();
         win.print();
         const afterprint = () => { cleanup(); try { win.removeEventListener('afterprint', afterprint); } catch {} };

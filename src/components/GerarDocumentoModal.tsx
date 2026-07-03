@@ -13,12 +13,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature } from 'lucide-react';
+import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, type DocumentConfig } from '@/lib/printLayout';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
-import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData, type SignatureData } from '@/lib/documentSignature';
+import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData } from '@/lib/documentSignature';
 import { applyTemplateValues } from '@/lib/templateVariables';
-import { htmlToPdfBase64 } from '@/lib/htmlToPdfBase64';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 
@@ -68,6 +67,51 @@ const stripConditionalBlocks = (html: string, dataNascimento?: string | null): s
     return doc.getElementById('__root__')?.innerHTML ?? html;
   } catch {
     return html.replace(/<([a-zA-Z][\w-]*)([^>]*)data-cond=["']menor_18["']([^>]*)>[\s\S]*?<\/\1>/g, '');
+  }
+};
+
+/**
+ * Normaliza HTML vindo dos modelos para impressão A4/ABNT.
+ * O editor pode gravar estilos inline de tela (font-size em px, line-height baixo,
+ * width/height fixos, overflow hidden), que são exatamente o que corta e bagunça
+ * o texto no PDF do navegador. Mantemos a semântica (p, strong, listas, tabelas)
+ * e removemos apenas propriedades que quebram paginação impressa.
+ */
+const normalizeForAbntPrint = (html: string): string => {
+  if (!html) return '';
+  try {
+    const doc = new DOMParser().parseFromString(`<div id="__abnt_root__">${html}</div>`, 'text/html');
+    const root = doc.getElementById('__abnt_root__');
+    if (!root) return html;
+
+    const unsafeForPrint = [
+      'font-family', 'font-size', 'line-height', 'white-space',
+      'overflow', 'overflow-x', 'overflow-y', 'text-overflow',
+      'height', 'min-height', 'max-height', 'position',
+      'top', 'right', 'bottom', 'left', 'transform', 'zoom',
+    ];
+    const widthLimitedTags = new Set(['P', 'DIV', 'SPAN', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER']);
+
+    root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+      unsafeForPrint.forEach(prop => el.style.removeProperty(prop));
+      if (widthLimitedTags.has(el.tagName)) {
+        el.style.removeProperty('width');
+        el.style.removeProperty('min-width');
+        el.style.removeProperty('max-width');
+      }
+      el.removeAttribute('height');
+      if (widthLimitedTags.has(el.tagName)) el.removeAttribute('width');
+    });
+
+    root.querySelectorAll('table').forEach((table) => {
+      (table as HTMLElement).style.width = '100%';
+      (table as HTMLElement).style.removeProperty('height');
+      table.removeAttribute('height');
+    });
+
+    return root.innerHTML;
+  } catch {
+    return html;
   }
 };
 
@@ -378,11 +422,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const buildHtmlBody = (signatureHtml: string) => {
     // Content may already be rich HTML from TipTap or plain text
     const raw = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
-    const html = stripConditionalBlocks(raw, paciente?.data_nascimento || pacienteExtra?.data_nascimento);
+    const html = normalizeForAbntPrint(stripConditionalBlocks(raw, paciente?.data_nascimento || pacienteExtra?.data_nascimento));
     const carimboHtml = formatCarimboBlock(carimbo);
     return `
-      <div class="content-block" style="margin-top:20px;">
-        <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;">${html}</div>
+      <div class="content-block doc-abnt">
+        <div class="abnt-text">${html}</div>
       </div>
       <div class="doc-sign-footer">
         <div class="sign-block">${signatureHtml}</div>
@@ -902,8 +946,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                     <div
                       dangerouslySetInnerHTML={{
                         __html: buildInstitutionalCSS(docConfig) + '<div class="doc-page">' + docHeader(selected.tipo, docConfig) +
-                          '<div class="doc-content" style="padding:0 20px;">' +
-                          stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento) +
+                          '<div class="doc-content content-block doc-abnt"><div class="abnt-text">' +
+                          normalizeForAbntPrint(stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento || pacienteExtra?.data_nascimento)) +
+                          '</div>' +
                           '</div>' + docFooter(docConfig) + '</div>'
                       }}
                     />
