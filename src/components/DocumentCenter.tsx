@@ -128,6 +128,12 @@ const DocumentCenter: React.FC<Props> = ({
 
   const handleAssinar = async (item: DocumentItem) => {
     if (!paciente) return;
+    // Templates: abrir o gerador para preencher campos e gerar o PDF automaticamente
+    if (!item.builtin) {
+      setGerarTemplateId(item.id);
+      return;
+    }
+    // Builtins (Ficha/APAC): mantém o fluxo de anexar PDF manualmente
     const id = await logGeracao(item);
     setAssinaturaCtx({ documentoGeradoId: id, nomeSugerido: `${item.nome} - ${paciente.nome}` });
     setAssinaturaOpen(true);
