@@ -982,32 +982,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     poll: loadFila,
   });
 
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "pacientes",
-    onEvent: (payload) => {
-      if (payload.eventType === "DELETE") {
-        const id = String((payload.old as any)?.id || "");
-        if (id) setPacientes((prev) => removeById(prev, id));
-        return;
-      }
-      
-      const row = payload.new as any;
-      if (!row?.id) return;
+  // Canal Realtime de `pacientes` migrado para PacientesSliceProvider (Fase 5, Passo 2).
 
-      // Unit isolation
-      const isGlobal = isGlobalAdmin;
-      const userUnidade = userUnidadeId;
-      if (!isGlobal && userUnidade && row.unidade_id && row.unidade_id !== userUnidade) {
-        // Only ignore if the row has a different unit AND it's not null/empty
-        // (Orphan patients are visible to everyone in their scoped context)
-        return;
-      }
 
-      setPacientes((prev) => upsertById(prev, mapPacienteRow(row)));
-    },
-    poll: loadPacientes,
-  });
 
   useRealtimeSync({
     enabled: !!authUser,
