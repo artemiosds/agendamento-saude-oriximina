@@ -30,7 +30,8 @@ import { normalizeSexo } from "@/lib/utils/sexo-normalization";
 const AtualizacaoCadastral: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { pacientes, refreshPacientes, logAction } = useData();
+  const { pacientes, refreshPacientes } = usePacientes();
+  const { logAction } = useOperacional();
   const { user } = useAuth();
   
   const [activeTab, setActiveTab] = useState("todos");

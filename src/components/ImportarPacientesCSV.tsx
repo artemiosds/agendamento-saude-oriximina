@@ -98,7 +98,8 @@ interface Props {
 }
 
 const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
-  const { refreshPacientes, logAction } = useData();
+  const { refreshPacientes } = usePacientes();
+  const { logAction } = useOperacional();
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 

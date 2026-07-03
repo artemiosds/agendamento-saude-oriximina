@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useOperacional } from '@/contexts/OperacionalContext';
+import { useAgendamentos } from '@/contexts/AgendamentosContext';
 import { cn, isoDayOfWeek, todayLocalStr } from '@/lib/utils';
 
 interface SlotInfoBadgeProps {
@@ -14,7 +15,8 @@ interface SlotInfoBadgeProps {
 export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>(({
   profissionalId, unidadeId, date, hora, compact, className,
 }, ref) => {
-  const { agendamentos, disponibilidades, getAvailableSlots, getTurnoInfo } = useOperacional();
+  const { disponibilidades, getAvailableSlots, getTurnoInfo } = useOperacional();
+  const { agendamentos } = useAgendamentos();
 
   const turnoData = useMemo(() => {
     return getTurnoInfo(profissionalId, unidadeId, date);
