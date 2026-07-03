@@ -73,6 +73,7 @@ import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
+import AgendaItemCard from "./agenda/AgendaItemCard";
 import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
 import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteModal";
 import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
