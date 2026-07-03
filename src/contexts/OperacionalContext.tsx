@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import type {
   Unidade,
   Sala,
@@ -137,8 +139,42 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshBloqueios,
+    refreshConfiguracoes,
     logAction,
   } = data;
+  const { user: authUser } = useAuth();
+
+  // Realtime ownership migrado do DataProvider (Fase 5, Passo 2).
+  // Full-reload aceito nestas 4 tabelas: frequência baixa, edições Master
+  // pontuais, sem risco de regressão como em `agendamentos`.
+  useRealtimeSync({
+    enabled: !!authUser,
+    table: "disponibilidades",
+    onEvent: () => { refreshDisponibilidades(); },
+    poll: refreshDisponibilidades,
+  });
+  useRealtimeSync({
+    enabled: !!authUser,
+    table: "bloqueios",
+    onEvent: () => { refreshBloqueios(); },
+    poll: refreshBloqueios,
+  });
+  useRealtimeSync({
+    enabled: !!authUser,
+    table: "funcionarios",
+    debounceMs: 1000,
+    pollIntervalMs: 120000,
+    onEvent: () => { refreshFuncionarios(); },
+    poll: refreshFuncionarios,
+  });
+  useRealtimeSync({
+    enabled: !!authUser,
+    table: "system_config",
+    debounceMs: 500,
+    pollIntervalMs: 60000,
+    onEvent: () => { refreshConfiguracoes(); },
+    poll: refreshConfiguracoes,
+  });
 
   const value = useMemo<OperacionalContextType>(
     () => ({
