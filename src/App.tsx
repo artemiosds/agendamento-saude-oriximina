@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
+import { DomainProviders } from "@/contexts/DomainProviders";
 import { PermissionsProvider, usePermissions, ModuleName } from "@/contexts/PermissionsContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import React, { Suspense } from "react";
@@ -184,6 +185,7 @@ const App = () => (
           <AuthProvider>
             <PermissionsProvider>
             <DataProvider>
+             <DomainProviders>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   <Route path="/" element={<Home />} />
@@ -238,6 +240,7 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
+             </DomainProviders>
             </DataProvider>
           </PermissionsProvider>
         </AuthProvider>
