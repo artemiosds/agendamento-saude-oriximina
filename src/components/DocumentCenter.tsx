@@ -68,6 +68,7 @@ const DocumentCenter: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
   const [gerarTemplateId, setGerarTemplateId] = useState<string | undefined>(undefined);
+  const [assinaturaOpen, setAssinaturaOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
