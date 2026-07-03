@@ -103,7 +103,7 @@ const defaultConfiguracoes: Configuracoes = {
 interface DataContextType {
   agendamentos: Agendamento[];
   
-  fila: FilaEspera[];
+  // fila state migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   atendimentos: Atendimento[];
   unidades: Unidade[];
   salas: Sala[];
@@ -116,9 +116,7 @@ interface DataContextType {
   updateAgendamento: (id: string, data: Partial<Agendamento>) => Promise<void>;
   cancelAgendamento: (id: string) => Promise<FilaEspera[]>;
   deleteAgendamento: (id: string) => Promise<void>;
-  addToFila: (f: FilaEspera) => Promise<void>;
-  updateFila: (id: string, data: Partial<FilaEspera>) => Promise<void>;
-  removeFromFila: (id: string) => Promise<void>;
+  // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
   addAtendimento: (a: Atendimento) => Promise<void>;
   updateAtendimento: (id: string, data: Partial<Atendimento>) => void;
   addUnidade: (u: Unidade) => void;
@@ -153,8 +151,7 @@ interface DataContextType {
   ) => { blocked: boolean; type?: string; label?: string };
   getDayInfoMap: (profissionalId: string, unidadeId: string, isPublic?: boolean) => Record<string, any>;
   updateConfiguracoes: (data: Partial<Configuracoes>) => void;
-  checkFilaForSlot: (profissionalId: string, unidadeId: string, data: string, hora: string) => FilaEspera[];
-  encaixarDaFila: (filaId: string, agendamento: Omit<Agendamento, "id" | "criadoEm">) => void;
+  // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
   refreshAgendamentos: () => Promise<void>;
@@ -165,7 +162,7 @@ interface DataContextType {
   ensureAgendamentosForDate: (date: string) => Promise<void>;
   ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
   
-  refreshFila: () => Promise<void>;
+  // refreshFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   refreshBloqueios: () => Promise<void>;
   refreshConfiguracoes: () => Promise<void>;
   /** Fase 5 (transitório): helper compartilhado com PacientesSliceProvider. */
@@ -265,7 +262,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const userUnidadeId = authUser?.unidadeId || '';
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   // pacientes state migrado para PacientesSliceProvider (Fase 5, Passo 3.1).
-  const [fila, setFila] = useState<FilaEspera[]>([]);
+  // fila state migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
@@ -281,8 +278,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   disponibilidadesRef.current = disponibilidades;
   const bloqueiosRef = useRef(bloqueios);
   bloqueiosRef.current = bloqueios;
-  const filaRef = useRef(fila);
-  filaRef.current = fila;
+  // filaRef removido — snapshot vive em `_filaBridge.ts` alimentado pelo FilaSliceProvider.
   const funcionariosRef = useRef(funcionarios);
   funcionariosRef.current = funcionarios;
   const configuracoesRef = useRef(configuracoes);
