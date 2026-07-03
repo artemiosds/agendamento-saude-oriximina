@@ -170,6 +170,8 @@ interface DataContextType {
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
   refreshConfiguracoes: () => Promise<void>;
+  /** Fase 5 (transitório): helper compartilhado com PacientesSliceProvider. */
+  resolveScopedUnidadeId: () => Promise<string>;
   logAction: (input: {
     acao: string;
     entidade: string;
