@@ -528,6 +528,66 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     setSalvando(false);
   };
 
+  const handleEnviarAutentique = async () => {
+    if (!selected) return;
+    setSalvando(true);
+    try {
+      // Assina digitalmente para carimbar hash antes de gerar o PDF
+      const sig = await generateSignature(
+        conteudoFinal,
+        profissional?.id || user?.id || '',
+        profissional?.nome || user?.nome || '',
+        profissional?.tipo_conselho || carimbo?.conselho || '',
+        profissional?.numero_conselho || carimbo?.numero_registro || '',
+        profissional?.uf_conselho || carimbo?.uf || ''
+      );
+      const signatureHtml = formatSignatureBlock(sig);
+      const body = buildHtmlBody(signatureHtml);
+
+      const cssPrefix = docConfig ? buildInstitutionalCSS(docConfig) : '';
+      const header = docConfig ? docHeader(selected.tipo, docConfig) : '';
+      const footer = docConfig ? docFooter(docConfig) : '';
+      const fullHtml =
+        cssPrefix +
+        '<div class="doc-page" style="background:#fff;">' +
+        header +
+        '<div class="doc-content" style="padding:0 20px;">' + body + '</div>' +
+        footer +
+        '</div>';
+
+      const { base64, filename } = await htmlToPdfBase64(fullHtml, `${selected.tipo}_${paciente?.nome || ''}`);
+
+      // Salva no histórico como enviado para assinatura
+      const { data: inserted, error: insErr } = await supabase
+        .from('documentos_gerados')
+        .insert({
+          paciente_id: paciente?.id || '',
+          paciente_nome: paciente?.nome || '',
+          profissional_id: profissional?.id || user?.id || '',
+          profissional_nome: profissional?.nome || user?.nome || '',
+          tipo_documento: selected.tipo,
+          conteudo_original: conteudoFinal,
+          conteudo_html: body,
+          campos_formulario: { ...campos, medicamentos } as any,
+          hash_assinatura: sig.hash,
+          ip_assinatura: sig.ip,
+          assinado_em: sig.timestamp,
+          modelo_id: selected.id,
+          unidade_id: unidade || '',
+          status: 'enviado_assinatura',
+        } as any)
+        .select('id')
+        .single();
+      if (insErr) throw insErr;
+
+      setPdfPreCarregado({ base64, filename, docId: (inserted as any)?.id });
+      setAutentiqueOpen(true);
+    } catch (e: any) {
+      toast.error('Erro ao gerar PDF: ' + (e?.message || e));
+    }
+    setSalvando(false);
+  };
+
   const updateCampo = (key: string, value: string) => setCampos(prev => ({ ...prev, [key]: value }));
 
   // Auto-calculate data_fim for atestado
