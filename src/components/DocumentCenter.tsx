@@ -255,6 +255,7 @@ const DocumentCenter: React.FC<Props> = ({
           onOpenChange={setAssinaturaOpen}
           nomeDocumentoSugerido={`Documento - ${paciente.nome}`}
           pacienteNome={paciente.nome}
+          pacienteTelefone={paciente.telefone || undefined}
           profissionalNome={user?.nome}
         />
       )}
