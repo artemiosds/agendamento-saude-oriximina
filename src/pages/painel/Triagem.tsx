@@ -1,7 +1,10 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { PageHeader } from '@/components/ui/page-header';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useAgendamentos } from "@/contexts/AgendamentosContext";
+import { useFila } from "@/contexts/FilaContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -217,7 +220,10 @@ const TriagemItem = React.memo(({
 });
 
 const Triagem: React.FC = () => {
-  const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
+  const { pacientes } = usePacientes();
+  const { agendamentos, updateAgendamento, refreshAgendamentos } = useAgendamentos();
+  const { fila, updateFila, refreshFila } = useFila();
+  const { logAction } = useOperacional();
   const { user, isGlobalAdmin } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
   const { resolved: customConfig } = useCustomFields('triagem', user?.unidadeId);
