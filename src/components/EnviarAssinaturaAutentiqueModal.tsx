@@ -140,6 +140,22 @@ const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
               <Textarea rows={2} value={message} onChange={e => setMessage(e.target.value)} placeholder="Instruções para os signatários" />
             </div>
 
+            <div className="space-y-2 rounded-md border border-border/60 p-2.5 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Também avisar o paciente por WhatsApp</Label>
+                <Switch checked={notificarWhats} onCheckedChange={setNotificarWhats} />
+              </div>
+              {notificarWhats && (
+                <Input
+                  placeholder="Telefone (com DDD)"
+                  value={telefoneWhats}
+                  onChange={e => setTelefoneWhats(e.target.value)}
+                  className="h-8"
+                />
+              )}
+            </div>
+
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Signatários</Label>
