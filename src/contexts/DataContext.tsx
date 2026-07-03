@@ -250,10 +250,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Unit isolation: only admin.sms sees all; everyone else is filtered
   const isGlobalAdmin = authUser?.usuario === 'admin.sms';
   const userUnidadeId = authUser?.unidadeId || '';
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  // agendamentos/atendimentos state migrados para AgendamentosSliceProvider (Fase 5, Passo 3.1).
   // pacientes state migrado para PacientesSliceProvider (Fase 5, Passo 3.1).
   // fila state migrado para FilaSliceProvider (Fase 5, Passo 3.1).
-  const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
   const [setores] = useState<Setor[]>(inlineSetores);
@@ -262,8 +261,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
-  const agendamentosRef = useRef(agendamentos);
-  agendamentosRef.current = agendamentos;
+  // agendamentosRef removido — mirror reativo via `_agendamentosBridge.ts` (useSyncExternalStore abaixo).
+  // Reactively subscribe to the AgendamentosSliceProvider snapshot so memos still update.
+  const agendamentos = useSyncExternalStore(
+    subscribeAgendamentosSnapshot,
+    getAgendamentosSnapshot,
+    getAgendamentosSnapshot,
+  );
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
   const bloqueiosRef = useRef(bloqueios);
