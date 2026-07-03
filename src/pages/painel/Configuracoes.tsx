@@ -957,35 +957,6 @@ const Configuracoes: React.FC = () => {
             <VincularSigtapProcedimentos />
             <Separator />
             <h2 className="text-lg font-semibold font-display text-foreground">Integrações</h2>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center"><MessageSquare className="w-5 h-5 text-success" /></div>
-                  <div className="flex-1"><h3 className="font-semibold font-display text-foreground">WhatsApp Business</h3><p className="text-sm text-muted-foreground">Notificações automáticas</p></div>
-                  <Switch checked={whatsapp.ativo} onCheckedChange={v => updateWhatsapp({ ativo: v })} />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><Label>Provedor</Label><Select value={whatsapp.provedor} onValueChange={v => updateWhatsapp({ provedor: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="360dialog">360dialog</SelectItem><SelectItem value="twilio">Twilio</SelectItem><SelectItem value="zapi">Z-API</SelectItem></SelectContent></Select></div>
-                  <div><Label>Número de Envio</Label><Input placeholder="5593999990000" value={whatsapp.numero} onChange={e => updateWhatsapp({ numero: e.target.value })} /></div>
-                  <div className="md:col-span-2"><Label>API Token</Label><Input type="password" placeholder="Cole o token aqui" value={whatsapp.token} onChange={e => updateWhatsapp({ token: e.target.value })} /></div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div className="p-4 bg-muted rounded-xl">
-                    <div className="flex items-center gap-2 mb-2"><QrCode className="w-5 h-5 text-foreground" /><span className="font-medium text-sm text-foreground">QR Code WhatsApp</span></div>
-                    <div className="w-40 h-40 bg-background rounded-lg border-2 border-dashed border-border flex items-center justify-center"><span className="text-xs text-muted-foreground">QR Code aparecerá aqui</span></div>
-                  </div>
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm text-foreground mb-2">Notificações automáticas</h4>
-                    <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Confirmação</span><Switch checked={whatsapp.notificacoes.confirmacao} onCheckedChange={v => updateNotificacoes({ confirmacao: v })} /></div>
-                    <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Lembrete 24h</span><Switch checked={whatsapp.notificacoes.lembrete24h} onCheckedChange={v => updateNotificacoes({ lembrete24h: v })} /></div>
-                    <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Lembrete 2h</span><Switch checked={whatsapp.notificacoes.lembrete2h} onCheckedChange={v => updateNotificacoes({ lembrete2h: v })} /></div>
-                    <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Remarcação</span><Switch checked={whatsapp.notificacoes.remarcacao} onCheckedChange={v => updateNotificacoes({ remarcacao: v })} /></div>
-                    <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Cancelamento</span><Switch checked={whatsapp.notificacoes.cancelamento} onCheckedChange={v => updateNotificacoes({ cancelamento: v })} /></div>
-                  </div>
-                </div>
-                <Button className="gradient-primary text-primary-foreground w-full mt-4" onClick={() => toast.success('Configurações de WhatsApp salvas!')}>Salvar WhatsApp</Button>
-              </CardContent>
-            </Card>
 
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
