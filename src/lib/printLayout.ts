@@ -161,40 +161,71 @@ function resolveLogoUrl(configUrl: string, fallback: string): string {
   return fallback;
 }
 
+function escapeCssString(s: string): string {
+  return String(s || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, ' ')
+    .replace(/\r/g, '');
+}
+
 export function buildInstitutionalCSS(config?: DocumentConfig): string {
   const t = config?.tipografia || DEFAULT_TYPOGRAPHY;
   const m = config?.margens || DEFAULT_MARGINS;
-  const footerSpace = config?.mostrarRodape === false ? 0 : 16;
-  const footerGap = footerSpace > 0 ? 5 : 0;
-  const footerBottomOffset = footerSpace > 0 ? 4 : m.inferior;
-  const screenBottomPadding = footerSpace > 0 ? footerBottomOffset : m.inferior;
-  const printBottomMargin = footerSpace > 0
-    ? Math.max(m.inferior, footerSpace + footerGap + footerBottomOffset)
-    : m.inferior;
+  const showFooter = config?.mostrarRodape !== false;
+  // Espaço reservado no @page para os @bottom-* boxes desenharem o rodapé
+  // institucional. Se rodapé desativado, usa a margem inferior configurada.
+  const printBottomMargin = showFooter ? Math.max(m.inferior, 20) : m.inferior;
+
   const fontFamily =
     t.fonte === 'Times New Roman' ? `'Times New Roman', Times, serif`
     : t.fonte === 'Calibri' ? `Calibri, 'Segoe UI', Arial, sans-serif`
     : t.fonte === 'Inter' ? `Inter, system-ui, Arial, sans-serif`
     : `Arial, 'Helvetica Neue', Helvetica, sans-serif`;
 
+  // Textos do rodapé impressos via @page margin boxes (única técnica que
+  // NÃO sobrepõe conteúdo em documentos multi-página no Chrome/Edge).
+  const linhaInstitucional = [config?.linha1, config?.linha2].filter(Boolean).join(' — ');
+  const enderecoRodape = config?.rodapeEndereco || '';
+  const rodapeExtra = config?.rodapeTexto || '';
+
+  const pageMarginBoxes = showFooter ? `
+    @bottom-left {
+      content: "${escapeCssString(enderecoRodape)}";
+      font-family: ${fontFamily};
+      font-size: 7pt;
+      color: #94a3b8;
+      padding-top: 4mm;
+      vertical-align: top;
+    }
+    @bottom-center {
+      content: "${escapeCssString(linhaInstitucional)}${rodapeExtra ? ' · ' + escapeCssString(rodapeExtra) : ''}";
+      font-family: ${fontFamily};
+      font-size: 7.5pt;
+      color: #64748b;
+      padding-top: 4mm;
+      vertical-align: top;
+    }
+    @bottom-right {
+      content: "Pág. " counter(page) "/" counter(pages);
+      font-family: ${fontFamily};
+      font-size: 7pt;
+      color: #94a3b8;
+      padding-top: 4mm;
+      vertical-align: top;
+    }
+  ` : '';
+
   return `
 <style>
-  :root { 
-    --doc-footer-space: ${footerSpace}mm; 
-    --doc-footer-gap: ${footerGap}mm;
-    --doc-footer-bottom-offset: ${footerBottomOffset}mm;
-    --doc-screen-bottom-padding: ${screenBottomPadding}mm;
-    --doc-page-height: calc(297mm - ${m.superior}mm - var(--doc-screen-bottom-padding)); 
-    --doc-print-bottom-margin: ${printBottomMargin}mm;
-  }
   @page {
     size: A4;
     margin: ${m.superior}mm ${m.direita}mm ${printBottomMargin}mm ${m.esquerda}mm;
+    ${pageMarginBoxes}
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   .doc-print-document {
     padding: 0;
-    min-height: var(--doc-page-height);
     background: #fff;
   }
   .doc-page {
@@ -203,14 +234,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     font-size: ${t.tamanhoBase}pt;
     line-height: 1.1;
     width: 100%;
-    min-height: var(--doc-page-height);
-    display: flex;
-    flex-direction: column;
     position: relative;
-  }
-  .doc-page > .doc-content {
-    flex: 1 1 auto;
-    min-height: 0;
   }
 
   /* HEADER */
@@ -381,24 +405,17 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .signature.pos-right .assinatura-img,
   .signature.pos-right .carimbo-img { margin-right: 0; margin-left: auto; }
 
-  /* FOOTER — no preview fica no fluxo; na impressão fica fixo na margem inferior reservada */
+  /* FOOTER — usado APENAS no preview em tela.
+     Na impressão, o rodapé real é desenhado pelos @bottom-* boxes do @page,
+     que reservam a margem inferior e nunca sobrepõem o conteúdo. */
   .doc-footer {
-    position: static;
-    flex: 0 0 auto;
     width: 100%;
-    min-height: var(--doc-footer-space);
-    margin-top: auto;
+    margin-top: 24px;
     padding-top: 5px;
     border-top: 1px solid #cbd5e1;
     font-size: 7.5pt;
     color: #64748b;
     background: #fff;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    break-inside: avoid;
-    page-break-inside: avoid;
-    overflow: hidden;
   }
   .doc-footer .footer-line { text-align: center; line-height: 1.25; overflow-wrap: anywhere; }
   .doc-footer .footer-extra { margin-top: 1px; }
@@ -412,40 +429,25 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   @media screen {
     .doc-print-document {
       min-height: 297mm;
-      padding: ${m.superior}mm ${m.direita}mm var(--doc-screen-bottom-padding) ${m.esquerda}mm;
-    }
-    .doc-print-document .doc-page {
-      min-height: var(--doc-page-height);
+      padding: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
     }
   }
 
   @media print {
     html, body { background: #fff; margin: 0; padding: 0; width: auto; min-width: 0; }
-    .doc-print-document { background: #fff; margin: 0; min-height: auto; padding: 0 !important; display: block; }
-    .doc-page { min-height: auto; display: block; position: static; }
+    .doc-print-document { background: #fff; margin: 0; padding: 0 !important; display: block; }
+    .doc-page { display: block; position: static; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
-    .doc-header, .signature, .doc-footer { page-break-inside: avoid; break-inside: avoid; }
-    .doc-page > .doc-content { display: block; min-height: 0; padding-bottom: 0; }
-    .doc-footer { 
-      position: fixed; 
-      left: ${m.esquerda}mm; 
-      right: ${m.direita}mm; 
-      bottom: var(--doc-footer-bottom-offset); 
-      width: auto;
-      height: var(--doc-footer-space);
-      min-height: 0; 
-      max-height: var(--doc-footer-space);
-      margin: 0;
-      padding-top: 4px;
-      background: #fff; 
-      z-index: 10;
-    }
-
+    .doc-header, .signature { page-break-inside: avoid; break-inside: avoid; }
+    /* O rodapé HTML fica apenas no preview de tela; na impressão é substituído
+       pelos @bottom-* boxes do @page (evita sobreposição multi-página). */
+    .doc-footer { display: none !important; }
     img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 
 </style>`;
 }
+
 
 export const institutionalCSS = buildInstitutionalCSS();
 
