@@ -332,8 +332,8 @@ const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const { pacientes } = usePacientes();
-  const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamento, getAvailableSlots, getAvailableDates } = useAgendamentos();
-  const { unidades, funcionarios, salas, bloqueios, logAction } = useOperacional();
+  const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamento } = useAgendamentos();
+  const { unidades, funcionarios, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates } = useOperacional();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
