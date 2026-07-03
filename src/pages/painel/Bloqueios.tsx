@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,7 +56,7 @@ const ROLES_PROFISSIONAL = [
 ];
 
 const Bloqueios: React.FC = () => {
-  const { bloqueios, addBloqueio, deleteBloqueio, refreshBloqueios, unidades, funcionarios, logAction } = useData();
+  const { bloqueios, addBloqueio, deleteBloqueio, refreshBloqueios, unidades, funcionarios, logAction } = useOperacional();
   const { user } = useAuth();
 
   const [dialogOpen, setDialogOpen]     = useState(false);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
 import DOMPurify from 'dompurify';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,7 +48,7 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
 
 const Encaminhamentos: React.FC = () => {
   const { user } = useAuth();
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
 
   // Recebidos (storage-based)
   const [encaminhamentos, setEncaminhamentos] = useState<EncaminhamentoData[]>([]);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -80,7 +80,7 @@ interface NotifLog {
 
 const ConfigWhatsApp: React.FC = () => {
   const { user } = useAuth();
-  const { unidades, configuracoes, updateConfiguracoes } = useData();
+  const { unidades, configuracoes, updateConfiguracoes } = useOperacional();
   const { whatsapp } = configuracoes;
 
   const isGlobalAdmin = user?.usuario === 'admin.sms';

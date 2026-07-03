@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,7 +68,7 @@ interface QueueRow {
 
 const ConfigWhatsAppAntiBan: React.FC = () => {
   const { user } = useAuth();
-  const { unidades } = useData();
+  const { unidades } = useOperacional();
   const isGlobalAdmin = user?.usuario === 'admin.sms';
   const userUnitId = user?.unidadeId || '';
 

@@ -16,7 +16,7 @@ import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { applyPhoneMask } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from '@/contexts/PacientesContext';
 import { useAuth } from "@/contexts/AuthContext";
 import { auditService } from "@/services/auditService";
 import { patientService } from "@/services/patientService";
@@ -140,7 +140,7 @@ export function ConferirDadosPacienteModal({
   const formRef = useRef<any>({});
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
-  const { refreshPacientes } = useData();
+  const { refreshPacientes } = usePacientes();
   const { user } = useAuth();
 
   const fetchPaciente = useCallback(async (id: string) => {

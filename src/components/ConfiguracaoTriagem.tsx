@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { UserCog, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 
 interface TriageSetting {
   id: string;
@@ -20,7 +20,7 @@ interface TriageSetting {
 }
 
 const ConfiguracaoTriagem: React.FC = () => {
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
   const [settings, setSettings] = useState<TriageSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProf, setSelectedProf] = useState('');

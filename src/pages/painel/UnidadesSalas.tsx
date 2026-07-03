@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { useCustomFields } from '@/hooks/useCustomFields';
 import { supabase } from '@/integrations/supabase/client';
 
 const UnidadesSalas: React.FC = () => {
-  const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useData();
+  const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useOperacional();
   const { resolved: customConfig } = useCustomFields('unidade');
   const [customData, setCustomData] = useState<Record<string, any>>({});
   const [unitDialog, setUnitDialog] = useState(false);

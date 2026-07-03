@@ -1,7 +1,7 @@
 import React, { useState, Suspense, useMemo } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
 import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
@@ -122,7 +122,7 @@ const roleLabels: Record<string, string> = {
 
 const PainelLayout: React.FC = () => {
   const { user, logout, isGlobalAdmin } = useAuth();
-  const { unidades } = useData();
+  const { unidades } = useOperacional();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();

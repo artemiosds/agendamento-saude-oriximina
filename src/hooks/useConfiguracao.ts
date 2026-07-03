@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { auditService } from '@/services/auditService';
 import { toast } from 'sonner';
@@ -51,7 +51,7 @@ interface PendingDraft {
  * - Fallback offline (localStorage draft)
  */
 export function useConfiguracao() {
-  const { configuracoes, updateConfiguracoes } = useData();
+  const { configuracoes, updateConfiguracoes } = useOperacional();
   const { user } = useAuth();
   const savingRef = useRef(false);
 

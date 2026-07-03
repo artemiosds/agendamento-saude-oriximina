@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -91,7 +91,7 @@ const DEFAULT: FluxoConfig = {
 };
 
 const ConfigFluxoAtendimento: React.FC = () => {
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
   const { user } = useAuth();
   const [config, setConfig] = useState<FluxoConfig>(DEFAULT);
   const [loading, setLoading] = useState(true);
