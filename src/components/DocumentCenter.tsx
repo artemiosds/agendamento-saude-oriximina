@@ -238,7 +238,7 @@ const DocumentCenter: React.FC<Props> = ({
             <Button
               variant="secondary"
               className="w-full gap-1.5"
-              onClick={() => setAssinaturaOpen(true)}
+              onClick={() => { setAssinaturaCtx(null); setAssinaturaOpen(true); }}
               disabled={!paciente}
             >
               <FileSignature className="w-4 h-4" /> Enviar para assinatura eletrônica
