@@ -730,7 +730,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     void Promise.all([
       loadDisponibilidades(),
       loadAgendamentos(),
-      loadFila(),
+      // loadFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
       loadBloqueios(),
     ]).catch((err) => console.error("Background data load failed:", err));
   }, [
@@ -740,7 +740,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadFuncionarios,
     loadDisponibilidades,
     loadAgendamentos,
-    loadFila,
+    // loadFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
     loadBloqueios,
   ]);
 
@@ -1085,93 +1085,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // addPaciente/updatePaciente migrados para PacientesSliceProvider (Fase 5, Passo 3.1).
 
 
-  const addToFila = useCallback(
-    async (f: FilaEspera) => {
-      const { error } = await supabase.from("fila_espera" as any).insert({
-        id: f.id,
-        paciente_id: f.pacienteId,
-        paciente_nome: f.pacienteNome,
-        unidade_id: f.unidadeId,
-        profissional_id: f.profissionalId || "",
-        setor: f.setor,
-        prioridade: ["normal", "alta", "urgente"].includes(f.prioridade) ? f.prioridade : "normal",
-        prioridade_perfil: f.prioridade,
-        status: f.status,
-        posicao: f.posicao,
-        hora_chegada: f.horaChegada,
-        observacoes: f.observacoes || "",
-        descricao_clinica: f.descricaoClinica || "",
-        cid: f.cid || "",
-        criado_por: f.criadoPor || "sistema",
-        data_solicitacao_original: f.dataSolicitacaoOriginal || "",
-        origem_cadastro: f.origemCadastro || "normal",
-        especialidade_destino: f.especialidadeDestino || "",
-      } as any);
-      if (!error) {
-        setFila((prev) => [...prev, f]);
-        await logAction({
-          acao: "criar",
-          entidade: "fila_espera",
-          entidadeId: f.id,
-          unidadeId: f.unidadeId,
-          detalhes: { prioridade: f.prioridade, origemCadastro: f.origemCadastro },
-        });
-        invalidateCache(queryKeys.fila.all);
-      } else console.error("Error adding to fila:", error);
-    },
-    [logAction, invalidateCache],
-  );
-
-  const updateFila = useCallback(
-    async (id: string, data: Partial<FilaEspera>) => {
-      const dbData: any = {};
-      if (data.status !== undefined) dbData.status = data.status;
-      if (data.prioridade !== undefined) {
-        dbData.prioridade = ["normal", "alta", "urgente"].includes(data.prioridade) ? data.prioridade : "normal";
-        dbData.prioridade_perfil = data.prioridade;
-      }
-      if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
-      if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
-      if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
-      if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
-      if (data.cid !== undefined) dbData.cid = data.cid;
-      if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada;
-      if (data.horaChamada !== undefined) dbData.hora_chamada = data.horaChamada;
-      if (data.pacienteNome !== undefined) dbData.paciente_nome = data.pacienteNome;
-      if (data.pacienteId !== undefined) dbData.paciente_id = data.pacienteId;
-      if (data.setor !== undefined) dbData.setor = data.setor;
-      const { error } = await supabase
-        .from("fila_espera" as any)
-        .update(dbData)
-        .eq("id", id);
-      if (!error) {
-        setFila((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
-        await logAction({
-          acao: "editar",
-          entidade: "fila_espera",
-          entidadeId: id,
-          detalhes: data as Record<string, unknown>,
-        });
-        invalidateCache(queryKeys.fila.all);
-      } else console.error("Error updating fila:", error);
-    },
-    [logAction, invalidateCache],
-  );
-
-  const removeFromFila = useCallback(
-    async (id: string) => {
-      const { error } = await supabase
-        .from("fila_espera" as any)
-        .delete()
-        .eq("id", id);
-      if (!error) {
-        setFila((prev) => prev.filter((f) => f.id !== id));
-        await logAction({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
-        invalidateCache(queryKeys.fila.all);
-      } else console.error("Error removing from fila:", error);
-    },
-    [logAction, invalidateCache],
-  );
+  // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
 
   const addAtendimento = useCallback(
     async (a: Atendimento) => {
