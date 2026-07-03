@@ -82,6 +82,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [profDestinoId, setProfDestinoId] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [carimbo, setCarimbo] = useState<CarimboData | null>(null);
+  const [autentiqueOpen, setAutentiqueOpen] = useState(false);
+  const [pdfPreCarregado, setPdfPreCarregado] = useState<{ base64: string; filename: string; docId?: string } | null>(null);
 
   // Type-specific fields
   const [campos, setCampos] = useState<Record<string, string>>({});
