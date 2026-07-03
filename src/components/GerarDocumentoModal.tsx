@@ -612,18 +612,16 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         .single();
       if (insErr) throw insErr;
 
-      // Abre a janela de impressão institucional (mesmo padrão do "Imprimir").
-      // O usuário escolhe "Salvar como PDF" no diálogo do navegador.
-      openPrintDocument(selected.tipo, body, {
+      // Gera PDF automaticamente com layout institucional (sem abrir diálogo de impressão).
+      const config = await loadDocumentConfig();
+      const fullHtml = buildDocumentShell(selected.tipo, body, config, {
         'Paciente': paciente?.nome || '',
         'CPF': paciente?.cpf || '',
         'Data': hoje,
       });
+      const pdf = await htmlToPdfBase64(fullHtml, `${selected.tipo}_${paciente?.nome || 'paciente'}`);
 
-      toast.success('Salve o PDF pelo diálogo de impressão e anexe na próxima tela.');
-
-      // Guarda o docId para vinculação, mas sem PDF pré-carregado — usuário anexa o arquivo salvo.
-      setPdfPreCarregado({ base64: '', filename: '', docId: (inserted as any)?.id });
+      setPdfPreCarregado({ base64: pdf.base64, filename: pdf.filename, docId: (inserted as any)?.id });
       setAutentiqueOpen(true);
     } catch (e: any) {
       toast.error('Erro ao preparar documento: ' + (e?.message || e));
