@@ -2050,6 +2050,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await loadBloqueios();
   }, [loadBloqueios]);
 
+  const refreshConfiguracoes = useCallback(async () => {
+    await loadConfiguracoes();
+  }, [loadConfiguracoes]);
+
   const stableFunctions = useRef({
     addAgendamento,
     updateAgendamento,
