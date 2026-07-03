@@ -1,7 +1,24 @@
-import React, { createContext, useContext, useMemo } from "react";
-import { useData } from "@/contexts/DataContext";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { queryKeys } from "@/hooks/queries/queryKeys";
+import { addDaysToDateStr, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
+import { auditService } from "@/services/auditService";
+import {
+  getAgendamentosSnapshot,
+  subscribeAgendamentosSnapshot,
+} from "@/contexts/_agendamentosBridge";
 import type {
   Unidade,
   Sala,
@@ -31,16 +48,6 @@ export interface TurnoInfoResult {
   excedido: boolean;
 }
 
-/**
- * OperacionalContext — slice memoizado do DataContext para tudo que é
- * estrutura operacional (unidades, salas, setores, funcionários,
- * disponibilidades, bloqueios, configurações) + cálculos de agenda que
- * dependem desse conjunto.
- *
- * Fase 1: fachada. Fase 2 (TODO): mover useRealtimeSync das tabelas
- * disponibilidades, bloqueios, funcionarios, system_config e os loaders
- * correspondentes para este provider.
- */
 interface BloqueioAgenda {
   id: string;
   titulo: string;
@@ -53,6 +60,128 @@ interface BloqueioAgenda {
   unidadeId: string;
   profissionalId: string;
   criadoPor: string;
+}
+
+const inlineSetores: Setor[] = [
+  { id: "st1", nome: "Clínica Geral" },
+  { id: "st2", nome: "Pediatria" },
+  { id: "st3", nome: "Odontologia" },
+  { id: "st4", nome: "Enfermagem" },
+  { id: "st5", nome: "Fisioterapia" },
+  { id: "st6", nome: "Psicologia" },
+  { id: "st7", nome: "Nutrição" },
+];
+
+const defaultConfiguracoes: Configuracoes = {
+  whatsapp: {
+    ativo: false,
+    provedor: "zapi",
+    token: "",
+    numero: "",
+    notificacoes: {
+      confirmacao: true,
+      lembrete24h: true,
+      lembrete2h: true,
+      remarcacao: true,
+      cancelamento: true,
+    },
+  },
+  googleCalendar: {
+    conectado: false,
+    criarEvento: true,
+    atualizarRemarcar: true,
+    removerCancelar: true,
+    enviarEmail: true,
+  },
+  filaEspera: { modoEncaixe: "assistido" },
+  templates: {
+    confirmacao:
+      "Olá {nome}! Sua consulta foi agendada para {data} às {hora} na {unidade}. Profissional: {profissional}.",
+    lembrete: "Lembrete: Sua consulta é em {data} às {hora} na {unidade} com {profissional}.",
+  },
+  webhook: {
+    ativo: true,
+    url: "https://hook.us2.make.com/a12e4puc3o58b3z78k9qu3wxevr5qkwa",
+    status: "ativo" as const,
+  },
+  gmail: {
+    ativo: false,
+    email: "",
+    senhaApp: "",
+    smtpHost: "smtp.gmail.com",
+    smtpPort: 587,
+  },
+  canalNotificacao: "webhook",
+  portalPaciente: {
+    permitirPortal: true,
+    enviarSenhaAutomaticamente: true,
+    enviarLinkAcesso: true,
+    pacientesBloqueados: [],
+  },
+};
+
+const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): Configuracoes => {
+  if (!incoming) return defaultConfiguracoes;
+  return {
+    ...defaultConfiguracoes,
+    ...incoming,
+    whatsapp: {
+      ...defaultConfiguracoes.whatsapp,
+      ...incoming.whatsapp,
+      notificacoes: {
+        ...defaultConfiguracoes.whatsapp.notificacoes,
+        ...incoming.whatsapp?.notificacoes,
+      },
+    },
+    googleCalendar: { ...defaultConfiguracoes.googleCalendar, ...incoming.googleCalendar },
+    filaEspera: { ...defaultConfiguracoes.filaEspera, ...incoming.filaEspera },
+    templates: { ...defaultConfiguracoes.templates, ...incoming.templates },
+    webhook: { ...defaultConfiguracoes.webhook, ...incoming.webhook },
+    gmail: { ...defaultConfiguracoes.gmail!, ...incoming.gmail },
+    canalNotificacao: incoming.canalNotificacao || defaultConfiguracoes.canalNotificacao,
+    portalPaciente: {
+      permitirPortal: true,
+      enviarSenhaAutomaticamente: true,
+      enviarLinkAcesso: true,
+      pacientesBloqueados: [],
+      ...incoming.portalPaciente,
+    },
+  };
+};
+
+// Lista única de status que NÃO ocupam vaga na agenda.
+const STATUS_NAO_OCUPA_VAGA = new Set([
+  "cancelado",
+  "falta",
+  "excluido",
+  "removido",
+  "inativo",
+]);
+const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
+
+export interface LogActionInput {
+  acao: string;
+  entidade: string;
+  entidadeId?: string;
+  entidadeNome?: string;
+  detalhes?: Record<string, unknown>;
+  user?: User | null;
+  unidadeId?: string;
+  unidadeNome?: string;
+  modulo?: string;
+  status?: string;
+  erro?: string;
+  before?: any;
+  after?: any;
+  pacienteId?: string;
+  pacienteNome?: string;
+  profissionalId?: string;
+  profissionalNome?: string;
+  agendamentoId?: string;
+  prontuarioId?: string;
+  documentoId?: string;
+  origem?: string;
+  rota?: string;
 }
 
 interface OperacionalContextType {
@@ -98,83 +227,1006 @@ interface OperacionalContextType {
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
-  logAction: ReturnType<typeof useData>["logAction"];
+  refreshConfiguracoes: () => Promise<void>;
+  resolveScopedUnidadeId: () => Promise<string>;
+  logAction: (input: LogActionInput) => void;
 }
 
 const OperacionalContext = createContext<OperacionalContextType | null>(null);
 
 export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const data = useData();
-
-  const {
-    unidades,
-    salas,
-    setores,
-    funcionarios,
-    disponibilidades,
-    bloqueios,
-    configuracoes,
-    addUnidade,
-    updateUnidade,
-    deleteUnidade,
-    addSala,
-    updateSala,
-    deleteSala,
-    addFuncionario,
-    updateFuncionario,
-    deleteFuncionario,
-    addDisponibilidade,
-    updateDisponibilidade,
-    deleteDisponibilidade,
-    addBloqueio,
-    updateBloqueio,
-    deleteBloqueio,
-    getAvailableSlots,
-    getTurnoInfo,
-    getAvailableDates,
-    getNextAvailableSlots,
-    getBlockingInfo,
-    getDayInfoMap,
-    updateConfiguracoes,
-    refreshFuncionarios,
-    refreshDisponibilidades,
-    refreshBloqueios,
-    refreshConfiguracoes,
-    logAction,
-  } = data;
+  const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
+  const isGlobalAdmin = authUser?.usuario === "admin.sms";
+  const userUnidadeId = authUser?.unidadeId || "";
 
-  // Realtime ownership migrado do DataProvider (Fase 5, Passo 2).
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [salas, setSalas] = useState<Sala[]>([]);
+  const [setores] = useState<Setor[]>(inlineSetores);
+  const [funcionarios, setFuncionarios] = useState<User[]>([]);
+  const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>([]);
+  const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
+  const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
+
+  // Mirror reativo do estado de agendamentos vindo do AgendamentosSliceProvider,
+  // necessário para os memos de contagem/agrupamento usados nos cálculos de vagas.
+  const agendamentos = useSyncExternalStore(
+    subscribeAgendamentosSnapshot,
+    getAgendamentosSnapshot,
+    getAgendamentosSnapshot,
+  );
+
+  const disponibilidadesRef = useRef(disponibilidades);
+  disponibilidadesRef.current = disponibilidades;
+  const bloqueiosRef = useRef(bloqueios);
+  bloqueiosRef.current = bloqueios;
+  const funcionariosRef = useRef(funcionarios);
+  funcionariosRef.current = funcionarios;
+  const configuracoesRef = useRef(configuracoes);
+  configuracoesRef.current = configuracoes;
+
+  const invalidateCache = useCallback(
+    (...keys: (readonly string[])[]) => {
+      keys.forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
+    },
+    [queryClient],
+  );
+
+  const resolveScopedUnidadeId = useCallback(async () => {
+    if (isGlobalAdmin) return "";
+    if (userUnidadeId) return userUnidadeId;
+
+    const funcionarioEmMemoria = funcionariosRef.current.find(
+      (f) => f.authUserId === authUser?.authUserId || f.id === authUser?.id || f.usuario === authUser?.usuario,
+    );
+    if (funcionarioEmMemoria?.unidadeId) return funcionarioEmMemoria.unidadeId;
+
+    if (!authUser?.authUserId) return "";
+
+    const { data, error } = await supabase
+      .from("funcionarios" as any)
+      .select("unidade_id")
+      .eq("auth_user_id", authUser.authUserId)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error resolving scoped unidade_id for pacientes:", error);
+      return "";
+    }
+
+    return ((data as { unidade_id?: string } | null)?.unidade_id || "").trim();
+  }, [authUser?.authUserId, authUser?.id, authUser?.usuario, isGlobalAdmin, userUnidadeId]);
+
+  const logAction = useCallback((input: LogActionInput) => {
+    auditService.log({
+      acao: input.acao,
+      modulo: input.modulo || input.entidade || "sistema",
+      entidade: input.entidade,
+      entidadeId: input.entidadeId,
+      user: input.user
+        ? {
+            id: input.user.id,
+            nome: input.user.nome,
+            role: input.user.role,
+            unidadeId: input.user.unidadeId,
+            cpf: input.user.cpf,
+          }
+        : null,
+      unidadeId: input.unidadeId || input.user?.unidadeId,
+      status: (input.status as any) || "sucesso",
+      errorMessage: input.erro,
+      before: input.before,
+      after: input.after,
+      detalhes: input.detalhes as Record<string, any>,
+    });
+  }, []);
+
+  const isSlotBlocked = useCallback(
+    (profissionalId: string, unidadeId: string, date: string, time?: string) => {
+      return bloqueiosRef.current.some((b) => {
+        if (date < b.dataInicio || date > b.dataFim) return false;
+        const isGlobal = (!b.unidadeId || b.unidadeId === "") && (!b.profissionalId || b.profissionalId === "");
+        const isUnitLevel = b.unidadeId === unidadeId && (!b.profissionalId || b.profissionalId === "");
+        const isProfLevel = b.profissionalId === profissionalId;
+        if (!isGlobal && !isUnitLevel && !isProfLevel) return false;
+        if (b.diaInteiro || !time) return true;
+        const start = b.horaInicio || "00:00";
+        const end = b.horaFim || "23:59";
+        return time >= start && time < end;
+      });
+    },
+    [],
+  );
+
+  const getBlockingInfo = useCallback(
+    (profissionalId: string, unidadeId: string, date: string) => {
+      const b = bloqueiosRef.current.find((bloqueio) => {
+        if (date < bloqueio.dataInicio || date > bloqueio.dataFim) return false;
+        const isGlobal =
+          (!bloqueio.unidadeId || bloqueio.unidadeId === "") &&
+          (!bloqueio.profissionalId || bloqueio.profissionalId === "");
+        const isUnitLevel =
+          bloqueio.unidadeId === unidadeId && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
+        const isProfLevel = bloqueio.profissionalId === profissionalId;
+        return isGlobal || isUnitLevel || isProfLevel;
+      });
+      return b ? { blocked: true, type: b.tipo, label: b.titulo } : { blocked: false };
+    },
+    [],
+  );
+
+  const loadConfiguracoes = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("system_config")
+        .select("configuracoes")
+        .eq("id", "default")
+        .maybeSingle();
+      if (data && !error) setConfiguracoes(safeConfigMerge(data.configuracoes as Record<string, unknown>));
+    } catch (err) {
+      console.error("Error loading configs:", err);
+    }
+  }, []);
+
+  const loadUnidades = useCallback(async () => {
+    try {
+      let query = supabase.from("unidades" as any).select("id,nome,nome_exibicao,endereco,telefone,whatsapp,ativo");
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq("id", userUnidadeId);
+      const { data, error } = await query;
+      if (data && !error)
+        setUnidades(
+          data.map((u: any) => ({
+            id: u.id,
+            nome: u.nome,
+            nomeExibicao: u.nome_exibicao || "",
+            endereco: u.endereco || "",
+            telefone: u.telefone || "",
+            whatsapp: u.whatsapp || "",
+            ativo: u.ativo,
+          })),
+        );
+    } catch (err) {
+      console.error("Error loading unidades:", err);
+    }
+  }, [isGlobalAdmin, userUnidadeId]);
+
+  const loadSalas = useCallback(async () => {
+    try {
+      let query = supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq("unidade_id", userUnidadeId);
+      const { data, error } = await query;
+      if (data && !error)
+        setSalas(data.map((s: any) => ({ id: s.id, nome: s.nome, unidadeId: s.unidade_id, ativo: s.ativo })));
+    } catch (err) {
+      console.error("Error loading salas:", err);
+    }
+  }, [isGlobalAdmin, userUnidadeId]);
+
+  const loadFuncionarios = useCallback(async () => {
+    try {
+      const query = supabase
+        .from("funcionarios" as any)
+        .select(
+          "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo,custom_data",
+        );
+      const { data, error } = await query;
+      if (data && !error) {
+        setFuncionarios(
+          data.map((f: any) => ({
+            id: f.id,
+            authUserId: f.auth_user_id || "",
+            nome: f.nome,
+            usuario: f.usuario,
+            email: f.email || "",
+            cpf: f.cpf || "",
+            profissao: f.profissao || "",
+            tipoConselho: f.tipo_conselho || "",
+            numeroConselho: f.numero_conselho || "",
+            ufConselho: f.uf_conselho || "",
+            role: f.role,
+            unidadeId: f.unidade_id || "",
+            salaId: f.sala_id || "",
+            setor: f.setor || "",
+            cargo: f.cargo || "",
+            criadoEm: f.criado_em || "",
+            criadoPor: f.criado_por || "",
+            tempoAtendimento: f.tempo_atendimento || 30,
+            podeAgendarRetorno: f.pode_agendar_retorno || false,
+            coren: f.coren || "",
+            ativo: f.ativo ?? true,
+            customData: f.custom_data || {},
+          })),
+        );
+      }
+    } catch (err) {
+      console.error("Error loading funcionarios:", err);
+    }
+  }, []);
+
+  const loadDisponibilidades = useCallback(async () => {
+    try {
+      let query = supabase
+        .from("disponibilidades" as any)
+        .select(
+          "id,profissional_id,unidade_id,sala_id,data_inicio,data_fim,hora_inicio,hora_fim,vagas_por_hora,vagas_por_dia,dias_semana,duracao_consulta",
+        );
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq("unidade_id", userUnidadeId);
+      const { data, error } = await query;
+      if (data && !error) {
+        setDisponibilidades(
+          data.map((d: any) => ({
+            id: d.id,
+            profissionalId: d.profissional_id,
+            unidadeId: d.unidade_id,
+            salaId: d.sala_id || "",
+            dataInicio: d.data_inicio,
+            dataFim: d.data_fim,
+            horaInicio: d.hora_inicio,
+            horaFim: d.hora_fim,
+            vagasPorHora: d.vagas_por_hora,
+            vagasPorDia: d.vagas_por_dia,
+            diasSemana: d.dias_semana || [],
+            duracaoConsulta: d.duracao_consulta || 30,
+          })),
+        );
+      }
+    } catch (err) {
+      console.error("Error loading disponibilidades:", err);
+    }
+  }, [isGlobalAdmin, userUnidadeId]);
+
+  const loadBloqueios = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("bloqueios" as any)
+        .select(
+          "id,titulo,tipo,data_inicio,data_fim,dia_inteiro,hora_inicio,hora_fim,unidade_id,profissional_id,criado_por",
+        );
+      if (data && !error) {
+        setBloqueios(
+          data.map((b: any) => ({
+            id: b.id,
+            titulo: b.titulo,
+            tipo: b.tipo,
+            dataInicio: b.data_inicio,
+            dataFim: b.data_fim,
+            diaInteiro: b.dia_inteiro ?? true,
+            horaInicio: b.hora_inicio || "",
+            horaFim: b.hora_fim || "",
+            unidadeId: b.unidade_id || "",
+            profissionalId: b.profissional_id || "",
+            criadoPor: b.criado_por || "",
+          })),
+        );
+      }
+    } catch (err) {
+      console.error("Error loading bloqueios:", err);
+    }
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    await Promise.all([loadConfiguracoes(), loadUnidades(), loadSalas(), loadFuncionarios()]);
+    void Promise.all([loadDisponibilidades(), loadBloqueios()]).catch((err) =>
+      console.error("Background data load failed:", err),
+    );
+  }, [loadConfiguracoes, loadUnidades, loadSalas, loadFuncionarios, loadDisponibilidades, loadBloqueios]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    loadAll();
+  }, [loadAll, authUser]);
+
+  const refreshFuncionarios = useCallback(async () => {
+    await loadFuncionarios();
+  }, [loadFuncionarios]);
+  const refreshDisponibilidades = useCallback(async () => {
+    await loadDisponibilidades();
+  }, [loadDisponibilidades]);
+  const refreshBloqueios = useCallback(async () => {
+    await loadBloqueios();
+  }, [loadBloqueios]);
+  const refreshConfiguracoes = useCallback(async () => {
+    await loadConfiguracoes();
+  }, [loadConfiguracoes]);
+
+  // Realtime ownership — handlers interiorizados chamando loaders locais.
   // Full-reload aceito nestas 4 tabelas: frequência baixa, edições Master
   // pontuais, sem risco de regressão como em `agendamentos`.
   useRealtimeSync({
     enabled: !!authUser,
     table: "disponibilidades",
-    onEvent: () => { refreshDisponibilidades(); },
-    poll: refreshDisponibilidades,
+    onEvent: () => {
+      loadDisponibilidades();
+    },
+    poll: loadDisponibilidades,
   });
   useRealtimeSync({
     enabled: !!authUser,
     table: "bloqueios",
-    onEvent: () => { refreshBloqueios(); },
-    poll: refreshBloqueios,
+    onEvent: () => {
+      loadBloqueios();
+    },
+    poll: loadBloqueios,
   });
   useRealtimeSync({
     enabled: !!authUser,
     table: "funcionarios",
     debounceMs: 1000,
     pollIntervalMs: 120000,
-    onEvent: () => { refreshFuncionarios(); },
-    poll: refreshFuncionarios,
+    onEvent: () => {
+      loadFuncionarios();
+    },
+    poll: loadFuncionarios,
   });
   useRealtimeSync({
     enabled: !!authUser,
     table: "system_config",
     debounceMs: 500,
     pollIntervalMs: 60000,
-    onEvent: () => { refreshConfiguracoes(); },
-    poll: refreshConfiguracoes,
+    onEvent: () => {
+      loadConfiguracoes();
+    },
+    poll: loadConfiguracoes,
   });
+
+  const appointmentCountsByKey = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissionalId}|${a.unidadeId}|${a.data}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [agendamentos]);
+
+  const appointmentsByDateProfUnit = useMemo(() => {
+    const map = new Map<string, typeof agendamentos>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissionalId}|${a.unidadeId}|${a.data}`;
+        const arr = map.get(key);
+        if (arr) arr.push(a);
+        else map.set(key, [a]);
+      }
+    }
+    return map;
+  }, [agendamentos]);
+
+  const appointmentCountsByKeyRef = useRef(appointmentCountsByKey);
+  appointmentCountsByKeyRef.current = appointmentCountsByKey;
+  const appointmentsByDateProfUnitRef = useRef(appointmentsByDateProfUnit);
+  appointmentsByDateProfUnitRef.current = appointmentsByDateProfUnit;
+
+  const getTurnoInfo = useCallback(
+    (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
+      const dayOfWeek = isoDayOfWeek(date);
+      const disps = disponibilidadesRef.current;
+      const turnoDisps = disps.filter(
+        (d) =>
+          d.profissionalId === profissionalId &&
+          d.unidadeId === unidadeId &&
+          d.diasSemana.includes(dayOfWeek) &&
+          date >= d.dataInicio &&
+          date <= d.dataFim &&
+          d.vagasPorHora === 0,
+      );
+      if (turnoDisps.length === 0) return [];
+
+      const key = `${profissionalId}|${unidadeId}|${date}`;
+      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+
+      const sortedTurnos = [...turnoDisps].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+
+      return sortedTurnos.map((td, index) => {
+        const turnoAppCount = dayAppointments.filter((a) => {
+          const aHora = a.hora;
+          const isLast = index === sortedTurnos.length - 1;
+          const isInRange = isLast
+            ? aHora >= td.horaInicio
+            : aHora >= td.horaInicio && aHora < sortedTurnos[index + 1].horaInicio;
+          const isFirst = index === 0;
+          if (isFirst && aHora < td.horaInicio) return true;
+          return isInRange;
+        }).length;
+
+        const turnoQuotas = (window as any).__quotasExternasCached || [];
+        const quotasTurno = turnoQuotas.filter(
+          (q: any) =>
+            q.profissional_interno_id === profissionalId &&
+            q.unidade_id === unidadeId &&
+            q.ativo === true &&
+            q.turno?.toLowerCase() === (td.horaInicio < "12:00" ? "manha" : td.horaInicio < "18:00" ? "tarde" : "noite"),
+        );
+
+        const vagasReservadasExterno = quotasTurno.reduce(
+          (acc: number, curr: any) => acc + (curr.vagas_total || 0),
+          0,
+        );
+        const vagasOcupadasExterno = dayAppointments.filter((a) => {
+          if (a.origem !== "externo") return false;
+          const aHora = a.hora;
+          const isLast = index === sortedTurnos.length - 1;
+          const isInRange = isLast
+            ? aHora >= td.horaInicio
+            : aHora >= td.horaInicio && aHora < sortedTurnos[index + 1].horaInicio;
+          const isFirst = index === 0;
+          if (isFirst && aHora < td.horaInicio) return true;
+          return isInRange;
+        }).length;
+
+        const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
+        const vagasTotal = td.vagasPorDia || 0;
+        const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
+        const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
+        const periodo = td.horaInicio < "12:00" ? "Manhã" : td.horaInicio < "18:00" ? "Tarde" : "Noite";
+
+        const turnosGlobais: Array<{ id: string; nome: string }> = (window as any).__turnosGlobaisCached || [];
+        const matchedGlobal = td.salaId ? turnosGlobais.find((t) => t.id === td.salaId) : undefined;
+        const rawCustomName = td.salaId && !matchedGlobal ? String(td.salaId).trim() : "";
+        const descricao =
+          rawCustomName && rawCustomName.toLowerCase() !== periodo.toLowerCase()
+            ? rawCustomName
+            : matchedGlobal && matchedGlobal.nome && matchedGlobal.nome.toLowerCase() !== periodo.toLowerCase()
+              ? matchedGlobal.nome
+              : undefined;
+
+        return {
+          turnoId: td.salaId || td.id,
+          nome: periodo,
+          descricao,
+          periodo,
+          horaInicio: td.horaInicio,
+          horaFim: td.horaFim,
+          vagasTotal,
+          vagasOcupadas: turnoAppCount,
+          vagasReservadasExterno,
+          vagasOcupadasExterno,
+          vagasOcupadasInterno,
+          vagasLivresInternas,
+          vagasLivresTotal,
+          lotado: turnoAppCount >= vagasTotal,
+          excedido: turnoAppCount > vagasTotal,
+        };
+      });
+    },
+    [],
+  );
+
+  const addUnidade = useCallback(
+    async (u: Unidade) => {
+      const { error } = await supabase.from("unidades" as any).insert({
+        id: u.id,
+        nome: u.nome,
+        nome_exibicao: u.nomeExibicao || "",
+        endereco: u.endereco,
+        telefone: u.telefone,
+        whatsapp: u.whatsapp,
+        ativo: u.ativo,
+      } as any);
+      if (!error) {
+        invalidateCache(queryKeys.unidades.all);
+        setUnidades((prev) => [...prev, u]);
+      } else console.error("Error adding unidade:", error);
+    },
+    [invalidateCache],
+  );
+
+  const updateUnidade = useCallback(
+    async (id: string, data: Partial<Unidade>) => {
+      const dbData: any = {};
+      if (data.nome !== undefined) dbData.nome = data.nome;
+      if (data.nomeExibicao !== undefined) dbData.nome_exibicao = data.nomeExibicao;
+      if (data.endereco !== undefined) dbData.endereco = data.endereco;
+      if (data.telefone !== undefined) dbData.telefone = data.telefone;
+      if (data.whatsapp !== undefined) dbData.whatsapp = data.whatsapp;
+      if (data.ativo !== undefined) dbData.ativo = data.ativo;
+      const { error } = await supabase
+        .from("unidades" as any)
+        .update(dbData)
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.unidades.all);
+        setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
+      } else console.error("Error updating unidade:", error);
+    },
+    [invalidateCache],
+  );
+
+  const deleteUnidade = useCallback(
+    async (id: string) => {
+      const { error } = await supabase
+        .from("unidades" as any)
+        .delete()
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.unidades.all);
+        setUnidades((prev) => prev.filter((u) => u.id !== id));
+      } else console.error("Error deleting unidade:", error);
+    },
+    [invalidateCache],
+  );
+
+  const addSala = useCallback(
+    async (s: Sala) => {
+      const { error } = await supabase
+        .from("salas" as any)
+        .insert({ id: s.id, nome: s.nome, unidade_id: s.unidadeId, ativo: s.ativo } as any);
+      if (!error) {
+        invalidateCache(queryKeys.salas.all);
+        setSalas((prev) => [...prev, s]);
+      } else console.error("Error adding sala:", error);
+    },
+    [invalidateCache],
+  );
+
+  const updateSala = useCallback(
+    async (id: string, data: Partial<Sala>) => {
+      const dbData: any = {};
+      if (data.nome !== undefined) dbData.nome = data.nome;
+      if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
+      if (data.ativo !== undefined) dbData.ativo = data.ativo;
+      const { error } = await supabase
+        .from("salas" as any)
+        .update(dbData)
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.salas.all);
+        setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+      } else console.error("Error updating sala:", error);
+    },
+    [invalidateCache],
+  );
+
+  const deleteSala = useCallback(
+    async (id: string) => {
+      const { error } = await supabase
+        .from("salas" as any)
+        .delete()
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.salas.all);
+        setSalas((prev) => prev.filter((s) => s.id !== id));
+      } else console.error("Error deleting sala:", error);
+    },
+    [invalidateCache],
+  );
+
+  const addFuncionario = useCallback(
+    async (u: User) => {
+      const { error } = await supabase.from("funcionarios" as any).insert({
+        id: u.id,
+        auth_user_id: u.authUserId,
+        nome: u.nome,
+        usuario: u.usuario,
+        email: u.email,
+        cpf: u.cpf,
+        profissao: u.profissao,
+        tipo_conselho: u.tipoConselho || "",
+        numero_conselho: u.numeroConselho || "",
+        uf_conselho: u.ufConselho || "",
+        role: u.role,
+        unidade_id: u.unidadeId,
+        sala_id: u.salaId || "",
+        setor: u.setor || "",
+        cargo: u.cargo || "",
+        criado_por: u.criadoPor || "",
+        tempo_atendimento: u.tempoAtendimento,
+        pode_agendar_retorno: u.podeAgendarRetorno || false,
+        coren: u.coren || "",
+        ativo: u.ativo,
+      } as any);
+      if (!error) {
+        invalidateCache(queryKeys.funcionarios.all);
+        setFuncionarios((prev) => [...prev, u]);
+      } else console.error("Error adding funcionario:", error);
+    },
+    [invalidateCache],
+  );
+
+  const updateFuncionario = useCallback(
+    async (id: string, data: Partial<User>) => {
+      const dbData: any = {};
+      if (data.nome !== undefined) dbData.nome = data.nome;
+      if (data.usuario !== undefined) dbData.usuario = data.usuario;
+      if (data.email !== undefined) dbData.email = data.email;
+      if (data.cpf !== undefined) dbData.cpf = data.cpf;
+      if (data.profissao !== undefined) dbData.profissao = data.profissao;
+      if (data.tipoConselho !== undefined) dbData.tipo_conselho = data.tipoConselho;
+      if (data.numeroConselho !== undefined) dbData.numero_conselho = data.numeroConselho;
+      if (data.ufConselho !== undefined) dbData.uf_conselho = data.ufConselho;
+      if (data.role !== undefined) dbData.role = data.role;
+      if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
+      if (data.salaId !== undefined) dbData.sala_id = data.salaId;
+      if (data.setor !== undefined) dbData.setor = data.setor;
+      if (data.cargo !== undefined) dbData.cargo = data.cargo;
+      if (data.tempoAtendimento !== undefined) dbData.tempo_atendimento = data.tempoAtendimento;
+      if (data.ativo !== undefined) dbData.ativo = data.ativo;
+      if (data.podeAgendarRetorno !== undefined) dbData.pode_agendar_retorno = data.podeAgendarRetorno;
+      if (data.coren !== undefined) dbData.coren = data.coren;
+      const { error } = await supabase
+        .from("funcionarios" as any)
+        .update(dbData)
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.funcionarios.all);
+        setFuncionarios((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
+      } else console.error("Error updating funcionario:", error);
+    },
+    [invalidateCache],
+  );
+
+  const deleteFuncionario = useCallback(
+    async (id: string) => {
+      const { error } = await supabase
+        .from("funcionarios" as any)
+        .delete()
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.funcionarios.all);
+        setFuncionarios((prev) => prev.filter((f) => f.id !== id));
+      } else console.error("Error deleting funcionario:", error);
+    },
+    [invalidateCache],
+  );
+
+  const addDisponibilidade = useCallback(
+    async (d: Disponibilidade) => {
+      const { error } = await supabase.from("disponibilidades" as any).insert({
+        id: d.id,
+        profissional_id: d.profissionalId,
+        unidade_id: d.unidadeId,
+        sala_id: d.salaId,
+        data_inicio: d.dataInicio,
+        data_fim: d.dataFim,
+        hora_inicio: d.horaInicio,
+        hora_fim: d.horaFim,
+        vagas_por_hora: d.vagasPorHora,
+        vagas_por_dia: d.vagasPorDia,
+        dias_semana: d.diasSemana,
+        duracao_consulta: d.duracaoConsulta,
+      } as any);
+      if (!error) {
+        invalidateCache(queryKeys.disponibilidades.all);
+        setDisponibilidades((prev) => [...prev, d]);
+      } else console.error("Error adding disponibilidade:", error);
+    },
+    [invalidateCache],
+  );
+
+  const updateDisponibilidade = useCallback(
+    async (id: string, data: Partial<Disponibilidade>) => {
+      const dbData: any = {};
+      if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
+      if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
+      if (data.salaId !== undefined) dbData.sala_id = data.salaId;
+      if (data.dataInicio !== undefined) dbData.data_inicio = data.dataInicio;
+      if (data.dataFim !== undefined) dbData.data_fim = data.dataFim;
+      if (data.horaInicio !== undefined) dbData.hora_inicio = data.horaInicio;
+      if (data.horaFim !== undefined) dbData.hora_fim = data.horaFim;
+      if (data.vagasPorHora !== undefined) dbData.vagas_por_hora = data.vagasPorHora;
+      if (data.vagasPorDia !== undefined) dbData.vagas_por_dia = data.vagasPorDia;
+      if (data.diasSemana !== undefined) dbData.dias_semana = data.diasSemana;
+      if (data.duracaoConsulta !== undefined) dbData.duracao_consulta = data.duracaoConsulta;
+      const { error } = await supabase
+        .from("disponibilidades" as any)
+        .update(dbData)
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.disponibilidades.all);
+        setDisponibilidades((prev) => prev.map((disp) => (disp.id === id ? { ...disp, ...data } : disp)));
+      } else console.error("Error updating disponibilidade:", error);
+    },
+    [invalidateCache],
+  );
+
+  const deleteDisponibilidade = useCallback(
+    async (id: string) => {
+      const { error } = await supabase
+        .from("disponibilidades" as any)
+        .delete()
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.disponibilidades.all);
+        setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
+      } else console.error("Error deleting disponibilidade:", error);
+    },
+    [invalidateCache],
+  );
+
+  const addBloqueio = useCallback(
+    async (b: Omit<BloqueioAgenda, "id">) => {
+      const { data: inserted, error } = await supabase
+        .from("bloqueios" as any)
+        .insert({
+          titulo: b.titulo,
+          tipo: b.tipo,
+          data_inicio: b.dataInicio,
+          data_fim: b.dataFim,
+          dia_inteiro: b.diaInteiro,
+          hora_inicio: b.horaInicio || "",
+          hora_fim: b.horaFim || "",
+          unidade_id: b.unidadeId || "",
+          profissional_id: b.profissionalId || "",
+          criado_por: b.criadoPor,
+        } as any)
+        .select()
+        .single();
+      if (!error && inserted) {
+        const id = (inserted as any).id;
+        invalidateCache(queryKeys.bloqueios.all);
+        setBloqueios((prev) => [{ ...b, id }, ...prev]);
+      } else {
+        console.error("Error adding bloqueio:", error);
+        throw error;
+      }
+    },
+    [invalidateCache],
+  );
+
+  const updateBloqueio = useCallback(
+    async (id: string, data: Partial<BloqueioAgenda>) => {
+      const dbData: any = {};
+      if (data.titulo !== undefined) dbData.titulo = data.titulo;
+      if (data.tipo !== undefined) dbData.tipo = data.tipo;
+      if (data.dataInicio !== undefined) dbData.data_inicio = data.dataInicio;
+      if (data.dataFim !== undefined) dbData.data_fim = data.dataFim;
+      if (data.diaInteiro !== undefined) dbData.dia_inteiro = data.diaInteiro;
+      if (data.horaInicio !== undefined) dbData.hora_inicio = data.horaInicio;
+      if (data.horaFim !== undefined) dbData.hora_fim = data.horaFim;
+      if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
+      if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
+      const { error } = await supabase
+        .from("bloqueios" as any)
+        .update(dbData)
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.bloqueios.all);
+        setBloqueios((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
+      } else console.error("Error updating bloqueio:", error);
+    },
+    [invalidateCache],
+  );
+
+  const deleteBloqueio = useCallback(
+    async (id: string) => {
+      const { error } = await supabase
+        .from("bloqueios" as any)
+        .delete()
+        .eq("id", id);
+      if (!error) {
+        invalidateCache(queryKeys.bloqueios.all);
+        setBloqueios((prev) => prev.filter((b) => b.id !== id));
+      } else console.error("Error deleting bloqueio:", error);
+    },
+    [invalidateCache],
+  );
+
+  const updateConfiguracoes = useCallback(
+    async (data: Partial<Configuracoes>) => {
+      const newConfigs = safeConfigMerge({ ...configuracoesRef.current, ...data });
+      const { error } = await supabase
+        .from("system_config" as any)
+        .update({ configuracoes: newConfigs as any })
+        .eq("id", "default");
+      if (!error) {
+        setConfiguracoes(newConfigs);
+        invalidateCache(queryKeys.configuracoes.all);
+      } else {
+        await supabase.from("system_config" as any).insert({
+          id: "default",
+          configuracoes: newConfigs as any,
+        } as any);
+        setConfiguracoes(newConfigs);
+      }
+    },
+    [invalidateCache],
+  );
+
+  const getAvailableSlots = useCallback(
+    (profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
+      const todayStr = todayLocalStr();
+      if (date < todayStr) return [];
+
+      const dayOfWeek = isoDayOfWeek(date);
+      const disps = disponibilidadesRef.current;
+      const allDisps = disps.filter(
+        (d) =>
+          d.profissionalId === profissionalId &&
+          d.unidadeId === unidadeId &&
+          d.diasSemana.includes(dayOfWeek) &&
+          date >= d.dataInicio &&
+          date <= d.dataFim,
+      );
+      if (allDisps.length === 0) return [];
+
+      const key = `${profissionalId}|${unidadeId}|${date}`;
+      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+
+      const turnoDisps = allDisps.filter((d) => d.vagasPorHora === 0);
+      const horaDisps = allDisps.filter((d) => d.vagasPorHora > 0);
+
+      const slots: string[] = [];
+      const ehHoje = date === todayStr;
+      const limiteMinutos = ehHoje ? nowMinutesInBrazil() + 30 : -1;
+
+      for (const td of turnoDisps) {
+        const turnoStart = td.horaInicio;
+        const turnoEnd = td.horaFim;
+        const turnoAppCount = dayAppointments.filter(
+          (a) => a.hora >= turnoStart && a.hora < turnoEnd,
+        ).length;
+        if (turnoAppCount >= td.vagasPorDia) continue;
+
+        const sh = parseInt(turnoStart.split(":")[0]);
+        const sm = parseInt(turnoStart.split(":")[1] || "0");
+        if (ehHoje && sh * 60 + sm <= limiteMinutos) continue;
+
+        const blocked = isSlotBlocked(profissionalId, unidadeId, date, turnoStart);
+        if (!blocked && !slots.includes(turnoStart)) {
+          slots.push(turnoStart);
+        }
+      }
+
+      if (horaDisps.length > 0) {
+        const disp = horaDisps[0];
+        if (dayAppointments.length < disp.vagasPorDia) {
+          const hourCounts = new Map<string, number>();
+          const slotCounts = new Map<string, number>();
+          for (const a of dayAppointments) {
+            const hKey = a.hora.substring(0, 3);
+            hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
+            slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
+          }
+
+          const funcs = funcionariosRef.current;
+          const prof = funcs.find((f) => f.id === profissionalId);
+          const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
+
+          const startHour = parseInt(disp.horaInicio.split(":")[0]);
+          const startMin = parseInt(disp.horaInicio.split(":")[1] || "0");
+          const endHour = parseInt(disp.horaFim.split(":")[0]);
+          const endMin = parseInt(disp.horaFim.split(":")[1] || "0");
+
+          let h = startHour;
+          let m = startMin;
+          while (h < endHour || (h === endHour && m < endMin)) {
+            const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+            if (ehHoje && h * 60 + m <= limiteMinutos) {
+              m += intervalMinutes;
+              while (m >= 60) {
+                m -= 60;
+                h++;
+              }
+              continue;
+            }
+
+            const hourStr = `${String(h).padStart(2, "0")}:`;
+            const hourCount = hourCounts.get(hourStr) || 0;
+            const slotCount = slotCounts.get(timeStr) || 0;
+            const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
+            if (!blocked && hourCount < disp.vagasPorHora) {
+              if (isPublic) {
+                if (slotCount === 0) slots.push(timeStr);
+              } else if (slotCount < disp.vagasPorHora) {
+                slots.push(timeStr);
+              }
+            }
+
+            m += intervalMinutes;
+            while (m >= 60) {
+              m -= 60;
+              h++;
+            }
+          }
+        }
+      }
+
+      return slots.sort();
+    },
+    [isSlotBlocked],
+  );
+
+  const getAvailableDatesInternal = useCallback(
+    (profissionalId: string, unidadeId: string): string[] => {
+      const disps = disponibilidadesRef.current;
+      const filteredDisps = disps.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
+      if (filteredDisps.length === 0) return [];
+
+      const dates: string[] = [];
+      const todayStr = todayLocalStr();
+      const processedDates = new Set<string>();
+
+      for (const disp of filteredDisps) {
+        let currentDate = disp.dataInicio > todayStr ? disp.dataInicio : todayStr;
+        while (currentDate <= disp.dataFim) {
+          const dayOfWeek = isoDayOfWeek(currentDate);
+          if (disp.diasSemana.includes(dayOfWeek) && !processedDates.has(currentDate)) {
+            const key = `${profissionalId}|${unidadeId}|${currentDate}`;
+            const dayCount = appointmentCountsByKeyRef.current.get(key) || 0;
+            const dateDisps = filteredDisps.filter(
+              (d) => d.diasSemana.includes(dayOfWeek) && currentDate >= d.dataInicio && currentDate <= d.dataFim,
+            );
+            const totalVagas = dateDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
+            if (dayCount < totalVagas && !isSlotBlocked(profissionalId, unidadeId, currentDate)) {
+              dates.push(currentDate);
+            }
+            processedDates.add(currentDate);
+          }
+          currentDate = addDaysToDateStr(currentDate, 1);
+        }
+      }
+
+      return dates.sort();
+    },
+    [isSlotBlocked],
+  );
+
+  const getAvailableDates = useCallback(
+    (profissionalId: string, unidadeId: string, isPublic = false): string[] => {
+      return getAvailableDatesInternal(profissionalId, unidadeId).filter(
+        (d) => getAvailableSlots(profissionalId, unidadeId, d, isPublic).length > 0,
+      );
+    },
+    [getAvailableDatesInternal, getAvailableSlots],
+  );
+
+  const getDayInfoMap = useCallback(
+    (profissionalId: string, unidadeId: string, isPublic = false): Record<string, any> => {
+      const map: Record<string, any> = {};
+      const disps = disponibilidadesRef.current;
+      const filteredDisps = disps.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
+      if (filteredDisps.length === 0) return map;
+
+      let currentDate = todayLocalStr();
+      for (let i = 0; i < 90; i++) {
+        const dayOfWeek = isoDayOfWeek(currentDate);
+        const hasDisp = filteredDisps.some(
+          (d) => d.diasSemana.includes(dayOfWeek) && currentDate >= d.dataInicio && currentDate <= d.dataFim,
+        );
+        if (hasDisp) {
+          const blockInfo = getBlockingInfo(profissionalId, unidadeId, currentDate);
+          if (blockInfo.blocked) {
+            const isHoliday = blockInfo.type === "feriado";
+            map[currentDate] = {
+              dateStr: currentDate,
+              status: isHoliday ? "holiday" : "blocked",
+              label: blockInfo.label || (isHoliday ? "Feriado" : "Bloqueado"),
+            };
+          } else {
+            const slots = getAvailableSlots(profissionalId, unidadeId, currentDate, isPublic);
+            if (slots.length === 0) {
+              const key = `${profissionalId}|${unidadeId}|${currentDate}`;
+              const dayCount = appointmentCountsByKeyRef.current.get(key) || 0;
+              if (dayCount > 0) {
+                map[currentDate] = { dateStr: currentDate, status: "full", label: "Lotado — sem vagas restantes" };
+              }
+            }
+          }
+        }
+        currentDate = addDaysToDateStr(currentDate, 1);
+      }
+      return map;
+    },
+    [getAvailableSlots, getBlockingInfo],
+  );
+
+  const getNextAvailableSlots = useCallback(
+    (profissionalId: string, unidadeId: string, fromDate: string, limit = 5, isPublic = false): string[] => {
+      const suggestions: string[] = [];
+      const dates = getAvailableDates(profissionalId, unidadeId, isPublic).filter((d) => d >= fromDate);
+      for (const d of dates) {
+        const slots = getAvailableSlots(profissionalId, unidadeId, d, isPublic);
+        for (const s of slots) {
+          suggestions.push(`${d} ${s}`);
+          if (suggestions.length >= limit) return suggestions;
+        }
+      }
+      return suggestions;
+    },
+    [getAvailableDates, getAvailableSlots],
+  );
 
   const value = useMemo<OperacionalContextType>(
     () => ({
@@ -210,6 +1262,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
       refreshFuncionarios,
       refreshDisponibilidades,
       refreshBloqueios,
+      refreshConfiguracoes,
+      resolveScopedUnidadeId,
       logAction,
     }),
     [
@@ -245,6 +1299,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
       refreshFuncionarios,
       refreshDisponibilidades,
       refreshBloqueios,
+      refreshConfiguracoes,
+      resolveScopedUnidadeId,
       logAction,
     ],
   );

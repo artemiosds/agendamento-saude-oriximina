@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useData } from "@/contexts/DataContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import {
   useRealtimeSync,
   type RealtimeSyncPayload,
@@ -117,7 +117,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
 }) => {
   const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
-  const { getTurnoInfo, logAction } = useData();
+  const { getTurnoInfo, logAction } = useOperacional();
   const isGlobalAdmin = authUser?.usuario === "admin.sms";
   const userUnidadeId = authUser?.unidadeId || "";
 
