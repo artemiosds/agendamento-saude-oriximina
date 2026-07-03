@@ -167,7 +167,6 @@ const sessionStatusLabels: Record<string, string> = {
 };
 
 const Tratamentos: React.FC = () => {
-  const {
   const { pacientes } = usePacientes();
   const { funcionarios, unidades, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates } = useOperacional();
   const { fila, addToFila } = useFila();
