@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSync, type RealtimeSyncPayload } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
+import { getFilaSnapshot } from "@/contexts/_filaBridge";
 import { auditService } from "@/services/auditService";
 
 import { toast } from "sonner";
@@ -103,7 +104,7 @@ const defaultConfiguracoes: Configuracoes = {
 interface DataContextType {
   agendamentos: Agendamento[];
   
-  fila: FilaEspera[];
+  // fila state migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   atendimentos: Atendimento[];
   unidades: Unidade[];
   salas: Sala[];
@@ -116,9 +117,7 @@ interface DataContextType {
   updateAgendamento: (id: string, data: Partial<Agendamento>) => Promise<void>;
   cancelAgendamento: (id: string) => Promise<FilaEspera[]>;
   deleteAgendamento: (id: string) => Promise<void>;
-  addToFila: (f: FilaEspera) => Promise<void>;
-  updateFila: (id: string, data: Partial<FilaEspera>) => Promise<void>;
-  removeFromFila: (id: string) => Promise<void>;
+  // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
   addAtendimento: (a: Atendimento) => Promise<void>;
   updateAtendimento: (id: string, data: Partial<Atendimento>) => void;
   addUnidade: (u: Unidade) => void;
@@ -153,8 +152,7 @@ interface DataContextType {
   ) => { blocked: boolean; type?: string; label?: string };
   getDayInfoMap: (profissionalId: string, unidadeId: string, isPublic?: boolean) => Record<string, any>;
   updateConfiguracoes: (data: Partial<Configuracoes>) => void;
-  checkFilaForSlot: (profissionalId: string, unidadeId: string, data: string, hora: string) => FilaEspera[];
-  encaixarDaFila: (filaId: string, agendamento: Omit<Agendamento, "id" | "criadoEm">) => void;
+  // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
   refreshAgendamentos: () => Promise<void>;
@@ -165,7 +163,7 @@ interface DataContextType {
   ensureAgendamentosForDate: (date: string) => Promise<void>;
   ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
   
-  refreshFila: () => Promise<void>;
+  // refreshFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   refreshBloqueios: () => Promise<void>;
   refreshConfiguracoes: () => Promise<void>;
   /** Fase 5 (transitório): helper compartilhado com PacientesSliceProvider. */
@@ -265,7 +263,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const userUnidadeId = authUser?.unidadeId || '';
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   // pacientes state migrado para PacientesSliceProvider (Fase 5, Passo 3.1).
-  const [fila, setFila] = useState<FilaEspera[]>([]);
+  // fila state migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
@@ -281,8 +279,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   disponibilidadesRef.current = disponibilidades;
   const bloqueiosRef = useRef(bloqueios);
   bloqueiosRef.current = bloqueios;
-  const filaRef = useRef(fila);
-  filaRef.current = fila;
+  // filaRef removido — snapshot vive em `_filaBridge.ts` alimentado pelo FilaSliceProvider.
   const funcionariosRef = useRef(funcionarios);
   funcionariosRef.current = funcionarios;
   const configuracoesRef = useRef(configuracoes);
@@ -689,59 +686,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await ensureAgendamentosForRange(date, date);
   }, [ensureAgendamentosForRange]);
 
-  const loadFila = useCallback(async () => {
-    try {
-      const TERMINAL_STATUSES = ['atendido', 'cancelado', 'falta', 'concluido', 'excluido_da_fila_triagem'];
-      const columns = "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
-
-      // Paginate to avoid the 1000-row default limit
-      let allData: any[] = [];
-      let from = 0;
-      const PAGE = 1000;
-      while (true) {
-        let query = supabase
-          .from("fila_espera" as any)
-          .select(columns)
-          .not('status', 'in', `(${TERMINAL_STATUSES.join(',')})`)
-          .order("criado_em", { ascending: true })
-          .range(from, from + PAGE - 1);
-        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
-        const { data, error } = await query;
-        if (error || !data || data.length === 0) break;
-        allData = allData.concat(data);
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
-
-      setFila(
-        allData.map((f: any) => ({
-          id: f.id,
-          pacienteId: f.paciente_id,
-          pacienteNome: f.paciente_nome,
-          unidadeId: f.unidade_id,
-          profissionalId: f.profissional_id || "",
-          setor: f.setor || "",
-          prioridade: (f.prioridade_perfil && f.prioridade_perfil !== "normal"
-            ? f.prioridade_perfil
-            : f.prioridade) as FilaEspera["prioridade"],
-          status: f.status as FilaEspera["status"],
-          posicao: f.posicao,
-          horaChegada: f.hora_chegada,
-          horaChamada: f.hora_chamada || "",
-          observacoes: f.observacoes || "",
-          descricaoClinica: f.descricao_clinica || "",
-          cid: f.cid || "",
-          criadoPor: f.criado_por || "",
-          criadoEm: f.criado_em || "",
-          dataSolicitacaoOriginal: f.data_solicitacao_original || "",
-          origemCadastro: f.origem_cadastro || "normal",
-          especialidadeDestino: f.especialidade_destino || "",
-        })),
-      );
-    } catch (err) {
-      console.error("Error loading fila:", err);
-    }
-  }, [isGlobalAdmin, userUnidadeId]);
+  // loadFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
 
   const loadBloqueios = useCallback(async () => {
     try {
@@ -786,7 +731,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     void Promise.all([
       loadDisponibilidades(),
       loadAgendamentos(),
-      loadFila(),
+      // loadFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
       loadBloqueios(),
     ]).catch((err) => console.error("Background data load failed:", err));
   }, [
@@ -796,7 +741,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadFuncionarios,
     loadDisponibilidades,
     loadAgendamentos,
-    loadFila,
+    // loadFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
     loadBloqueios,
   ]);
 
@@ -1113,7 +1058,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, status: "cancelado" as const } : a)));
       invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
-      return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
+      // Fase 5: filtragem da fila reproduzida inline (checkFilaForSlot migrou
+      // para FilaSliceProvider). Lemos o snapshot module-level exposto pelo bridge.
+      const filaSnapshot = getFilaSnapshot();
+      return filaSnapshot
+        .filter(
+          (f) =>
+            f.status === "aguardando" &&
+            f.unidadeId === ag.unidadeId &&
+            (!f.profissionalId || f.profissionalId === ag.profissionalId),
+        )
+        .sort((a, b) => {
+          const aRank = priorityRank[a.prioridade] ?? 99;
+          const bRank = priorityRank[b.prioridade] ?? 99;
+          if (aRank !== bRank) return aRank - bRank;
+          return a.horaChegada.localeCompare(b.horaChegada);
+        });
     },
     [invalidateCache],
   );
@@ -1141,93 +1101,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // addPaciente/updatePaciente migrados para PacientesSliceProvider (Fase 5, Passo 3.1).
 
 
-  const addToFila = useCallback(
-    async (f: FilaEspera) => {
-      const { error } = await supabase.from("fila_espera" as any).insert({
-        id: f.id,
-        paciente_id: f.pacienteId,
-        paciente_nome: f.pacienteNome,
-        unidade_id: f.unidadeId,
-        profissional_id: f.profissionalId || "",
-        setor: f.setor,
-        prioridade: ["normal", "alta", "urgente"].includes(f.prioridade) ? f.prioridade : "normal",
-        prioridade_perfil: f.prioridade,
-        status: f.status,
-        posicao: f.posicao,
-        hora_chegada: f.horaChegada,
-        observacoes: f.observacoes || "",
-        descricao_clinica: f.descricaoClinica || "",
-        cid: f.cid || "",
-        criado_por: f.criadoPor || "sistema",
-        data_solicitacao_original: f.dataSolicitacaoOriginal || "",
-        origem_cadastro: f.origemCadastro || "normal",
-        especialidade_destino: f.especialidadeDestino || "",
-      } as any);
-      if (!error) {
-        setFila((prev) => [...prev, f]);
-        await logAction({
-          acao: "criar",
-          entidade: "fila_espera",
-          entidadeId: f.id,
-          unidadeId: f.unidadeId,
-          detalhes: { prioridade: f.prioridade, origemCadastro: f.origemCadastro },
-        });
-        invalidateCache(queryKeys.fila.all);
-      } else console.error("Error adding to fila:", error);
-    },
-    [logAction, invalidateCache],
-  );
-
-  const updateFila = useCallback(
-    async (id: string, data: Partial<FilaEspera>) => {
-      const dbData: any = {};
-      if (data.status !== undefined) dbData.status = data.status;
-      if (data.prioridade !== undefined) {
-        dbData.prioridade = ["normal", "alta", "urgente"].includes(data.prioridade) ? data.prioridade : "normal";
-        dbData.prioridade_perfil = data.prioridade;
-      }
-      if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
-      if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
-      if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
-      if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
-      if (data.cid !== undefined) dbData.cid = data.cid;
-      if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada;
-      if (data.horaChamada !== undefined) dbData.hora_chamada = data.horaChamada;
-      if (data.pacienteNome !== undefined) dbData.paciente_nome = data.pacienteNome;
-      if (data.pacienteId !== undefined) dbData.paciente_id = data.pacienteId;
-      if (data.setor !== undefined) dbData.setor = data.setor;
-      const { error } = await supabase
-        .from("fila_espera" as any)
-        .update(dbData)
-        .eq("id", id);
-      if (!error) {
-        setFila((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
-        await logAction({
-          acao: "editar",
-          entidade: "fila_espera",
-          entidadeId: id,
-          detalhes: data as Record<string, unknown>,
-        });
-        invalidateCache(queryKeys.fila.all);
-      } else console.error("Error updating fila:", error);
-    },
-    [logAction, invalidateCache],
-  );
-
-  const removeFromFila = useCallback(
-    async (id: string) => {
-      const { error } = await supabase
-        .from("fila_espera" as any)
-        .delete()
-        .eq("id", id);
-      if (!error) {
-        setFila((prev) => prev.filter((f) => f.id !== id));
-        await logAction({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
-        invalidateCache(queryKeys.fila.all);
-      } else console.error("Error removing from fila:", error);
-    },
-    [logAction, invalidateCache],
-  );
+  // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
 
   const addAtendimento = useCallback(
     async (a: Atendimento) => {
@@ -1593,33 +1467,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [invalidateCache],
   );
 
-  const checkFilaForSlot = useCallback(
-    (profissionalId: string, unidadeId: string, _data: string, _hora: string): FilaEspera[] => {
-      return filaRef.current
-        .filter(
-          (f) =>
-            f.status === "aguardando" &&
-            f.unidadeId === unidadeId &&
-            (!f.profissionalId || f.profissionalId === profissionalId),
-        )
-        .sort((a, b) => {
-          const aRank = priorityRank[a.prioridade] ?? 99;
-          const bRank = priorityRank[b.prioridade] ?? 99;
-          if (aRank !== bRank) return aRank - bRank;
-          return a.horaChegada.localeCompare(b.horaChegada);
-        });
-    },
-    [],
-  );
-
-  const encaixarDaFila = useCallback(
-    async (filaId: string, agData: Omit<Agendamento, "id" | "criadoEm">) => {
-      const newAg: Agendamento = { ...agData, id: `ag${Date.now()}`, criadoEm: new Date().toISOString() };
-      await addAgendamento(newAg);
-      await updateFila(filaId, { status: "encaixado" as const });
-    },
-    [addAgendamento, updateFila],
-  );
+  // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
 
   const appointmentCountsByKey = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1866,9 +1714,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshAgendamentos = useCallback(async () => {
     await loadAgendamentos();
   }, [loadAgendamentos]);
-  const refreshFila = useCallback(async () => {
-    await loadFila();
-  }, [loadFila]);
+  // refreshFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   const refreshBloqueios = useCallback(async () => {
     await loadBloqueios();
   }, [loadBloqueios]);
@@ -1882,9 +1728,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateAgendamento,
     cancelAgendamento,
     deleteAgendamento,
-    addToFila,
-    updateFila,
-    removeFromFila,
+    // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider.
     addAtendimento,
     updateAtendimento,
     addUnidade,
@@ -1909,16 +1753,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getBlockingInfo,
     getDayInfoMap,
     updateConfiguracoes,
-    checkFilaForSlot,
-    encaixarDaFila,
+    // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider.
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshAgendamentos,
     applyAgendamentoRealtimeEvent,
     ensureAgendamentosForDate,
     ensureAgendamentosForRange,
-    
-    refreshFila,
+
+    // refreshFila migrado para FilaSliceProvider.
     refreshBloqueios,
     refreshConfiguracoes,
     resolveScopedUnidadeId,
@@ -1929,9 +1772,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateAgendamento,
     cancelAgendamento,
     deleteAgendamento,
-    addToFila,
-    updateFila,
-    removeFromFila,
+    // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider.
     addAtendimento,
     updateAtendimento,
     addUnidade,
@@ -1956,15 +1797,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getBlockingInfo,
     getDayInfoMap,
     updateConfiguracoes,
-    checkFilaForSlot,
-    encaixarDaFila,
+    // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider.
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshAgendamentos,
     applyAgendamentoRealtimeEvent,
     ensureAgendamentosForDate,
     ensureAgendamentosForRange,
-    refreshFila,
+    // refreshFila migrado para FilaSliceProvider.
     refreshBloqueios,
     refreshConfiguracoes,
     resolveScopedUnidadeId,
@@ -1974,7 +1814,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const contextValue = useMemo(
     (): DataContextType => ({
       agendamentos,
-      fila,
+      // fila migrado para FilaSliceProvider.
       atendimentos,
       unidades,
       salas,
@@ -1987,7 +1827,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }),
     [
       agendamentos,
-      fila,
+      // fila migrado para FilaSliceProvider.
       atendimentos,
       unidades,
       salas,
