@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
-import { useData } from '@/contexts/DataContext';
+import { useAgendamentos } from '@/contexts/AgendamentosContext';
+import { useFila } from '@/contexts/FilaContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, Users, Clock, CheckCircle, TrendingUp, XCircle, AlertTriangle, BarChart3 } from 'lucide-react';
@@ -39,7 +41,9 @@ interface AtendimentoDB {
 }
 
 const Dashboard: React.FC = () => {
-  const { agendamentos, fila, funcionarios, unidades, disponibilidades, salas } = useData();
+  const { agendamentos } = useAgendamentos();
+  const { fila } = useFila();
+  const { funcionarios, unidades, disponibilidades, salas } = useOperacional();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const isGlobalAdmin = user?.usuario === 'admin.sms';
