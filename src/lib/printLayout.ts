@@ -164,9 +164,13 @@ function resolveLogoUrl(configUrl: string, fallback: string): string {
 export function buildInstitutionalCSS(config?: DocumentConfig): string {
   const t = config?.tipografia || DEFAULT_TYPOGRAPHY;
   const m = config?.margens || DEFAULT_MARGINS;
-  const footerSpace = config?.mostrarRodape === false ? 0 : 18;
-  const footerGap = footerSpace > 0 ? 6 : 0;
-  const printBottomMargin = m.inferior + footerSpace + footerGap;
+  const footerSpace = config?.mostrarRodape === false ? 0 : 16;
+  const footerGap = footerSpace > 0 ? 5 : 0;
+  const footerBottomOffset = footerSpace > 0 ? 2 : m.inferior;
+  const screenBottomPadding = footerSpace > 0 ? footerBottomOffset : m.inferior;
+  const printBottomMargin = footerSpace > 0
+    ? Math.max(m.inferior, footerSpace + footerGap + footerBottomOffset)
+    : m.inferior;
   const fontFamily =
     t.fonte === 'Times New Roman' ? `'Times New Roman', Times, serif`
     : t.fonte === 'Calibri' ? `Calibri, 'Segoe UI', Arial, sans-serif`
@@ -178,13 +182,14 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   :root { 
     --doc-footer-space: ${footerSpace}mm; 
     --doc-footer-gap: ${footerGap}mm;
-    --doc-page-height: calc(297mm - ${m.superior + m.inferior}mm); 
+    --doc-footer-bottom-offset: ${footerBottomOffset}mm;
+    --doc-screen-bottom-padding: ${screenBottomPadding}mm;
+    --doc-page-height: calc(297mm - ${m.superior}mm - var(--doc-screen-bottom-padding)); 
     --doc-print-bottom-margin: ${printBottomMargin}mm;
   }
   @page {
     size: A4;
     margin: ${m.superior}mm ${m.direita}mm ${printBottomMargin}mm ${m.esquerda}mm;
-    @bottom-center { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #666; }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   .doc-print-document {
@@ -388,6 +393,9 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     font-size: 7.5pt;
     color: #64748b;
     background: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
     break-inside: avoid;
     page-break-inside: avoid;
     overflow: hidden;
@@ -404,7 +412,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   @media screen {
     .doc-print-document {
       min-height: 297mm;
-      padding: ${m.superior}mm ${m.direita}mm ${m.inferior}mm ${m.esquerda}mm;
+      padding: ${m.superior}mm ${m.direita}mm var(--doc-screen-bottom-padding) ${m.esquerda}mm;
     }
     .doc-print-document .doc-page {
       min-height: var(--doc-page-height);
@@ -412,7 +420,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   }
 
   @media print {
-    html, body { background: #fff; margin: 0; padding: 0; width: 210mm; }
+    html, body { background: #fff; margin: 0; padding: 0; width: auto; min-width: 0; }
     .doc-print-document { background: #fff; margin: 0; min-height: auto; padding: 0 !important; display: block; }
     .doc-page { min-height: auto; display: block; position: static; }
     .no-print, nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
@@ -422,9 +430,10 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
       position: fixed; 
       left: ${m.esquerda}mm; 
       right: ${m.direita}mm; 
-      bottom: ${Math.max(4, Math.min(10, Math.round(m.inferior / 2)))}mm; 
+      bottom: var(--doc-footer-bottom-offset); 
       width: auto;
-      min-height: var(--doc-footer-space); 
+      height: var(--doc-footer-space);
+      min-height: 0; 
       max-height: var(--doc-footer-space);
       margin: 0;
       padding-top: 4px;
