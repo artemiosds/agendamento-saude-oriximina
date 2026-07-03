@@ -940,47 +940,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     poll: loadAgendamentos,
   });
 
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "fila_espera",
-    onEvent: (payload) => {
-      if (payload.eventType === "DELETE") {
-        const id = String((payload.old as any)?.id || "");
-        if (id) setFila((prev) => removeById(prev, id));
-        return;
-      }
-      const row = payload.new as any;
-      if (!row?.id) return;
-      // Unit isolation
-      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
-      setFila((prev) =>
-        upsertById(prev, {
-          id: row.id,
-          pacienteId: row.paciente_id,
-          pacienteNome: row.paciente_nome,
-          unidadeId: row.unidade_id,
-          profissionalId: row.profissional_id || "",
-          setor: row.setor || "",
-          prioridade: (row.prioridade_perfil && row.prioridade_perfil !== "normal"
-            ? row.prioridade_perfil
-            : row.prioridade) as FilaEspera["prioridade"],
-          status: row.status as FilaEspera["status"],
-          posicao: row.posicao,
-          horaChegada: row.hora_chegada,
-          horaChamada: row.hora_chamada || "",
-          observacoes: row.observacoes || "",
-          descricaoClinica: row.descricao_clinica || "",
-          cid: row.cid || "",
-          criadoPor: row.criado_por || "",
-          criadoEm: row.criado_em || "",
-          dataSolicitacaoOriginal: row.data_solicitacao_original || "",
-          origemCadastro: row.origem_cadastro || "normal",
-          especialidadeDestino: row.especialidade_destino || "",
-        }),
-      );
-    },
-    poll: loadFila,
-  });
+  // Canal Realtime de `fila_espera` migrado para FilaSliceProvider (Fase 5, Passo 2).
 
   // Canal Realtime de `pacientes` migrado para PacientesSliceProvider (Fase 5, Passo 2).
 

@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import type { Agendamento, FilaEspera } from "@/types";
 
 /**
@@ -30,6 +32,18 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     checkFilaForSlot,
     encaixarDaFila,
   } = useData();
+  const { user: authUser } = useAuth();
+
+  // Realtime ownership migrado do DataProvider (rt:public:fila_espera:all).
+  useRealtimeSync({
+    enabled: !!authUser,
+    table: "fila_espera",
+    onEvent: () => {
+      refreshFila();
+    },
+    poll: refreshFila,
+  });
+
 
   const value = useMemo<FilaContextType>(
     () => ({
