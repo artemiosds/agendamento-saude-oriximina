@@ -21,6 +21,7 @@ interface Props {
   pacienteTelefone?: string;
   profissionalEmail?: string;
   profissionalNome?: string;
+  arquivoPreCarregado?: { base64: string; filename: string };
 }
 
 async function fileToBase64(file: File): Promise<string> {
