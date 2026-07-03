@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
+import { useAgendamentos } from '@/contexts/AgendamentosContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -36,7 +37,8 @@ interface EvalExisting {
 const AvaliacaoMultiprofissional: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { logAction, refreshAgendamentos } = useData();
+  const { logAction } = useOperacional();
+  const { refreshAgendamentos } = useAgendamentos();
   const [pacientes, setPacientes] = useState<PacienteMulti[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);

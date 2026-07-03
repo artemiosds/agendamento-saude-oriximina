@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -142,7 +143,8 @@ const calcIdade = (dn: string) => {
 
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
-  const { pacientes, funcionarios } = useData();
+  const { pacientes } = usePacientes();
+  const { funcionarios } = useOperacional();
   const { can } = usePermissions();
   const [modo, setModo] = useState<ModoRelatorio>("selector");
   const [showIndividualChooser, setShowIndividualChooser] = useState(false);
