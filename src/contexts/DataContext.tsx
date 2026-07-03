@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSync, type RealtimeSyncPayload } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
+import { getFilaSnapshot } from "@/contexts/_filaBridge";
 import { auditService } from "@/services/auditService";
 
 import { toast } from "sonner";
@@ -1057,7 +1058,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, status: "cancelado" as const } : a)));
       invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
-      return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
+      // Fase 5: filtragem da fila reproduzida inline (checkFilaForSlot migrou
+      // para FilaSliceProvider). Lemos o snapshot module-level exposto pelo bridge.
+      const filaSnapshot = getFilaSnapshot();
+      return filaSnapshot
+        .filter(
+          (f) =>
+            f.status === "aguardando" &&
+            f.unidadeId === ag.unidadeId &&
+            (!f.profissionalId || f.profissionalId === ag.profissionalId),
+        )
+        .sort((a, b) => {
+          const aRank = priorityRank[a.prioridade] ?? 99;
+          const bRank = priorityRank[b.prioridade] ?? 99;
+          if (aRank !== bRank) return aRank - bRank;
+          return a.horaChegada.localeCompare(b.horaChegada);
+        });
     },
     [invalidateCache],
   );
@@ -1451,33 +1467,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [invalidateCache],
   );
 
-  const checkFilaForSlot = useCallback(
-    (profissionalId: string, unidadeId: string, _data: string, _hora: string): FilaEspera[] => {
-      return filaRef.current
-        .filter(
-          (f) =>
-            f.status === "aguardando" &&
-            f.unidadeId === unidadeId &&
-            (!f.profissionalId || f.profissionalId === profissionalId),
-        )
-        .sort((a, b) => {
-          const aRank = priorityRank[a.prioridade] ?? 99;
-          const bRank = priorityRank[b.prioridade] ?? 99;
-          if (aRank !== bRank) return aRank - bRank;
-          return a.horaChegada.localeCompare(b.horaChegada);
-        });
-    },
-    [],
-  );
-
-  const encaixarDaFila = useCallback(
-    async (filaId: string, agData: Omit<Agendamento, "id" | "criadoEm">) => {
-      const newAg: Agendamento = { ...agData, id: `ag${Date.now()}`, criadoEm: new Date().toISOString() };
-      await addAgendamento(newAg);
-      await updateFila(filaId, { status: "encaixado" as const });
-    },
-    [addAgendamento, updateFila],
-  );
+  // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
 
   const appointmentCountsByKey = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1724,9 +1714,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshAgendamentos = useCallback(async () => {
     await loadAgendamentos();
   }, [loadAgendamentos]);
-  const refreshFila = useCallback(async () => {
-    await loadFila();
-  }, [loadFila]);
+  // refreshFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   const refreshBloqueios = useCallback(async () => {
     await loadBloqueios();
   }, [loadBloqueios]);
