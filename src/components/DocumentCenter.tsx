@@ -263,9 +263,11 @@ const DocumentCenter: React.FC<Props> = ({
 
       {paciente && (
         <EnviarAssinaturaAutentiqueModal
+          key={assinaturaCtx?.documentoGeradoId || 'avulso'}
           open={assinaturaOpen}
-          onOpenChange={setAssinaturaOpen}
-          nomeDocumentoSugerido={`Documento - ${paciente.nome}`}
+          onOpenChange={(o) => { setAssinaturaOpen(o); if (!o) setAssinaturaCtx(null); }}
+          nomeDocumentoSugerido={assinaturaCtx?.nomeSugerido || `Documento - ${paciente.nome}`}
+          documentoGeradoId={assinaturaCtx?.documentoGeradoId}
           pacienteNome={paciente.nome}
           pacienteTelefone={paciente.telefone || undefined}
           profissionalNome={user?.nome}
