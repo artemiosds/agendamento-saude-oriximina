@@ -18,6 +18,7 @@ interface Props {
   documentoGeradoId?: string;
   pacienteEmail?: string;
   pacienteNome?: string;
+  pacienteTelefone?: string;
   profissionalEmail?: string;
   profissionalNome?: string;
 }
