@@ -134,16 +134,27 @@ const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
               <Input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Termo de consentimento" />
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Arquivo PDF</Label>
-              <div className="flex items-center gap-2">
-                <Input type="file" accept="application/pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
-                <Upload className="w-4 h-4 text-muted-foreground" />
+            {arquivoPreCarregado ? (
+              <div className="space-y-1.5">
+                <Label>Arquivo PDF</Label>
+                <div className="text-xs rounded border border-border/60 bg-muted/30 px-2.5 py-2 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span className="truncate">{arquivoPreCarregado.filename}</span>
+                  <Badge variant="outline" className="ml-auto text-[10px]">gerado automaticamente</Badge>
+                </div>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Gere o PDF pelo botão "Imprimir → Salvar como PDF" do documento e anexe aqui.
-              </p>
-            </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Arquivo PDF</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="file" accept="application/pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
+                  <Upload className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Gere o PDF pelo botão "Imprimir → Salvar como PDF" do documento e anexe aqui.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>Mensagem opcional</Label>
