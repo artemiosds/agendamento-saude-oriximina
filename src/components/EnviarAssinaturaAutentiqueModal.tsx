@@ -5,9 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { FileSignature, Plus, Trash2, Loader2, Upload, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { autentiqueService, type AutentiqueSigner } from '@/services/autentiqueService';
+import { whatsappService } from '@/services/whatsappService';
 
 interface Props {
   open: boolean;
