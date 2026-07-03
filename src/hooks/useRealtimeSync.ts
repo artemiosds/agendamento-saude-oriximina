@@ -124,7 +124,11 @@ export function useRealtimeSync<T = Record<string, unknown>>({
 
     return () => {
       clearTimeout(subscribeTimeout);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      payloadsRef.current = [];
       stopPolling();
       supabase.removeChannel(channel);
     };
