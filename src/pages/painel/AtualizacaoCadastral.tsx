@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from "react";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Card, CardContent } from "@/components/ui/card";
