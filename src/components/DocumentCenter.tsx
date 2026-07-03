@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Search, Plus, Pencil, Play, Printer, FileSignature, Loader2 } from 'lucide-react';
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
+import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 
 type Categoria = 'Todos' | 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
 const CATEGORIAS: Categoria[] = ['Todos', 'Cadastro', 'Clínico', 'Regulação', 'CER'];
