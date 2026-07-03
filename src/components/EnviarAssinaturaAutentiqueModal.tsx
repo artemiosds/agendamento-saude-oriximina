@@ -5,9 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { FileSignature, Plus, Trash2, Loader2, Upload, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { autentiqueService, type AutentiqueSigner } from '@/services/autentiqueService';
+import { whatsappService } from '@/services/whatsappService';
 
 interface Props {
   open: boolean;
@@ -16,6 +18,7 @@ interface Props {
   documentoGeradoId?: string;
   pacienteEmail?: string;
   pacienteNome?: string;
+  pacienteTelefone?: string;
   profissionalEmail?: string;
   profissionalNome?: string;
 }
@@ -30,11 +33,13 @@ async function fileToBase64(file: File): Promise<string> {
 
 const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
   open, onOpenChange, nomeDocumentoSugerido, documentoGeradoId,
-  pacienteEmail, pacienteNome, profissionalEmail, profissionalNome,
+  pacienteEmail, pacienteNome, pacienteTelefone, profissionalEmail, profissionalNome,
 }) => {
   const [nome, setNome] = useState(nomeDocumentoSugerido || 'Documento clínico');
   const [message, setMessage] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [notificarWhats, setNotificarWhats] = useState(!!pacienteTelefone);
+  const [telefoneWhats, setTelefoneWhats] = useState(pacienteTelefone || '');
   const [signers, setSigners] = useState<AutentiqueSigner[]>(() => {
     const arr: AutentiqueSigner[] = [];
     if (profissionalNome && profissionalEmail) arr.push({ name: profissionalNome, email: profissionalEmail, action: 'SIGN' });
@@ -72,6 +77,16 @@ const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
       }
       setEnviado({ id: (data as any).document.id, name: (data as any).document.name });
       toast({ title: 'Enviado para assinatura', description: 'Signatários receberão o e-mail da Autentique.' });
+
+      // Notificação WhatsApp complementar (best-effort, não bloqueia fluxo)
+      if (notificarWhats && telefoneWhats.trim() && pacienteNome) {
+        whatsappService.sendDirect({
+          tipo: 'documento_assinatura',
+          telefone: telefoneWhats.trim(),
+          paciente_nome: pacienteNome,
+          observacoes: `Você recebeu um documento para assinatura eletrônica (${nome}). Verifique seu e-mail cadastrado na Autentique.`,
+        }).catch(() => { /* silencioso */ });
+      }
     } catch (err) {
       toast({ title: 'Erro', description: String(err), variant: 'destructive' });
     } finally {
@@ -124,6 +139,22 @@ const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
               <Label>Mensagem opcional</Label>
               <Textarea rows={2} value={message} onChange={e => setMessage(e.target.value)} placeholder="Instruções para os signatários" />
             </div>
+
+            <div className="space-y-2 rounded-md border border-border/60 p-2.5 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Também avisar o paciente por WhatsApp</Label>
+                <Switch checked={notificarWhats} onCheckedChange={setNotificarWhats} />
+              </div>
+              {notificarWhats && (
+                <Input
+                  placeholder="Telefone (com DDD)"
+                  value={telefoneWhats}
+                  onChange={e => setTelefoneWhats(e.target.value)}
+                  className="h-8"
+                />
+              )}
+            </div>
+
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">

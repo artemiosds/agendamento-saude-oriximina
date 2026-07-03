@@ -9,8 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Eye, Printer, XCircle, FileText, Loader2 } from 'lucide-react';
+import { Eye, Printer, XCircle, FileText, Loader2, FileSignature, RefreshCw, ExternalLink } from 'lucide-react';
 import { openPrintDocument } from '@/lib/printLayout';
+import { autentiqueService } from '@/services/autentiqueService';
 
 interface DocumentoGerado {
   id: string;
@@ -138,6 +139,34 @@ const DocumentosHistorico: React.FC<Props> = ({ pacienteId, pacienteNome }) => {
                   </Badge>
                 </td>
                 <td className="p-2 text-right space-x-1">
+                  {(() => {
+                    const aut = (d.campos_formulario as any)?.autentique;
+                    if (!aut?.document_id) return null;
+                    const cls =
+                      aut.status === 'signed' ? 'bg-green-100 text-green-800'
+                      : aut.status === 'rejected' ? 'bg-red-100 text-red-800'
+                      : 'bg-blue-100 text-blue-800';
+                    const label =
+                      aut.status === 'signed' ? 'Assinado (Autentique)'
+                      : aut.status === 'rejected' ? 'Rejeitado' : 'Aguardando assinatura';
+                    return (
+                      <>
+                        <Badge variant="outline" className={`${cls} mr-1`}><FileSignature className="w-3 h-3 mr-1" />{label}</Badge>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Atualizar status Autentique"
+                          onClick={async () => {
+                            const { data } = await autentiqueService.statusDocumento(aut.document_id, d.id);
+                            if ((data as any)?.success) { toast.success('Status atualizado'); loadDocs(); }
+                          }}>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
+                        {aut.signed_url && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Baixar PDF assinado" asChild>
+                            <a href={aut.signed_url} target="_blank" rel="noreferrer"><ExternalLink className="w-3.5 h-3.5" /></a>
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewDoc(d)} title="Visualizar">
                     <Eye className="w-3.5 h-3.5" />
                   </Button>
