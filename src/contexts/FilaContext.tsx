@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+import { useAgendamentos } from "@/contexts/AgendamentosContext";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { setFilaSnapshot } from "@/contexts/_filaBridge";
@@ -84,7 +85,8 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
-  const { addAgendamento, logAction } = useData();
+  const { logAction } = useData();
+  const { addAgendamento } = useAgendamentos();
   const isGlobalAdmin = authUser?.usuario === "admin.sms";
   const userUnidadeId = authUser?.unidadeId || "";
 
