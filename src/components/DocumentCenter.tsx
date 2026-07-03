@@ -108,10 +108,10 @@ const DocumentCenter: React.FC<Props> = ({
     return true;
   });
 
-  const logGeracao = async (item: DocumentItem) => {
-    if (!paciente?.id) return;
+  const logGeracao = async (item: DocumentItem): Promise<string | undefined> => {
+    if (!paciente?.id) return undefined;
     try {
-      await supabase.from('documentos_gerados').insert({
+      const { data } = await supabase.from('documentos_gerados').insert({
         paciente_id: paciente.id,
         paciente_nome: paciente.nome,
         tipo_documento: item.nome,
@@ -119,10 +119,18 @@ const DocumentCenter: React.FC<Props> = ({
         status: 'gerado',
         conteudo_html: '',
         campos_formulario: {},
-      } as any);
+      } as any).select('id').single();
+      return (data as any)?.id;
     } catch {
-      /* silently ignore log errors */
+      return undefined;
     }
+  };
+
+  const handleAssinar = async (item: DocumentItem) => {
+    if (!paciente) return;
+    const id = await logGeracao(item);
+    setAssinaturaCtx({ documentoGeradoId: id, nomeSugerido: `${item.nome} - ${paciente.nome}` });
+    setAssinaturaOpen(true);
   };
 
   const handleGerar = async (item: DocumentItem) => {
