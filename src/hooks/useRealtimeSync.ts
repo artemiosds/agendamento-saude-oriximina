@@ -31,6 +31,7 @@ export function useRealtimeSync<T = Record<string, unknown>>({
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onEventRef = useRef(onEvent);
   const pollRef = useRef(poll);
+  const payloadsRef = useRef<RealtimeSyncPayload<T>[]>([]);
 
   useEffect(() => {
     onEventRef.current = onEvent;
@@ -60,18 +61,35 @@ export function useRealtimeSync<T = Record<string, unknown>>({
       }, pollIntervalMs);
     };
 
-    const handlePayload = (payload: RealtimeSyncPayload<T>) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+    const flushPayloads = () => {
+      const queued = payloadsRef.current;
+      payloadsRef.current = [];
+      for (const p of queued) {
+        try {
+          onEventRef.current(p);
+        } catch (err) {
+          console.error(`[useRealtimeSync:${table}] handler error`, err);
+        }
+      }
+    };
 
+    const handlePayload = (payload: RealtimeSyncPayload<T>) => {
       if (debounceMs <= 0) {
         onEventRef.current(payload);
         return;
       }
 
+      // Enfileira o payload e agrupa a chamada na janela de debounce, sem
+      // descartar eventos intermediários — o handler é invocado uma vez
+      // por payload recebido quando o timer dispara.
+      payloadsRef.current.push(payload);
+      if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
-        onEventRef.current(payload);
+        timerRef.current = null;
+        flushPayloads();
       }, debounceMs);
     };
+
 
     const channelName = channelKey || `rt:${schema}:${table}:${filter || "all"}`;
     const subscriptionConfig = {
