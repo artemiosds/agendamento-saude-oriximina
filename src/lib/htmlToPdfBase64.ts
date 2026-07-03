@@ -154,8 +154,16 @@ export async function htmlToPdfBase64(
       abntText: HTMLElement;
     };
 
+    const textBlocks = sourceAbntText
+      ? Array.from(sourceAbntText.children)
+      : Array.from(originalContent.children).filter((child) => !child.classList.contains('doc-sign-footer'));
+    const footerHtml = footer?.innerHTML || '';
+
     const book = doc.createElement('div');
     book.className = 'pdf-book';
+    doc.body.className = 'pdf-render-document';
+    doc.body.innerHTML = '';
+    doc.body.appendChild(book);
 
     const makePage = (firstPage: boolean): PageParts => {
       const sheet = doc.createElement('div');
@@ -235,10 +243,6 @@ export async function htmlToPdfBase64(
       }
     };
 
-    const textBlocks = sourceAbntText
-      ? Array.from(sourceAbntText.children)
-      : Array.from(originalContent.children).filter((child) => !child.classList.contains('doc-sign-footer'));
-
     textBlocks.forEach(appendTextBlock);
 
     if (sourceSignFooter) {
@@ -251,10 +255,6 @@ export async function htmlToPdfBase64(
       }
     }
 
-    doc.body.className = 'pdf-render-document';
-    doc.body.innerHTML = '';
-    doc.body.appendChild(book);
-
     Array.from(book.querySelectorAll<HTMLElement>('.pdf-sheet')).forEach((sheet) => {
       const emptyText = sheet.querySelector('.abnt-text');
       const emptyWrap = sheet.querySelector('.content-block.doc-abnt');
@@ -264,7 +264,6 @@ export async function htmlToPdfBase64(
     });
 
     const sheets = Array.from(book.querySelectorAll<HTMLElement>('.pdf-sheet'));
-    const footerHtml = footer?.innerHTML || '';
     sheets.forEach((sheet, index) => {
       const pageFooter = doc.createElement('div');
       pageFooter.className = 'pdf-page-footer';
