@@ -166,7 +166,7 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   const m = config?.margens || DEFAULT_MARGINS;
   const footerSpace = config?.mostrarRodape === false ? 0 : 16;
   const footerGap = footerSpace > 0 ? 5 : 0;
-  const footerBottomOffset = footerSpace > 0 ? 2 : m.inferior;
+  const footerBottomOffset = footerSpace > 0 ? 4 : m.inferior;
   const screenBottomPadding = footerSpace > 0 ? footerBottomOffset : m.inferior;
   const printBottomMargin = footerSpace > 0
     ? Math.max(m.inferior, footerSpace + footerGap + footerBottomOffset)
