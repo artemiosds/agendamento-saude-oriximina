@@ -106,10 +106,8 @@ const defaultConfiguracoes: Configuracoes = {
 };
 
 interface DataContextType {
-  agendamentos: Agendamento[];
-  
+  // agendamentos/atendimentos state e CRUDs migrados para AgendamentosSliceProvider (Fase 5, Passo 3.1).
   // fila state migrado para FilaSliceProvider (Fase 5, Passo 3.1).
-  atendimentos: Atendimento[];
   unidades: Unidade[];
   salas: Sala[];
   setores: Setor[];
@@ -117,13 +115,6 @@ interface DataContextType {
   disponibilidades: Disponibilidade[];
   bloqueios: BloqueioAgenda[];
   configuracoes: Configuracoes;
-  addAgendamento: (ag: Agendamento) => Promise<void>;
-  updateAgendamento: (id: string, data: Partial<Agendamento>) => Promise<void>;
-  cancelAgendamento: (id: string) => Promise<FilaEspera[]>;
-  deleteAgendamento: (id: string) => Promise<void>;
-  // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
-  addAtendimento: (a: Atendimento) => Promise<void>;
-  updateAtendimento: (id: string, data: Partial<Atendimento>) => void;
   addUnidade: (u: Unidade) => void;
   updateUnidade: (id: string, data: Partial<Unidade>) => void;
   deleteUnidade: (id: string) => void;
@@ -159,13 +150,7 @@ interface DataContextType {
   // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider (Fase 5, Passo 3.1).
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
-  refreshAgendamentos: () => Promise<void>;
-  /** Fase 5 (transitório): handler de upsert incremental do canal `agendamentos`,
-   *  exposto para uso pelo AgendamentosSliceProvider. Será interiorizado no slice
-   *  no Passo 3, junto com o state. */
-  applyAgendamentoRealtimeEvent: (payload: RealtimeSyncPayload) => void;
-  ensureAgendamentosForDate: (date: string) => Promise<void>;
-  ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
+  // refreshAgendamentos/ensureAgendamentos*/applyAgendamentoRealtimeEvent migrados para AgendamentosSliceProvider.
   
   // refreshFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   refreshBloqueios: () => Promise<void>;
