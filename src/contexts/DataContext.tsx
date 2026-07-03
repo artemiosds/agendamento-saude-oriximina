@@ -2099,6 +2099,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshPacientes,
     refreshFila,
     refreshBloqueios,
+    refreshConfiguracoes,
     logAction,
   });
   stableFunctions.current = {
@@ -2146,6 +2147,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshPacientes,
     refreshFila,
     refreshBloqueios,
+    refreshConfiguracoes,
     logAction,
   };
 
