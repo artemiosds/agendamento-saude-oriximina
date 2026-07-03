@@ -3782,10 +3782,20 @@ const ProntuarioPage: React.FC = () => {
                         onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
                       />
                     </div>
+                    {effectiveProfissao && (
+                      <CamposEspecialidade
+                        profissao={effectiveProfissao}
+                        profissionalId={form.profissional_id || user?.id || ""}
+                        tipoProntuario={'sessao'}
+                        values={especialidadeFields}
+                        onChange={handleEspecialidadeChange}
+                      />
+                    )}
                   </>
                 )}
               </div>
             )}
+
 
             {/* 🔴 PRONTUÁRIO 4 — URGÊNCIA */}
             {form.tipo_registro === 'urgencia' && (
