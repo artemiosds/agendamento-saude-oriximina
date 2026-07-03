@@ -2189,6 +2189,96 @@ const Agenda: React.FC = () => {
     }
   }, [editAg, profissionais, agendamentos, updateAgendamento, logAction, user, refreshAgendamentos]);
 
+  // Maps memoizados para lookup O(1) por id ao renderizar cada item da agenda
+  const pacienteById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    pacientes.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [pacientes]);
+  const unidadeById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    unidades.forEach((u) => map.set(u.id, u));
+    return map;
+  }, [unidades]);
+
+  // Refs para handlers estáveis passados ao AgendaItemCard memoizado.
+  const handleOpenEditRef = React.useRef(handleOpenEdit);
+  const handleAprovarRef = React.useRef(handleAprovar);
+  const handleIniciarAtendimentoRef = React.useRef(handleIniciarAtendimento);
+  const handleStatusChangeRef = React.useRef(handleStatusChange);
+  const handleDeleteAgendamentoRef = React.useRef(handleDeleteAgendamento);
+  handleOpenEditRef.current = handleOpenEdit;
+  handleAprovarRef.current = handleAprovar;
+  handleIniciarAtendimentoRef.current = handleIniciarAtendimento;
+  handleStatusChangeRef.current = handleStatusChange;
+  handleDeleteAgendamentoRef.current = handleDeleteAgendamento;
+
+  const stableOpenDetalhe = React.useCallback((ag: any) => {
+    setDetalheAg(ag);
+    setDetalheOpen(true);
+  }, []);
+  const stableOpenEdit = React.useCallback((ag: any) => handleOpenEditRef.current(ag), []);
+  const stableAprovar = React.useCallback((ag: any) => handleAprovarRef.current(ag), []);
+  const stableRejeitarInit = React.useCallback((ag: any) => {
+    setRejeicaoTarget(ag);
+    setRejeicaoMotivo("");
+  }, []);
+  const stableIniciarAtendimento = React.useCallback(
+    (ag: any) => handleIniciarAtendimentoRef.current(ag),
+    [],
+  );
+  const stableContinuar = React.useCallback((ag: any) => {
+    const params = new URLSearchParams({
+      pacienteId: ag.pacienteId,
+      pacienteNome: ag.pacienteNome,
+      agendamentoId: ag.id,
+      data: ag.data,
+      tipo: ag.tipo || '',
+    });
+    try {
+      const stored = localStorage.getItem(`timer_${ag.id}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.horaInicio) params.set('horaInicio', parsed.horaInicio);
+      }
+    } catch {}
+    navigate(`/painel/prontuario?${params.toString()}`);
+  }, [navigate]);
+  const stableVerProntuario = React.useCallback((ag: any) => {
+    const params = new URLSearchParams({
+      pacienteId: ag.pacienteId,
+      pacienteNome: ag.pacienteNome,
+      agendamentoId: ag.id,
+      data: ag.data,
+      tipo: ag.tipo || '',
+    });
+    navigate(`/painel/prontuario?${params.toString()}`);
+  }, [navigate]);
+  const stableAbrirRetorno = React.useCallback((ag: any) => {
+    setRetornoAg({ pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome });
+    setRetornoForm({ data: "", hora: "" });
+    setRetornoDialogOpen(true);
+  }, []);
+  const stableStatusChange = React.useCallback(
+    (id: string, key: string) => handleStatusChangeRef.current(id, key),
+    [],
+  );
+  const stableCancelInit = React.useCallback((ag: any) => {
+    setCancelTarget(ag);
+    setCancelMotivo('');
+  }, []);
+  const stableConcluir = React.useCallback((payload: any) => {
+    setConcluirTarget(payload);
+  }, []);
+  const stableDelete = React.useCallback(
+    (id: string) => handleDeleteAgendamentoRef.current(id),
+    [],
+  );
+
+  const canAgendaEdit = can("agenda", "can_edit");
+  const canAgendaDelete = can("agenda", "can_delete");
+
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
