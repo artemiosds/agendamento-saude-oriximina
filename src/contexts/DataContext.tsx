@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import {
   Agendamento,
   Paciente,
@@ -26,9 +26,13 @@ const inlineSetores = [
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRealtimeSync, type RealtimeSyncPayload } from "@/hooks/useRealtimeSync";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 import { getFilaSnapshot } from "@/contexts/_filaBridge";
+import {
+  getAgendamentosSnapshot,
+  subscribeAgendamentosSnapshot,
+} from "@/contexts/_agendamentosBridge";
 import { auditService } from "@/services/auditService";
 
 import { toast } from "sonner";
