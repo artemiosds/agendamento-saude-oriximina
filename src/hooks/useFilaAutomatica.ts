@@ -1,5 +1,8 @@
 import { useCallback } from 'react';
-import { useData } from '@/contexts/DataContext';
+import { useFila } from '@/contexts/FilaContext';
+import { usePacientes } from '@/contexts/PacientesContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
+import { useAgendamentos } from '@/contexts/AgendamentosContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { toast } from 'sonner';
@@ -18,10 +21,10 @@ interface SlotInfo {
 }
 
 export function useFilaAutomatica() {
-  const {
-    fila, pacientes, funcionarios, unidades,
-    updateFila, addAgendamento, logAction, refreshFila, refreshAgendamentos,
-  } = useData();
+  const { fila, updateFila, refreshFila } = useFila();
+  const { pacientes } = usePacientes();
+  const { funcionarios, unidades, logAction } = useOperacional();
+  const { addAgendamento, refreshAgendamentos } = useAgendamentos();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,7 +29,7 @@ interface AtendimentoDB {
 const Atendimentos: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { unidades, logAction } = useData();
+  const { unidades, logAction } = useOperacional();
   const resolvePaciente = usePacienteNomeResolver();
   const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
