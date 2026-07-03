@@ -1266,9 +1266,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshDisponibilidades = useCallback(async () => {
     await loadDisponibilidades();
   }, [loadDisponibilidades]);
-  const refreshAgendamentos = useCallback(async () => {
-    await loadAgendamentos();
-  }, [loadAgendamentos]);
+  // refreshAgendamentos migrado para AgendamentosSliceProvider (Fase 5, Passo 3.1).
   // refreshFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
   const refreshBloqueios = useCallback(async () => {
     await loadBloqueios();
@@ -1279,13 +1277,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loadConfiguracoes]);
 
   const stableFunctions = useRef({
-    addAgendamento,
-    updateAgendamento,
-    cancelAgendamento,
-    deleteAgendamento,
+    // addAgendamento/updateAgendamento/cancelAgendamento/deleteAgendamento migrados para AgendamentosSliceProvider.
     // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider.
-    addAtendimento,
-    updateAtendimento,
+    // addAtendimento/updateAtendimento migrados para AgendamentosSliceProvider.
     addUnidade,
     updateUnidade,
     deleteUnidade,
@@ -1311,10 +1305,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider.
     refreshFuncionarios,
     refreshDisponibilidades,
-    refreshAgendamentos,
-    applyAgendamentoRealtimeEvent,
-    ensureAgendamentosForDate,
-    ensureAgendamentosForRange,
+    // refreshAgendamentos/applyAgendamentoRealtimeEvent/ensureAgendamentos* migrados para AgendamentosSliceProvider.
 
     // refreshFila migrado para FilaSliceProvider.
     refreshBloqueios,
@@ -1323,13 +1314,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAction,
   });
   stableFunctions.current = {
-    addAgendamento,
-    updateAgendamento,
-    cancelAgendamento,
-    deleteAgendamento,
+    // addAgendamento/updateAgendamento/cancelAgendamento/deleteAgendamento migrados para AgendamentosSliceProvider.
     // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider.
-    addAtendimento,
-    updateAtendimento,
+    // addAtendimento/updateAtendimento migrados para AgendamentosSliceProvider.
     addUnidade,
     updateUnidade,
     deleteUnidade,
@@ -1355,10 +1342,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider.
     refreshFuncionarios,
     refreshDisponibilidades,
-    refreshAgendamentos,
-    applyAgendamentoRealtimeEvent,
-    ensureAgendamentosForDate,
-    ensureAgendamentosForRange,
+    // refreshAgendamentos/applyAgendamentoRealtimeEvent/ensureAgendamentos* migrados para AgendamentosSliceProvider.
     // refreshFila migrado para FilaSliceProvider.
     refreshBloqueios,
     refreshConfiguracoes,
@@ -1368,9 +1352,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const contextValue = useMemo(
     (): DataContextType => ({
-      agendamentos,
+      // agendamentos/atendimentos migrados para AgendamentosSliceProvider.
       // fila migrado para FilaSliceProvider.
-      atendimentos,
       unidades,
       salas,
       setores,
@@ -1381,9 +1364,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...stableFunctions.current,
     }),
     [
-      agendamentos,
+      // agendamentos/atendimentos migrados para AgendamentosSliceProvider.
       // fila migrado para FilaSliceProvider.
-      atendimentos,
       unidades,
       salas,
       setores,
