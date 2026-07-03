@@ -2,42 +2,54 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 /**
- * Renderiza HTML em PDF A4 usando html2canvas + jsPDF.addImage.
- * Mais confiável que jsPDF.html() para conteúdo off-screen.
+ * Renderiza HTML em PDF A4 usando iframe isolado + html2canvas + jsPDF.
+ * Isolar em iframe evita herança do CSS global (oklch/tailwind), que quebra html2canvas.
  */
 export async function htmlToPdfBase64(
   fullHtml: string,
   filenameHint = 'documento',
 ): Promise<{ base64: string; filename: string }> {
-  // Container visível em tela mas fora do fluxo (necessário para html2canvas medir corretamente)
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.top = '0';
-  container.style.left = '0';
-  container.style.zIndex = '-1';
-  container.style.opacity = '0';
-  container.style.pointerEvents = 'none';
-  container.style.width = '794px'; // A4 @ 96dpi
-  container.style.background = '#ffffff';
-  container.style.color = '#000000';
-  container.style.padding = '24px';
-  container.style.boxSizing = 'border-box';
-  container.innerHTML = fullHtml;
-  document.body.appendChild(container);
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.left = '0';
+  iframe.style.top = '0';
+  iframe.style.width = '820px';
+  iframe.style.height = '1200px';
+  iframe.style.border = '0';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
+  iframe.style.zIndex = '-1';
+  document.body.appendChild(iframe);
 
   try {
-    // Aguarda fontes/imagens
-    if ((document as any).fonts?.ready) {
-      try { await (document as any).fonts.ready; } catch { /* noop */ }
-    }
-    await new Promise((r) => setTimeout(r, 100));
+    const doc = iframe.contentDocument!;
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><style>
+      html,body{margin:0;padding:0;background:#fff;color:#000;
+        font-family:Georgia,'Times New Roman',serif;font-size:13px;line-height:1.6;}
+      #root{width:794px;padding:24px;box-sizing:border-box;background:#fff;color:#000;}
+      *{color:inherit;}
+      img{max-width:100%;}
+    </style></head><body><div id="root">${fullHtml}</div></body></html>`);
+    doc.close();
 
-    const canvas = await html2canvas(container, {
+    // Aguarda layout / imagens
+    await new Promise((r) => setTimeout(r, 200));
+    const anyDoc = doc as any;
+    if (anyDoc.fonts?.ready) { try { await anyDoc.fonts.ready; } catch { /* noop */ } }
+
+    const target = doc.getElementById('root') as HTMLElement;
+    // Ajusta altura do iframe para conter todo o conteúdo
+    iframe.style.height = `${Math.max(target.scrollHeight + 40, 1200)}px`;
+
+    const canvas = await html2canvas(target, {
       scale: 2,
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
       windowWidth: 794,
+      width: 794,
+      height: target.scrollHeight,
     });
 
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
@@ -48,7 +60,6 @@ export async function htmlToPdfBase64(
     const imgWidth = pageWidth;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    // Paginação: adiciona a imagem completa e desloca com negative y para próxima página
     let heightLeft = imgHeight;
     let position = 0;
     pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
@@ -65,6 +76,6 @@ export async function htmlToPdfBase64(
     const safe = filenameHint.replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 60) || 'documento';
     return { base64, filename: `${safe}_${Date.now()}.pdf` };
   } finally {
-    document.body.removeChild(container);
+    document.body.removeChild(iframe);
   }
 }
