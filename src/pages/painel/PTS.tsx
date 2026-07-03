@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
-import { useData } from '@/contexts/DataContext';
+import { usePacientes } from '@/contexts/PacientesContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -174,7 +175,8 @@ const statusMetaColor = (s: string): string => {
 const PTS: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { pacientes, funcionarios, unidades, logAction } = useData();
+  const { pacientes } = usePacientes();
+  const { funcionarios, unidades, logAction } = useOperacional();
 
   // List state
   const [ptsList, setPtsList] = useState<PTSRecord[]>([]);

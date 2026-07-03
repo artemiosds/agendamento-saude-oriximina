@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
-import { useData } from '@/contexts/DataContext';
+import { usePacientes } from '@/contexts/PacientesContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
+import { useFila } from '@/contexts/FilaContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -76,7 +78,9 @@ interface TriagemDB {
 }
 
 const Relatorios: React.FC = () => {
-  const { pacientes, funcionarios, unidades, salas, fila } = useData();
+  const { pacientes } = usePacientes();
+  const { funcionarios, unidades, salas } = useOperacional();
+  const { fila } = useFila();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('executivo');
