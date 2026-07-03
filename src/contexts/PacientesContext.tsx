@@ -10,7 +10,7 @@ import React, {
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useData } from "@/contexts/DataContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import type { Paciente } from "@/types";
@@ -82,7 +82,7 @@ const mapPacienteRow = (p: any): Paciente => ({
 export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
-  const { resolveScopedUnidadeId } = useData();
+  const { resolveScopedUnidadeId } = useOperacional();
   const isGlobalAdmin = authUser?.usuario === "admin.sms";
 
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
