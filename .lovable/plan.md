@@ -1,112 +1,89 @@
-# Plano: WhatsApp Business Hardening
+## Problema real
 
-Escopo grande. Vou entregar em **4 fases** para manter qualidade e permitir validação incremental. Nenhum campo de opt-in será adicionado ao paciente.
+O rodapé institucional está aparecendo **no meio das páginas impressas**, sobreposto ao texto do documento (confirmado no PDF enviado, páginas 1 e 2).
 
----
+**Causa:** o CSS atual usa `.doc-footer { position: fixed; bottom: 4mm }` para tentar fixar o rodapé no fim de cada página impressa. Isso é um "hack" que o Chrome **não** implementa de forma consistente em impressão multi-página:
+- Em documentos de 1 página funciona.
+- Em documentos com 2+ páginas, o Chrome ancora o `bottom` ao viewport ou ao primeiro page-box, resultando em posicionamento errático (às vezes meio da página, às vezes desaparece).
 
-## Fase 1 — Banco de dados (migration única)
+Correções anteriores tentaram ajustar `--doc-footer-bottom-offset`, `@page margin`, `flex layout` — nenhuma resolve o problema **estrutural**: `position: fixed` não é o mecanismo CSS correto para rodapé impresso.
 
-### Novas tabelas
+## Solução correta — CSS Paged Media (`@page` margin boxes)
 
-**`whatsapp_templates`** (substitui a atual, que é muito simples)
-- `id, nome_interno, categoria` (utility|service|authentication|marketing)
-- `evento` (agendamento_criado|lembrete_24h|lembrete_2h|cancelamento|remarcacao|falta|lista_espera|vaga_disponivel)
-- `status` (rascunho|pendente_aprovacao|aprovado|rejeitado|inativo)
-- `provider_template_id, idioma, corpo, variaveis_permitidas jsonb`
-- `permite_envio_fora_24h bool, ativo bool, provider text`
+O padrão W3C CSS Paged Media define **caixas de margem** dentro de `@page`, especificamente para cabeçalho/rodapé impressos. O Chrome/Edge suportam plenamente `content:` com string, e o navegador **reserva automaticamente** a área de margem e desenha o conteúdo lá em **cada página**, sem nunca sobrepor o corpo.
 
-**`whatsapp_queue`** (já existe — adicionar colunas faltantes)
-- `template_id, payload_json, priority int, error_code, next_retry_at, scheduled_for`
-- Status enum estendido: pending|processing|sent|delivered|read|failed|canceled|skipped
-- Índice único parcial: `(patient_id, appointment_id, message_type)` para status ativos → evita duplicidade.
+```css
+@page {
+  size: A4;
+  margin: 15mm 15mm 22mm 15mm;
 
-**`whatsapp_conversations`** (controle da janela 24h)
-- `phone PK, patient_id, last_patient_message_at, opted_out bool, opted_out_at, updated_at`
-- Função SQL `is_24h_window_open(phone)` → boolean.
-
-**`whatsapp_event_config`** (já existe — estender)
-- `template_id, antecedencia_minutos, exige_confirmacao, prioridade, impedir_duplicidade`
-
-**`whatsapp_inbound_messages`** (novo)
-- `id, phone, patient_id, body, recebido_em, intent` (confirmar|remarcar|atendente|sair|livre)
-- `appointment_id, processed bool`
-
-**`whatsapp_health_snapshots`** (novo, diário)
-- contadores: enviadas, entregues, lidas, falhas, respostas, rejeicoes, pendentes, taxa_erro, taxa_resposta, taxa_confirmacao, status_conexao
-
-GRANTs + RLS (somente staff) em todas.
-
-### Função SQL crítica
-`enqueue_whatsapp_message(...)` aplica regras antes de inserir:
-1. opted_out → skipped
-2. fora janela 24h + template não permite → bloquear
-3. duplicidade (mesmo patient+appointment+event ativo) → skipped
-4. provedor pausado → pending com `scheduled_for` futuro
-
----
-
-## Fase 2 — Backend / Edge Functions
-
-**`whatsapp-provider`** (refatorar) — interface genérica:
-```ts
-interface WhatsAppProvider {
-  sendTemplateMessage(); sendTextMessage();
-  checkConnection(); getMessageStatus(); processWebhook();
+  @bottom-center {
+    content: "Secretaria Municipal de Saúde de Oriximiná — CER II";
+    font-family: Arial, sans-serif;
+    font-size: 7.5pt;
+    color: #64748b;
+  }
+  @bottom-left {
+    content: "Rua Barão do Rio Branco, S/N — Oriximiná-PA";
+    font-size: 7pt;
+    color: #94a3b8;
+  }
+  @bottom-right {
+    content: "Página " counter(page) " de " counter(pages);
+    font-size: 7pt;
+    color: #94a3b8;
+  }
 }
 ```
-Implementações: `UazapiGoProvider`, `EvolutionProvider`, stub `CloudApiProvider`.
 
-**`whatsapp-queue-processor`** (cron a cada 1 min):
-- pega N mensagens pending ordenadas por priority (2h > 24h > confirmação)
-- rate-limit configurável por provider/instância
-- retry com backoff (max 3), atualiza `next_retry_at`
-- **circuit breaker**: se taxa de erro em janela móvel > limite → pausa fila por X min e cria alerta
+Vantagens:
+- Renderizado pelo motor de paginação do navegador — **impossível sobrepor** o conteúdo.
+- Repete idêntico em todas as páginas.
+- Numeração de página nativa via `counter(page)` / `counter(pages)`.
+- Zero JavaScript, zero cálculos frágeis.
 
-**`whatsapp-webhook`** (refatorar):
-- Atualiza `whatsapp_queue` por `provider_message_id` (sent/delivered/read/failed)
-- Mensagens recebidas → grava `whatsapp_inbound_messages` + atualiza `whatsapp_conversations.last_patient_message_at`
-- Parser de intent: `1|CONFIRMAR`, `2|REMARCAR`, `3|ATENDENTE`, `SAIR|PARAR|CANCELAR`
-- Ações automáticas: confirma agendamento, abre solicitação remarcação, marca opt-out, etc.
+## Escopo da mudança
 
-**`whatsapp-health-snapshot`** (cron diário) — popula `whatsapp_health_snapshots`.
+**Arquivo único:** `src/lib/printLayout.ts`
 
----
+1. **Em `buildInstitutionalCSS`:**
+   - Adicionar dinamicamente ao bloco `@page` os `@bottom-left/center/right` com os textos vindos de `config.rodapeTexto`, `config.rodapeEndereco` e `linha1`. Escapar aspas nos textos.
+   - Remover as variáveis CSS que existiam só para acomodar o footer fixo: `--doc-footer-space`, `--doc-footer-gap`, `--doc-footer-bottom-offset`, `--doc-screen-bottom-padding`.
+   - Simplificar `@page margin-bottom` para valor fixo (ex: `22mm`) — espaço reservado para os @bottom boxes.
+   - Em `@media print`: **remover** todo o bloco `.doc-footer { position: fixed; ... }`. O `.doc-footer` fica escondido (`display: none`) na impressão porque o @page cuida disso.
 
-## Fase 3 — Interface (refatorar `WhatsAppBusiness.tsx`)
+2. **Em `@media screen`:**
+   - Manter `.doc-footer` no fluxo (como já está), para o preview mostrar o rodapé no fim do documento.
+   - Remover o padding-bottom calculado que existia só para o footer fixo.
 
-Tabs:
-1. **Conexão** — status, QR, reconectar (já existe, mantém)
-2. **Templates** — CRUD completo + status aprovação + preview com variáveis
-3. **Eventos** — matriz evento × template + toggles
-4. **Fila** — listagem com filtros, retry manual, cancelar, ver payload
-5. **Respostas** — inbox de `whatsapp_inbound_messages`, transferir p/ recepção
-6. **Logs** — `notification_logs` filtrado
-7. **Saúde do número** — cards de KPI + gráfico 7d + alertas + botão "pausar fila"
+3. **Função `docFooter()`** (usada no HTML): manter geração igual para o preview em tela — só o comportamento de impressão muda.
 
-Componentes novos em `src/components/whatsapp/`:
-- `TemplatesManager.tsx`, `EventsMatrix.tsx`, `QueueTable.tsx`, `InboxPanel.tsx`, `HealthDashboard.tsx`
+## Riscos e validação
 
-## Fase 4 — Seed de templates iniciais
+**Compatibilidade:**
+- Chrome/Edge: 100% suportado (é o motor usado em "Imprimir → Salvar como PDF").
+- Firefox: suporta apenas `@bottom-*` com string simples — funciona.
+- Safari: suporta parcialmente — cai no fluxo normal se não renderizar, mas o `.doc-footer` fica escondido na impressão. Como o sistema é usado via Chrome no ambiente clínico, isso é aceitável.
 
-Insert dos 6 templates do prompt (confirmação, lembrete 24h, lembrete 2h, remarcação, cancelamento, vaga disponível) como **utility/rascunho** — usuário aprova no provedor e atualiza `provider_template_id`.
+**O que NÃO muda:**
+- Preview em tela permanece idêntico.
+- Layout do cabeçalho (`.doc-header`) permanece idêntico.
+- Todos os documentos que usam `printLayout.ts` (Termo de Compromisso, atestados, receitas, ficha, etc.) herdam a correção sem alteração no código deles.
+- Configurações do painel Master (margens, tipografia, texto do rodapé) continuam funcionando.
 
----
+**QA obrigatório após implementar:**
+1. Reimprimir o Termo de Compromisso (documento de 3 páginas).
+2. Salvar como PDF.
+3. Converter em imagens com `pdftoppm` e inspecionar cada página.
+4. Confirmar: rodapé aparece SOMENTE na margem inferior, texto do corpo intacto do início ao fim.
+5. Testar também documento curto (1 página) — rodapé ainda deve aparecer na parte inferior.
 
-## Detalhes técnicos importantes
+## Detalhes técnicos
 
-- **Janela 24h**: calculada por trigger ou função `is_24h_window_open(phone)` usando `last_patient_message_at >= now() - 24h`.
-- **Anti-duplicidade**: índice único parcial `WHERE status IN ('pending','processing','sent')`.
-- **Rate limit**: configurado em `whatsapp_config` (msgs/min por instância).
-- **Circuit breaker**: estado em `whatsapp_connection_status.fila_pausada_ate`.
-- **Compat**: campo `provider` em `whatsapp_templates` e `whatsapp_queue` permite multi-provedor simultâneo.
-- **Sem opt-in cadastral**: a única "permissão" respeitada é `opted_out` derivado de resposta SAIR/PARAR — nunca um campo no cadastro.
+Chrome suporta em `@page`:
+- `@top-left`, `@top-center`, `@top-right`
+- `@bottom-left`, `@bottom-center`, `@bottom-right`
+- Content types: `string`, `counter(page)`, `counter(pages)`, `attr()`
+- **Não suporta:** `content: element(name)` (Paged Media Module 3) — por isso o texto tem que ser strings, não HTML rico. Como o rodapé atual já é só 2–3 linhas de texto, isso é irrelevante.
 
----
-
-## Confirmação antes de implementar
-
-Como é grande (≈15 arquivos novos, 1 migration densa, 3 edge functions), confirme:
-
-1. **Posso prosseguir com as 4 fases em sequência nesta mesma execução**, ou prefere que eu pare entre fases para você validar?
-2. O **provider ativo hoje** é UazapiGo, Evolution, ou ambos? (afeta seed e rate-limit padrão)
-3. Manter as tabelas `whatsapp_queue` e `whatsapp_event_config` existentes (ALTER) ou recriar? Recomendo ALTER para preservar dados.
+Escapar strings: as aspas duplas dos textos precisam virar `\"` dentro do `content: "..."` gerado.
