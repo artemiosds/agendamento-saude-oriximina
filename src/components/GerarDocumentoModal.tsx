@@ -13,11 +13,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip } from 'lucide-react';
+import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, type DocumentConfig } from '@/lib/printLayout';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData, type SignatureData } from '@/lib/documentSignature';
 import { applyTemplateValues } from '@/lib/templateVariables';
+import { htmlToPdfBase64 } from '@/lib/htmlToPdfBase64';
+import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 
 interface Props {
@@ -80,6 +82,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [profDestinoId, setProfDestinoId] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [carimbo, setCarimbo] = useState<CarimboData | null>(null);
+  const [autentiqueOpen, setAutentiqueOpen] = useState(false);
+  const [pdfPreCarregado, setPdfPreCarregado] = useState<{ base64: string; filename: string; docId?: string } | null>(null);
 
   // Type-specific fields
   const [campos, setCampos] = useState<Record<string, string>>({});
@@ -524,6 +528,66 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     setSalvando(false);
   };
 
+  const handleEnviarAutentique = async () => {
+    if (!selected) return;
+    setSalvando(true);
+    try {
+      // Assina digitalmente para carimbar hash antes de gerar o PDF
+      const sig = await generateSignature(
+        conteudoFinal,
+        profissional?.id || user?.id || '',
+        profissional?.nome || user?.nome || '',
+        profissional?.tipo_conselho || carimbo?.conselho || '',
+        profissional?.numero_conselho || carimbo?.numero_registro || '',
+        profissional?.uf_conselho || carimbo?.uf || ''
+      );
+      const signatureHtml = formatSignatureBlock(sig);
+      const body = buildHtmlBody(signatureHtml);
+
+      const cssPrefix = docConfig ? buildInstitutionalCSS(docConfig) : '';
+      const header = docConfig ? docHeader(selected.tipo, docConfig) : '';
+      const footer = docConfig ? docFooter(docConfig) : '';
+      const fullHtml =
+        cssPrefix +
+        '<div class="doc-page" style="background:#fff;">' +
+        header +
+        '<div class="doc-content" style="padding:0 20px;">' + body + '</div>' +
+        footer +
+        '</div>';
+
+      const { base64, filename } = await htmlToPdfBase64(fullHtml, `${selected.tipo}_${paciente?.nome || ''}`);
+
+      // Salva no histórico como enviado para assinatura
+      const { data: inserted, error: insErr } = await supabase
+        .from('documentos_gerados')
+        .insert({
+          paciente_id: paciente?.id || '',
+          paciente_nome: paciente?.nome || '',
+          profissional_id: profissional?.id || user?.id || '',
+          profissional_nome: profissional?.nome || user?.nome || '',
+          tipo_documento: selected.tipo,
+          conteudo_original: conteudoFinal,
+          conteudo_html: body,
+          campos_formulario: { ...campos, medicamentos } as any,
+          hash_assinatura: sig.hash,
+          ip_assinatura: sig.ip,
+          assinado_em: sig.timestamp,
+          modelo_id: selected.id,
+          unidade_id: unidade || '',
+          status: 'enviado_assinatura',
+        } as any)
+        .select('id')
+        .single();
+      if (insErr) throw insErr;
+
+      setPdfPreCarregado({ base64, filename, docId: (inserted as any)?.id });
+      setAutentiqueOpen(true);
+    } catch (e: any) {
+      toast.error('Erro ao gerar PDF: ' + (e?.message || e));
+    }
+    setSalvando(false);
+  };
+
   const updateCampo = (key: string, value: string) => setCampos(prev => ({ ...prev, [key]: value }));
 
   // Auto-calculate data_fim for atestado
@@ -886,6 +950,10 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               <Button variant="outline" onClick={handleAnexarProntuario} disabled={salvando} className="gap-1.5" title="Salva uma cópia do documento no histórico do prontuário do paciente, para respaldo.">
                 <Paperclip className="w-4 h-4" /> Anexar ao Prontuário
               </Button>
+              <Button variant="outline" onClick={handleEnviarAutentique} disabled={salvando} className="gap-1.5" title="Gera o PDF do documento e envia para assinatura eletrônica na Autentique.">
+                {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSignature className="w-4 h-4" />}
+                Enviar para Assinatura Eletrônica
+              </Button>
               <Button
                 onClick={handleSignAndFinalize}
                 disabled={salvando || (isEncaminhamento && !profDestinoId)}
@@ -898,6 +966,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
           )}
         </DialogFooter>
       </DialogContent>
+
+      {selected && paciente && (
+        <EnviarAssinaturaAutentiqueModal
+          key={pdfPreCarregado?.docId || 'none'}
+          open={autentiqueOpen}
+          onOpenChange={(o) => { setAutentiqueOpen(o); if (!o) setPdfPreCarregado(null); }}
+          nomeDocumentoSugerido={`${selected.tipo} - ${paciente.nome}`}
+          documentoGeradoId={pdfPreCarregado?.docId}
+          pacienteNome={paciente.nome}
+          pacienteTelefone={paciente.telefone}
+          profissionalNome={profissional?.nome || user?.nome}
+          arquivoPreCarregado={pdfPreCarregado ? { base64: pdfPreCarregado.base64, filename: pdfPreCarregado.filename } : undefined}
+        />
+      )}
     </Dialog>
   );
 };
