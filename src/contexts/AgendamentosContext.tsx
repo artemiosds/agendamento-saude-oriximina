@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import type { Agendamento, Atendimento, FilaEspera } from "@/types";
 
 /**
@@ -42,7 +44,19 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     atendimentos,
     addAtendimento,
     updateAtendimento,
+    applyAgendamentoRealtimeEvent,
   } = useData();
+  const { user: authUser } = useAuth();
+
+  // Realtime ownership migrado do DataProvider (rt:public:agendamentos:all).
+  // Handler preserva upsert incremental via applyAgendamentoRealtimeEvent
+  // (exposto temporariamente por useData enquanto o state ainda vive lá).
+  useRealtimeSync({
+    enabled: !!authUser,
+    table: "agendamentos",
+    onEvent: applyAgendamentoRealtimeEvent,
+    poll: refreshAgendamentos,
+  });
 
   const value = useMemo<AgendamentosContextType>(
     () => ({
