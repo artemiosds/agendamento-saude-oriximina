@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useData } from '@/contexts/DataContext';
+import { usePacientes } from '@/contexts/PacientesContext';
 
 /**
  * Returns a resolver function that looks up the current patient name
@@ -12,7 +12,7 @@ import { useData } from '@/contexts/DataContext';
  *   <span>{resolvePaciente(ag.pacienteId, ag.pacienteNome)}</span>
  */
 export function usePacienteNomeResolver() {
-  const { pacientes } = useData();
+  const { pacientes } = usePacientes();
 
   const pacienteMap = useMemo(() => {
     const map = new Map<string, string>();

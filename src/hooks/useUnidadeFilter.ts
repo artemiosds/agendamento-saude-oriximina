@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 
 /**
  * Centralized hook for unit-based visibility filtering.
@@ -11,7 +11,7 @@ import { useData } from '@/contexts/DataContext';
  */
 export function useUnidadeFilter() {
   const { user, isGlobalAdmin } = useAuth();
-  const { unidades, funcionarios, salas, disponibilidades } = useData();
+  const { unidades, funcionarios, salas, disponibilidades } = useOperacional();
 
   /** True if user has role=master (either global or unit-scoped) */
   const isMaster = user?.role === 'master';

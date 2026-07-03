@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useData } from "@/contexts/DataContext";
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,7 +70,7 @@ interface ExternalAppointment {
 
 const ProfissionaisExternos: React.FC = () => {
   const { user } = useAuth();
-  const { unidades, funcionarios, disponibilidades } = useData();
+  const { unidades, funcionarios, disponibilidades } = useOperacional();
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const { can } = usePermissions();
   const canManage = can("usuarios", "can_edit");

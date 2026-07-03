@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -311,7 +311,7 @@ const generateHumanSummary = (log: EnrichedLog) => {
 const Auditoria: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
   const [logs, setLogs] = useState<EnrichedLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);

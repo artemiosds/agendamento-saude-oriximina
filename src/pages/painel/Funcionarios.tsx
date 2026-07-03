@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState, LoadingState } from '@/components/EmptyState';
 import { Users } from 'lucide-react';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -64,7 +64,7 @@ interface FuncionarioDB {
 }
 
 const Funcionarios: React.FC = () => {
-  const { unidades, salas, refreshFuncionarios, logAction } = useData();
+  const { unidades, salas, refreshFuncionarios, logAction } = useOperacional();
   const { unidadesVisiveis, isGlobalMaster } = useUnidadeFilter();
   const { user, isUnitMaster } = useAuth();
   const { can } = usePermissions();

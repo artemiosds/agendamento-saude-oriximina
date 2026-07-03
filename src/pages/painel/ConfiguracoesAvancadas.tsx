@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { useData } from "@/contexts/DataContext";
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { normalizePhone, formatPhoneForDisplay, applyPhoneMask } from "@/lib/phoneUtils";
@@ -118,7 +118,7 @@ const HorariosSection: React.FC = () => {
 
 // ─── Section 2: Regras ────────────────────────────────────────────────────────
 const RegrasSection: React.FC = () => {
-  const { configuracoes, updateConfiguracoes } = useData();
+  const { configuracoes, updateConfiguracoes } = useOperacional();
   const [regras, setRegras] = useState({
     antecedencia_minima_horas: 2,
     antecedencia_maxima_dias: 90,
@@ -181,7 +181,7 @@ const RegrasSection: React.FC = () => {
 
 // ─── Section 3: Notificações ──────────────────────────────────────────────────
 const NotificacoesSection: React.FC = () => {
-  const { configuracoes, updateConfiguracoes } = useData();
+  const { configuracoes, updateConfiguracoes } = useOperacional();
   const [notif, setNotif] = useState({
     enviar_confirmacao: true,
     enviar_lembrete_24h: true,

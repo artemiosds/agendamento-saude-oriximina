@@ -13,7 +13,7 @@ import {
   Phone, IdCard, Mail, Clock, CircleDot, ListChecks,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import {
   useCustomFields,
   CustomFieldDef,
@@ -202,7 +202,7 @@ const SortableItem: React.FC<SortableItemProps> = ({
 
 // -------- Main component --------
 const ConfigPersonalizarCampos: React.FC = () => {
-  const { unidades } = useData();
+  const { unidades } = useOperacional();
   const { getRawScreenConfig, updateScreenConfig, loading } = useCustomFields();
 
   const [selectedScreen, setSelectedScreen] = useState<ScreenKey>('paciente');

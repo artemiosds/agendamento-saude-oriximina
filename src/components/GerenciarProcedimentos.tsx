@@ -13,7 +13,7 @@ import { Search, Stethoscope, Users, ChevronDown, Tag, Loader2, Plus, Pencil, Tr
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useData } from "@/contexts/DataContext";
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from "@/contexts/AuthContext";
 import {
   SIGTAP_ESPECIALIDADE_TO_PROFISSAO,
@@ -74,7 +74,7 @@ const emptyForm: CustomForm = {
 };
 
 const GerenciarProcedimentos: React.FC = () => {
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
   const { user } = useAuth();
   const isMaster = user?.role === "master";
 

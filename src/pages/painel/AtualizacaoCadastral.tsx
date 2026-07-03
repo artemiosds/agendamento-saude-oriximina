@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from "react";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,7 +30,8 @@ import { normalizeSexo } from "@/lib/utils/sexo-normalization";
 const AtualizacaoCadastral: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { pacientes, refreshPacientes, logAction } = useData();
+  const { pacientes, refreshPacientes } = usePacientes();
+  const { logAction } = useOperacional();
   const { user } = useAuth();
   
   const [activeTab, setActiveTab] = useState("todos");

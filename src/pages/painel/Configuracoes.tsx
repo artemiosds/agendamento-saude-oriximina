@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
 import VincularSigtapProcedimentos from '@/components/VincularSigtapProcedimentos';
 import SigtapSyncPanel from '@/components/SigtapSyncPanel';
@@ -62,7 +62,7 @@ const TABS = [
 type TabId = typeof TABS[number]['id'];
 
 const Configuracoes: React.FC = () => {
-  const { configuracoes, updateConfiguracoes, unidades, funcionarios } = useData();
+  const { configuracoes, updateConfiguracoes, unidades, funcionarios } = useOperacional();
   const { user } = useAuth();
   const { whatsapp, googleCalendar, filaEspera, templates, webhook } = configuracoes;
   const gcal = useGoogleCalendar();

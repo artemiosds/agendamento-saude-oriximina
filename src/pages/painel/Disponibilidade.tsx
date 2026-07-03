@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -80,7 +80,7 @@ type ModoDisponibilidade = 'por_hora' | 'por_turno';
 const CONFIG_KEY_MODOS = 'config_modos_disponibilidade';
 
 const Disponibilidade: React.FC = () => {
-  const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useData();
+  const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useOperacional();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
