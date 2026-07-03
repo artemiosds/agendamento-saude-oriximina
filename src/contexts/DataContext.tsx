@@ -169,6 +169,7 @@ interface DataContextType {
   refreshPacientes: () => Promise<void>;
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
+  refreshConfiguracoes: () => Promise<void>;
   logAction: (input: {
     acao: string;
     entidade: string;
@@ -951,124 +952,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 
 
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "disponibilidades",
-    onEvent: (payload) => {
-      if (payload.eventType === "DELETE") {
-        const id = String((payload.old as any)?.id || "");
-        if (id) setDisponibilidades((prev) => removeById(prev, id));
-        return;
-      }
-      const row = payload.new as any;
-      if (!row?.id) return;
-      setDisponibilidades((prev) =>
-        upsertById(prev, {
-          id: row.id,
-          profissionalId: row.profissional_id,
-          unidadeId: row.unidade_id,
-          salaId: row.sala_id || "",
-          dataInicio: row.data_inicio,
-          dataFim: row.data_fim,
-          horaInicio: row.hora_inicio,
-          horaFim: row.hora_fim,
-          vagasPorHora: row.vagas_por_hora,
-          vagasPorDia: row.vagas_por_dia,
-          diasSemana: row.dias_semana || [],
-          duracaoConsulta: row.duracao_consulta || 30,
-        }),
-      );
-    },
-    poll: loadDisponibilidades,
-  });
-
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "bloqueios",
-    onEvent: (payload) => {
-      if (payload.eventType === "DELETE") {
-        const id = String((payload.old as any)?.id || "");
-        if (id) setBloqueios((prev) => removeById(prev, id));
-        return;
-      }
-      const row = payload.new as any;
-      if (!row?.id) return;
-      setBloqueios((prev) =>
-        upsertById(prev, {
-          id: row.id,
-          titulo: row.titulo,
-          tipo: row.tipo,
-          dataInicio: row.data_inicio,
-          dataFim: row.data_fim,
-          diaInteiro: row.dia_inteiro ?? true,
-          horaInicio: row.hora_inicio || "",
-          horaFim: row.hora_fim || "",
-          unidadeId: row.unidade_id || "",
-          profissionalId: row.profissional_id || "",
-          criadoPor: row.criado_por || "",
-        }),
-      );
-    },
-    poll: loadBloqueios,
-  });
-
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "funcionarios",
-    debounceMs: 1000,
-    pollIntervalMs: 120000,
-    onEvent: (payload) => {
-      if (payload.eventType === "DELETE") {
-        const id = String((payload.old as any)?.id || "");
-        if (id) setFuncionarios((prev) => removeById(prev, id));
-        return;
-      }
-      const row = payload.new as any;
-      if (!row?.id) return;
-      // All staff see all funcionarios — no unit filter on realtime
-      setFuncionarios((prev) =>
-        upsertById(prev, {
-          id: row.id,
-          authUserId: row.auth_user_id || "",
-          nome: row.nome,
-          usuario: row.usuario,
-          email: row.email || "",
-          cpf: row.cpf || "",
-          profissao: row.profissao || "",
-          tipoConselho: row.tipo_conselho || "",
-          numeroConselho: row.numero_conselho || "",
-          ufConselho: row.uf_conselho || "",
-          role: row.role,
-          unidadeId: row.unidade_id || "",
-          salaId: row.sala_id || "",
-          setor: row.setor || "",
-          cargo: row.cargo || "",
-          criadoEm: row.criado_em || "",
-          criadoPor: row.criado_por || "",
-          tempoAtendimento: row.tempo_atendimento || 30,
-          podeAgendarRetorno: row.pode_agendar_retorno || false,
-          coren: row.coren || "",
-          ativo: row.ativo ?? true,
-        }),
-      );
-    },
-    poll: loadFuncionarios,
-  });
-
-  // Realtime sync for system_config — reflects Master changes to all users instantly
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "system_config",
-    debounceMs: 500,
-    onEvent: (payload) => {
-      const row = payload.new as any;
-      if (row?.configuracoes) {
-        setConfiguracoes(safeConfigMerge(row.configuracoes as Record<string, unknown>));
-      }
-    },
-    poll: loadConfiguracoes,
-    pollIntervalMs: 60000,
-  });
+  // Canais Realtime de `disponibilidades`, `bloqueios`, `funcionarios` e
+  // `system_config` migrados para OperacionalSliceProvider (Fase 5, Passo 2).
 
   const getTurnoInfo = useCallback(
     (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
