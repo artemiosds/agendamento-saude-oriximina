@@ -562,7 +562,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // errors and updates state independently, so partial failures don't block the app.
     void Promise.all([
       loadDisponibilidades(),
-      loadAgendamentos(),
+      // loadAgendamentos migrado para AgendamentosSliceProvider.
       // loadFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
       loadBloqueios(),
     ]).catch((err) => console.error("Background data load failed:", err));
@@ -572,7 +572,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadSalas,
     loadFuncionarios,
     loadDisponibilidades,
-    loadAgendamentos,
+    // loadAgendamentos migrado para AgendamentosSliceProvider.
     // loadFila migrado para FilaSliceProvider (Fase 5, Passo 3.1).
     loadBloqueios,
   ]);
