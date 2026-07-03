@@ -73,11 +73,10 @@ const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
 
     setLoading(true);
     try {
-      const b64 = await fileToBase64(file);
       const { data, error } = await autentiqueService.criarDocumento({
-        nome: nome.trim() || file.name,
+        nome: nome.trim() || filename,
         file_base64: b64,
-        filename: file.name,
+        filename,
         message: message.trim() || undefined,
         signers: validos,
         documento_gerado_id: documentoGeradoId,
