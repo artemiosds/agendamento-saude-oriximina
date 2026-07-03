@@ -950,6 +950,10 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               <Button variant="outline" onClick={handleAnexarProntuario} disabled={salvando} className="gap-1.5" title="Salva uma cópia do documento no histórico do prontuário do paciente, para respaldo.">
                 <Paperclip className="w-4 h-4" /> Anexar ao Prontuário
               </Button>
+              <Button variant="outline" onClick={handleEnviarAutentique} disabled={salvando} className="gap-1.5" title="Gera o PDF do documento e envia para assinatura eletrônica na Autentique.">
+                {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSignature className="w-4 h-4" />}
+                Enviar para Assinatura Eletrônica
+              </Button>
               <Button
                 onClick={handleSignAndFinalize}
                 disabled={salvando || (isEncaminhamento && !profDestinoId)}
@@ -962,6 +966,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
           )}
         </DialogFooter>
       </DialogContent>
+
+      {selected && paciente && (
+        <EnviarAssinaturaAutentiqueModal
+          key={pdfPreCarregado?.docId || 'none'}
+          open={autentiqueOpen}
+          onOpenChange={(o) => { setAutentiqueOpen(o); if (!o) setPdfPreCarregado(null); }}
+          nomeDocumentoSugerido={`${selected.tipo} - ${paciente.nome}`}
+          documentoGeradoId={pdfPreCarregado?.docId}
+          pacienteNome={paciente.nome}
+          pacienteTelefone={paciente.telefone}
+          profissionalNome={profissional?.nome || user?.nome}
+          arquivoPreCarregado={pdfPreCarregado ? { base64: pdfPreCarregado.base64, filename: pdfPreCarregado.filename } : undefined}
+        />
+      )}
     </Dialog>
   );
 };
