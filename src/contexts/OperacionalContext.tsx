@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from "react";
-import { useData, type TurnoInfoResult } from "@/contexts/DataContext";
+import { useData } from "@/contexts/DataContext";
 import type {
   Unidade,
   Sala,
@@ -8,6 +8,26 @@ import type {
   Disponibilidade,
   Configuracoes,
 } from "@/types";
+
+export interface TurnoInfoResult {
+  turnoId: string;
+  nome: string;
+  /** Custom block name configured on disponibilidade (e.g. "Eco"). Optional. */
+  descricao?: string;
+  /** Period label derived from horaInicio (Manhã/Tarde/Noite). */
+  periodo: string;
+  horaInicio: string;
+  horaFim: string;
+  vagasTotal: number;
+  vagasOcupadas: number;
+  vagasReservadasExterno: number;
+  vagasOcupadasExterno: number;
+  vagasOcupadasInterno: number;
+  vagasLivresInternas: number;
+  vagasLivresTotal: number;
+  lotado: boolean;
+  excedido: boolean;
+}
 
 /**
  * OperacionalContext — slice memoizado do DataContext para tudo que é

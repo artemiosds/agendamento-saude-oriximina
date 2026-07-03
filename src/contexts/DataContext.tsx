@@ -35,25 +35,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 
-export interface TurnoInfoResult {
-  turnoId: string;
-  nome: string;
-  /** Custom block name configured on disponibilidade (e.g. "Eco"). Optional. */
-  descricao?: string;
-  /** Period label derived from horaInicio (Manhã/Tarde/Noite). */
-  periodo: string;
-  horaInicio: string;
-  horaFim: string;
-  vagasTotal: number;
-  vagasOcupadas: number;
-  vagasReservadasExterno: number;
-  vagasOcupadasExterno: number;
-  vagasOcupadasInterno: number;
-  vagasLivresInternas: number;
-  vagasLivresTotal: number;
-  lotado: boolean;
-  excedido: boolean;
-}
+import type { TurnoInfoResult } from "@/contexts/OperacionalContext";
+export type { TurnoInfoResult };
 
 interface BloqueioAgenda {
   id: string;
