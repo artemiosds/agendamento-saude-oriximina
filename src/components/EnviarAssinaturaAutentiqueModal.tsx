@@ -33,11 +33,13 @@ async function fileToBase64(file: File): Promise<string> {
 
 const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
   open, onOpenChange, nomeDocumentoSugerido, documentoGeradoId,
-  pacienteEmail, pacienteNome, profissionalEmail, profissionalNome,
+  pacienteEmail, pacienteNome, pacienteTelefone, profissionalEmail, profissionalNome,
 }) => {
   const [nome, setNome] = useState(nomeDocumentoSugerido || 'Documento clínico');
   const [message, setMessage] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [notificarWhats, setNotificarWhats] = useState(!!pacienteTelefone);
+  const [telefoneWhats, setTelefoneWhats] = useState(pacienteTelefone || '');
   const [signers, setSigners] = useState<AutentiqueSigner[]>(() => {
     const arr: AutentiqueSigner[] = [];
     if (profissionalNome && profissionalEmail) arr.push({ name: profissionalNome, email: profissionalEmail, action: 'SIGN' });
@@ -75,6 +77,16 @@ const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
       }
       setEnviado({ id: (data as any).document.id, name: (data as any).document.name });
       toast({ title: 'Enviado para assinatura', description: 'Signatários receberão o e-mail da Autentique.' });
+
+      // Notificação WhatsApp complementar (best-effort, não bloqueia fluxo)
+      if (notificarWhats && telefoneWhats.trim() && pacienteNome) {
+        whatsappService.sendDirect({
+          tipo: 'documento_assinatura',
+          telefone: telefoneWhats.trim(),
+          paciente_nome: pacienteNome,
+          observacoes: `Você recebeu um documento para assinatura eletrônica (${nome}). Verifique seu e-mail cadastrado na Autentique.`,
+        }).catch(() => { /* silencioso */ });
+      }
     } catch (err) {
       toast({ title: 'Erro', description: String(err), variant: 'destructive' });
     } finally {
