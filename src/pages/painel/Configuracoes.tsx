@@ -54,7 +54,7 @@ const TABS = [
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, globalOnly: false },
   { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
   { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
-  { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
+  
   { id: 'integracoes', label: 'Sistemas Integrados', icon: Network, globalOnly: false },
   { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
 ] as const;
@@ -1150,29 +1150,6 @@ const Configuracoes: React.FC = () => {
           </div>
         );
 
-      case 'auditoria':
-        return (
-          <div className="space-y-4">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Search className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold font-display text-foreground">Auditoria e Logs</h3>
-                    <p className="text-sm text-muted-foreground">Acesse a página completa de auditoria para visualizar todos os logs do sistema</p>
-                  </div>
-                </div>
-                <Button variant="outline" className="w-full" onClick={() => window.open('/painel/auditoria', '_blank')}>
-                  <Search className="w-4 h-4 mr-2" /> Abrir Auditoria Completa
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2">A página de auditoria possui filtros avançados, exportação em CSV/PDF e relatórios de atividade profissional.</p>
-              </CardContent>
-            </Card>
-            <EditorProntuarioConfig />
-          </div>
-        );
 
       case 'integracoes':
         return <ConfigSistemasIntegrados />;
