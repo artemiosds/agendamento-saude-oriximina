@@ -1728,9 +1728,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateAgendamento,
     cancelAgendamento,
     deleteAgendamento,
-    addToFila,
-    updateFila,
-    removeFromFila,
+    // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider.
     addAtendimento,
     updateAtendimento,
     addUnidade,
@@ -1755,16 +1753,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getBlockingInfo,
     getDayInfoMap,
     updateConfiguracoes,
-    checkFilaForSlot,
-    encaixarDaFila,
+    // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider.
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshAgendamentos,
     applyAgendamentoRealtimeEvent,
     ensureAgendamentosForDate,
     ensureAgendamentosForRange,
-    
-    refreshFila,
+
+    // refreshFila migrado para FilaSliceProvider.
     refreshBloqueios,
     refreshConfiguracoes,
     resolveScopedUnidadeId,
@@ -1775,9 +1772,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateAgendamento,
     cancelAgendamento,
     deleteAgendamento,
-    addToFila,
-    updateFila,
-    removeFromFila,
+    // addToFila/updateFila/removeFromFila migrados para FilaSliceProvider.
     addAtendimento,
     updateAtendimento,
     addUnidade,
@@ -1802,15 +1797,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getBlockingInfo,
     getDayInfoMap,
     updateConfiguracoes,
-    checkFilaForSlot,
-    encaixarDaFila,
+    // checkFilaForSlot/encaixarDaFila migrados para FilaSliceProvider.
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshAgendamentos,
     applyAgendamentoRealtimeEvent,
     ensureAgendamentosForDate,
     ensureAgendamentosForRange,
-    refreshFila,
+    // refreshFila migrado para FilaSliceProvider.
     refreshBloqueios,
     refreshConfiguracoes,
     resolveScopedUnidadeId,
@@ -1820,7 +1814,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const contextValue = useMemo(
     (): DataContextType => ({
       agendamentos,
-      fila,
+      // fila migrado para FilaSliceProvider.
       atendimentos,
       unidades,
       salas,
@@ -1833,7 +1827,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }),
     [
       agendamentos,
-      fila,
+      // fila migrado para FilaSliceProvider.
       atendimentos,
       unidades,
       salas,
