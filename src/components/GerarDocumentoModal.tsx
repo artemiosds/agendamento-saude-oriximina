@@ -532,7 +532,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     if (!selected) return;
     setSalvando(true);
     try {
-      // Assina digitalmente para carimbar hash antes de gerar o PDF
+      // Assina digitalmente para carimbar hash antes de imprimir o PDF
       const sig = await generateSignature(
         conteudoFinal,
         profissional?.id || user?.id || '',
@@ -544,20 +544,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       const signatureHtml = formatSignatureBlock(sig);
       const body = buildHtmlBody(signatureHtml);
 
-      const cssPrefix = docConfig ? buildInstitutionalCSS(docConfig) : '';
-      const header = docConfig ? docHeader(selected.tipo, docConfig) : '';
-      const footer = docConfig ? docFooter(docConfig) : '';
-      const fullHtml =
-        cssPrefix +
-        '<div class="doc-page" style="background:#fff;">' +
-        header +
-        '<div class="doc-content" style="padding:0 20px;">' + body + '</div>' +
-        footer +
-        '</div>';
-
-      const { base64, filename } = await htmlToPdfBase64(fullHtml, `${selected.tipo}_${paciente?.nome || ''}`);
-
-      // Salva no histórico como enviado para assinatura
+      // Salva no histórico como assinado (mesma trilha do fluxo padrão)
       const { data: inserted, error: insErr } = await supabase
         .from('documentos_gerados')
         .insert({
@@ -580,10 +567,21 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         .single();
       if (insErr) throw insErr;
 
-      setPdfPreCarregado({ base64, filename, docId: (inserted as any)?.id });
+      // Abre a janela de impressão institucional (mesmo padrão do "Imprimir").
+      // O usuário escolhe "Salvar como PDF" no diálogo do navegador.
+      openPrintDocument(selected.tipo, body, {
+        'Paciente': paciente?.nome || '',
+        'CPF': paciente?.cpf || '',
+        'Data': hoje,
+      });
+
+      toast.success('Salve o PDF pelo diálogo de impressão e anexe na próxima tela.');
+
+      // Guarda o docId para vinculação, mas sem PDF pré-carregado — usuário anexa o arquivo salvo.
+      setPdfPreCarregado({ base64: '', filename: '', docId: (inserted as any)?.id });
       setAutentiqueOpen(true);
     } catch (e: any) {
-      toast.error('Erro ao gerar PDF: ' + (e?.message || e));
+      toast.error('Erro ao preparar documento: ' + (e?.message || e));
     }
     setSalvando(false);
   };
@@ -977,7 +975,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
           pacienteNome={paciente.nome}
           pacienteTelefone={paciente.telefone}
           profissionalNome={profissional?.nome || user?.nome}
-          arquivoPreCarregado={pdfPreCarregado ? { base64: pdfPreCarregado.base64, filename: pdfPreCarregado.filename } : undefined}
+          arquivoPreCarregado={pdfPreCarregado?.base64 ? { base64: pdfPreCarregado.base64, filename: pdfPreCarregado.filename } : undefined}
         />
       )}
     </Dialog>
