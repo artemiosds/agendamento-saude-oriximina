@@ -26,7 +26,7 @@ const inlineSetores = [
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { useRealtimeSync, type RealtimeSyncPayload } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 import { auditService } from "@/services/auditService";
 
@@ -160,6 +160,10 @@ interface DataContextType {
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
   refreshAgendamentos: () => Promise<void>;
+  /** Fase 5 (transitório): handler de upsert incremental do canal `agendamentos`,
+   *  exposto para uso pelo AgendamentosSliceProvider. Será interiorizado no slice
+   *  no Passo 3, junto com o state. */
+  applyAgendamentoRealtimeEvent: (payload: RealtimeSyncPayload) => void;
   ensureAgendamentosForDate: (date: string) => Promise<void>;
   ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
   refreshPacientes: () => Promise<void>;
@@ -899,10 +903,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   const removeById = <T extends { id: string }>(prev: T[], id: string) => prev.filter((item) => item.id !== id);
 
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "agendamentos",
-    onEvent: (payload) => {
+  // Handler de upsert incremental do canal `agendamentos`, exposto via useData
+  // para uso do AgendamentosSliceProvider. O canal em si vive no slice.
+  const applyAgendamentoRealtimeEvent = useCallback(
+    (payload: RealtimeSyncPayload) => {
       if (payload.eventType === "DELETE") {
         const id = String((payload.old as any)?.id || "");
         if (id) setAgendamentos((prev) => removeById(prev, id));
@@ -937,8 +941,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }),
       );
     },
-    poll: loadAgendamentos,
-  });
+    [isGlobalAdmin, userUnidadeId],
+  );
+
 
   // Canal Realtime de `fila_espera` migrado para FilaSliceProvider (Fase 5, Passo 2).
 
