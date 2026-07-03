@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useFila } from "@/contexts/FilaContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
@@ -170,20 +172,16 @@ const formatWaitTime = (minutes: number): string => {
 };
 
 const FilaEspera: React.FC = () => {
+  const { pacientes, addPaciente } = usePacientes();
+  const { fila, addToFila, updateFila, removeFromFila } = useFila();
   const {
-    fila,
-    addToFila,
-    updateFila,
-    removeFromFila,
-    pacientes,
     funcionarios,
     unidades,
-    addPaciente,
     logAction,
     getAvailableDates,
     getAvailableSlots,
     getDayInfoMap,
-  } = useData();
+  } = useOperacional();
   const { user } = useAuth();
   const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
