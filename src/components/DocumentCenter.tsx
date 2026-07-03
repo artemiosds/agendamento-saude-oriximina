@@ -69,6 +69,7 @@ const DocumentCenter: React.FC<Props> = ({
   const [templates, setTemplates] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
   const [gerarTemplateId, setGerarTemplateId] = useState<string | undefined>(undefined);
   const [assinaturaOpen, setAssinaturaOpen] = useState(false);
+  const [assinaturaCtx, setAssinaturaCtx] = useState<{ documentoGeradoId?: string; nomeSugerido?: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -107,10 +108,10 @@ const DocumentCenter: React.FC<Props> = ({
     return true;
   });
 
-  const logGeracao = async (item: DocumentItem) => {
-    if (!paciente?.id) return;
+  const logGeracao = async (item: DocumentItem): Promise<string | undefined> => {
+    if (!paciente?.id) return undefined;
     try {
-      await supabase.from('documentos_gerados').insert({
+      const { data } = await supabase.from('documentos_gerados').insert({
         paciente_id: paciente.id,
         paciente_nome: paciente.nome,
         tipo_documento: item.nome,
@@ -118,10 +119,18 @@ const DocumentCenter: React.FC<Props> = ({
         status: 'gerado',
         conteudo_html: '',
         campos_formulario: {},
-      } as any);
+      } as any).select('id').single();
+      return (data as any)?.id;
     } catch {
-      /* silently ignore log errors */
+      return undefined;
     }
+  };
+
+  const handleAssinar = async (item: DocumentItem) => {
+    if (!paciente) return;
+    const id = await logGeracao(item);
+    setAssinaturaCtx({ documentoGeradoId: id, nomeSugerido: `${item.nome} - ${paciente.nome}` });
+    setAssinaturaOpen(true);
   };
 
   const handleGerar = async (item: DocumentItem) => {
@@ -211,6 +220,9 @@ const DocumentCenter: React.FC<Props> = ({
                     <Button size="sm" variant="default" className="h-8 gap-1" onClick={() => handleGerar(item)}>
                       <Play className="w-3.5 h-3.5" /> Gerar
                     </Button>
+                    <Button size="sm" variant="secondary" className="h-8 gap-1" onClick={() => handleAssinar(item)} disabled={!paciente}>
+                      <FileSignature className="w-3.5 h-3.5" /> Assinar
+                    </Button>
                     {canManage && !item.builtin && (
                       <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleEditar(item)}>
                         <Pencil className="w-3.5 h-3.5" /> Editar
@@ -226,7 +238,7 @@ const DocumentCenter: React.FC<Props> = ({
             <Button
               variant="secondary"
               className="w-full gap-1.5"
-              onClick={() => setAssinaturaOpen(true)}
+              onClick={() => { setAssinaturaCtx(null); setAssinaturaOpen(true); }}
               disabled={!paciente}
             >
               <FileSignature className="w-4 h-4" /> Enviar para assinatura eletrônica
@@ -251,9 +263,11 @@ const DocumentCenter: React.FC<Props> = ({
 
       {paciente && (
         <EnviarAssinaturaAutentiqueModal
+          key={assinaturaCtx?.documentoGeradoId || 'avulso'}
           open={assinaturaOpen}
-          onOpenChange={setAssinaturaOpen}
-          nomeDocumentoSugerido={`Documento - ${paciente.nome}`}
+          onOpenChange={(o) => { setAssinaturaOpen(o); if (!o) setAssinaturaCtx(null); }}
+          nomeDocumentoSugerido={assinaturaCtx?.nomeSugerido || `Documento - ${paciente.nome}`}
+          documentoGeradoId={assinaturaCtx?.documentoGeradoId}
           pacienteNome={paciente.nome}
           pacienteTelefone={paciente.telefone || undefined}
           profissionalNome={user?.nome}
