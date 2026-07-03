@@ -9,7 +9,9 @@ import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/data/PacientesContext";
+import { useAgendamentos } from "@/contexts/data/AgendamentosContext";
+import { useOperacional } from "@/contexts/data/OperacionalContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -329,7 +331,9 @@ const isPtsSpecialtyCompatible = (pts: any, specialty?: string | null) => {
 const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, getAvailableDates, salas, bloqueios } = useData();
+  const { pacientes } = usePacientes();
+  const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamento, getAvailableSlots, getAvailableDates } = useAgendamentos();
+  const { unidades, funcionarios, salas, bloqueios, logAction } = useOperacional();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();

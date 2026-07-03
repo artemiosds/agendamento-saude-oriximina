@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/data/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
 import { bpaService, LinhaBpaNormalizada } from '@/services/bpaService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -153,7 +153,7 @@ const calcBpaHash = (linhas: string[]) => {
 
 const BpaProducao: React.FC = () => {
   const { user, isGlobalAdmin } = useAuth();
-  const { unidades, funcionarios } = useData();
+  const { unidades, funcionarios } = useOperacional();
 
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
   const [pacMap, setPacMap] = useState<Record<string, PacienteInfo>>({});
