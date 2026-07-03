@@ -574,7 +574,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
           assinado_em: sig.timestamp,
           modelo_id: selected.id,
           unidade_id: unidade || '',
-          status: 'enviado_assinatura',
+          status: 'assinado',
         } as any)
         .select('id')
         .single();
