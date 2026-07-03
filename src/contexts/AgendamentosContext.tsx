@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useData } from "@/contexts/DataContext";
-import type { Agendamento, FilaEspera } from "@/types";
+import type { Agendamento, Atendimento, FilaEspera } from "@/types";
 
 /**
  * AgendamentosContext — slice memoizado do DataContext.
  *
  * Fase 1 (atual): é uma fachada que consome useData() e memoiza apenas
- * o slice de agendamentos. Nenhum consumidor precisa mudar; quem migrar
- * para useAgendamentos() deixa de re-renderizar quando pacientes/fila/
- * config/operacional mudam.
+ * o slice de agendamentos + atendimentos. Nenhum consumidor precisa mudar;
+ * quem migrar para useAgendamentos() deixa de re-renderizar quando pacientes/
+ * fila/config/operacional mudam.
  *
- * TODO (Fase 2): mover useRealtimeSync("agendamentos") e loadAgendamentos
- * para este provider e remover do DataProvider.
+ * TODO (Fase 2): mover useRealtimeSync("agendamentos"|"atendimentos") e
+ * loaders para este provider e remover do DataProvider.
  */
 interface AgendamentosContextType {
   agendamentos: Agendamento[];
@@ -22,6 +22,9 @@ interface AgendamentosContextType {
   refreshAgendamentos: () => Promise<void>;
   ensureAgendamentosForDate: (date: string) => Promise<void>;
   ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
+  atendimentos: Atendimento[];
+  addAtendimento: (a: Atendimento) => Promise<void>;
+  updateAtendimento: (id: string, data: Partial<Atendimento>) => void;
 }
 
 const AgendamentosContext = createContext<AgendamentosContextType | null>(null);
@@ -36,6 +39,9 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     refreshAgendamentos,
     ensureAgendamentosForDate,
     ensureAgendamentosForRange,
+    atendimentos,
+    addAtendimento,
+    updateAtendimento,
   } = useData();
 
   const value = useMemo<AgendamentosContextType>(
@@ -48,6 +54,9 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       refreshAgendamentos,
       ensureAgendamentosForDate,
       ensureAgendamentosForRange,
+      atendimentos,
+      addAtendimento,
+      updateAtendimento,
     }),
     [
       agendamentos,
@@ -58,6 +67,9 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       refreshAgendamentos,
       ensureAgendamentosForDate,
       ensureAgendamentosForRange,
+      atendimentos,
+      addAtendimento,
+      updateAtendimento,
     ],
   );
 
