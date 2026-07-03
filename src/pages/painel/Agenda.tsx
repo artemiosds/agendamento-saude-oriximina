@@ -4,7 +4,10 @@ import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
 import { isSameDay } from "date-fns";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useAgendamentos } from "@/contexts/AgendamentosContext";
+import { useFila } from "@/contexts/FilaContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
@@ -240,30 +243,29 @@ const Agenda: React.FC = () => {
   const { user } = useAuth();
   const isProfissional = user?.role === "profissional";
 
+  const { pacientes } = usePacientes();
   const {
     agendamentos,
-    updateAgendamento,
-    pacientes,
-    funcionarios,
-    unidades,
-    salas,
     addAgendamento,
-    configuracoes,
-    addAtendimento,
-    logAction,
+    updateAgendamento,
     refreshAgendamentos,
     ensureAgendamentosForDate,
     ensureAgendamentosForRange,
-    refreshFila,
-    fila,
-    updateFila,
-    addToFila,
+    addAtendimento,
+  } = useAgendamentos();
+  const { fila, addToFila, updateFila, refreshFila } = useFila();
+  const {
+    funcionarios,
+    unidades,
+    salas,
+    bloqueios,
+    configuracoes,
     disponibilidades,
+    logAction,
     getAvailableSlots,
     getAvailableDates,
     getTurnoInfo,
-    bloqueios,
-  } = useData();
+  } = useOperacional();
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
