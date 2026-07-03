@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
+import { useFila } from "@/contexts/FilaContext";
+import { useAgendamentos } from "@/contexts/AgendamentosContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -164,21 +167,10 @@ const sessionStatusLabels: Record<string, string> = {
 };
 
 const Tratamentos: React.FC = () => {
-  const {
-    pacientes,
-    funcionarios,
-    unidades,
-    fila,
-    salas,
-    bloqueios,
-    addToFila,
-    logAction,
-    getAvailableSlots,
-    getAvailableDates,
-    addAgendamento,
-    cancelAgendamento,
-    deleteAgendamento,
-  } = useData();
+  const { pacientes } = usePacientes();
+  const { funcionarios, unidades, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates } = useOperacional();
+  const { fila, addToFila } = useFila();
+  const { addAgendamento, cancelAgendamento, deleteAgendamento } = useAgendamentos();
   const { user } = useAuth();
   const { can } = usePermissions();
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();

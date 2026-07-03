@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useProntuarioConfig, getDefaultConfig, mergeAdminAndProfConfig, normalizeProfissao, TIPOS_PRONTUARIO, BlocoConfig, ProntuarioConfigData } from '@/hooks/useProntuarioConfig';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,7 +57,7 @@ interface CampoExtra {
 
 const MeuProntuario: React.FC = () => {
   const { user } = useAuth();
-  const { funcionarios } = useData();
+  const { funcionarios } = useOperacional();
   const [tipo, setTipo] = useState('sessao');
   
   const meuFuncionario = funcionarios.find(f => f.id === user?.id);

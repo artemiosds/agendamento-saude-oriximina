@@ -1,7 +1,10 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState, ErrorState } from "@/components/EmptyState";
-import { useData } from "@/contexts/DataContext";
+import { usePacientes } from "@/contexts/PacientesContext";
+import { useAgendamentos } from "@/contexts/AgendamentosContext";
+import { useFila } from "@/contexts/FilaContext";
+import { useOperacional } from "@/contexts/OperacionalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
@@ -195,19 +198,10 @@ const fetchPacientesByIds = async (ids: string[]) => {
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
-  const {
-    pacientes,
-    addPaciente,
-    updatePaciente,
-    agendamentos,
-    fila,
-    addToFila,
-    unidades,
-    funcionarios,
-    logAction,
-    refreshPacientes,
-    refreshFila,
-  } = useData();
+  const { pacientes, addPaciente, updatePaciente, refreshPacientes } = usePacientes();
+  const { agendamentos } = useAgendamentos();
+  const { fila, addToFila, refreshFila } = useFila();
+  const { unidades, funcionarios, logAction } = useOperacional();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { notify } = useWebhookNotify();
