@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOperacional } from '@/contexts/data/OperacionalContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
 import { bpaService, LinhaBpaNormalizada } from '@/services/bpaService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

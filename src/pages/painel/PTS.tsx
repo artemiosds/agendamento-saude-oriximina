@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
-import { usePacientes } from '@/contexts/data/PacientesContext';
-import { useOperacional } from '@/contexts/data/OperacionalContext';
+import { usePacientes } from '@/contexts/PacientesContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

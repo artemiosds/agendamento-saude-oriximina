@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
-import { usePacientes } from '@/contexts/data/PacientesContext';
-import { useOperacional } from '@/contexts/data/OperacionalContext';
-import { useFila } from '@/contexts/data/FilaContext';
+import { usePacientes } from '@/contexts/PacientesContext';
+import { useOperacional } from '@/contexts/OperacionalContext';
+import { useFila } from '@/contexts/FilaContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
