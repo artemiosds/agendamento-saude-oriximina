@@ -35,6 +35,7 @@ async function fileToBase64(file: File): Promise<string> {
 const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
   open, onOpenChange, nomeDocumentoSugerido, documentoGeradoId,
   pacienteEmail, pacienteNome, pacienteTelefone, profissionalEmail, profissionalNome,
+  arquivoPreCarregado,
 }) => {
   const [nome, setNome] = useState(nomeDocumentoSugerido || 'Documento clínico');
   const [message, setMessage] = useState('');
@@ -57,7 +58,16 @@ const EnviarAssinaturaAutentiqueModal: React.FC<Props> = ({
     setSigners(signers.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
 
   const handleEnviar = async () => {
-    if (!file) { toast({ title: 'Selecione o PDF do documento', variant: 'destructive' }); return; }
+    let b64: string;
+    let filename: string;
+    if (arquivoPreCarregado) {
+      b64 = arquivoPreCarregado.base64;
+      filename = arquivoPreCarregado.filename;
+    } else {
+      if (!file) { toast({ title: 'Selecione o PDF do documento', variant: 'destructive' }); return; }
+      b64 = await fileToBase64(file);
+      filename = file.name;
+    }
     const validos = signers.filter(s => s.email.trim() && s.name.trim());
     if (validos.length === 0) { toast({ title: 'Informe pelo menos um signatário', variant: 'destructive' }); return; }
 
