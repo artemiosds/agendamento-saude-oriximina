@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Search, Plus, Pencil, Play, Printer, FileSignature, Loader2 } from 'lucide-react';
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
+import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 
 type Categoria = 'Todos' | 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
 const CATEGORIAS: Categoria[] = ['Todos', 'Cadastro', 'Clínico', 'Regulação', 'CER'];
@@ -67,6 +68,7 @@ const DocumentCenter: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
   const [gerarTemplateId, setGerarTemplateId] = useState<string | undefined>(undefined);
+  const [assinaturaOpen, setAssinaturaOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -220,13 +222,21 @@ const DocumentCenter: React.FC<Props> = ({
             )}
           </div>
 
-          {canManage && (
-            <div className="border-t border-border/70 p-3">
+          <div className="border-t border-border/70 p-3 space-y-2">
+            <Button
+              variant="secondary"
+              className="w-full gap-1.5"
+              onClick={() => setAssinaturaOpen(true)}
+              disabled={!paciente}
+            >
+              <FileSignature className="w-4 h-4" /> Enviar para assinatura eletrônica
+            </Button>
+            {canManage && (
               <Button variant="outline" className="w-full gap-1.5" onClick={handleCriar}>
                 <Plus className="w-4 h-4" /> Criar novo tipo de documento
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -236,6 +246,16 @@ const DocumentCenter: React.FC<Props> = ({
           onOpenChange={(o) => { if (!o) setGerarTemplateId(undefined); }}
           paciente={pacienteGerar}
           templateId={gerarTemplateId}
+        />
+      )}
+
+      {paciente && (
+        <EnviarAssinaturaAutentiqueModal
+          open={assinaturaOpen}
+          onOpenChange={setAssinaturaOpen}
+          nomeDocumentoSugerido={`Documento - ${paciente.nome}`}
+          pacienteNome={paciente.nome}
+          profissionalNome={user?.nome}
         />
       )}
     </>
