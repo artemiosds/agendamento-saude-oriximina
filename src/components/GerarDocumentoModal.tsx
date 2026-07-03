@@ -975,7 +975,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
           pacienteNome={paciente.nome}
           pacienteTelefone={paciente.telefone}
           profissionalNome={profissional?.nome || user?.nome}
-          arquivoPreCarregado={pdfPreCarregado ? { base64: pdfPreCarregado.base64, filename: pdfPreCarregado.filename } : undefined}
+          arquivoPreCarregado={pdfPreCarregado?.base64 ? { base64: pdfPreCarregado.base64, filename: pdfPreCarregado.filename } : undefined}
         />
       )}
     </Dialog>
