@@ -220,6 +220,9 @@ const DocumentCenter: React.FC<Props> = ({
                     <Button size="sm" variant="default" className="h-8 gap-1" onClick={() => handleGerar(item)}>
                       <Play className="w-3.5 h-3.5" /> Gerar
                     </Button>
+                    <Button size="sm" variant="secondary" className="h-8 gap-1" onClick={() => handleAssinar(item)} disabled={!paciente}>
+                      <FileSignature className="w-3.5 h-3.5" /> Assinar
+                    </Button>
                     {canManage && !item.builtin && (
                       <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleEditar(item)}>
                         <Pencil className="w-3.5 h-3.5" /> Editar
