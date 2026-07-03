@@ -3850,8 +3850,18 @@ const ProntuarioPage: React.FC = () => {
                     onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
                   />
                 </div>
+                {effectiveProfissao && (
+                  <CamposEspecialidade
+                    profissao={effectiveProfissao}
+                    profissionalId={form.profissional_id || user?.id || ""}
+                    tipoProntuario={'procedimento'}
+                    values={especialidadeFields}
+                    onChange={handleEspecialidadeChange}
+                  />
+                )}
               </div>
             )}
+
 
             {/* Legacy types: show generic fields */}
             {!['avaliacao_inicial', 'retorno', 'sessao', 'urgencia', 'procedimento', 'visita_domiciliar'].includes(form.tipo_registro) && (
