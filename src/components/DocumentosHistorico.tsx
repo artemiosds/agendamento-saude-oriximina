@@ -9,8 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Eye, Printer, XCircle, FileText, Loader2 } from 'lucide-react';
+import { Eye, Printer, XCircle, FileText, Loader2, FileSignature, RefreshCw, ExternalLink } from 'lucide-react';
 import { openPrintDocument } from '@/lib/printLayout';
+import { autentiqueService } from '@/services/autentiqueService';
 
 interface DocumentoGerado {
   id: string;
