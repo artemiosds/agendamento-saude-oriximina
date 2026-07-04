@@ -184,7 +184,6 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <PermissionsProvider>
-            <DataProvider>
              <DomainProviders>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
@@ -241,7 +240,6 @@ const App = () => (
                 </Routes>
               </Suspense>
              </DomainProviders>
-            </DataProvider>
           </PermissionsProvider>
         </AuthProvider>
       </BrowserRouter>
