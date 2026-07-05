@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -229,7 +230,7 @@ const HistoricoTriagem: React.FC = () => {
               <Label className="text-xs">Buscar paciente</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" placeholder="Nome do paciente..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                <DebouncedInput className="pl-9" placeholder="Nome do paciente..." value={search} onChange={(e) => setSearch(e.target.value)} debounceMs={300} />
               </div>
             </div>
             <div>

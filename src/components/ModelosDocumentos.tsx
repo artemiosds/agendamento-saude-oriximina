@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DebouncedInput } from '@/components/ui/debounced-input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -294,11 +295,12 @@ const ModelosDocumentos: React.FC = () => {
           <div className="flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
+              <DebouncedInput
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar modelo..."
                 className="pl-8 h-9"
+                debounceMs={300}
               />
             </div>
             <Select value={filterTipo} onValueChange={setFilterTipo}>
