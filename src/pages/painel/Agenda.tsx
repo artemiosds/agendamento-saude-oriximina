@@ -869,6 +869,69 @@ const Agenda: React.FC = () => {
     [filtered],
   );
 
+  const handleImprimirLista = React.useCallback(() => {
+    const fmtDate = (s: string) => { if (!s) return "-"; const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; };
+    const fmtCpf = (v?: string) => v ? v.replace(/\D/g, '').replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4") : "-";
+    const ordered = [...filtered].sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+    const rows = ordered.map((ag, idx) => {
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      const nome = resolvePaciente(ag.pacienteId, ag.pacienteNome) || "-";
+      const cpf = fmtCpf(pac?.cpf);
+      const cns = pac?.cns ? formatCNS(pac.cns) : "-";
+      const nasc = pac?.dataNascimento || "";
+      const idade = nasc ? calcularIdade(nasc) : "-";
+      return `<tr>
+        <td style="text-align:center;font-weight:bold">${idx + 1}</td>
+        <td style="text-align:center">${ag.hora || "-"}</td>
+        <td>${nome}</td>
+        <td>${cpf}</td>
+        <td>${cns}</td>
+        <td style="text-align:center">${fmtDate(nasc)}</td>
+        <td style="text-align:center">${idade}</td>
+      </tr>`;
+    }).join("");
+
+    const body = `
+      <style>
+        .agenda-print-table { width:100%; border-collapse:collapse; font-family: Arial, Helvetica, sans-serif; }
+        .agenda-print-table th, .agenda-print-table td {
+          border:1px solid #333; padding:3px 5px; font-size:10px; vertical-align:middle;
+        }
+        .agenda-print-table th { background:#e8eef5; text-align:center; font-weight:bold; text-transform:uppercase; letter-spacing:0.3px; }
+        .agenda-print-table tbody tr:nth-child(even) td { background:#f7f9fc; }
+      </style>
+      <table class="agenda-print-table">
+        <thead>
+          <tr>
+            <th style="width:5%">Nº</th>
+            <th style="width:8%">Hora</th>
+            <th style="width:32%">Paciente</th>
+            <th style="width:15%">CPF</th>
+            <th style="width:18%">Cartão SUS</th>
+            <th style="width:12%">Nascimento</th>
+            <th style="width:10%">Idade</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows || `<tr><td colspan="7" style="text-align:center;padding:10px">Nenhum agendamento para os filtros selecionados.</td></tr>`}
+        </tbody>
+      </table>
+    `;
+
+    const profNome = filterProf !== "all" ? (profissionais.find((p) => p.id === filterProf)?.nome || "") : "Todos";
+    const unidNome = filterUnit !== "all" ? (unidades.find((u: any) => u.id === filterUnit)?.nome || "") : "Todas";
+    const statusLabel = statusFilter !== "all" ? (STATUS_FILTER_OPTIONS.find((o) => o.value === statusFilter)?.label || statusFilter) : "Todos";
+
+    void openPrintDocument("Lista de Agendamentos", body, {
+      Data: fmtDate(selectedDate),
+      Profissional: profNome,
+      Unidade: unidNome,
+      Status: statusLabel,
+      Total: String(ordered.length),
+    });
+  }, [filtered, pacientes, resolvePaciente, filterProf, filterUnit, statusFilter, selectedDate, profissionais, unidades]);
+
+
   // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
   const statusCounts = React.useMemo(() => {
     // Regra centralizada de ocupação de vaga
