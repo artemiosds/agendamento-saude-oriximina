@@ -159,19 +159,29 @@ export function printProntuario(h: ProntuarioHistEntry) {
 
 const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ paciente, historico, currentId, onView }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   const sorted = useMemo(
     () =>
       [...(historico || [])]
         .filter((h) => h.id !== currentId)
+        .filter((h) => {
+          const d = (h.data_atendimento || "").slice(0, 10);
+          if (dateFrom && d < dateFrom) return false;
+          if (dateTo && d > dateTo) return false;
+          return true;
+        })
         .sort((a, b) => (b.data_atendimento || "").localeCompare(a.data_atendimento || "")),
-    [historico, currentId],
+    [historico, currentId, dateFrom, dateTo],
   );
 
+  const hasDateFilter = Boolean(dateFrom || dateTo);
+
   return (
-    <aside className="hidden lg:flex flex-col h-full w-full border-l border-border bg-muted/20">
+    <aside className="hidden lg:flex flex-col h-full max-h-screen w-full border-l border-border bg-muted/20 overflow-hidden">
       {/* Patient Card */}
-      <div className="p-4 border-b border-border bg-card/50">
+      <div className="p-4 border-b border-border bg-card/50 shrink-0">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
             <User className="w-4 h-4 text-primary" />
@@ -202,14 +212,49 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
         </dl>
       </div>
 
-      {/* History */}
-      <div className="px-4 py-3 flex items-center gap-2 border-b border-border/60">
+      {/* History Header */}
+      <div className="px-4 py-3 flex items-center gap-2 border-b border-border/60 shrink-0">
         <History className="w-4 h-4 text-muted-foreground" />
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Histórico de Atendimentos
         </h3>
         <Badge variant="secondary" className="ml-auto text-[10px]">{sorted.length}</Badge>
       </div>
+
+      {/* Date Filter */}
+      <div className="px-3 py-2 border-b border-border/60 shrink-0 bg-background/40">
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-7 text-[11px] px-2"
+            aria-label="Data inicial"
+          />
+          <span className="text-[10px] text-muted-foreground">até</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-7 text-[11px] px-2"
+            aria-label="Data final"
+          />
+          {hasDateFilter && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 shrink-0"
+              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              aria-label="Limpar filtro de data"
+              title="Limpar filtro"
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
 
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-2">
