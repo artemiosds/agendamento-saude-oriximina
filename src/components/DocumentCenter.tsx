@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DebouncedInput } from '@/components/ui/debounced-input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Search, Plus, Pencil, Play, Printer, FileSignature, Loader2 } from 'lucide-react';
@@ -186,11 +187,12 @@ const DocumentCenter: React.FC<Props> = ({
             <DialogDescription className="sr-only">Central de documentos do paciente</DialogDescription>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
+              <DebouncedInput
                 value={busca}
                 onChange={e => setBusca(e.target.value)}
                 placeholder="Buscar documento..."
                 className="pl-9 h-9"
+                debounceMs={300}
               />
             </div>
             <Tabs value={cat} onValueChange={(v) => setCat(v as Categoria)}>

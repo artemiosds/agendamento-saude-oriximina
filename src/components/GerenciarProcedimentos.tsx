@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -438,11 +439,12 @@ const GerenciarProcedimentos: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-2 mb-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
+            <DebouncedInput
               placeholder="Buscar por nome ou código..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
+              debounceMs={300}
             />
           </div>
           <Select value={filterEsp} onValueChange={setFilterEsp}>
