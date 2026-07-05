@@ -29,10 +29,6 @@ import type { Agendamento, Atendimento, FilaEspera } from "@/types";
  * `cancelAgendamento`, `deleteAgendamento`, `addAtendimento`,
  * `updateAtendimento`) e canal Realtime `public.agendamentos` com
  * upsert incremental interiorizado (`applyAgendamentoRealtimeEvent`).
- *
- * Ainda depende de `useData()` para `getTurnoInfo` (validação de quota) e
- * `logAction` (auditoria). Essas dependências saem quando OperacionalContext
- * absorver os derivados de disponibilidade.
  */
 interface AgendamentosContextType {
   agendamentos: Agendamento[];
@@ -290,8 +286,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     await loadAgendamentos();
   }, [loadAgendamentos]);
 
-  // Handler de upsert incremental do canal `agendamentos` — interiorizado
-  // (Fase 5, Passo 3.1): não é mais exposto via useData().
+  // Handler de upsert incremental do canal `agendamentos`.
   const applyAgendamentoRealtimeEvent = useCallback(
     (payload: RealtimeSyncPayload) => {
       if (payload.eventType === "DELETE") {
