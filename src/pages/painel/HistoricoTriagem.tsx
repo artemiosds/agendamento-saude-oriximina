@@ -108,15 +108,17 @@ const HistoricoTriagem: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [trAll, funcRes, agAll, pacAll, nursAll] = await Promise.all([
+      const [trAll, funcRes, agAll, filaAll, pacAll, nursAll] = await Promise.all([
         fetchAll("triage_records", "*", { column: "criado_em", ascending: false }),
         supabase.from("funcionarios").select("id, nome, auth_user_id"),
         fetchAll("agendamentos", "id, paciente_id, paciente_nome, unidade_id"),
+        fetchAll("fila_espera", "id, paciente_id, paciente_nome, unidade_id"),
         fetchAll("pacientes", "id, nome"),
         fetchAll("nursing_evaluations", "agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado"),
       ]);
       const trRes = { data: trAll } as any;
       const agRes = { data: agAll } as any;
+      const filaRes = { data: filaAll } as any;
       const pacRes = { data: pacAll } as any;
       const nursRes = { data: nursAll } as any;
 
@@ -129,13 +131,14 @@ const HistoricoTriagem: React.FC = () => {
       const pacMap = new Map<string, string>();
       (pacRes.data || []).forEach((p: any) => pacMap.set(String(p.id), p.nome));
 
-      const agMap = new Map<string, { nome: string; pacienteId: string }>();
-      const unitAgIds = new Set<string>();
+      const agMap = new Map<string, { nome: string; pacienteId: string; unidadeId: string }>();
       (agRes.data || []).forEach((a: any) => {
-        agMap.set(a.id, { nome: a.paciente_nome, pacienteId: a.paciente_id });
-        if (user?.usuario === 'admin.sms' || !user?.unidadeId || a.unidade_id === user?.unidadeId) {
-          unitAgIds.add(a.id);
-        }
+        agMap.set(a.id, { nome: a.paciente_nome, pacienteId: a.paciente_id, unidadeId: a.unidade_id });
+      });
+
+      const filaMap = new Map<string, { nome: string; pacienteId: string; unidadeId: string }>();
+      (filaRes.data || []).forEach((f: any) => {
+        filaMap.set(f.id, { nome: f.paciente_nome, pacienteId: f.paciente_id, unidadeId: f.unidade_id });
       });
 
       const nursMap = new Map<string, NursingEval>();
@@ -144,13 +147,21 @@ const HistoricoTriagem: React.FC = () => {
       });
 
       const enriched: EnrichedRecord[] = (trRes.data || [])
-        .filter((r: any) => user?.usuario === 'admin.sms' || !user?.unidadeId || unitAgIds.has(r.agendamento_id))
+        .filter((r: any) => {
+          if (user?.usuario === 'admin.sms' || !user?.unidadeId) return true;
+          const ag = agMap.get(r.agendamento_id);
+          const filaItem = filaMap.get(r.agendamento_id);
+          return ag?.unidadeId === user.unidadeId || filaItem?.unidadeId === user.unidadeId;
+        })
         .map((r: any) => {
           const ag = agMap.get(r.agendamento_id);
+          const filaItem = filaMap.get(r.agendamento_id);
           // Fallback chain: live patient name -> denormalized appointment name -> custom_data -> truncated ID
           const nomeReal =
-            (ag && pacMap.get(ag.pacienteId)) ||
+            (ag?.pacienteId && pacMap.get(ag.pacienteId)) ||
+            (filaItem?.pacienteId && pacMap.get(filaItem.pacienteId)) ||
             ag?.nome ||
+            filaItem?.nome ||
             r?.custom_data?.paciente_nome ||
             (r.agendamento_id ? `Agendamento ${String(r.agendamento_id).slice(0, 8)}` : "Paciente não encontrado");
           return {
