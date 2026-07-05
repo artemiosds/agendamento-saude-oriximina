@@ -48,6 +48,41 @@ interface NursingEval {
   resultado: string | null;
 }
 
+interface TriageRecordRow extends TriageRecord {
+  custom_data?: { paciente_nome?: string } | null;
+}
+
+interface FuncionarioRow {
+  id: string;
+  nome: string;
+  auth_user_id: string | null;
+}
+
+interface LookupRow {
+  id: string;
+  paciente_id: string | null;
+  paciente_nome: string | null;
+  unidade_id: string | null;
+}
+
+interface PacienteLookupRow {
+  id: string;
+  nome: string | null;
+}
+
+interface NursingEvalRow extends NursingEval {
+  agendamento_id: string | null;
+}
+
+interface QueryResponse<T> {
+  data: T[] | null;
+  error: { message: string } | null;
+}
+
+interface RangeQuery<T> {
+  range: (from: number, to: number) => PromiseLike<QueryResponse<T>>;
+}
+
 interface EnrichedRecord extends TriageRecord {
   pacienteNome: string;
   profissionalNome: string;
@@ -83,20 +118,14 @@ const HistoricoTriagem: React.FC = () => {
   const [editing, setEditing] = useState<EnrichedRecord | null>(null);
 
   // Recursive pagination helper to bypass 1000-row default limit
-  const fetchAll = async (
-    table: string,
-    columns: string,
-    orderBy?: { column: string; ascending?: boolean }
-  ): Promise<any[]> => {
+  const fetchAll = async <T,>(createQuery: () => RangeQuery<T>): Promise<T[]> => {
     const PAGE = 1000;
-    const all: any[] = [];
+    const all: T[] = [];
     let offset = 0;
     while (true) {
-      let q = supabase.from(table as any).select(columns);
-      if (orderBy) q = q.order(orderBy.column, { ascending: orderBy.ascending ?? true });
-      const { data, error } = await q.range(offset, offset + PAGE - 1);
+      const { data, error } = await createQuery().range(offset, offset + PAGE - 1);
       if (error) throw error;
-      const chunk = (data || []) as any[];
+      const chunk = data || [];
       all.push(...chunk);
       if (chunk.length < PAGE) break;
       offset += PAGE;
@@ -108,49 +137,57 @@ const HistoricoTriagem: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [trAll, funcRes, agAll, pacAll, nursAll] = await Promise.all([
-        fetchAll("triage_records", "*", { column: "criado_em", ascending: false }),
+      const [trAll, funcRes, agAll, filaAll, pacAll, nursAll] = await Promise.all([
+        fetchAll<TriageRecordRow>(() => supabase.from("triage_records").select("*").order("criado_em", { ascending: false }) as unknown as RangeQuery<TriageRecordRow>),
         supabase.from("funcionarios").select("id, nome, auth_user_id"),
-        fetchAll("agendamentos", "id, paciente_id, paciente_nome, unidade_id"),
-        fetchAll("pacientes", "id, nome"),
-        fetchAll("nursing_evaluations", "agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado"),
+        fetchAll<LookupRow>(() => supabase.from("agendamentos").select("id, paciente_id, paciente_nome, unidade_id") as unknown as RangeQuery<LookupRow>),
+        fetchAll<LookupRow>(() => supabase.from("fila_espera").select("id, paciente_id, paciente_nome, unidade_id") as unknown as RangeQuery<LookupRow>),
+        fetchAll<PacienteLookupRow>(() => supabase.from("pacientes").select("id, nome") as unknown as RangeQuery<PacienteLookupRow>),
+        fetchAll<NursingEvalRow>(() => supabase.from("nursing_evaluations").select("agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado") as unknown as RangeQuery<NursingEvalRow>),
       ]);
-      const trRes = { data: trAll } as any;
-      const agRes = { data: agAll } as any;
-      const pacRes = { data: pacAll } as any;
-      const nursRes = { data: nursAll } as any;
 
       const funcMap = new Map<string, string>();
-      (funcRes.data || []).forEach((f: any) => {
+      ((funcRes.data || []) as FuncionarioRow[]).forEach((f) => {
         funcMap.set(String(f.id), f.nome);
         if (f.auth_user_id) funcMap.set(String(f.auth_user_id), f.nome);
       });
 
       const pacMap = new Map<string, string>();
-      (pacRes.data || []).forEach((p: any) => pacMap.set(String(p.id), p.nome));
+      pacAll.forEach((p) => {
+        if (p.nome) pacMap.set(String(p.id), p.nome);
+      });
 
-      const agMap = new Map<string, { nome: string; pacienteId: string }>();
-      const unitAgIds = new Set<string>();
-      (agRes.data || []).forEach((a: any) => {
-        agMap.set(a.id, { nome: a.paciente_nome, pacienteId: a.paciente_id });
-        if (user?.usuario === 'admin.sms' || !user?.unidadeId || a.unidade_id === user?.unidadeId) {
-          unitAgIds.add(a.id);
-        }
+      const agMap = new Map<string, { nome: string | null; pacienteId: string | null; unidadeId: string | null }>();
+      agAll.forEach((a) => {
+        agMap.set(a.id, { nome: a.paciente_nome, pacienteId: a.paciente_id, unidadeId: a.unidade_id });
+      });
+
+      const filaMap = new Map<string, { nome: string | null; pacienteId: string | null; unidadeId: string | null }>();
+      filaAll.forEach((f) => {
+        filaMap.set(f.id, { nome: f.paciente_nome, pacienteId: f.paciente_id, unidadeId: f.unidade_id });
       });
 
       const nursMap = new Map<string, NursingEval>();
-      (nursRes.data || []).forEach((n: any) => {
+      nursAll.forEach((n) => {
         if (n.agendamento_id) nursMap.set(n.agendamento_id, n);
       });
 
-      const enriched: EnrichedRecord[] = (trRes.data || [])
-        .filter((r: any) => user?.usuario === 'admin.sms' || !user?.unidadeId || unitAgIds.has(r.agendamento_id))
-        .map((r: any) => {
+      const enriched: EnrichedRecord[] = trAll
+        .filter((r) => {
+          if (user?.usuario === 'admin.sms' || !user?.unidadeId) return true;
           const ag = agMap.get(r.agendamento_id);
+          const filaItem = filaMap.get(r.agendamento_id);
+          return ag?.unidadeId === user.unidadeId || filaItem?.unidadeId === user.unidadeId;
+        })
+        .map((r) => {
+          const ag = agMap.get(r.agendamento_id);
+          const filaItem = filaMap.get(r.agendamento_id);
           // Fallback chain: live patient name -> denormalized appointment name -> custom_data -> truncated ID
           const nomeReal =
-            (ag && pacMap.get(ag.pacienteId)) ||
+            (ag?.pacienteId && pacMap.get(ag.pacienteId)) ||
+            (filaItem?.pacienteId && pacMap.get(filaItem.pacienteId)) ||
             ag?.nome ||
+            filaItem?.nome ||
             r?.custom_data?.paciente_nome ||
             (r.agendamento_id ? `Agendamento ${String(r.agendamento_id).slice(0, 8)}` : "Paciente não encontrado");
           return {
