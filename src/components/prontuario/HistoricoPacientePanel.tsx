@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy } from "lucide-react";
+import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
 
