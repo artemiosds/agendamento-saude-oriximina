@@ -20,7 +20,7 @@ import {
   DEFAULT_CONFIG, type DocumentConfig, type LogoSlotConfig,
 } from '@/lib/printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+import logoCerFallback from '@/assets/logo-cer-ii.webp';
 
 const CONFIG_KEY = 'config_impressao';
 

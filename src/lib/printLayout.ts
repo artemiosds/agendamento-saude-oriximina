@@ -6,7 +6,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+import logoCerFallback from '@/assets/logo-cer-ii.webp';
 
 export interface DocumentTypography {
   fonte: string;          // 'Arial' | 'Times New Roman' | 'Calibri' | 'Inter'
