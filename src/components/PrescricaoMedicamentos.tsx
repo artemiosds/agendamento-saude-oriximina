@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { loadDocumentConfig, type DocumentConfig } from "@/lib/printLayout";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+import logoCerFallback from '@/assets/logo-cer-ii.webp';
 
 interface MedicationType {
   id: string;

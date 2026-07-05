@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { EncaminhamentoData } from '@/services/encaminhamentoService';
 import { marcarComoLido } from '@/services/encaminhamentoService';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+import logoCerFallback from '@/assets/logo-cer-ii.webp';
 
 interface Props {
   open: boolean;

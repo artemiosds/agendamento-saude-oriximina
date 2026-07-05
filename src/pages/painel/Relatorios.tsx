@@ -23,7 +23,7 @@ import { saveAs } from 'file-saver';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, ImageRun } from 'docx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+import logoCerFallback from '@/assets/logo-cer-ii.webp';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { ChartCard } from '@/components/ChartCard';
 // Realtime removido: relatórios são snapshot estático.
