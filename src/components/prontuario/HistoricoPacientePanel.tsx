@@ -256,7 +256,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
       </div>
 
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-3 space-y-2">
           {!paciente && (
             <p className="text-xs text-muted-foreground italic text-center py-6">
@@ -266,7 +266,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
           {paciente && sorted.length === 0 && (
             <div className="text-center py-6">
               <p className="text-xs text-muted-foreground italic">
-                Primeiro atendimento deste paciente
+                {hasDateFilter ? "Nenhum atendimento no período selecionado" : "Primeiro atendimento deste paciente"}
               </p>
             </div>
           )}
