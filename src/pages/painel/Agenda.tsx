@@ -2965,6 +2965,18 @@ const Agenda: React.FC = () => {
                         <span className="text-xs font-bold uppercase tracking-tight">Limpar</span>
                       </Button>
                     )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.print()}
+                      className="h-11 px-3 flex items-center gap-1.5 print:hidden"
+                      title="Imprimir lista de agendamentos filtrados"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-tight">Imprimir Lista</span>
+                    </Button>
+
                   </div>
                 </div>
               </div>
