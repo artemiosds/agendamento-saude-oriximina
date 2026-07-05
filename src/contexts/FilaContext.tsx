@@ -21,10 +21,6 @@ import type { Agendamento, FilaEspera } from "@/types";
  * FilaContext — Fase 5 (Passo 3.1): dono próprio de `fila`, loader,
  * CRUDs (`addToFila`, `updateFila`, `removeFromFila`), helpers
  * (`checkFilaForSlot`, `encaixarDaFila`) e canal Realtime `public.fila_espera`.
- *
- * Ainda depende de `useData()` só para `addAgendamento` (usado por
- * `encaixarDaFila`) e `logAction`. Essas dependências saem quando
- * `agendamentos` migrar para AgendamentosContext.
  */
 interface FilaContextType {
   fila: FilaEspera[];

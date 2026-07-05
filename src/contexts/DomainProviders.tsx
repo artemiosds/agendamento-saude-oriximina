@@ -5,11 +5,8 @@ import { FilaSliceProvider } from "@/contexts/FilaContext";
 import { OperacionalSliceProvider } from "@/contexts/OperacionalContext";
 
 /**
- * DomainProviders — aninha os 4 sub-contextos de domínio.
- *
- * DEVE ficar DENTRO do <DataProvider>. Cada slice lê de useData() e
- * memoiza seu próprio valor, permitindo migração incremental de
- * consumidores sem quebrar quem ainda usa useData().
+ * DomainProviders — aninha os 4 sub-contextos de domínio
+ * (Operacional, Pacientes, Agendamentos, Fila).
  */
 export const DomainProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (

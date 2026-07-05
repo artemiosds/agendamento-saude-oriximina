@@ -16,12 +16,8 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
 import type { Paciente } from "@/types";
 
 /**
- * PacientesContext — Fase 5 (Passo 3.1): dono próprio do state, loader,
- * CRUDs e canal Realtime de `public.pacientes`. Não consome mais
- * `pacientes/addPaciente/updatePaciente/refreshPacientes` de `useData()`.
- *
- * Ainda depende de `useData()` só para `resolveScopedUnidadeId` (ponte
- * temporária — será eliminada quando `funcionarios` migrar para Operacional).
+ * PacientesContext — dono próprio do state, loader, CRUDs e canal Realtime
+ * de `public.pacientes`.
  */
 interface PacientesContextType {
   pacientes: Paciente[];
