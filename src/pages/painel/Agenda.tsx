@@ -2970,7 +2970,7 @@ const Agenda: React.FC = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.print()}
+                      onClick={handleImprimirLista}
                       className="h-11 px-3 flex items-center gap-1.5 print:hidden"
                       title="Imprimir lista de agendamentos filtrados"
                     >
