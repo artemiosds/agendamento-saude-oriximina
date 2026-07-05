@@ -1494,6 +1494,46 @@ const Pacientes: React.FC = () => {
           .filter((s) => s && String(s).trim() !== '')
           .join(' — ');
 
+        const cd: any = (detalhePaciente as any).custom_data || (detalhePaciente as any).customData || {};
+        const p: any = detalhePaciente;
+
+        // Endereço completo montado a partir de custom_data + campos legado
+        const enderecoLinha1 = [
+          [cd.tipoLogradouro, cd.logradouro].filter(Boolean).join(' ').trim() || cd.logradouro,
+          cd.numero && `nº ${cd.numero}`,
+          cd.complemento,
+        ].filter(Boolean).join(', ');
+        const enderecoLinha2 = [
+          cd.bairro,
+          [p.municipio, cd.uf].filter(Boolean).join(' - '),
+          cd.cep && `CEP ${cd.cep}`,
+        ].filter(Boolean).join(' • ');
+        const enderecoCompleto = [enderecoLinha1, enderecoLinha2].filter(Boolean).join('\n')
+          || p.endereco || '';
+
+        const sexoLabel = (() => {
+          const s = String(p.sexo || cd.sexo || '').toUpperCase();
+          if (s === 'M' || s === 'MASCULINO') return 'Masculino';
+          if (s === 'F' || s === 'FEMININO') return 'Feminino';
+          return s || '';
+        })();
+
+        const racaCor = cd.raca_cor || cd.racaCor;
+        const nacionalidade = cd.nacionalidade;
+        const naturalidade = [p.naturalidade, p.naturalidade_uf || p.naturalidadeUf].filter(Boolean).join(' / ');
+        const telSecundario = cd.telefone_secundario || cd.telefoneSecundario;
+
+        const responsavel = (p.menor_idade || cd.menor_idade) ? [
+          p.nome_responsavel || cd.nome_responsavel,
+          (p.cpf_responsavel || cd.cpf_responsavel) && `CPF ${formatCPF(p.cpf_responsavel || cd.cpf_responsavel)}`,
+        ].filter(Boolean).join(' • ') : '';
+
+        const flagsPrioridade = [
+          (p.is_gestante || cd.is_gestante) && 'Gestante',
+          (p.is_pne || cd.is_pne) && 'PNE',
+          (p.is_autista || cd.is_autista) && 'Autista',
+        ].filter(Boolean).join(', ');
+
         const footer = (
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -1538,15 +1578,40 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('cpf', 'CPF')} valor={formatCPF(detalhePaciente.cpf)} />
               <PCampo label={L('cns', 'Cartão SUS')} valor={formatCNS(detalhePaciente.cns)} />
               <PCampo label={L('nomeMae', 'Nome da mãe')} valor={detalhePaciente.nomeMae} />
+              <PCampo label="Sexo" valor={sexoLabel} />
+              <PCampo label="Raça / Cor" valor={racaCor} />
+              <PCampo label="Nacionalidade" valor={nacionalidade} />
+              <PCampo label="Naturalidade" valor={naturalidade} />
               <PCampo label="CID" valor={cidVal} />
             </PSecao>
 
+            {responsavel && (
+              <PSecao titulo="Responsável Legal">
+                <PCampo label="Dados" valor={responsavel} />
+              </PSecao>
+            )}
+
             <PSecao titulo="Contato">
               <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label="Tel. secundário" valor={formatTelefoneBR(telSecundario)} />
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
-              <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
 
+            <PSecao titulo="Endereço">
+              <PCampo label="Logradouro" valor={enderecoLinha1} />
+              <PCampo label="Bairro" valor={cd.bairro} />
+              <PCampo label="Município / UF" valor={[p.municipio, cd.uf].filter(Boolean).join(' - ')} />
+              <PCampo label="CEP" valor={cd.cep} />
+              {!enderecoLinha1 && !cd.bairro && p.endereco && (
+                <PCampo label="Endereço" valor={p.endereco} />
+              )}
+            </PSecao>
+
+            {flagsPrioridade && (
+              <PSecao titulo="Prioridades / Condições">
+                <PCampo label="Sinalizações" valor={flagsPrioridade} />
+              </PSecao>
+            )}
 
             <PSecao titulo="Histórico">
               <PCampo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarDataBR(detalhePaciente.criadoEm) : ''} />
