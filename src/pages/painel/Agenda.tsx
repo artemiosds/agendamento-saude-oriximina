@@ -3703,82 +3703,9 @@ const Agenda: React.FC = () => {
         agendamento={faltaTarget}
         onConfirm={(dados) => handleRegistrarFalta(dados)}
       />
-
-      {/* Área de impressão da lista de agendamentos - oculta na tela, visível apenas na impressão */}
-      <div id="agenda-print-area" aria-hidden="true">
-        <style>{`
-          @media print {
-            body * { visibility: hidden !important; }
-            #agenda-print-area, #agenda-print-area * { visibility: visible !important; }
-            #agenda-print-area {
-              position: absolute !important;
-              left: 0; top: 0; width: 100%;
-              padding: 12mm 10mm;
-              background: #fff !important;
-              color: #000 !important;
-              font-family: Arial, Helvetica, sans-serif;
-            }
-            #agenda-print-area table { width: 100%; border-collapse: collapse; }
-            #agenda-print-area th, #agenda-print-area td {
-              border: 1px solid #333; padding: 3px 5px; font-size: 10px; text-align: left; vertical-align: middle;
-            }
-            #agenda-print-area th { background: #eee !important; -webkit-print-color-adjust: exact; }
-            #agenda-print-area h1 { font-size: 14px; margin: 0 0 4px 0; }
-            #agenda-print-area .print-sub { font-size: 10px; margin-bottom: 8px; color: #333; }
-            @page { size: A4 portrait; margin: 8mm; }
-          }
-          @media not print {
-            #agenda-print-area { display: none !important; }
-          }
-        `}</style>
-        <h1>Lista de Agendamentos — {(() => { const [y,m,d] = selectedDate.split('-'); return `${d}/${m}/${y}`; })()}</h1>
-        <div className="print-sub">
-          Total: {filtered.length}
-          {filterProf !== "all" && ` • Profissional: ${profissionais.find(p => p.id === filterProf)?.nome || ""}`}
-          {statusFilter !== "all" && ` • Status: ${STATUS_FILTER_OPTIONS.find(o => o.value === statusFilter)?.label || statusFilter}`}
-          {filterUnit !== "all" && ` • Unidade: ${unidades.find((u: any) => u.id === filterUnit)?.nome || ""}`}
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: '8%' }}>Hora</th>
-              <th style={{ width: '32%' }}>Paciente</th>
-              <th style={{ width: '15%' }}>CPF</th>
-              <th style={{ width: '18%' }}>Cartão SUS</th>
-              <th style={{ width: '13%' }}>Nascimento</th>
-              <th style={{ width: '7%' }}>Idade</th>
-              <th style={{ width: '7%' }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((ag) => {
-              const pac = pacientes.find((p) => p.id === ag.pacienteId);
-              const nome = resolvePaciente(ag.pacienteId, ag.pacienteNome);
-              const cpf = pac?.cpf ? pac.cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4") : "-";
-              const cns = pac?.cns ? formatCNS(pac.cns) : "-";
-              const nasc = pac?.dataNascimento || "";
-              const nascFmt = nasc ? (() => { const [y,m,d] = nasc.split('-'); return `${d}/${m}/${y}`; })() : "-";
-              const idade = nasc ? calcularIdade(nasc) : "-";
-              return (
-                <tr key={ag.id}>
-                  <td>{ag.hora || "-"}</td>
-                  <td>{nome || "-"}</td>
-                  <td>{cpf}</td>
-                  <td>{cns}</td>
-                  <td>{nascFmt}</td>
-                  <td>{idade}</td>
-                  <td>{ag.status || "-"}</td>
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: 'center' }}>Nenhum agendamento para os filtros selecionados.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
+
 
 };
 
