@@ -11,7 +11,7 @@ import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
 import { Color } from '@tiptap/extension-color';
-import TextStyle from '@tiptap/extension-text-style';
+import { TextStyle } from '@tiptap/extension-text-style';
 import { FontSize } from '@tiptap/extension-font-size';
 import FontFamily from '@tiptap/extension-font-family';
 import Dropcursor from '@tiptap/extension-dropcursor';
