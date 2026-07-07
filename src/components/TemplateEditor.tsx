@@ -10,11 +10,14 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
+import Image from '@tiptap/extension-image';
+import Dropcursor from '@tiptap/extension-dropcursor';
 import DOMPurify from 'dompurify';
 import { applyExampleValues, normalizeTemplateAliases, TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +33,7 @@ import {
   Strikethrough, Subscript as SubIcon, Superscript as SupIcon, Undo2, Redo2, Minus,
   FileImage, PenLine, QrCode, Barcode, Upload, Clock, Hash, DollarSign, Mail, Link as LinkIcon,
   Phone, MapPin, IdCard, CircleDot, AlignVerticalSpaceAround, SeparatorHorizontal, Palette,
+  Square, ImageIcon, Rows, Columns, ChevronDown,
 } from 'lucide-react';
 
 const FONT_FAMILIES = [
@@ -173,6 +177,16 @@ const SpacerNode = Node.create({
   },
 });
 
+// Caixa de texto arrastável
+const TextBoxNode = Node.create({
+  name: 'textbox', group: 'block', content: 'block+', draggable: true, defining: true,
+  parseHTML() { return [{ tag: 'div[data-type="textbox"]' }]; },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'textbox', class: 'tpl-textbox' }), 0];
+  },
+});
+
+
 // -------- Editor Panel --------
 interface EditorPanelProps {
   templateId?: string | null;
@@ -194,14 +208,16 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ dropcursor: false }),
       Underline,
       TextStyleExt,
       FontFamily.configure({ types: ['textStyle'] }),
       TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right', 'justify'] }),
-      Table.configure({ resizable: false }),
+      Table.configure({ resizable: true }),
       TableRow, TableHeader, TableCell,
-      SubMark, SupMark, PageBreakNode, SpacerNode,
+      Image.configure({ inline: false, allowBase64: true }),
+      Dropcursor.configure({ color: '#2A6F97', width: 3 }),
+      SubMark, SupMark, PageBreakNode, SpacerNode, TextBoxNode,
       VariableMark,
       ConditionalMark,
     ],
@@ -275,6 +291,15 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
   const insertHR = () => editor?.chain().focus().setHorizontalRule().run();
   const insertPageBreak = () => editor?.chain().focus().insertContent({ type: 'pageBreak' }).run();
   const insertSpacer = () => editor?.chain().focus().insertContent({ type: 'spacer', attrs: { size: '24px' } }).run();
+  const insertTable = (rows: number, cols: number) => editor?.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+  const insertTextBox = () => editor?.chain().focus().insertContent({
+    type: 'textbox',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nova caixa de texto — digite aqui...' }] }],
+  }).run();
+  const insertImage = () => {
+    const url = window.prompt('URL da imagem:');
+    if (url) editor?.chain().focus().setImage({ src: url }).run();
+  };
   const setColor = (color: string) => {
     if (!editor) return;
     editor.chain().focus().setMark('textStyle', { color }).run();
@@ -393,8 +418,13 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       <style>{`
         .tpl-var { background: hsl(210 100% 92%); color: hsl(210 80% 30%); padding: 1px 6px; border-radius: 4px; font-weight: 500; font-size: 0.9em; }
         .tpl-cond { border: 1px dashed hsl(340 70% 55%); background: hsl(340 80% 97%); padding: 2px 4px; border-radius: 4px; }
-        .prose table { border-collapse: collapse; }
-        .prose th, .prose td { border: 1px solid hsl(var(--border)); padding: 4px 8px; }
+        .prose table { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 8px 0; }
+        .prose th, .prose td { border: 1px solid hsl(var(--border)); padding: 4px 8px; vertical-align: top; position: relative; }
+        .prose th { background: hsl(var(--muted)); font-weight: 700; }
+        .ProseMirror .selectedCell::after { content: ''; position: absolute; inset: 0; background: hsl(var(--primary) / 0.15); pointer-events: none; }
+        .tpl-textbox { border: 1px dashed hsl(var(--border)); background: hsl(var(--muted) / 0.35); padding: 10px 12px; margin: 8px 0; border-radius: 8px; position: relative; }
+        .tpl-textbox::before { content: '⋮⋮ caixa de texto (arraste)'; position: absolute; top: -9px; left: 10px; font-size: 9px; background: hsl(var(--background)); color: hsl(var(--muted-foreground)); padding: 0 6px; letter-spacing: 0.5px; text-transform: uppercase; border-radius: 3px; }
+        .prose img { max-width: 100%; height: auto; }
       `}</style>
 
       {/* Header form */}
@@ -437,7 +467,44 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Lista"><List className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Lista numerada"><ListOrdered className="w-4 h-4" /></Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Tabela"><TableIcon className="w-4 h-4" /></Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" title="Tabela">
+                  <TableIcon className="w-4 h-4" /> <ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel className="text-xs">Inserir</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => insertTable(2, 2)}>Tabela 2 × 2</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertTable(3, 3)}>Tabela 3 × 3</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertTable(4, 4)}>Tabela 4 × 4</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertTable(5, 3)}>Tabela 5 × 3</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const r = Number(window.prompt('Linhas:', '3')) || 3;
+                  const c = Number(window.prompt('Colunas:', '3')) || 3;
+                  insertTable(Math.max(1, r), Math.max(1, c));
+                }}>Personalizada…</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Linha</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addRowBefore().run()}><Rows className="w-3.5 h-3.5 mr-2" />Adicionar acima</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addRowAfter().run()}><Rows className="w-3.5 h-3.5 mr-2" />Adicionar abaixo</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().deleteRow().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir linha</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Coluna</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addColumnBefore().run()}><Columns className="w-3.5 h-3.5 mr-2" />Adicionar à esquerda</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addColumnAfter().run()}><Columns className="w-3.5 h-3.5 mr-2" />Adicionar à direita</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().deleteColumn().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir coluna</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Células</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().mergeCells().run()}>Mesclar células</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().splitCell().run()}>Dividir célula</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().toggleHeaderRow().run()}>Alternar cabeçalho</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={!editor?.isActive('table')} className="text-destructive" onClick={() => editor?.chain().focus().deleteTable().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir tabela</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertTextBox} title="Caixa de texto (arrastável)"><Square className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertImage} title="Imagem"><ImageIcon className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertHR} title="Linha horizontal"><Minus className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertPageBreak} title="Quebra de página"><SeparatorHorizontal className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertSpacer} title="Espaçador"><AlignVerticalSpaceAround className="w-4 h-4" /></Button>
