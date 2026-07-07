@@ -12,7 +12,33 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
 import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
-import { FontSize } from '@tiptap/extension-font-size';
+
+/** FontSize inline (evita dependência prerelease incompatível) */
+const FontSize = TextStyle.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      fontSize: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.style.fontSize || null,
+        renderHTML: (attrs: any) => (attrs.fontSize ? { style: `font-size:${attrs.fontSize}` } : {}),
+      },
+    };
+  },
+  addCommands() {
+    return {
+      ...(this.parent?.() as any),
+      setFontSize:
+        (size: string) =>
+        ({ chain }: any) =>
+          chain().setMark('textStyle', { fontSize: size }).run(),
+      unsetFontSize:
+        () =>
+        ({ chain }: any) =>
+          chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run(),
+    };
+  },
+});
 import FontFamily from '@tiptap/extension-font-family';
 import Dropcursor from '@tiptap/extension-dropcursor';
 import { Button } from '@/components/ui/button';
