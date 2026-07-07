@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Search, Plus, Pencil, Play, Printer, FileSignature, Loader2 } from 'lucide-react';
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
+import { printOciOrtopedia } from '@/lib/printOciOrtopedia';
 
 type Categoria = 'Todos' | 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
 const CATEGORIAS: Categoria[] = ['Todos', 'Cadastro', 'Clínico', 'Regulação', 'CER'];
@@ -35,7 +36,7 @@ interface DocumentItem {
   id: string;
   nome: string;
   categoria: Categoria;
-  builtin?: 'ficha_completa' | 'ficha_dados' | 'apac';
+  builtin?: 'ficha_completa' | 'ficha_dados' | 'apac' | 'oci_ortopedia';
   icon: React.ReactNode;
 }
 
@@ -93,6 +94,7 @@ const DocumentCenter: React.FC<Props> = ({
       { id: 'b:ficha_completa', nome: 'Ficha Completa', categoria: 'Cadastro', builtin: 'ficha_completa', icon: <Printer className="w-4 h-4" /> },
       { id: 'b:ficha_dados', nome: 'Imprimir Só Dados', categoria: 'Cadastro', builtin: 'ficha_dados', icon: <Printer className="w-4 h-4" /> },
       { id: 'b:apac', nome: 'Laudo APAC', categoria: 'Regulação', builtin: 'apac', icon: <FileSignature className="w-4 h-4" /> },
+      { id: 'b:oci_ortopedia', nome: 'OCI Avaliação Diagnóstica em Ortopedia (Radiologia + TC)', categoria: 'Regulação', builtin: 'oci_ortopedia', icon: <FileSignature className="w-4 h-4" /> },
     ];
     const fromDb: DocumentItem[] = templates.map(t => ({
       id: t.id,
@@ -145,6 +147,11 @@ const DocumentCenter: React.FC<Props> = ({
     if (item.builtin === 'ficha_completa') { onOpenChange(false); onOpenFichaCompleta(); return; }
     if (item.builtin === 'ficha_dados')    { onOpenChange(false); onOpenFichaSoDados(); return; }
     if (item.builtin === 'apac')           { onOpenChange(false); onOpenApac(); return; }
+    if (item.builtin === 'oci_ortopedia')  {
+      onOpenChange(false);
+      if (paciente) printOciOrtopedia(paciente as any, undefined);
+      return;
+    }
     setGerarTemplateId(item.id);
   };
 
