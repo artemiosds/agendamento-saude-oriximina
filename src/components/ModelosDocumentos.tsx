@@ -288,10 +288,50 @@ const ModelosDocumentos: React.FC = () => {
                 <p className="text-sm text-muted-foreground">{modelos.length} modelo(s) disponível(is)</p>
               </div>
             </div>
-            <Button onClick={openNew} size="sm" className="gap-1.5">
-              <Plus className="w-4 h-4" /> Novo Modelo
-            </Button>
-          </div>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <Sparkles className="w-4 h-4" /> Modelos prontos
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel className="text-xs">Inserir modelo pré-configurado</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {READY_TEMPLATES.map(rt => (
+                    <DropdownMenuItem
+                      key={rt.id}
+                      className="flex-col items-start gap-0.5 py-2"
+                      onClick={() => {
+                        setCurrent({
+                          id: '',
+                          nome: rt.nome,
+                          tipo: rt.tipo,
+                          conteudo: rt.conteudo,
+                          ativo: true,
+                          perfis_permitidos: ['master', 'profissional'],
+                          tipo_modelo: user?.role === 'master' || isGlobalAdmin ? 'UNIDADE' : 'PROFISSIONAL',
+                          unidade_id: user?.unidadeId || '',
+                          criado_por: user?.id || '',
+                          criado_por_nome: user?.nome || '',
+                          versoes: [],
+                          blocos_clinicos: [],
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                        });
+                        setEditOpen(true);
+                      }}
+                    >
+                      <span className="text-sm font-medium">{rt.nome}</span>
+                      {rt.descricao && <span className="text-[11px] text-muted-foreground whitespace-normal">{rt.descricao}</span>}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button onClick={openNew} size="sm" className="gap-1.5">
+                <Plus className="w-4 h-4" /> Novo Modelo
+              </Button>
+            </div>
 
           {/* Search & Filters */}
           <div className="flex flex-wrap gap-2 items-center">
