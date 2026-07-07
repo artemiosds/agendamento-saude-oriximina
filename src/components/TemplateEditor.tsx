@@ -462,7 +462,44 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Lista"><List className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Lista numerada"><ListOrdered className="w-4 h-4" /></Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Tabela"><TableIcon className="w-4 h-4" /></Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" title="Tabela">
+                  <TableIcon className="w-4 h-4" /> <ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel className="text-xs">Inserir</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => insertTable(2, 2)}>Tabela 2 × 2</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertTable(3, 3)}>Tabela 3 × 3</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertTable(4, 4)}>Tabela 4 × 4</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertTable(5, 3)}>Tabela 5 × 3</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const r = Number(window.prompt('Linhas:', '3')) || 3;
+                  const c = Number(window.prompt('Colunas:', '3')) || 3;
+                  insertTable(Math.max(1, r), Math.max(1, c));
+                }}>Personalizada…</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Linha</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addRowBefore().run()}><Rows className="w-3.5 h-3.5 mr-2" />Adicionar acima</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addRowAfter().run()}><Rows className="w-3.5 h-3.5 mr-2" />Adicionar abaixo</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().deleteRow().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir linha</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Coluna</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addColumnBefore().run()}><Columns className="w-3.5 h-3.5 mr-2" />Adicionar à esquerda</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().addColumnAfter().run()}><Columns className="w-3.5 h-3.5 mr-2" />Adicionar à direita</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().deleteColumn().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir coluna</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Células</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().mergeCells().run()}>Mesclar células</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().splitCell().run()}>Dividir célula</DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().toggleHeaderRow().run()}>Alternar cabeçalho</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={!editor?.isActive('table')} className="text-destructive" onClick={() => editor?.chain().focus().deleteTable().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir tabela</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertTextBox} title="Caixa de texto (arrastável)"><Square className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertImage} title="Imagem"><ImageIcon className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertHR} title="Linha horizontal"><Minus className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertPageBreak} title="Quebra de página"><SeparatorHorizontal className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertSpacer} title="Espaçador"><AlignVerticalSpaceAround className="w-4 h-4" /></Button>
