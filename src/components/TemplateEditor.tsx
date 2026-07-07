@@ -418,8 +418,13 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       <style>{`
         .tpl-var { background: hsl(210 100% 92%); color: hsl(210 80% 30%); padding: 1px 6px; border-radius: 4px; font-weight: 500; font-size: 0.9em; }
         .tpl-cond { border: 1px dashed hsl(340 70% 55%); background: hsl(340 80% 97%); padding: 2px 4px; border-radius: 4px; }
-        .prose table { border-collapse: collapse; }
-        .prose th, .prose td { border: 1px solid hsl(var(--border)); padding: 4px 8px; }
+        .prose table { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 8px 0; }
+        .prose th, .prose td { border: 1px solid hsl(var(--border)); padding: 4px 8px; vertical-align: top; position: relative; }
+        .prose th { background: hsl(var(--muted)); font-weight: 700; }
+        .ProseMirror .selectedCell::after { content: ''; position: absolute; inset: 0; background: hsl(var(--primary) / 0.15); pointer-events: none; }
+        .tpl-textbox { border: 1px dashed hsl(var(--border)); background: hsl(var(--muted) / 0.35); padding: 10px 12px; margin: 8px 0; border-radius: 8px; position: relative; }
+        .tpl-textbox::before { content: '⋮⋮ caixa de texto (arraste)'; position: absolute; top: -9px; left: 10px; font-size: 9px; background: hsl(var(--background)); color: hsl(var(--muted-foreground)); padding: 0 6px; letter-spacing: 0.5px; text-transform: uppercase; border-radius: 3px; }
+        .prose img { max-width: 100%; height: auto; }
       `}</style>
 
       {/* Header form */}
