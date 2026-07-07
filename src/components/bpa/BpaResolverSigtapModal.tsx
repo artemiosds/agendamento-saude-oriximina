@@ -179,17 +179,26 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       if (isAgendaMode) {
         // Carrega agendamentos com presença confirmada do paciente na competência,
         // restritos ao mesmo profissional e unidade. NÃO toca em prontuarios/PTS.
+        // Mantém coerência com BpaExportar (que injeta falta/paciente_faltou também).
         const STATUS_PRESENCA = [
           "concluido",
           "confirmado_chegada",
           "aguardando_atendimento",
           "em_atendimento",
+          "falta",
+          "paciente_faltou",
         ];
         let q: any = (supabase as any)
           .from("agendamentos")
           .select("id, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
-          .eq("paciente_id", item.paciente_id)
-          .in("status", STATUS_PRESENCA);
+          .eq("paciente_id", item.paciente_id);
+        // Se o botão veio de uma linha específica da lista, garante que o próprio
+        // agendamento seja incluído mesmo com status fora do conjunto de presença.
+        if (item.agendamento_id) {
+          q = q.or(`id.eq.${item.agendamento_id},status.in.(${STATUS_PRESENCA.join(",")})`);
+        } else {
+          q = q.in("status", STATUS_PRESENCA);
+        }
         if (range) q = q.gte("data", range.ini).lte("data", range.fim);
         else if (item.data_atendimento) q = q.eq("data", item.data_atendimento);
         if (item.profissional_id) q = q.eq("profissional_id", item.profissional_id);
