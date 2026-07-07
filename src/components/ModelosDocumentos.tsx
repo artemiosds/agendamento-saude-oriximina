@@ -332,6 +332,7 @@ const ModelosDocumentos: React.FC = () => {
                 <Plus className="w-4 h-4" /> Novo Modelo
               </Button>
             </div>
+          </div>
 
           {/* Search & Filters */}
           <div className="flex flex-wrap gap-2 items-center">
