@@ -208,14 +208,16 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ dropcursor: false }),
       Underline,
       TextStyleExt,
       FontFamily.configure({ types: ['textStyle'] }),
       TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right', 'justify'] }),
-      Table.configure({ resizable: false }),
+      Table.configure({ resizable: true }),
       TableRow, TableHeader, TableCell,
-      SubMark, SupMark, PageBreakNode, SpacerNode,
+      Image.configure({ inline: false, allowBase64: true }),
+      Dropcursor.configure({ color: '#2A6F97', width: 3 }),
+      SubMark, SupMark, PageBreakNode, SpacerNode, TextBoxNode,
       VariableMark,
       ConditionalMark,
     ],
