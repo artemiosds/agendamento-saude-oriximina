@@ -1075,7 +1075,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="ghost" onClick={handleFechar} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSalvar} disabled={!podeSalvar || saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             {saving && progress
