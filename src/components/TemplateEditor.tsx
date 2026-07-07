@@ -291,6 +291,15 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
   const insertHR = () => editor?.chain().focus().setHorizontalRule().run();
   const insertPageBreak = () => editor?.chain().focus().insertContent({ type: 'pageBreak' }).run();
   const insertSpacer = () => editor?.chain().focus().insertContent({ type: 'spacer', attrs: { size: '24px' } }).run();
+  const insertTable = (rows: number, cols: number) => editor?.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+  const insertTextBox = () => editor?.chain().focus().insertContent({
+    type: 'textbox',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nova caixa de texto — digite aqui...' }] }],
+  }).run();
+  const insertImage = () => {
+    const url = window.prompt('URL da imagem:');
+    if (url) editor?.chain().focus().setImage({ src: url }).run();
+  };
   const setColor = (color: string) => {
     if (!editor) return;
     editor.chain().focus().setMark('textStyle', { color }).run();
