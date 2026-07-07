@@ -36,7 +36,7 @@ interface DocumentItem {
   id: string;
   nome: string;
   categoria: Categoria;
-  builtin?: 'ficha_completa' | 'ficha_dados' | 'apac';
+  builtin?: 'ficha_completa' | 'ficha_dados' | 'apac' | 'oci_ortopedia';
   icon: React.ReactNode;
 }
 
