@@ -704,7 +704,14 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) onClose(); }}>
+  const handleFechar = () => {
+    if (aditivosDirty) onResolved();
+    else onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) handleFechar(); }}>
+
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
