@@ -75,9 +75,10 @@ export async function createPatientReferral(referral: Omit<PatientReferral, 'id'
 }
 
 export async function updatePatientReferral(id: string, updates: Partial<PatientReferral>): Promise<PatientReferral> {
+  const { attachments: _ignored, ...dbUpdates } = updates as any;
   const { data, error } = await supabase
     .from('patient_referrals')
-    .update(updates)
+    .update(dbUpdates)
     .eq('id', id)
     .select()
     .single();
