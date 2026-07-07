@@ -360,7 +360,7 @@ const ModelosDocumentos: React.FC = () => {
             </Select>
           </div>
 
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && READY_TEMPLATES.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
               <p className="text-sm">Nenhum modelo encontrado.</p>
