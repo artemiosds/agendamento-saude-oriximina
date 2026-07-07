@@ -500,8 +500,17 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         });
       } catch (_e) { /* noop */ }
 
-      toast.success(`Aditivo ${novoCod} cadastrado para ${item.competencia.slice(4,6)}/${item.competencia.slice(0,4)}.`);
-      onResolved();
+      toast.success(`Aditivo ${novoCod} cadastrado para ${item.competencia.slice(4,6)}/${item.competencia.slice(0,4)}. Você pode adicionar outro.`);
+      setAditivosDirty(true);
+      // Limpa seleção para permitir adicionar outro procedimento nesta mesma abertura
+      setSelSigtap(null);
+      setSelCid("");
+      setCidManual("");
+      setCidOptions([]);
+      setCidQuery("");
+      setQuery("");
+      setHits([]);
+      setAdicionarExtra(false);
     } catch (e: any) {
       toast.error("Falha ao salvar aditivo: " + (e?.message || "erro"));
     } finally {
@@ -516,8 +525,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       const nova = aditivos.filter((a) => normalizeSigtap(a.codigo) !== cod);
       await persistirAditivos(nova);
       setAditivos(nova);
+      setAditivosDirty(true);
       toast.success("Aditivo removido.");
-      onResolved();
     } catch (e: any) {
       toast.error("Falha ao remover aditivo: " + (e?.message || "erro"));
     } finally {
