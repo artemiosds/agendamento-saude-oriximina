@@ -147,6 +147,11 @@ const DocumentCenter: React.FC<Props> = ({
     if (item.builtin === 'ficha_completa') { onOpenChange(false); onOpenFichaCompleta(); return; }
     if (item.builtin === 'ficha_dados')    { onOpenChange(false); onOpenFichaSoDados(); return; }
     if (item.builtin === 'apac')           { onOpenChange(false); onOpenApac(); return; }
+    if (item.builtin === 'oci_ortopedia')  {
+      onOpenChange(false);
+      if (paciente) printOciOrtopedia(paciente as any, undefined);
+      return;
+    }
     setGerarTemplateId(item.id);
   };
 
