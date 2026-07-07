@@ -730,7 +730,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
             ) : (
               <>
                 <FileText className="h-3 w-3" />
-                {prontuarios.length} prontuário(s) {item?.competencia ? "no mês" : "nessa data"} serão atualizados
+                {prontuarios.length} {isAgendaMode ? "agendamento(s)" : "prontuário(s)"} {item?.competencia ? "no mês" : "nessa data"} serão atualizados
                 {isFisio && ptsAtivo && <> · PTS vinculado: <b>{ptsAtivo.id?.slice(0, 8)}</b></>}
               </>
             )}
