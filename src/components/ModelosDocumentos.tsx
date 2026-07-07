@@ -14,9 +14,11 @@ import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { FileText, Plus, Pencil, Trash2, Eye, Copy, Loader2, Printer, Search, Globe, Building2, UserIcon, Filter } from 'lucide-react';
+import { FileText, Plus, Pencil, Trash2, Eye, Copy, Loader2, Printer, Search, Globe, Building2, UserIcon, Filter, Sparkles } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, type DocumentConfig } from '@/lib/printLayout';
 import { applyExampleValues, normalizeTemplateAliases } from '@/lib/templateVariables';
+import { READY_TEMPLATES } from '@/lib/readyTemplates';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 const RichTextEditor = lazy(() => import('@/components/editor/RichTextEditor'));
 
