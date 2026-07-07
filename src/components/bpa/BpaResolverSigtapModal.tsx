@@ -703,7 +703,6 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     }
   };
 
-  return (
   const handleFechar = () => {
     if (aditivosDirty) onResolved();
     else onClose();
