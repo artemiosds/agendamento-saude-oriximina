@@ -133,6 +133,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   // Aditivos por competência (pacientes.custom_data.bpa_aditivos)
   const [aditivos, setAditivos] = useState<Array<{ codigo: string; nome?: string; cid?: string; competencia?: string; added_at?: string; added_by_nome?: string }>>([]);
   const [savingAditivo, setSavingAditivo] = useState(false);
+  // Marca se houve alteração em aditivos para regenerar exportação ao fechar
+  const [aditivosDirty, setAditivosDirty] = useState(false);
 
   // Progresso de gravação em lote
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -157,6 +159,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setAdicionarExtra(false);
     setProntuarios([]);
     setAditivos([]);
+    setAditivosDirty(false);
+
 
     setPtsList([]);
     setPtsAtivo(null);
@@ -496,8 +500,17 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         });
       } catch (_e) { /* noop */ }
 
-      toast.success(`Aditivo ${novoCod} cadastrado para ${item.competencia.slice(4,6)}/${item.competencia.slice(0,4)}.`);
-      onResolved();
+      toast.success(`Aditivo ${novoCod} cadastrado para ${item.competencia.slice(4,6)}/${item.competencia.slice(0,4)}. Você pode adicionar outro.`);
+      setAditivosDirty(true);
+      // Limpa seleção para permitir adicionar outro procedimento nesta mesma abertura
+      setSelSigtap(null);
+      setSelCid("");
+      setCidManual("");
+      setCidOptions([]);
+      setCidQuery("");
+      setQuery("");
+      setHits([]);
+      setAdicionarExtra(false);
     } catch (e: any) {
       toast.error("Falha ao salvar aditivo: " + (e?.message || "erro"));
     } finally {
@@ -512,8 +525,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
       const nova = aditivos.filter((a) => normalizeSigtap(a.codigo) !== cod);
       await persistirAditivos(nova);
       setAditivos(nova);
+      setAditivosDirty(true);
       toast.success("Aditivo removido.");
-      onResolved();
     } catch (e: any) {
       toast.error("Falha ao remover aditivo: " + (e?.message || "erro"));
     } finally {
@@ -690,8 +703,14 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     }
   };
 
+  const handleFechar = () => {
+    if (aditivosDirty) onResolved();
+    else onClose();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) onClose(); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) handleFechar(); }}>
+
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1056,7 +1075,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="ghost" onClick={handleFechar} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSalvar} disabled={!podeSalvar || saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             {saving && progress
