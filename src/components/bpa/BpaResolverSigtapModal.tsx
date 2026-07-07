@@ -159,6 +159,8 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
     setAdicionarExtra(false);
     setProntuarios([]);
     setAditivos([]);
+    setAditivosDirty(false);
+
 
     setPtsList([]);
     setPtsAtivo(null);
