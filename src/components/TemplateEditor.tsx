@@ -177,6 +177,16 @@ const SpacerNode = Node.create({
   },
 });
 
+// Caixa de texto arrastável
+const TextBoxNode = Node.create({
+  name: 'textbox', group: 'block', content: 'block+', draggable: true, defining: true,
+  parseHTML() { return [{ tag: 'div[data-type="textbox"]' }]; },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'textbox', class: 'tpl-textbox' }), 0];
+  },
+});
+
+
 // -------- Editor Panel --------
 interface EditorPanelProps {
   templateId?: string | null;
