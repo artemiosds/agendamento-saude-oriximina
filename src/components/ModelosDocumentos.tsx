@@ -360,7 +360,7 @@ const ModelosDocumentos: React.FC = () => {
             </Select>
           </div>
 
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && READY_TEMPLATES.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
               <p className="text-sm">Nenhum modelo encontrado.</p>
@@ -368,6 +368,63 @@ const ModelosDocumentos: React.FC = () => {
             </div>
           ) : (
             <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+              {READY_TEMPLATES
+                .filter(rt => !modelos.some(m => m.nome.trim().toLowerCase() === rt.nome.trim().toLowerCase()))
+                .filter(rt => {
+                  if (search && !rt.nome.toLowerCase().includes(search.toLowerCase()) && !rt.tipo.toLowerCase().includes(search.toLowerCase())) return false;
+                  if (filterTipo !== 'todos' && rt.tipo !== filterTipo) return false;
+                  return true;
+                })
+                .map(rt => {
+                  const openReady = () => {
+                    setCurrent({
+                      id: '',
+                      nome: rt.nome,
+                      tipo: rt.tipo,
+                      conteudo: rt.conteudo,
+                      ativo: true,
+                      perfis_permitidos: ['master', 'profissional'],
+                      tipo_modelo: user?.role === 'master' || isGlobalAdmin ? 'UNIDADE' : 'PROFISSIONAL',
+                      unidade_id: user?.unidadeId || '',
+                      criado_por: user?.id || '',
+                      criado_por_nome: user?.nome || '',
+                      versoes: [],
+                      blocos_clinicos: [],
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    });
+                    setEditOpen(true);
+                  };
+                  return (
+                    <div
+                      key={`ready-${rt.id}`}
+                      className="border border-dashed rounded-lg p-4 transition-all flex flex-col gap-3 bg-primary/5 hover:bg-primary/10 hover:shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-sm truncate" title={rt.nome}>{rt.nome}</h4>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5">{rt.tipo}</Badge>
+                            <Badge variant="secondary" className="text-[10px] gap-1 py-0 px-1.5 bg-primary/15 text-primary">
+                              <Sparkles className="w-3 h-3" /> Pronto
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-3 flex-1">
+                        {rt.descricao || rt.conteudo.replace(/<[^>]*>/g, '').slice(0, 160)}
+                      </p>
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                        <span className="text-[10px] text-muted-foreground">Modelo pronto — clique para editar/salvar</span>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={openReady} title="Editar e salvar">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               {filtered.map(m => {
                 const tipoInfo = TIPO_MODELO_LABELS[m.tipo_modelo] || TIPO_MODELO_LABELS.UNIDADE;
                 const TipoIcon = tipoInfo.icon;
