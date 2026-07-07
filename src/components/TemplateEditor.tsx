@@ -33,6 +33,7 @@ import {
   Strikethrough, Subscript as SubIcon, Superscript as SupIcon, Undo2, Redo2, Minus,
   FileImage, PenLine, QrCode, Barcode, Upload, Clock, Hash, DollarSign, Mail, Link as LinkIcon,
   Phone, MapPin, IdCard, CircleDot, AlignVerticalSpaceAround, SeparatorHorizontal, Palette,
+  Square, ImageIcon, Rows, Columns, ChevronDown,
 } from 'lucide-react';
 
 const FONT_FAMILIES = [
