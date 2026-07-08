@@ -47,7 +47,7 @@ export function useWhatsappStatus() {
   useEffect(() => {
     if (!unidadeId || isGlobalAdmin) return;
     const channel = supabase
-      .channel(`whatsapp_config_${unidadeId}`)
+      .channel(`whatsapp_config_${unidadeId}_${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes' as any,
         { event: '*', schema: 'public', table: 'whatsapp_config', filter: `unidade_id=eq.${unidadeId}` },
