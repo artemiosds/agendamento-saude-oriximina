@@ -15,6 +15,7 @@ import Dropcursor from '@tiptap/extension-dropcursor';
 import DOMPurify from 'dompurify';
 import { applyExampleValues, normalizeTemplateAliases, TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
 import { supabase } from '@/integrations/supabase/client';
+import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
