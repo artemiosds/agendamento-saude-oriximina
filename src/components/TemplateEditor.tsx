@@ -514,8 +514,14 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
         .prose th, .prose td { border: 1px solid hsl(var(--border)); padding: 4px 8px; vertical-align: top; position: relative; }
         .prose th { background: hsl(var(--muted)); font-weight: 700; }
         .ProseMirror .selectedCell::after { content: ''; position: absolute; inset: 0; background: hsl(var(--primary) / 0.15); pointer-events: none; }
+        /* Native resize handles inside editor for textbox and tables */
+        .ProseMirror .tpl-textbox { resize: both; overflow: auto; min-width: 120px; min-height: 48px; }
+        .ProseMirror table { display: block; resize: horizontal; overflow: auto; max-width: 100%; }
+        /* Drag handle hint for tables */
+        .ProseMirror table { cursor: grab; }
+        .ProseMirror table:active { cursor: grabbing; }
         .tpl-textbox { border: 1px dashed hsl(var(--border)); background: hsl(var(--muted) / 0.35); padding: 10px 12px; margin: 8px 0; border-radius: 8px; position: relative; }
-        .tpl-textbox::before { content: '⋮⋮ caixa de texto (arraste)'; position: absolute; top: -9px; left: 10px; font-size: 9px; background: hsl(var(--background)); color: hsl(var(--muted-foreground)); padding: 0 6px; letter-spacing: 0.5px; text-transform: uppercase; border-radius: 3px; }
+        .tpl-textbox::before { content: '⋮⋮ caixa de texto (arraste p/ mover · canto p/ redimensionar)'; position: absolute; top: -9px; left: 10px; font-size: 9px; background: hsl(var(--background)); color: hsl(var(--muted-foreground)); padding: 0 6px; letter-spacing: 0.5px; text-transform: uppercase; border-radius: 3px; }
         .prose img { max-width: 100%; height: auto; }
 
         /* Visual A4 sheet */
