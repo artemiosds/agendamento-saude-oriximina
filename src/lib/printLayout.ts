@@ -118,6 +118,7 @@ function mergeConfig(raw: any): DocumentConfig {
     logoCentral: raw.cabecalho?.logoCentral || raw.logoCentral || '',
     logoDireita: raw.cabecalho?.logoDireita || raw.logoDireita || '',
     mostrarLogoCentral: centralLegado,
+    mostrarLogos: raw.mostrarLogos !== false,
     logosConfig: {
       esquerda: mergeSlot(lc.esquerda, DEFAULT_CONFIG.logosConfig.esquerda),
       central: mergeSlot(lc.central, { ...DEFAULT_CONFIG.logosConfig.central, ativo: centralLegado }),
