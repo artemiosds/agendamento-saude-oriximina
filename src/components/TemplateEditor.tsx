@@ -1075,10 +1075,26 @@ const TemplateEditor: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null | undefined>(undefined); // undefined=lista, null=novo, string=id
   const [seed, setSeed] = useState<{ nome: string; tipo: string; conteudo: string } | null>(null);
 
+  const READY_HIDDEN_KEY = 'template_editor_hidden_ready';
+  const [hiddenReady, setHiddenReady] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(READY_HIDDEN_KEY) || '[]'); } catch { return []; }
+  });
+  const persistHidden = (arr: string[]) => {
+    setHiddenReady(arr);
+    try { localStorage.setItem(READY_HIDDEN_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+  };
+  const hideReady = (id: string) => {
+    if (!window.confirm('Ocultar este modelo pronto da lista? Você pode restaurá-lo limpando o cache do navegador.')) return;
+    persistHidden([...new Set([...hiddenReady, id])]);
+    toast.success('Modelo pronto ocultado');
+  };
+
   const readyRows = useMemo(() => {
     const existingNames = new Set(templates.map(t => (t.nome || '').trim().toLowerCase()));
-    return READY_TEMPLATES.filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()));
-  }, [templates]);
+    return READY_TEMPLATES
+      .filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()))
+      .filter(rt => !hiddenReady.includes(rt.id));
+  }, [templates, hiddenReady]);
 
   const load = async () => {
     setLoading(true);
