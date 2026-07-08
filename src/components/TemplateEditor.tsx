@@ -542,6 +542,61 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
                 <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().splitCell().run()}>Dividir célula</DropdownMenuItem>
                 <DropdownMenuItem disabled={!editor?.isActive('table')} onClick={() => editor?.chain().focus().toggleHeaderRow().run()}>Alternar cabeçalho</DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Estilo da célula</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <label className="flex items-center justify-between gap-2 w-full px-2 py-1.5 cursor-pointer text-xs">
+                    <span>Cor de fundo</span>
+                    <input type="color" className="h-6 w-8 p-0 border rounded cursor-pointer"
+                      onChange={(e) => (editor?.chain().focus() as any).setCellAttribute('backgroundColor', e.target.value).run()} />
+                  </label>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')}
+                  onClick={() => (editor?.chain().focus() as any).setCellAttribute('backgroundColor', null).run()}>
+                  Remover cor de fundo
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Bordas</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <label className="flex items-center justify-between gap-2 w-full px-2 py-1.5 cursor-pointer text-xs">
+                    <span>Cor da borda</span>
+                    <input type="color" defaultValue="#94a3b8" className="h-6 w-8 p-0 border rounded cursor-pointer"
+                      onChange={(e) => (editor?.chain().focus() as any).setCellAttribute('borderColor', e.target.value).run()} />
+                  </label>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                    <span>Espessura</span>
+                    <div className="flex gap-1">
+                      {['1px', '2px', '3px', '4px'].map((w) => (
+                        <button key={w} type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                          onClick={() => (editor?.chain().focus() as any).setCellAttribute('borderWidth', w).run()}>{w}</button>
+                      ))}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                    <span>Estilo</span>
+                    <div className="flex gap-1">
+                      {[{ l: 'Sólida', v: 'solid' }, { l: 'Tracej.', v: 'dashed' }, { l: 'Pontil.', v: 'dotted' }, { l: 'Dupla', v: 'double' }].map((s) => (
+                        <button key={s.v} type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                          onClick={() => (editor?.chain().focus() as any).setCellAttribute('borderStyleAttr', s.v).run()}>{s.l}</button>
+                      ))}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')}
+                  onClick={() => (editor?.chain().focus() as any).setCellAttribute('borderStyleAttr', 'hidden').run()}>
+                  Remover borda desta célula
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('table')}
+                  onClick={() => {
+                    const c: any = editor?.chain().focus();
+                    c.setCellAttribute('borderColor', null).setCellAttribute('borderWidth', null).setCellAttribute('borderStyleAttr', null).run();
+                  }}>
+                  Resetar borda ao padrão
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem disabled={!editor?.isActive('table')} className="text-destructive" onClick={() => editor?.chain().focus().deleteTable().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir tabela</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
