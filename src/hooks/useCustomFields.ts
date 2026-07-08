@@ -266,10 +266,12 @@ export function useCustomFields(screen?: ScreenKey, unidadeId?: string) {
 
   // Realtime — refetch whenever the row changes anywhere in the system
   useEffect(() => {
-    const channel = supabase
-      .channel('custom-fields-config')
+    const channel = supabase.channel(
+      `custom-fields-config-${Math.random().toString(36).slice(2)}`,
+    );
+    channel
       .on(
-        'postgres_changes',
+        'postgres_changes' as any,
         { event: '*', schema: 'public', table: 'system_config', filter: `id=eq.${CONFIG_ID}` },
         () => fetchConfig(),
       )
