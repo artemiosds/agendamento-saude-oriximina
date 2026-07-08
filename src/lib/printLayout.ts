@@ -771,9 +771,15 @@ export function buildDocumentShell(
 </html>`;
 }
 
-export async function openPrintDocument(title: string, body: string, meta?: Record<string, string>): Promise<void> {
+export async function openPrintDocument(
+  title: string,
+  body: string,
+  meta?: Record<string, string>,
+  configOverride?: Partial<DocumentConfig>,
+): Promise<void> {
   const config = await loadDocumentConfig();
-  printViaIframe(buildDocumentShell(title, body, config, meta));
+  const merged = configOverride ? { ...config, ...configOverride } as DocumentConfig : config;
+  printViaIframe(buildDocumentShell(title, body, merged, meta));
 }
 
 export function printViaIframe(html: string): void {

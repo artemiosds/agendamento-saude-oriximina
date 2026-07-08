@@ -25,6 +25,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import {
   Bold, Italic, UnderlineIcon, Heading1, Heading2, Heading3,
@@ -282,6 +283,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   const [zoom, setZoom] = useState<number>(100); // %
   const [showGrid, setShowGrid] = useState<boolean>(false);
   const [showRuler, setShowRuler] = useState<boolean>(true);
+  const [mostrarLogos, setMostrarLogos] = useState<boolean>(true);
 
   const PAGE_DIMS = { A4: [210, 297], A5: [148, 210], Letter: [216, 279], Legal: [216, 356] } as const;
   const [pageW, pageH] = orientation === 'portrait' ? PAGE_DIMS[pageSize] : [PAGE_DIMS[pageSize][1], PAGE_DIMS[pageSize][0]];
@@ -329,6 +331,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       setCategoria((CATEGORIAS.includes(data.tipo as Categoria) ? data.tipo : 'Clínico') as Categoria);
       const meta = (data.blocos_clinicos as any) || {};
       setCamposManuais(meta.campos_manuais || []);
+      setMostrarLogos(meta.mostrar_logos !== false);
       if (editor) {
         editor.commands.setContent(normalizeTemplateAliases(data.conteudo || '<p></p>'));
         setDirty(false);
@@ -442,7 +445,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       p_perfis_permitidos: templateId ? null : ['master', 'profissional', 'coordenador', 'gestao'],
       p_tipo_modelo: templateId ? null : 'UNIDADE',
       p_unidade_id: templateId ? null : (user?.unidadeId || ''),
-      p_blocos_clinicos: { campos_manuais: camposManuais },
+      p_blocos_clinicos: { campos_manuais: camposManuais, mostrar_logos: mostrarLogos },
       p_versoes: templateId ? null : [],
     });
     if (error) {
@@ -579,6 +582,15 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
           </Select>
         </div>
       </div>
+
+      <div className="flex items-center justify-between border rounded-md px-3 py-2 bg-muted/30">
+        <div>
+          <Label className="text-sm">Exibir logos no cabeçalho oficial</Label>
+          <p className="text-xs text-muted-foreground">Controla os logos institucionais somente para este documento na hora da impressão.</p>
+        </div>
+        <Switch checked={mostrarLogos} onCheckedChange={(v) => { setMostrarLogos(!!v); setDirty(true); }} />
+      </div>
+
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
         {/* Left: editor */}

@@ -243,11 +243,15 @@ const ModelosDocumentos: React.FC = () => {
         <div class="role">Fisioterapia — CRF 12345/PA</div>
       </div>
     `;
+    const meta = (m.blocos_clinicos as any) || {};
+    const override = meta && typeof meta === 'object' && 'mostrar_logos' in meta
+      ? { mostrarLogos: meta.mostrar_logos !== false }
+      : undefined;
     openPrintDocument(m.tipo, body, {
       'Paciente': 'João da Silva',
       'CPF': '123.456.789-00',
       'Data': new Date().toLocaleDateString('pt-BR'),
-    });
+    }, override);
   };
 
   const canEdit = (m: DocumentTemplate) => {
