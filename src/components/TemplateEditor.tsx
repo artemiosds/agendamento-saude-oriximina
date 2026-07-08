@@ -1084,6 +1084,14 @@ const TemplateEditor: React.FC = () => {
     setLoading(false);
   };
 
+  const handleDelete = async (t: TemplateRow) => {
+    if (!window.confirm(`Excluir o modelo "${t.nome}"? Esta ação não pode ser desfeita.`)) return;
+    const { error } = await supabase.from('document_templates').delete().eq('id', t.id);
+    if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
+    toast.success('Modelo excluído');
+    load();
+  };
+
   useEffect(() => { load(); }, []);
 
   // Auto-abrir modo criação quando URL contiver ?novo=1
