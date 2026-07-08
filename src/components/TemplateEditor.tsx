@@ -247,6 +247,15 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
   const [addFieldOpen, setAddFieldOpen] = useState<null | ManualField['type']>(null);
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldOptions, setNewFieldOptions] = useState('');
+  const [pageSize, setPageSize] = useState<'A4' | 'A5' | 'Letter' | 'Legal'>('A4');
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [pageMargin, setPageMargin] = useState<number>(20); // mm
+  const [zoom, setZoom] = useState<number>(100); // %
+  const [showGrid, setShowGrid] = useState<boolean>(false);
+  const [showRuler, setShowRuler] = useState<boolean>(true);
+
+  const PAGE_DIMS = { A4: [210, 297], A5: [148, 210], Letter: [216, 279], Legal: [216, 356] } as const;
+  const [pageW, pageH] = orientation === 'portrait' ? PAGE_DIMS[pageSize] : [PAGE_DIMS[pageSize][1], PAGE_DIMS[pageSize][0]];
 
   const editor = useEditor({
     extensions: [
@@ -266,7 +275,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     content: '<p></p>',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[400px] p-4 bg-background rounded-md border',
+        class: 'prose prose-sm max-w-none focus:outline-none tpl-editor-canvas',
       },
     },
     onUpdate: () => setDirty(true),
@@ -467,6 +476,53 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
         .tpl-textbox { border: 1px dashed hsl(var(--border)); background: hsl(var(--muted) / 0.35); padding: 10px 12px; margin: 8px 0; border-radius: 8px; position: relative; }
         .tpl-textbox::before { content: '⋮⋮ caixa de texto (arraste)'; position: absolute; top: -9px; left: 10px; font-size: 9px; background: hsl(var(--background)); color: hsl(var(--muted-foreground)); padding: 0 6px; letter-spacing: 0.5px; text-transform: uppercase; border-radius: 3px; }
         .prose img { max-width: 100%; height: auto; }
+
+        /* Visual A4 sheet */
+        .tpl-page-viewport {
+          background: hsl(220 15% 92%);
+          border: 1px solid hsl(var(--border));
+          border-radius: 6px;
+          padding: 24px 16px;
+          overflow: auto;
+          max-height: 75vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+        }
+        .tpl-ruler-h {
+          position: relative;
+          height: 16px;
+          background: repeating-linear-gradient(to right,
+            hsl(var(--muted-foreground) / 0.3) 0, hsl(var(--muted-foreground) / 0.3) 1px,
+            transparent 1px, transparent 5mm);
+          border-bottom: 1px solid hsl(var(--border));
+          background-color: hsl(var(--background));
+          border-radius: 3px 3px 0 0;
+        }
+        .tpl-ruler-h span {
+          position: absolute; top: 1px; font-size: 8px; color: hsl(var(--muted-foreground));
+          transform: translateX(-50%);
+        }
+        .tpl-page-sheet {
+          background: #ffffff;
+          color: #000;
+          box-shadow: 0 4px 18px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08);
+          transform-origin: top center;
+          transition: transform 0.15s ease;
+          margin: 0 auto;
+          position: relative;
+        }
+        .tpl-page-sheet .tpl-editor-canvas {
+          outline: none;
+          min-height: 100%;
+        }
+        .tpl-page-sheet.tpl-page-grid {
+          background-image:
+            linear-gradient(to right, hsl(210 40% 90%) 1px, transparent 1px),
+            linear-gradient(to bottom, hsl(210 40% 90%) 1px, transparent 1px);
+          background-size: 5mm 5mm;
+        }
       `}</style>
 
       {/* Header form */}
@@ -649,8 +705,71 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             </Select>
           </div>
 
-          <EditorContent editor={editor} />
+          {/* Barra de página / zoom */}
+          <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 border-b bg-muted/40 text-xs">
+            <span className="font-semibold text-muted-foreground">Página:</span>
+            <Select value={pageSize} onValueChange={(v: any) => setPageSize(v)}>
+              <SelectTrigger className="h-7 w-[90px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="A4">A4 (210×297)</SelectItem>
+                <SelectItem value="A5">A5 (148×210)</SelectItem>
+                <SelectItem value="Letter">Letter</SelectItem>
+                <SelectItem value="Legal">Legal</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={orientation} onValueChange={(v: any) => setOrientation(v)}>
+              <SelectTrigger className="h-7 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="portrait">Retrato</SelectItem>
+                <SelectItem value="landscape">Paisagem</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="ml-1">Margem</span>
+            <Input
+              type="number" min={0} max={60} value={pageMargin}
+              onChange={(e) => setPageMargin(Number(e.target.value) || 0)}
+              className="h-7 w-14 text-xs"
+            />
+            <span>mm</span>
+            <Separator orientation="vertical" className="h-5 mx-1" />
+            <span>Zoom</span>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setZoom(z => Math.max(50, z - 10))}>−</Button>
+            <span className="w-10 text-center tabular-nums">{zoom}%</span>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</Button>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setZoom(100)}>100%</Button>
+            <Separator orientation="vertical" className="h-5 mx-1" />
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} /> Grade
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={showRuler} onChange={e => setShowRuler(e.target.checked)} /> Régua
+            </label>
+            <span className="ml-auto text-muted-foreground">{pageW} × {pageH} mm</span>
+          </div>
+
+          {/* Área visual da folha */}
+          <div className="tpl-page-viewport">
+            {showRuler && (
+              <div className="tpl-ruler-h" style={{ width: `${pageW}mm` }}>
+                {Array.from({ length: Math.ceil(pageW / 10) + 1 }).map((_, i) => (
+                  <span key={i} style={{ left: `${i * 10}mm` }}>{i}</span>
+                ))}
+              </div>
+            )}
+            <div
+              className={`tpl-page-sheet${showGrid ? ' tpl-page-grid' : ''}`}
+              style={{
+                width: `${pageW}mm`,
+                minHeight: `${pageH}mm`,
+                padding: `${pageMargin}mm`,
+                transform: `scale(${zoom / 100})`,
+              }}
+            >
+              <EditorContent editor={editor} />
+            </div>
+          </div>
         </div>
+
 
         {/* Right: variables sidebar */}
         <aside className="space-y-4 border rounded-md p-3 bg-card/50 max-h-[600px] overflow-y-auto">
