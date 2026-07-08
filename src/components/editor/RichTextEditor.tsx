@@ -7,8 +7,60 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Highlight from '@tiptap/extension-highlight';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell as BaseTableCell } from '@tiptap/extension-table-cell';
+import { TableHeader as BaseTableHeader } from '@tiptap/extension-table-header';
+
+/** Extensões de célula e cabeçalho com estilos customizáveis (borda, cor, fundo) */
+const styleAttrs = {
+  backgroundColor: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.style.backgroundColor || el.getAttribute('data-bg') || null,
+    renderHTML: (attrs: any) => (attrs.backgroundColor ? { style: `background-color:${attrs.backgroundColor}` } : {}),
+  },
+  borderColor: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-color') || null,
+    renderHTML: (attrs: any) => (attrs.borderColor ? { 'data-border-color': attrs.borderColor } : {}),
+  },
+  borderWidth: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-width') || null,
+    renderHTML: (attrs: any) => (attrs.borderWidth ? { 'data-border-width': attrs.borderWidth } : {}),
+  },
+  borderStyleAttr: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-style') || null,
+    renderHTML: (attrs: any) => (attrs.borderStyleAttr ? { 'data-border-style': attrs.borderStyleAttr } : {}),
+  },
+};
+
+const mergeStyleFromAttrs = (attrs: any, existing: Record<string, any> = {}) => {
+  const styles: string[] = [];
+  if (attrs.backgroundColor) styles.push(`background-color:${attrs.backgroundColor}`);
+  if (attrs.borderColor) styles.push(`border-color:${attrs.borderColor}`);
+  if (attrs.borderWidth) styles.push(`border-width:${attrs.borderWidth}`);
+  if (attrs.borderStyleAttr) styles.push(`border-style:${attrs.borderStyleAttr}`);
+  if (existing.style) styles.push(String(existing.style));
+  return styles.length ? { ...existing, style: styles.join(';') } : existing;
+};
+
+const TableCell = BaseTableCell.extend({
+  addAttributes() {
+    return { ...this.parent?.(), ...styleAttrs };
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return ['td', mergeStyleFromAttrs(node.attrs, HTMLAttributes), 0];
+  },
+});
+
+const TableHeader = BaseTableHeader.extend({
+  addAttributes() {
+    return { ...this.parent?.(), ...styleAttrs };
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return ['th', mergeStyleFromAttrs(node.attrs, HTMLAttributes), 0];
+  },
+});
 import Image from '@tiptap/extension-image';
 import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
