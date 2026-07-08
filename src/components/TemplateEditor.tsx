@@ -1084,6 +1084,14 @@ const TemplateEditor: React.FC = () => {
     setLoading(false);
   };
 
+  const handleDelete = async (t: TemplateRow) => {
+    if (!window.confirm(`Excluir o modelo "${t.nome}"? Esta ação não pode ser desfeita.`)) return;
+    const { error } = await supabase.from('document_templates').delete().eq('id', t.id);
+    if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
+    toast.success('Modelo excluído');
+    load();
+  };
+
   useEffect(() => { load(); }, []);
 
   // Auto-abrir modo criação quando URL contiver ?novo=1
@@ -1150,9 +1158,14 @@ const TemplateEditor: React.FC = () => {
                   <td className="p-2">{t.tipo}</td>
                   <td className="p-2">{t.ativo ? 'Ativo' : 'Inativo'}</td>
                   <td className="p-2 text-right">
-                    <Button size="sm" variant="outline" className="gap-1" onClick={() => { setSeed(null); setEditingId(t.id); }}>
-                      <Pencil className="w-3.5 h-3.5" /> Editar
-                    </Button>
+                    <div className="flex justify-end gap-1.5">
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => { setSeed(null); setEditingId(t.id); }}>
+                        <Pencil className="w-3.5 h-3.5" /> Editar
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1 text-destructive hover:text-destructive" onClick={() => handleDelete(t)}>
+                        <Trash2 className="w-3.5 h-3.5" /> Excluir
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
