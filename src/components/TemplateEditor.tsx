@@ -15,6 +15,7 @@ import Dropcursor from '@tiptap/extension-dropcursor';
 import DOMPurify from 'dompurify';
 import { applyExampleValues, normalizeTemplateAliases, TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
 import { supabase } from '@/integrations/supabase/client';
+import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -259,10 +260,11 @@ const TableHeader = BaseTableHeader.extend({
 // -------- Editor Panel --------
 interface EditorPanelProps {
   templateId?: string | null;
+  seed?: { nome: string; tipo: string; conteudo: string } | null;
   onDone: () => void;
 }
 
-const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone }) => {
+const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onDone }) => {
   const { user } = useAuth();
   const [nome, setNome] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('Clínico');
@@ -334,6 +336,15 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
       setLoading(false);
     })();
   }, [templateId, editor]);
+
+  // Apply seed (ready template) when creating new
+  useEffect(() => {
+    if (templateId || !seed || !editor) return;
+    setNome(seed.nome || '');
+    setCategoria((CATEGORIAS.includes(seed.tipo as Categoria) ? seed.tipo : 'Clínico') as Categoria);
+    editor.commands.setContent(normalizeTemplateAliases(seed.conteudo || '<p></p>'));
+    setDirty(true);
+  }, [seed, templateId, editor]);
 
   // -------- Insert helpers --------
   const insertVariable = (key: string) => {
@@ -1044,6 +1055,12 @@ const TemplateEditor: React.FC = () => {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null | undefined>(undefined); // undefined=lista, null=novo, string=id
+  const [seed, setSeed] = useState<{ nome: string; tipo: string; conteudo: string } | null>(null);
+
+  const readyRows = useMemo(() => {
+    const existingNames = new Set(templates.map(t => (t.nome || '').trim().toLowerCase()));
+    return READY_TEMPLATES.filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()));
+  }, [templates]);
 
   const load = async () => {
     setLoading(true);
@@ -1077,10 +1094,10 @@ const TemplateEditor: React.FC = () => {
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">
-            {editingId ? 'Editar template' : 'Novo template'}
+            {editingId ? 'Editar template' : (seed ? `Novo template — ${seed.nome}` : 'Novo template')}
           </h3>
         </div>
-        <TemplateEditorPanel templateId={editingId} onDone={() => { setEditingId(undefined); load(); }} />
+        <TemplateEditorPanel templateId={editingId} seed={seed} onDone={() => { setEditingId(undefined); setSeed(null); load(); }} />
       </div>
     );
   }
@@ -1092,7 +1109,7 @@ const TemplateEditor: React.FC = () => {
           <FileText className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">Modelos de Documentos</h3>
         </div>
-        <Button onClick={() => setEditingId(null)} className="gap-1.5">
+        <Button onClick={() => { setSeed(null); setEditingId(null); }} className="gap-1.5">
           <Plus className="w-4 h-4" /> Criar novo tipo de documento
         </Button>
       </div>
@@ -1101,7 +1118,7 @@ const TemplateEditor: React.FC = () => {
         <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
         </div>
-      ) : templates.length === 0 ? (
+      ) : templates.length === 0 && readyRows.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">Nenhum template cadastrado.</p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -1121,7 +1138,27 @@ const TemplateEditor: React.FC = () => {
                   <td className="p-2">{t.tipo}</td>
                   <td className="p-2">{t.ativo ? 'Ativo' : 'Inativo'}</td>
                   <td className="p-2 text-right">
-                    <Button size="sm" variant="outline" className="gap-1" onClick={() => setEditingId(t.id)}>
+                    <Button size="sm" variant="outline" className="gap-1" onClick={() => { setSeed(null); setEditingId(t.id); }}>
+                      <Pencil className="w-3.5 h-3.5" /> Editar
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {readyRows.map(rt => (
+                <tr key={`ready-${rt.id}`} className="border-t hover:bg-muted/30 bg-primary/5">
+                  <td className="p-2">{rt.nome}</td>
+                  <td className="p-2">{rt.tipo}</td>
+                  <td className="p-2"><span className="text-primary font-medium">Modelo pronto</span></td>
+                  <td className="p-2 text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      onClick={() => {
+                        setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo });
+                        setEditingId(null);
+                      }}
+                    >
                       <Pencil className="w-3.5 h-3.5" /> Editar
                     </Button>
                   </td>
