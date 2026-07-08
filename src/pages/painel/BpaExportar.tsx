@@ -2201,6 +2201,17 @@ const BpaExportar: React.FC = () => {
               addCodigo(formData.procedimento_padrao, "Padrão (form)");
             }
           }
+          // 5.1) Fallback oficial: CBOs 223710 (Fisio), 223605 (Fono), 223810 (Nutri)
+          // sem nenhum SIGTAP coletado → usa 0301010048 (Consulta nível superior
+          // na atenção especializada — exceto médico). Não altera fluxo: só
+          // preenche o vazio antes do bloqueio por pendência.
+          {
+            const cboFallback = obterCboValido(prof);
+            const CBOS_CONSULTA_PADRAO = new Set(["223710", "223605", "223810"]);
+            if (codigosColetados.length === 0 && CBOS_CONSULTA_PADRAO.has(cboFallback)) {
+              addCodigo("0301010048", "Padrão CBO (Consulta nível superior)");
+            }
+          }
 
           const codigosParaExportar = consolidarCodigosColetados();
 
