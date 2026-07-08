@@ -603,9 +603,10 @@ export function docHeader(title: string, config: DocumentConfig, extraRight?: st
   const logoRightUrl = resolveLogoUrl(config.logoDireita, logoCerFallback);
   const logoCenterUrl = config.logoCentral;
 
-  const showLeft = slots.esquerda.ativo && !!logoLeftUrl;
-  const showRight = slots.direita.ativo && !!logoRightUrl;
-  const showCenter = slots.central.ativo && !!logoCenterUrl;
+  const logosEnabled = config.mostrarLogos !== false;
+  const showLeft = logosEnabled && slots.esquerda.ativo && !!logoLeftUrl;
+  const showRight = logosEnabled && slots.direita.ativo && !!logoRightUrl;
+  const showCenter = logosEnabled && slots.central.ativo && !!logoCenterUrl;
 
   const renderImg = (url: string, alt: string, slot: LogoSlotConfig) => {
     const h = slot.altura;
