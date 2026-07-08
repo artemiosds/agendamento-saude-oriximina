@@ -282,6 +282,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   const [zoom, setZoom] = useState<number>(100); // %
   const [showGrid, setShowGrid] = useState<boolean>(false);
   const [showRuler, setShowRuler] = useState<boolean>(true);
+  const [mostrarLogos, setMostrarLogos] = useState<boolean>(true);
 
   const PAGE_DIMS = { A4: [210, 297], A5: [148, 210], Letter: [216, 279], Legal: [216, 356] } as const;
   const [pageW, pageH] = orientation === 'portrait' ? PAGE_DIMS[pageSize] : [PAGE_DIMS[pageSize][1], PAGE_DIMS[pageSize][0]];
