@@ -37,7 +37,7 @@ export function useFormTemplate({ formSlug, profissionalId, unidadeId, enabled =
   useEffect(() => {
     if (!enabled || !formSlug) return;
     const channel = supabase
-      .channel(`form_templates:${formSlug}`)
+      .channel(`form_templates:${formSlug}:${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'form_templates', filter: `form_slug=eq.${formSlug}` },
