@@ -337,6 +337,15 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
     })();
   }, [templateId, editor]);
 
+  // Apply seed (ready template) when creating new
+  useEffect(() => {
+    if (templateId || !seed || !editor) return;
+    setNome(seed.nome || '');
+    setCategoria((CATEGORIAS.includes(seed.tipo as Categoria) ? seed.tipo : 'Clínico') as Categoria);
+    editor.commands.setContent(normalizeTemplateAliases(seed.conteudo || '<p></p>'));
+    setDirty(true);
+  }, [seed, templateId, editor]);
+
   // -------- Insert helpers --------
   const insertVariable = (key: string) => {
     if (!editor) return;
