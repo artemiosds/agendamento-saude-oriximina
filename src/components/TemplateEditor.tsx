@@ -1158,9 +1158,14 @@ const TemplateEditor: React.FC = () => {
                   <td className="p-2">{t.tipo}</td>
                   <td className="p-2">{t.ativo ? 'Ativo' : 'Inativo'}</td>
                   <td className="p-2 text-right">
-                    <Button size="sm" variant="outline" className="gap-1" onClick={() => { setSeed(null); setEditingId(t.id); }}>
-                      <Pencil className="w-3.5 h-3.5" /> Editar
-                    </Button>
+                    <div className="flex justify-end gap-1.5">
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => { setSeed(null); setEditingId(t.id); }}>
+                        <Pencil className="w-3.5 h-3.5" /> Editar
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1 text-destructive hover:text-destructive" onClick={() => handleDelete(t)}>
+                        <Trash2 className="w-3.5 h-3.5" /> Excluir
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
