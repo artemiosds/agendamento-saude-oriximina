@@ -260,10 +260,11 @@ const TableHeader = BaseTableHeader.extend({
 // -------- Editor Panel --------
 interface EditorPanelProps {
   templateId?: string | null;
+  seed?: { nome: string; tipo: string; conteudo: string } | null;
   onDone: () => void;
 }
 
-const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone }) => {
+const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onDone }) => {
   const { user } = useAuth();
   const [nome, setNome] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('Clínico');
