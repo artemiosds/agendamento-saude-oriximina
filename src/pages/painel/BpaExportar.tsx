@@ -2417,9 +2417,9 @@ const BpaExportar: React.FC = () => {
             const listaParaEmitir =
               codigosParaExportar.length > 0
                 ? codigosParaExportar
-                : sigtapReq.exige
+                : sigtapReq.exige && !formData.exportar_com_pendencias
                   ? []
-                  : [{ codigo: somenteNumeros(formData.procedimento_padrao) || "", origem: "Padrão (form)" }];
+                  : [{ codigo: somenteNumeros(formData.procedimento_padrao) || "", origem: formData.exportar_com_pendencias ? "Padrão (form) — pendência ignorada" : "Padrão (form)" }];
 
             for (const procEntry of listaParaEmitir) {
               const proc = zfill(procEntry.codigo, 10);
