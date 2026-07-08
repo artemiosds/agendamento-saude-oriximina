@@ -303,7 +303,17 @@ const ConfigImpressaoDocumentos: React.FC = () => {
                   <Eye className="w-4 h-4" /> Pré-visualizar A4
                 </Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center justify-between gap-3 rounded-md border p-3 bg-muted/30">
+                <div>
+                  <Label className="text-sm font-medium">Exibir logos no cabeçalho oficial</Label>
+                  <p className="text-xs text-muted-foreground">Quando desativado, nenhuma logo (esquerda, central ou direita) aparecerá nos documentos impressos — apenas o bloco institucional em texto.</p>
+                </div>
+                <Switch
+                  checked={config.mostrarLogos !== false}
+                  onCheckedChange={v => save({ ...config, mostrarLogos: v })}
+                />
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${config.mostrarLogos === false ? 'opacity-50 pointer-events-none' : ''}`}>
                 <LogoSlot label="Logo Esquerda" value={config.logoEsquerda} slot="esquerda" inputRef={refLeft} />
                 <LogoSlot label="Logo Central" value={config.logoCentral} slot="central" inputRef={refCenter} />
                 <LogoSlot label="Logo Direita" value={config.logoDireita} slot="direita" inputRef={refRight} />

@@ -34,6 +34,7 @@ export interface DocumentConfig {
   logoCentral: string;
   logoDireita: string;
   mostrarLogoCentral: boolean;
+  mostrarLogos: boolean;
   logosConfig: {
     esquerda: LogoSlotConfig;
     central: LogoSlotConfig;
@@ -73,6 +74,7 @@ export const DEFAULT_CONFIG: DocumentConfig = {
   logoCentral: '',
   logoDireita: '',
   mostrarLogoCentral: false,
+  mostrarLogos: true,
   logosConfig: {
     esquerda: defaultSlot(70, true),
     central: defaultSlot(72, false),
@@ -116,6 +118,7 @@ function mergeConfig(raw: any): DocumentConfig {
     logoCentral: raw.cabecalho?.logoCentral || raw.logoCentral || '',
     logoDireita: raw.cabecalho?.logoDireita || raw.logoDireita || '',
     mostrarLogoCentral: centralLegado,
+    mostrarLogos: raw.mostrarLogos !== false,
     logosConfig: {
       esquerda: mergeSlot(lc.esquerda, DEFAULT_CONFIG.logosConfig.esquerda),
       central: mergeSlot(lc.central, { ...DEFAULT_CONFIG.logosConfig.central, ativo: centralLegado }),
@@ -600,9 +603,10 @@ export function docHeader(title: string, config: DocumentConfig, extraRight?: st
   const logoRightUrl = resolveLogoUrl(config.logoDireita, logoCerFallback);
   const logoCenterUrl = config.logoCentral;
 
-  const showLeft = slots.esquerda.ativo && !!logoLeftUrl;
-  const showRight = slots.direita.ativo && !!logoRightUrl;
-  const showCenter = slots.central.ativo && !!logoCenterUrl;
+  const logosEnabled = config.mostrarLogos !== false;
+  const showLeft = logosEnabled && slots.esquerda.ativo && !!logoLeftUrl;
+  const showRight = logosEnabled && slots.direita.ativo && !!logoRightUrl;
+  const showCenter = logosEnabled && slots.central.ativo && !!logoCenterUrl;
 
   const renderImg = (url: string, alt: string, slot: LogoSlotConfig) => {
     const h = slot.altura;
