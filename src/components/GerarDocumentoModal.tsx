@@ -559,11 +559,15 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       });
 
       // Print
+      const tplMeta = (selected.blocos_clinicos as any) || {};
+      const printOverride = tplMeta && typeof tplMeta === 'object' && 'mostrar_logos' in tplMeta
+        ? { mostrarLogos: tplMeta.mostrar_logos !== false }
+        : undefined;
       openPrintDocument(selected.tipo, body, {
         'Paciente': paciente?.nome || '',
         'CPF': paciente?.cpf || '',
         'Data': hoje,
-      });
+      }, printOverride);
 
       toast.success('✅ Documento assinado e finalizado!');
       onOpenChange(false);
