@@ -658,8 +658,71 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
             </Select>
           </div>
 
-          <EditorContent editor={editor} />
+          {/* Barra de página / zoom */}
+          <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 border-b bg-muted/40 text-xs">
+            <span className="font-semibold text-muted-foreground">Página:</span>
+            <Select value={pageSize} onValueChange={(v: any) => setPageSize(v)}>
+              <SelectTrigger className="h-7 w-[90px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="A4">A4 (210×297)</SelectItem>
+                <SelectItem value="A5">A5 (148×210)</SelectItem>
+                <SelectItem value="Letter">Letter</SelectItem>
+                <SelectItem value="Legal">Legal</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={orientation} onValueChange={(v: any) => setOrientation(v)}>
+              <SelectTrigger className="h-7 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="portrait">Retrato</SelectItem>
+                <SelectItem value="landscape">Paisagem</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="ml-1">Margem</span>
+            <Input
+              type="number" min={0} max={60} value={pageMargin}
+              onChange={(e) => setPageMargin(Number(e.target.value) || 0)}
+              className="h-7 w-14 text-xs"
+            />
+            <span>mm</span>
+            <Separator orientation="vertical" className="h-5 mx-1" />
+            <span>Zoom</span>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setZoom(z => Math.max(50, z - 10))}>−</Button>
+            <span className="w-10 text-center tabular-nums">{zoom}%</span>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</Button>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setZoom(100)}>100%</Button>
+            <Separator orientation="vertical" className="h-5 mx-1" />
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} /> Grade
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={showRuler} onChange={e => setShowRuler(e.target.checked)} /> Régua
+            </label>
+            <span className="ml-auto text-muted-foreground">{pageW} × {pageH} mm</span>
+          </div>
+
+          {/* Área visual da folha */}
+          <div className="tpl-page-viewport">
+            {showRuler && (
+              <div className="tpl-ruler-h" style={{ width: `${pageW}mm` }}>
+                {Array.from({ length: Math.ceil(pageW / 10) + 1 }).map((_, i) => (
+                  <span key={i} style={{ left: `${i * 10}mm` }}>{i}</span>
+                ))}
+              </div>
+            )}
+            <div
+              className={`tpl-page-sheet${showGrid ? ' tpl-page-grid' : ''}`}
+              style={{
+                width: `${pageW}mm`,
+                minHeight: `${pageH}mm`,
+                padding: `${pageMargin}mm`,
+                transform: `scale(${zoom / 100})`,
+              }}
+            >
+              <EditorContent editor={editor} />
+            </div>
+          </div>
         </div>
+
 
         {/* Right: variables sidebar */}
         <aside className="space-y-4 border rounded-md p-3 bg-card/50 max-h-[600px] overflow-y-auto">
