@@ -34,6 +34,7 @@ export interface DocumentConfig {
   logoCentral: string;
   logoDireita: string;
   mostrarLogoCentral: boolean;
+  mostrarLogos: boolean;
   logosConfig: {
     esquerda: LogoSlotConfig;
     central: LogoSlotConfig;
