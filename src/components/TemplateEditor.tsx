@@ -330,6 +330,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       setCategoria((CATEGORIAS.includes(data.tipo as Categoria) ? data.tipo : 'Clínico') as Categoria);
       const meta = (data.blocos_clinicos as any) || {};
       setCamposManuais(meta.campos_manuais || []);
+      setMostrarLogos(meta.mostrar_logos !== false);
       if (editor) {
         editor.commands.setContent(normalizeTemplateAliases(data.conteudo || '<p></p>'));
         setDirty(false);
