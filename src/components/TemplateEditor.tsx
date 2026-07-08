@@ -1075,10 +1075,26 @@ const TemplateEditor: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null | undefined>(undefined); // undefined=lista, null=novo, string=id
   const [seed, setSeed] = useState<{ nome: string; tipo: string; conteudo: string } | null>(null);
 
+  const READY_HIDDEN_KEY = 'template_editor_hidden_ready';
+  const [hiddenReady, setHiddenReady] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(READY_HIDDEN_KEY) || '[]'); } catch { return []; }
+  });
+  const persistHidden = (arr: string[]) => {
+    setHiddenReady(arr);
+    try { localStorage.setItem(READY_HIDDEN_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+  };
+  const hideReady = (id: string) => {
+    if (!window.confirm('Ocultar este modelo pronto da lista? Você pode restaurá-lo limpando o cache do navegador.')) return;
+    persistHidden([...new Set([...hiddenReady, id])]);
+    toast.success('Modelo pronto ocultado');
+  };
+
   const readyRows = useMemo(() => {
     const existingNames = new Set(templates.map(t => (t.nome || '').trim().toLowerCase()));
-    return READY_TEMPLATES.filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()));
-  }, [templates]);
+    return READY_TEMPLATES
+      .filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()))
+      .filter(rt => !hiddenReady.includes(rt.id));
+  }, [templates, hiddenReady]);
 
   const load = async () => {
     setLoading(true);
@@ -1181,17 +1197,27 @@ const TemplateEditor: React.FC = () => {
                   <td className="p-2">{rt.tipo}</td>
                   <td className="p-2"><span className="text-primary font-medium">Modelo pronto</span></td>
                   <td className="p-2 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      onClick={() => {
-                        setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo });
-                        setEditingId(null);
-                      }}
-                    >
-                      <Pencil className="w-3.5 h-3.5" /> Editar
-                    </Button>
+                    <div className="flex justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => {
+                          setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo });
+                          setEditingId(null);
+                        }}
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 text-destructive hover:text-destructive"
+                        onClick={() => hideReady(rt.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Excluir
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
