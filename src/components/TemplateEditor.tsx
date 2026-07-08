@@ -476,6 +476,53 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
         .tpl-textbox { border: 1px dashed hsl(var(--border)); background: hsl(var(--muted) / 0.35); padding: 10px 12px; margin: 8px 0; border-radius: 8px; position: relative; }
         .tpl-textbox::before { content: '⋮⋮ caixa de texto (arraste)'; position: absolute; top: -9px; left: 10px; font-size: 9px; background: hsl(var(--background)); color: hsl(var(--muted-foreground)); padding: 0 6px; letter-spacing: 0.5px; text-transform: uppercase; border-radius: 3px; }
         .prose img { max-width: 100%; height: auto; }
+
+        /* Visual A4 sheet */
+        .tpl-page-viewport {
+          background: hsl(220 15% 92%);
+          border: 1px solid hsl(var(--border));
+          border-radius: 6px;
+          padding: 24px 16px;
+          overflow: auto;
+          max-height: 75vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+        }
+        .tpl-ruler-h {
+          position: relative;
+          height: 16px;
+          background: repeating-linear-gradient(to right,
+            hsl(var(--muted-foreground) / 0.3) 0, hsl(var(--muted-foreground) / 0.3) 1px,
+            transparent 1px, transparent 5mm);
+          border-bottom: 1px solid hsl(var(--border));
+          background-color: hsl(var(--background));
+          border-radius: 3px 3px 0 0;
+        }
+        .tpl-ruler-h span {
+          position: absolute; top: 1px; font-size: 8px; color: hsl(var(--muted-foreground));
+          transform: translateX(-50%);
+        }
+        .tpl-page-sheet {
+          background: #ffffff;
+          color: #000;
+          box-shadow: 0 4px 18px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08);
+          transform-origin: top center;
+          transition: transform 0.15s ease;
+          margin: 0 auto;
+          position: relative;
+        }
+        .tpl-page-sheet .tpl-editor-canvas {
+          outline: none;
+          min-height: 100%;
+        }
+        .tpl-page-sheet.tpl-page-grid {
+          background-image:
+            linear-gradient(to right, hsl(210 40% 90%) 1px, transparent 1px),
+            linear-gradient(to bottom, hsl(210 40% 90%) 1px, transparent 1px);
+          background-size: 5mm 5mm;
+        }
       `}</style>
 
       {/* Header form */}
