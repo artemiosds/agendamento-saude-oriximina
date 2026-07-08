@@ -1109,7 +1109,7 @@ const TemplateEditor: React.FC = () => {
           <FileText className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">Modelos de Documentos</h3>
         </div>
-        <Button onClick={() => setEditingId(null)} className="gap-1.5">
+        <Button onClick={() => { setSeed(null); setEditingId(null); }} className="gap-1.5">
           <Plus className="w-4 h-4" /> Criar novo tipo de documento
         </Button>
       </div>
@@ -1118,7 +1118,7 @@ const TemplateEditor: React.FC = () => {
         <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
         </div>
-      ) : templates.length === 0 ? (
+      ) : templates.length === 0 && readyRows.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">Nenhum template cadastrado.</p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -1138,7 +1138,27 @@ const TemplateEditor: React.FC = () => {
                   <td className="p-2">{t.tipo}</td>
                   <td className="p-2">{t.ativo ? 'Ativo' : 'Inativo'}</td>
                   <td className="p-2 text-right">
-                    <Button size="sm" variant="outline" className="gap-1" onClick={() => setEditingId(t.id)}>
+                    <Button size="sm" variant="outline" className="gap-1" onClick={() => { setSeed(null); setEditingId(t.id); }}>
+                      <Pencil className="w-3.5 h-3.5" /> Editar
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {readyRows.map(rt => (
+                <tr key={`ready-${rt.id}`} className="border-t hover:bg-muted/30 bg-primary/5">
+                  <td className="p-2">{rt.nome}</td>
+                  <td className="p-2">{rt.tipo}</td>
+                  <td className="p-2"><span className="text-primary font-medium">Modelo pronto</span></td>
+                  <td className="p-2 text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      onClick={() => {
+                        setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo });
+                        setEditingId(null);
+                      }}
+                    >
                       <Pencil className="w-3.5 h-3.5" /> Editar
                     </Button>
                   </td>
