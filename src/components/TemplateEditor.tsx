@@ -295,7 +295,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       TextStyleExt,
       FontFamily.configure({ types: ['textStyle'] }),
       TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right', 'justify'] }),
-      Table.configure({ resizable: true }),
+      Table.extend({ group: 'block', draggable: true }).configure({ resizable: true, allowTableNodeSelection: true }),
       TableRow, TableHeader, TableCell,
       Image.configure({ inline: false, allowBase64: true }),
       Dropcursor.configure({ color: '#2A6F97', width: 3 }),
