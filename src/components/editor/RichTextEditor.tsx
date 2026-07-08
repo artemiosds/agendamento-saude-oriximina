@@ -7,8 +7,60 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Highlight from '@tiptap/extension-highlight';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell as BaseTableCell } from '@tiptap/extension-table-cell';
+import { TableHeader as BaseTableHeader } from '@tiptap/extension-table-header';
+
+/** Extensões de célula e cabeçalho com estilos customizáveis (borda, cor, fundo) */
+const styleAttrs = {
+  backgroundColor: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.style.backgroundColor || el.getAttribute('data-bg') || null,
+    renderHTML: (attrs: any) => (attrs.backgroundColor ? { style: `background-color:${attrs.backgroundColor}` } : {}),
+  },
+  borderColor: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-color') || null,
+    renderHTML: (attrs: any) => (attrs.borderColor ? { 'data-border-color': attrs.borderColor } : {}),
+  },
+  borderWidth: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-width') || null,
+    renderHTML: (attrs: any) => (attrs.borderWidth ? { 'data-border-width': attrs.borderWidth } : {}),
+  },
+  borderStyleAttr: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-style') || null,
+    renderHTML: (attrs: any) => (attrs.borderStyleAttr ? { 'data-border-style': attrs.borderStyleAttr } : {}),
+  },
+};
+
+const mergeStyleFromAttrs = (attrs: any, existing: Record<string, any> = {}) => {
+  const styles: string[] = [];
+  if (attrs.backgroundColor) styles.push(`background-color:${attrs.backgroundColor}`);
+  if (attrs.borderColor) styles.push(`border-color:${attrs.borderColor}`);
+  if (attrs.borderWidth) styles.push(`border-width:${attrs.borderWidth}`);
+  if (attrs.borderStyleAttr) styles.push(`border-style:${attrs.borderStyleAttr}`);
+  if (existing.style) styles.push(String(existing.style));
+  return styles.length ? { ...existing, style: styles.join(';') } : existing;
+};
+
+const TableCell = BaseTableCell.extend({
+  addAttributes() {
+    return { ...this.parent?.(), ...styleAttrs };
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return ['td', mergeStyleFromAttrs(node.attrs, HTMLAttributes), 0];
+  },
+});
+
+const TableHeader = BaseTableHeader.extend({
+  addAttributes() {
+    return { ...this.parent?.(), ...styleAttrs };
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return ['th', mergeStyleFromAttrs(node.attrs, HTMLAttributes), 0];
+  },
+});
 import Image from '@tiptap/extension-image';
 import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
@@ -349,6 +401,98 @@ const RichTextEditor: React.FC<Props> = ({ content, onChange, placeholder, class
               <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().mergeCells().run()}>Mesclar células</DropdownMenuItem>
               <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().splitCell().run()}>Dividir célula</DropdownMenuItem>
               <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Alternar cabeçalho</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs">Estilo da célula</DropdownMenuLabel>
+              <DropdownMenuItem disabled={!inTable} onSelect={(e) => e.preventDefault()} className="p-0">
+                <label className="flex items-center justify-between gap-2 w-full px-2 py-1.5 cursor-pointer text-xs">
+                  <span>Cor de fundo</span>
+                  <input
+                    type="color"
+                    className="h-6 w-8 p-0 border rounded cursor-pointer"
+                    onChange={(e) => (editor.chain().focus() as any).setCellAttribute('backgroundColor', e.target.value).run()}
+                  />
+                </label>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!inTable}
+                onClick={() => (editor.chain().focus() as any).setCellAttribute('backgroundColor', null).run()}
+              >
+                Remover cor de fundo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs">Bordas</DropdownMenuLabel>
+              <DropdownMenuItem disabled={!inTable} onSelect={(e) => e.preventDefault()} className="p-0">
+                <label className="flex items-center justify-between gap-2 w-full px-2 py-1.5 cursor-pointer text-xs">
+                  <span>Cor da borda</span>
+                  <input
+                    type="color"
+                    defaultValue="#94a3b8"
+                    className="h-6 w-8 p-0 border rounded cursor-pointer"
+                    onChange={(e) => (editor.chain().focus() as any).setCellAttribute('borderColor', e.target.value).run()}
+                  />
+                </label>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!inTable} onSelect={(e) => e.preventDefault()} className="p-0">
+                <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                  <span>Espessura</span>
+                  <div className="flex gap-1">
+                    {['1px', '2px', '3px', '4px'].map((w) => (
+                      <button
+                        key={w}
+                        type="button"
+                        className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                        onClick={() => (editor.chain().focus() as any).setCellAttribute('borderWidth', w).run()}
+                      >
+                        {w}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!inTable} onSelect={(e) => e.preventDefault()} className="p-0">
+                <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                  <span>Estilo</span>
+                  <div className="flex gap-1">
+                    {[
+                      { label: 'Sólida', v: 'solid' },
+                      { label: 'Tracejada', v: 'dashed' },
+                      { label: 'Pontilhada', v: 'dotted' },
+                      { label: 'Dupla', v: 'double' },
+                    ].map((s) => (
+                      <button
+                        key={s.v}
+                        type="button"
+                        className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                        onClick={() => (editor.chain().focus() as any).setCellAttribute('borderStyleAttr', s.v).run()}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!inTable}
+                onClick={() =>
+                  (editor.chain().focus() as any)
+                    .setCellAttribute('borderStyleAttr', 'hidden')
+                    .run()
+                }
+              >
+                Remover borda desta célula
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!inTable}
+                onClick={() => {
+                  const chain: any = editor.chain().focus();
+                  chain.setCellAttribute('borderColor', null)
+                    .setCellAttribute('borderWidth', null)
+                    .setCellAttribute('borderStyleAttr', null)
+                    .run();
+                }}
+              >
+                Resetar borda ao padrão
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled={!inTable} className="text-destructive" onClick={() => editor.chain().focus().deleteTable().run()}>
                 <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir tabela
