@@ -186,6 +186,48 @@ const TextBoxNode = Node.create({
   },
 });
 
+// -------- Table cell/header with border & background styling --------
+const cellStyleAttrs = {
+  backgroundColor: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.style.backgroundColor || null,
+    renderHTML: (attrs: any) => (attrs.backgroundColor ? { 'data-bg': attrs.backgroundColor } : {}),
+  },
+  borderColor: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-color'),
+    renderHTML: (attrs: any) => (attrs.borderColor ? { 'data-border-color': attrs.borderColor } : {}),
+  },
+  borderWidth: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-width'),
+    renderHTML: (attrs: any) => (attrs.borderWidth ? { 'data-border-width': attrs.borderWidth } : {}),
+  },
+  borderStyleAttr: {
+    default: null as string | null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-border-style'),
+    renderHTML: (attrs: any) => (attrs.borderStyleAttr ? { 'data-border-style': attrs.borderStyleAttr } : {}),
+  },
+};
+const buildCellStyle = (attrs: any, existing: Record<string, any> = {}) => {
+  const parts: string[] = [];
+  if (attrs.backgroundColor) parts.push(`background-color:${attrs.backgroundColor}`);
+  if (attrs.borderColor) parts.push(`border-color:${attrs.borderColor}`);
+  if (attrs.borderWidth) parts.push(`border-width:${attrs.borderWidth}`);
+  if (attrs.borderStyleAttr) parts.push(`border-style:${attrs.borderStyleAttr}`);
+  if (existing.style) parts.push(String(existing.style));
+  return parts.length ? { ...existing, style: parts.join(';') } : existing;
+};
+const TableCell = BaseTableCell.extend({
+  addAttributes() { return { ...this.parent?.(), ...cellStyleAttrs }; },
+  renderHTML({ HTMLAttributes, node }) { return ['td', buildCellStyle(node.attrs, HTMLAttributes), 0]; },
+});
+const TableHeader = BaseTableHeader.extend({
+  addAttributes() { return { ...this.parent?.(), ...cellStyleAttrs }; },
+  renderHTML({ HTMLAttributes, node }) { return ['th', buildCellStyle(node.attrs, HTMLAttributes), 0]; },
+});
+
+
 
 // -------- Editor Panel --------
 interface EditorPanelProps {
