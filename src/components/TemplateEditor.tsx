@@ -1197,17 +1197,27 @@ const TemplateEditor: React.FC = () => {
                   <td className="p-2">{rt.tipo}</td>
                   <td className="p-2"><span className="text-primary font-medium">Modelo pronto</span></td>
                   <td className="p-2 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      onClick={() => {
-                        setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo });
-                        setEditingId(null);
-                      }}
-                    >
-                      <Pencil className="w-3.5 h-3.5" /> Editar
-                    </Button>
+                    <div className="flex justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => {
+                          setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo });
+                          setEditingId(null);
+                        }}
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 text-destructive hover:text-destructive"
+                        onClick={() => hideReady(rt.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Excluir
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
