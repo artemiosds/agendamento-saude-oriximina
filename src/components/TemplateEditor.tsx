@@ -177,12 +177,39 @@ const SpacerNode = Node.create({
   },
 });
 
-// Caixa de texto arrastável
+// Caixa de texto arrastável (com atributos de estilo)
 const TextBoxNode = Node.create({
   name: 'textbox', group: 'block', content: 'block+', draggable: true, defining: true,
+  addAttributes() {
+    return {
+      width: { default: null as string | null },
+      height: { default: null as string | null },
+      backgroundColor: { default: null as string | null },
+      borderColor: { default: null as string | null },
+      borderWidth: { default: null as string | null },
+      borderStyleAttr: { default: null as string | null },
+      borderRadius: { default: null as string | null },
+      padding: { default: null as string | null },
+      textAlign: { default: null as string | null },
+      float: { default: null as string | null },
+    };
+  },
   parseHTML() { return [{ tag: 'div[data-type="textbox"]' }]; },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'textbox', class: 'tpl-textbox' }), 0];
+  renderHTML({ HTMLAttributes, node }) {
+    const a = node.attrs as any;
+    const styles: string[] = [];
+    if (a.width) styles.push(`width:${a.width}`);
+    if (a.height) styles.push(`height:${a.height};min-height:${a.height}`);
+    if (a.backgroundColor) styles.push(`background-color:${a.backgroundColor}`);
+    if (a.borderColor) styles.push(`border-color:${a.borderColor}`);
+    if (a.borderWidth) styles.push(`border-width:${a.borderWidth}`);
+    if (a.borderStyleAttr) styles.push(`border-style:${a.borderStyleAttr}`);
+    if (a.borderRadius) styles.push(`border-radius:${a.borderRadius}`);
+    if (a.padding) styles.push(`padding:${a.padding}`);
+    if (a.textAlign) styles.push(`text-align:${a.textAlign}`);
+    if (a.float === 'left') styles.push('float:left;margin-right:12px');
+    if (a.float === 'right') styles.push('float:right;margin-left:12px');
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'textbox', class: 'tpl-textbox', style: styles.join(';') }), 0];
   },
 });
 
