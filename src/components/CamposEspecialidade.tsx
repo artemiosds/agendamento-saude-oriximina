@@ -165,7 +165,7 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
     };
     load();
     const channel = supabase
-      .channel(`camposesp_realtime_${prof}`)
+      .channel(`camposesp_realtime_${prof}_${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config', filter: 'id=eq.default' }, load)
       .subscribe();
     return () => { cancelled = true; supabase.removeChannel(channel); };
