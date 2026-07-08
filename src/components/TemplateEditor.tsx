@@ -177,12 +177,39 @@ const SpacerNode = Node.create({
   },
 });
 
-// Caixa de texto arrastável
+// Caixa de texto arrastável (com atributos de estilo)
 const TextBoxNode = Node.create({
   name: 'textbox', group: 'block', content: 'block+', draggable: true, defining: true,
+  addAttributes() {
+    return {
+      width: { default: null as string | null },
+      height: { default: null as string | null },
+      backgroundColor: { default: null as string | null },
+      borderColor: { default: null as string | null },
+      borderWidth: { default: null as string | null },
+      borderStyleAttr: { default: null as string | null },
+      borderRadius: { default: null as string | null },
+      padding: { default: null as string | null },
+      textAlign: { default: null as string | null },
+      float: { default: null as string | null },
+    };
+  },
   parseHTML() { return [{ tag: 'div[data-type="textbox"]' }]; },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'textbox', class: 'tpl-textbox' }), 0];
+  renderHTML({ HTMLAttributes, node }) {
+    const a = node.attrs as any;
+    const styles: string[] = [];
+    if (a.width) styles.push(`width:${a.width}`);
+    if (a.height) styles.push(`height:${a.height};min-height:${a.height}`);
+    if (a.backgroundColor) styles.push(`background-color:${a.backgroundColor}`);
+    if (a.borderColor) styles.push(`border-color:${a.borderColor}`);
+    if (a.borderWidth) styles.push(`border-width:${a.borderWidth}`);
+    if (a.borderStyleAttr) styles.push(`border-style:${a.borderStyleAttr}`);
+    if (a.borderRadius) styles.push(`border-radius:${a.borderRadius}`);
+    if (a.padding) styles.push(`padding:${a.padding}`);
+    if (a.textAlign) styles.push(`text-align:${a.textAlign}`);
+    if (a.float === 'left') styles.push('float:left;margin-right:12px');
+    if (a.float === 'right') styles.push('float:right;margin-left:12px');
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'textbox', class: 'tpl-textbox', style: styles.join(';') }), 0];
   },
 });
 
@@ -656,7 +683,133 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
                 <DropdownMenuItem disabled={!editor?.isActive('table')} className="text-destructive" onClick={() => editor?.chain().focus().deleteTable().run()}><Trash2 className="w-3.5 h-3.5 mr-2" />Excluir tabela</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertTextBox} title="Caixa de texto (arrastável)"><Square className="w-4 h-4" /></Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" title="Caixa de texto">
+                  <Square className="w-4 h-4" /> Caixa <ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuItem onClick={insertTextBox}><Plus className="w-3.5 h-3.5 mr-2" />Inserir caixa de texto</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Tamanho (na caixa selecionada)</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center gap-2 w-full px-2 py-1.5 text-xs">
+                    <span className="w-14">Largura</span>
+                    <Input className="h-6 text-xs" placeholder="ex.: 60%, 300px"
+                      onBlur={(e) => e.target.value && editor?.chain().focus().updateAttributes('textbox', { width: e.target.value }).run()} />
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center gap-2 w-full px-2 py-1.5 text-xs">
+                    <span className="w-14">Altura</span>
+                    <Input className="h-6 text-xs" placeholder="ex.: 120px, auto"
+                      onBlur={(e) => e.target.value && editor?.chain().focus().updateAttributes('textbox', { height: e.target.value }).run()} />
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center gap-2 w-full px-2 py-1.5 text-xs">
+                    <span className="w-14">Padding</span>
+                    <Input className="h-6 text-xs" placeholder="ex.: 12px, 10px 16px"
+                      onBlur={(e) => e.target.value && editor?.chain().focus().updateAttributes('textbox', { padding: e.target.value }).run()} />
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Cores</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <label className="flex items-center justify-between gap-2 w-full px-2 py-1.5 cursor-pointer text-xs">
+                    <span>Fundo</span>
+                    <input type="color" className="h-6 w-8 p-0 border rounded cursor-pointer"
+                      onChange={(e) => editor?.chain().focus().updateAttributes('textbox', { backgroundColor: e.target.value }).run()} />
+                  </label>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')}
+                  onClick={() => editor?.chain().focus().updateAttributes('textbox', { backgroundColor: null }).run()}>
+                  Remover fundo
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Borda</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <label className="flex items-center justify-between gap-2 w-full px-2 py-1.5 cursor-pointer text-xs">
+                    <span>Cor</span>
+                    <input type="color" defaultValue="#94a3b8" className="h-6 w-8 p-0 border rounded cursor-pointer"
+                      onChange={(e) => editor?.chain().focus().updateAttributes('textbox', { borderColor: e.target.value }).run()} />
+                  </label>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                    <span>Espessura</span>
+                    <div className="flex gap-1">
+                      {['1px', '2px', '3px', '4px', '6px'].map(w => (
+                        <button key={w} type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                          onClick={() => editor?.chain().focus().updateAttributes('textbox', { borderWidth: w }).run()}>{w}</button>
+                      ))}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                    <span>Estilo</span>
+                    <div className="flex gap-1">
+                      {[{ l: 'Sól.', v: 'solid' }, { l: 'Trac.', v: 'dashed' }, { l: 'Pont.', v: 'dotted' }, { l: 'Dup.', v: 'double' }].map(s => (
+                        <button key={s.v} type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                          onClick={() => editor?.chain().focus().updateAttributes('textbox', { borderStyleAttr: s.v }).run()}>{s.l}</button>
+                      ))}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                    <span>Cantos</span>
+                    <div className="flex gap-1">
+                      {['0', '4px', '8px', '12px', '20px', '999px'].map(r => (
+                        <button key={r} type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                          onClick={() => editor?.chain().focus().updateAttributes('textbox', { borderRadius: r }).run()}>{r}</button>
+                      ))}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')}
+                  onClick={() => editor?.chain().focus().updateAttributes('textbox', { borderStyleAttr: 'hidden' }).run()}>
+                  Remover borda
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs">Posição</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                    <span>Flutuar</span>
+                    <div className="flex gap-1">
+                      <button type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                        onClick={() => editor?.chain().focus().updateAttributes('textbox', { float: 'left' }).run()}>Esq.</button>
+                      <button type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                        onClick={() => editor?.chain().focus().updateAttributes('textbox', { float: null }).run()}>Nenhum</button>
+                      <button type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                        onClick={() => editor?.chain().focus().updateAttributes('textbox', { float: 'right' }).run()}>Dir.</button>
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')} onSelect={(e) => e.preventDefault()} className="p-0">
+                  <div className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-xs">
+                    <span>Texto</span>
+                    <div className="flex gap-1">
+                      {[{ i: '⬅', v: 'left' }, { i: '↔', v: 'center' }, { i: '➡', v: 'right' }, { i: '≡', v: 'justify' }].map(a => (
+                        <button key={a.v} type="button" className="px-1.5 py-0.5 border rounded hover:bg-accent text-[10px]"
+                          onClick={() => editor?.chain().focus().updateAttributes('textbox', { textAlign: a.v }).run()}>{a.i}</button>
+                      ))}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={!editor?.isActive('textbox')}
+                  onClick={() => editor?.chain().focus().updateAttributes('textbox', {
+                    width: null, height: null, backgroundColor: null, borderColor: null,
+                    borderWidth: null, borderStyleAttr: null, borderRadius: null, padding: null,
+                    textAlign: null, float: null,
+                  }).run()}>
+                  Resetar caixa
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertImage} title="Imagem"><ImageIcon className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertHR} title="Linha horizontal"><Minus className="w-4 h-4" /></Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={insertPageBreak} title="Quebra de página"><SeparatorHorizontal className="w-4 h-4" /></Button>
