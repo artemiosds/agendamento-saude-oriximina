@@ -1055,6 +1055,12 @@ const TemplateEditor: React.FC = () => {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null | undefined>(undefined); // undefined=lista, null=novo, string=id
+  const [seed, setSeed] = useState<{ nome: string; tipo: string; conteudo: string } | null>(null);
+
+  const readyRows = useMemo(() => {
+    const existingNames = new Set(templates.map(t => (t.nome || '').trim().toLowerCase()));
+    return READY_TEMPLATES.filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()));
+  }, [templates]);
 
   const load = async () => {
     setLoading(true);
