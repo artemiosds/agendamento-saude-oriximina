@@ -74,6 +74,7 @@ export const DEFAULT_CONFIG: DocumentConfig = {
   logoCentral: '',
   logoDireita: '',
   mostrarLogoCentral: false,
+  mostrarLogos: true,
   logosConfig: {
     esquerda: defaultSlot(70, true),
     central: defaultSlot(72, false),
