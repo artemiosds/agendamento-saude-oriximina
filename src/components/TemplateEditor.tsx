@@ -445,7 +445,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       p_perfis_permitidos: templateId ? null : ['master', 'profissional', 'coordenador', 'gestao'],
       p_tipo_modelo: templateId ? null : 'UNIDADE',
       p_unidade_id: templateId ? null : (user?.unidadeId || ''),
-      p_blocos_clinicos: { campos_manuais: camposManuais },
+      p_blocos_clinicos: { campos_manuais: camposManuais, mostrar_logos: mostrarLogos },
       p_versoes: templateId ? null : [],
     });
     if (error) {
