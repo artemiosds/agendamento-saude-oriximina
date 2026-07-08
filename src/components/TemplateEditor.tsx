@@ -1094,10 +1094,10 @@ const TemplateEditor: React.FC = () => {
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">
-            {editingId ? 'Editar template' : 'Novo template'}
+            {editingId ? 'Editar template' : (seed ? `Novo template — ${seed.nome}` : 'Novo template')}
           </h3>
         </div>
-        <TemplateEditorPanel templateId={editingId} onDone={() => { setEditingId(undefined); load(); }} />
+        <TemplateEditorPanel templateId={editingId} seed={seed} onDone={() => { setEditingId(undefined); setSeed(null); load(); }} />
       </div>
     );
   }
