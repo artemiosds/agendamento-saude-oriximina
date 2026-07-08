@@ -275,7 +275,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, onDone })
     content: '<p></p>',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[400px] p-4 bg-background rounded-md border',
+        class: 'prose prose-sm max-w-none focus:outline-none tpl-editor-canvas',
       },
     },
     onUpdate: () => setDirty(true),
