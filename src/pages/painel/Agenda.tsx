@@ -456,10 +456,14 @@ const Agenda: React.FC = () => {
           const row: any = (payload.new as any) || (payload.old as any);
           if (!row?.agendamento_id) return;
           if (!dayAgIds.includes(row.agendamento_id)) return;
-          setTriageMap((prev) => ({
-            ...prev,
-            [row.agendamento_id]: { risco: String(row.classificacao_risco || "").toLowerCase() },
-          }));
+          setTriageMap((prev) => {
+            const comorb: any[] = Array.isArray(row?.custom_data?.comorbidades) ? row.custom_data.comorbidades : [];
+            const tea = comorb.some((c: any) => String(c || "").toUpperCase().includes("TEA"));
+            return {
+              ...prev,
+              [row.agendamento_id]: { risco: String(row.classificacao_risco || "").toLowerCase(), tea },
+            };
+          });
         }
       )
       .subscribe();
