@@ -414,7 +414,7 @@ const Agenda: React.FC = () => {
       const [triageRes, filaRes] = await Promise.all([
         supabase
           .from("triage_records")
-          .select("agendamento_id, classificacao_risco")
+          .select("agendamento_id, classificacao_risco, custom_data")
           .in("agendamento_id", dayAgIds),
         supabase
           .from("fila_espera" as any)
@@ -423,9 +423,11 @@ const Agenda: React.FC = () => {
       ]);
       if (!cancelled) {
         if (triageRes.data) {
-          const m: Record<string, { risco: string }> = {};
-          for (const r of triageRes.data) {
-            m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+          const m: Record<string, { risco: string; tea: boolean }> = {};
+          for (const r of triageRes.data as any[]) {
+            const comorb: any[] = Array.isArray(r?.custom_data?.comorbidades) ? r.custom_data.comorbidades : [];
+            const tea = comorb.some((c) => String(c || "").toUpperCase().includes("TEA"));
+            m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase(), tea };
           }
           setTriageMap(m);
         }
