@@ -404,7 +404,7 @@ const Agenda: React.FC = () => {
   }, [agendamentos]);
 
   // ── Triage records + arrival times for priority sorting ──
-  const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
+  const [triageMap, setTriageMap] = useState<Record<string, { risco: string; tea: boolean }>>({});
   const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
@@ -414,7 +414,7 @@ const Agenda: React.FC = () => {
       const [triageRes, filaRes] = await Promise.all([
         supabase
           .from("triage_records")
-          .select("agendamento_id, classificacao_risco")
+          .select("agendamento_id, classificacao_risco, custom_data")
           .in("agendamento_id", dayAgIds),
         supabase
           .from("fila_espera" as any)
@@ -423,9 +423,11 @@ const Agenda: React.FC = () => {
       ]);
       if (!cancelled) {
         if (triageRes.data) {
-          const m: Record<string, { risco: string }> = {};
-          for (const r of triageRes.data) {
-            m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+          const m: Record<string, { risco: string; tea: boolean }> = {};
+          for (const r of triageRes.data as any[]) {
+            const comorb: any[] = Array.isArray(r?.custom_data?.comorbidades) ? r.custom_data.comorbidades : [];
+            const tea = comorb.some((c) => String(c || "").toUpperCase().includes("TEA"));
+            m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase(), tea };
           }
           setTriageMap(m);
         }
@@ -454,10 +456,14 @@ const Agenda: React.FC = () => {
           const row: any = (payload.new as any) || (payload.old as any);
           if (!row?.agendamento_id) return;
           if (!dayAgIds.includes(row.agendamento_id)) return;
-          setTriageMap((prev) => ({
-            ...prev,
-            [row.agendamento_id]: { risco: String(row.classificacao_risco || "").toLowerCase() },
-          }));
+          setTriageMap((prev) => {
+            const comorb: any[] = Array.isArray(row?.custom_data?.comorbidades) ? row.custom_data.comorbidades : [];
+            const tea = comorb.some((c: any) => String(c || "").toUpperCase().includes("TEA"));
+            return {
+              ...prev,
+              [row.agendamento_id]: { risco: String(row.classificacao_risco || "").toLowerCase(), tea },
+            };
+          });
         }
       )
       .subscribe();
@@ -771,21 +777,26 @@ const Agenda: React.FC = () => {
       return String(ag.status || "").toLowerCase() === "apto_atendimento";
     };
 
-    // Peso por idade — idosos (≥60) e crianças (<12) têm prioridade legal
-    const getPesoIdade = (ag: any): number => {
+    // Idade (número) — usado para prioridade legal (≥80, ≥60)
+    const getIdade = (ag: any): number => {
       const pac = pacientes.find((p) => p.id === ag.pacienteId);
       const nasc = (pac as any)?.dataNascimento || (pac as any)?.data_nascimento;
-      if (!nasc) return 3;
+      if (!nasc) return -1;
       try {
         const idade = calcularIdade(nasc);
-        if (typeof idade !== "number" || isNaN(idade)) return 3;
-        if (idade >= 80) return 1; // idoso ≥80 (prioridade especial — Lei 13.466/2017)
-        if (idade >= 60) return 2; // idoso
-        if (idade < 12) return 2;  // criança
-        return 3;
-      } catch {
-        return 3;
-      }
+        return typeof idade === "number" && !isNaN(idade) ? idade : -1;
+      } catch { return -1; }
+    };
+
+    // TEA vem de triage_records.custom_data.comorbidades
+    const isTea = (ag: any): boolean => !!triageMap[ag.id]?.tea;
+
+    // Chave de desempate: hora_chegada real (arrivalMap) → fallback hora agendada
+    const getArrivalKey = (ag: any): string => {
+      const chegada = arrivalMap[ag.id];
+      if (chegada) return String(chegada);
+      // Fallback: hora agendada formatada para comparar como string
+      return `99:${(ag.hora || "99:99")}`;
     };
 
     const base = agendamentos
@@ -801,33 +812,42 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1) Trocar a posição dos blocos manhã/tarde quando entrar a tarde.
+        // 1. Turno — manhã antes de tarde (respeitando tardeAtiva do dia atual)
         const groupA = getTurnoSortGroup(a);
         const groupB = getTurnoSortGroup(b);
         if (groupA !== groupB) return groupA - groupB;
 
-        // 2) Concluídos sempre descem para o final do próprio grupo.
+        // 2. Concluídos vão para o fim absoluto
         const concluidoA = isConcluido(a) ? 1 : 0;
         const concluidoB = isConcluido(b) ? 1 : 0;
         if (concluidoA !== concluidoB) return concluidoA - concluidoB;
 
-        // 3) "Apto p/ Atendimento" sobe ao topo do grupo (acima dos demais status).
-        const aptoA = isApto(a) ? 0 : 1;
-        const aptoB = isApto(b) ? 0 : 1;
-        if (aptoA !== aptoB) return aptoA - aptoB;
-
-        // 4) Classificação de risco Manchester (vermelho → azul → sem classificação).
+        // 3. Risco Clínico (Soberania de Manchester) — fura qualquer fila administrativa
         const riscoA = getPesoClassificacaoRisco(a);
         const riscoB = getPesoClassificacaoRisco(b);
         if (riscoA !== riscoB) return riscoA - riscoB;
 
-        // 5) Prioridade por idade (≥80 → ≥60/<12 → demais).
-        const idadeA = getPesoIdade(a);
-        const idadeB = getPesoIdade(b);
-        if (idadeA !== idadeB) return idadeA - idadeB;
+        // 4. Prioridade Legal Especial (Lei 13.466/2017) — ≥80 anos, dentro do mesmo risco
+        const idadeA = getIdade(a);
+        const idadeB = getIdade(b);
+        const super80A = idadeA >= 80 ? 0 : 1;
+        const super80B = idadeB >= 80 ? 0 : 1;
+        if (super80A !== super80B) return super80A - super80B;
 
-        // 6) Mantém ordem interna estável pela hora agendada.
-        return horaToMin(a.hora) - horaToMin(b.hora);
+        // 5. Prioridade Legal Padrão — ≥60 anos OU TEA (empatam entre si)
+        const prioA = (idadeA >= 60 || isTea(a)) ? 0 : 1;
+        const prioB = (idadeB >= 60 || isTea(b)) ? 0 : 1;
+        if (prioA !== prioB) return prioA - prioB;
+
+        // 6. Status da fila — apto_atendimento sobe frente aos que aguardam triagem
+        const aptoA = isApto(a) ? 0 : 1;
+        const aptoB = isApto(b) ? 0 : 1;
+        if (aptoA !== aptoB) return aptoA - aptoB;
+
+        // 7. Desempate final — ordem real de chegada (fallback: hora agendada)
+        const keyA = getArrivalKey(a);
+        const keyB = getArrivalKey(b);
+        return keyA.localeCompare(keyB);
       });
 
     let result = base;
