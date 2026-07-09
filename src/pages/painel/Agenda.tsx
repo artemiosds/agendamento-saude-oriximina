@@ -404,7 +404,7 @@ const Agenda: React.FC = () => {
   }, [agendamentos]);
 
   // ── Triage records + arrival times for priority sorting ──
-  const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
+  const [triageMap, setTriageMap] = useState<Record<string, { risco: string; tea: boolean }>>({});
   const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
