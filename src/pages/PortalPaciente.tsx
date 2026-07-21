@@ -157,6 +157,31 @@ const PortalPaciente: React.FC = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); setPaciente(null); setAgendamentos([]); setFila([]); setIsLoggedIn(false); };
 
+  const handleSalvarDados = async () => {
+    if (!dados.nome || !dados.telefone) { toast.error('Nome e telefone são obrigatórios.'); return; }
+    setSavingDados(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { toast.error('Sessão expirada.'); setSavingDados(false); return; }
+      const payload = serializeDadosPaciente(dados, paciente ? (paciente as any).custom_data : {});
+      // Não permite alterar e-mail (é o login)
+      delete (payload as any).email;
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=update-patient`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) },
+      );
+      const json = await res.json();
+      if (!res.ok || json?.error) { toast.error(json?.error || 'Erro ao salvar.'); setSavingDados(false); return; }
+      toast.success('Dados atualizados com sucesso!');
+      const { data: pac } = await (supabase as any).from('pacientes').select('*').eq('id', json.id).single();
+      if (pac) { setPaciente(pac); setDados(deserializeDadosPaciente(pac)); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao salvar dados.');
+    } finally { setSavingDados(false); }
+  };
+
   const handleCancelar = async (agId: string) => {
     try {
       await (supabase as any).from('agendamentos').update({ status: 'cancelado' }).eq('id', agId);
