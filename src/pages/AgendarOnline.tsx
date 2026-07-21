@@ -68,9 +68,12 @@ const AgendarOnline: React.FC = () => {
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
-    nome: '', cpf: '', cns: '', telefone: '', dataNascimento: '', email: '', obs: '',
-    data: '', hora: '', senha: '', senhaConfirm: '',
+    data: '', hora: '', senha: '', senhaConfirm: '', obs: '',
   });
+  const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
+  const updateDados = useCallback((patch: Partial<DadosPacienteValue>) => {
+    setDados(prev => ({ ...prev, ...patch }));
+  }, []);
 
   const loadPublicData = useCallback(async () => {
     try {
