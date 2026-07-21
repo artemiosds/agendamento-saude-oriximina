@@ -287,7 +287,7 @@ const AgendarOnline: React.FC = () => {
   }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
   const validateStep2 = (): boolean => {
-    const err = validatePacienteFields({ nome: form.nome, telefone: form.telefone, email: form.email });
+    const err = validatePacienteFields({ nome: dados.nome, telefone: dados.telefone, email: dados.email });
     if (err) {
       const newErrors: Record<string, string> = {};
       if (err.includes('Nome')) newErrors.nome = err;
@@ -297,9 +297,8 @@ const AgendarOnline: React.FC = () => {
       toast.error(err);
       return false;
     }
-    if (form.dataNascimento && !validateDateBrazilian(form.dataNascimento)) {
-      setErrors({ dataNascimento: 'Data de nascimento inválida.' });
-      toast.error('Data de nascimento inválida.');
+    if (dados.menor_idade && (!dados.nome_responsavel || !dados.cpf_responsavel)) {
+      toast.error('Para menor de idade, informe nome e CPF do responsável.');
       return false;
     }
     if (!form.senha || form.senha.length < 6) {
@@ -319,7 +318,7 @@ const AgendarOnline: React.FC = () => {
   const handleNext2 = () => { if (validateStep2()) setStep(3); };
 
   const handleSubmit = async () => {
-    if (!form.nome || !form.telefone || !form.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
+    if (!dados.nome || !dados.telefone || !dados.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
@@ -328,11 +327,10 @@ const AgendarOnline: React.FC = () => {
       const normalizePhone = (t: string) => t.replace(/\D/g, '');
       const normalizeCpf = (c: string) => c.replace(/\D/g, '');
       const normalizeEmail = (e: string) => e.trim().toLowerCase();
-      const phoneNorm = normalizePhone(form.telefone);
-      const cpfNorm = normalizeCpf(form.cpf);
-      const emailNorm = normalizeEmail(form.email);
+      const phoneNorm = normalizePhone(dados.telefone);
+      const cpfNorm = normalizeCpf(dados.cpf);
+      const emailNorm = normalizeEmail(dados.email);
 
-      // Check for existing patient via edge function
       const checkRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=check-patient`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
@@ -343,10 +341,10 @@ const AgendarOnline: React.FC = () => {
       let pacienteId: string;
       if (checkData.found) {
         pacienteId = checkData.id;
-        if (form.cns) {
+        if (dados.cns) {
           await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=update-patient-cns`,
             { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-              body: JSON.stringify({ id: pacienteId, cns: form.cns }) });
+              body: JSON.stringify({ id: pacienteId, cns: dados.cns }) });
         }
       } else {
         if (form.tipo === 'Retorno') {
@@ -355,15 +353,15 @@ const AgendarOnline: React.FC = () => {
           return;
         }
         pacienteId = `p${Date.now()}`;
+        const serialized = serializeDadosPaciente(dados);
         const createRes = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-patient`,
           { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-            body: JSON.stringify({ id: pacienteId, nome: form.nome, cpf: form.cpf, cns: form.cns, telefone: form.telefone, data_nascimento: convertBrazilianToISO(form.dataNascimento), email: form.email, observacoes: form.obs }) }
+            body: JSON.stringify({ id: pacienteId, ...serialized, observacoes: dados.observacoes || form.obs }) }
         );
         if (!createRes.ok) throw new Error('Failed to create patient');
       }
 
-      // Create portal account
       try {
         await supabase.functions.invoke('patient-signup', {
           body: { email: emailNorm, senha: form.senha, pacienteId },
@@ -376,18 +374,16 @@ const AgendarOnline: React.FC = () => {
       const unidade = unidades.find(u => u.id === form.unidadeId);
       const agId = `ag${Date.now()}`;
 
-      // Create appointment via edge function
       const agRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-appointment`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-          body: JSON.stringify({ id: agId, paciente_id: pacienteId, paciente_nome: form.nome, unidade_id: form.unidadeId, sala_id: '', setor_id: prof?.setor || '', profissional_id: form.profissionalId, profissional_nome: prof?.nome || '', data: form.data, hora: form.hora, tipo: form.tipo, observacoes: form.obs }) }
+          body: JSON.stringify({ id: agId, paciente_id: pacienteId, paciente_nome: dados.nome, unidade_id: form.unidadeId, sala_id: '', setor_id: prof?.setor || '', profissional_id: form.profissionalId, profissional_nome: prof?.nome || '', data: form.data, hora: form.hora, tipo: form.tipo, observacoes: form.obs }) }
       );
       if (!agRes.ok) throw new Error('Failed to create appointment');
 
-      // Send webhook notification
       try {
         await supabase.functions.invoke('webhook-notify', {
-          body: { evento: 'novo_agendamento', paciente_nome: form.nome, telefone: form.telefone, email: form.email, data_consulta: form.data, hora_consulta: form.hora, unidade: unidade?.nome || '', profissional: prof?.nome || '', tipo_atendimento: form.tipo, status_agendamento: 'pendente', id_agendamento: agId, observacoes: form.obs },
+          body: { evento: 'novo_agendamento', paciente_nome: dados.nome, telefone: dados.telefone, email: dados.email, data_consulta: form.data, hora_consulta: form.hora, unidade: unidade?.nome || '', profissional: prof?.nome || '', tipo_atendimento: form.tipo, status_agendamento: 'pendente', id_agendamento: agId, observacoes: form.obs },
         });
       } catch (notifyErr) {
         console.error('Webhook notification failed (non-blocking):', notifyErr);
@@ -402,6 +398,7 @@ const AgendarOnline: React.FC = () => {
       setLoading(false);
     }
   };
+
 
   if (dataLoading) {
     return (
