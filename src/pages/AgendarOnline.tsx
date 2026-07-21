@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +13,7 @@ import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import type { DayInfo } from '@/components/CalendarioDisponibilidade';
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from '@/lib/utils';
+import DadosPacienteBlocos, { emptyDadosPaciente, serializeDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 
 const applyDateMask = (value: string): string => {
   const digits = value.replace(/\D/g, '');
