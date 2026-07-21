@@ -446,7 +446,7 @@ const AgendarOnline: React.FC = () => {
                 <p className="text-muted-foreground mb-4">{onlineConfig.mensagem_confirmacao}</p>
               ) : (
                 <p className="text-muted-foreground mb-4">
-                  {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada com sucesso.
+                  {dados.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada com sucesso.
                 </p>
               )}
               <p className="text-muted-foreground mb-2 text-sm"><strong>Data:</strong> {form.data} às {form.hora}</p>
@@ -546,37 +546,12 @@ const AgendarOnline: React.FC = () => {
             {step === 2 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Seus Dados</h2>
-                <div>
-                  <Label>Nome Completo *</Label>
-                  <Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} />
-                  {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-                  <div><Label>Cartão SUS / CNS</Label><Input value={form.cns} onChange={e => setForm(p => ({ ...p, cns: maskCNS(e.target.value) }))} placeholder="000 0000 0000 0000" maxLength={18} /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Telefone *</Label>
-                    <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
-                    {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Data Nasc.</Label>
-                    <Input type="text" value={form.dataNascimento}
-                      onChange={e => { const masked = applyDateMask(e.target.value); setForm(p => ({ ...p, dataNascimento: masked })); }}
-                      placeholder="DD/MM/AAAA" maxLength={10} />
-                    <p className="text-xs text-muted-foreground mt-1">Digite a data no formato: 23/11/1985</p>
-                    {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
-                  </div>
-                  <div>
-                    <Label>E-mail *</Label>
-                    <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
-                    {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  Preencha os blocos abaixo. Os campos marcados com * são obrigatórios. Você poderá completar/editar tudo depois no Portal do Paciente.
+                </p>
+
+                <DadosPacienteBlocos value={dados} onChange={updateDados} errors={errors} />
+
                 <div className="border-t pt-4 mt-2">
                   <p className="text-sm font-medium text-foreground mb-3">Criar acesso ao Portal do Paciente</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -601,13 +576,14 @@ const AgendarOnline: React.FC = () => {
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Use este e-mail e senha para acessar o Portal do Paciente.</p>
                 </div>
-                <div><Label>Observações</Label><Input value={form.obs} onChange={e => setForm(p => ({ ...p, obs: e.target.value }))} /></div>
+
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Voltar</Button>
-                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.nome || !form.telefone || !form.email || !form.senha}>Próximo</Button>
+                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!dados.nome || !dados.telefone || !dados.email || !form.senha}>Próximo</Button>
                 </div>
               </div>
             )}
+
 
             {step === 3 && (
               <div className="space-y-4">
