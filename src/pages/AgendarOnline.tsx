@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +13,7 @@ import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import type { DayInfo } from '@/components/CalendarioDisponibilidade';
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from '@/lib/utils';
+import DadosPacienteBlocos, { emptyDadosPaciente, serializeDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 
 const applyDateMask = (value: string): string => {
   const digits = value.replace(/\D/g, '');
@@ -68,9 +68,12 @@ const AgendarOnline: React.FC = () => {
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
-    nome: '', cpf: '', cns: '', telefone: '', dataNascimento: '', email: '', obs: '',
-    data: '', hora: '', senha: '', senhaConfirm: '',
+    data: '', hora: '', senha: '', senhaConfirm: '', obs: '',
   });
+  const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
+  const updateDados = useCallback((patch: Partial<DadosPacienteValue>) => {
+    setDados(prev => ({ ...prev, ...patch }));
+  }, []);
 
   const loadPublicData = useCallback(async () => {
     try {
@@ -284,7 +287,7 @@ const AgendarOnline: React.FC = () => {
   }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
   const validateStep2 = (): boolean => {
-    const err = validatePacienteFields({ nome: form.nome, telefone: form.telefone, email: form.email });
+    const err = validatePacienteFields({ nome: dados.nome, telefone: dados.telefone, email: dados.email });
     if (err) {
       const newErrors: Record<string, string> = {};
       if (err.includes('Nome')) newErrors.nome = err;
@@ -294,9 +297,8 @@ const AgendarOnline: React.FC = () => {
       toast.error(err);
       return false;
     }
-    if (form.dataNascimento && !validateDateBrazilian(form.dataNascimento)) {
-      setErrors({ dataNascimento: 'Data de nascimento inválida.' });
-      toast.error('Data de nascimento inválida.');
+    if (dados.menor_idade && (!dados.nome_responsavel || !dados.cpf_responsavel)) {
+      toast.error('Para menor de idade, informe nome e CPF do responsável.');
       return false;
     }
     if (!form.senha || form.senha.length < 6) {
@@ -316,7 +318,7 @@ const AgendarOnline: React.FC = () => {
   const handleNext2 = () => { if (validateStep2()) setStep(3); };
 
   const handleSubmit = async () => {
-    if (!form.nome || !form.telefone || !form.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
+    if (!dados.nome || !dados.telefone || !dados.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
@@ -325,11 +327,10 @@ const AgendarOnline: React.FC = () => {
       const normalizePhone = (t: string) => t.replace(/\D/g, '');
       const normalizeCpf = (c: string) => c.replace(/\D/g, '');
       const normalizeEmail = (e: string) => e.trim().toLowerCase();
-      const phoneNorm = normalizePhone(form.telefone);
-      const cpfNorm = normalizeCpf(form.cpf);
-      const emailNorm = normalizeEmail(form.email);
+      const phoneNorm = normalizePhone(dados.telefone);
+      const cpfNorm = normalizeCpf(dados.cpf);
+      const emailNorm = normalizeEmail(dados.email);
 
-      // Check for existing patient via edge function
       const checkRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=check-patient`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
@@ -340,10 +341,10 @@ const AgendarOnline: React.FC = () => {
       let pacienteId: string;
       if (checkData.found) {
         pacienteId = checkData.id;
-        if (form.cns) {
+        if (dados.cns) {
           await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=update-patient-cns`,
             { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-              body: JSON.stringify({ id: pacienteId, cns: form.cns }) });
+              body: JSON.stringify({ id: pacienteId, cns: dados.cns }) });
         }
       } else {
         if (form.tipo === 'Retorno') {
@@ -352,15 +353,15 @@ const AgendarOnline: React.FC = () => {
           return;
         }
         pacienteId = `p${Date.now()}`;
+        const serialized = serializeDadosPaciente(dados);
         const createRes = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-patient`,
           { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-            body: JSON.stringify({ id: pacienteId, nome: form.nome, cpf: form.cpf, cns: form.cns, telefone: form.telefone, data_nascimento: convertBrazilianToISO(form.dataNascimento), email: form.email, observacoes: form.obs }) }
+            body: JSON.stringify({ id: pacienteId, ...serialized, observacoes: dados.observacoes || form.obs }) }
         );
         if (!createRes.ok) throw new Error('Failed to create patient');
       }
 
-      // Create portal account
       try {
         await supabase.functions.invoke('patient-signup', {
           body: { email: emailNorm, senha: form.senha, pacienteId },
@@ -373,18 +374,16 @@ const AgendarOnline: React.FC = () => {
       const unidade = unidades.find(u => u.id === form.unidadeId);
       const agId = `ag${Date.now()}`;
 
-      // Create appointment via edge function
       const agRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-appointment`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-          body: JSON.stringify({ id: agId, paciente_id: pacienteId, paciente_nome: form.nome, unidade_id: form.unidadeId, sala_id: '', setor_id: prof?.setor || '', profissional_id: form.profissionalId, profissional_nome: prof?.nome || '', data: form.data, hora: form.hora, tipo: form.tipo, observacoes: form.obs }) }
+          body: JSON.stringify({ id: agId, paciente_id: pacienteId, paciente_nome: dados.nome, unidade_id: form.unidadeId, sala_id: '', setor_id: prof?.setor || '', profissional_id: form.profissionalId, profissional_nome: prof?.nome || '', data: form.data, hora: form.hora, tipo: form.tipo, observacoes: form.obs }) }
       );
       if (!agRes.ok) throw new Error('Failed to create appointment');
 
-      // Send webhook notification
       try {
         await supabase.functions.invoke('webhook-notify', {
-          body: { evento: 'novo_agendamento', paciente_nome: form.nome, telefone: form.telefone, email: form.email, data_consulta: form.data, hora_consulta: form.hora, unidade: unidade?.nome || '', profissional: prof?.nome || '', tipo_atendimento: form.tipo, status_agendamento: 'pendente', id_agendamento: agId, observacoes: form.obs },
+          body: { evento: 'novo_agendamento', paciente_nome: dados.nome, telefone: dados.telefone, email: dados.email, data_consulta: form.data, hora_consulta: form.hora, unidade: unidade?.nome || '', profissional: prof?.nome || '', tipo_atendimento: form.tipo, status_agendamento: 'pendente', id_agendamento: agId, observacoes: form.obs },
         });
       } catch (notifyErr) {
         console.error('Webhook notification failed (non-blocking):', notifyErr);
@@ -399,6 +398,7 @@ const AgendarOnline: React.FC = () => {
       setLoading(false);
     }
   };
+
 
   if (dataLoading) {
     return (
@@ -446,7 +446,7 @@ const AgendarOnline: React.FC = () => {
                 <p className="text-muted-foreground mb-4">{onlineConfig.mensagem_confirmacao}</p>
               ) : (
                 <p className="text-muted-foreground mb-4">
-                  {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada com sucesso.
+                  {dados.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada com sucesso.
                 </p>
               )}
               <p className="text-muted-foreground mb-2 text-sm"><strong>Data:</strong> {form.data} às {form.hora}</p>
@@ -546,37 +546,12 @@ const AgendarOnline: React.FC = () => {
             {step === 2 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Seus Dados</h2>
-                <div>
-                  <Label>Nome Completo *</Label>
-                  <Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} />
-                  {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-                  <div><Label>Cartão SUS / CNS</Label><Input value={form.cns} onChange={e => setForm(p => ({ ...p, cns: maskCNS(e.target.value) }))} placeholder="000 0000 0000 0000" maxLength={18} /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Telefone *</Label>
-                    <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
-                    {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Data Nasc.</Label>
-                    <Input type="text" value={form.dataNascimento}
-                      onChange={e => { const masked = applyDateMask(e.target.value); setForm(p => ({ ...p, dataNascimento: masked })); }}
-                      placeholder="DD/MM/AAAA" maxLength={10} />
-                    <p className="text-xs text-muted-foreground mt-1">Digite a data no formato: 23/11/1985</p>
-                    {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
-                  </div>
-                  <div>
-                    <Label>E-mail *</Label>
-                    <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
-                    {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  Preencha os blocos abaixo. Os campos marcados com * são obrigatórios. Você poderá completar/editar tudo depois no Portal do Paciente.
+                </p>
+
+                <DadosPacienteBlocos value={dados} onChange={updateDados} errors={errors} />
+
                 <div className="border-t pt-4 mt-2">
                   <p className="text-sm font-medium text-foreground mb-3">Criar acesso ao Portal do Paciente</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -601,13 +576,14 @@ const AgendarOnline: React.FC = () => {
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Use este e-mail e senha para acessar o Portal do Paciente.</p>
                 </div>
-                <div><Label>Observações</Label><Input value={form.obs} onChange={e => setForm(p => ({ ...p, obs: e.target.value }))} /></div>
+
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Voltar</Button>
-                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.nome || !form.telefone || !form.email || !form.senha}>Próximo</Button>
+                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!dados.nome || !dados.telefone || !dados.email || !form.senha}>Próximo</Button>
                 </div>
               </div>
             )}
+
 
             {step === 3 && (
               <div className="space-y-4">

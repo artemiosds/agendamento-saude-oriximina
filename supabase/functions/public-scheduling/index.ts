@@ -116,20 +116,69 @@ serve(async (req) => {
       if (!patient.id || !patient.nome) {
         return new Response(JSON.stringify({ error: "id and nome are required" }), { status: 400, headers: corsHeaders });
       }
-      const { error } = await supabase.from("pacientes").insert({
+      const payload: Record<string, unknown> = {
         id: patient.id,
         nome: patient.nome,
         cpf: patient.cpf || "",
         cns: patient.cns || "",
         telefone: patient.telefone || "",
-        data_nascimento: patient.data_nascimento || "",
+        data_nascimento: patient.data_nascimento || null,
         email: patient.email || "",
         observacoes: patient.observacoes || "",
-      });
+      };
+      // Optional extended fields (blocos completos)
+      const optional = [
+        "endereco","sexo","raca_cor","naturalidade","naturalidade_uf","municipio",
+        "nome_mae","menor_idade","nome_responsavel","cpf_responsavel",
+        "is_gestante","is_pne","is_autista","ubs_origem","custom_data",
+      ];
+      for (const k of optional) {
+        if (patient[k] !== undefined && patient[k] !== null) payload[k] = patient[k];
+      }
+      const { error } = await supabase.from("pacientes").insert(payload);
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
       }
       return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+    }
+
+    // Portal do Paciente atualiza os próprios dados
+    if (req.method === "POST" && action === "update-patient") {
+      const authHeader = req.headers.get("Authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "");
+      if (!token) {
+        return new Response(JSON.stringify({ error: "Não autenticado." }), { status: 401, headers: corsHeaders });
+      }
+      const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+      if (userErr || !userData?.user) {
+        return new Response(JSON.stringify({ error: "Sessão inválida." }), { status: 401, headers: corsHeaders });
+      }
+      const authUserId = userData.user.id;
+      const body = await req.json();
+      const { data: pac } = await supabase.from("pacientes").select("id, custom_data").eq("auth_user_id", authUserId).maybeSingle();
+      if (!pac) {
+        return new Response(JSON.stringify({ error: "Paciente não vinculado a esta conta." }), { status: 403, headers: corsHeaders });
+      }
+      const allowed = [
+        "nome","cpf","cns","data_nascimento","telefone","email","endereco",
+        "sexo","raca_cor","naturalidade","naturalidade_uf","municipio",
+        "nome_mae","menor_idade","nome_responsavel","cpf_responsavel",
+        "is_gestante","is_pne","is_autista","ubs_origem","observacoes","custom_data",
+      ];
+      const updates: Record<string, unknown> = {};
+      for (const k of allowed) {
+        if (body[k] !== undefined) updates[k] = body[k];
+      }
+      // Merge custom_data em vez de sobrescrever tudo
+      if (body.custom_data && typeof body.custom_data === "object") {
+        updates.custom_data = { ...(pac.custom_data || {}), ...body.custom_data };
+      }
+      // Nunca permite trocar unidade_id, id ou auth_user_id
+      const { error: updErr } = await supabase.from("pacientes").update(updates).eq("id", pac.id);
+      if (updErr) {
+        return new Response(JSON.stringify({ error: updErr.message }), { status: 500, headers: corsHeaders });
+      }
+      return new Response(JSON.stringify({ success: true, id: pac.id }), { headers: corsHeaders });
     }
 
     if (req.method === "POST" && action === "create-appointment") {

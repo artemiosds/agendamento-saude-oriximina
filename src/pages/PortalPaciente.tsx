@@ -6,12 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Calendar, Clock, User, FileText, LogOut, ArrowLeft, Loader2, MapPin, AlertCircle, List, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Calendar, Clock, User, FileText, LogOut, ArrowLeft, Loader2, MapPin, AlertCircle, List, Eye, EyeOff, KeyRound, UserCog } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { openPrintDocument } from '@/lib/printLayout';
+import DadosPacienteBlocos, { deserializeDadosPaciente, serializeDadosPaciente, emptyDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 
 interface PacienteData {
   id: string;
@@ -65,6 +66,8 @@ const PortalPaciente: React.FC = () => {
   const [agendamentos, setAgendamentos] = useState<AgendamentoData[]>([]);
   const [fila, setFila] = useState<FilaData[]>([]);
   const [unidades, setUnidades] = useState<any[]>([]);
+  const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
+  const [savingDados, setSavingDados] = useState(false);
 
   // Recovery state
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>('none');
@@ -122,6 +125,7 @@ const PortalPaciente: React.FC = () => {
     const { data: pac } = await (supabase as any).from('pacientes').select('*').eq('auth_user_id', authUserId).single();
     if (!pac) { setIsLoggedIn(false); return; }
     setPaciente(pac); setIsLoggedIn(true);
+    setDados(deserializeDadosPaciente(pac));
     const { data: ags } = await (supabase as any).from('agendamentos').select('*').eq('paciente_id', pac.id).order('data', { ascending: false });
     if (ags) setAgendamentos(ags);
     const { data: filaData } = await (supabase as any).from('fila_espera').select('*').eq('paciente_id', pac.id).in('status', ['aguardando', 'chamado']);
@@ -152,6 +156,31 @@ const PortalPaciente: React.FC = () => {
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); setPaciente(null); setAgendamentos([]); setFila([]); setIsLoggedIn(false); };
+
+  const handleSalvarDados = async () => {
+    if (!dados.nome || !dados.telefone) { toast.error('Nome e telefone são obrigatórios.'); return; }
+    setSavingDados(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { toast.error('Sessão expirada.'); setSavingDados(false); return; }
+      const payload = serializeDadosPaciente(dados, paciente ? (paciente as any).custom_data : {});
+      // Não permite alterar e-mail (é o login)
+      delete (payload as any).email;
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=update-patient`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) },
+      );
+      const json = await res.json();
+      if (!res.ok || json?.error) { toast.error(json?.error || 'Erro ao salvar.'); setSavingDados(false); return; }
+      toast.success('Dados atualizados com sucesso!');
+      const { data: pac } = await (supabase as any).from('pacientes').select('*').eq('id', json.id).single();
+      if (pac) { setPaciente(pac); setDados(deserializeDadosPaciente(pac)); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao salvar dados.');
+    } finally { setSavingDados(false); }
+  };
 
   const handleCancelar = async (agId: string) => {
     try {
@@ -361,7 +390,7 @@ const PortalPaciente: React.FC = () => {
 
       <div className="container mx-auto px-4 py-6 max-w-3xl">
         <Tabs defaultValue="proximos" className="space-y-4">
-          <TabsList className="grid grid-cols-3 w-full">
+          <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="proximos" className="text-xs sm:text-sm">
               <Calendar className="w-4 h-4 mr-1 hidden sm:inline" /> Próximas ({futureAgendamentos.length})
             </TabsTrigger>
@@ -371,7 +400,26 @@ const PortalPaciente: React.FC = () => {
             <TabsTrigger value="fila" className="text-xs sm:text-sm">
               <List className="w-4 h-4 mr-1 hidden sm:inline" /> Fila ({fila.length})
             </TabsTrigger>
+            <TabsTrigger value="dados" className="text-xs sm:text-sm">
+              <UserCog className="w-4 h-4 mr-1 hidden sm:inline" /> Meus Dados
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dados" className="space-y-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Atualize seus dados abaixo. As alterações refletem imediatamente no seu prontuário na unidade de saúde.
+                </p>
+                <DadosPacienteBlocos value={dados} onChange={(patch) => setDados(prev => ({ ...prev, ...patch }))} emailDisabled />
+                <Button onClick={handleSalvarDados} disabled={savingDados} className="w-full gradient-primary text-primary-foreground">
+                  {savingDados ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  {savingDados ? 'Salvando...' : 'Salvar alterações'}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
 
           <TabsContent value="proximos" className="space-y-3">
             {futureAgendamentos.length === 0 ? (
