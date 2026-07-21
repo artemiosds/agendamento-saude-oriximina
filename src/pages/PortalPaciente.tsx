@@ -6,12 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Calendar, Clock, User, FileText, LogOut, ArrowLeft, Loader2, MapPin, AlertCircle, List, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Calendar, Clock, User, FileText, LogOut, ArrowLeft, Loader2, MapPin, AlertCircle, List, Eye, EyeOff, KeyRound, UserCog } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { openPrintDocument } from '@/lib/printLayout';
+import DadosPacienteBlocos, { deserializeDadosPaciente, serializeDadosPaciente, emptyDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 
 interface PacienteData {
   id: string;
@@ -65,6 +66,8 @@ const PortalPaciente: React.FC = () => {
   const [agendamentos, setAgendamentos] = useState<AgendamentoData[]>([]);
   const [fila, setFila] = useState<FilaData[]>([]);
   const [unidades, setUnidades] = useState<any[]>([]);
+  const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
+  const [savingDados, setSavingDados] = useState(false);
 
   // Recovery state
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>('none');
@@ -122,6 +125,7 @@ const PortalPaciente: React.FC = () => {
     const { data: pac } = await (supabase as any).from('pacientes').select('*').eq('auth_user_id', authUserId).single();
     if (!pac) { setIsLoggedIn(false); return; }
     setPaciente(pac); setIsLoggedIn(true);
+    setDados(deserializeDadosPaciente(pac));
     const { data: ags } = await (supabase as any).from('agendamentos').select('*').eq('paciente_id', pac.id).order('data', { ascending: false });
     if (ags) setAgendamentos(ags);
     const { data: filaData } = await (supabase as any).from('fila_espera').select('*').eq('paciente_id', pac.id).in('status', ['aguardando', 'chamado']);
