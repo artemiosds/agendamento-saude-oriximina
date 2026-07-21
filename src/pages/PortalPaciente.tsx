@@ -390,7 +390,7 @@ const PortalPaciente: React.FC = () => {
 
       <div className="container mx-auto px-4 py-6 max-w-3xl">
         <Tabs defaultValue="proximos" className="space-y-4">
-          <TabsList className="grid grid-cols-3 w-full">
+          <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="proximos" className="text-xs sm:text-sm">
               <Calendar className="w-4 h-4 mr-1 hidden sm:inline" /> Próximas ({futureAgendamentos.length})
             </TabsTrigger>
@@ -400,7 +400,26 @@ const PortalPaciente: React.FC = () => {
             <TabsTrigger value="fila" className="text-xs sm:text-sm">
               <List className="w-4 h-4 mr-1 hidden sm:inline" /> Fila ({fila.length})
             </TabsTrigger>
+            <TabsTrigger value="dados" className="text-xs sm:text-sm">
+              <UserCog className="w-4 h-4 mr-1 hidden sm:inline" /> Meus Dados
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dados" className="space-y-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Atualize seus dados abaixo. As alterações refletem imediatamente no seu prontuário na unidade de saúde.
+                </p>
+                <DadosPacienteBlocos value={dados} onChange={(patch) => setDados(prev => ({ ...prev, ...patch }))} emailDisabled />
+                <Button onClick={handleSalvarDados} disabled={savingDados} className="w-full gradient-primary text-primary-foreground">
+                  {savingDados ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  {savingDados ? 'Salvando...' : 'Salvar alterações'}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
 
           <TabsContent value="proximos" className="space-y-3">
             {futureAgendamentos.length === 0 ? (
