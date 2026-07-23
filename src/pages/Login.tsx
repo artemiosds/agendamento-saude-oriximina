@@ -53,7 +53,7 @@ const Login: React.FC = () => {
       }
       const roleRoutes: Record<string, string> = {
         master: '/painel',
-        gestao: '/painel/dashboard',
+        gestao: '/painel',
         coordenador: '/painel',
         recepcao: '/painel/agenda',
         profissional: '/painel/agenda',
