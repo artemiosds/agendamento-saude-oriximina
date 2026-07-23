@@ -222,6 +222,14 @@
   }
 }
 
+/* Desliga backdrop-filter em containers densos (listas com muitos cards).
+   Ganho grande de FPS em PCs fracos sem alterar layout. */
+.perf-dense,
+.perf-dense * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* Fallback for browsers without backdrop-filter support */
 @supports not (backdrop-filter: blur(1px)) {
   .glass,
