@@ -3156,7 +3156,8 @@ const Agenda: React.FC = () => {
             </Card>
           )}
 
-          <div className="space-y-2">
+          <div className={`space-y-2 ${filtered.length > 50 ? 'perf-dense' : ''}`}>
+
             {filtered.length === 0 ? (
               <Card className="shadow-card border-0">
                 <CardContent className="p-8 text-center">
