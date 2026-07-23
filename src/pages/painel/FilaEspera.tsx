@@ -2068,7 +2068,7 @@ const FilaEspera: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="space-y-2">
+      <div className={`space-y-2 ${paginatedFila.length > 50 ? 'perf-dense' : ''}`}>
         {filteredFila.length === 0 ? (
           <Card className="shadow-card border-0">
             <CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent>

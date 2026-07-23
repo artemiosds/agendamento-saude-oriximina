@@ -1420,7 +1420,7 @@ const Pacientes: React.FC = () => {
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 ${filtered.length > 50 ? 'perf-dense' : ''}`}>
         {filtered.slice(0, visibleCount).map((p) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
