@@ -1,71 +1,83 @@
-# Plano: Dados unificados — Agendamento Online + Portal do Paciente
+# Auditoria de Performance — Plano Cirúrgico
 
-## Objetivo
-Fazer o **Agendamento Online** (público) e a área "Meus Dados" do **Portal do Paciente** usarem a mesma estrutura de blocos do cadastro interno, com dados refletindo em tempo real na ficha do paciente.
+Objetivo: eliminar travamento no clique e lentidão de carregamento **sem alterar fluxo, regras de negócio ou lógica**. Só refactor de camada técnica.
 
-## Blocos padronizados (idênticos aos do cadastro interno)
-1. **Identificação** — Nome, Data Nasc., CPF, CNS, Sexo, Raça/Cor, Nacionalidade, Naturalidade/UF, Município, Nome da Mãe, Responsável (se menor)
-2. **Endereço** — CEP, Tipo de Logradouro (DNE), Logradouro, Número, Complemento, Bairro, Município/UF
-3. **Contato** — Telefone principal, Telefone secundário, E-mail
-4. **Complementares** — Gestante, PNE, Autista (TEA), UBS de origem, Observações
+Já aplicado em fases anteriores (não repetir):
+- `React.memo` / `useMemo` / debounce 300 ms nas listas grandes
+- `.perf-dense` desabilitando `backdrop-filter` em >50 itens
+- `RealtimeManager` com ref-counting em `useRealtimeSync`
+- `select` enxuto em `AgendamentosContext` e `PacientesContext`
 
-Campos gravados nas colunas nativas de `pacientes` quando existirem (nome, cpf, cns, telefone, email, data_nascimento, endereco, is_gestante, is_pne, is_autista, naturalidade, naturalidade_uf, municipio, nome_mae, nome_responsavel, cpf_responsavel, ubs_origem, observacoes). Os demais (CEP, número, complemento, bairro, sexo, raça, nacionalidade, telefone secundário) vão para `pacientes.custom_data` — **sem criar novas colunas** (respeita a regra do projeto).
+Este plano ataca só o que ainda dá jank real.
 
-## Componente compartilhado
-Criar `src/components/DadosPacienteBlocos.tsx` — versão **enxuta** dos blocos do `CadastroPacienteForm`, sem: fotos, anexos, encaminhamento clínico, campos SIGTAP/CID, histórico. Só os 4 blocos acima.
+---
 
-Reutilizado em:
-- **`/agendar`** (etapa 2) — substitui os campos atuais, com senha do Portal ao final
-- **`/portal` → aba "Meus Dados"** — nova aba com botão "Salvar alterações"
+## Frente 1 — Feedback imediato no clique (loading isolado por botão)
 
-## Alterações por arquivo
+Problema: ao clicar em Salvar/Aprovar/Cancelar/Excluir, a UI parece "congelar" porque o botão não muda de estado até a Promise resolver.
 
-### 1. `src/components/DadosPacienteBlocos.tsx` (novo)
-- Props: `value`, `onChange`, `mode: "publico" | "portal"`, `showResponsavel`
-- Usa `LogradouroDneAutocomplete` e `MunicipioCombobox` (já existentes)
-- Sanitização e máscaras já testadas (CPF, CNS, CEP, telefone)
+Ação:
+1. Criar `src/components/ui/async-button.tsx` — wrapper de `<Button>` que:
+   - aceita `onClick: () => Promise<void>`
+   - marca `disabled` + spinner assim que clicado
+   - reaproveita `useActionGuard` existente (evita duplo clique)
+2. Migrar como piloto (baixo risco, alto impacto visual):
+   - `Pacientes.tsx` — botões Salvar/Excluir do modal
+   - `Agenda.tsx` — Confirmar chegada / Cancelar / Desmarcar
+   - `FilaEspera.tsx` — Chamar / Remover / Converter em agendamento
+   - `Configuracoes.tsx` — Salvar de cada aba
+   - `Prontuario` (SOAP) — Registrar / Finalizar
+   
+Nenhuma mutação muda — só o botão passa a mostrar estado local.
 
-### 2. `src/pages/AgendarOnline.tsx`
-- Etapa 2 troca campos avulsos por `<DadosPacienteBlocos mode="publico" />`
-- Persistência: montar payload já com `custom_data` populado
-- Sem quebra de fluxo (senha, validação, criação de conta continuam iguais)
+## Frente 2 — Optimistic updates onde já é seguro
 
-### 3. `supabase/functions/public-scheduling/index.ts` (ação `create-patient`)
-- Aceitar campos extras: `endereco`, `is_gestante`, `is_pne`, `is_autista`, `naturalidade`, `naturalidade_uf`, `municipio`, `nome_mae`, `nome_responsavel`, `cpf_responsavel`, `ubs_origem`, `custom_data`
-- Adicionar ação `update-patient` (chamada pelo Portal, só permite atualizar o próprio registro via `auth.uid()` → `pacientes.auth_user_id`)
+Aplicar somente onde a UI já reflete o estado local antes do round-trip (padrão que os slices usam hoje):
+- `updateAgendamento` (status, hora_chegada) — já é optimistic, adicionar rollback em erro (hoje só loga)
+- `cancelAgendamento` / `deleteAgendamento` — idem
+- `updatePaciente` — idem
 
-### 4. `src/pages/PortalPaciente.tsx`
-- Nova aba **"Meus Dados"** no `Tabs` existente
-- Formulário `<DadosPacienteBlocos mode="portal" />` pré-preenchido com `paciente`
-- Botão "Salvar alterações" → chama edge function `public-scheduling?action=update-patient`
-- Após salvar: `loadPacienteData` para refletir na UI
+Não vou introduzir optimistic novo onde não existe (risco de dessincronizar com RLS).
 
-## Segurança (Supabase)
-- **Não altera schema** — só usa colunas existentes + `custom_data` jsonb
-- **RLS**: a atualização pelo Portal vai via edge function com **service role**, mas valida `auth.uid() === paciente.auth_user_id` antes de gravar (padrão já usado em `ensure-patient-portal`)
-- **Nenhuma nova migração** necessária
+## Frente 3 — Consultas Supabase enxutas + paginação real
 
-## Riscos e mitigação
-| Risco | Mitigação |
-|---|---|
-| Quebrar fluxo público existente | Manter `create-patient` retrocompatível (novos campos opcionais) |
-| Paciente editando outro paciente | Edge function valida `auth_user_id === auth.uid()` antes de qualquer update |
-| Sobrecarga de campos no formulário público | Blocos colapsáveis via `Accordion`; obrigatórios só em Identificação/Contato |
-| Divergência de tipagem | `custom_data` como `Record<string, any>`, campos nativos tipados |
+Auditar e reduzir 3 telas específicas onde o `select` ainda puxa colunas demais ou não pagina:
 
-## Fora do escopo (não vou fazer)
-- Foto do paciente
-- Anexos / documentos
-- Encaminhamento clínico, CID, mobilidade, equipamentos, dispositivos
-- Bloco de "Histórico" clínico
-- Novas colunas ou tabelas
-- Alteração de campos de senha / recuperação (já funcionam)
+1. `HistoricoTriagem.tsx` — hoje faz paginação recursiva de todas as colunas de `triage_records`. Reduzir para `id, paciente_id, paciente_nome, criado_em, prioridade, unidade_id` no listing e buscar detalhes só ao expandir.
+2. `Auditoria.tsx` — trocar fetch total por `range(0, 99)` com botão "Carregar mais".
+3. `Faltosos.tsx` — trocar `select('*')` por colunas usadas na tabela.
+
+Sem mudar filtros/ordenação — só payload.
+
+## Frente 4 — Cleanup de listeners e efeitos
+
+Varredura por `supabase.channel(` e `useEffect` sem retorno:
+- Confirmar `removeChannel` em todos os hooks (após consolidação já feita)
+- Garantir cleanup de `setTimeout`/`setInterval` em `WhatsappPausedBanner`, `AtendimentoTimer`, `ConfigSyncIndicator`
+- Cancelar fetches em modais de detalhe com `AbortController` quando o modal fecha durante request
+
+---
+
+## Fora do escopo (não vou tocar)
+
+- Lógica de negócio, RLS, edge functions, schema
+- Fluxos clínicos (SOAP, PTS, triagem, ciclos)
+- Fase C de bundle (assunto separado, já mapeado)
 
 ## Ordem de execução
-1. Criar `DadosPacienteBlocos.tsx`
-2. Estender edge function `public-scheduling`
-3. Trocar etapa 2 de `AgendarOnline.tsx`
-4. Adicionar aba "Meus Dados" no `PortalPaciente.tsx`
-5. Typecheck limpo
 
-Aprovar para eu executar?
+1. Frente 1 (AsyncButton + 5 telas piloto) — maior ganho percebido
+2. Frente 4 (cleanup) — invisível mas elimina leaks
+3. Frente 3 (payload) — reduz TTI das 3 telas citadas
+4. Frente 2 (rollback em optimistic) — polimento
+
+Cada frente é commit isolado, reversível.
+
+## Detalhes técnicos
+
+- `AsyncButton` estende `ButtonProps`, não quebra tipos existentes
+- Todas as chamadas de Supabase mantêm `.eq/.in/.order` idênticos — só a lista de colunas do `select` muda
+- Nenhum canal Realtime novo; só cleanup
+- Zero migração de banco
+
+Posso executar as 4 frentes em sequência?
