@@ -502,19 +502,27 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     async (id: string): Promise<FilaEspera[]> => {
       const ag = agendamentosRef.current.find((a) => a.id === id);
       if (!ag) return [];
-      const { error } = await supabase
-        .from("agendamentos" as any)
-        .update({ status: "cancelado" })
-        .eq("id", id);
-      if (error) {
-        console.error("Error cancelling agendamento:", error);
-        throw new Error("Erro ao cancelar agendamento.");
-      }
+      const previousStatus = ag.status;
+      // Optimistic update: reflete o cancelamento imediato na UI.
       setAgendamentos((prev) =>
         prev.map((a) =>
           a.id === id ? { ...a, status: "cancelado" as const } : a,
         ),
       );
+      const { error } = await supabase
+        .from("agendamentos" as any)
+        .update({ status: "cancelado" })
+        .eq("id", id);
+      if (error) {
+        // Rollback em caso de falha (RLS/rede) para não mentir para o usuário.
+        setAgendamentos((prev) =>
+          prev.map((a) =>
+            a.id === id ? { ...a, status: previousStatus } : a,
+          ),
+        );
+        console.error("Error cancelling agendamento:", error);
+        throw new Error("Erro ao cancelar agendamento.");
+      }
       invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
       // Filtragem da fila reproduzida inline via snapshot module-level.
       const filaSnapshot = getFilaSnapshot();
@@ -541,15 +549,22 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
    */
   const deleteAgendamento = useCallback(
     async (id: string): Promise<void> => {
+      const previous = agendamentosRef.current.find((a) => a.id === id);
+      // Optimistic remove
+      setAgendamentos((prev) => prev.filter((a) => a.id !== id));
       const { error } = await supabase
         .from("agendamentos" as any)
         .delete()
         .eq("id", id);
       if (error) {
+        // Rollback: reinsere o registro se o delete falhar.
+        if (previous)
+          setAgendamentos((prev) =>
+            prev.some((a) => a.id === id) ? prev : [...prev, previous],
+          );
         console.error("Error deleting agendamento:", error);
         throw new Error("Erro ao excluir agendamento.");
       }
-      setAgendamentos((prev) => prev.filter((a) => a.id !== id));
       invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
     },
     [invalidateCache],
