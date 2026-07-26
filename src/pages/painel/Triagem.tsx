@@ -432,6 +432,9 @@ const Triagem: React.FC = () => {
 
         if (profissionalId && profTriageDisabled.has(profissionalId)) return null;
 
+        const pac = pacientes.find((p) => p.id === item.pacienteId);
+        const { age, formatted } = parseDob(pac?.dataNascimento);
+
         return {
           id: agendamentoRelacionado?.id || item.id,
           filaId: item.id,
@@ -439,6 +442,8 @@ const Triagem: React.FC = () => {
           filaCriadoEm: item.criadoEm,
           pacienteId: item.pacienteId,
           pacienteNome: agendamentoRelacionado?.pacienteNome || item.pacienteNome,
+          pacienteDataNascimento: formatted,
+          pacienteIdade: age,
           unidadeId: item.unidadeId,
           profissionalId,
           profissionalNome: agendamentoRelacionado?.profissionalNome || "—",
@@ -453,8 +458,18 @@ const Triagem: React.FC = () => {
       })
       .filter((item): item is Agendamento => Boolean(item))
       .filter((item) => !termo || item.pacienteNome.toLowerCase().includes(termo))
-      .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
-  }, [agendamentos, fila, isGlobalAdmin, user?.unidadeId, busca, profTriageDisabled]);
+      .sort((a, b) => {
+        // Estatuto do Idoso (Lei 10.741/2003): idosos (>=60) primeiro
+        const aIdoso = (a.pacienteIdade ?? -1) >= 60 ? 1 : 0;
+        const bIdoso = (b.pacienteIdade ?? -1) >= 60 ? 1 : 0;
+        if (aIdoso !== bIdoso) return bIdoso - aIdoso;
+        // Dentro do grupo, ordena por horário de chegada (mais antigo primeiro)
+        const aChegada = a.filaCriadoEm || '';
+        const bChegada = b.filaCriadoEm || '';
+        if (aChegada && bChegada) return aChegada.localeCompare(bChegada);
+        return (a.hora || '').localeCompare(b.hora || '');
+      });
+  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca, profTriageDisabled]);
 
   const imc = useMemo(() => {
     const peso = parseFloat(form.peso);
