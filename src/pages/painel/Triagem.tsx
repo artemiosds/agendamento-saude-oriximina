@@ -41,6 +41,8 @@ interface Agendamento {
   filaCriadoEm?: string;
   pacienteId: string;
   pacienteNome: string;
+  pacienteDataNascimento?: string;
+  pacienteIdade?: number | null;
   unidadeId: string;
   profissionalId: string;
   profissionalNome: string;
@@ -52,6 +54,26 @@ interface Agendamento {
   descricaoClinica?: string;
   observacoes?: string;
 }
+
+// Parse DOB in ISO (YYYY-MM-DD) or BR (DD/MM/YYYY) and return {age, formatted}
+const parseDob = (dob?: string): { age: number | null; formatted: string } => {
+  if (!dob) return { age: null, formatted: "" };
+  let d: Date | null = null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(dob)) {
+    const [y, m, day] = dob.slice(0, 10).split("-").map(Number);
+    d = new Date(y, m - 1, day);
+  } else if (/^\d{2}\/\d{2}\/\d{4}/.test(dob)) {
+    const [day, m, y] = dob.slice(0, 10).split("/").map(Number);
+    d = new Date(y, m - 1, day);
+  }
+  if (!d || isNaN(d.getTime())) return { age: null, formatted: "" };
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) age--;
+  const formatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  return { age, formatted };
+};
 
 interface Paciente {
   id: string;
@@ -157,6 +179,18 @@ const TriagemItem = React.memo(({
         <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
+            {item.pacienteDataNascimento && item.pacienteIdade != null ? (
+              <span className={`font-medium ${item.pacienteIdade >= 60 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
+                Nasc.: {item.pacienteDataNascimento} • {item.pacienteIdade} anos
+                {item.pacienteIdade >= 60 && (
+                  <Badge className="ml-1.5 bg-amber-500 text-white text-[10px] px-1.5 py-0">PRIORIDADE IDOSO</Badge>
+                )}
+              </span>
+            ) : (
+              <Badge variant="destructive" className="text-[10px]">Idade não informada</Badge>
+            )}
+          </div>
           <div className="mt-0.5 flex flex-wrap gap-1">
             {espBadge && (
               <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
@@ -398,6 +432,9 @@ const Triagem: React.FC = () => {
 
         if (profissionalId && profTriageDisabled.has(profissionalId)) return null;
 
+        const pac = pacientes.find((p) => p.id === item.pacienteId);
+        const { age, formatted } = parseDob(pac?.dataNascimento);
+
         return {
           id: agendamentoRelacionado?.id || item.id,
           filaId: item.id,
@@ -405,6 +442,8 @@ const Triagem: React.FC = () => {
           filaCriadoEm: item.criadoEm,
           pacienteId: item.pacienteId,
           pacienteNome: agendamentoRelacionado?.pacienteNome || item.pacienteNome,
+          pacienteDataNascimento: formatted,
+          pacienteIdade: age,
           unidadeId: item.unidadeId,
           profissionalId,
           profissionalNome: agendamentoRelacionado?.profissionalNome || "—",
@@ -419,8 +458,18 @@ const Triagem: React.FC = () => {
       })
       .filter((item): item is Agendamento => Boolean(item))
       .filter((item) => !termo || item.pacienteNome.toLowerCase().includes(termo))
-      .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
-  }, [agendamentos, fila, isGlobalAdmin, user?.unidadeId, busca, profTriageDisabled]);
+      .sort((a, b) => {
+        // Estatuto do Idoso (Lei 10.741/2003): idosos (>=60) primeiro
+        const aIdoso = (a.pacienteIdade ?? -1) >= 60 ? 1 : 0;
+        const bIdoso = (b.pacienteIdade ?? -1) >= 60 ? 1 : 0;
+        if (aIdoso !== bIdoso) return bIdoso - aIdoso;
+        // Dentro do grupo, ordena por horário de chegada (mais antigo primeiro)
+        const aChegada = a.filaCriadoEm || '';
+        const bChegada = b.filaCriadoEm || '';
+        if (aChegada && bChegada) return aChegada.localeCompare(bChegada);
+        return (a.hora || '').localeCompare(b.hora || '');
+      });
+  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca, profTriageDisabled]);
 
   const imc = useMemo(() => {
     const peso = parseFloat(form.peso);
