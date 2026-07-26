@@ -41,6 +41,8 @@ interface Agendamento {
   filaCriadoEm?: string;
   pacienteId: string;
   pacienteNome: string;
+  pacienteDataNascimento?: string;
+  pacienteIdade?: number | null;
   unidadeId: string;
   profissionalId: string;
   profissionalNome: string;
@@ -52,6 +54,26 @@ interface Agendamento {
   descricaoClinica?: string;
   observacoes?: string;
 }
+
+// Parse DOB in ISO (YYYY-MM-DD) or BR (DD/MM/YYYY) and return {age, formatted}
+const parseDob = (dob?: string): { age: number | null; formatted: string } => {
+  if (!dob) return { age: null, formatted: "" };
+  let d: Date | null = null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(dob)) {
+    const [y, m, day] = dob.slice(0, 10).split("-").map(Number);
+    d = new Date(y, m - 1, day);
+  } else if (/^\d{2}\/\d{2}\/\d{4}/.test(dob)) {
+    const [day, m, y] = dob.slice(0, 10).split("/").map(Number);
+    d = new Date(y, m - 1, day);
+  }
+  if (!d || isNaN(d.getTime())) return { age: null, formatted: "" };
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) age--;
+  const formatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  return { age, formatted };
+};
 
 interface Paciente {
   id: string;
