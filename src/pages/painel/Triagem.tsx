@@ -43,6 +43,9 @@ interface Agendamento {
   pacienteNome: string;
   pacienteDataNascimento?: string;
   pacienteIdade?: number | null;
+  pacienteIsGestante?: boolean;
+  pacienteIsPne?: boolean;
+  pacienteIsAutista?: boolean;
   unidadeId: string;
   profissionalId: string;
   profissionalNome: string;
