@@ -43,6 +43,9 @@ interface Agendamento {
   pacienteNome: string;
   pacienteDataNascimento?: string;
   pacienteIdade?: number | null;
+  pacienteIsGestante?: boolean;
+  pacienteIsPne?: boolean;
+  pacienteIsAutista?: boolean;
   unidadeId: string;
   profissionalId: string;
   profissionalNome: string;
@@ -444,6 +447,9 @@ const Triagem: React.FC = () => {
           pacienteNome: agendamentoRelacionado?.pacienteNome || item.pacienteNome,
           pacienteDataNascimento: formatted,
           pacienteIdade: age,
+          pacienteIsGestante: !!pac?.isGestante,
+          pacienteIsPne: !!pac?.isPne,
+          pacienteIsAutista: !!pac?.isAutista,
           unidadeId: item.unidadeId,
           profissionalId,
           profissionalNome: agendamentoRelacionado?.profissionalNome || "—",
@@ -459,10 +465,10 @@ const Triagem: React.FC = () => {
       .filter((item): item is Agendamento => Boolean(item))
       .filter((item) => !termo || item.pacienteNome.toLowerCase().includes(termo))
       .sort((a, b) => {
-        // Estatuto do Idoso (Lei 10.741/2003): idosos (>=60) primeiro
-        const aIdoso = (a.pacienteIdade ?? -1) >= 60 ? 1 : 0;
-        const bIdoso = (b.pacienteIdade ?? -1) >= 60 ? 1 : 0;
-        if (aIdoso !== bIdoso) return bIdoso - aIdoso;
+        // Grupo prioritário: Idoso ≥60 (Lei 10.741/2003) OU Gestante OU PNE OU TEA/Autista
+        const aPrio = ((a.pacienteIdade ?? -1) >= 60 || a.pacienteIsGestante || a.pacienteIsPne || a.pacienteIsAutista) ? 1 : 0;
+        const bPrio = ((b.pacienteIdade ?? -1) >= 60 || b.pacienteIsGestante || b.pacienteIsPne || b.pacienteIsAutista) ? 1 : 0;
+        if (aPrio !== bPrio) return bPrio - aPrio;
         // Dentro do grupo, ordena por horário de chegada (mais antigo primeiro)
         const aChegada = a.filaCriadoEm || '';
         const bChegada = b.filaCriadoEm || '';
