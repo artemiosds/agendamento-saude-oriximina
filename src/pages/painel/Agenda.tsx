@@ -834,9 +834,11 @@ const Agenda: React.FC = () => {
         const super80B = idadeB >= 80 ? 0 : 1;
         if (super80A !== super80B) return super80A - super80B;
 
-        // 5. Prioridade Legal Padrão — ≥60 anos OU TEA (empatam entre si)
-        const prioA = (idadeA >= 60 || isTea(a)) ? 0 : 1;
-        const prioB = (idadeB >= 60 || isTea(b)) ? 0 : 1;
+        // 5. Prioridade Legal Padrão — ≥60 anos OU TEA OU Gestante OU PNE (empatam entre si)
+        const pacA = pacientes.find((p) => p.id === a.pacienteId);
+        const pacB = pacientes.find((p) => p.id === b.pacienteId);
+        const prioA = (idadeA >= 60 || isTea(a) || !!pacA?.isGestante || !!pacA?.isPne) ? 0 : 1;
+        const prioB = (idadeB >= 60 || isTea(b) || !!pacB?.isGestante || !!pacB?.isPne) ? 0 : 1;
         if (prioA !== prioB) return prioA - prioB;
 
         // 6. Status da fila — apto_atendimento sobe frente aos que aguardam triagem
