@@ -186,12 +186,21 @@ const TriagemItem = React.memo(({
             {item.pacienteDataNascimento && item.pacienteIdade != null ? (
               <span className={`font-medium ${item.pacienteIdade >= 60 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
                 Nasc.: {item.pacienteDataNascimento} • {item.pacienteIdade} anos
-                {item.pacienteIdade >= 60 && (
-                  <Badge className="ml-1.5 bg-amber-500 text-white text-[10px] px-1.5 py-0">PRIORIDADE IDOSO</Badge>
-                )}
               </span>
             ) : (
               <Badge variant="destructive" className="text-[10px]">Idade não informada</Badge>
+            )}
+            {item.pacienteIdade != null && item.pacienteIdade >= 60 && (
+              <Badge className="bg-amber-500 hover:bg-amber-500 text-white text-[10px] px-1.5 py-0">PRIORIDADE IDOSO</Badge>
+            )}
+            {item.pacienteIsGestante && (
+              <Badge className="bg-pink-500 hover:bg-pink-500 text-white text-[10px] px-1.5 py-0">PRIORIDADE GESTANTE</Badge>
+            )}
+            {item.pacienteIsPne && (
+              <Badge className="bg-blue-500 hover:bg-blue-500 text-white text-[10px] px-1.5 py-0">PRIORIDADE PNE</Badge>
+            )}
+            {item.pacienteIsAutista && (
+              <Badge className="bg-purple-500 hover:bg-purple-500 text-white text-[10px] px-1.5 py-0">PRIORIDADE TEA</Badge>
             )}
           </div>
           <div className="mt-0.5 flex flex-wrap gap-1">
