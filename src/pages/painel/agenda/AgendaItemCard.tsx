@@ -237,6 +237,43 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
             {tipoInfo.label}
           </span>
           {(() => {
+            const dob = paciente?.dataNascimento as string | undefined;
+            let idade: number | null = null;
+            if (dob) {
+              const iso = /^\d{4}-\d{2}-\d{2}/.test(dob)
+                ? dob.slice(0, 10)
+                : /^(\d{2})\/(\d{2})\/(\d{4})/.test(dob)
+                  ? `${dob.slice(6, 10)}-${dob.slice(3, 5)}-${dob.slice(0, 2)}`
+                  : null;
+              if (iso) {
+                const d = new Date(iso + "T12:00:00");
+                if (!isNaN(d.getTime())) {
+                  const now = new Date();
+                  let a = now.getFullYear() - d.getFullYear();
+                  const md = now.getMonth() - d.getMonth();
+                  if (md < 0 || (md === 0 && now.getDate() < d.getDate())) a--;
+                  idade = a;
+                }
+              }
+            }
+            return (
+              <>
+                {idade != null && idade >= 60 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-500 text-white">PRIORIDADE IDOSO</span>
+                )}
+                {paciente?.isGestante && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-pink-500 text-white">PRIORIDADE GESTANTE</span>
+                )}
+                {paciente?.isPne && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-blue-500 text-white">PRIORIDADE PNE</span>
+                )}
+                {paciente?.isAutista && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-purple-500 text-white">PRIORIDADE TEA</span>
+                )}
+              </>
+            );
+          })()}
+          {(() => {
             const riscoRaw = triageRisco;
             if (!riscoRaw) return null;
             const m = getManchesterBadgeStyle(riscoRaw);
