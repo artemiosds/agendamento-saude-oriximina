@@ -1073,11 +1073,43 @@ const BpaExportar: React.FC = () => {
           console.warn("[BPA-Exportar] falha ao incluir técnicos de triagem no filtro:", e);
         }
 
+        // Também inclui profissionais que possuem agendamentos com presença
+        // (mesmos status usados na exportação) mas ainda sem prontuário
+        // finalizado — ex.: Odontologia, cujos atendimentos ficam só na agenda.
+        let profIdsAgenda: string[] = [];
+        try {
+          let agQ = (supabase as any)
+            .from("agendamentos")
+            .select("profissional_id")
+            .gte("data", startDate)
+            .lte("data", endDate)
+            .in("status", [
+              "concluido",
+              "confirmado_chegada",
+              "aguardando_atendimento",
+              "em_atendimento",
+              "falta",
+              "paciente_faltou",
+            ])
+            .not("profissional_id", "is", null)
+            .range(0, 9999);
+          if (formData.unidade_id !== "all") agQ = agQ.eq("unidade_id", formData.unidade_id);
+          const { data: agRows } = await agQ;
+          profIdsAgenda = (agRows || []).map((a: any) => a.profissional_id).filter(Boolean);
+        } catch (e) {
+          console.warn("[BPA-Exportar] falha ao incluir profissionais da agenda no filtro:", e);
+        }
+
         const profissionalIds = [
           ...new Set(
-            [...(atendimentos || []).map((item: any) => item.profissional_id), ...tecnicoIdsTriagem].filter(Boolean),
+            [
+              ...(atendimentos || []).map((item: any) => item.profissional_id),
+              ...tecnicoIdsTriagem,
+              ...profIdsAgenda,
+            ].filter(Boolean),
           ),
         ] as string[];
+
 
 
         if (profissionalIds.length === 0) {
