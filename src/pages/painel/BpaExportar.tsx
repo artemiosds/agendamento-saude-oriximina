@@ -1423,17 +1423,37 @@ const BpaExportar: React.FC = () => {
           "falta",
           "paciente_faltou",
         ];
+        // Exceção autorizada (Odontologia — JÉSSICA CARDOSO QUEIROZ): a agenda
+        // dela não recebe encerramento de atendimento, os registros ficam em
+        // "apto_atendimento"/"confirmado". Somente para este profissional, e
+        // somente quando os DOIS checkboxes estão marcados, esses status também
+        // são considerados presença presumida.
+        const PROF_PRESENCA_PRESUMIDA = "f444b6b3-86f7-4bed-8b54-ce40482e8061";
+        const STATUS_PRESUMIDOS = ["apto_atendimento", "confirmado"];
+        const presumirJessica =
+          !!formData.incluir_agenda_sem_prontuario && !!formData.exportar_com_pendencias;
+        const statusConsulta = presumirJessica
+          ? [...STATUS_PRESENCA, ...STATUS_PRESUMIDOS]
+          : STATUS_PRESENCA;
         let agQuery = (supabase as any)
           .from("agendamentos")
           .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
           .gte("data", startDate)
           .lte("data", endDate)
-          .in("status", STATUS_PRESENCA)
+          .in("status", statusConsulta)
           .range(0, 9999);
         if (formData.unidade_id !== "all") agQuery = agQuery.eq("unidade_id", formData.unidade_id);
         if (formData.profissional_id !== "all") agQuery = agQuery.eq("profissional_id", formData.profissional_id);
-        const { data: agsRows, error: agsErr } = await agQuery;
+        const { data: agsRowsRaw, error: agsErr } = await agQuery;
         if (agsErr) throw agsErr;
+
+        // Status presumidos valem exclusivamente para o profissional autorizado.
+        const agsRows = ((agsRowsRaw as any[]) || []).filter(
+          (a) =>
+            !STATUS_PRESUMIDOS.includes(String(a?.status)) ||
+            a?.profissional_id === PROF_PRESENCA_PRESUMIDA,
+        );
+
 
         // Chaves de prontuário/triagem já cobertos: mesmo paciente+profissional+data
         const cobertos = new Set<string>(
