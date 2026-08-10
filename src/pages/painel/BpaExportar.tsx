@@ -1375,26 +1375,32 @@ const BpaExportar: React.FC = () => {
       }
 
 
-      let triagemQuery = (supabase as any)
-        .from("triage_records")
-        .select("id, agendamento_id, tecnico_id, criado_em")
-        .gte("criado_em", `${startDate}T00:00:00`)
-        .lte("criado_em", `${endDate}T23:59:59`)
-        .not("tecnico_id", "is", null)
-        .range(0, 9999);
-      if (formData.profissional_id !== "all") {
-        triagemQuery = triagemQuery.eq("tecnico_id", formData.profissional_id);
-      }
-      const { data: triagensPeriodo } = await triagemQuery;
+      const triagensPeriodo = await fetchAllRowsBpa<any>(() => {
+        let q = (supabase as any)
+          .from("triage_records")
+          .select("id, agendamento_id, tecnico_id, criado_em")
+          .gte("criado_em", `${startDate}T00:00:00`)
+          .lte("criado_em", `${endDate}T23:59:59`)
+          .not("tecnico_id", "is", null)
+          .order("id", { ascending: true });
+        if (formData.profissional_id !== "all") {
+          q = q.eq("tecnico_id", formData.profissional_id);
+        }
+        return q;
+      });
       const agIdsTriagem = [
         ...new Set(((triagensPeriodo as any[]) || []).map((t) => t.agendamento_id).filter(Boolean)),
       ] as string[];
       const agsTriagemMap = new Map<string, any>();
-      if (agIdsTriagem.length > 0) {
-        const { data: agsTr } = await (supabase as any)
-          .from("agendamentos")
-          .select("id, paciente_id, paciente_nome, unidade_id, data")
-          .in("id", agIdsTriagem);
+      for (let i = 0; i < agIdsTriagem.length; i += 500) {
+        const parte = agIdsTriagem.slice(i, i + 500);
+        const agsTr = await fetchAllRowsBpa<any>(() =>
+          (supabase as any)
+            .from("agendamentos")
+            .select("id, paciente_id, paciente_nome, unidade_id, data")
+            .in("id", parte)
+            .order("id", { ascending: true }),
+        );
         (agsTr || []).forEach((a: any) => agsTriagemMap.set(a.id, a));
       }
 
