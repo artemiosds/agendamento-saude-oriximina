@@ -1692,18 +1692,20 @@ const BpaExportar: React.FC = () => {
       // atendimento correspondente, sem alterar o fluxo de geração.
       const sigtapPorSessaoTratamento = new Map<string, string[]>();
       try {
-        let sessQuery = (supabase as any)
-          .from("treatment_sessions")
-          .select("id, cycle_id, patient_id, professional_id, scheduled_date, status, procedure_done")
-          .in("patient_id", pacienteIds)
-          .gte("scheduled_date", startDate)
-          .lte("scheduled_date", endDate)
-          .not("status", "in", "(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)")
-          .range(0, 9999);
-        if (formData.profissional_id !== "all") {
-          sessQuery = sessQuery.eq("professional_id", formData.profissional_id);
-        }
-        const { data: sessoesRows } = await sessQuery;
+        const sessoesRows = await fetchAllRowsBpa<any>(() => {
+          let q = (supabase as any)
+            .from("treatment_sessions")
+            .select("id, cycle_id, patient_id, professional_id, scheduled_date, status, procedure_done")
+            .in("patient_id", pacienteIds)
+            .gte("scheduled_date", startDate)
+            .lte("scheduled_date", endDate)
+            .not("status", "in", "(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)")
+            .order("id", { ascending: true });
+          if (formData.profissional_id !== "all") {
+            q = q.eq("professional_id", formData.profissional_id);
+          }
+          return q;
+        });
         const sessoes = (sessoesRows || []).filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
         const cycleIds = [...new Set(sessoes.map((s: any) => s.cycle_id).filter(Boolean))] as string[];
         const cycleMap = new Map<string, any>();
