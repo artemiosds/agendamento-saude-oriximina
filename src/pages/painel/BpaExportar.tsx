@@ -1059,24 +1059,33 @@ const BpaExportar: React.FC = () => {
         // união os técnicos sumiriam do filtro de profissionais.
         let tecnicoIdsTriagem: string[] = [];
         try {
-          let triagensQuery = (supabase as any)
-            .from("triage_records")
-            .select("tecnico_id, agendamento_id, criado_em")
-            .gte("criado_em", `${startDate}T00:00:00`)
-            .lte("criado_em", `${endDate}T23:59:59`)
-            .not("tecnico_id", "is", null)
-            .range(0, 9999);
-          const { data: triagensFiltro } = await triagensQuery;
+          const triagensFiltro = await fetchAllRowsBpa<any>(() =>
+            (supabase as any)
+              .from("triage_records")
+              .select("tecnico_id, agendamento_id, criado_em")
+              .gte("criado_em", `${startDate}T00:00:00`)
+              .lte("criado_em", `${endDate}T23:59:59`)
+              .not("tecnico_id", "is", null)
+              .order("id", { ascending: true }),
+          );
           let trIds = (triagensFiltro || []).map((t: any) => t.tecnico_id).filter(Boolean);
           if (formData.unidade_id !== "all" && (triagensFiltro || []).length) {
             const agIds = [
               ...new Set((triagensFiltro || []).map((t: any) => t.agendamento_id).filter(Boolean)),
             ] as string[];
             if (agIds.length) {
-              const { data: agsRows } = await (supabase as any)
-                .from("agendamentos")
-                .select("id, unidade_id")
-                .in("id", agIds);
+              const agsRows: any[] = [];
+              for (let i = 0; i < agIds.length; i += 500) {
+                const parte = agIds.slice(i, i + 500);
+                const rows = await fetchAllRowsBpa<any>(() =>
+                  (supabase as any)
+                    .from("agendamentos")
+                    .select("id, unidade_id")
+                    .in("id", parte)
+                    .order("id", { ascending: true }),
+                );
+                agsRows.push(...rows);
+              }
               const agMap = new Map<string, any>((agsRows || []).map((a: any) => [a.id, a]));
               trIds = (triagensFiltro || [])
                 .filter((t: any) => {
