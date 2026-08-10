@@ -130,6 +130,25 @@ const calcularIdade = (dataNasc: any, dataAtendimento: any): string => {
   return zfill(Math.max(0, idade), 3);
 };
 
+// PostgREST limita a resposta a 1000 linhas mesmo com .range(0, 9999). Sem
+// paginação recursiva, competências com muitas triagens/agendamentos perdem
+// registros — e profissionais (ex.: técnicos de enfermagem) desaparecem do
+// filtro e da produção. Helper único usado nas varreduras da exportação.
+const PAGE_SIZE_BPA = 1000;
+async function fetchAllRowsBpa<T = any>(build: () => any): Promise<T[]> {
+  const out: T[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE_BPA) {
+    const { data, error } = await build().range(offset, offset + PAGE_SIZE_BPA - 1);
+    if (error) throw error;
+    const rows = (data || []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE_SIZE_BPA) break;
+    if (offset > 400000) break; // trava de segurança
+  }
+  return out;
+}
+
+
 const obterCboValido = (prof: any): string => {
   if (!prof) return "";
   const cd = prof.custom_data || {};
