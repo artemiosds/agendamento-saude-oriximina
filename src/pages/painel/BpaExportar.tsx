@@ -1106,23 +1106,25 @@ const BpaExportar: React.FC = () => {
         // finalizado — ex.: Odontologia, cujos atendimentos ficam só na agenda.
         let profIdsAgenda: string[] = [];
         try {
-          let agQ = (supabase as any)
-            .from("agendamentos")
-            .select("profissional_id")
-            .gte("data", startDate)
-            .lte("data", endDate)
-            .in("status", [
-              "concluido",
-              "confirmado_chegada",
-              "aguardando_atendimento",
-              "em_atendimento",
-              "falta",
-              "paciente_faltou",
-            ])
-            .not("profissional_id", "is", null)
-            .range(0, 9999);
-          if (formData.unidade_id !== "all") agQ = agQ.eq("unidade_id", formData.unidade_id);
-          const { data: agRows } = await agQ;
+          const agRows = await fetchAllRowsBpa<any>(() => {
+            let q = (supabase as any)
+              .from("agendamentos")
+              .select("profissional_id")
+              .gte("data", startDate)
+              .lte("data", endDate)
+              .in("status", [
+                "concluido",
+                "confirmado_chegada",
+                "aguardando_atendimento",
+                "em_atendimento",
+                "falta",
+                "paciente_faltou",
+              ])
+              .not("profissional_id", "is", null)
+              .order("id", { ascending: true });
+            if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+            return q;
+          });
           profIdsAgenda = (agRows || []).map((a: any) => a.profissional_id).filter(Boolean);
         } catch (e) {
           console.warn("[BPA-Exportar] falha ao incluir profissionais da agenda no filtro:", e);
