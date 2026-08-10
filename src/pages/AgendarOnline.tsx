@@ -145,53 +145,77 @@ const AgendarOnline: React.FC = () => {
     if (date < todayStr) return [];
 
     const dayOfWeek = isoDayOfWeek(date);
-    const disp = disponibilidades.find(d =>
+    const allDisps = disponibilidades.filter(d =>
       d.profissional_id === profissionalId && d.unidade_id === unidadeId &&
       d.dias_semana.includes(dayOfWeek) && date >= d.data_inicio && date <= d.data_fim
     );
-    if (!disp) return [];
-
-    const slots: string[] = [];
-    const startHour = parseInt(disp.hora_inicio.split(':')[0]);
-    const startMin = parseInt(disp.hora_inicio.split(':')[1] || '0');
-    const endHour = parseInt(disp.hora_fim.split(':')[0]);
-    const endMin = parseInt(disp.hora_fim.split(':')[1] || '0');
+    if (allDisps.length === 0) return [];
 
     const key = `${profissionalId}|${unidadeId}|${date}`;
     const dayAppointments = appointmentsByDateProfUnit.get(key) || [];
-    if (dayAppointments.length >= disp.vagas_por_dia) return [];
 
-    const hourCounts = new Map<string, number>();
-    const slotCounts = new Map<string, number>();
-    for (const a of dayAppointments) {
-      const hKey = a.hora.substring(0, 3);
-      hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
-      slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
-    }
+    // Convenção do sistema: vagas_por_hora === 0 => modo turno (1 slot por turno, limite = vagas_por_dia)
+    const turnoDisps = allDisps.filter(d => !d.vagas_por_hora);
+    const horaDisps = allDisps.filter(d => d.vagas_por_hora > 0);
 
-    const prof = profissionais.find(f => f.id === profissionalId);
-    const intervalMinutes = Math.max(15, prof?.tempo_atendimento || 30);
+    const slots: string[] = [];
     const ehHoje = date === todayStr;
     const limiteMinutos = ehHoje ? nowMinutesInBrazil() + 30 : -1;
 
-    let h = startHour, m = startMin;
-    while (h < endHour || (h === endHour && m < endMin)) {
-      const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      if (ehHoje && h * 60 + m <= limiteMinutos) {
-        m += intervalMinutes;
-        while (m >= 60) { m -= 60; h++; }
-        continue;
-      }
-      const hourStr = `${String(h).padStart(2, '0')}:`;
-      const hourCount = hourCounts.get(hourStr) || 0;
-      const slotCount = slotCounts.get(timeStr) || 0;
-      const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
-      if (!blocked && hourCount < disp.vagas_por_hora && slotCount === 0) slots.push(timeStr);
-      m += intervalMinutes;
-      while (m >= 60) { m -= 60; h++; }
+    for (const td of turnoDisps) {
+      const turnoStart = td.hora_inicio;
+      const turnoEnd = td.hora_fim;
+      const turnoAppCount = dayAppointments.filter(a => a.hora >= turnoStart && a.hora < turnoEnd).length;
+      if (turnoAppCount >= td.vagas_por_dia) continue;
+
+      const sh = parseInt(turnoStart.split(':')[0]);
+      const sm = parseInt(turnoStart.split(':')[1] || '0');
+      if (ehHoje && sh * 60 + sm <= limiteMinutos) continue;
+      if (isSlotBlocked(profissionalId, unidadeId, date, turnoStart)) continue;
+      if (!slots.includes(turnoStart)) slots.push(turnoStart);
     }
-    return slots;
+
+    if (horaDisps.length > 0) {
+      const disp = horaDisps[0];
+      if (dayAppointments.length < disp.vagas_por_dia) {
+        const hourCounts = new Map<string, number>();
+        const slotCounts = new Map<string, number>();
+        for (const a of dayAppointments) {
+          const hKey = a.hora.substring(0, 3);
+          hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
+          slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
+        }
+
+        const prof = profissionais.find(f => f.id === profissionalId);
+        const intervalMinutes = Math.max(15, prof?.tempo_atendimento || 30);
+
+        const startHour = parseInt(disp.hora_inicio.split(':')[0]);
+        const startMin = parseInt(disp.hora_inicio.split(':')[1] || '0');
+        const endHour = parseInt(disp.hora_fim.split(':')[0]);
+        const endMin = parseInt(disp.hora_fim.split(':')[1] || '0');
+
+        let h = startHour, m = startMin;
+        while (h < endHour || (h === endHour && m < endMin)) {
+          const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+          if (ehHoje && h * 60 + m <= limiteMinutos) {
+            m += intervalMinutes;
+            while (m >= 60) { m -= 60; h++; }
+            continue;
+          }
+          const hourStr = `${String(h).padStart(2, '0')}:`;
+          const hourCount = hourCounts.get(hourStr) || 0;
+          const slotCount = slotCounts.get(timeStr) || 0;
+          const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
+          if (!blocked && hourCount < disp.vagas_por_hora && slotCount === 0) slots.push(timeStr);
+          m += intervalMinutes;
+          while (m >= 60) { m -= 60; h++; }
+        }
+      }
+    }
+
+    return slots.sort();
   }, [disponibilidades, appointmentsByDateProfUnit, profissionais, isSlotBlocked]);
+
 
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
     const disps = disponibilidades.filter(d => d.profissional_id === profissionalId && d.unidade_id === unidadeId);
