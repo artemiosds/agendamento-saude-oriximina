@@ -1471,17 +1471,18 @@ const BpaExportar: React.FC = () => {
         const statusConsulta = presumirJessica
           ? [...STATUS_PRESENCA, ...STATUS_PRESUMIDOS]
           : STATUS_PRESENCA;
-        let agQuery = (supabase as any)
-          .from("agendamentos")
-          .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
-          .gte("data", startDate)
-          .lte("data", endDate)
-          .in("status", statusConsulta)
-          .range(0, 9999);
-        if (formData.unidade_id !== "all") agQuery = agQuery.eq("unidade_id", formData.unidade_id);
-        if (formData.profissional_id !== "all") agQuery = agQuery.eq("profissional_id", formData.profissional_id);
-        const { data: agsRowsRaw, error: agsErr } = await agQuery;
-        if (agsErr) throw agsErr;
+        const agsRowsRaw = await fetchAllRowsBpa<any>(() => {
+          let q = (supabase as any)
+            .from("agendamentos")
+            .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
+            .gte("data", startDate)
+            .lte("data", endDate)
+            .in("status", statusConsulta)
+            .order("id", { ascending: true });
+          if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+          if (formData.profissional_id !== "all") q = q.eq("profissional_id", formData.profissional_id);
+          return q;
+        });
 
         // Status presumidos valem exclusivamente para o profissional autorizado.
         const agsRows = ((agsRowsRaw as any[]) || []).filter(
