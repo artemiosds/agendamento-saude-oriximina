@@ -283,6 +283,7 @@ const AgendarOnline: React.FC = () => {
     let currentDate = todayLocalStr();
     for (let i = 0; i < 90; i++) {
       const dateStr = currentDate;
+      currentDate = addDaysToDateStr(currentDate, 1);
       const dayOfWeek = isoDayOfWeek(dateStr);
       const hasDisp = disps.some(d => d.dias_semana.includes(dayOfWeek) && dateStr >= d.data_inicio && dateStr <= d.data_fim);
       if (!hasDisp) continue;
@@ -294,12 +295,9 @@ const AgendarOnline: React.FC = () => {
       }
       const slots = getAvailableSlots(form.profissionalId, form.unidadeId, dateStr);
       if (slots.length === 0) {
-        const disp = disps.find(d => d.dias_semana.includes(dayOfWeek) && dateStr >= d.data_inicio && dateStr <= d.data_fim);
-        if (disp) {
-          const key = `${form.profissionalId}|${form.unidadeId}|${dateStr}`;
-          const dayCount = appointmentCountsByKey.get(key) || 0;
-          if (dayCount > 0) map[dateStr] = { dateStr, status: 'full', label: 'Lotado — sem vagas restantes' };
-        }
+        const key = `${form.profissionalId}|${form.unidadeId}|${dateStr}`;
+        const dayCount = appointmentCountsByKey.get(key) || 0;
+        if (dayCount > 0) map[dateStr] = { dateStr, status: 'full', label: 'Lotado — sem vagas restantes' };
       }
     }
     return map;
