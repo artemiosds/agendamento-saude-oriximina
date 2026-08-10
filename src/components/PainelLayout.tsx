@@ -71,7 +71,6 @@ const menuGroups: MenuGroup[] = [
     title: 'Documentos e Arquivo',
     items: [
       { to: '/painel/relatorios',   label: 'Relatórios',    icon: FileText, modulo: 'relatorios' },
-      { to: '/painel/bpa-producao', label: 'BPA-Produção',  icon: FileText, modulo: 'relatorios' },
       { to: '/painel/bpa-exportar', label: 'BPA-Exportar',  icon: FileText, modulo: 'relatorios' },
     ],
   },

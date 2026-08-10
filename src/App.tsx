@@ -84,7 +84,7 @@ const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encam
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
 const MonitoramentoSistema        = lazyRetry(() => import("./pages/painel/MonitoramentoSistema"));
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
-const BpaProducao                 = lazyRetry(() => import("./pages/painel/BpaProducao"));
+
 const AtualizacaoCadastral         = lazyRetry(() => import("./pages/painel/AtualizacaoCadastral"));
 const Faltosos                    = lazyRetry(() => import("./pages/painel/Faltosos"));
 const BpaExportar                  = lazyRetry(() => import("./pages/painel/BpaExportar"));
@@ -231,7 +231,7 @@ const App = () => (
                     <Route path="alta" element={<ModuleRoute modulo="prontuario"><RelatorioAlta /></ModuleRoute>} />
                     <Route path="encaminhamentos" element={<ModuleRoute modulo="encaminhamento"><Encaminhamentos /></ModuleRoute>} />
                     <Route path="meu-prontuario" element={<ModuleRoute modulo="prontuario"><MeuProntuario /></ModuleRoute>} />
-                    <Route path="bpa-producao" element={<ModuleRoute modulo="relatorios"><BpaProducao /></ModuleRoute>} />
+                    
                     <Route path="faltosos" element={<ModuleRoute modulo="pacientes"><Faltosos /></ModuleRoute>} />
                     <Route path="bpa-exportar" element={<ModuleRoute modulo="relatorios"><BpaExportar /></ModuleRoute>} />
                   </Route>
