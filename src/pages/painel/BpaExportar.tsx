@@ -130,6 +130,25 @@ const calcularIdade = (dataNasc: any, dataAtendimento: any): string => {
   return zfill(Math.max(0, idade), 3);
 };
 
+// PostgREST limita a resposta a 1000 linhas mesmo com .range(0, 9999). Sem
+// paginação recursiva, competências com muitas triagens/agendamentos perdem
+// registros — e profissionais (ex.: técnicos de enfermagem) desaparecem do
+// filtro e da produção. Helper único usado nas varreduras da exportação.
+const PAGE_SIZE_BPA = 1000;
+async function fetchAllRowsBpa<T = any>(build: () => any): Promise<T[]> {
+  const out: T[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE_BPA) {
+    const { data, error } = await build().range(offset, offset + PAGE_SIZE_BPA - 1);
+    if (error) throw error;
+    const rows = (data || []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE_SIZE_BPA) break;
+    if (offset > 400000) break; // trava de segurança
+  }
+  return out;
+}
+
+
 const obterCboValido = (prof: any): string => {
   if (!prof) return "";
   const cd = prof.custom_data || {};
@@ -1040,24 +1059,33 @@ const BpaExportar: React.FC = () => {
         // união os técnicos sumiriam do filtro de profissionais.
         let tecnicoIdsTriagem: string[] = [];
         try {
-          let triagensQuery = (supabase as any)
-            .from("triage_records")
-            .select("tecnico_id, agendamento_id, criado_em")
-            .gte("criado_em", `${startDate}T00:00:00`)
-            .lte("criado_em", `${endDate}T23:59:59`)
-            .not("tecnico_id", "is", null)
-            .range(0, 9999);
-          const { data: triagensFiltro } = await triagensQuery;
+          const triagensFiltro = await fetchAllRowsBpa<any>(() =>
+            (supabase as any)
+              .from("triage_records")
+              .select("tecnico_id, agendamento_id, criado_em")
+              .gte("criado_em", `${startDate}T00:00:00`)
+              .lte("criado_em", `${endDate}T23:59:59`)
+              .not("tecnico_id", "is", null)
+              .order("id", { ascending: true }),
+          );
           let trIds = (triagensFiltro || []).map((t: any) => t.tecnico_id).filter(Boolean);
           if (formData.unidade_id !== "all" && (triagensFiltro || []).length) {
             const agIds = [
               ...new Set((triagensFiltro || []).map((t: any) => t.agendamento_id).filter(Boolean)),
             ] as string[];
             if (agIds.length) {
-              const { data: agsRows } = await (supabase as any)
-                .from("agendamentos")
-                .select("id, unidade_id")
-                .in("id", agIds);
+              const agsRows: any[] = [];
+              for (let i = 0; i < agIds.length; i += 500) {
+                const parte = agIds.slice(i, i + 500);
+                const rows = await fetchAllRowsBpa<any>(() =>
+                  (supabase as any)
+                    .from("agendamentos")
+                    .select("id, unidade_id")
+                    .in("id", parte)
+                    .order("id", { ascending: true }),
+                );
+                agsRows.push(...rows);
+              }
               const agMap = new Map<string, any>((agsRows || []).map((a: any) => [a.id, a]));
               trIds = (triagensFiltro || [])
                 .filter((t: any) => {
@@ -1078,23 +1106,25 @@ const BpaExportar: React.FC = () => {
         // finalizado — ex.: Odontologia, cujos atendimentos ficam só na agenda.
         let profIdsAgenda: string[] = [];
         try {
-          let agQ = (supabase as any)
-            .from("agendamentos")
-            .select("profissional_id")
-            .gte("data", startDate)
-            .lte("data", endDate)
-            .in("status", [
-              "concluido",
-              "confirmado_chegada",
-              "aguardando_atendimento",
-              "em_atendimento",
-              "falta",
-              "paciente_faltou",
-            ])
-            .not("profissional_id", "is", null)
-            .range(0, 9999);
-          if (formData.unidade_id !== "all") agQ = agQ.eq("unidade_id", formData.unidade_id);
-          const { data: agRows } = await agQ;
+          const agRows = await fetchAllRowsBpa<any>(() => {
+            let q = (supabase as any)
+              .from("agendamentos")
+              .select("profissional_id")
+              .gte("data", startDate)
+              .lte("data", endDate)
+              .in("status", [
+                "concluido",
+                "confirmado_chegada",
+                "aguardando_atendimento",
+                "em_atendimento",
+                "falta",
+                "paciente_faltou",
+              ])
+              .not("profissional_id", "is", null)
+              .order("id", { ascending: true });
+            if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+            return q;
+          });
           profIdsAgenda = (agRows || []).map((a: any) => a.profissional_id).filter(Boolean);
         } catch (e) {
           console.warn("[BPA-Exportar] falha ao incluir profissionais da agenda no filtro:", e);
@@ -1345,26 +1375,32 @@ const BpaExportar: React.FC = () => {
       }
 
 
-      let triagemQuery = (supabase as any)
-        .from("triage_records")
-        .select("id, agendamento_id, tecnico_id, criado_em")
-        .gte("criado_em", `${startDate}T00:00:00`)
-        .lte("criado_em", `${endDate}T23:59:59`)
-        .not("tecnico_id", "is", null)
-        .range(0, 9999);
-      if (formData.profissional_id !== "all") {
-        triagemQuery = triagemQuery.eq("tecnico_id", formData.profissional_id);
-      }
-      const { data: triagensPeriodo } = await triagemQuery;
+      const triagensPeriodo = await fetchAllRowsBpa<any>(() => {
+        let q = (supabase as any)
+          .from("triage_records")
+          .select("id, agendamento_id, tecnico_id, criado_em")
+          .gte("criado_em", `${startDate}T00:00:00`)
+          .lte("criado_em", `${endDate}T23:59:59`)
+          .not("tecnico_id", "is", null)
+          .order("id", { ascending: true });
+        if (formData.profissional_id !== "all") {
+          q = q.eq("tecnico_id", formData.profissional_id);
+        }
+        return q;
+      });
       const agIdsTriagem = [
         ...new Set(((triagensPeriodo as any[]) || []).map((t) => t.agendamento_id).filter(Boolean)),
       ] as string[];
       const agsTriagemMap = new Map<string, any>();
-      if (agIdsTriagem.length > 0) {
-        const { data: agsTr } = await (supabase as any)
-          .from("agendamentos")
-          .select("id, paciente_id, paciente_nome, unidade_id, data")
-          .in("id", agIdsTriagem);
+      for (let i = 0; i < agIdsTriagem.length; i += 500) {
+        const parte = agIdsTriagem.slice(i, i + 500);
+        const agsTr = await fetchAllRowsBpa<any>(() =>
+          (supabase as any)
+            .from("agendamentos")
+            .select("id, paciente_id, paciente_nome, unidade_id, data")
+            .in("id", parte)
+            .order("id", { ascending: true }),
+        );
         (agsTr || []).forEach((a: any) => agsTriagemMap.set(a.id, a));
       }
 
@@ -1435,17 +1471,18 @@ const BpaExportar: React.FC = () => {
         const statusConsulta = presumirJessica
           ? [...STATUS_PRESENCA, ...STATUS_PRESUMIDOS]
           : STATUS_PRESENCA;
-        let agQuery = (supabase as any)
-          .from("agendamentos")
-          .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
-          .gte("data", startDate)
-          .lte("data", endDate)
-          .in("status", statusConsulta)
-          .range(0, 9999);
-        if (formData.unidade_id !== "all") agQuery = agQuery.eq("unidade_id", formData.unidade_id);
-        if (formData.profissional_id !== "all") agQuery = agQuery.eq("profissional_id", formData.profissional_id);
-        const { data: agsRowsRaw, error: agsErr } = await agQuery;
-        if (agsErr) throw agsErr;
+        const agsRowsRaw = await fetchAllRowsBpa<any>(() => {
+          let q = (supabase as any)
+            .from("agendamentos")
+            .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
+            .gte("data", startDate)
+            .lte("data", endDate)
+            .in("status", statusConsulta)
+            .order("id", { ascending: true });
+          if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+          if (formData.profissional_id !== "all") q = q.eq("profissional_id", formData.profissional_id);
+          return q;
+        });
 
         // Status presumidos valem exclusivamente para o profissional autorizado.
         const agsRows = ((agsRowsRaw as any[]) || []).filter(
@@ -1655,18 +1692,20 @@ const BpaExportar: React.FC = () => {
       // atendimento correspondente, sem alterar o fluxo de geração.
       const sigtapPorSessaoTratamento = new Map<string, string[]>();
       try {
-        let sessQuery = (supabase as any)
-          .from("treatment_sessions")
-          .select("id, cycle_id, patient_id, professional_id, scheduled_date, status, procedure_done")
-          .in("patient_id", pacienteIds)
-          .gte("scheduled_date", startDate)
-          .lte("scheduled_date", endDate)
-          .not("status", "in", "(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)")
-          .range(0, 9999);
-        if (formData.profissional_id !== "all") {
-          sessQuery = sessQuery.eq("professional_id", formData.profissional_id);
-        }
-        const { data: sessoesRows } = await sessQuery;
+        const sessoesRows = await fetchAllRowsBpa<any>(() => {
+          let q = (supabase as any)
+            .from("treatment_sessions")
+            .select("id, cycle_id, patient_id, professional_id, scheduled_date, status, procedure_done")
+            .in("patient_id", pacienteIds)
+            .gte("scheduled_date", startDate)
+            .lte("scheduled_date", endDate)
+            .not("status", "in", "(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)")
+            .order("id", { ascending: true });
+          if (formData.profissional_id !== "all") {
+            q = q.eq("professional_id", formData.profissional_id);
+          }
+          return q;
+        });
         const sessoes = (sessoesRows || []).filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
         const cycleIds = [...new Set(sessoes.map((s: any) => s.cycle_id).filter(Boolean))] as string[];
         const cycleMap = new Map<string, any>();
