@@ -54,69 +54,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PacienteItemCard from "./pacientes/PacienteItemCard";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 
-interface FichaDados {
-  paciente: {
-    nome: string;
-    cpf: string;
-    cns: string;
-    data_nascimento: string;
-    nome_mae: string;
-    telefone: string;
-    telefone_secundario?: string;
-    email?: string;
-    endereco?: string;
-    responsavel?: string;
-    sexo?: string;
-    naturalidade?: string;
-    nacionalidade?: string;
-    raca_cor?: string;
-    situacao_rua?: boolean;
-    menor_idade?: boolean;
-    parentesco_responsavel?: string;
-    observacoes_cadastrais?: string;
-    informacoes_adicionais?: string;
-    origem_cadastro?: string;
-    unidade_vinculada?: string;
-    tipo_logradouro?: string;
-    logradouro?: string;
-    numero?: string;
-    complemento?: string;
-    bairro?: string;
-    municipio?: string;
-    uf?: string;
-    cep?: string;
-  };
-  dadosClinicos: {
-    numero_prontuario: string;
-    cid: string;
-    tipo_atendimento: string;
-    unidade_origem: string;
-    unidade_atendimento: string;
-    data_atendimento: string;
-    especialidade?: string;
-    encaminhamento?: string;
-  };
-  sinaisVitais: {
-    pressao_arterial: string;
-    frequencia_cardiaca: string;
-    temperatura: string;
-    saturacao: string;
-    peso: string;
-    altura: string;
-    glicemia?: string;
-    frequencia_respiratoria?: string;
-  };
-  profissional: {
-    nome: string;
-    cargo: string;
-    registro: string;
-  };
-  evoluciones: Array<{
-    data: string;
-    observacao: string;
-    profissional: string;
-  }>;
-}
+import { buildFichaAtendimentoData, type FichaDados } from "@/lib/fichaAtendimentoData";
+
 
 const PACIENTE_COLUMNS =
   "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data,sexo";
