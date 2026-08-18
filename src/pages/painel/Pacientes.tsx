@@ -54,69 +54,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PacienteItemCard from "./pacientes/PacienteItemCard";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 
-interface FichaDados {
-  paciente: {
-    nome: string;
-    cpf: string;
-    cns: string;
-    data_nascimento: string;
-    nome_mae: string;
-    telefone: string;
-    telefone_secundario?: string;
-    email?: string;
-    endereco?: string;
-    responsavel?: string;
-    sexo?: string;
-    naturalidade?: string;
-    nacionalidade?: string;
-    raca_cor?: string;
-    situacao_rua?: boolean;
-    menor_idade?: boolean;
-    parentesco_responsavel?: string;
-    observacoes_cadastrais?: string;
-    informacoes_adicionais?: string;
-    origem_cadastro?: string;
-    unidade_vinculada?: string;
-    tipo_logradouro?: string;
-    logradouro?: string;
-    numero?: string;
-    complemento?: string;
-    bairro?: string;
-    municipio?: string;
-    uf?: string;
-    cep?: string;
-  };
-  dadosClinicos: {
-    numero_prontuario: string;
-    cid: string;
-    tipo_atendimento: string;
-    unidade_origem: string;
-    unidade_atendimento: string;
-    data_atendimento: string;
-    especialidade?: string;
-    encaminhamento?: string;
-  };
-  sinaisVitais: {
-    pressao_arterial: string;
-    frequencia_cardiaca: string;
-    temperatura: string;
-    saturacao: string;
-    peso: string;
-    altura: string;
-    glicemia?: string;
-    frequencia_respiratoria?: string;
-  };
-  profissional: {
-    nome: string;
-    cargo: string;
-    registro: string;
-  };
-  evoluciones: Array<{
-    data: string;
-    observacao: string;
-    profissional: string;
-  }>;
-}
+import { buildFichaAtendimentoData, type FichaDados } from "@/lib/fichaAtendimentoData";
+
 
 const PACIENTE_COLUMNS =
   "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data,sexo";
@@ -1033,104 +972,13 @@ const Pacientes: React.FC = () => {
     }
   };
 
-  // Função para buscar dados da ficha em paralelo
-  const fetchFichaData = useCallback(async (pacienteId: string): Promise<FichaDados> => {
-    // A) PACIENTE
-    const pacientePromise = supabase
-      .from("pacientes")
-      .select("*")
-      .eq("id", pacienteId)
-      .single()
-      .then(({ data, error }) => {
-        if (error || !data) throw new Error("Paciente não encontrado");
-        
-        const cd = (data.custom_data || {}) as Record<string, any>;
-        
-        return {
-          paciente: {
-            nome: data.nome || "",
-            cpf: data.cpf || "",
-            cns: data.cns || "",
-            data_nascimento: data.data_nascimento || "",
-            nome_mae: data.nome_mae || "",
-            telefone: data.telefone || "",
-            telefone_secundario: cd.telefone_secundario || "",
-            email: data.email || "",
-            endereco: data.endereco || "",
-            responsavel: data.nome_responsavel || "",
-            sexo: cd.sexo || "",
-            naturalidade: data.naturalidade || "",
-            nacionalidade: cd.nacionalidade || "",
-            raca_cor: cd.raca_cor || "",
-            situacao_rua: !!cd.situacao_rua,
-            menor_idade: !!data.menor_idade,
-            parentesco_responsavel: cd.parentesco_responsavel || "",
-            observacoes_cadastrais: data.observacoes || "",
-            informacoes_adicionais: cd.informacoes_adicionais || "",
-            origem_cadastro: cd.origem_cadastro || "",
-            unidade_vinculada: (unidades.find(u => u.id === data.unidade_id)?.nome) || "",
-            // Address mapping
-            tipo_logradouro: cd.tipoLogradouro || cd.tipo_logradouro || "",
-            logradouro: cd.logradouro || "",
-            numero: cd.numero || "",
-            complemento: cd.complemento || "",
-            bairro: cd.bairro || "",
-            municipio: data.municipio || cd.municipio || "",
-            uf: cd.uf || "",
-            cep: cd.cep || "",
-          },
-          cid: data.cid || "",
-        };
-      });
+  // Busca dos dados da ficha (builder compartilhado com a Agenda)
+  const fetchFichaData = useCallback(
+    (pacienteId: string): Promise<FichaDados> =>
+      buildFichaAtendimentoData({ pacienteId, unidades, user }),
+    [unidades, user],
+  );
 
-    // B) DADOS CLÍNICOS — Sempre limpos para a ficha de impressão
-    const dadosClinicosPromise = Promise.resolve({
-      numero_prontuario: pacienteId,
-      tipo_atendimento: "",
-      unidade_origem: "",
-      unidade_atendimento: "",
-      data_atendimento: "",
-    });
-
-    // C) SINAIS VITAIS — Sempre limpos para a ficha de impressão
-    const sinaisVitaisPromise = Promise.resolve({
-      pressao_arterial: "",
-      frequencia_cardiaca: "",
-      temperatura: "",
-      saturacao: "",
-      peso: "",
-      altura: "",
-      frequencia_respiratoria: "",
-      glicemia: "",
-    });
-
-    // D) PROFISSIONAL LOGADO
-    const profissionalPromise = Promise.resolve({
-      nome: user?.nome || "",
-      cargo: user?.role || "",
-      registro: user?.numeroConselho || "",
-    });
-
-    // E) EVOLUÇÕES CLÍNICAS — Sempre limpas para a ficha de impressão
-    const evolucionesPromise = Promise.resolve([]);
-
-    // Executar todas as buscas em paralelo
-    const [pacienteResult, dadosClinicos, sinaisVitais, profissional, evoluciones] = await Promise.all([
-      pacientePromise,
-      dadosClinicosPromise,
-      sinaisVitaisPromise,
-      profissionalPromise,
-      evolucionesPromise,
-    ]);
-
-    return {
-      paciente: pacienteResult.paciente,
-      dadosClinicos: { ...dadosClinicos, cid: pacienteResult.cid },
-      sinaisVitais,
-      profissional,
-      evoluciones,
-    };
-  }, [unidades, user, agendamentos]);
 
   // Abrir ficha de impressão
   const handleOpenFicha = async (p: (typeof pacientes)[0], mode: FichaPrintMode = 'completa') => {
