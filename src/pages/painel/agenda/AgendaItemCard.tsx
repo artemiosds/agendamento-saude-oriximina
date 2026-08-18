@@ -125,6 +125,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   onCancelInit,
   onConcluir,
   onDelete,
+  onImprimirFicha,
 }) => {
   const today = todayLocalStr();
   const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
@@ -334,6 +335,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
             <Eye className="w-3.5 h-3.5" />
           </Button>
           {onImprimirFicha && (
+            <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -348,6 +350,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
               </TooltipTrigger>
               <TooltipContent>Imprimir Ficha de Atendimento</TooltipContent>
             </Tooltip>
+            </TooltipProvider>
           )}
           {/* Botão individual de aviso — MASTER e RECEPCAO */}
           {(user?.role === "master" || user?.role === "recepcao") && (
