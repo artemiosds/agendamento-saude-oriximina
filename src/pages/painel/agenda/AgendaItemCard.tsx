@@ -30,6 +30,7 @@ import {
   RotateCcw,
   X,
   Trash2,
+  Printer,
 } from "lucide-react";
 import ContactActionButton from "@/components/ContactActionButton";
 import { AgendaNotificacaoIndividual } from "@/components/AgendaNotificacoes";
@@ -81,6 +82,7 @@ export interface AgendaItemCardProps {
     iniciado_em: string | null;
   }) => void;
   onDelete: (id: string) => void;
+  onImprimirFicha?: (ag: any) => void;
 }
 
 const isSameDay = (a: Date, b: Date) =>
@@ -331,6 +333,22 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
           >
             <Eye className="w-3.5 h-3.5" />
           </Button>
+          {onImprimirFicha && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => onImprimirFicha(ag)}
+                  aria-label="Imprimir Ficha de Atendimento"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Imprimir Ficha de Atendimento</TooltipContent>
+            </Tooltip>
+          )}
           {/* Botão individual de aviso — MASTER e RECEPCAO */}
           {(user?.role === "master" || user?.role === "recepcao") && (
             <AgendaNotificacaoIndividual
