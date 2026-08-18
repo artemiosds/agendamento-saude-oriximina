@@ -1,83 +1,26 @@
-# Auditoria de Performance — Plano Cirúrgico
+# Ficha de Atendimento Clínico na Agenda
 
-Objetivo: eliminar travamento no clique e lentidão de carregamento **sem alterar fluxo, regras de negócio ou lógica**. Só refactor de camada técnica.
+Objetivo: ter o mesmo documento "Ficha de Atendimento Clínico Completa" (hoje só na tela Pacientes) disponível direto na Agenda, ao lado de cada paciente agendado, pronto para imprimir — sem alterar o fluxo da agenda.
 
-Já aplicado em fases anteriores (não repetir):
-- `React.memo` / `useMemo` / debounce 300 ms nas listas grandes
-- `.perf-dense` desabilitando `backdrop-filter` em >50 itens
-- `RealtimeManager` com ref-counting em `useRealtimeSync`
-- `select` enxuto em `AgendamentosContext` e `PacientesContext`
+## O que o usuário vai ver
 
-Este plano ataca só o que ainda dá jank real.
+- Em cada cartão de paciente da Agenda, na mesma barra de ações onde já ficam os botões (olho/detalhe, editar, etc.), entra um botão discreto de impressora com tooltip "Imprimir Ficha de Atendimento".
+- Ao clicar, abre o mesmo diálogo já usado em Pacientes, com os dois modos:
+  - **Completa** (Ficha de Atendimento Clínico)
+  - **Só Dados Pessoais** (Ficha Cadastral)
+- O layout impresso é exatamente o atual (A4 institucional, `FichaImpressao` + `printLayout`), sem nenhuma mudança visual no documento.
+- O botão fica junto às ações já existentes, agrupado por ordem, para não competir com "Confirmar chegada" nem outros cliques críticos.
 
----
+## Como será feito (técnico)
 
-## Frente 1 — Feedback imediato no clique (loading isolado por botão)
+1. **Extrair o builder de dados** — `fetchFichaData` está hoje embutido em `src/pages/painel/Pacientes.tsx` (linha ~1037). Mover para um módulo compartilhado `src/lib/fichaAtendimentoData.ts`, exportando `buildFichaAtendimentoData({ pacienteId, unidades, user })` com o mesmo retorno (`paciente`, `dadosClinicos`, `sinaisVitais`, `profissional`, `evoluciones`) e os mesmos campos/mapeamentos de `custom_data`. Nenhuma regra de negócio muda; campos clínicos continuam em branco para preenchimento manual.
+2. **Pacientes passa a consumir o módulo** — trocar a função local pelo import, mantendo `handleOpenFicha` e o diálogo como estão. Zero mudança de comportamento nessa tela.
+3. **Prop opcional no cartão da Agenda** — em `src/pages/painel/agenda/AgendaItemCard.tsx`, adicionar `onImprimirFicha?: (ag: any) => void` e renderizar o botão de impressora dentro do bloco de ações existente (`flex gap-1 flex-wrap`, ~linha 324), só quando a prop existir. Prop opcional = nenhum outro consumidor quebra.
+4. **Diálogo na Agenda** — em `src/pages/painel/Agenda.tsx`, adicionar estados locais (`fichaOpen`, `fichaData`, `fichaLoading`, `fichaPrintMode`), o handler que chama `buildFichaAtendimentoData` com o `paciente_id` do agendamento, e o `Dialog` com `<FichaImpressao />` e os dois botões de modo — espelhando o que já existe em Pacientes.
+5. **Estabilidade de performance** — o handler entra via `useRef` (padrão já adotado na Agenda para handlers passados a componentes memoizados), então a memoização do `AgendaItemCard` continua efetiva e a lista não re-renderiza a mais.
 
-Problema: ao clicar em Salvar/Aprovar/Cancelar/Excluir, a UI parece "congelar" porque o botão não muda de estado até a Promise resolver.
+## Fora de escopo
 
-Ação:
-1. Criar `src/components/ui/async-button.tsx` — wrapper de `<Button>` que:
-   - aceita `onClick: () => Promise<void>`
-   - marca `disabled` + spinner assim que clicado
-   - reaproveita `useActionGuard` existente (evita duplo clique)
-2. Migrar como piloto (baixo risco, alto impacto visual):
-   - `Pacientes.tsx` — botões Salvar/Excluir do modal
-   - `Agenda.tsx` — Confirmar chegada / Cancelar / Desmarcar
-   - `FilaEspera.tsx` — Chamar / Remover / Converter em agendamento
-   - `Configuracoes.tsx` — Salvar de cada aba
-   - `Prontuario` (SOAP) — Registrar / Finalizar
-   
-Nenhuma mutação muda — só o botão passa a mostrar estado local.
-
-## Frente 2 — Optimistic updates onde já é seguro
-
-Aplicar somente onde a UI já reflete o estado local antes do round-trip (padrão que os slices usam hoje):
-- `updateAgendamento` (status, hora_chegada) — já é optimistic, adicionar rollback em erro (hoje só loga)
-- `cancelAgendamento` / `deleteAgendamento` — idem
-- `updatePaciente` — idem
-
-Não vou introduzir optimistic novo onde não existe (risco de dessincronizar com RLS).
-
-## Frente 3 — Consultas Supabase enxutas + paginação real
-
-Auditar e reduzir 3 telas específicas onde o `select` ainda puxa colunas demais ou não pagina:
-
-1. `HistoricoTriagem.tsx` — hoje faz paginação recursiva de todas as colunas de `triage_records`. Reduzir para `id, paciente_id, paciente_nome, criado_em, prioridade, unidade_id` no listing e buscar detalhes só ao expandir.
-2. `Auditoria.tsx` — trocar fetch total por `range(0, 99)` com botão "Carregar mais".
-3. `Faltosos.tsx` — trocar `select('*')` por colunas usadas na tabela.
-
-Sem mudar filtros/ordenação — só payload.
-
-## Frente 4 — Cleanup de listeners e efeitos
-
-Varredura por `supabase.channel(` e `useEffect` sem retorno:
-- Confirmar `removeChannel` em todos os hooks (após consolidação já feita)
-- Garantir cleanup de `setTimeout`/`setInterval` em `WhatsappPausedBanner`, `AtendimentoTimer`, `ConfigSyncIndicator`
-- Cancelar fetches em modais de detalhe com `AbortController` quando o modal fecha durante request
-
----
-
-## Fora do escopo (não vou tocar)
-
-- Lógica de negócio, RLS, edge functions, schema
-- Fluxos clínicos (SOAP, PTS, triagem, ciclos)
-- Fase C de bundle (assunto separado, já mapeado)
-
-## Ordem de execução
-
-1. Frente 1 (AsyncButton + 5 telas piloto) — maior ganho percebido
-2. Frente 4 (cleanup) — invisível mas elimina leaks
-3. Frente 3 (payload) — reduz TTI das 3 telas citadas
-4. Frente 2 (rollback em optimistic) — polimento
-
-Cada frente é commit isolado, reversível.
-
-## Detalhes técnicos
-
-- `AsyncButton` estende `ButtonProps`, não quebra tipos existentes
-- Todas as chamadas de Supabase mantêm `.eq/.in/.order` idênticos — só a lista de colunas do `select` muda
-- Nenhum canal Realtime novo; só cleanup
-- Zero migração de banco
-
-Posso executar as 4 frentes em sequência?
+- Não altera ordenação da fila, status, cascata de prioridade nem qualquer regra de agendamento.
+- Não altera o layout do documento impresso nem `printLayout.ts`.
+- Não cria tabelas nem colunas; apenas leitura de `pacientes` já existente.
