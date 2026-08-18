@@ -78,6 +78,8 @@ import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
 import AgendaItemCard from "./agenda/AgendaItemCard";
+import { FichaImpressao, type FichaPrintMode } from "@/components/FichaImpressao";
+import { buildFichaAtendimentoData, type FichaDados } from "@/lib/fichaAtendimentoData";
 import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
 import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteModal";
 import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
@@ -2365,6 +2367,42 @@ const Agenda: React.FC = () => {
     [],
   );
 
+  // ---- Ficha de Atendimento Clínico (impressão a partir da Agenda) ----
+  const [fichaOpen, setFichaOpen] = useState(false);
+  const [fichaLoading, setFichaLoading] = useState(false);
+  const [fichaData, setFichaData] = useState<FichaDados | null>(null);
+  const [fichaPrintMode, setFichaPrintMode] = useState<FichaPrintMode>("completa");
+
+  const handleImprimirFicha = useCallback(
+    async (ag: any) => {
+      const pacienteId = ag?.pacienteId || ag?.paciente_id;
+      if (!pacienteId) {
+        toast.error("Agendamento sem paciente vinculado.");
+        return;
+      }
+      setFichaPrintMode("completa");
+      setFichaLoading(true);
+      setFichaOpen(true);
+      try {
+        const data = await buildFichaAtendimentoData({ pacienteId, unidades, user });
+        setFichaData(data);
+      } catch (err) {
+        console.error("[Agenda] erro ao carregar ficha:", err);
+        toast.error("Erro ao carregar dados para impressão.");
+        setFichaOpen(false);
+      } finally {
+        setFichaLoading(false);
+      }
+    },
+    [unidades, user],
+  );
+  const handleImprimirFichaRef = React.useRef(handleImprimirFicha);
+  handleImprimirFichaRef.current = handleImprimirFicha;
+  const stableImprimirFicha = React.useCallback(
+    (ag: any) => handleImprimirFichaRef.current(ag),
+    [],
+  );
+
   const canAgendaEdit = can("agenda", "can_edit");
   const canAgendaDelete = can("agenda", "can_delete");
 
@@ -3222,6 +3260,7 @@ const Agenda: React.FC = () => {
                     onCancelInit={stableCancelInit}
                     onConcluir={stableConcluir}
                     onDelete={stableDelete}
+                    onImprimirFicha={stableImprimirFicha}
                   />
                 );
               })
@@ -3664,6 +3703,34 @@ const Agenda: React.FC = () => {
       </Dialog>
 
       {/* Modal de Falta com Justificativa */}
+      {/* Dialog de impressão da Ficha de Atendimento Clínico */}
+      <Dialog open={fichaOpen} onOpenChange={(open) => { if (!open) { setFichaOpen(false); setFichaData(null); } }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b flex flex-row items-center justify-between">
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Printer className="w-5 h-5" />
+              {fichaPrintMode === "dados_pessoais" ? "Ficha Cadastral" : "Ficha de Atendimento Clínico"}
+            </DialogTitle>
+            <div className="flex gap-2">
+              <Button size="sm" variant={fichaPrintMode === "completa" ? "default" : "outline"} onClick={() => setFichaPrintMode("completa")}>Completa</Button>
+              <Button size="sm" variant={fichaPrintMode === "dados_pessoais" ? "default" : "outline"} onClick={() => setFichaPrintMode("dados_pessoais")}>Só Dados Pessoais</Button>
+            </div>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            {fichaLoading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">Carregando dados da ficha...</div>
+            ) : fichaData ? (
+              <FichaImpressao
+                data={fichaData}
+                mode={fichaPrintMode}
+                onPrintComplete={() => { setFichaOpen(false); setFichaData(null); }}
+              />
+            ) : (
+              <div className="py-10 text-center text-sm text-muted-foreground">Não foi possível carregar os dados da ficha.</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <RegistrarFaltaModal
         open={!!faltaTarget}
         onOpenChange={(o) => { if (!o) setFaltaTarget(null); }}
