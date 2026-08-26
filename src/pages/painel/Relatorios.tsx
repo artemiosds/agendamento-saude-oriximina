@@ -102,6 +102,9 @@ const Relatorios: React.FC = () => {
   const { fila } = useFila();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
+  // Valores primitivos estáveis (o objeto `user` é recriado pelo AuthContext na montagem).
+  const userUnidadeId = user?.unidadeId;
+  const userUsuario = user?.usuario;
   const [activeTab, setActiveTab] = useState('executivo');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
   const [filterCargoProd, setFilterCargoProd] = useState('all');
@@ -278,8 +281,8 @@ const Relatorios: React.FC = () => {
             }
           }
 
-          if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-            query = query.eq('unidade_id', user.unidadeId);
+          if (userUnidadeId && userUsuario !== 'admin.sms') {
+            query = query.eq('unidade_id', userUnidadeId);
           }
           
           if (table === 'agendamentos') {
@@ -397,7 +400,8 @@ const Relatorios: React.FC = () => {
       // Só a requisição vigente libera o estado de carregamento.
       if (abortRef.current === controller) setIsFetching(false);
     }
-  }, [user, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
+    // Deps primitivas: evita refetch duplicado quando o AuthContext recria o objeto `user`.
+  }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
 
 
   useEffect(() => {
