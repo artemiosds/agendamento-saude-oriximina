@@ -388,6 +388,10 @@ const Relatorios: React.FC = () => {
     loadReportData();
   }, [loadReportData]);
 
+  // Cancela qualquer busca pendente ao desmontar a página.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+
   const handleRefresh = () => {
     loadReportData();
   };
