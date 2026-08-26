@@ -484,8 +484,10 @@ const Relatorios: React.FC = () => {
     const remarcados = data.filter(d => d.status === 'remarcado').length;
     const retornos = data.filter(d => d.status === 'retorno' || d.tipo === 'Retorno').length;
     
-    const taxaComparecimento = totalAgendamentos > 0 ? Math.round((concluidos / (totalAgendamentos - cancelados || 1)) * 100) : 0;
-    const taxaFalta = totalAgendamentos > 0 ? Math.round((faltas / totalAgendamentos) * 100) : 0;
+    // Base única (agendamentos efetivos = total - cancelados) — ver calcTaxa* no topo do arquivo
+    const taxaComparecimento = calcTaxaComparecimento(concluidos, totalAgendamentos, cancelados);
+    const taxaFalta = calcTaxaFalta(faltas, totalAgendamentos, cancelados);
+
     
     const primeiraConsulta = data.filter(d => d.tipo === 'Consulta' || d.tipo === 'Primeira Consulta').length;
     const online = data.filter(d => d.origem === 'online').length;
