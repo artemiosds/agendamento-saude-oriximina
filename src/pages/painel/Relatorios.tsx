@@ -204,9 +204,16 @@ const Relatorios: React.FC = () => {
   // categoriasMap declared after CATEGORIAS to avoid TDZ — see below.
 
   const loadReportData = useCallback(async (isAutoRefresh = false) => {
-    if (isFetching) return;
+    // Cancela a busca anterior ainda em voo: a última intenção do usuário sempre vence.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
+    const isAbortError = (e: any) =>
+      signal.aborted || e?.name === 'AbortError' || /abort/i.test(e?.message || '');
+
     setIsFetching(true);
-    
+
     try {
       const filters = { 
         unit: filterUnit, 
@@ -219,13 +226,24 @@ const Relatorios: React.FC = () => {
       };
       console.log(`[Relatórios] ${isAutoRefresh ? 'Auto-refresh' : 'Buscando'} dados com filtros:`, filters);
 
-      const fetchAllPages = async (table: string, dateField?: string) => {
+      /** Retorna as linhas e sinaliza se a carga daquela tabela ficou incompleta. */
+      const fetchAllPages = async (
+        table: string,
+        dateField?: string,
+      ): Promise<{ table: string; rows: any[]; partial: boolean }> => {
         let allData: any[] = [];
         let from = 0;
         const PAGE_SIZE = 1000;
         
         while (true) {
-          let query = (supabase.from(table as any) as any).select('*').order('id', { ascending: true }).range(from, from + PAGE_SIZE - 1);
+          if (signal.aborted) return { table, rows: allData, partial: true };
+
+          // O signal é aplicado em TODA página de TODA tabela, não só na primeira.
+          let query = (supabase.from(table as any) as any)
+            .select('*')
+            .order('id', { ascending: true })
+            .range(from, from + PAGE_SIZE - 1)
+            .abortSignal(signal);
           
           if (dateField) {
             if (dateFrom) {
@@ -268,30 +286,21 @@ const Relatorios: React.FC = () => {
 
           const { data, error } = await query;
           if (error) {
+            if (isAbortError(error)) return { table, rows: allData, partial: true };
             console.error(`Error fetching ${table}:`, error);
-            break;
-          };
+            // Falha real: retorna o que veio e marca a tabela como parcial.
+            return { table, rows: allData, partial: true };
+          }
           if (!data || data.length === 0) break;
           
           allData = allData.concat(data);
           if (data.length < PAGE_SIZE) break;
           from += PAGE_SIZE;
         }
-        return allData;
+        return { table, rows: allData, partial: false };
       };
 
-      const [
-        ags, 
-        prons, 
-        filaRes, 
-        triageRes, 
-        cyclesRes, 
-        sessRes, 
-        nursingRes, 
-        multiRes, 
-        ptsRes,
-        proceduresRes
-      ] = await Promise.all([
+      const results = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
         fetchAllPages('prontuarios', 'data_atendimento'),
         fetchAllPages('fila_espera', 'criado_em'),
@@ -303,6 +312,13 @@ const Relatorios: React.FC = () => {
         fetchAllPages('pts', 'created_at'),
         fetchAllPages('patient_procedures', 'data'),
       ]);
+
+      // Busca cancelada: não aplica nenhum estado da requisição obsoleta.
+      if (signal.aborted) return;
+
+      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes] =
+        results.map(r => r.rows);
+      const failedTables = results.filter(r => r.partial).map(r => r.table);
 
       setAgendamentosFull(ags || []);
       setProntuariosFull(prons || []);
@@ -329,26 +345,44 @@ const Relatorios: React.FC = () => {
       });
       
       if (allCids.size > 0) {
-        const { data: cidData } = await supabase
+        const { data: cidData, error: cidError } = await supabase
           .from('cid10_codigos')
           .select('codigo, descricao')
-          .in('codigo', Array.from(allCids));
-        
+          .in('codigo', Array.from(allCids))
+          .abortSignal(signal);
+
+        if (signal.aborted) return;
+        if (cidError && !isAbortError(cidError)) {
+          console.error('Error fetching cid10_codigos:', cidError);
+          failedTables.push('cid10_codigos');
+        }
         if (cidData) {
           const descMap: Record<string, string> = {};
           cidData.forEach(c => { descMap[c.codigo] = c.descricao; });
           setCid10Descriptions(descMap);
         }
       }
-      
-      setLastUpdated(new Date());
+
+      setPartialTables(failedTables);
+      if (failedTables.length === 0) {
+        // Só marca nova atualização quando a carga foi completa.
+        setLastUpdated(new Date());
+      } else {
+        toast.error(`Dados parciais: falha ao carregar ${failedTables.join(', ')}`);
+      }
       setIsInitialLoading(false);
-    } catch (err) { 
-      console.error('Error loading report data:', err); 
+    } catch (err: any) {
+      if (isAbortError(err)) return; // requisição substituída por outra mais recente
+      console.error('Error loading report data:', err);
+      setPartialTables(prev => (prev.length ? prev : ['erro geral']));
+      toast.error('Falha ao carregar os relatórios. Dados podem estar incompletos.');
+      setIsInitialLoading(false);
     } finally {
-      setIsFetching(false);
+      // Só a requisição vigente libera o estado de carregamento.
+      if (abortRef.current === controller) setIsFetching(false);
     }
   }, [user, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
+
 
   useEffect(() => {
     loadReportData();
