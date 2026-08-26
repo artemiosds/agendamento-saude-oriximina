@@ -397,7 +397,8 @@ const Relatorios: React.FC = () => {
       // Só a requisição vigente libera o estado de carregamento.
       if (abortRef.current === controller) setIsFetching(false);
     }
-  }, [user, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
+    // Deps primitivas: evita refetch duplicado quando o AuthContext recria o objeto `user`.
+  }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
 
 
   useEffect(() => {
