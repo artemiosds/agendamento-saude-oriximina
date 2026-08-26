@@ -25,7 +25,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.webp';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { DashboardSkeleton, TableSkeleton } from '@/components/skeletons';
 import { ChartCard } from '@/components/ChartCard';
+
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID } from '@/data/clinicalCategories';
 import { normalizeSexo } from '@/lib/utils/sexo-normalization';
