@@ -278,8 +278,8 @@ const Relatorios: React.FC = () => {
             }
           }
 
-          if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-            query = query.eq('unidade_id', user.unidadeId);
+          if (userUnidadeId && userUsuario !== 'admin.sms') {
+            query = query.eq('unidade_id', userUnidadeId);
           }
           
           if (table === 'agendamentos') {
