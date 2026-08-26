@@ -2966,8 +2966,41 @@ ${dataRows}
 
       </div>
 
+      {/* Aviso de dados parciais: falha em uma ou mais tabelas */}
+      {partialTables.length > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2 text-sm text-amber-900">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+            <div>
+              <div className="font-semibold">Dados parciais</div>
+              <div className="text-xs">
+                Falha ao carregar: {partialTables.join(', ')}. Os números exibidos podem estar incompletos —
+                a última atualização completa foi em {lastUpdatedLabel}.
+              </div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
+            <RefreshCw className="w-4 h-4 mr-1" />Tentar novamente
+          </Button>
+        </div>
+      )}
+
+      {isInitialLoading ? (
+        <DashboardSkeleton />
+      ) : isFetching ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-border/60 bg-card px-2 py-3 h-[58px] animate-pulse" />
+            ))}
+          </div>
+          <TableSkeleton rows={8} columns={6} />
+        </div>
+      ) : (
+      <>
       {/* KPI Cards */}
       <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+
         {[
           { label: 'Total', value: stats.total, color: '#1B3A5C' },
           { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
