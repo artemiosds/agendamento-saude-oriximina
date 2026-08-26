@@ -2,9 +2,16 @@
 
 Escopo: apenas `src/pages/painel/Relatorios.tsx` (mais um hook novo de debounce). Nenhuma otimização de query nesta etapa — colunas, índices e agregações ficam para a segunda etapa.
 
+## Confirmações técnicas solicitadas
+
+1. **Versão do cliente:** `package.json` declara `@supabase/supabase-js: ^2.98.0` e a versão instalada é **2.110.1** (postgrest-js 2.110.1). O método existe e está tipado: `abortSignal(signal: AbortSignal): this` em `PostgrestTransformBuilder` (linha 642 do fonte do pacote), disponível também no `.d.mts`. Suporte confirmado.
+
+2. **Paginação:** o `signal` será aplicado **dentro do `while (true)`**, na construção de cada `query` antes do `.range(...)` — ou seja, em toda página de todas as 10 tabelas, não só na primeira. Além disso, cada iteração checa `signal.aborted` antes de continuar o loop, e a query de `cid10_codigos` (que roda depois do `Promise.all`) também recebe o mesmo signal.
+
 ## Achado importante antes de começar
 
 O guard atual não faz o que parece. Em `loadReportData` (linha 194) existe `if (isFetching) return;`, mas `isFetching` **não está na lista de dependências** do `useCallback` (linha 338). O callback é recriado a cada mudança de filtro capturando `isFetching = false`, então o guard nunca bloqueia nada. Consequência real: várias buscas rodam em paralelo e **a última que responder sobrescreve o estado**, não a última que o usuário pediu. O sintoma é o inverso do descrito no relatório anterior: não há descarte silencioso, há sobrescrita fora de ordem. A correção com AbortController resolve os dois casos.
+
 
 ## 1. Corrigir a race condition
 
