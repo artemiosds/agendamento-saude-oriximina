@@ -1179,8 +1179,9 @@ const Relatorios: React.FC = () => {
 
     return Object.values(muniMap).map(m => {
       const totalAgendamentos = m.atendimentos;
-      const taxaComparecimento = totalAgendamentos > 0 ? Math.round((m.concluidos / (totalAgendamentos - m.cancelados || 1)) * 100) : 0;
-      const taxaFalta = totalAgendamentos > 0 ? Math.round((m.faltas / totalAgendamentos) * 100) : 0;
+      const taxaComparecimento = calcTaxaComparecimento(m.concluidos, totalAgendamentos, m.cancelados);
+      const taxaFalta = calcTaxaFalta(m.faltas, totalAgendamentos, m.cancelados);
+
       
       return {
         ...m,
