@@ -64,6 +64,11 @@ Cada item é aplicado e verificado antes do próximo, com relato de arquivo e li
 4. `taxaFalta` unificada → conferir que o card da faixa e a aba Executivo mostram o mesmo número.
 5. Falha parcial → conferir que o aviso aparece e o timestamp antigo permanece.
 
+### Teste de cancelamento real (Network)
+
+Ao final, rodo o teste pedido de forma automatizada (Playwright + CDP), que é o equivalente do DevTools Network: aplicar um filtro, trocar de filtro durante o carregamento, e capturar o estado das requisições a `/rest/v1/*`. O critério de aprovação é a primeira busca terminar em **falha por cancelamento** (`net::ERR_ABORTED` / `requestfailed`), não em resposta 200. Reporto os eventos capturados; se aparecer 200 completo, o abort não está funcionando e eu corrijo antes de declarar concluído.
+
+
 ## Detalhes técnicos
 
 - Arquivos alterados: `src/pages/painel/Relatorios.tsx`; novo `src/hooks/useDebouncedValue.ts`.
