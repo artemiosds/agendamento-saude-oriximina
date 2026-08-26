@@ -4785,6 +4785,9 @@ th{background:#f1f5f9;font-weight:600;}
           </Card>
         </TabsContent>
       </Tabs>
+      </>
+      )}
+
 
       {/* Clinical Detail Dialog */}
       <Dialog 
