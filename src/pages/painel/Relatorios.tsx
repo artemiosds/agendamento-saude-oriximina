@@ -25,7 +25,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.webp';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { DashboardSkeleton, TableSkeleton } from '@/components/skeletons';
 import { ChartCard } from '@/components/ChartCard';
+
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID } from '@/data/clinicalCategories';
 import { normalizeSexo } from '@/lib/utils/sexo-normalization';
@@ -57,6 +60,22 @@ const formatDateBR = (d: string | null | undefined): string => {
     return d || 'Não informado';
   }
 };
+
+/**
+ * Base única para as taxas de presença/ausência: AGENDAMENTOS EFETIVOS
+ * (total - cancelados). Um agendamento cancelado nunca gerou expectativa de
+ * presença, portanto não entra no denominador. Usado em todas as abas.
+ */
+const baseEfetivos = (total: number, cancelados: number) => Math.max(0, total - cancelados);
+export const calcTaxaComparecimento = (concluidos: number, total: number, cancelados: number) => {
+  const base = baseEfetivos(total, cancelados);
+  return base > 0 ? Math.round((concluidos / base) * 100) : 0;
+};
+export const calcTaxaFalta = (faltas: number, total: number, cancelados: number) => {
+  const base = baseEfetivos(total, cancelados);
+  return base > 0 ? Math.round((faltas / base) * 100) : 0;
+};
+
 
 interface AtendimentoDB {
   id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
@@ -94,11 +113,16 @@ const Relatorios: React.FC = () => {
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
   // Padrão: últimos 30 dias para evitar varrer todo o histórico em cada carga
-  const [dateFrom, setDateFrom] = useState(() => {
+  // dateFromInput/dateToInput = valor imediato do input (UI responsiva)
+  // dateFrom/dateTo = valor com debounce de 400ms, usado por fetch e cálculos
+  const [dateFromInput, setDateFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30);
     return d.toISOString().slice(0, 10);
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateToInput, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const dateFrom = useDebouncedValue(dateFromInput, 400);
+  const dateTo = useDebouncedValue(dateToInput, 400);
+
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
@@ -147,6 +171,11 @@ const Relatorios: React.FC = () => {
 
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
+  /** Tabelas que falharam na última carga — dados exibidos são parciais */
+  const [partialTables, setPartialTables] = useState<string[]>([]);
+  /** Controla o cancelamento da busca em voo quando os filtros mudam */
+  const abortRef = useRef<AbortController | null>(null);
+
   const [agendamentosFull, setAgendamentosFull] = useState<any[]>([]);
   const [prontuariosFull, setProntuariosFull] = useState<any[]>([]);
 
@@ -191,9 +220,16 @@ const Relatorios: React.FC = () => {
   // categoriasMap declared after CATEGORIAS to avoid TDZ — see below.
 
   const loadReportData = useCallback(async (isAutoRefresh = false) => {
-    if (isFetching) return;
+    // Cancela a busca anterior ainda em voo: a última intenção do usuário sempre vence.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
+    const isAbortError = (e: any) =>
+      signal.aborted || e?.name === 'AbortError' || /abort/i.test(e?.message || '');
+
     setIsFetching(true);
-    
+
     try {
       const filters = { 
         unit: filterUnit, 
@@ -206,13 +242,24 @@ const Relatorios: React.FC = () => {
       };
       console.log(`[Relatórios] ${isAutoRefresh ? 'Auto-refresh' : 'Buscando'} dados com filtros:`, filters);
 
-      const fetchAllPages = async (table: string, dateField?: string) => {
+      /** Retorna as linhas e sinaliza se a carga daquela tabela ficou incompleta. */
+      const fetchAllPages = async (
+        table: string,
+        dateField?: string,
+      ): Promise<{ table: string; rows: any[]; partial: boolean }> => {
         let allData: any[] = [];
         let from = 0;
         const PAGE_SIZE = 1000;
         
         while (true) {
-          let query = (supabase.from(table as any) as any).select('*').order('id', { ascending: true }).range(from, from + PAGE_SIZE - 1);
+          if (signal.aborted) return { table, rows: allData, partial: true };
+
+          // O signal é aplicado em TODA página de TODA tabela, não só na primeira.
+          let query = (supabase.from(table as any) as any)
+            .select('*')
+            .order('id', { ascending: true })
+            .range(from, from + PAGE_SIZE - 1)
+            .abortSignal(signal);
           
           if (dateField) {
             if (dateFrom) {
@@ -255,30 +302,21 @@ const Relatorios: React.FC = () => {
 
           const { data, error } = await query;
           if (error) {
+            if (isAbortError(error)) return { table, rows: allData, partial: true };
             console.error(`Error fetching ${table}:`, error);
-            break;
-          };
+            // Falha real: retorna o que veio e marca a tabela como parcial.
+            return { table, rows: allData, partial: true };
+          }
           if (!data || data.length === 0) break;
           
           allData = allData.concat(data);
           if (data.length < PAGE_SIZE) break;
           from += PAGE_SIZE;
         }
-        return allData;
+        return { table, rows: allData, partial: false };
       };
 
-      const [
-        ags, 
-        prons, 
-        filaRes, 
-        triageRes, 
-        cyclesRes, 
-        sessRes, 
-        nursingRes, 
-        multiRes, 
-        ptsRes,
-        proceduresRes
-      ] = await Promise.all([
+      const results = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
         fetchAllPages('prontuarios', 'data_atendimento'),
         fetchAllPages('fila_espera', 'criado_em'),
@@ -290,6 +328,13 @@ const Relatorios: React.FC = () => {
         fetchAllPages('pts', 'created_at'),
         fetchAllPages('patient_procedures', 'data'),
       ]);
+
+      // Busca cancelada: não aplica nenhum estado da requisição obsoleta.
+      if (signal.aborted) return;
+
+      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes] =
+        results.map(r => r.rows);
+      const failedTables = results.filter(r => r.partial).map(r => r.table);
 
       setAgendamentosFull(ags || []);
       setProntuariosFull(prons || []);
@@ -316,30 +361,52 @@ const Relatorios: React.FC = () => {
       });
       
       if (allCids.size > 0) {
-        const { data: cidData } = await supabase
+        const { data: cidData, error: cidError } = await supabase
           .from('cid10_codigos')
           .select('codigo, descricao')
-          .in('codigo', Array.from(allCids));
-        
+          .in('codigo', Array.from(allCids))
+          .abortSignal(signal);
+
+        if (signal.aborted) return;
+        if (cidError && !isAbortError(cidError)) {
+          console.error('Error fetching cid10_codigos:', cidError);
+          failedTables.push('cid10_codigos');
+        }
         if (cidData) {
           const descMap: Record<string, string> = {};
           cidData.forEach(c => { descMap[c.codigo] = c.descricao; });
           setCid10Descriptions(descMap);
         }
       }
-      
-      setLastUpdated(new Date());
+
+      setPartialTables(failedTables);
+      if (failedTables.length === 0) {
+        // Só marca nova atualização quando a carga foi completa.
+        setLastUpdated(new Date());
+      } else {
+        toast.error(`Dados parciais: falha ao carregar ${failedTables.join(', ')}`);
+      }
       setIsInitialLoading(false);
-    } catch (err) { 
-      console.error('Error loading report data:', err); 
+    } catch (err: any) {
+      if (isAbortError(err)) return; // requisição substituída por outra mais recente
+      console.error('Error loading report data:', err);
+      setPartialTables(prev => (prev.length ? prev : ['erro geral']));
+      toast.error('Falha ao carregar os relatórios. Dados podem estar incompletos.');
+      setIsInitialLoading(false);
     } finally {
-      setIsFetching(false);
+      // Só a requisição vigente libera o estado de carregamento.
+      if (abortRef.current === controller) setIsFetching(false);
     }
   }, [user, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
+
 
   useEffect(() => {
     loadReportData();
   }, [loadReportData]);
+
+  // Cancela qualquer busca pendente ao desmontar a página.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
 
   const handleRefresh = () => {
     loadReportData();
@@ -417,8 +484,10 @@ const Relatorios: React.FC = () => {
     const remarcados = data.filter(d => d.status === 'remarcado').length;
     const retornos = data.filter(d => d.status === 'retorno' || d.tipo === 'Retorno').length;
     
-    const taxaComparecimento = totalAgendamentos > 0 ? Math.round((concluidos / (totalAgendamentos - cancelados || 1)) * 100) : 0;
-    const taxaFalta = totalAgendamentos > 0 ? Math.round((faltas / totalAgendamentos) * 100) : 0;
+    // Base única (agendamentos efetivos = total - cancelados) — ver calcTaxa* no topo do arquivo
+    const taxaComparecimento = calcTaxaComparecimento(concluidos, totalAgendamentos, cancelados);
+    const taxaFalta = calcTaxaFalta(faltas, totalAgendamentos, cancelados);
+
     
     const primeiraConsulta = data.filter(d => d.tipo === 'Consulta' || d.tipo === 'Primeira Consulta').length;
     const online = data.filter(d => d.origem === 'online').length;
@@ -1110,8 +1179,9 @@ const Relatorios: React.FC = () => {
 
     return Object.values(muniMap).map(m => {
       const totalAgendamentos = m.atendimentos;
-      const taxaComparecimento = totalAgendamentos > 0 ? Math.round((m.concluidos / (totalAgendamentos - m.cancelados || 1)) * 100) : 0;
-      const taxaFalta = totalAgendamentos > 0 ? Math.round((m.faltas / totalAgendamentos) * 100) : 0;
+      const taxaComparecimento = calcTaxaComparecimento(m.concluidos, totalAgendamentos, m.cancelados);
+      const taxaFalta = calcTaxaFalta(m.faltas, totalAgendamentos, m.cancelados);
+
       
       return {
         ...m,
@@ -1287,8 +1357,10 @@ const Relatorios: React.FC = () => {
   const executiveKpis = useMemo(() => {
     const total = stats.total || 0;
     const efetivos = total - stats.cancelados;
-    const taxaComparecimento = efetivos > 0 ? Math.round((stats.concluidos / efetivos) * 100) : 0;
-    const taxaFalta = efetivos > 0 ? Math.round((stats.faltas / efetivos) * 100) : 0;
+    // Mesmos helpers usados em `stats` — números idênticos entre abas.
+    const taxaComparecimento = calcTaxaComparecimento(stats.concluidos, total, stats.cancelados);
+    const taxaFalta = calcTaxaFalta(stats.faltas, total, stats.cancelados);
+
     const taxaCancelamento = total > 0 ? Math.round((stats.cancelados / total) * 100) : 0;
     const taxaRetorno = total > 0 ? Math.round((stats.retornos / total) * 100) : 0;
 
@@ -2852,21 +2924,21 @@ ${dataRows}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div>
             <Label className="text-xs">Unidade</Label>
-            <Select value={filterUnit} onValueChange={setFilterUnit}>
+            <Select value={filterUnit} onValueChange={setFilterUnit} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Profissional</Label>
-            <Select value={filterProf} onValueChange={setFilterProf}>
+            <Select value={filterProf} onValueChange={setFilterProf} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Status</Label>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus} onValueChange={setFilterStatus} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
@@ -2876,25 +2948,59 @@ ${dataRows}
           </div>
           <div>
             <Label className="text-xs">Tipo</Label>
-            <Select value={filterTipo} onValueChange={setFilterTipo}>
+            <Select value={filterTipo} onValueChange={setFilterTipo} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Setor</Label>
-            <Select value={filterSetor} onValueChange={setFilterSetor}>
+            <Select value={filterSetor} onValueChange={setFilterSetor} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
-          <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+          <div><Label className="text-xs">De</Label><Input type="date" value={dateFromInput} onChange={e => setDateFrom(e.target.value)} disabled={isFetching} className="h-9" /></div>
+          <div><Label className="text-xs">Até</Label><Input type="date" value={dateToInput} onChange={e => setDateTo(e.target.value)} disabled={isFetching} className="h-9" /></div>
         </div>
+
       </div>
 
+      {/* Aviso de dados parciais: falha em uma ou mais tabelas */}
+      {partialTables.length > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2 text-sm text-amber-900">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+            <div>
+              <div className="font-semibold">Dados parciais</div>
+              <div className="text-xs">
+                Falha ao carregar: {partialTables.join(', ')}. Os números exibidos podem estar incompletos —
+                a última atualização completa foi em {lastUpdatedLabel}.
+              </div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
+            <RefreshCw className="w-4 h-4 mr-1" />Tentar novamente
+          </Button>
+        </div>
+      )}
+
+      {isInitialLoading ? (
+        <DashboardSkeleton />
+      ) : isFetching ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-border/60 bg-card px-2 py-3 h-[58px] animate-pulse" />
+            ))}
+          </div>
+          <TableSkeleton rows={8} columns={6} />
+        </div>
+      ) : (
+      <>
       {/* KPI Cards */}
       <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+
         {[
           { label: 'Total', value: stats.total, color: '#1B3A5C' },
           { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
@@ -4506,11 +4612,11 @@ th{background:#f1f5f9;font-weight:600;}
               <div className="flex flex-wrap items-end gap-3 mb-4">
                 <div>
                   <Label className="text-xs">Data Inicial *</Label>
-                  <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateFromInput} onChange={e => { setDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Data Final *</Label>
-                  <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateToInput} onChange={e => { setDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Profissional</Label>
@@ -4679,6 +4785,9 @@ th{background:#f1f5f9;font-weight:600;}
           </Card>
         </TabsContent>
       </Tabs>
+      </>
+      )}
+
 
       {/* Clinical Detail Dialog */}
       <Dialog 
