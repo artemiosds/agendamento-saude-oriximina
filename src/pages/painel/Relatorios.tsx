@@ -2924,21 +2924,21 @@ ${dataRows}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div>
             <Label className="text-xs">Unidade</Label>
-            <Select value={filterUnit} onValueChange={setFilterUnit}>
+            <Select value={filterUnit} onValueChange={setFilterUnit} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Profissional</Label>
-            <Select value={filterProf} onValueChange={setFilterProf}>
+            <Select value={filterProf} onValueChange={setFilterProf} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Status</Label>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus} onValueChange={setFilterStatus} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
@@ -2948,21 +2948,22 @@ ${dataRows}
           </div>
           <div>
             <Label className="text-xs">Tipo</Label>
-            <Select value={filterTipo} onValueChange={setFilterTipo}>
+            <Select value={filterTipo} onValueChange={setFilterTipo} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Setor</Label>
-            <Select value={filterSetor} onValueChange={setFilterSetor}>
+            <Select value={filterSetor} onValueChange={setFilterSetor} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
-          <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+          <div><Label className="text-xs">De</Label><Input type="date" value={dateFromInput} onChange={e => setDateFrom(e.target.value)} disabled={isFetching} className="h-9" /></div>
+          <div><Label className="text-xs">Até</Label><Input type="date" value={dateToInput} onChange={e => setDateTo(e.target.value)} disabled={isFetching} className="h-9" /></div>
         </div>
+
       </div>
 
       {/* KPI Cards */}
