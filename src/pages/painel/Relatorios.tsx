@@ -4616,7 +4616,7 @@ th{background:#f1f5f9;font-weight:600;}
                 </div>
                 <div>
                   <Label className="text-xs">Data Final *</Label>
-                  <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateToInput} onChange={e => { setDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Profissional</Label>
