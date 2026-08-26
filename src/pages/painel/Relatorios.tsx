@@ -66,15 +66,16 @@ const formatDateBR = (d: string | null | undefined): string => {
  * (total - cancelados). Um agendamento cancelado nunca gerou expectativa de
  * presença, portanto não entra no denominador. Usado em todas as abas.
  */
-const efetivos = (total: number, cancelados: number) => Math.max(0, total - cancelados);
+const baseEfetivos = (total: number, cancelados: number) => Math.max(0, total - cancelados);
 export const calcTaxaComparecimento = (concluidos: number, total: number, cancelados: number) => {
-  const base = efetivos(total, cancelados);
+  const base = baseEfetivos(total, cancelados);
   return base > 0 ? Math.round((concluidos / base) * 100) : 0;
 };
 export const calcTaxaFalta = (faltas: number, total: number, cancelados: number) => {
-  const base = efetivos(total, cancelados);
+  const base = baseEfetivos(total, cancelados);
   return base > 0 ? Math.round((faltas / base) * 100) : 0;
 };
+
 
 interface AtendimentoDB {
   id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
