@@ -404,9 +404,15 @@ const Relatorios: React.FC = () => {
   }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
 
 
+  // Carrega os dados automaticamente apenas UMA vez, na montagem da página.
+  // A partir daí, mudar qualquer filtro (Unidade, Profissional, Status, Tipo,
+  // Setor, De, Até) não dispara busca sozinha — só o clique em "Atualizar
+  // Dados" (handleRefresh, abaixo) executa uma nova busca, já usando os
+  // filtros selecionados no momento do clique.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadReportData();
-  }, [loadReportData]);
+  }, []);
 
   // Cancela qualquer busca pendente ao desmontar a página.
   useEffect(() => () => abortRef.current?.abort(), []);
