@@ -155,6 +155,11 @@ const Relatorios: React.FC = () => {
 
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
+  /** Tabelas que falharam na última carga — dados exibidos são parciais */
+  const [partialTables, setPartialTables] = useState<string[]>([]);
+  /** Controla o cancelamento da busca em voo quando os filtros mudam */
+  const abortRef = useRef<AbortController | null>(null);
+
   const [agendamentosFull, setAgendamentosFull] = useState<any[]>([]);
   const [prontuariosFull, setProntuariosFull] = useState<any[]>([]);
 
