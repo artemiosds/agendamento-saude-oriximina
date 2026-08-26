@@ -94,11 +94,16 @@ const Relatorios: React.FC = () => {
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
   // Padrão: últimos 30 dias para evitar varrer todo o histórico em cada carga
-  const [dateFrom, setDateFrom] = useState(() => {
+  // dateFromInput/dateToInput = valor imediato do input (UI responsiva)
+  // dateFrom/dateTo = valor com debounce de 400ms, usado por fetch e cálculos
+  const [dateFromInput, setDateFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30);
     return d.toISOString().slice(0, 10);
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateToInput, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const dateFrom = useDebouncedValue(dateFromInput, 400);
+  const dateTo = useDebouncedValue(dateToInput, 400);
+
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
