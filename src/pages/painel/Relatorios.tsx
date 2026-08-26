@@ -4612,7 +4612,7 @@ th{background:#f1f5f9;font-weight:600;}
               <div className="flex flex-wrap items-end gap-3 mb-4">
                 <div>
                   <Label className="text-xs">Data Inicial *</Label>
-                  <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateFromInput} onChange={e => { setDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Data Final *</Label>
