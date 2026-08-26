@@ -102,6 +102,9 @@ const Relatorios: React.FC = () => {
   const { fila } = useFila();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
+  // Valores primitivos estáveis (o objeto `user` é recriado pelo AuthContext na montagem).
+  const userUnidadeId = user?.unidadeId;
+  const userUsuario = user?.usuario;
   const [activeTab, setActiveTab] = useState('executivo');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
   const [filterCargoProd, setFilterCargoProd] = useState('all');
