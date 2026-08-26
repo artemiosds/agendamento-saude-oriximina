@@ -1357,8 +1357,10 @@ const Relatorios: React.FC = () => {
   const executiveKpis = useMemo(() => {
     const total = stats.total || 0;
     const efetivos = total - stats.cancelados;
-    const taxaComparecimento = efetivos > 0 ? Math.round((stats.concluidos / efetivos) * 100) : 0;
-    const taxaFalta = efetivos > 0 ? Math.round((stats.faltas / efetivos) * 100) : 0;
+    // Mesmos helpers usados em `stats` — números idênticos entre abas.
+    const taxaComparecimento = calcTaxaComparecimento(stats.concluidos, total, stats.cancelados);
+    const taxaFalta = calcTaxaFalta(stats.faltas, total, stats.cancelados);
+
     const taxaCancelamento = total > 0 ? Math.round((stats.cancelados / total) * 100) : 0;
     const taxaRetorno = total > 0 ? Math.round((stats.retornos / total) * 100) : 0;
 
