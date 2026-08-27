@@ -67,6 +67,13 @@ const formatDateBR = (d: string | null | undefined): string => {
  * presença, portanto não entra no denominador. Usado em todas as abas.
  */
 const baseEfetivos = (total: number, cancelados: number) => Math.max(0, total - cancelados);
+
+/** Tabelas que possuem a coluna unidade_id — filtrar por unidade fora dessa lista gera erro 42703. */
+const TABLES_WITH_UNIDADE = new Set(['agendamentos', 'prontuarios', 'fila_espera']);
+
+/** Campos de data que são TIMESTAMP(TZ) e precisam de recorte por hora. */
+const TIMESTAMP_DATE_FIELDS = new Set(['criado_em', 'created_at', 'updated_at', 'atualizado_em']);
+
 export const calcTaxaComparecimento = (concluidos: number, total: number, cancelados: number) => {
   const base = baseEfetivos(total, cancelados);
   return base > 0 ? Math.round((concluidos / base) * 100) : 0;
