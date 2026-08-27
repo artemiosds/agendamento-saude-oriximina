@@ -265,43 +265,35 @@ const Relatorios: React.FC = () => {
             .abortSignal(signal);
           
           if (dateField) {
+            const isTimestamp = TIMESTAMP_DATE_FIELDS.has(dateField);
             if (dateFrom) {
-              // Se for TIMESTAMPTZ, garante que comece no início do dia
-              const fromVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
-                ? `${dateFrom}T00:00:00` 
-                : dateFrom;
-              query = query.gte(dateField, fromVal);
+              query = query.gte(dateField, isTimestamp ? `${dateFrom}T00:00:00` : dateFrom);
             }
             if (dateTo) {
-              // Se for TIMESTAMPTZ, garante que termine no final do dia
-              const toVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
-                ? `${dateTo}T23:59:59` 
-                : dateTo;
-              query = query.lte(dateField, toVal);
+              query = query.lte(dateField, isTimestamp ? `${dateTo}T23:59:59` : dateTo);
             }
           }
 
-          if (userUnidadeId && userUsuario !== 'admin.sms') {
+          // Só filtra por unidade nas tabelas que realmente possuem a coluna unidade_id.
+          const hasUnidade = TABLES_WITH_UNIDADE.has(table);
+
+          if (hasUnidade && userUnidadeId && userUsuario !== 'admin.sms') {
             query = query.eq('unidade_id', userUnidadeId);
           }
-          
+
+          if (hasUnidade && filterUnit !== 'all') {
+            query = query.eq('unidade_id', filterUnit);
+          }
+
           if (table === 'agendamentos') {
-            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
             if (filterStatus !== 'all') query = query.eq('status', filterStatus);
             if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
             if (filterSetor !== 'all') query = query.eq('tipo', filterSetor);
           } else if (table === 'prontuarios') {
-            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
-          } else if (['triage_records', 'nursing_evaluations', 'multiprofessional_evaluations', 'pts'].includes(table)) {
-            // These tables might have unidade_id or profissional_id
-            // We should apply unit filter if applicable
-            if (filterUnit !== 'all') {
-              // Note: check if field exists, but most have it
-              query = query.eq('unidade_id', filterUnit);
-            }
           }
+
 
           const { data, error } = await query;
           if (error) {
