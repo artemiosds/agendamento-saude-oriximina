@@ -317,12 +317,13 @@ const Relatorios: React.FC = () => {
         fetchAllPages('fila_espera', 'criado_em'),
         fetchAllPages('triage_records', 'criado_em'),
         fetchAllPages('treatment_cycles', 'created_at'),
-        fetchAllPages('treatment_sessions', 'data'),
+        fetchAllPages('treatment_sessions', 'scheduled_date'),
         fetchAllPages('nursing_evaluations', 'created_at'),
         fetchAllPages('multiprofessional_evaluations', 'created_at'),
         fetchAllPages('pts', 'created_at'),
-        fetchAllPages('patient_procedures', 'data'),
+        fetchAllPages('patient_procedures', 'created_at'),
       ]);
+
 
       // Busca cancelada: não aplica nenhum estado da requisição obsoleta.
       if (signal.aborted) return;
