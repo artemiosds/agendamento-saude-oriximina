@@ -67,6 +67,13 @@ const formatDateBR = (d: string | null | undefined): string => {
  * presença, portanto não entra no denominador. Usado em todas as abas.
  */
 const baseEfetivos = (total: number, cancelados: number) => Math.max(0, total - cancelados);
+
+/** Tabelas que possuem a coluna unidade_id — filtrar por unidade fora dessa lista gera erro 42703. */
+const TABLES_WITH_UNIDADE = new Set(['agendamentos', 'prontuarios', 'fila_espera']);
+
+/** Campos de data que são TIMESTAMP(TZ) e precisam de recorte por hora. */
+const TIMESTAMP_DATE_FIELDS = new Set(['criado_em', 'created_at', 'updated_at', 'atualizado_em']);
+
 export const calcTaxaComparecimento = (concluidos: number, total: number, cancelados: number) => {
   const base = baseEfetivos(total, cancelados);
   return base > 0 ? Math.round((concluidos / base) * 100) : 0;
@@ -265,43 +272,35 @@ const Relatorios: React.FC = () => {
             .abortSignal(signal);
           
           if (dateField) {
+            const isTimestamp = TIMESTAMP_DATE_FIELDS.has(dateField);
             if (dateFrom) {
-              // Se for TIMESTAMPTZ, garante que comece no início do dia
-              const fromVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
-                ? `${dateFrom}T00:00:00` 
-                : dateFrom;
-              query = query.gte(dateField, fromVal);
+              query = query.gte(dateField, isTimestamp ? `${dateFrom}T00:00:00` : dateFrom);
             }
             if (dateTo) {
-              // Se for TIMESTAMPTZ, garante que termine no final do dia
-              const toVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
-                ? `${dateTo}T23:59:59` 
-                : dateTo;
-              query = query.lte(dateField, toVal);
+              query = query.lte(dateField, isTimestamp ? `${dateTo}T23:59:59` : dateTo);
             }
           }
 
-          if (userUnidadeId && userUsuario !== 'admin.sms') {
+          // Só filtra por unidade nas tabelas que realmente possuem a coluna unidade_id.
+          const hasUnidade = TABLES_WITH_UNIDADE.has(table);
+
+          if (hasUnidade && userUnidadeId && userUsuario !== 'admin.sms') {
             query = query.eq('unidade_id', userUnidadeId);
           }
-          
+
+          if (hasUnidade && filterUnit !== 'all') {
+            query = query.eq('unidade_id', filterUnit);
+          }
+
           if (table === 'agendamentos') {
-            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
             if (filterStatus !== 'all') query = query.eq('status', filterStatus);
             if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
             if (filterSetor !== 'all') query = query.eq('tipo', filterSetor);
           } else if (table === 'prontuarios') {
-            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
-          } else if (['triage_records', 'nursing_evaluations', 'multiprofessional_evaluations', 'pts'].includes(table)) {
-            // These tables might have unidade_id or profissional_id
-            // We should apply unit filter if applicable
-            if (filterUnit !== 'all') {
-              // Note: check if field exists, but most have it
-              query = query.eq('unidade_id', filterUnit);
-            }
           }
+
 
           const { data, error } = await query;
           if (error) {
@@ -325,12 +324,13 @@ const Relatorios: React.FC = () => {
         fetchAllPages('fila_espera', 'criado_em'),
         fetchAllPages('triage_records', 'criado_em'),
         fetchAllPages('treatment_cycles', 'created_at'),
-        fetchAllPages('treatment_sessions', 'data'),
+        fetchAllPages('treatment_sessions', 'scheduled_date'),
         fetchAllPages('nursing_evaluations', 'created_at'),
         fetchAllPages('multiprofessional_evaluations', 'created_at'),
         fetchAllPages('pts', 'created_at'),
-        fetchAllPages('patient_procedures', 'data'),
+        fetchAllPages('patient_procedures', 'created_at'),
       ]);
+
 
       // Busca cancelada: não aplica nenhum estado da requisição obsoleta.
       if (signal.aborted) return;
