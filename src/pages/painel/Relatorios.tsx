@@ -350,18 +350,13 @@ const Relatorios: React.FC = () => {
       setPtsData(ptsRes || []);
       setProcedimentosDB(proceduresRes || []);
 
-      // Extract all CIDs to fetch official descriptions
+      // Extrai CIDs válidos (regex estrito, forma canônica sem ponto) para buscar descrições oficiais
       const allCids = new Set<string>();
-      (prons || []).forEach(p => {
-        if (p.cid_codigo) p.cid_codigo.split(/[,;\s]+/).filter(Boolean).forEach((c: string) => allCids.add(c.toUpperCase()));
-      });
-      (ptsRes || []).forEach((p: any) => {
-        if (p.cid_primario) allCids.add(p.cid_primario.toUpperCase());
-        if (p.cid_secundario) allCids.add(p.cid_secundario.toUpperCase());
-      });
-      (proceduresRes || []).forEach((p: any) => {
-        if (p.cid) allCids.add(p.cid.toUpperCase());
-      });
+      const collect = (v?: string | null) => extractCids(v).forEach(c => allCids.add(c));
+      (prons || []).forEach((p: any) => collect(p.cid_codigo));
+      (ptsRes || []).forEach((p: any) => { collect(p.cid_primario); collect(p.cid_secundario); });
+      (proceduresRes || []).forEach((p: any) => collect(p.cid));
+      pacientes.forEach((p: any) => collect(p.cid));
       
       if (allCids.size > 0) {
         const { data: cidData, error: cidError } = await supabase
