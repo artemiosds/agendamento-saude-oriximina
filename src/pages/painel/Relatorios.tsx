@@ -30,7 +30,7 @@ import { DashboardSkeleton, TableSkeleton } from '@/components/skeletons';
 import { ChartCard } from '@/components/ChartCard';
 
 // Realtime removido: relatórios são snapshot estático.
-import { CLINICAL_CATEGORIES, getCategoryByCID } from '@/data/clinicalCategories';
+import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
 import { normalizeSexo } from '@/lib/utils/sexo-normalization';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
@@ -350,18 +350,13 @@ const Relatorios: React.FC = () => {
       setPtsData(ptsRes || []);
       setProcedimentosDB(proceduresRes || []);
 
-      // Extract all CIDs to fetch official descriptions
+      // Extrai CIDs válidos (regex estrito, forma canônica sem ponto) para buscar descrições oficiais
       const allCids = new Set<string>();
-      (prons || []).forEach(p => {
-        if (p.cid_codigo) p.cid_codigo.split(/[,;\s]+/).filter(Boolean).forEach((c: string) => allCids.add(c.toUpperCase()));
-      });
-      (ptsRes || []).forEach((p: any) => {
-        if (p.cid_primario) allCids.add(p.cid_primario.toUpperCase());
-        if (p.cid_secundario) allCids.add(p.cid_secundario.toUpperCase());
-      });
-      (proceduresRes || []).forEach((p: any) => {
-        if (p.cid) allCids.add(p.cid.toUpperCase());
-      });
+      const collect = (v?: string | null) => extractCids(v).forEach(c => allCids.add(c));
+      (prons || []).forEach((p: any) => collect(p.cid_codigo));
+      (ptsRes || []).forEach((p: any) => { collect(p.cid_primario); collect(p.cid_secundario); });
+      (proceduresRes || []).forEach((p: any) => collect(p.cid));
+      pacientes.forEach((p: any) => collect(p.cid));
       
       if (allCids.size > 0) {
         const { data: cidData, error: cidError } = await supabase
@@ -377,7 +372,10 @@ const Relatorios: React.FC = () => {
         }
         if (cidData) {
           const descMap: Record<string, string> = {};
-          cidData.forEach(c => { descMap[c.codigo] = c.descricao; });
+          cidData.forEach(c => {
+            const canonical = normalizeCid(c.codigo);
+            if (canonical) descMap[canonical] = c.descricao;
+          });
           setCid10Descriptions(descMap);
         }
       }
