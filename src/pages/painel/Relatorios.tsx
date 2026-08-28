@@ -372,7 +372,10 @@ const Relatorios: React.FC = () => {
         }
         if (cidData) {
           const descMap: Record<string, string> = {};
-          cidData.forEach(c => { descMap[c.codigo] = c.descricao; });
+          cidData.forEach(c => {
+            const canonical = normalizeCid(c.codigo);
+            if (canonical) descMap[canonical] = c.descricao;
+          });
           setCid10Descriptions(descMap);
         }
       }
