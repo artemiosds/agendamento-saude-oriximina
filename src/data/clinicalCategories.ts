@@ -126,14 +126,14 @@ export const CLINICAL_CATEGORIES: ClinicalCategory[] = [
   {
     id: 'neurologico',
     name: 'Condições Neurológicas',
-    cidPrefixes: [...range('G', 0, 79), ...range('G', 84, 99), 'I60', 'I61', 'I62', 'I63', 'I64', 'I67', 'I69'],
+    cidPrefixes: ['G00', 'G99', 'I60', 'I61', 'I62', 'I63', 'I64', 'I67', 'I69'],
     description: 'Doenças do sistema nervoso central e periférico',
     keywords: ['avc', 'isquemia', 'hemorragia cerebral', 'epilepsia', 'esclerose'],
   },
   {
     id: 'reabilitacao_motora',
     name: 'Reabilitação Motora',
-    cidPrefixes: [...range('M', 0, 99), ...range('S', 0, 99), ...range('T', 0, 98)],
+    cidPrefixes: ['M00', 'M99', 'S00', 'T98'],
     description: 'Condições osteomusculares e sequelas de trauma',
     keywords: ['fratura', 'luxacao', 'traumatismo', 'lesao muscular', 'pos-operatorio'],
   },
