@@ -864,14 +864,13 @@ const Relatorios: React.FC = () => {
 
     if (clinicalSearch) {
       const term = clinicalSearch.toUpperCase().trim();
-      const normTerm = term.replace('.', '');
-      
+      const normTerm = normalizeCid(term);
+
       patientsList = patientsList.filter(ps => {
         const matchesName = ps.nome.toUpperCase().includes(term);
-        const matchesCid = Array.from(ps.cids).some(c => {
-          const normC = c.replace('.', '');
-          return normC.startsWith(normTerm) || normTerm.startsWith(normC);
-        });
+        const matchesCid = !!normTerm && Array.from(ps.cids).some(c =>
+          c.startsWith(normTerm) || normTerm.startsWith(c)
+        );
         return matchesName || matchesCid;
       });
     }
