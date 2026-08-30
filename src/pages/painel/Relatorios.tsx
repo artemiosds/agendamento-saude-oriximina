@@ -399,7 +399,7 @@ const Relatorios: React.FC = () => {
       if (abortRef.current === controller) setIsFetching(false);
     }
     // Deps primitivas: evita refetch duplicado quando o AuthContext recria o objeto `user`.
-  }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
+  }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo, pacientes]);
 
 
   // Carrega os dados automaticamente apenas UMA vez, na montagem da página.
