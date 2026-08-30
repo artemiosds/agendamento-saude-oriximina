@@ -909,7 +909,8 @@ const Relatorios: React.FC = () => {
     const totalPatients = patientsList.length || 1;
     const topCidsAll = Object.entries(cidFrequency)
       .map(([cid, count]) => ({
-        cid,
+        cid: formatCid(cid),
+        codigo: cid,
         count,
         descricao: cid10Descriptions[cid] || "Descrição não carregada",
         percent: +((count / totalPatients) * 100).toFixed(1),
