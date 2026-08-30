@@ -958,20 +958,21 @@ const Relatorios: React.FC = () => {
     ];
     const faixaEtariaDist = faixas.map(f => ({ name: f.name, value: f.count }));
 
-    // ===== Evolução temporal (diagnósticos por mês) =====
+    // ===== Evolução temporal (diagnósticos válidos por mês) =====
     const monthCount: Record<string, number> = {};
     prontuariosFull.forEach(pr => {
       if (!pr.cid_codigo || !pr.data_atendimento) return;
+      const n = extractCids(pr.cid_codigo).length;
+      if (n === 0) return;
       const key = String(pr.data_atendimento).slice(0, 7); // YYYY-MM
-      const n = pr.cid_codigo.split(/[,;\s]+/).filter(Boolean).length || 0;
       monthCount[key] = (monthCount[key] || 0) + n;
     });
     const evolucaoTemporal = Object.entries(monthCount)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, value]) => ({ month, value }));
 
-    // ===== Múltiplos CIDs =====
-    const comMulti = patientsList.filter(p => p.cids.size > 1);
+    // ===== Múltiplos CIDs (2 ou mais códigos válidos e distintos) =====
+    const comMulti = patientsList.filter(p => p.cids.size >= 2);
     const totalCidsSoma = patientsList.reduce((acc, p) => acc + p.cids.size, 0);
     const mediaCidPorPaciente = patientsList.length ? +(totalCidsSoma / patientsList.length).toFixed(2) : 0;
 
