@@ -835,24 +835,24 @@ const Relatorios: React.FC = () => {
       addCids(ps, p.cid, 'procedimento');
     });
 
-    // 4ª prioridade / fallback: CID do cadastro base do paciente
-    Object.values(patientStats).forEach(ps => {
-      const pac: any = pacMap.get(ps.id);
-      addCids(ps, pac?.cid, 'cadastro');
+    // 4ª prioridade / fallback: inclui pacientes cujo único CID está no cadastro base.
+    pacientes.forEach((pac: any) => {
+      const ps = getOrCreatePatient(pac.id, pac.nome);
+      addCids(ps, pac.cid, 'cadastro');
     });
 
-    // Categorização a partir dos CIDs válidos (canônicos)
+    // Categorização a partir dos CIDs válidos (canônicos).
     Object.values(patientStats).forEach(ps => {
       ps.cids.forEach(cid => {
         const description = cid10Descriptions[cid];
         const cats = getCategoryByCID(cid, description);
-        cats.forEach(cat => ps.categories.add(cat.name));
+        if (cats.length > 0) {
+          cats.forEach(cat => ps.categories.add(cat.name));
+        } else {
+          // Cada CID válido sem enquadramento explícito entra em Outros.
+          ps.categories.add(OTHER_CATEGORY_NAME);
+        }
       });
-      // Qualquer CID válido não mapeado em deficiência entra em "Outros Diagnósticos",
-      // garantindo que a soma das categorias feche com o Total com CID.
-      if (ps.cids.size > 0 && ps.categories.size === 0) {
-        ps.categories.add(OTHER_CATEGORY_NAME);
-      }
     });
 
     // Somente pacientes com pelo menos 1 CID válido entram na Análise Clínica.
