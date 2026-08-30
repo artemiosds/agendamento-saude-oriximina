@@ -787,65 +787,77 @@ const Relatorios: React.FC = () => {
           profissionais: new Set(),
           origens: new Set()
         };
-        
-        // Add CID from patient registration
-        if (pac?.cid) {
-          const cids = pac.cid.split(/[,;\s]+/).filter(Boolean);
-          cids.forEach(c => {
-            const cid = c.toUpperCase();
-            patientStats[id].cids.add(cid);
-            patientStats[id].origens.add('cadastro');
-          });
-        }
       }
       return patientStats[id];
     };
 
-    // 1. Process medical records
+    // Adiciona apenas CIDs válidos (regex estrito + forma canônica), sem duplicar por paciente.
+    const addCids = (
+      ps: typeof patientStats[string],
+      raw: string | null | undefined,
+      origem: 'prontuario' | 'pts' | 'cadastro' | 'procedimento',
+    ) => {
+      const codes = extractCids(raw);
+      if (codes.length === 0) return;
+      codes.forEach(c => ps.cids.add(c));
+      ps.origens.add(origem);
+    };
+
+    // Cascata de fontes — 1ª prioridade: prontuários (atendimentos clínicos)
     prontuariosFull.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
-      ps.origens.add('prontuario');
       ps.atendimentos++;
       ps.datas.push(p.data_atendimento);
       if (p.profissional_id || p.profissional_nome) {
         ps.profissionais.add(p.profissional_id || p.profissional_nome);
       }
 
-      if (p.cid_codigo) {
-        const cids = p.cid_codigo.split(/[,;\s]+/).filter(Boolean);
-        cids.forEach(c => ps.cids.add(c.toUpperCase()));
-      }
+      addCids(ps, p.cid_codigo, 'prontuario');
 
       if (p.procedimentos_texto) {
-        const procs = p.procedimentos_texto.split(/[,;]+/).filter(Boolean);
-        procs.forEach(pr => ps.procedimentos.add(pr.trim()));
+        const procs = p.procedimentos_texto.split(/[,;]+/).map((x: string) => x.trim()).filter(Boolean);
+        procs.forEach((pr: string) => ps.procedimentos.add(pr));
       }
     });
 
-    // 2. Process PTS
+    // 2ª prioridade: PTS (cid_primario / cid_secundario)
     ptsData.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
-      ps.origens.add('pts');
-      if (p.cid_primario) ps.cids.add(p.cid_primario.toUpperCase());
-      if (p.cid_secundario) ps.cids.add(p.cid_secundario.toUpperCase());
+      addCids(ps, p.cid_primario, 'pts');
+      addCids(ps, p.cid_secundario, 'pts');
       if (p.objetivos_curto_prazo) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_curto_prazo);
     });
 
-    // 3. Process linked procedures
+    // 3ª prioridade: procedimentos vinculados
     procedimentosDB.forEach(p => {
       const ps = getOrCreatePatient(p.patient_id);
-      ps.origens.add('procedimento');
       if (p.procedimento_nome) ps.procedimentos.add(p.procedimento_nome);
-      if (p.cid) ps.cids.add(p.cid.toUpperCase());
+      addCids(ps, p.cid, 'procedimento');
     });
 
-    // Derive categories with intelligence
+    // 4ª prioridade / fallback: CID do cadastro base do paciente
+    Object.values(patientStats).forEach(ps => {
+      const pac: any = pacMap.get(ps.id);
+      addCids(ps, pac?.cid, 'cadastro');
+    });
+
+    // Categorização a partir dos CIDs válidos (canônicos)
     Object.values(patientStats).forEach(ps => {
       ps.cids.forEach(cid => {
         const description = cid10Descriptions[cid];
         const cats = getCategoryByCID(cid, description);
         cats.forEach(cat => ps.categories.add(cat.name));
       });
+      // Qualquer CID válido não mapeado em deficiência entra em "Outros Diagnósticos",
+      // garantindo que a soma das categorias feche com o Total com CID.
+      if (ps.cids.size > 0 && ps.categories.size === 0) {
+        ps.categories.add(OTHER_CATEGORY_NAME);
+      }
+    });
+
+    // Somente pacientes com pelo menos 1 CID válido entram na Análise Clínica.
+    Object.keys(patientStats).forEach(id => {
+      if (patientStats[id].cids.size === 0) delete patientStats[id];
     });
 
     let patientsList = Object.values(patientStats);
