@@ -399,7 +399,7 @@ const Relatorios: React.FC = () => {
       if (abortRef.current === controller) setIsFetching(false);
     }
     // Deps primitivas: evita refetch duplicado quando o AuthContext recria o objeto `user`.
-  }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
+  }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo, pacientes]);
 
 
   // Carrega os dados automaticamente apenas UMA vez, na montagem da página.
@@ -787,79 +787,90 @@ const Relatorios: React.FC = () => {
           profissionais: new Set(),
           origens: new Set()
         };
-        
-        // Add CID from patient registration
-        if (pac?.cid) {
-          const cids = pac.cid.split(/[,;\s]+/).filter(Boolean);
-          cids.forEach(c => {
-            const cid = c.toUpperCase();
-            patientStats[id].cids.add(cid);
-            patientStats[id].origens.add('cadastro');
-          });
-        }
       }
       return patientStats[id];
     };
 
-    // 1. Process medical records
+    // Adiciona apenas CIDs válidos (regex estrito + forma canônica), sem duplicar por paciente.
+    const addCids = (
+      ps: typeof patientStats[string],
+      raw: string | null | undefined,
+      origem: 'prontuario' | 'pts' | 'cadastro' | 'procedimento',
+    ) => {
+      const codes = extractCids(raw);
+      if (codes.length === 0) return;
+      codes.forEach(c => ps.cids.add(c));
+      ps.origens.add(origem);
+    };
+
+    // Cascata de fontes — 1ª prioridade: prontuários (atendimentos clínicos)
     prontuariosFull.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
-      ps.origens.add('prontuario');
       ps.atendimentos++;
       ps.datas.push(p.data_atendimento);
       if (p.profissional_id || p.profissional_nome) {
         ps.profissionais.add(p.profissional_id || p.profissional_nome);
       }
 
-      if (p.cid_codigo) {
-        const cids = p.cid_codigo.split(/[,;\s]+/).filter(Boolean);
-        cids.forEach(c => ps.cids.add(c.toUpperCase()));
-      }
+      addCids(ps, p.cid_codigo, 'prontuario');
 
       if (p.procedimentos_texto) {
-        const procs = p.procedimentos_texto.split(/[,;]+/).filter(Boolean);
-        procs.forEach(pr => ps.procedimentos.add(pr.trim()));
+        const procs = p.procedimentos_texto.split(/[,;]+/).map((x: string) => x.trim()).filter(Boolean);
+        procs.forEach((pr: string) => ps.procedimentos.add(pr));
       }
     });
 
-    // 2. Process PTS
+    // 2ª prioridade: PTS (cid_primario / cid_secundario)
     ptsData.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
-      ps.origens.add('pts');
-      if (p.cid_primario) ps.cids.add(p.cid_primario.toUpperCase());
-      if (p.cid_secundario) ps.cids.add(p.cid_secundario.toUpperCase());
+      addCids(ps, p.cid_primario, 'pts');
+      addCids(ps, p.cid_secundario, 'pts');
       if (p.objetivos_curto_prazo) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_curto_prazo);
     });
 
-    // 3. Process linked procedures
+    // 3ª prioridade: procedimentos vinculados
     procedimentosDB.forEach(p => {
       const ps = getOrCreatePatient(p.patient_id);
-      ps.origens.add('procedimento');
       if (p.procedimento_nome) ps.procedimentos.add(p.procedimento_nome);
-      if (p.cid) ps.cids.add(p.cid.toUpperCase());
+      addCids(ps, p.cid, 'procedimento');
     });
 
-    // Derive categories with intelligence
+    // 4ª prioridade / fallback: inclui pacientes cujo único CID está no cadastro base.
+    pacientes.forEach((pac: any) => {
+      const ps = getOrCreatePatient(pac.id, pac.nome);
+      addCids(ps, pac.cid, 'cadastro');
+    });
+
+    // Categorização a partir dos CIDs válidos (canônicos).
     Object.values(patientStats).forEach(ps => {
       ps.cids.forEach(cid => {
         const description = cid10Descriptions[cid];
         const cats = getCategoryByCID(cid, description);
-        cats.forEach(cat => ps.categories.add(cat.name));
+        if (cats.length > 0) {
+          cats.forEach(cat => ps.categories.add(cat.name));
+        } else {
+          // Cada CID válido sem enquadramento explícito entra em Outros.
+          ps.categories.add(OTHER_CATEGORY_NAME);
+        }
       });
+    });
+
+    // Somente pacientes com pelo menos 1 CID válido entram na Análise Clínica.
+    Object.keys(patientStats).forEach(id => {
+      if (patientStats[id].cids.size === 0) delete patientStats[id];
     });
 
     let patientsList = Object.values(patientStats);
 
     if (clinicalSearch) {
       const term = clinicalSearch.toUpperCase().trim();
-      const normTerm = term.replace('.', '');
-      
+      const normTerm = normalizeCid(term);
+
       patientsList = patientsList.filter(ps => {
         const matchesName = ps.nome.toUpperCase().includes(term);
-        const matchesCid = Array.from(ps.cids).some(c => {
-          const normC = c.replace('.', '');
-          return normC.startsWith(normTerm) || normTerm.startsWith(normC);
-        });
+        const matchesCid = !!normTerm && Array.from(ps.cids).some(c =>
+          c.startsWith(normTerm) || normTerm.startsWith(c)
+        );
         return matchesName || matchesCid;
       });
     }
@@ -898,7 +909,8 @@ const Relatorios: React.FC = () => {
     const totalPatients = patientsList.length || 1;
     const topCidsAll = Object.entries(cidFrequency)
       .map(([cid, count]) => ({
-        cid,
+        cid: formatCid(cid),
+        codigo: cid,
         count,
         descricao: cid10Descriptions[cid] || "Descrição não carregada",
         percent: +((count / totalPatients) * 100).toFixed(1),
@@ -946,20 +958,21 @@ const Relatorios: React.FC = () => {
     ];
     const faixaEtariaDist = faixas.map(f => ({ name: f.name, value: f.count }));
 
-    // ===== Evolução temporal (diagnósticos por mês) =====
+    // ===== Evolução temporal (diagnósticos válidos por mês) =====
     const monthCount: Record<string, number> = {};
     prontuariosFull.forEach(pr => {
       if (!pr.cid_codigo || !pr.data_atendimento) return;
+      const n = extractCids(pr.cid_codigo).length;
+      if (n === 0) return;
       const key = String(pr.data_atendimento).slice(0, 7); // YYYY-MM
-      const n = pr.cid_codigo.split(/[,;\s]+/).filter(Boolean).length || 0;
       monthCount[key] = (monthCount[key] || 0) + n;
     });
     const evolucaoTemporal = Object.entries(monthCount)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, value]) => ({ month, value }));
 
-    // ===== Múltiplos CIDs =====
-    const comMulti = patientsList.filter(p => p.cids.size > 1);
+    // ===== Múltiplos CIDs (2 ou mais códigos válidos e distintos) =====
+    const comMulti = patientsList.filter(p => p.cids.size >= 2);
     const totalCidsSoma = patientsList.reduce((acc, p) => acc + p.cids.size, 0);
     const mediaCidPorPaciente = patientsList.length ? +(totalCidsSoma / patientsList.length).toFixed(2) : 0;
 
@@ -4842,7 +4855,7 @@ th{background:#f1f5f9;font-weight:600;}
                                 className="text-[10px] cursor-help" 
                                 title={cid10Descriptions[c] || "Descrição não carregada"}
                               >
-                                {c}
+                                {formatCid(c)}
                               </Badge>
                             ))}
                           </div>

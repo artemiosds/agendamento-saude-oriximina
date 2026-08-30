@@ -105,7 +105,7 @@ export const CLINICAL_CATEGORIES: ClinicalCategory[] = [
   {
     id: 'def_intelectual',
     name: 'Deficiência Intelectual',
-    cidPrefixes: ['F70', 'F71', 'F72', 'F73', 'F78', 'F79'],
+    cidPrefixes: range('F', 70, 79),
     description: 'Funcionamento intelectual significativamente inferior à média (F70-F79)',
     keywords: ['retardo mental', 'deficiencia intelectual', 'atraso cognitivo'],
   },
