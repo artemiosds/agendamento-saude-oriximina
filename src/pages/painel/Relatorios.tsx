@@ -4855,7 +4855,7 @@ th{background:#f1f5f9;font-weight:600;}
                                 className="text-[10px] cursor-help" 
                                 title={cid10Descriptions[c] || "Descrição não carregada"}
                               >
-                                {c}
+                                {formatCid(c)}
                               </Badge>
                             ))}
                           </div>
