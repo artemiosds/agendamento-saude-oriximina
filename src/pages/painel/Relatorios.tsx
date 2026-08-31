@@ -143,6 +143,8 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+  // CIDs do PTS vivem em public.pts_cid (1 linha por CID), não em colunas do PTS.
+  const [ptsCidData, setPtsCidData] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
   const [clinicalSearch, setClinicalSearch] = useState('');
@@ -329,13 +331,14 @@ const Relatorios: React.FC = () => {
         fetchAllPages('multiprofessional_evaluations', 'created_at'),
         fetchAllPages('pts', 'created_at'),
         fetchAllPages('patient_procedures', 'created_at'),
+        fetchAllPages('pts_cid', 'created_at'),
       ]);
 
 
       // Busca cancelada: não aplica nenhum estado da requisição obsoleta.
       if (signal.aborted) return;
 
-      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes] =
+      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes, ptsCidRes] =
         results.map(r => r.rows);
       const failedTables = results.filter(r => r.partial).map(r => r.table);
 
@@ -349,14 +352,18 @@ const Relatorios: React.FC = () => {
       setMultiEvals(multiRes || []);
       setPtsData(ptsRes || []);
       setProcedimentosDB(proceduresRes || []);
+      setPtsCidData(ptsCidRes || []);
 
-      // Extrai CIDs válidos (regex estrito, forma canônica sem ponto) para buscar descrições oficiais
+      // Extrai CIDs válidos (regex estrito, forma canônica sem ponto) para buscar descrições oficiais.
+      // Fontes reais no banco: prontuarios.custom_data.cid/cid10, pts_cid.cid_codigo,
+      // patient_procedures.cid e pacientes.cid.
       const allCids = new Set<string>();
       const collect = (v?: string | null) => extractCids(v).forEach(c => allCids.add(c));
-      (prons || []).forEach((p: any) => collect(p.cid_codigo));
-      (ptsRes || []).forEach((p: any) => { collect(p.cid_primario); collect(p.cid_secundario); });
+      (prons || []).forEach((p: any) => { collect(p.custom_data?.cid); collect(p.custom_data?.cid10); });
+      (ptsCidRes || []).forEach((p: any) => collect(p.cid_codigo));
       (proceduresRes || []).forEach((p: any) => collect(p.cid));
       pacientes.forEach((p: any) => collect(p.cid));
+      
       
       if (allCids.size > 0) {
         const { data: cidData, error: cidError } = await supabase
@@ -803,7 +810,7 @@ const Relatorios: React.FC = () => {
       ps.origens.add(origem);
     };
 
-    // Cascata de fontes — 1ª prioridade: prontuários (atendimentos clínicos)
+    // Cascata de fontes — 1ª prioridade: prontuários (atendimentos clínicos).
     prontuariosFull.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
       ps.atendimentos++;
@@ -812,7 +819,8 @@ const Relatorios: React.FC = () => {
         ps.profissionais.add(p.profissional_id || p.profissional_nome);
       }
 
-      addCids(ps, p.cid_codigo, 'prontuario');
+      addCids(ps, p.custom_data?.cid, 'prontuario');
+      addCids(ps, p.custom_data?.cid10, 'prontuario');
 
       if (p.procedimentos_texto) {
         const procs = p.procedimentos_texto.split(/[,;]+/).map((x: string) => x.trim()).filter(Boolean);
@@ -820,12 +828,21 @@ const Relatorios: React.FC = () => {
       }
     });
 
-    // 2ª prioridade: PTS (cid_primario / cid_secundario)
+    // 2ª prioridade: CIDs do PTS vinculados pela tabela pts_cid.
+    const ptsPatients = new Map<string, string>();
+    ptsData.forEach(p => ptsPatients.set(p.id, p.patient_id));
+    ptsCidData.forEach(p => {
+      const patientId = ptsPatients.get(p.pts_id);
+      if (!patientId) return;
+      const ps = getOrCreatePatient(patientId);
+      addCids(ps, p.cid_codigo, 'pts');
+    });
+
+    // Mantém objetivos e demais indicadores do PTS associados ao paciente.
     ptsData.forEach(p => {
-      const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
-      addCids(ps, p.cid_primario, 'pts');
-      addCids(ps, p.cid_secundario, 'pts');
-      if (p.objetivos_curto_prazo) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_curto_prazo);
+      const ps = getOrCreatePatient(p.patient_id);
+      if (p.objetivos_terapeuticos) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_terapeuticos);
+      if (p.metas_curto_prazo) ps.procedimentos.add("Meta PTS: " + p.metas_curto_prazo);
     });
 
     // 3ª prioridade: procedimentos vinculados
@@ -1011,7 +1028,7 @@ const Relatorios: React.FC = () => {
       evolucaoTemporal,
       kpis
     };
-  }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions, clinicalSearch]);
+  }, [prontuariosFull, pacientes, ptsData, ptsCidData, procedimentosDB, cid10Descriptions, clinicalSearch]);
 
 
   // === FILA REPORT ===
@@ -2832,7 +2849,7 @@ ${dataRows}
           H1('8. Análise Clínica'),
           mkTable(
             ['CID', 'Descrição', 'Quantidade'],
-            ((clinicalReport as any)?.topCids || (clinicalReport as any)?.cids || []).slice(0, 20).map((c: any) => [c.codigo || c.cid || '-', c.descricao || '-', c.quantidade ?? c.total ?? 0])
+            ((clinicalReport as any)?.topCids20 || []).slice(0, 20).map((c: any) => [c.cid || '-', c.descricao || '-', c.count ?? 0])
           ),
 
           H1('9. Tratamentos'),
