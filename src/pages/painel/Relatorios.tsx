@@ -331,13 +331,14 @@ const Relatorios: React.FC = () => {
         fetchAllPages('multiprofessional_evaluations', 'created_at'),
         fetchAllPages('pts', 'created_at'),
         fetchAllPages('patient_procedures', 'created_at'),
+        fetchAllPages('pts_cid', 'created_at'),
       ]);
 
 
       // Busca cancelada: não aplica nenhum estado da requisição obsoleta.
       if (signal.aborted) return;
 
-      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes] =
+      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes, ptsCidRes] =
         results.map(r => r.rows);
       const failedTables = results.filter(r => r.partial).map(r => r.table);
 
@@ -351,14 +352,18 @@ const Relatorios: React.FC = () => {
       setMultiEvals(multiRes || []);
       setPtsData(ptsRes || []);
       setProcedimentosDB(proceduresRes || []);
+      setPtsCidData(ptsCidRes || []);
 
-      // Extrai CIDs válidos (regex estrito, forma canônica sem ponto) para buscar descrições oficiais
+      // Extrai CIDs válidos (regex estrito, forma canônica sem ponto) para buscar descrições oficiais.
+      // Fontes reais no banco: prontuarios.custom_data.cid/cid10, pts_cid.cid_codigo,
+      // patient_procedures.cid e pacientes.cid.
       const allCids = new Set<string>();
       const collect = (v?: string | null) => extractCids(v).forEach(c => allCids.add(c));
-      (prons || []).forEach((p: any) => collect(p.cid_codigo));
-      (ptsRes || []).forEach((p: any) => { collect(p.cid_primario); collect(p.cid_secundario); });
+      (prons || []).forEach((p: any) => { collect(p.custom_data?.cid); collect(p.custom_data?.cid10); });
+      (ptsCidRes || []).forEach((p: any) => collect(p.cid_codigo));
       (proceduresRes || []).forEach((p: any) => collect(p.cid));
       pacientes.forEach((p: any) => collect(p.cid));
+      
       
       if (allCids.size > 0) {
         const { data: cidData, error: cidError } = await supabase
