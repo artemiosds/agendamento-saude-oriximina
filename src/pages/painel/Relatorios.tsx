@@ -2849,7 +2849,7 @@ ${dataRows}
           H1('8. Análise Clínica'),
           mkTable(
             ['CID', 'Descrição', 'Quantidade'],
-            ((clinicalReport as any)?.topCids || (clinicalReport as any)?.cids || []).slice(0, 20).map((c: any) => [c.codigo || c.cid || '-', c.descricao || '-', c.quantidade ?? c.total ?? 0])
+            ((clinicalReport as any)?.topCids20 || []).slice(0, 20).map((c: any) => [c.cid || '-', c.descricao || '-', c.count ?? 0])
           ),
 
           H1('9. Tratamentos'),
