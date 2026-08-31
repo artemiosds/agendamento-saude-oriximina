@@ -1028,7 +1028,7 @@ const Relatorios: React.FC = () => {
       evolucaoTemporal,
       kpis
     };
-  }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions, clinicalSearch]);
+  }, [prontuariosFull, pacientes, ptsData, ptsCidData, procedimentosDB, cid10Descriptions, clinicalSearch]);
 
 
   // === FILA REPORT ===
