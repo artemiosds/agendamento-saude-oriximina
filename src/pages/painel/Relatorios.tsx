@@ -810,7 +810,7 @@ const Relatorios: React.FC = () => {
       ps.origens.add(origem);
     };
 
-    // Cascata de fontes — 1ª prioridade: prontuários (atendimentos clínicos)
+    // Cascata de fontes — 1ª prioridade: prontuários (atendimentos clínicos).
     prontuariosFull.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
       ps.atendimentos++;
@@ -819,7 +819,8 @@ const Relatorios: React.FC = () => {
         ps.profissionais.add(p.profissional_id || p.profissional_nome);
       }
 
-      addCids(ps, p.cid_codigo, 'prontuario');
+      addCids(ps, p.custom_data?.cid, 'prontuario');
+      addCids(ps, p.custom_data?.cid10, 'prontuario');
 
       if (p.procedimentos_texto) {
         const procs = p.procedimentos_texto.split(/[,;]+/).map((x: string) => x.trim()).filter(Boolean);
@@ -827,12 +828,21 @@ const Relatorios: React.FC = () => {
       }
     });
 
-    // 2ª prioridade: PTS (cid_primario / cid_secundario)
+    // 2ª prioridade: CIDs do PTS vinculados pela tabela pts_cid.
+    const ptsPatients = new Map<string, string>();
+    ptsData.forEach(p => ptsPatients.set(p.id, p.patient_id));
+    ptsCidData.forEach(p => {
+      const patientId = ptsPatients.get(p.pts_id);
+      if (!patientId) return;
+      const ps = getOrCreatePatient(patientId);
+      addCids(ps, p.cid_codigo, 'pts');
+    });
+
+    // Mantém objetivos e demais indicadores do PTS associados ao paciente.
     ptsData.forEach(p => {
-      const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
-      addCids(ps, p.cid_primario, 'pts');
-      addCids(ps, p.cid_secundario, 'pts');
-      if (p.objetivos_curto_prazo) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_curto_prazo);
+      const ps = getOrCreatePatient(p.patient_id);
+      if (p.objetivos_terapeuticos) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_terapeuticos);
+      if (p.metas_curto_prazo) ps.procedimentos.add("Meta PTS: " + p.metas_curto_prazo);
     });
 
     // 3ª prioridade: procedimentos vinculados
