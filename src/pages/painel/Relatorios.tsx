@@ -143,6 +143,8 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+  // CIDs do PTS vivem em public.pts_cid (1 linha por CID), não em colunas do PTS.
+  const [ptsCidData, setPtsCidData] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
   const [clinicalSearch, setClinicalSearch] = useState('');
