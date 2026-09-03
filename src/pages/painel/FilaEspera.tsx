@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { DebouncedInput } from "@/components/ui/debounced-input";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ProfissaoCboSelect, { getProfissaoLabel } from "@/components/fila/ProfissaoCboSelect";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
