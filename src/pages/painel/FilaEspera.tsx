@@ -574,7 +574,9 @@ const FilaEspera: React.FC = () => {
       observacoes: "",
       descricaoClinica: "",
       cid: "",
+      especialidadeDestino: "",
     });
+    setModoDirecionamento("profissional");
     setCriarPaciente(false);
     setNovoPaciente({
       nome: "",
