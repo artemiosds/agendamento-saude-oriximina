@@ -608,7 +608,11 @@ const FilaEspera: React.FC = () => {
       observacoes: f.observacoes || "",
       descricaoClinica: f.descricaoClinica || "",
       cid: f.cid || "",
+      especialidadeDestino: (f as any).especialidadeDestino || "",
     });
+    setModoDirecionamento(
+      !f.profissionalId && (f as any).especialidadeDestino ? "profissao" : "profissional",
+    );
     setCriarPaciente(false);
     setDuplicataEncontrada(null);
     setPacienteErrors({});
