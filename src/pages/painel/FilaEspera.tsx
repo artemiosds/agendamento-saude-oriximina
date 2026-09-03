@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { DebouncedInput } from "@/components/ui/debounced-input";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ProfissaoCboSelect, { getProfissaoLabel } from "@/components/fila/ProfissaoCboSelect";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -304,7 +305,10 @@ const FilaEspera: React.FC = () => {
     observacoes: "",
     descricaoClinica: "",
     cid: "",
+    especialidadeDestino: "",
   });
+  /** "profissional" = profissional individual | "profissao" = aberto por profissão/CBO */
+  const [modoDirecionamento, setModoDirecionamento] = useState<"profissional" | "profissao">("profissional");
 
   useEffect(() => {
     return () => {
@@ -571,7 +575,9 @@ const FilaEspera: React.FC = () => {
       observacoes: "",
       descricaoClinica: "",
       cid: "",
+      especialidadeDestino: "",
     });
+    setModoDirecionamento("profissional");
     setCriarPaciente(false);
     setNovoPaciente({
       nome: "",
@@ -603,7 +609,11 @@ const FilaEspera: React.FC = () => {
       observacoes: f.observacoes || "",
       descricaoClinica: f.descricaoClinica || "",
       cid: f.cid || "",
+      especialidadeDestino: (f as any).especialidadeDestino || "",
     });
+    setModoDirecionamento(
+      !f.profissionalId && (f as any).especialidadeDestino ? "profissao" : "profissional",
+    );
     setCriarPaciente(false);
     setDuplicataEncontrada(null);
     setPacienteErrors({});
@@ -704,7 +714,8 @@ const FilaEspera: React.FC = () => {
       pacienteId,
       pacienteNome,
       unidadeId: form.unidadeId,
-      profissionalId: form.profissionalId,
+      profissionalId: modoDirecionamento === "profissao" ? "" : form.profissionalId,
+      especialidadeDestino: modoDirecionamento === "profissao" ? form.especialidadeDestino : "",
       setor: form.setor,
       prioridade: form.prioridade as any,
       status: "aguardando",
@@ -762,6 +773,10 @@ const FilaEspera: React.FC = () => {
   const handleSave = async () => {
     if (!form.pacienteNome || !form.unidadeId) {
       toast.error("Informe o paciente e a unidade.");
+      return;
+    }
+    if (modoDirecionamento === "profissao" && !form.especialidadeDestino) {
+      toast.error("Selecione a profissão/CBO ou escolha um profissional específico.");
       return;
     }
     if (editId) {
@@ -1744,25 +1759,62 @@ const FilaEspera: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>Profissional (opcional)</Label>
+              <Label>Direcionar para</Label>
               <Select
-                value={form.profissionalId || "none"}
-                onValueChange={(v) => setForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                value={modoDirecionamento}
+                onValueChange={(v: "profissional" | "profissao") => {
+                  setModoDirecionamento(v);
+                  setForm((p) => ({
+                    ...p,
+                    profissionalId: v === "profissao" ? "" : p.profissionalId,
+                    especialidadeDestino: v === "profissional" ? "" : p.especialidadeDestino,
+                  }));
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Qualquer</SelectItem>
-                  {profissionais.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}
-                      {p.profissao ? ` — ${p.profissao}` : ""}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="profissional">Profissional específico</SelectItem>
+                  <SelectItem value="profissao">Profissão / CBO (qualquer profissional)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {modoDirecionamento === "profissional" ? (
+              <div>
+                <Label>Profissional (opcional)</Label>
+                <Select
+                  value={form.profissionalId || "none"}
+                  onValueChange={(v) => setForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Qualquer profissional</SelectItem>
+                    {profissionais.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.nome}
+                        {p.profissao ? ` — ${p.profissao}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div>
+                <Label>Profissão / CBO</Label>
+                <ProfissaoCboSelect
+                  profissionais={profissionais}
+                  value={form.especialidadeDestino}
+                  onChange={(value) => setForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))}
+                  placeholder="Qualquer profissão ou selecione uma profissão"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A fila ficará aberta para qualquer profissional desta profissão.
+                </p>
+              </div>
+            )}
             <div>
               <Label>Prioridade</Label>
               <Select value={form.prioridade} onValueChange={(v) => setForm((p) => ({ ...p, prioridade: v }))}>
@@ -2085,7 +2137,9 @@ const FilaEspera: React.FC = () => {
             const manchesterRisco = getManchesterConfig((f as any).classificacaoRisco);
             const profLabel = prof
               ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}`
-              : "Qualquer profissional";
+              : (f as any).especialidadeDestino
+                ? `Aberto para: ${getProfissaoLabel(profissionais, (f as any).especialidadeDestino)}`
+                : "Qualquer profissional";
             const statusInfo = statusLabels[f.status];
             return (
               <FilaEsperaItemRow

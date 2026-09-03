@@ -42,6 +42,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { normalizeSexo } from "@/lib/utils/sexo-normalization";
 
 import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
+import ProfissaoCboSelect from "@/components/fila/ProfissaoCboSelect";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
@@ -277,11 +278,13 @@ const Pacientes: React.FC = () => {
   const [filaForm, setFilaForm] = useState({
     unidadeId: "",
     profissionalId: "",
+    especialidadeDestino: "",
     prioridade: "normal",
     observacoes: "",
     descricaoClinica: "",
     cid: "",
   });
+  const [filaDirecionamento, setFilaDirecionamento] = useState<"profissional" | "profissao">("profissional");
   const [savingFila, setSavingFila] = useState(false);
 
   // Set of patient IDs currently in active queue
@@ -882,17 +885,23 @@ const Pacientes: React.FC = () => {
     setFilaForm({
       unidadeId: "",
       profissionalId: "",
+      especialidadeDestino: "",
       prioridade: "normal",
       observacoes: "",
       descricaoClinica: "",
       cid: "",
     });
+    setFilaDirecionamento("profissional");
     setFilaDialogOpen(true);
   };
 
   const handleAddToFila = async () => {
     if (!filaPaciente || !filaForm.unidadeId) {
       toast.error("Selecione a unidade.");
+      return;
+    }
+    if (filaDirecionamento === "profissao" && !filaForm.especialidadeDestino) {
+      toast.error("Selecione a profissão/CBO ou escolha um profissional específico.");
       return;
     }
     setSavingFila(true);
@@ -903,7 +912,8 @@ const Pacientes: React.FC = () => {
         pacienteId: filaPaciente.id,
         pacienteNome: filaPaciente.nome,
         unidadeId: filaForm.unidadeId,
-        profissionalId: filaForm.profissionalId,
+        profissionalId: filaDirecionamento === "profissao" ? "" : filaForm.profissionalId,
+        especialidadeDestino: filaDirecionamento === "profissao" ? filaForm.especialidadeDestino : "",
         setor: "",
         prioridade: filaForm.prioridade as any,
         status: "aguardando",
@@ -1154,25 +1164,62 @@ const Pacientes: React.FC = () => {
                 </Select>
               </div>
               <div>
-                <Label>Profissional (opcional)</Label>
+                <Label>Direcionar para</Label>
                 <Select
-                  value={filaForm.profissionalId || "none"}
-                  onValueChange={(v) => setFilaForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                  value={filaDirecionamento}
+                  onValueChange={(v: "profissional" | "profissao") => {
+                    setFilaDirecionamento(v);
+                    setFilaForm((p) => ({
+                      ...p,
+                      profissionalId: v === "profissao" ? "" : p.profissionalId,
+                      especialidadeDestino: v === "profissional" ? "" : p.especialidadeDestino,
+                    }));
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Qualquer</SelectItem>
-                    {profissionais.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome}
-                        {p.profissao ? ` — ${p.profissao}` : ""}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="profissional">Profissional específico</SelectItem>
+                    <SelectItem value="profissao">Profissão / CBO (qualquer profissional)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {filaDirecionamento === "profissional" ? (
+                <div>
+                  <Label>Profissional (opcional)</Label>
+                  <Select
+                    value={filaForm.profissionalId || "none"}
+                    onValueChange={(v) => setFilaForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Qualquer profissional</SelectItem>
+                      {profissionais.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome}
+                          {p.profissao ? ` — ${p.profissao}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label>Profissão / CBO</Label>
+                  <ProfissaoCboSelect
+                    profissionais={profissionais}
+                    value={filaForm.especialidadeDestino}
+                    onChange={(value) => setFilaForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))}
+                    placeholder="Qualquer profissão ou selecione uma profissão"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    A fila ficará aberta para qualquer profissional desta profissão.
+                  </p>
+                </div>
+              )}
               <div>
                 <Label>Prioridade</Label>
                 <Select
