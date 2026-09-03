@@ -210,6 +210,8 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         dbData.paciente_nome = data.pacienteNome;
       if (data.pacienteId !== undefined) dbData.paciente_id = data.pacienteId;
       if (data.setor !== undefined) dbData.setor = data.setor;
+      if ((data as any).especialidadeDestino !== undefined)
+        dbData.especialidade_destino = (data as any).especialidadeDestino;
       const { error } = await supabase
         .from("fila_espera" as any)
         .update(dbData)
