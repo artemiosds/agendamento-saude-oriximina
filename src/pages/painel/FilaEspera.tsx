@@ -775,6 +775,10 @@ const FilaEspera: React.FC = () => {
       toast.error("Informe o paciente e a unidade.");
       return;
     }
+    if (modoDirecionamento === "profissao" && !form.especialidadeDestino) {
+      toast.error("Selecione a profissão/CBO ou escolha um profissional específico.");
+      return;
+    }
     if (editId) {
       await updateFila(editId, { ...form, prioridade: form.prioridade as any });
       toast.success("Registro atualizado!");
@@ -2133,7 +2137,9 @@ const FilaEspera: React.FC = () => {
             const manchesterRisco = getManchesterConfig((f as any).classificacaoRisco);
             const profLabel = prof
               ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}`
-              : "Qualquer profissional";
+              : (f as any).especialidadeDestino
+                ? `Aberto para: ${getProfissaoLabel(profissionais, (f as any).especialidadeDestino)}`
+                : "Qualquer profissional";
             const statusInfo = statusLabels[f.status];
             return (
               <FilaEsperaItemRow

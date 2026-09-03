@@ -900,6 +900,10 @@ const Pacientes: React.FC = () => {
       toast.error("Selecione a unidade.");
       return;
     }
+    if (filaDirecionamento === "profissao" && !filaForm.especialidadeDestino) {
+      toast.error("Selecione a profissão/CBO ou escolha um profissional específico.");
+      return;
+    }
     setSavingFila(true);
     try {
       const newId = `f${Date.now()}`;
