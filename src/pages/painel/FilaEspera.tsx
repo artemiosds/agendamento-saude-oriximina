@@ -1755,25 +1755,62 @@ const FilaEspera: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>Profissional (opcional)</Label>
+              <Label>Direcionar para</Label>
               <Select
-                value={form.profissionalId || "none"}
-                onValueChange={(v) => setForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                value={modoDirecionamento}
+                onValueChange={(v: "profissional" | "profissao") => {
+                  setModoDirecionamento(v);
+                  setForm((p) => ({
+                    ...p,
+                    profissionalId: v === "profissao" ? "" : p.profissionalId,
+                    especialidadeDestino: v === "profissional" ? "" : p.especialidadeDestino,
+                  }));
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Qualquer</SelectItem>
-                  {profissionais.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}
-                      {p.profissao ? ` — ${p.profissao}` : ""}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="profissional">Profissional específico</SelectItem>
+                  <SelectItem value="profissao">Profissão / CBO (qualquer profissional)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {modoDirecionamento === "profissional" ? (
+              <div>
+                <Label>Profissional (opcional)</Label>
+                <Select
+                  value={form.profissionalId || "none"}
+                  onValueChange={(v) => setForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Qualquer profissional</SelectItem>
+                    {profissionais.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.nome}
+                        {p.profissao ? ` — ${p.profissao}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div>
+                <Label>Profissão / CBO</Label>
+                <ProfissaoCboSelect
+                  profissionais={profissionais}
+                  value={form.especialidadeDestino}
+                  onChange={(value) => setForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))}
+                  placeholder="Qualquer profissão ou selecione uma profissão"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A fila ficará aberta para qualquer profissional desta profissão.
+                </p>
+              </div>
+            )}
             <div>
               <Label>Prioridade</Label>
               <Select value={form.prioridade} onValueChange={(v) => setForm((p) => ({ ...p, prioridade: v }))}>
