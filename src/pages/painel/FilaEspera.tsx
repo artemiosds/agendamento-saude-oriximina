@@ -304,7 +304,10 @@ const FilaEspera: React.FC = () => {
     observacoes: "",
     descricaoClinica: "",
     cid: "",
+    especialidadeDestino: "",
   });
+  /** "profissional" = profissional individual | "profissao" = aberto por profissão/CBO */
+  const [modoDirecionamento, setModoDirecionamento] = useState<"profissional" | "profissao">("profissional");
 
   useEffect(() => {
     return () => {
