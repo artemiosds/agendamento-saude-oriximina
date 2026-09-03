@@ -42,6 +42,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { normalizeSexo } from "@/lib/utils/sexo-normalization";
 
 import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
+import ProfissaoCboSelect from "@/components/fila/ProfissaoCboSelect";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
