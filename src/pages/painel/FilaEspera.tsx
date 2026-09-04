@@ -284,6 +284,7 @@ const FilaEspera: React.FC = () => {
     sexo: "",
     unidadeId: "",
     profissionalId: "",
+    especialidadeDestino: "",
     tipo: "primeira_consulta",
     dataSolicitacaoOriginal: "",
     descricaoClinica: "",
@@ -294,6 +295,8 @@ const FilaEspera: React.FC = () => {
   const [importDup, setImportDup] = useState<(typeof pacientes)[0] | null>(null);
   const [importErrors, setImportErrors] = useState<Record<string, string>>({});
   const [importSaving, setImportSaving] = useState(false);
+  const [importDirecionamento, setImportDirecionamento] = useState<"profissional" | "profissao">("profissional");
+
 
   const [form, setForm] = useState({
     pacienteNome: "",
@@ -780,7 +783,12 @@ const FilaEspera: React.FC = () => {
       return;
     }
     if (editId) {
-      await updateFila(editId, { ...form, prioridade: form.prioridade as any });
+      await updateFila(editId, {
+        ...form,
+        prioridade: form.prioridade as any,
+        profissionalId: modoDirecionamento === "profissao" ? "" : form.profissionalId,
+        especialidadeDestino: modoDirecionamento === "profissao" ? form.especialidadeDestino : "",
+      });
       toast.success("Registro atualizado!");
       setDialogOpen(false);
     } else {
@@ -894,7 +902,9 @@ const FilaEspera: React.FC = () => {
         pacienteId,
         pacienteNome,
         unidadeId: importForm.unidadeId,
-        profissionalId: importForm.profissionalId,
+        profissionalId: importDirecionamento === "profissao" ? "" : importForm.profissionalId,
+        especialidadeDestino:
+          importDirecionamento === "profissao" ? importForm.especialidadeDestino : "",
         setor: "",
         prioridade: importForm.prioridade as any,
         status: "aguardando",
@@ -1263,6 +1273,7 @@ const FilaEspera: React.FC = () => {
                     sexo: "",
                     unidadeId: "",
                     profissionalId: "",
+                    especialidadeDestino: "",
                     tipo: "primeira_consulta",
                     dataSolicitacaoOriginal: "",
                     descricaoClinica: "",
@@ -1270,6 +1281,7 @@ const FilaEspera: React.FC = () => {
                     observacoes: "",
                     prioridade: "normal",
                   } as any);
+                  setImportDirecionamento("profissional");
                   setImportDup(null);
                   setImportErrors({});
                   setImportDialogOpen(true);
@@ -2019,25 +2031,64 @@ const FilaEspera: React.FC = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Profissional Desejado</Label>
+                  <Label>Direcionar para</Label>
                   <Select
-                    value={importForm.profissionalId || "none"}
-                    onValueChange={(v) => setImportForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                    value={importDirecionamento}
+                    onValueChange={(v: "profissional" | "profissao") => {
+                      setImportDirecionamento(v);
+                      setImportForm((p) => ({
+                        ...p,
+                        profissionalId: v === "profissao" ? "" : p.profissionalId,
+                        especialidadeDestino: v === "profissional" ? "" : p.especialidadeDestino,
+                      }));
+                    }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Qualquer</SelectItem>
-                      {profissionais.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.nome}
-                          {p.profissao ? ` — ${p.profissao}` : ""}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="profissional">Profissional específico</SelectItem>
+                      <SelectItem value="profissao">Profissão / CBO (qualquer profissional)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {importDirecionamento === "profissional" ? (
+                  <div>
+                    <Label>Profissional Desejado</Label>
+                    <Select
+                      value={importForm.profissionalId || "none"}
+                      onValueChange={(v) => setImportForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Qualquer profissional</SelectItem>
+                        {profissionais.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.nome}
+                            {p.profissao ? ` — ${p.profissao}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div>
+                    <Label>Profissão / CBO Desejada</Label>
+                    <ProfissaoCboSelect
+                      profissionais={profissionais}
+                      value={importForm.especialidadeDestino}
+                      onChange={(value) =>
+                        setImportForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))
+                      }
+                      placeholder="Qualquer profissão ou selecione uma profissão"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      A fila ficará aberta para qualquer profissional desta profissão.
+                    </p>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Tipo</Label>
