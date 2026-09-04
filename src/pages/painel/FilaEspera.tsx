@@ -783,7 +783,12 @@ const FilaEspera: React.FC = () => {
       return;
     }
     if (editId) {
-      await updateFila(editId, { ...form, prioridade: form.prioridade as any });
+      await updateFila(editId, {
+        ...form,
+        prioridade: form.prioridade as any,
+        profissionalId: modoDirecionamento === "profissao" ? "" : form.profissionalId,
+        especialidadeDestino: modoDirecionamento === "profissao" ? form.especialidadeDestino : "",
+      });
       toast.success("Registro atualizado!");
       setDialogOpen(false);
     } else {
