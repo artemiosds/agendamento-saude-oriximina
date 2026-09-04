@@ -284,6 +284,7 @@ const FilaEspera: React.FC = () => {
     sexo: "",
     unidadeId: "",
     profissionalId: "",
+    especialidadeDestino: "",
     tipo: "primeira_consulta",
     dataSolicitacaoOriginal: "",
     descricaoClinica: "",
@@ -294,6 +295,8 @@ const FilaEspera: React.FC = () => {
   const [importDup, setImportDup] = useState<(typeof pacientes)[0] | null>(null);
   const [importErrors, setImportErrors] = useState<Record<string, string>>({});
   const [importSaving, setImportSaving] = useState(false);
+  const [importDirecionamento, setImportDirecionamento] = useState<"profissional" | "profissao">("profissional");
+
 
   const [form, setForm] = useState({
     pacienteNome: "",
