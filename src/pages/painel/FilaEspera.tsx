@@ -1266,6 +1266,7 @@ const FilaEspera: React.FC = () => {
                     sexo: "",
                     unidadeId: "",
                     profissionalId: "",
+                    especialidadeDestino: "",
                     tipo: "primeira_consulta",
                     dataSolicitacaoOriginal: "",
                     descricaoClinica: "",
@@ -1273,6 +1274,7 @@ const FilaEspera: React.FC = () => {
                     observacoes: "",
                     prioridade: "normal",
                   } as any);
+                  setImportDirecionamento("profissional");
                   setImportDup(null);
                   setImportErrors({});
                   setImportDialogOpen(true);
