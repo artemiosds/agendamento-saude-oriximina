@@ -81,9 +81,29 @@ const AvaliacaoEnfermagem: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const { logAction } = useOperacional();
-  const { refreshFila } = useFila();
-  const [fila, setFila] = useState<FilaItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { fila: filaGlobal, refreshFila } = useFila();
+  // Lista derivada do estado centralizado do FilaContext — sem canal próprio
+  // e sem select('*') duplicado nesta tela.
+  const fila = useMemo<FilaItem[]>(() => {
+    const isAdmin = user?.usuario === 'admin.sms';
+    return filaGlobal
+      .filter(
+        (f) =>
+          f.status === 'aguardando_enfermagem' &&
+          (isAdmin || !user?.unidadeId || f.unidadeId === user?.unidadeId),
+      )
+      .sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''))
+      .map((f) => ({
+        id: f.id,
+        pacienteNome: f.pacienteNome,
+        pacienteId: f.pacienteId,
+        unidadeId: f.unidadeId,
+        criadoEm: f.criadoEm || '',
+        especialidadeDestino: f.especialidadeDestino || '',
+        horaChegada: f.horaChegada || '',
+      }));
+  }, [filaGlobal, user?.unidadeId, user?.usuario]);
+  const loading = false;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<FilaItem | null>(null);
   const [saving, setSaving] = useState(false);
