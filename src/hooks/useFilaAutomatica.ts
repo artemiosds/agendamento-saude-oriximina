@@ -23,7 +23,10 @@ interface SlotInfo {
 export function useFilaAutomatica() {
   const { fila, updateFila, refreshFila } = useFila();
   const { pacientes } = usePacientes();
-  const { funcionarios, unidades, logAction } = useOperacional();
+  const { funcionarios, unidades, logAction, configuracoes } = useOperacional();
+  // Trava de chamada (Configurações → Fila de espera → Modo de encaixe).
+  // 'assistido' = chamada manual: a fila nunca avança sozinha.
+  const modoEncaixe = configuracoes?.filaEspera?.modoEncaixe ?? 'assistido';
   const { addAgendamento, refreshAgendamentos } = useAgendamentos();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
