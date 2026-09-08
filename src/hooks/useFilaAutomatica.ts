@@ -286,6 +286,35 @@ export function useFilaAutomatica() {
       },
     });
 
+    // MODO MANUAL (assistido): não avança a fila sozinho. Apenas informa a
+    // recepção; a chamada acontece exclusivamente pelo clique humano na
+    // tela de Fila de Espera.
+    if (modoEncaixe !== 'automatico') {
+      const candidatos = getNextInQueue(agendamento.profissionalId, agendamento.unidadeId);
+      if (candidatos.length === 0) {
+        toast.info('Nenhum paciente na fila de espera para esta vaga.');
+        return false;
+      }
+      await logAction({
+        acao: 'fila_vaga_disponivel_manual',
+        entidade: 'agendamento',
+        entidadeId: agendamento.id,
+        user,
+        unidadeId: agendamento.unidadeId,
+        detalhes: {
+          modo: 'manual/assistido',
+          candidatos: candidatos.length,
+          proximo: candidatos[0]?.pacienteNome || '',
+          data: agendamento.data,
+          hora: agendamento.hora,
+        },
+      });
+      toast.info(
+        `Vaga livre em ${agendamento.data} às ${agendamento.hora}. ${candidatos.length} paciente(s) na fila — chamada manual: use "Chamar" na Fila de Espera.`,
+      );
+      return false;
+    }
+
     const called = await chamarProximoDaFila({
       data: agendamento.data,
       hora: agendamento.hora,
@@ -302,7 +331,7 @@ export function useFilaAutomatica() {
     }
 
     return called;
-  }, [logAction, chamarProximoDaFila]);
+  }, [logAction, chamarProximoDaFila, modoEncaixe, getNextInQueue]);
 
   return {
     getNextInQueue,
