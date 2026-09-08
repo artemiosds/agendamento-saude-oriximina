@@ -2710,6 +2710,7 @@ const BpaExportar: React.FC = () => {
                 : [chaveAtendimento, proc, cid].join("|");
               if (chavesLinhasBpa.has(chaveLinhaBpa)) {
                 stats.autoCorrected++;
+                resumoIntegridade.totalDuplicadosRemovidos++;
                 details.autoCorrected.push({
                   ...itemDetail,
                   pendencia: "Linha BPA-I duplicada removida",
@@ -2717,6 +2718,7 @@ const BpaExportar: React.FC = () => {
                 });
                 continue;
               }
+
               chavesLinhasBpa.add(chaveLinhaBpa);
               const folhaBpa = Math.floor(exportedCount / 20) + 1;
               const sequenciaFolha = (exportedCount % 20) + 1;
