@@ -24,6 +24,8 @@ import {
   normalizeCep,
   type CepInfo,
 } from "@/lib/bpaNormalization";
+import { validarListaProcedimentosBpaI } from "@/lib/bpaFinalValidation";
+
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
