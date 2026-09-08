@@ -2646,15 +2646,54 @@ const BpaExportar: React.FC = () => {
                 : `Pendência mista: ${motivosTxt}`;
             details.critical.push({ ...itemDetail, pendencia: rotulo, valor_atual: motivosTxt });
           } else {
-            // Novo loop: emite UMA linha BPA-I por SIGTAP encontrado no atendimento.
-            // Se a profissão exige SIGTAP e a lista está vazia, nada é emitido
-            // (a pendência já foi registrada acima quando exportar_com_pendencias=false).
-            const listaParaEmitir =
-              codigosParaExportar.length > 0
-                ? codigosParaExportar
-                : sigtapReq.exige && !formData.exportar_com_pendencias
-                  ? []
-                  : [{ codigo: somenteNumeros(formData.procedimento_padrao) || "", origem: formData.exportar_com_pendencias ? "Padrão (form) — pendência ignorada" : "Padrão (form)" }];
+            // Emite UMA linha BPA-I por SIGTAP VÁLIDO do atendimento.
+            // Procedimentos reprovados na validação final não geram Registro 03
+            // e não contam como produção — o motivo já foi informado ao usuário.
+            const fallbackPadrao =
+              codigosParaExportar.length === 0 && !(sigtapReq.exige && !formData.exportar_com_pendencias)
+                ? [
+                    {
+                      codigo: somenteNumeros(formData.procedimento_padrao) || "",
+                      origem: formData.exportar_com_pendencias
+                        ? "Padrão (form) — pendência ignorada"
+                        : "Padrão (form)",
+                      cid: "",
+                    },
+                  ]
+                : [];
+            let listaParaEmitir = codigosValidados;
+            if (listaParaEmitir.length === 0 && fallbackPadrao.length > 0) {
+              const valFallback = validarListaProcedimentosBpaI(fallbackPadrao, validacaoCtxLinha);
+              listaParaEmitir = valFallback.validos.map((r) => ({
+                codigo: r.codigo,
+                origem: r.origem,
+                cid: r.cid,
+              }));
+              for (const rej of valFallback.rejeitados) {
+                stats.rejectedProc++;
+                const motivo = rej.rejeicoes.join(" | ");
+                resumoIntegridade.rejeitados.push({
+                  paciente: nome_pac || ident,
+                  data: String(pront.data_atendimento || "").slice(0, 10),
+                  codigo: rej.codigo || "—",
+                  cbo,
+                  motivo,
+                });
+                warnings.push(
+                  `${ident}: procedimento padrão ${rej.codigo || "(vazio)"} NÃO exportado (CBO ${cbo}) — ${motivo}`,
+                );
+                details.rejectedProc.push({
+                  ...itemDetail,
+                  pendencia: "Procedimento incompatível — não exportado",
+                  valor_atual: `${rej.codigo || "vazio"} (origem: ${rej.origem}) → ${motivo}`,
+                  codigo_sigtap: rej.codigo,
+                  cbo,
+                  origem_sigtap: rej.origem,
+                  motivo,
+                });
+              }
+            }
+
 
             for (const procEntry of listaParaEmitir) {
               const proc = zfill(procEntry.codigo, 10);
