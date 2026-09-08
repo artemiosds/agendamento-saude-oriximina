@@ -52,6 +52,30 @@ const priorityRank: Record<string, number> = {
   normal: 6,
 };
 
+/**
+ * Fila operacional: apenas os status que a recepção/triagem/enfermagem
+ * atendem no dia. O backlog `apto_atendimento` (triados aguardando
+ * agendamento, ~11 mil linhas) ficou fora de propósito — ele é visto em
+ * Pacientes/Agenda/Relatórios e não participa do encaixe (a Agenda usa o
+ * status do próprio agendamento).
+ */
+const STATUS_OPERACIONAIS = [
+  "aguardando",
+  "chamado",
+  "em_atendimento",
+  "chegada_confirmada",
+  "aguardando_triagem",
+  "aguardando_enfermagem",
+  "aguardando_atendimento",
+  "aguardando_agendamento_interno",
+  "encaixado",
+] as const;
+
+const STATUS_OPERACIONAIS_SET = new Set<string>(STATUS_OPERACIONAIS);
+
+const FILA_COLUMNS =
+  "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
+
 const mapFilaRow = (f: any): FilaEspera => ({
   id: f.id,
   pacienteId: f.paciente_id,
