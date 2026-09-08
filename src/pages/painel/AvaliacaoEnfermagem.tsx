@@ -139,50 +139,8 @@ const AvaliacaoEnfermagem: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Load from fila_espera where status = 'aguardando_enfermagem'
-  const loadFila = useCallback(async () => {
-    const isAdmin = user?.usuario === 'admin.sms';
-    if (!isAdmin && !user?.unidadeId) return;
-    setLoading(true);
-    try {
-      let query = (supabase as any)
-        .from('fila_espera')
-        .select('*')
-        .eq('status', 'aguardando_enfermagem')
-        .order('criado_em', { ascending: true });
-      if (!isAdmin && user?.unidadeId) {
-        query = query.eq('unidade_id', user.unidadeId);
-      }
-      const { data, error } = await query;
-
-      if (data && !error) {
-        setFila(data.map((f: any) => ({
-          id: f.id,
-          pacienteNome: f.paciente_nome,
-          pacienteId: f.paciente_id,
-          unidadeId: f.unidade_id,
-          criadoEm: f.criado_em || '',
-          especialidadeDestino: f.especialidade_destino || '',
-          horaChegada: f.hora_chegada || '',
-        })));
-      }
-    } catch (err) {
-      console.error('Error loading nursing queue:', err);
-    }
-    setLoading(false);
-  }, [user?.unidadeId, user?.usuario]);
-
-  useEffect(() => { loadFila(); }, [loadFila]);
-
-  // Realtime on fila_espera
-  useEffect(() => {
-    const isAdmin = user?.usuario === 'admin.sms';
-    if (!isAdmin && !user?.unidadeId) return;
-    const channel = supabase.channel('enfermagem-fila-espera')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'fila_espera' }, () => loadFila())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user?.unidadeId, user?.usuario, loadFila]);
+  // A fila desta tela vem do FilaContext (canal realtime único e compartilhado).
+  const loadFila = refreshFila;
 
   const openAvaliacao = async (item: FilaItem) => {
     setSelected(item);
