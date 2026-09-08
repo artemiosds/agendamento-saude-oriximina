@@ -2425,7 +2425,7 @@ const BpaExportar: React.FC = () => {
             cnsProfissional: cns_prof,
             municipioPaciente: municipio,
             sexoPaciente: sexo,
-            idadePaciente: Number.isFinite(Number(idade)) ? Number(idade) : null,
+            idadePaciente: raw_nasc && /^\d{3}$/.test(idade) ? Number(idade) : null,
           };
           const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar, validacaoCtxLinha);
 
