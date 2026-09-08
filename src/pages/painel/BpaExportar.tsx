@@ -949,6 +949,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: number;
       missingLogradouro: number;
       missingSigtap: number;
+      rejectedProc: number;
       autoCorrected: number;
     };
     details: {
@@ -965,11 +966,25 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: any[];
       missingLogradouro: any[];
       missingSigtap: any[];
+      rejectedProc: any[];
       autoCorrected: any[];
       critical: any[];
     };
+    resumo?: {
+      totalAtendimentos: number;
+      totalProcedimentosEncontrados: number;
+      totalProcedimentosValidos: number;
+      totalRegistros03: number;
+      totalDuplicadosRemovidos: number;
+      rejeitados: Array<{ paciente: string; data: string; codigo: string; cbo: string; motivo: string }>;
+      municipios: string[];
+      codigosIbge: string[];
+      inconsistencias: string[];
+      producaoMultipla: string[];
+    } | null;
 
     error: string | null;
+
     fileName: string;
     confRows: any[];
     pendRows: any[];
