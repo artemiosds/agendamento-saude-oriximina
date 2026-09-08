@@ -2397,16 +2397,81 @@ const BpaExportar: React.FC = () => {
               motivo,
             });
           }
-          if (codigosParaExportar.length > 1) {
-            warnings.push(
-              `${ident}: ${codigosParaExportar.length} procedimentos SIGTAP encontrados para este atendimento — geradas ${codigosParaExportar.length} linhas BPA-I.`,
-            );
-          }
           if (codigosParaExportar.length === 0 && !sigtapReq.exige) stats.defaultProc++;
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
           const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || "");
+
+          // ===== VALIDAÇÃO FINAL OBRIGATÓRIA (SIGTAP × CBO × competência) =====
+          // Permissivo para encontrar/consolidar; rigoroso para exportar.
+          // Nenhum procedimento entra no TXT sem passar por esta checagem — nem
+          // os reaproveitados do histórico/PTS (que valem apenas como sugestão).
+          resumoIntegridade.totalAtendimentos++;
+          resumoIntegridade.totalProcedimentosEncontrados += codigosParaExportar.length;
+          resumoIntegridade.totalDuplicadosRemovidos += Math.max(
+            0,
+            codigosColetados.length - codigosParaExportar.length,
+          );
+          if (municipio) {
+            ibgeSet.add(municipio);
+            if (munRes.fonte) municipiosSet.add(`${municipio} (${munRes.fonte})`);
+          }
+
+          const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar, {
+            ...validacaoCtxBase,
+            cbo,
+            cnes,
+            cnsProfissional: cns_prof,
+            municipioPaciente: municipio,
+            sexoPaciente: sexo,
+            idadePaciente: Number.isFinite(Number(idade)) ? Number(idade) : null,
+          });
+
+          const codigosValidados = validacaoProcs.validos.map((r) => {
+            const original = codigosParaExportar.find((c) => c.codigo === r.codigo && (c.cid || "") === r.cid);
+            return original || { codigo: r.codigo, origem: r.origem, cid: r.cid };
+          });
+          resumoIntegridade.totalProcedimentosValidos += codigosValidados.length;
+
+          for (const rej of validacaoProcs.rejeitados) {
+            stats.rejectedProc++;
+            const motivo = rej.rejeicoes.join(" | ");
+            resumoIntegridade.rejeitados.push({
+              paciente: nome_pac || ident,
+              data: String(pront.data_atendimento || "").slice(0, 10),
+              codigo: rej.codigo || "—",
+              cbo,
+              motivo,
+            });
+            warnings.push(
+              `${ident}: procedimento ${rej.codigo || "(vazio)"} NÃO exportado (CBO ${cbo}) — ${motivo}`,
+            );
+            details.rejectedProc.push({
+              ...itemDetail,
+              pendencia: "Procedimento incompatível — não exportado",
+              valor_atual: `${rej.codigo || "vazio"} (origem: ${rej.origem}) → ${motivo}`,
+              codigo_sigtap: rej.codigo,
+              cbo,
+              origem_sigtap: rej.origem,
+              motivo,
+            });
+          }
+          for (const item of validacaoProcs.todos) {
+            for (const aviso of item.avisos) {
+              resumoIntegridade.inconsistencias.push(`${ident}: ${item.codigo} — ${aviso}`);
+            }
+          }
+          // Produção múltipla válida é INFORMATIVA — nunca pendência/erro.
+          if (codigosValidados.length > 1) {
+            resumoIntegridade.producaoMultipla.push(
+              `${ident}: ${codigosValidados.length} procedimentos SIGTAP válidos — ${codigosValidados.length} linhas BPA-I (${codigosValidados
+                .map((c) => c.codigo)
+                .join(", ")})`,
+            );
+          }
+
+
           const pacCd = (pac?.custom_data as any) || {};
           const unidadeCd = unitCd || {};
           // CID: cada linha BPA-I pode carregar o CID vinculado ao procedimento.
