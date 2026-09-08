@@ -2888,6 +2888,7 @@ const BpaExportar: React.FC = () => {
         ["missingMunicipio", "Município ausente"],
         ["missingCbo", "CBO profissional ausente"],
         ["missingSigtap", "Procedimento SIGTAP ausente"],
+        ["rejectedProc", "Procedimento incompatível (não exportado)"],
         ["missingNacionalidade", "Nacionalidade ausente/inválida"],
         ["missingLogradouro", "Código de logradouro ausente"],
         ["defaultProc", "Usando procedimento padrão"],
@@ -2898,6 +2899,10 @@ const BpaExportar: React.FC = () => {
       });
       pendRows.push(...Array.from(pendMap.values()));
 
+      resumoIntegridade.totalRegistros03 = exportedCount;
+      resumoIntegridade.municipios = Array.from(municipiosSet).sort();
+      resumoIntegridade.codigosIbge = Array.from(ibgeSet).sort();
+
       setResults({
         totalFound: prontuarios.length,
         exportedCount,
@@ -2905,7 +2910,9 @@ const BpaExportar: React.FC = () => {
         criticalCount,
         stats,
         details,
+        resumo: { ...resumoIntegridade },
         error: null,
+
         fileName,
         blobUrl: url,
         confRows,
