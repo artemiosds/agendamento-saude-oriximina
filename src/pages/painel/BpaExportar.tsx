@@ -1365,14 +1365,43 @@ const BpaExportar: React.FC = () => {
       try {
         const { data: cfgRowTr } = await (supabase as any)
           .from("system_config")
-          .select("value")
-          .eq("key", "bpa_config")
+          .select("configuracoes")
+          .eq("id", "bpa_config")
           .maybeSingle();
-        bpaConfigValue = cfgRowTr?.value || {};
+        bpaConfigValue = cfgRowTr?.configuracoes || {};
         triagemSigtapDefault = String(bpaConfigValue.bpa_triagem_sigtap || "").replace(/\D/g, "");
       } catch {
         /* sem config → cai no procedimento padrão da exportação */
       }
+
+      // === Base da validação final BPA-I (SIGTAP × CBO × competência) ===
+      // Catálogo SIGTAP ativo do sistema: usado apenas para reprovar códigos
+      // inexistentes/inativos. Se a carga falhar, a checagem é ignorada.
+      const codigosSigtapAtivos = new Set<string>();
+      try {
+        const catalogo = await fetchAllRowsBpa<any>(() =>
+          (supabase as any)
+            .from("sigtap_procedimentos")
+            .select("codigo")
+            .eq("ativo", true)
+            .order("codigo", { ascending: true }),
+        );
+        (catalogo || []).forEach((r: any) => {
+          const c = String(r.codigo || "").replace(/\D/g, "");
+          if (c) codigosSigtapAtivos.add(c);
+        });
+      } catch {
+        /* sem catálogo → validação de existência do código é ignorada */
+      }
+      const validacaoCtxBase = {
+        competencia: formData.competencia,
+        codigosConhecidos: codigosSigtapAtivos,
+        restricoes: (bpaConfigValue.sigtap_restricoes || {}) as Record<string, any>,
+        permitidosPorCbo: (bpaConfigValue.sigtap_permitidos_por_cbo || {}) as Record<string, string[]>,
+        bloqueadosPorCbo: (bpaConfigValue.sigtap_bloqueados_por_cbo || {}) as Record<string, string[]>,
+        liberarTodos: !!bpaConfigValue.sigtap_liberar_todos,
+      };
+
 
 
       const triagensPeriodo = await fetchAllRowsBpa<any>(() => {
