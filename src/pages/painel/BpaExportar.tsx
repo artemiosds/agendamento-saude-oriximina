@@ -1302,6 +1302,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: 0,
       missingLogradouro: 0,
       missingSigtap: 0,
+      rejectedProc: 0,
       autoCorrected: 0,
     };
 
@@ -1319,9 +1320,27 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: [] as any[],
       missingLogradouro: [] as any[],
       missingSigtap: [] as any[],
+      rejectedProc: [] as any[],
       autoCorrected: [] as any[],
       critical: [] as any[],
     };
+
+    // Resumo de integridade final (permissivo para encontrar, rigoroso para exportar)
+    const resumoIntegridade = {
+      totalAtendimentos: 0,
+      totalProcedimentosEncontrados: 0,
+      totalProcedimentosValidos: 0,
+      totalRegistros03: 0,
+      totalDuplicadosRemovidos: 0,
+      rejeitados: [] as Array<{ paciente: string; data: string; codigo: string; cbo: string; motivo: string }>,
+      municipios: [] as string[],
+      codigosIbge: [] as string[],
+      inconsistencias: [] as string[],
+      producaoMultipla: [] as string[],
+    };
+    const municipiosSet = new Set<string>();
+    const ibgeSet = new Set<string>();
+
 
 
     try {
