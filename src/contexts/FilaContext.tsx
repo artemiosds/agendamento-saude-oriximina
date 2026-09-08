@@ -52,6 +52,30 @@ const priorityRank: Record<string, number> = {
   normal: 6,
 };
 
+/**
+ * Fila operacional: apenas os status que a recepção/triagem/enfermagem
+ * atendem no dia. O backlog `apto_atendimento` (triados aguardando
+ * agendamento, ~11 mil linhas) ficou fora de propósito — ele é visto em
+ * Pacientes/Agenda/Relatórios e não participa do encaixe (a Agenda usa o
+ * status do próprio agendamento).
+ */
+const STATUS_OPERACIONAIS = [
+  "aguardando",
+  "chamado",
+  "em_atendimento",
+  "chegada_confirmada",
+  "aguardando_triagem",
+  "aguardando_enfermagem",
+  "aguardando_atendimento",
+  "aguardando_agendamento_interno",
+  "encaixado",
+] as const;
+
+const STATUS_OPERACIONAIS_SET = new Set<string>(STATUS_OPERACIONAIS);
+
+const FILA_COLUMNS =
+  "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
+
 const mapFilaRow = (f: any): FilaEspera => ({
   id: f.id,
   pacienteId: f.paciente_id,
@@ -104,15 +128,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const loadFila = useCallback(async () => {
     try {
-      const TERMINAL_STATUSES = [
-        "atendido",
-        "cancelado",
-        "falta",
-        "concluido",
-        "excluido_da_fila_triagem",
-      ];
-      const columns =
-        "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
+      const columns = FILA_COLUMNS;
 
       let allData: any[] = [];
       let from = 0;
@@ -121,7 +137,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         let query = supabase
           .from("fila_espera" as any)
           .select(columns)
-          .not("status", "in", `(${TERMINAL_STATUSES.join(",")})`)
+          .in("status", STATUS_OPERACIONAIS)
           .order("criado_em", { ascending: true })
           .range(from, from + PAGE - 1);
         if (!isGlobalAdmin && userUnidadeId)
@@ -297,13 +313,54 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
     loadFila();
   }, [authUser, loadFila]);
 
-  // Realtime ownership migrado do DataProvider (rt:public:fila_espera:all).
+  /**
+   * Realtime incremental (patch em memória) — não relê a tabela inteira.
+   * O SELECT completo só volta a rodar via `poll` (fallback de queda de
+   * conexão do próprio useRealtimeSync) ou `refreshFila()` manual.
+   */
+  const applyRealtimeEvent = useCallback(
+    (payload: any) => {
+      const row = payload?.new && Object.keys(payload.new).length ? payload.new : null;
+      const oldRow = payload?.old || null;
+      const id = String(row?.id ?? oldRow?.id ?? "");
+      if (!id) return;
+
+      if (payload?.eventType === "DELETE") {
+        setFila((prev) => prev.filter((f) => f.id !== id));
+        return;
+      }
+      if (!row) return;
+
+      // Isolamento por unidade: ignora eventos de outras unidades.
+      const rowUnidade = String(row.unidade_id || "");
+      if (!isGlobalAdmin && userUnidadeId && rowUnidade !== userUnidadeId) {
+        setFila((prev) => prev.filter((f) => f.id !== id));
+        return;
+      }
+
+      // Saiu da fila operacional (atendido, cancelado, apto_atendimento, etc.)
+      if (!STATUS_OPERACIONAIS_SET.has(String(row.status || ""))) {
+        setFila((prev) => prev.filter((f) => f.id !== id));
+        return;
+      }
+
+      const mapped = mapFilaRow(row);
+      setFila((prev) => {
+        const idx = prev.findIndex((f) => f.id === id);
+        if (idx === -1) return [...prev, mapped];
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...mapped };
+        return next;
+      });
+    },
+    [isGlobalAdmin, userUnidadeId],
+  );
+
   useRealtimeSync({
     enabled: !!authUser,
     table: "fila_espera",
-    onEvent: () => {
-      refreshFila();
-    },
+    debounceMs: 0,
+    onEvent: applyRealtimeEvent,
     poll: refreshFila,
   });
 

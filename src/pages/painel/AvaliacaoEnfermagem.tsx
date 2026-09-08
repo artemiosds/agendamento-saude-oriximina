@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -81,9 +81,29 @@ const AvaliacaoEnfermagem: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const { logAction } = useOperacional();
-  const { refreshFila } = useFila();
-  const [fila, setFila] = useState<FilaItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { fila: filaGlobal, refreshFila } = useFila();
+  // Lista derivada do estado centralizado do FilaContext — sem canal próprio
+  // e sem select('*') duplicado nesta tela.
+  const fila = useMemo<FilaItem[]>(() => {
+    const isAdmin = user?.usuario === 'admin.sms';
+    return filaGlobal
+      .filter(
+        (f) =>
+          f.status === 'aguardando_enfermagem' &&
+          (isAdmin || !user?.unidadeId || f.unidadeId === user?.unidadeId),
+      )
+      .sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''))
+      .map((f) => ({
+        id: f.id,
+        pacienteNome: f.pacienteNome,
+        pacienteId: f.pacienteId,
+        unidadeId: f.unidadeId,
+        criadoEm: f.criadoEm || '',
+        especialidadeDestino: f.especialidadeDestino || '',
+        horaChegada: f.horaChegada || '',
+      }));
+  }, [filaGlobal, user?.unidadeId, user?.usuario]);
+  const loading = false;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<FilaItem | null>(null);
   const [saving, setSaving] = useState(false);
@@ -119,50 +139,8 @@ const AvaliacaoEnfermagem: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Load from fila_espera where status = 'aguardando_enfermagem'
-  const loadFila = useCallback(async () => {
-    const isAdmin = user?.usuario === 'admin.sms';
-    if (!isAdmin && !user?.unidadeId) return;
-    setLoading(true);
-    try {
-      let query = (supabase as any)
-        .from('fila_espera')
-        .select('*')
-        .eq('status', 'aguardando_enfermagem')
-        .order('criado_em', { ascending: true });
-      if (!isAdmin && user?.unidadeId) {
-        query = query.eq('unidade_id', user.unidadeId);
-      }
-      const { data, error } = await query;
-
-      if (data && !error) {
-        setFila(data.map((f: any) => ({
-          id: f.id,
-          pacienteNome: f.paciente_nome,
-          pacienteId: f.paciente_id,
-          unidadeId: f.unidade_id,
-          criadoEm: f.criado_em || '',
-          especialidadeDestino: f.especialidade_destino || '',
-          horaChegada: f.hora_chegada || '',
-        })));
-      }
-    } catch (err) {
-      console.error('Error loading nursing queue:', err);
-    }
-    setLoading(false);
-  }, [user?.unidadeId, user?.usuario]);
-
-  useEffect(() => { loadFila(); }, [loadFila]);
-
-  // Realtime on fila_espera
-  useEffect(() => {
-    const isAdmin = user?.usuario === 'admin.sms';
-    if (!isAdmin && !user?.unidadeId) return;
-    const channel = supabase.channel('enfermagem-fila-espera')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'fila_espera' }, () => loadFila())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user?.unidadeId, user?.usuario, loadFila]);
+  // A fila desta tela vem do FilaContext (canal realtime único e compartilhado).
+  const loadFila = refreshFila;
 
   const openAvaliacao = async (item: FilaItem) => {
     setSelected(item);
