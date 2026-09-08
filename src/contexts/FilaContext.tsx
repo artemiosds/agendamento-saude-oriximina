@@ -313,13 +313,54 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
     loadFila();
   }, [authUser, loadFila]);
 
-  // Realtime ownership migrado do DataProvider (rt:public:fila_espera:all).
+  /**
+   * Realtime incremental (patch em memória) — não relê a tabela inteira.
+   * O SELECT completo só volta a rodar via `poll` (fallback de queda de
+   * conexão do próprio useRealtimeSync) ou `refreshFila()` manual.
+   */
+  const applyRealtimeEvent = useCallback(
+    (payload: any) => {
+      const row = payload?.new && Object.keys(payload.new).length ? payload.new : null;
+      const oldRow = payload?.old || null;
+      const id = String(row?.id ?? oldRow?.id ?? "");
+      if (!id) return;
+
+      if (payload?.eventType === "DELETE") {
+        setFila((prev) => prev.filter((f) => f.id !== id));
+        return;
+      }
+      if (!row) return;
+
+      // Isolamento por unidade: ignora eventos de outras unidades.
+      const rowUnidade = String(row.unidade_id || "");
+      if (!isGlobalAdmin && userUnidadeId && rowUnidade !== userUnidadeId) {
+        setFila((prev) => prev.filter((f) => f.id !== id));
+        return;
+      }
+
+      // Saiu da fila operacional (atendido, cancelado, apto_atendimento, etc.)
+      if (!STATUS_OPERACIONAIS_SET.has(String(row.status || ""))) {
+        setFila((prev) => prev.filter((f) => f.id !== id));
+        return;
+      }
+
+      const mapped = mapFilaRow(row);
+      setFila((prev) => {
+        const idx = prev.findIndex((f) => f.id === id);
+        if (idx === -1) return [...prev, mapped];
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...mapped };
+        return next;
+      });
+    },
+    [isGlobalAdmin, userUnidadeId],
+  );
+
   useRealtimeSync({
     enabled: !!authUser,
     table: "fila_espera",
-    onEvent: () => {
-      refreshFila();
-    },
+    debounceMs: 0,
+    onEvent: applyRealtimeEvent,
     poll: refreshFila,
   });
 
