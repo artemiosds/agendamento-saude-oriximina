@@ -104,15 +104,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const loadFila = useCallback(async () => {
     try {
-      const TERMINAL_STATUSES = [
-        "atendido",
-        "cancelado",
-        "falta",
-        "concluido",
-        "excluido_da_fila_triagem",
-      ];
-      const columns =
-        "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
+      const columns = FILA_COLUMNS;
 
       let allData: any[] = [];
       let from = 0;
@@ -121,7 +113,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         let query = supabase
           .from("fila_espera" as any)
           .select(columns)
-          .not("status", "in", `(${TERMINAL_STATUSES.join(",")})`)
+          .in("status", STATUS_OPERACIONAIS)
           .order("criado_em", { ascending: true })
           .range(from, from + PAGE - 1);
         if (!isGlobalAdmin && userUnidadeId)
