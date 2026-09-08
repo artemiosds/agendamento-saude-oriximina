@@ -24,6 +24,8 @@ import {
   normalizeCep,
   type CepInfo,
 } from "@/lib/bpaNormalization";
+import { validarListaProcedimentosBpaI } from "@/lib/bpaFinalValidation";
+
 
 // Comparador alfabético estável: nome → data
 const cmpAlfa = (a: any, b: any) => {
@@ -947,6 +949,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: number;
       missingLogradouro: number;
       missingSigtap: number;
+      rejectedProc: number;
       autoCorrected: number;
     };
     details: {
@@ -963,11 +966,25 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: any[];
       missingLogradouro: any[];
       missingSigtap: any[];
+      rejectedProc: any[];
       autoCorrected: any[];
       critical: any[];
     };
+    resumo?: {
+      totalAtendimentos: number;
+      totalProcedimentosEncontrados: number;
+      totalProcedimentosValidos: number;
+      totalRegistros03: number;
+      totalDuplicadosRemovidos: number;
+      rejeitados: Array<{ paciente: string; data: string; codigo: string; cbo: string; motivo: string }>;
+      municipios: string[];
+      codigosIbge: string[];
+      inconsistencias: string[];
+      producaoMultipla: string[];
+    } | null;
 
     error: string | null;
+
     fileName: string;
     confRows: any[];
     pendRows: any[];
@@ -1300,6 +1317,7 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: 0,
       missingLogradouro: 0,
       missingSigtap: 0,
+      rejectedProc: 0,
       autoCorrected: 0,
     };
 
@@ -1317,9 +1335,27 @@ const BpaExportar: React.FC = () => {
       missingNacionalidade: [] as any[],
       missingLogradouro: [] as any[],
       missingSigtap: [] as any[],
+      rejectedProc: [] as any[],
       autoCorrected: [] as any[],
       critical: [] as any[],
     };
+
+    // Resumo de integridade final (permissivo para encontrar, rigoroso para exportar)
+    const resumoIntegridade = {
+      totalAtendimentos: 0,
+      totalProcedimentosEncontrados: 0,
+      totalProcedimentosValidos: 0,
+      totalRegistros03: 0,
+      totalDuplicadosRemovidos: 0,
+      rejeitados: [] as Array<{ paciente: string; data: string; codigo: string; cbo: string; motivo: string }>,
+      municipios: [] as string[],
+      codigosIbge: [] as string[],
+      inconsistencias: [] as string[],
+      producaoMultipla: [] as string[],
+    };
+    const municipiosSet = new Set<string>();
+    const ibgeSet = new Set<string>();
+
 
 
     try {
@@ -1365,14 +1401,43 @@ const BpaExportar: React.FC = () => {
       try {
         const { data: cfgRowTr } = await (supabase as any)
           .from("system_config")
-          .select("value")
-          .eq("key", "bpa_config")
+          .select("configuracoes")
+          .eq("id", "bpa_config")
           .maybeSingle();
-        bpaConfigValue = cfgRowTr?.value || {};
+        bpaConfigValue = cfgRowTr?.configuracoes || {};
         triagemSigtapDefault = String(bpaConfigValue.bpa_triagem_sigtap || "").replace(/\D/g, "");
       } catch {
         /* sem config → cai no procedimento padrão da exportação */
       }
+
+      // === Base da validação final BPA-I (SIGTAP × CBO × competência) ===
+      // Catálogo SIGTAP ativo do sistema: usado apenas para reprovar códigos
+      // inexistentes/inativos. Se a carga falhar, a checagem é ignorada.
+      const codigosSigtapAtivos = new Set<string>();
+      try {
+        const catalogo = await fetchAllRowsBpa<any>(() =>
+          (supabase as any)
+            .from("sigtap_procedimentos")
+            .select("codigo")
+            .eq("ativo", true)
+            .order("codigo", { ascending: true }),
+        );
+        (catalogo || []).forEach((r: any) => {
+          const c = String(r.codigo || "").replace(/\D/g, "");
+          if (c) codigosSigtapAtivos.add(c);
+        });
+      } catch {
+        /* sem catálogo → validação de existência do código é ignorada */
+      }
+      const validacaoCtxBase = {
+        competencia: formData.competencia,
+        codigosConhecidos: codigosSigtapAtivos,
+        restricoes: (bpaConfigValue.sigtap_restricoes || {}) as Record<string, any>,
+        permitidosPorCbo: (bpaConfigValue.sigtap_permitidos_por_cbo || {}) as Record<string, string[]>,
+        bloqueadosPorCbo: (bpaConfigValue.sigtap_bloqueados_por_cbo || {}) as Record<string, string[]>,
+        liberarTodos: !!bpaConfigValue.sigtap_liberar_todos,
+      };
+
 
 
       const triagensPeriodo = await fetchAllRowsBpa<any>(() => {
@@ -2332,16 +2397,83 @@ const BpaExportar: React.FC = () => {
               motivo,
             });
           }
-          if (codigosParaExportar.length > 1) {
-            warnings.push(
-              `${ident}: ${codigosParaExportar.length} procedimentos SIGTAP encontrados para este atendimento — geradas ${codigosParaExportar.length} linhas BPA-I.`,
-            );
-          }
           if (codigosParaExportar.length === 0 && !sigtapReq.exige) stats.defaultProc++;
 
           const data_atend = formatarData(pront.data_atendimento);
           const idade = calcularIdade(raw_nasc, pront.data_atendimento);
           const nome_pac = limparTexto(pac?.nome || pront.paciente_nome || "");
+
+          // ===== VALIDAÇÃO FINAL OBRIGATÓRIA (SIGTAP × CBO × competência) =====
+          // Permissivo para encontrar/consolidar; rigoroso para exportar.
+          // Nenhum procedimento entra no TXT sem passar por esta checagem — nem
+          // os reaproveitados do histórico/PTS (que valem apenas como sugestão).
+          resumoIntegridade.totalAtendimentos++;
+          resumoIntegridade.totalProcedimentosEncontrados += codigosParaExportar.length;
+          resumoIntegridade.totalDuplicadosRemovidos += Math.max(
+            0,
+            codigosColetados.length - codigosParaExportar.length,
+          );
+          if (municipio) {
+            ibgeSet.add(municipio);
+            if (munRes.fonte) municipiosSet.add(`${municipio} (${munRes.fonte})`);
+          }
+
+          const validacaoCtxLinha = {
+            ...validacaoCtxBase,
+            cbo,
+            cnes,
+            cnsProfissional: cns_prof,
+            municipioPaciente: municipio,
+            sexoPaciente: sexo,
+            idadePaciente: raw_nasc && /^\d{3}$/.test(idade) ? Number(idade) : null,
+          };
+          const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar, validacaoCtxLinha);
+
+
+          const codigosValidados = validacaoProcs.validos.map((r) => {
+            const original = codigosParaExportar.find((c) => c.codigo === r.codigo && (c.cid || "") === r.cid);
+            return original || { codigo: r.codigo, origem: r.origem, cid: r.cid };
+          });
+          resumoIntegridade.totalProcedimentosValidos += codigosValidados.length;
+
+          for (const rej of validacaoProcs.rejeitados) {
+            stats.rejectedProc++;
+            const motivo = rej.rejeicoes.join(" | ");
+            resumoIntegridade.rejeitados.push({
+              paciente: nome_pac || ident,
+              data: String(pront.data_atendimento || "").slice(0, 10),
+              codigo: rej.codigo || "—",
+              cbo,
+              motivo,
+            });
+            warnings.push(
+              `${ident}: procedimento ${rej.codigo || "(vazio)"} NÃO exportado (CBO ${cbo}) — ${motivo}`,
+            );
+            details.rejectedProc.push({
+              ...itemDetail,
+              pendencia: "Procedimento incompatível — não exportado",
+              valor_atual: `${rej.codigo || "vazio"} (origem: ${rej.origem}) → ${motivo}`,
+              codigo_sigtap: rej.codigo,
+              cbo,
+              origem_sigtap: rej.origem,
+              motivo,
+            });
+          }
+          for (const item of validacaoProcs.todos) {
+            for (const aviso of item.avisos) {
+              resumoIntegridade.inconsistencias.push(`${ident}: ${item.codigo} — ${aviso}`);
+            }
+          }
+          // Produção múltipla válida é INFORMATIVA — nunca pendência/erro.
+          if (codigosValidados.length > 1) {
+            resumoIntegridade.producaoMultipla.push(
+              `${ident}: ${codigosValidados.length} procedimentos SIGTAP válidos — ${codigosValidados.length} linhas BPA-I (${codigosValidados
+                .map((c) => c.codigo)
+                .join(", ")})`,
+            );
+          }
+
+
           const pacCd = (pac?.custom_data as any) || {};
           const unidadeCd = unitCd || {};
           // CID: cada linha BPA-I pode carregar o CID vinculado ao procedimento.
@@ -2514,15 +2646,54 @@ const BpaExportar: React.FC = () => {
                 : `Pendência mista: ${motivosTxt}`;
             details.critical.push({ ...itemDetail, pendencia: rotulo, valor_atual: motivosTxt });
           } else {
-            // Novo loop: emite UMA linha BPA-I por SIGTAP encontrado no atendimento.
-            // Se a profissão exige SIGTAP e a lista está vazia, nada é emitido
-            // (a pendência já foi registrada acima quando exportar_com_pendencias=false).
-            const listaParaEmitir =
-              codigosParaExportar.length > 0
-                ? codigosParaExportar
-                : sigtapReq.exige && !formData.exportar_com_pendencias
-                  ? []
-                  : [{ codigo: somenteNumeros(formData.procedimento_padrao) || "", origem: formData.exportar_com_pendencias ? "Padrão (form) — pendência ignorada" : "Padrão (form)" }];
+            // Emite UMA linha BPA-I por SIGTAP VÁLIDO do atendimento.
+            // Procedimentos reprovados na validação final não geram Registro 03
+            // e não contam como produção — o motivo já foi informado ao usuário.
+            const fallbackPadrao =
+              codigosParaExportar.length === 0 && !(sigtapReq.exige && !formData.exportar_com_pendencias)
+                ? [
+                    {
+                      codigo: somenteNumeros(formData.procedimento_padrao) || "",
+                      origem: formData.exportar_com_pendencias
+                        ? "Padrão (form) — pendência ignorada"
+                        : "Padrão (form)",
+                      cid: "",
+                    },
+                  ]
+                : [];
+            let listaParaEmitir = codigosValidados;
+            if (listaParaEmitir.length === 0 && fallbackPadrao.length > 0) {
+              const valFallback = validarListaProcedimentosBpaI(fallbackPadrao, validacaoCtxLinha);
+              listaParaEmitir = valFallback.validos.map((r) => ({
+                codigo: r.codigo,
+                origem: r.origem,
+                cid: r.cid,
+              }));
+              for (const rej of valFallback.rejeitados) {
+                stats.rejectedProc++;
+                const motivo = rej.rejeicoes.join(" | ");
+                resumoIntegridade.rejeitados.push({
+                  paciente: nome_pac || ident,
+                  data: String(pront.data_atendimento || "").slice(0, 10),
+                  codigo: rej.codigo || "—",
+                  cbo,
+                  motivo,
+                });
+                warnings.push(
+                  `${ident}: procedimento padrão ${rej.codigo || "(vazio)"} NÃO exportado (CBO ${cbo}) — ${motivo}`,
+                );
+                details.rejectedProc.push({
+                  ...itemDetail,
+                  pendencia: "Procedimento incompatível — não exportado",
+                  valor_atual: `${rej.codigo || "vazio"} (origem: ${rej.origem}) → ${motivo}`,
+                  codigo_sigtap: rej.codigo,
+                  cbo,
+                  origem_sigtap: rej.origem,
+                  motivo,
+                });
+              }
+            }
+
 
             for (const procEntry of listaParaEmitir) {
               const proc = zfill(procEntry.codigo, 10);
@@ -2539,6 +2710,7 @@ const BpaExportar: React.FC = () => {
                 : [chaveAtendimento, proc, cid].join("|");
               if (chavesLinhasBpa.has(chaveLinhaBpa)) {
                 stats.autoCorrected++;
+                resumoIntegridade.totalDuplicadosRemovidos++;
                 details.autoCorrected.push({
                   ...itemDetail,
                   pendencia: "Linha BPA-I duplicada removida",
@@ -2546,6 +2718,7 @@ const BpaExportar: React.FC = () => {
                 });
                 continue;
               }
+
               chavesLinhasBpa.add(chaveLinhaBpa);
               const folhaBpa = Math.floor(exportedCount / 20) + 1;
               const sequenciaFolha = (exportedCount % 20) + 1;
@@ -2717,6 +2890,7 @@ const BpaExportar: React.FC = () => {
         ["missingMunicipio", "Município ausente"],
         ["missingCbo", "CBO profissional ausente"],
         ["missingSigtap", "Procedimento SIGTAP ausente"],
+        ["rejectedProc", "Procedimento incompatível (não exportado)"],
         ["missingNacionalidade", "Nacionalidade ausente/inválida"],
         ["missingLogradouro", "Código de logradouro ausente"],
         ["defaultProc", "Usando procedimento padrão"],
@@ -2727,6 +2901,10 @@ const BpaExportar: React.FC = () => {
       });
       pendRows.push(...Array.from(pendMap.values()));
 
+      resumoIntegridade.totalRegistros03 = exportedCount;
+      resumoIntegridade.municipios = Array.from(municipiosSet).sort();
+      resumoIntegridade.codigosIbge = Array.from(ibgeSet).sort();
+
       setResults({
         totalFound: prontuarios.length,
         exportedCount,
@@ -2734,7 +2912,9 @@ const BpaExportar: React.FC = () => {
         criticalCount,
         stats,
         details,
+        resumo: { ...resumoIntegridade },
         error: null,
+
         fileName,
         blobUrl: url,
         confRows,
@@ -3989,7 +4169,86 @@ const BpaExportar: React.FC = () => {
                 </Card>
               )}
 
+              {results.resumo && (
+                <Card className="border-primary/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Validação final de integridade (antes do download)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                      <div>
+                        Atendimentos: <b>{results.resumo.totalAtendimentos}</b>
+                      </div>
+                      <div>
+                        Procedimentos encontrados: <b>{results.resumo.totalProcedimentosEncontrados}</b>
+                      </div>
+                      <div>
+                        Procedimentos válidos: <b>{results.resumo.totalProcedimentosValidos}</b>
+                      </div>
+                      <div>
+                        Registros 03 gerados: <b>{results.resumo.totalRegistros03}</b>
+                      </div>
+                      <div>
+                        Duplicados removidos: <b>{results.resumo.totalDuplicadosRemovidos}</b>
+                      </div>
+                      <div>
+                        Rejeitados: <b className="text-destructive">{results.resumo.rejeitados.length}</b>
+                      </div>
+                    </div>
+
+                    {results.resumo.producaoMultipla.length > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-sky-700">
+                          Produção múltipla (informativo — não é pendência):
+                        </div>
+                        <div className="max-h-32 overflow-auto space-y-0.5">
+                          {results.resumo.producaoMultipla.slice(0, 50).map((m, i) => (
+                            <div key={i} className="text-muted-foreground">
+                              • {m}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {results.resumo.rejeitados.length > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-destructive">
+                          Procedimentos rejeitados (não entraram no TXT):
+                        </div>
+                        <div className="max-h-40 overflow-auto space-y-0.5">
+                          {results.resumo.rejeitados.slice(0, 100).map((r, i) => (
+                            <div key={i} className="text-muted-foreground">
+                              • {r.paciente} — {r.data} — {r.codigo} (CBO {r.cbo}): {r.motivo}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {results.resumo.inconsistencias.length > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-amber-700">Inconsistências (não bloqueiam):</div>
+                        <div className="max-h-32 overflow-auto space-y-0.5">
+                          {results.resumo.inconsistencias.slice(0, 50).map((m, i) => (
+                            <div key={i} className="text-muted-foreground">
+                              • {m}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-2 border-t text-xs text-muted-foreground">
+                      Municípios/IBGE utilizados ({results.resumo.codigosIbge.length}):{" "}
+                      {results.resumo.codigosIbge.slice(0, 40).join(", ") || "—"}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {results.blobUrl && (
+
                 <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
                   <a
                     href={results.blobUrl}
