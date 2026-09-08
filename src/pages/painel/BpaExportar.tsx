@@ -4169,7 +4169,86 @@ const BpaExportar: React.FC = () => {
                 </Card>
               )}
 
+              {results.resumo && (
+                <Card className="border-primary/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Validação final de integridade (antes do download)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                      <div>
+                        Atendimentos: <b>{results.resumo.totalAtendimentos}</b>
+                      </div>
+                      <div>
+                        Procedimentos encontrados: <b>{results.resumo.totalProcedimentosEncontrados}</b>
+                      </div>
+                      <div>
+                        Procedimentos válidos: <b>{results.resumo.totalProcedimentosValidos}</b>
+                      </div>
+                      <div>
+                        Registros 03 gerados: <b>{results.resumo.totalRegistros03}</b>
+                      </div>
+                      <div>
+                        Duplicados removidos: <b>{results.resumo.totalDuplicadosRemovidos}</b>
+                      </div>
+                      <div>
+                        Rejeitados: <b className="text-destructive">{results.resumo.rejeitados.length}</b>
+                      </div>
+                    </div>
+
+                    {results.resumo.producaoMultipla.length > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-sky-700">
+                          Produção múltipla (informativo — não é pendência):
+                        </div>
+                        <div className="max-h-32 overflow-auto space-y-0.5">
+                          {results.resumo.producaoMultipla.slice(0, 50).map((m, i) => (
+                            <div key={i} className="text-muted-foreground">
+                              • {m}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {results.resumo.rejeitados.length > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-destructive">
+                          Procedimentos rejeitados (não entraram no TXT):
+                        </div>
+                        <div className="max-h-40 overflow-auto space-y-0.5">
+                          {results.resumo.rejeitados.slice(0, 100).map((r, i) => (
+                            <div key={i} className="text-muted-foreground">
+                              • {r.paciente} — {r.data} — {r.codigo} (CBO {r.cbo}): {r.motivo}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {results.resumo.inconsistencias.length > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-amber-700">Inconsistências (não bloqueiam):</div>
+                        <div className="max-h-32 overflow-auto space-y-0.5">
+                          {results.resumo.inconsistencias.slice(0, 50).map((m, i) => (
+                            <div key={i} className="text-muted-foreground">
+                              • {m}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-2 border-t text-xs text-muted-foreground">
+                      Municípios/IBGE utilizados ({results.resumo.codigosIbge.length}):{" "}
+                      {results.resumo.codigosIbge.slice(0, 40).join(", ") || "—"}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {results.blobUrl && (
+
                 <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
                   <a
                     href={results.blobUrl}
