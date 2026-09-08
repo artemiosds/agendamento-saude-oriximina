@@ -2418,7 +2418,7 @@ const BpaExportar: React.FC = () => {
             if (munRes.fonte) municipiosSet.add(`${municipio} (${munRes.fonte})`);
           }
 
-          const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar, {
+          const validacaoCtxLinha = {
             ...validacaoCtxBase,
             cbo,
             cnes,
@@ -2426,7 +2426,9 @@ const BpaExportar: React.FC = () => {
             municipioPaciente: municipio,
             sexoPaciente: sexo,
             idadePaciente: Number.isFinite(Number(idade)) ? Number(idade) : null,
-          });
+          };
+          const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar, validacaoCtxLinha);
+
 
           const codigosValidados = validacaoProcs.validos.map((r) => {
             const original = codigosParaExportar.find((c) => c.codigo === r.codigo && (c.cid || "") === r.cid);
