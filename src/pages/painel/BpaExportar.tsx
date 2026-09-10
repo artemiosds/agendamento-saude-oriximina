@@ -1290,9 +1290,17 @@ const BpaExportar: React.FC = () => {
       municipio_padrao: "150530",
       exportar_com_pendencias: false,
       incluir_agenda_sem_prontuario: false,
+      data_especifica: "",
+      turno: "todos",
     });
     setResults(null);
     setSelectedCategory(null);
+  };
+
+  // Limpa apenas os filtros avançados, preservando competência, unidade,
+  // profissional, fallbacks e os Procedimentos Padrão.
+  const handleLimparFiltrosAvancados = () => {
+    setFormData((prev) => ({ ...prev, data_especifica: "", turno: "todos" }));
   };
 
   const handleGerar = async () => {
