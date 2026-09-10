@@ -6,7 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 
 interface BuscaPacienteProps {
-  pacientes: Paciente[];
+  /** Atalho de cache local opcional — a busca real é feita no banco sob demanda. */
+  pacientes?: Paciente[];
   value: string;
   onChange: (pacienteId: string, pacienteNome: string) => void;
   unidadeId?: string | null;
@@ -32,7 +33,7 @@ const mapPaciente = (row: any): Paciente => ({
 const sanitizeSearchTerm = (value: string) => value.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ');
 const escapeIlikeTerm = (value: string) => sanitizeSearchTerm(value).replace(/[%_]/g, '\\$&');
 
-function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }: BuscaPacienteProps) {
+function BuscaPacienteComponent({ pacientes = [], value, onChange, unidadeId = null }: BuscaPacienteProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [aberto, setAberto] = useState(false);
@@ -44,7 +45,7 @@ function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedQuery(query);
-    }, 250);
+    }, 300);
 
     return () => window.clearTimeout(timeout);
   }, [query]);
@@ -107,7 +108,7 @@ function BuscaPacienteComponent({ pacientes, value, onChange, unidadeId = null }
         .select('id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em')
         .or(`nome.ilike.%${term}%,cpf.ilike.%${term}%,cns.ilike.%${term}%,telefone.ilike.%${term}%`)
         .order('nome', { ascending: true })
-        .limit(10);
+        .limit(20);
 
       if (!cancelled) {
         setResultados(error || !data ? [] : (data as any[]).map(mapPaciente));
