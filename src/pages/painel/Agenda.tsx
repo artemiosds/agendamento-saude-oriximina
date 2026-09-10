@@ -2495,25 +2495,10 @@ const Agenda: React.FC = () => {
                       unidadeId={user?.unidadeId}
                     />
 
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <div className="flex-1 h-px bg-border" />
-                      <span>ou selecione pela lista</span>
-                      <div className="flex-1 h-px bg-border" />
-                    </div>
-                    <Select value={newAg.pacienteId} onValueChange={(v) => handlePacienteSelecionadoNovoAg(v)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um paciente..." />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        {pacientes.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.nome}
-                            {p.cpf ? ` — ${p.cpf}` : ""}
-                            {p.telefone ? ` — ${p.telefone}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Digite ao menos 2 letras do nome, CPF, CNS ou telefone para localizar o paciente.
+                    </p>
+
                     {newAg.pacienteId && !pacientesConferidos.has(newAg.pacienteId) && (
                       <p className="text-xs text-warning">
                         ⚠ Conferência de dados pendente — selecione novamente o paciente para abrir o modal.
