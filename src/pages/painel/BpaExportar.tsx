@@ -891,6 +891,9 @@ const BpaExportar: React.FC = () => {
     municipio_padrao: "150530",
     exportar_com_pendencias: false,
     incluir_agenda_sem_prontuario: false,
+    // Filtros avançados (opcionais). Vazio/"todos" = comportamento atual.
+    data_especifica: "",
+    turno: "todos",
   });
 
   // Listas de procedimentos SIGTAP padrão (multi). Persistência em localStorage.
@@ -1287,9 +1290,17 @@ const BpaExportar: React.FC = () => {
       municipio_padrao: "150530",
       exportar_com_pendencias: false,
       incluir_agenda_sem_prontuario: false,
+      data_especifica: "",
+      turno: "todos",
     });
     setResults(null);
     setSelectedCategory(null);
+  };
+
+  // Limpa apenas os filtros avançados, preservando competência, unidade,
+  // profissional, fallbacks e os Procedimentos Padrão.
+  const handleLimparFiltrosAvancados = () => {
+    setFormData((prev) => ({ ...prev, data_especifica: "", turno: "todos" }));
   };
 
   const handleGerar = async () => {
@@ -1299,6 +1310,22 @@ const BpaExportar: React.FC = () => {
     if (formData.competencia.length !== 6 || isNaN(Number(formData.competencia))) {
       toast.error("Competência deve ter 6 dígitos (AAAAMM)");
       return;
+    }
+
+    // Filtro avançado: a data específica precisa pertencer à competência.
+    if (formData.data_especifica) {
+      const compDaData = formData.data_especifica.slice(0, 7).replace("-", "");
+      if (compDaData !== formData.competencia) {
+        const mesNome = new Date(
+          Number(formData.competencia.slice(0, 4)),
+          Number(formData.competencia.slice(4, 6)) - 1,
+          1,
+        ).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        toast.error(
+          `A data selecionada não pertence à competência ${formData.competencia}. Selecione uma data dentro de ${mesNome}.`,
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -1363,8 +1390,13 @@ const BpaExportar: React.FC = () => {
       const ano = competencia.substring(0, 4);
       const mes = competencia.substring(4, 6);
 
-      const startDate = `${ano}-${mes}-01`;
-      const endDate = new Date(parseInt(ano), parseInt(mes), 0).toISOString().split("T")[0];
+      // Filtro avançado de data: estreita a janela da competência para o dia
+      // escolhido. Todas as consultas seguintes já usam este par, então o
+      // pipeline (coleta, consolidação, validação, TXT) segue idêntico.
+      const startDate = formData.data_especifica || `${ano}-${mes}-01`;
+      const endDate =
+        formData.data_especifica ||
+        new Date(parseInt(ano), parseInt(mes), 0).toISOString().split("T")[0];
 
       const prontuariosOriginais: any[] = [];
       const PAGE = 1000;
@@ -1484,6 +1516,7 @@ const BpaExportar: React.FC = () => {
             profissional_nome: "",
             unidade_id: unidadeIdTr,
             data_atendimento: dataAtend,
+            hora_atendimento: String(t.criado_em || "").slice(11, 16),
             status: "finalizado",
             tipo_registro: "triagem",
             hipotese: "",
@@ -1539,7 +1572,7 @@ const BpaExportar: React.FC = () => {
         const agsRowsRaw = await fetchAllRowsBpa<any>(() => {
           let q = (supabase as any)
             .from("agendamentos")
-            .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
+            .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, hora, custom_data, status")
             .gte("data", startDate)
             .lte("data", endDate)
             .in("status", statusConsulta)
@@ -1586,6 +1619,7 @@ const BpaExportar: React.FC = () => {
               profissional_nome: a.profissional_nome || "",
               unidade_id: a.unidade_id,
               data_atendimento: String(a.data).slice(0, 10),
+              hora_atendimento: String(a.hora || "").slice(0, 5),
               status: "finalizado",
               tipo_registro: "agenda_sem_prontuario",
               hipotese: "",
@@ -1607,6 +1641,36 @@ const BpaExportar: React.FC = () => {
         }
       } catch (e) {
         console.warn("[BPA-Exportar] falha ao injetar agenda sem prontuário:", e);
+      }
+
+      // === Filtro avançado de turno ===
+      // Aplica-se apenas à SELEÇÃO dos atendimentos, antes de qualquer coleta
+      // de procedimentos. Usa a mesma convenção de período do sistema
+      // (< 12:00 Manhã, < 18:00 Tarde, senão Noite).
+      if (formData.turno && formData.turno !== "todos") {
+        const periodoDe = (hora: string): "manha" | "tarde" | "noite" | "" => {
+          const h = String(hora || "").slice(0, 5);
+          if (!/^\d{2}:\d{2}$/.test(h)) return "";
+          if (h < "12:00") return "manha";
+          if (h < "18:00") return "tarde";
+          return "noite";
+        };
+        let semHora = 0;
+        const filtrados = prontuarios.filter((p: any) => {
+          const per = periodoDe(p?.hora_atendimento);
+          if (!per) {
+            semHora++;
+            return false;
+          }
+          return per === formData.turno;
+        });
+        if (semHora > 0) {
+          warnings.push(
+            `${semHora} atendimento(s) sem hora registrada não puderam ser classificados por turno e ficaram fora do filtro.`,
+          );
+        }
+        prontuarios.length = 0;
+        prontuarios.push(...filtrados);
       }
 
       if (!prontuarios || prontuarios.length === 0) {
@@ -3452,6 +3516,57 @@ const BpaExportar: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Filtros avançados (opcionais) — apenas estreitam a seleção de
+              atendimentos. Vazio/"todos" = comportamento atual. */}
+          <div className="rounded-lg border border-dashed p-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-sm font-semibold">Filtros avançados (opcional)</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleLimparFiltrosAvancados}
+                disabled={loading || (!formData.data_especifica && formData.turno === "todos")}
+              >
+                Limpar filtros
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="data_especifica">Data do atendimento</Label>
+                <Input
+                  id="data_especifica"
+                  name="data_especifica"
+                  type="date"
+                  value={formData.data_especifica}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, data_especifica: e.target.value }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Vazio = competência inteira. A data deve pertencer à competência informada.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Turno</Label>
+                <Select
+                  value={formData.turno}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, turno: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os turnos</SelectItem>
+                    <SelectItem value="manha">Manhã</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                    <SelectItem value="noite">Noite</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
