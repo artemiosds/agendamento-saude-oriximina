@@ -891,6 +891,9 @@ const BpaExportar: React.FC = () => {
     municipio_padrao: "150530",
     exportar_com_pendencias: false,
     incluir_agenda_sem_prontuario: false,
+    // Filtros avançados (opcionais). Vazio/"todos" = comportamento atual.
+    data_especifica: "",
+    turno: "todos",
   });
 
   // Listas de procedimentos SIGTAP padrão (multi). Persistência em localStorage.
@@ -1301,6 +1304,22 @@ const BpaExportar: React.FC = () => {
       return;
     }
 
+    // Filtro avançado: a data específica precisa pertencer à competência.
+    if (formData.data_especifica) {
+      const compDaData = formData.data_especifica.slice(0, 7).replace("-", "");
+      if (compDaData !== formData.competencia) {
+        const mesNome = new Date(
+          Number(formData.competencia.slice(0, 4)),
+          Number(formData.competencia.slice(4, 6)) - 1,
+          1,
+        ).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        toast.error(
+          `A data selecionada não pertence à competência ${formData.competencia}. Selecione uma data dentro de ${mesNome}.`,
+        );
+        return;
+      }
+    }
+
     setLoading(true);
     const warnings: string[] = [];
     const stats = {
@@ -1363,8 +1382,13 @@ const BpaExportar: React.FC = () => {
       const ano = competencia.substring(0, 4);
       const mes = competencia.substring(4, 6);
 
-      const startDate = `${ano}-${mes}-01`;
-      const endDate = new Date(parseInt(ano), parseInt(mes), 0).toISOString().split("T")[0];
+      // Filtro avançado de data: estreita a janela da competência para o dia
+      // escolhido. Todas as consultas seguintes já usam este par, então o
+      // pipeline (coleta, consolidação, validação, TXT) segue idêntico.
+      const startDate = formData.data_especifica || `${ano}-${mes}-01`;
+      const endDate =
+        formData.data_especifica ||
+        new Date(parseInt(ano), parseInt(mes), 0).toISOString().split("T")[0];
 
       const prontuariosOriginais: any[] = [];
       const PAGE = 1000;
@@ -1484,6 +1508,7 @@ const BpaExportar: React.FC = () => {
             profissional_nome: "",
             unidade_id: unidadeIdTr,
             data_atendimento: dataAtend,
+            hora_atendimento: String(t.criado_em || "").slice(11, 16),
             status: "finalizado",
             tipo_registro: "triagem",
             hipotese: "",
@@ -1539,7 +1564,7 @@ const BpaExportar: React.FC = () => {
         const agsRowsRaw = await fetchAllRowsBpa<any>(() => {
           let q = (supabase as any)
             .from("agendamentos")
-            .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, custom_data, status")
+            .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, hora, custom_data, status")
             .gte("data", startDate)
             .lte("data", endDate)
             .in("status", statusConsulta)
@@ -1586,6 +1611,7 @@ const BpaExportar: React.FC = () => {
               profissional_nome: a.profissional_nome || "",
               unidade_id: a.unidade_id,
               data_atendimento: String(a.data).slice(0, 10),
+              hora_atendimento: String(a.hora || "").slice(0, 5),
               status: "finalizado",
               tipo_registro: "agenda_sem_prontuario",
               hipotese: "",
@@ -1604,6 +1630,39 @@ const BpaExportar: React.FC = () => {
 
         if (sinteticos.length > 0) {
           prontuarios.push(...sinteticos);
+        }
+      } catch (e) {
+        console.warn("[BPA-Exportar] falha ao injetar agenda sem prontuário:", e);
+      }
+
+      // === Filtro avançado de turno ===
+      // Aplica-se apenas à SELEÇÃO dos atendimentos, antes de qualquer coleta
+      // de procedimentos. Usa a mesma convenção de período do sistema
+      // (< 12:00 Manhã, < 18:00 Tarde, senão Noite).
+      if (formData.turno && formData.turno !== "todos") {
+        const periodoDe = (hora: string): "manha" | "tarde" | "noite" | "" => {
+          const h = String(hora || "").slice(0, 5);
+          if (!/^\d{2}:\d{2}$/.test(h)) return "";
+          if (h < "12:00") return "manha";
+          if (h < "18:00") return "tarde";
+          return "noite";
+        };
+        let semHora = 0;
+        const filtrados = prontuarios.filter((p: any) => {
+          const per = periodoDe(p?.hora_atendimento);
+          if (!per) {
+            semHora++;
+            return false;
+          }
+          return per === formData.turno;
+        });
+        if (semHora > 0) {
+          warnings.push(
+            `${semHora} atendimento(s) sem hora registrada não puderam ser classificados por turno e ficaram fora do filtro.`,
+          );
+        }
+        prontuarios.length = 0;
+        prontuarios.push(...filtrados);
         }
       } catch (e) {
         console.warn("[BPA-Exportar] falha ao injetar agenda sem prontuário:", e);
