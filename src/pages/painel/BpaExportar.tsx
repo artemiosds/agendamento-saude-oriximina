@@ -3519,6 +3519,57 @@ const BpaExportar: React.FC = () => {
             </div>
           </div>
 
+          {/* Filtros avançados (opcionais) — apenas estreitam a seleção de
+              atendimentos. Vazio/"todos" = comportamento atual. */}
+          <div className="rounded-lg border border-dashed p-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-sm font-semibold">Filtros avançados (opcional)</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleLimparFiltrosAvancados}
+                disabled={loading || (!formData.data_especifica && formData.turno === "todos")}
+              >
+                Limpar filtros
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="data_especifica">Data do atendimento</Label>
+                <Input
+                  id="data_especifica"
+                  name="data_especifica"
+                  type="date"
+                  value={formData.data_especifica}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, data_especifica: e.target.value }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Vazio = competência inteira. A data deve pertencer à competência informada.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Turno</Label>
+                <Select
+                  value={formData.turno}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, turno: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os turnos</SelectItem>
+                    <SelectItem value="manha">Manhã</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                    <SelectItem value="noite">Noite</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4 border-t">
             <div className="space-y-2">
               <Label htmlFor="cnes">CNES (Fallback)</Label>
