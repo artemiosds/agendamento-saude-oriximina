@@ -1663,9 +1663,6 @@ const BpaExportar: React.FC = () => {
         }
         prontuarios.length = 0;
         prontuarios.push(...filtrados);
-        }
-      } catch (e) {
-        console.warn("[BPA-Exportar] falha ao injetar agenda sem prontuário:", e);
       }
 
       if (!prontuarios || prontuarios.length === 0) {
