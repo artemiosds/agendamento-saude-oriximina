@@ -115,17 +115,6 @@ function formatField(
       ? sanitizeBpaText(input)
       : sanitizeRaw(input);
 
-  if (definition.required && !normalized) {
-    errors.push({
-      field: name,
-      start: definition.start,
-      end: definition.end,
-      value: original,
-      problem: "Campo obrigatório vazio após normalização",
-      correction: `Informar um valor válido com até ${definition.length} caracteres`,
-    });
-  }
-
   if (normalized.length > definition.length) {
     adjustments.push({
       field: name,
