@@ -1047,116 +1047,23 @@ const BpaExportar: React.FC = () => {
         const startDate = `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-01`;
         const endDate = new Date(ano, mes, 0).toISOString().split("T")[0];
 
-        // Paginação recursiva: PostgREST limita a resposta (padrão 1000 linhas)
-        // mesmo com .range(0, 9999). Sem isso, profissionais cujos registros
-        // ficam além das primeiras N linhas (ordenação interna do servidor)
-        // somem da lista. Ex.: médicos com prontuários em datas posteriores.
-        const PAGE = 1000;
-        let atendimentos: any[] = [];
-        for (let offset = 0; ; offset += PAGE) {
-          let q = (supabase as any)
-            .from("prontuarios")
-            .select("profissional_id")
-            .gte("data_atendimento", startDate)
-            .lte("data_atendimento", endDate)
-            .eq("status", "finalizado")
-            .not("profissional_id", "is", null)
-            .range(offset, offset + PAGE - 1);
-          if (formData.unidade_id !== "all") {
-            q = q.eq("unidade_id", formData.unidade_id);
-          }
-          const { data: pageRows, error: pageErr } = await q;
-          if (pageErr) throw pageErr;
-          const rows = pageRows || [];
-          atendimentos = atendimentos.concat(rows);
-          if (rows.length < PAGE) break;
-          if (offset > 200000) break; // hard safety
-        }
-
-
-        // Também inclui Técnicos de Enfermagem (CBO 322205) que registraram
-        // triagens no período. Triagens não geram prontuário, então sem essa
-        // união os técnicos sumiriam do filtro de profissionais.
-        let tecnicoIdsTriagem: string[] = [];
-        try {
-          const triagensFiltro = await fetchAllRowsBpa<any>(() =>
-            (supabase as any)
-              .from("triage_records")
-              .select("tecnico_id, agendamento_id, criado_em")
-              .gte("criado_em", `${startDate}T00:00:00`)
-              .lte("criado_em", `${endDate}T23:59:59`)
-              .not("tecnico_id", "is", null)
-              .order("id", { ascending: true }),
-          );
-          let trIds = (triagensFiltro || []).map((t: any) => t.tecnico_id).filter(Boolean);
-          if (formData.unidade_id !== "all" && (triagensFiltro || []).length) {
-            const agIds = [
-              ...new Set((triagensFiltro || []).map((t: any) => t.agendamento_id).filter(Boolean)),
-            ] as string[];
-            if (agIds.length) {
-              const agsRows: any[] = [];
-              for (let i = 0; i < agIds.length; i += 500) {
-                const parte = agIds.slice(i, i + 500);
-                const rows = await fetchAllRowsBpa<any>(() =>
-                  (supabase as any)
-                    .from("agendamentos")
-                    .select("id, unidade_id")
-                    .in("id", parte)
-                    .order("id", { ascending: true }),
-                );
-                agsRows.push(...rows);
-              }
-              const agMap = new Map<string, any>((agsRows || []).map((a: any) => [a.id, a]));
-              trIds = (triagensFiltro || [])
-                .filter((t: any) => {
-                  const ag = agMap.get(t.agendamento_id);
-                  return ag && ag.unidade_id === formData.unidade_id;
-                })
-                .map((t: any) => t.tecnico_id);
-
-            }
-          }
-          tecnicoIdsTriagem = trIds;
-        } catch (e) {
-          console.warn("[BPA-Exportar] falha ao incluir técnicos de triagem no filtro:", e);
-        }
-
-        // Também inclui profissionais que possuem agendamentos com presença
-        // (mesmos status usados na exportação) mas ainda sem prontuário
-        // finalizado — ex.: Odontologia, cujos atendimentos ficam só na agenda.
-        let profIdsAgenda: string[] = [];
-        try {
-          const agRows = await fetchAllRowsBpa<any>(() => {
-            let q = (supabase as any)
-              .from("agendamentos")
-              .select("profissional_id")
-              .gte("data", startDate)
-              .lte("data", endDate)
-              .in("status", [
-                "concluido",
-                "confirmado_chegada",
-                "aguardando_atendimento",
-                "em_atendimento",
-                "falta",
-                "paciente_faltou",
-              ])
-              .not("profissional_id", "is", null)
-              .order("id", { ascending: true });
-            if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
-            return q;
-          });
-          profIdsAgenda = (agRows || []).map((a: any) => a.profissional_id).filter(Boolean);
-        } catch (e) {
-          console.warn("[BPA-Exportar] falha ao incluir profissionais da agenda no filtro:", e);
-        }
+        // PERF: uma única RPC resolve no banco quais profissionais tiveram
+        // atendimento na competência (prontuários finalizados + triagens de
+        // técnicos + agendamentos com presença). Antes a tela baixava milhares
+        // de linhas dessas três tabelas só para montar o combo.
+        const { data: rpcRows, error: rpcError } = await (supabase as any).rpc(
+          "bpa_profissionais_com_atendimento",
+          {
+            p_start: startDate,
+            p_end: endDate,
+            p_unidade_id: formData.unidade_id !== "all" ? formData.unidade_id : null,
+          },
+        );
+        if (rpcError) throw rpcError;
 
         const profissionalIds = [
           ...new Set(
-            [
-              ...(atendimentos || []).map((item: any) => item.profissional_id),
-              ...tecnicoIdsTriagem,
-              ...profIdsAgenda,
-            ].filter(Boolean),
+            ((rpcRows || []) as any[]).map((r: any) => r?.profissional_id).filter(Boolean),
           ),
         ] as string[];
 
