@@ -4290,6 +4290,31 @@ const BpaExportar: React.FC = () => {
                     <CardTitle className="text-base">Validação final de integridade (antes do download)</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs pb-1 border-b mb-1">
+                      <div>
+                        Competência: <b>{formData.competencia || "—"}</b>
+                      </div>
+                      <div>
+                        Data:{" "}
+                        <b>
+                          {formData.data_especifica
+                            ? formatarDataBR(formData.data_especifica)
+                            : "Competência inteira"}
+                        </b>
+                      </div>
+                      <div>
+                        Turno:{" "}
+                        <b>
+                          {formData.turno === "manha"
+                            ? "Manhã"
+                            : formData.turno === "tarde"
+                              ? "Tarde"
+                              : formData.turno === "noite"
+                                ? "Noite"
+                                : "Todos os turnos"}
+                        </b>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                       <div>
                         Atendimentos: <b>{results.resumo.totalAtendimentos}</b>
