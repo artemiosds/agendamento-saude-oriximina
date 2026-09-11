@@ -7,6 +7,7 @@ import {
   buildRegistro03,
   calcularCampoControleBpa,
 } from "./bpaTxtLayout";
+import { resolveMunicipioBpa } from "./bpaNormalization";
 
 const registroValido = () => ({
   tipoRegistro: "03",
@@ -116,5 +117,26 @@ describe("layout TXT BPA-I", () => {
     expect(linhas).toHaveLength(2);
     expect(new Set(linhas.map((line) => line.slice(49, 59))).size).toBe(2);
     expect(linhas.every((line) => line.length === 338)).toBe(true);
+  });
+
+  it("preserva município estruturado válido quando o CEP diverge", () => {
+    const result = resolveMunicipioBpa({
+      municipioCadastro: "150530",
+      cepInfo: { cep: "68000000", ibge6: "150680", uf: "PA", localidade: "Santarém" },
+      municipioPadrao: "150530",
+    });
+    expect(result.codigo).toBe("150530");
+    expect(result.fonte).toBe("cadastro");
+    expect(result.autoCorrigido).toBe(false);
+  });
+
+  it("usa município do CEP somente quando o cadastro está ausente", () => {
+    const result = resolveMunicipioBpa({
+      municipioCadastro: "",
+      cepInfo: { cep: "68000000", ibge6: "150680", uf: "PA", localidade: "Santarém" },
+      municipioPadrao: "150530",
+    });
+    expect(result.codigo).toBe("150680");
+    expect(result.fonte).toBe("cep");
   });
 });
