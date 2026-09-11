@@ -1554,6 +1554,8 @@ const BpaExportar: React.FC = () => {
       // Aplica-se apenas à SELEÇÃO dos atendimentos, antes de qualquer coleta
       // de procedimentos. Usa a mesma convenção de período do sistema
       // (< 12:00 Manhã, < 18:00 Tarde, senão Noite).
+      // IMPORTANTE: o horário de referência é o do ATENDIMENTO AGENDADO, não o
+      // horário em que o prontuário foi digitado (que costuma ser horas depois).
       if (formData.turno && formData.turno !== "todos") {
         const periodoDe = (hora: string): "manha" | "tarde" | "noite" | "" => {
           const h = String(hora || "").slice(0, 5);
@@ -1562,18 +1564,56 @@ const BpaExportar: React.FC = () => {
           if (h < "18:00") return "tarde";
           return "noite";
         };
+
+        // Resolve a hora da agenda em lote para os prontuários vinculados.
+        const horaPorAgendamento = new Map<string, string>();
+        try {
+          const agIdsTurno = [
+            ...new Set(
+              prontuarios
+                .map((p: any) => p?.agendamento_id)
+                .filter((v: any) => !!v)
+                .map((v: any) => String(v)),
+            ),
+          ] as string[];
+          for (let i = 0; i < agIdsTurno.length; i += 500) {
+            const parte = agIdsTurno.slice(i, i + 500);
+            const { data: agHoras } = await (supabase as any)
+              .from("agendamentos")
+              .select("id, hora")
+              .in("id", parte);
+            (agHoras || []).forEach((a: any) => {
+              if (a?.id && a?.hora) horaPorAgendamento.set(String(a.id), String(a.hora).slice(0, 5));
+            });
+          }
+        } catch (e) {
+          console.warn("[BPA-Exportar] falha ao resolver hora da agenda para turno:", e);
+        }
+
+        const horaDeReferencia = (p: any): string =>
+          horaPorAgendamento.get(String(p?.agendamento_id || "")) ||
+          String(p?.hora_atendimento || "").slice(0, 5);
+
         let semHora = 0;
         const filtrados = prontuarios.filter((p: any) => {
-          const per = periodoDe(p?.hora_atendimento);
+          const per = periodoDe(horaDeReferencia(p));
           if (!per) {
+            // Sem horário conhecido: mantém na exportação para não perder
+            // produção válida, apenas informa no resumo.
             semHora++;
-            return false;
+            return true;
           }
           return per === formData.turno;
         });
+        const foraDoTurno = prontuarios.length - filtrados.length;
+        if (foraDoTurno > 0) {
+          warnings.push(
+            `Filtro de turno: ${foraDoTurno} atendimento(s) fora do turno selecionado foram desconsiderados.`,
+          );
+        }
         if (semHora > 0) {
           warnings.push(
-            `${semHora} atendimento(s) sem hora registrada não puderam ser classificados por turno e ficaram fora do filtro.`,
+            `${semHora} atendimento(s) sem horário identificado foram mantidos na exportação (não classificáveis por turno).`,
           );
         }
         prontuarios.length = 0;
