@@ -63,7 +63,7 @@ describe("layout TXT BPA-I", () => {
   it("mantém logradouro, complemento, número e bairro em campos independentes", () => {
     const result = buildRegistro03(registroValido());
     expect(result.errors).toEqual([]);
-    expect(result.line.slice(202, 232)).toBe("RUA CESAR GUERREIRO COM NOME ");
+    expect(result.line.slice(202, 232)).toBe("RUA CESAR GUERREIRO COM NOME E");
     expect(result.line.slice(232, 242)).toBe("CASA A    ");
     expect(result.line.slice(242, 247)).toBe("1021 ");
     expect(result.line.slice(247, 277)).toBe("CIDADE NOVA                   ");
