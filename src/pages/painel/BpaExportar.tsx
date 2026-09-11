@@ -25,6 +25,14 @@ import {
   type CepInfo,
 } from "@/lib/bpaNormalization";
 import { validarListaProcedimentosBpaI } from "@/lib/bpaFinalValidation";
+import {
+  BPA_HEADER_LENGTH,
+  BPA_I_RECORD_LENGTH,
+  buildHeaderBpa,
+  buildRegistro03,
+  calcularCampoControleBpa,
+  type BpaLayoutIssue,
+} from "@/lib/bpaTxtLayout";
 
 
 // Comparador alfabético estável: nome → data
@@ -574,8 +582,6 @@ const inferirSexoPorNome = (nome: string): "M" | "F" | null => {
   return null;
 };
 
-const BPA_HEADER_LENGTH = 130;
-const BPA_I_RECORD_LENGTH = 338;
 const CRLF_BYTES = new Uint8Array([0x0d, 0x0a]);
 
 const bytesToHex = (arr: number[] | Uint8Array, sep = " ") =>
@@ -834,43 +840,6 @@ const nacionalidadeBpa = (pac: any): { codigo: string | null; motivo?: string } 
   const res = resolverNacionalidadeBpa(raw);
   if (res.codigo) return { codigo: res.codigo };
   return { codigo: null, motivo: res.motivoErro };
-};
-
-const calcularCampoControle = (itens: Array<{ procedimento: string; quantidade: string }>): string => {
-  const soma = itens.reduce(
-    (acc, item) => acc + Number(somenteNumeros(item.procedimento) || 0) + Number(somenteNumeros(item.quantidade) || 0),
-    0,
-  );
-  return zfill((soma % 1111) + 1111, 4);
-};
-
-const buildHeaderOficial = (params: {
-  competencia: string;
-  totalRegistros: number;
-  totalFolhas: number;
-  campoControle: string;
-  orgaoOrigem: string;
-  siglaOrigem: string;
-  documentoOrigem: string;
-  orgaoDestino: string;
-  indicadorDestino: string;
-  versaoSistema: string;
-}): string => {
-  const header =
-    "01" +
-    "#BPA#" +
-    zfill(params.competencia, 6) +
-    zfill(params.totalRegistros, 6) +
-    zfill(params.totalFolhas, 6) +
-    zfill(params.campoControle, 4) +
-    fixedText(params.orgaoOrigem, 30) +
-    fixedText(params.siglaOrigem, 6) +
-    zfill(params.documentoOrigem, 14) +
-    fixedText(params.orgaoDestino, 40) +
-    (params.indicadorDestino === "E" ? "E" : "M") +
-    rpad(limparTexto(params.versaoSistema || "SMSORIXI"), 10);
-
-  return header.slice(0, BPA_HEADER_LENGTH).padEnd(BPA_HEADER_LENGTH, " ");
 };
 
 const BpaExportar: React.FC = () => {
@@ -1999,6 +1968,7 @@ const BpaExportar: React.FC = () => {
       const pendRows: any[] = [];
       const chavesAtendimentos = new Set<string>();
       const chavesLinhasBpa = new Set<string>();
+      const errosEstruturais: Array<BpaLayoutIssue & { paciente: string; data: string; linha: number }> = [];
 
       let hasError = false;
 
@@ -2630,18 +2600,15 @@ const BpaExportar: React.FC = () => {
               });
             }
           }
-          const endereco = fixedText(pac?.logradouro || pac?.endereco || pacCd.logradouro || pacCd.endereco, 30);
-          const complemento = fixedText(pac?.complemento || pacCd.complemento, 10);
-          const numero = rpad(limparTexto(pac?.numero || pacCd.numero) || "S/N", 5);
-          const bairro = fixedText(pac?.bairro || pacCd.bairro, 30);
-          const telefone = fixedDigits(pac?.telefone || pacCd.telefone, 11);
-          const email = rpad(
-            String(pac?.email || pacCd.email || "")
-              .toUpperCase()
-              .replace(/[\r\n]/g, " ")
-              .slice(0, 40),
-            40,
-          );
+          // Endereço permanece estruturado. O campo legado `endereco` só é
+          // fallback do logradouro e nunca preenche número, complemento/bairro.
+          const logradouroEstruturado = primeiroValorPreenchido(pac?.logradouro, pacCd.logradouro);
+          const endereco = logradouroEstruturado || primeiroValorPreenchido(pac?.endereco, pacCd.endereco) || "";
+          const complemento = primeiroValorPreenchido(pac?.complemento, pacCd.complemento) || "";
+          const numero = primeiroValorPreenchido(pac?.numero, pacCd.numero) || "S/N";
+          const bairro = primeiroValorPreenchido(pac?.bairro, pacCd.bairro) || "";
+          const telefone = primeiroValorPreenchido(pac?.telefone, pacCd.telefone) || "";
+          const email = primeiroValorPreenchido(pac?.email, pacCd.email) || "";
           const ineEquipe = fixedDigits(unidadeCd.ine || pront.custom_data?.ine_equipe || "", 10);
 
           if (pendenciaPaciente && !formData.exportar_com_pendencias) {
@@ -2734,52 +2701,23 @@ const BpaExportar: React.FC = () => {
               const folhaBpa = Math.floor(exportedCount / 20) + 1;
               const sequenciaFolha = (exportedCount % 20) + 1;
 
-              // Montagem do Layout oficial BPA-I: Registro 03 com 338 caracteres antes do CRLF
-              let l = "";
-              l += "03"; // 001-002 - Tipo Registro
-              l += cnes; // 003-009 - CNES
-              l += zfill(competencia, 6); // 010-015 - Competência
-              l += cns_prof; // 016-030 - CNS Profissional
-              l += cbo; // 031-036 - CBO
-              l += data_atend; // 037-044 - Data Atendimento
-              l += zfill(folhaBpa, 3); // 045-047 - Folha BPA
-              l += zfill(sequenciaFolha, 2); // 048-049 - Sequência na folha
-              l += proc; // 050-059 - Procedimento SIGTAP
-              l += cns_pac; // 060-074 - CNS Paciente
-              l += sexo; // 075-075 - Sexo
-              l += municipio; // 076-081 - Município IBGE
-              l += cid; // 082-085 - CID
-              l += idade; // 086-088 - Idade
-              l += quantidade; // 089-094 - Quantidade
-              l += carater; // 095-096 - Caráter atendimento
-              l += autorizacao; // 097-109 - Autorização
-              l += "BPA"; // 110-112 - Origem
-              l += rpad(nome_pac, 30); // 113-142 - Nome paciente
-              l += data_nasc; // 143-150 - Data nascimento
-              l += raca; // 151-152 - Raça/cor
-              l += etnia; // 153-156 - Etnia
-              l += nacionalidade; // 157-159 - Nacionalidade
-              l += servico; // 160-162 - Serviço
-              l += classificacao; // 163-165 - Classificação
-              l += sequenciaEquipe; // 166-173 - Sequência equipe
-              l += areaEquipe; // 174-177 - Área equipe
-              l += cnpj; // 178-191 - CNPJ
-              l += cep; // 192-199 - CEP paciente
-              l += codigoLogradouro; // 200-202 - Código logradouro
-              l += endereco; // 203-232 - Endereço
-              l += complemento; // 233-242 - Complemento
-              l += numero; // 243-247 - Número
-              l += bairro; // 248-277 - Bairro
-              l += telefone; // 278-288 - Telefone
-              l += email; // 289-328 - E-mail
-              l += ineEquipe; // 329-338 - INE equipe
-
-              l = l.padEnd(BPA_I_RECORD_LENGTH, " ").slice(0, BPA_I_RECORD_LENGTH);
-
-              if (l.length !== BPA_I_RECORD_LENGTH) {
-                hasError = true;
+              const registro = buildRegistro03({
+                tipoRegistro: "03", cnes, competencia, cnsProfissional: cns_prof, cbo,
+                dataAtendimento: data_atend, folha: folhaBpa, sequencia: sequenciaFolha,
+                procedimento: proc, cnsPaciente: cns_pac, sexo, municipioIbge: municipio,
+                cid, idade, quantidade, caraterAtendimento: carater, autorizacao, origem: "BPA",
+                nomePaciente: nome_pac, dataNascimento: data_nasc, racaCor: raca, etnia,
+                nacionalidade, servico, classificacao, sequenciaEquipe, areaEquipe, cnpj,
+                cep, codigoLogradouro, logradouro: endereco, complemento, numero, bairro,
+                telefone, email, ineEquipe,
+              });
+              const l = registro.line;
+              for (const issue of registro.errors) {
+                errosEstruturais.push({ ...issue, paciente: ident, data: data_atend, linha: exportedCount + 2 });
+              }
+              for (const issue of registro.adjustments) {
                 warnings.push(
-                  `${ident} (${data_atend}): Erro de tamanho na linha (${l.length}/${BPA_I_RECORD_LENGTH}).`,
+                  `${ident} (${data_atend}): campo ${issue.field} [${issue.start}-${issue.end}] foi limitado ao tamanho oficial.`,
                 );
               }
 
@@ -2850,11 +2788,38 @@ const BpaExportar: React.FC = () => {
       // Geração do Cabeçalho oficial: Registro 01 com 130 caracteres antes do CRLF
       const qtdRegistros = zfill(exportedCount, 6);
       const totalFolhas = Math.max(1, Math.ceil(exportedCount / 20));
-      const campoControle = calcularCampoControle(itensControle);
+      if (errosEstruturais.length > 0) {
+        hasError = true;
+        criticalCount += errosEstruturais.length;
+        for (const issue of errosEstruturais) {
+          const motivo = `Linha ${issue.linha}, campo ${issue.field} [${issue.start}-${issue.end}]: ${issue.problem}. ${issue.correction}.`;
+          warnings.push(`${issue.paciente} (${issue.data}): ${motivo}`);
+          details.critical.push({
+            paciente_nome: issue.paciente,
+            data_atendimento: issue.data,
+            pendencia: "Erro estrutural do TXT",
+            valor_atual: issue.value || "Vazio",
+            motivo,
+          });
+        }
+      }
+
+      if (hasError) {
+        setResults({
+          totalFound: prontuarios.length, exportedCount: 0, warnings, criticalCount, stats, details,
+          resumo: { ...resumoIntegridade, totalRegistros03: 0 },
+          error: "O TXT foi bloqueado pela validação estrutural. Revise os campos indicados nas pendências.",
+          fileName: "", blobUrl: null, confRows: [], pendRows: [], headerPreview: null, headerDetails: null,
+        });
+        setLoading(false);
+        return;
+      }
+
+      const campoControle = calcularCampoControleBpa(itensControle);
       const unidadeHeader =
         formData.unidade_id !== "all" ? unidades.find((u) => u.id === formData.unidade_id) : unidades[0];
       const unidadeHeaderCd = (unidadeHeader?.custom_data as any) || {};
-      const header = buildHeaderOficial({
+      const headerBuild = buildHeaderBpa({
         competencia: formData.competencia,
         totalRegistros: exportedCount,
         totalFolhas,
@@ -2867,6 +2832,13 @@ const BpaExportar: React.FC = () => {
         indicadorDestino: unidadeHeaderCd.indicador_destino_bpa || "M",
         versaoSistema: unidadeHeaderCd.versao_bpa || "SMSORIXI",
       });
+      if (headerBuild.errors.length > 0) {
+        const descricao = headerBuild.errors
+          .map((issue) => `${issue.field} [${issue.start}-${issue.end}]: ${issue.problem}`)
+          .join(" | ");
+        throw new Error(`Cabeçalho BPA-I inválido: ${descricao}`);
+      }
+      const header = headerBuild.line;
       const headerBytes = toIsoBytes(header);
 
       // Arquivo ANSI/ISO-8859-1, sem BOM e com CRLF entre todas as linhas.

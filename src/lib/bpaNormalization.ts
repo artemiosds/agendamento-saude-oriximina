@@ -280,7 +280,7 @@ export async function fetchCepInfoMap(ceps: string[]): Promise<Map<string, CepIn
 /**
  * Resolve município IBGE (6 dígitos) usando:
  *  1. Município do cadastro, se válido
- *  2. IBGE derivado do CEP (ViaCEP) — sobrepõe o cadastro quando divergir
+ *  2. IBGE derivado do CEP (ViaCEP), somente se o cadastro estiver inválido
  *  3. Município padrão da exportação, como último recurso
  *
  * Retorna o código final + flag de correção automática (CEP→município).
@@ -299,23 +299,24 @@ export function resolveMunicipioBpa(opts: {
   const cepIbge = opts.cepInfo?.ibge6 || '';
   const padrao = onlyDigits(opts.municipioPadrao).slice(0, 6);
 
-  // Se o CEP tem IBGE válido e diverge do cadastro, prevalecer o do CEP
-  if (cepIbge && cepIbge.length === 6) {
-    if (!cadastro || cadastro !== cepIbge) {
-      return {
-        codigo: cepIbge,
-        fonte: 'cep',
-        autoCorrigido: !!cadastro && cadastro !== cepIbge,
-        motivo: cadastro && cadastro !== cepIbge
-          ? `Município do cadastro (${cadastro}) divergia do CEP (${cepIbge}) — ajustado pelo CEP`
-          : 'Município preenchido automaticamente a partir do CEP',
-      };
-    }
-    return { codigo: cepIbge, fonte: 'cep', autoCorrigido: false };
+  if (cadastro && cadastro.length === 6 && cadastro !== '000000') {
+    return {
+      codigo: cadastro,
+      fonte: 'cadastro',
+      autoCorrigido: false,
+      motivo: cepIbge && cadastro !== cepIbge
+        ? `Município cadastrado (${cadastro}) preservado apesar da divergência com o CEP (${cepIbge})`
+        : undefined,
+    };
   }
 
-  if (cadastro && cadastro.length === 6 && cadastro !== '000000') {
-    return { codigo: cadastro, fonte: 'cadastro', autoCorrigido: false };
+  if (cepIbge && cepIbge.length === 6 && cepIbge !== '000000') {
+    return {
+      codigo: cepIbge,
+      fonte: 'cep',
+      autoCorrigido: true,
+      motivo: 'Município preenchido automaticamente a partir do CEP porque o cadastro estava ausente ou inválido',
+    };
   }
 
   if (padrao && padrao.length === 6 && padrao !== '000000') {
