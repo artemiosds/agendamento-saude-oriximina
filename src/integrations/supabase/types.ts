@@ -4274,6 +4274,12 @@ export type Database = {
             Args: { p_paciente_id: string; p_profissional_id?: string }
             Returns: Json
           }
+      bpa_profissionais_com_atendimento: {
+        Args: { p_end: string; p_start: string; p_unidade_id?: string }
+        Returns: {
+          profissional_id: string
+        }[]
+      }
       check_slot_availability: {
         Args: {
           p_data: string
