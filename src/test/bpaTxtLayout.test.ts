@@ -5,6 +5,7 @@ import {
 } from "@/lib/bpaNormalization";
 import {
   documentoOrigemDaUnidade,
+  documentoOrigemInstitucionalDaConfig,
   primeBpaDocumentoOrigemInstitucional,
 } from "@/lib/bpaHeaderSource";
 import {
@@ -174,10 +175,19 @@ describe("BPA-I TXT layout", () => {
     expect(result.line).toHaveLength(BPA_I_RECORD_LENGTH);
   });
 
-  it("preserva o mapeamento histórico do documento institucional da unidade", () => {
+  it("preserva o mapeamento histórico do documento da unidade para diagnóstico", () => {
     expect(documentoOrigemDaUnidade({ custom_data: { cnpj: "12.345.678/0001-99" } })).toBe("12345678000199");
     expect(documentoOrigemDaUnidade({ cnpj: "12345678000199", custom_data: {} })).toBe("12345678000199");
     expect(documentoOrigemDaUnidade({ custom_data: { cpf: "123.456.789-01" } })).toBe("12345678901");
+  });
+
+  it("lê o CNPJ institucional já existente em config_sistema", () => {
+    const documento = documentoOrigemInstitucionalDaConfig({
+      config_sistema: {
+        instituicao: { cnpj: "12.345.678/0001-99" },
+      },
+    });
+    expect(documento).toBe("12345678000199");
   });
 
   it("mantém documentoOrigem direto nas posições 66-79 e Header com 130 posições", () => {
@@ -187,11 +197,25 @@ describe("BPA-I TXT layout", () => {
     expect(header.line.slice(65, 79)).toBe("12345678000199");
   });
 
-  it("reutiliza documento institucional real quando a unidade do Header não o possui", () => {
-    primeBpaDocumentoOrigemInstitucional("12.345.678/0001-99");
+  it("reutiliza CNPJ institucional configurado quando a unidade do Header não o possui", () => {
+    const documento = documentoOrigemInstitucionalDaConfig({
+      config_sistema: {
+        instituicao: { cnpj: "12.345.678/0001-99" },
+      },
+    });
+    primeBpaDocumentoOrigemInstitucional(documento);
     const header = buildHeaderBpa({ ...headerBase, documentoOrigem: "" });
     expect(header.errors.some((e) => e.field === "documentoOrigem")).toBe(false);
     expect(header.line.slice(65, 79)).toBe("12345678000199");
+    expect(header.line).toHaveLength(BPA_HEADER_LENGTH);
+    expect(buildRegistro03(registroBase).line).toHaveLength(BPA_I_RECORD_LENGTH);
+  });
+
+  it("não usa CPF de 11 dígitos para satisfazer documentoOrigem institucional", () => {
+    primeBpaDocumentoOrigemInstitucional("");
+    const header = buildHeaderBpa({ ...headerBase, documentoOrigem: "12345678901" });
+    expect(header.errors.some((e) => e.field === "documentoOrigem")).toBe(true);
+    expect(header.line.slice(65, 79).trim()).toBe("");
     expect(header.line).toHaveLength(BPA_HEADER_LENGTH);
   });
 
