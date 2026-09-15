@@ -1,9 +1,3 @@
-import { normalizeEnderecoBpaDne } from "./bpaNormalization";
-import {
-  debugBpaDocumentoOrigem,
-  getBpaDocumentoOrigemInstitucional,
-} from "./bpaHeaderSource";
-
 /**
  * Construtor posicional do arquivo BPA-I (SIA/SUS).
  * Referência: Layout de Exportação BPA — Registro 01 (130) e Registro 03 (338).
@@ -107,38 +101,6 @@ function sanitizeRaw(value: unknown): string {
     .trim();
 }
 
-function normalizeNumeroToken(value: unknown): string {
-  return sanitizeBpaText(value).replace(/[\s.,;:#-]+/g, "");
-}
-
-/**
- * Remove do final do logradouro somente o número que já existe no campo
- * estruturado `numero`. A remoção é deliberadamente conservadora: só acontece
- * quando o último token normalizado é exatamente igual ao número estruturado.
- * Assim nomes reais com algarismos não são alterados e valores alfanuméricos
- * como 35B, 12A, SN e S/N continuam válidos.
- */
-export function normalizeBpaStreetNumber(logradouro: unknown, numero: unknown): {
-  logradouro: string;
-  numero: string;
-  adjusted: boolean;
-} {
-  const street = sanitizeBpaText(logradouro);
-  const number = sanitizeBpaText(numero);
-  const numberToken = normalizeNumeroToken(numero);
-  if (!street || !numberToken) return { logradouro: street, numero: number, adjusted: false };
-
-  const parts = street.split(/\s+/).filter(Boolean);
-  if (parts.length < 2) return { logradouro: street, numero: number, adjusted: false };
-
-  const last = normalizeNumeroToken(parts[parts.length - 1]);
-  if (!last || last !== numberToken) return { logradouro: street, numero: number, adjusted: false };
-
-  const cleanStreet = parts.slice(0, -1).join(" ").trim();
-  if (!cleanStreet) return { logradouro: street, numero: number, adjusted: false };
-  return { logradouro: cleanStreet, numero: number, adjusted: true };
-}
-
 function formatField(
   name: string,
   definition: BpaFieldDefinition,
@@ -152,17 +114,6 @@ function formatField(
     : definition.kind === "text"
       ? sanitizeBpaText(input)
       : sanitizeRaw(input);
-
-  if (definition.required && !normalized) {
-    errors.push({
-      field: name,
-      start: definition.start,
-      end: definition.end,
-      value: original,
-      problem: "Campo obrigatório vazio ou inválido após normalização",
-      correction: "Corrigir o dado de origem antes de gerar o BPA-I",
-    });
-  }
 
   if (normalized.length > definition.length) {
     adjustments.push({
@@ -184,52 +135,8 @@ function formatField(
 export function buildRegistro03(data: BpaRegistro03Data): BpaBuildResult {
   const errors: BpaLayoutIssue[] = [];
   const adjustments: BpaLayoutIssue[] = [];
-
-  // A tabela logradouros_dne é carregada antes da montagem do TXT pelo fluxo
-  // de normalização BPA. Aqui apenas aplicamos o catálogo já existente em
-  // memória. Nenhum código é inventado e nenhum cadastro é persistido.
-  const dneAddress = normalizeEnderecoBpaDne({
-    codigoLogradouro: data.codigoLogradouro,
-    logradouro: data.logradouro,
-  });
-  const dataComDne: BpaRegistro03Data = dneAddress.correspondenciaSegura
-    ? {
-        ...data,
-        codigoLogradouro: dneAddress.codigoLogradouro,
-        logradouro: dneAddress.logradouro,
-      }
-    : data;
-
-  if (dneAddress.ajustado) {
-    adjustments.push({
-      field: "logradouro",
-      start: BPA_I_FIELDS.logradouro.start,
-      end: BPA_I_FIELDS.logradouro.end,
-      value: String(data.logradouro ?? ""),
-      problem: "Tipo de logradouro estava duplicado no início do nome",
-      correction: `Tipo resolvido em logradouros_dne (${dneAddress.tipoDescricao}) e logradouro normalizado para "${dneAddress.logradouro}"`,
-    });
-  }
-
-  // Correção apenas em memória: quando o número já está estruturado e também
-  // aparece como último token do logradouro, remove a duplicação antes do TXT.
-  const address = normalizeBpaStreetNumber(dataComDne.logradouro, dataComDne.numero);
-  const normalizedData: BpaRegistro03Data = address.adjusted
-    ? { ...dataComDne, logradouro: address.logradouro, numero: address.numero }
-    : dataComDne;
-  if (address.adjusted) {
-    adjustments.push({
-      field: "logradouro",
-      start: BPA_I_FIELDS.logradouro.start,
-      end: BPA_I_FIELDS.logradouro.end,
-      value: String(dataComDne.logradouro ?? ""),
-      problem: "Número do imóvel estava duplicado no final do logradouro",
-      correction: `Logradouro normalizado para "${address.logradouro}"; número estruturado preservado`,
-    });
-  }
-
   const parts = Object.entries(BPA_I_FIELDS).map(([name, definition]) =>
-    formatField(name, definition, normalizedData[name as keyof BpaRegistro03Data], errors, adjustments),
+    formatField(name, definition, data[name as keyof BpaRegistro03Data], errors, adjustments),
   );
   const line = parts.join("");
 
@@ -262,31 +169,6 @@ export interface BpaHeaderData {
 export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
   const errors: BpaLayoutIssue[] = [];
   const adjustments: BpaLayoutIssue[] = [];
-  const documentoRecebido = digits(data.documentoOrigem);
-  const documentoDireto = documentoRecebido.length === 14 ? documentoRecebido : "";
-  const documentoOrigem = documentoDireto || getBpaDocumentoOrigemInstitucional();
-
-  debugBpaDocumentoOrigem({
-    valorOriginal: data.documentoOrigem,
-    valorEnviado: documentoOrigem,
-    fonteDireta: documentoDireto
-      ? "CNPJ da unidade selecionada"
-      : documentoRecebido
-        ? "documento legado da unidade ignorado por não ser CNPJ de 14 dígitos"
-        : "unidade sem CNPJ",
-  });
-
-  if (!documentoDireto && documentoOrigem) {
-    adjustments.push({
-      field: "documentoOrigem",
-      start: 66,
-      end: 79,
-      value: String(data.documentoOrigem ?? ""),
-      problem: "CNPJ não estava disponível na unidade usada para montar o header",
-      correction: "Reutilizado CNPJ institucional real já configurado no sistema ou, na ausência dele, CNPJ institucional único das unidades ativas",
-    });
-  }
-
   const defs: Array<[string, BpaFieldDefinition, unknown]> = [
     ["tipoRegistro", { start: 1, end: 2, length: 2, kind: "digits", required: true }, "01"],
     ["identificacao", { start: 3, end: 7, length: 5, kind: "raw", required: true }, "#BPA#"],
@@ -296,7 +178,7 @@ export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
     ["campoControle", { start: 26, end: 29, length: 4, kind: "digits", required: true }, data.campoControle],
     ["orgaoOrigem", { start: 30, end: 59, length: 30, kind: "text", required: true }, data.orgaoOrigem],
     ["siglaOrigem", { start: 60, end: 65, length: 6, kind: "text", required: true }, data.siglaOrigem],
-    ["documentoOrigem", { start: 66, end: 79, length: 14, kind: "digits", required: true }, documentoOrigem],
+    ["documentoOrigem", { start: 66, end: 79, length: 14, kind: "digits", required: true }, data.documentoOrigem],
     ["orgaoDestino", { start: 80, end: 119, length: 40, kind: "text", required: true }, data.orgaoDestino],
     ["indicadorDestino", { start: 120, end: 120, length: 1, kind: "text", required: true }, data.indicadorDestino === "E" ? "E" : "M"],
     ["versaoSistema", { start: 121, end: 130, length: 10, kind: "text", required: true }, data.versaoSistema],
