@@ -4,6 +4,10 @@ import {
   primeDneLogradouros,
 } from "@/lib/bpaNormalization";
 import {
+  documentoOrigemDaUnidade,
+  primeBpaDocumentoOrigemInstitucional,
+} from "@/lib/bpaHeaderSource";
+import {
   BPA_HEADER_LENGTH,
   BPA_I_RECORD_LENGTH,
   buildHeaderBpa,
@@ -51,6 +55,19 @@ const registroBase = {
   ineEquipe: "",
 };
 
+const headerBase = {
+  competencia: "202609",
+  totalRegistros: 3,
+  totalFolhas: 1,
+  campoControle: "1234",
+  orgaoOrigem: "SECRETARIA MUNICIPAL DE SAUDE",
+  siglaOrigem: "SMS",
+  documentoOrigem: "12345678000199",
+  orgaoDestino: "SECRETARIA MUNICIPAL DE SAUDE",
+  indicadorDestino: "M",
+  versaoSistema: "SMSORIXI",
+};
+
 const dneRows = [
   { codigo: "081", descricao: "Rua" },
   { codigo: "008", descricao: "Avenida" },
@@ -62,6 +79,7 @@ const dneRows = [
 
 beforeEach(() => {
   primeDneLogradouros(dneRows);
+  primeBpaDocumentoOrigemInstitucional("");
 });
 
 describe("BPA-I TXT layout", () => {
@@ -156,19 +174,36 @@ describe("BPA-I TXT layout", () => {
     expect(result.line).toHaveLength(BPA_I_RECORD_LENGTH);
   });
 
+  it("preserva o mapeamento histórico do documento institucional da unidade", () => {
+    expect(documentoOrigemDaUnidade({ custom_data: { cnpj: "12.345.678/0001-99" } })).toBe("12345678000199");
+    expect(documentoOrigemDaUnidade({ cnpj: "12345678000199", custom_data: {} })).toBe("12345678000199");
+    expect(documentoOrigemDaUnidade({ custom_data: { cpf: "123.456.789-01" } })).toBe("12345678901");
+  });
+
+  it("mantém documentoOrigem direto nas posições 66-79 e Header com 130 posições", () => {
+    const header = buildHeaderBpa({ ...headerBase, documentoOrigem: "12.345.678/0001-99" });
+    expect(header.errors).toEqual([]);
+    expect(header.line).toHaveLength(BPA_HEADER_LENGTH);
+    expect(header.line.slice(65, 79)).toBe("12345678000199");
+  });
+
+  it("reutiliza documento institucional real quando a unidade do Header não o possui", () => {
+    primeBpaDocumentoOrigemInstitucional("12.345.678/0001-99");
+    const header = buildHeaderBpa({ ...headerBase, documentoOrigem: "" });
+    expect(header.errors.some((e) => e.field === "documentoOrigem")).toBe(false);
+    expect(header.line.slice(65, 79)).toBe("12345678000199");
+    expect(header.line).toHaveLength(BPA_HEADER_LENGTH);
+  });
+
+  it("mantém documentoOrigem obrigatório quando não existe fonte institucional segura", () => {
+    primeBpaDocumentoOrigemInstitucional("");
+    const header = buildHeaderBpa({ ...headerBase, documentoOrigem: "" });
+    expect(header.errors.some((e) => e.field === "documentoOrigem")).toBe(true);
+    expect(header.line).toHaveLength(BPA_HEADER_LENGTH);
+  });
+
   it("preserva o cabeçalho oficial de 130 posições", () => {
-    const header = buildHeaderBpa({
-      competencia: "202609",
-      totalRegistros: 3,
-      totalFolhas: 1,
-      campoControle: "1234",
-      orgaoOrigem: "SECRETARIA MUNICIPAL DE SAUDE",
-      siglaOrigem: "SMS",
-      documentoOrigem: "12345678000199",
-      orgaoDestino: "SECRETARIA MUNICIPAL DE SAUDE",
-      indicadorDestino: "M",
-      versaoSistema: "SMSORIXI",
-    });
+    const header = buildHeaderBpa(headerBase);
     expect(header.line).toHaveLength(BPA_HEADER_LENGTH);
     expect(header.errors).toEqual([]);
   });
