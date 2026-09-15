@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { lovable } from "@/integrations/lovable/index";
 import logoSms from "@/assets/logo-sms.jpeg";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Recovery state
   const [recoveryStep, setRecoveryStep] = useState<Step>('login');
@@ -45,6 +46,12 @@ const Login: React.FC = () => {
     const result = await login(usuario.trim(), senha);
     setLoading(false);
     if (result.success) {
+      const requested = searchParams.get('next');
+      const safeNext = requested?.startsWith('/') && !requested.startsWith('//') ? requested : null;
+      if (safeNext) {
+        navigate(safeNext, { replace: true });
+        return;
+      }
       // Role-based redirect after login
       const userRole = result.role || '';
       if (!userRole) {

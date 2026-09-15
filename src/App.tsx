@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 
 import { DomainProviders } from "@/contexts/DomainProviders";
@@ -53,6 +53,7 @@ function lazyRetry<T extends React.ComponentType<any>>(
 // Eagerly loaded
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import OAuthConsent from "./pages/OAuthConsent";
 
 // Lazy loaded with retry
 const AgendarOnline               = lazyRetry(() => import("./pages/AgendarOnline"));
@@ -149,8 +150,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 const LoginRedirect: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
   if (isLoading) return <PageLoader />;
-  if (isAuthenticated) return <Navigate to="/painel" replace />;
+  if (isAuthenticated) {
+    const requested = new URLSearchParams(location.search).get("next");
+    const safeNext = requested?.startsWith("/") && !requested.startsWith("//") ? requested : "/painel";
+    return <Navigate to={safeNext} replace />;
+  }
   return <Login />;
 };
 
@@ -189,6 +195,7 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/login" element={<LoginRedirect />} />
+                  <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                   <Route path="/agendar" element={<Suspense fallback={<PageLoader />}><AgendarOnline /></Suspense>} />
                   <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalPaciente /></Suspense>} />
                   <Route path="/externo" element={<Suspense fallback={<PageLoader />}><LoginExterno /></Suspense>} />
