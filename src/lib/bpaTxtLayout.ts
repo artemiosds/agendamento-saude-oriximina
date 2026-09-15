@@ -262,13 +262,18 @@ export interface BpaHeaderData {
 export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
   const errors: BpaLayoutIssue[] = [];
   const adjustments: BpaLayoutIssue[] = [];
-  const documentoDireto = digits(data.documentoOrigem);
+  const documentoRecebido = digits(data.documentoOrigem);
+  const documentoDireto = documentoRecebido.length === 14 ? documentoRecebido : "";
   const documentoOrigem = documentoDireto || getBpaDocumentoOrigemInstitucional();
 
   debugBpaDocumentoOrigem({
     valorOriginal: data.documentoOrigem,
     valorEnviado: documentoOrigem,
-    fonteDireta: documentoDireto ? "mapeamento legado da unidade" : "unidade sem documento",
+    fonteDireta: documentoDireto
+      ? "CNPJ da unidade selecionada"
+      : documentoRecebido
+        ? "documento legado da unidade ignorado por não ser CNPJ de 14 dígitos"
+        : "unidade sem CNPJ",
   });
 
   if (!documentoDireto && documentoOrigem) {
@@ -277,8 +282,8 @@ export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
       start: 66,
       end: 79,
       value: String(data.documentoOrigem ?? ""),
-      problem: "Documento não estava disponível na unidade usada para montar o header",
-      correction: "Reutilizado CNPJ institucional já configurado no sistema ou, na ausência dele, documento institucional único das unidades ativas",
+      problem: "CNPJ não estava disponível na unidade usada para montar o header",
+      correction: "Reutilizado CNPJ institucional real já configurado no sistema ou, na ausência dele, CNPJ institucional único das unidades ativas",
     });
   }
 
