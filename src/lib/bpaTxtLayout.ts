@@ -101,6 +101,38 @@ function sanitizeRaw(value: unknown): string {
     .trim();
 }
 
+function normalizeNumeroToken(value: unknown): string {
+  return sanitizeBpaText(value).replace(/[\s.,;:#-]+/g, "");
+}
+
+/**
+ * Remove do final do logradouro somente o número que já existe no campo
+ * estruturado `numero`. A remoção é deliberadamente conservadora: só acontece
+ * quando o último token normalizado é exatamente igual ao número estruturado.
+ * Assim nomes reais com algarismos não são alterados e valores alfanuméricos
+ * como 35B, 12A, SN e S/N continuam válidos.
+ */
+export function normalizeBpaStreetNumber(logradouro: unknown, numero: unknown): {
+  logradouro: string;
+  numero: string;
+  adjusted: boolean;
+} {
+  const street = sanitizeBpaText(logradouro);
+  const number = sanitizeBpaText(numero);
+  const numberToken = normalizeNumeroToken(numero);
+  if (!street || !numberToken) return { logradouro: street, numero: number, adjusted: false };
+
+  const parts = street.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return { logradouro: street, numero: number, adjusted: false };
+
+  const last = normalizeNumeroToken(parts[parts.length - 1]);
+  if (!last || last !== numberToken) return { logradouro: street, numero: number, adjusted: false };
+
+  const cleanStreet = parts.slice(0, -1).join(" ").trim();
+  if (!cleanStreet) return { logradouro: street, numero: number, adjusted: false };
+  return { logradouro: cleanStreet, numero: number, adjusted: true };
+}
+
 function formatField(
   name: string,
   definition: BpaFieldDefinition,
@@ -114,6 +146,17 @@ function formatField(
     : definition.kind === "text"
       ? sanitizeBpaText(input)
       : sanitizeRaw(input);
+
+  if (definition.required && !normalized) {
+    errors.push({
+      field: name,
+      start: definition.start,
+      end: definition.end,
+      value: original,
+      problem: "Campo obrigatório vazio ou inválido após normalização",
+      correction: "Corrigir o dado de origem antes de gerar o BPA-I",
+    });
+  }
 
   if (normalized.length > definition.length) {
     adjustments.push({
@@ -135,8 +178,27 @@ function formatField(
 export function buildRegistro03(data: BpaRegistro03Data): BpaBuildResult {
   const errors: BpaLayoutIssue[] = [];
   const adjustments: BpaLayoutIssue[] = [];
+
+  // Correção apenas em memória: quando o número já está estruturado e também
+  // aparece como último token do logradouro, remove a duplicação antes do TXT.
+  // Nenhum dado do cadastro é persistido ou inventado.
+  const address = normalizeBpaStreetNumber(data.logradouro, data.numero);
+  const normalizedData: BpaRegistro03Data = address.adjusted
+    ? { ...data, logradouro: address.logradouro, numero: address.numero }
+    : data;
+  if (address.adjusted) {
+    adjustments.push({
+      field: "logradouro",
+      start: BPA_I_FIELDS.logradouro.start,
+      end: BPA_I_FIELDS.logradouro.end,
+      value: String(data.logradouro ?? ""),
+      problem: "Número do imóvel estava duplicado no final do logradouro",
+      correction: `Logradouro normalizado para "${address.logradouro}"; número estruturado preservado`,
+    });
+  }
+
   const parts = Object.entries(BPA_I_FIELDS).map(([name, definition]) =>
-    formatField(name, definition, data[name as keyof BpaRegistro03Data], errors, adjustments),
+    formatField(name, definition, normalizedData[name as keyof BpaRegistro03Data], errors, adjustments),
   );
   const line = parts.join("");
 
