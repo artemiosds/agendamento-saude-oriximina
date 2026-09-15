@@ -1,8 +1,11 @@
+import { supabase } from '@/integrations/supabase/client';
+
 /**
  * Normalização e validação para BPA-Exportar.
  *
- * Foco: corrigir automaticamente raça/cor, etnia, CNS, CEP e município (IBGE)
- * usando regras seguras e auditáveis ANTES de gerar TXT/Excel/PDF.
+ * Foco: corrigir automaticamente raça/cor, etnia, CNS, CEP, município (IBGE)
+ * e tipo de logradouro usando fontes já existentes no sistema, sem persistir
+ * alterações no cadastro do paciente.
  *
  * Não altera layout do TXT BPA-I. Não persiste no banco. Apenas higieniza
  * o dado em memória durante a exportação.
@@ -56,8 +59,8 @@ export function isValidCnsAlgo(cnsRaw: string | null | undefined): boolean {
  * que passe na validação oficial, se existir no cadastro.
  */
 export function pickValidCnsPaciente(pac: any): {
-  cns: string;            // 15 dígitos válido, ou '' se nenhum encontrado
-  original: string;       // valor originalmente preferido (pac.cns / custom_data.cns)
+  cns: string;
+  original: string;
   fonte: 'pac.cns' | 'custom_data.cns' | 'custom_data.cartao_sus' | 'custom_data.cns_alternativo' | 'nenhum';
   substituido: boolean;
 } {
@@ -86,16 +89,10 @@ export function pickValidCnsPaciente(pac: any): {
 // Raça/Cor — padrão do fluxo: Amarelo (04) quando ausente/não declarada
 // ============================================================
 
-export const RACA_COR_PADRAO_FLUXO = '04'; // Amarelo
+export const RACA_COR_PADRAO_FLUXO = '04';
 
-/**
- * Normaliza raça/cor para o código IBGE oficial (01..05).
- * Quando o cadastro estiver vazio, '99', 'não declarada' ou inválido,
- * aplica automaticamente o padrão do fluxo (04 — Amarelo) e marca como
- * correção automática auditável. Nunca emite '99' no TXT.
- */
 export function normalizeRacaCorBpa(valor: any): {
-  codigo: string;             // sempre 01..05 (nunca 99)
+  codigo: string;
   autoCorrigido: boolean;
   motivo: string;
   valorOriginal: string;
@@ -113,7 +110,6 @@ export function normalizeRacaCorBpa(valor: any): {
   if (['04', 'amarela', 'amarelo'].includes(s)) return { codigo: '04', autoCorrigido: false, motivo: '', valorOriginal: original };
   if (['05', 'indigena', 'indígena'].includes(s) || s === 'indigena') return { codigo: '05', autoCorrigido: false, motivo: '', valorOriginal: original };
 
-  // Tudo o que não bate (vazio, '99', 'sem informação', 'não declarada', lixo) → padrão Amarelo
   const motivo = !original
     ? 'Sem valor no cadastro'
     : (s === '99' || /sem\s*informa/.test(s) || /nao\s*declar/.test(s) || /não\s*declar/.test(s))
@@ -131,19 +127,12 @@ export function normalizeRacaCorBpa(valor: any): {
 // Etnia — contextual conforme raça/cor + nacionalidade
 // ============================================================
 
-/**
- * Decide o campo Etnia (4 chars) conforme regra oficial:
- *  - Obrigatória APENAS quando raça/cor = 05 (indígena) E nacionalidade = 010 (brasileira).
- *  - Caso contrário, retorna 4 espaços em branco (conforme layout BPA-I).
- *
- * Se for obrigatória e o cadastro não tiver etnia, retorna `pendencia=true`.
- */
 export function normalizeEtniaBpa(opts: {
   racaCodigo: string;
   nacionalidadeCodigo: string;
   etniaCadastro: string | number | null | undefined;
 }): {
-  etniaPadded: string;          // string com 4 chars (sempre)
+  etniaPadded: string;
   obrigatoria: boolean;
   pendencia: boolean;
   motivo?: string;
@@ -169,36 +158,228 @@ export function normalizeEtniaBpa(opts: {
 }
 
 // ============================================================
+// Tipo de logradouro — catálogo existente logradouros_dne
+// ============================================================
+
+export interface DneLogradouroRow {
+  codigo: string | number | null | undefined;
+  descricao: string | null | undefined;
+}
+
+type DneLogradouroEntry = {
+  codigo: string;
+  descricao: string;
+  chave: string;
+};
+
+export interface DneLogradouroIndex {
+  byName: Map<string, DneLogradouroEntry>;
+  byCode: Map<string, DneLogradouroEntry>;
+  entries: DneLogradouroEntry[];
+}
+
+const normalizeDneText = (value: any): string =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const emptyDneIndex = (): DneLogradouroIndex => ({
+  byName: new Map(),
+  byCode: new Map(),
+  entries: [],
+});
+
+let dneLogradouroIndex: DneLogradouroIndex = emptyDneIndex();
+let dneLoadPromise: Promise<DneLogradouroIndex> | null = null;
+
+export function buildDneLogradouroIndex(rows: DneLogradouroRow[]): DneLogradouroIndex {
+  const byName = new Map<string, DneLogradouroEntry>();
+  const byCode = new Map<string, DneLogradouroEntry>();
+  const entries: DneLogradouroEntry[] = [];
+
+  for (const row of rows || []) {
+    const rawCodigo = onlyDigits(row?.codigo);
+    const codigo = rawCodigo ? rawCodigo.padStart(3, '0').slice(-3) : '';
+    const descricao = String(row?.descricao ?? '').trim();
+    const chave = normalizeDneText(descricao);
+    if (!codigo || !chave) continue;
+    const entry = { codigo, descricao, chave };
+    if (!byName.has(chave)) byName.set(chave, entry);
+    if (!byCode.has(codigo)) byCode.set(codigo, entry);
+    entries.push(entry);
+  }
+
+  entries.sort((a, b) => b.chave.length - a.chave.length || a.chave.localeCompare(b.chave));
+  return { byName, byCode, entries };
+}
+
+export function primeDneLogradouros(rows: DneLogradouroRow[]): DneLogradouroIndex {
+  dneLogradouroIndex = buildDneLogradouroIndex(rows);
+  return dneLogradouroIndex;
+}
+
+export async function ensureDneLogradourosLoaded(): Promise<DneLogradouroIndex> {
+  if (dneLogradouroIndex.entries.length > 0) return dneLogradouroIndex;
+  if (dneLoadPromise) return dneLoadPromise;
+
+  dneLoadPromise = (async () => {
+    const rows: DneLogradouroRow[] = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await (supabase as any)
+        .from('logradouros_dne')
+        .select('codigo,descricao')
+        .order('descricao', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      const part = (data || []) as DneLogradouroRow[];
+      rows.push(...part);
+      if (part.length < PAGE) break;
+    }
+    return primeDneLogradouros(rows);
+  })();
+
+  try {
+    return await dneLoadPromise;
+  } finally {
+    dneLoadPromise = null;
+  }
+}
+
+export function getDneLogradouroIndex(): DneLogradouroIndex {
+  return dneLogradouroIndex;
+}
+
+export function normalizeEnderecoBpaDne(opts: {
+  codigoLogradouro?: any;
+  tipoLogradouro?: any;
+  logradouro?: any;
+  index?: DneLogradouroIndex;
+}): {
+  codigoLogradouro: string;
+  logradouro: string;
+  tipoDescricao: string;
+  correspondenciaSegura: boolean;
+  ajustado: boolean;
+  fonte: 'codigo_existente' | 'tipo_estruturado' | 'prefixo_logradouro' | 'nenhuma';
+} {
+  const index = opts.index || dneLogradouroIndex;
+  const codigoExistenteRaw = onlyDigits(opts.codigoLogradouro);
+  const codigoExistente = codigoExistenteRaw ? codigoExistenteRaw.padStart(3, '0').slice(-3) : '';
+  const tipoNorm = normalizeDneText(opts.tipoLogradouro);
+  const logradouroNorm = normalizeDneText(opts.logradouro);
+
+  const stripPrefix = (entry: DneLogradouroEntry, value: string): { value: string; stripped: boolean } => {
+    const normalized = normalizeDneText(value);
+    if (!normalized || !entry.chave) return { value: normalized, stripped: false };
+    if (!normalized.startsWith(`${entry.chave} `)) return { value: normalized, stripped: false };
+    const restante = normalized.slice(entry.chave.length).trim();
+    if (!restante) return { value: normalized, stripped: false };
+    return { value: restante, stripped: true };
+  };
+
+  // Código estruturado existente tem prioridade absoluta. Se ele existir no
+  // catálogo, apenas retiramos do texto um prefixo duplicado correspondente ao
+  // MESMO código. Se o catálogo não reconhecer o código, preservamos tudo.
+  if (codigoExistente) {
+    const entry = index.byCode.get(codigoExistente);
+    if (!entry) {
+      return {
+        codigoLogradouro: codigoExistente,
+        logradouro: logradouroNorm,
+        tipoDescricao: String(opts.tipoLogradouro ?? '').trim(),
+        correspondenciaSegura: false,
+        ajustado: false,
+        fonte: 'codigo_existente',
+      };
+    }
+    const stripped = stripPrefix(entry, logradouroNorm);
+    return {
+      codigoLogradouro: codigoExistente,
+      logradouro: stripped.value,
+      tipoDescricao: entry.descricao,
+      correspondenciaSegura: true,
+      ajustado: stripped.stripped,
+      fonte: 'codigo_existente',
+    };
+  }
+
+  // Quando o tipo já estiver estruturado como texto, só aceitamos igualdade
+  // exata com uma descrição existente em logradouros_dne.
+  if (tipoNorm) {
+    const entry = index.byName.get(tipoNorm);
+    if (entry) {
+      const stripped = stripPrefix(entry, logradouroNorm);
+      return {
+        codigoLogradouro: entry.codigo,
+        logradouro: stripped.value,
+        tipoDescricao: entry.descricao,
+        correspondenciaSegura: true,
+        ajustado: stripped.stripped,
+        fonte: 'tipo_estruturado',
+      };
+    }
+  }
+
+  // Sem tipo/código estruturado, procuramos a descrição cadastrada como prefixo
+  // integral do logradouro. A lista vem exclusivamente de logradouros_dne e é
+  // ordenada pelo maior nome primeiro para evitar correspondência parcial.
+  if (logradouroNorm) {
+    const entry = index.entries.find((candidate) => logradouroNorm.startsWith(`${candidate.chave} `));
+    if (entry) {
+      const restante = logradouroNorm.slice(entry.chave.length).trim();
+      if (restante) {
+        return {
+          codigoLogradouro: entry.codigo,
+          logradouro: restante,
+          tipoDescricao: entry.descricao,
+          correspondenciaSegura: true,
+          ajustado: true,
+          fonte: 'prefixo_logradouro',
+        };
+      }
+    }
+  }
+
+  return {
+    codigoLogradouro: '',
+    logradouro: logradouroNorm,
+    tipoDescricao: String(opts.tipoLogradouro ?? '').trim(),
+    correspondenciaSegura: false,
+    ajustado: false,
+    fonte: 'nenhuma',
+  };
+}
+
+// ============================================================
 // CEP + Município IBGE — consulta ViaCEP em lote
 // ============================================================
 
 export interface CepInfo {
-  cep: string;       // 8 dígitos
-  ibge6: string;     // código IBGE 6 dígitos (sem dígito verificador) — usado no BPA
+  cep: string;
+  ibge6: string;
   uf?: string;
   localidade?: string;
 }
 
-/** Valida CEP: precisa ter exatamente 8 dígitos e não ser todo zeros. */
 export function isCepValido(cepRaw: any): boolean {
   const c = onlyDigits(cepRaw);
   return c.length === 8 && c !== '00000000';
 }
 
-/** Normaliza CEP para 8 dígitos. Retorna string vazia se inválido. */
 export function normalizeCep(cepRaw: any): string {
   const c = onlyDigits(cepRaw);
   return c.length === 8 ? c : '';
 }
 
-/**
- * Consulta o ViaCEP para uma lista de CEPs únicos e devolve um Map cep→info.
- * Falhas individuais não interrompem o lote.
- */
 const VIACEP_TIMEOUT_MS = 2500;
 const VIACEP_CHUNK_SIZE = 50;
 const VIACEP_CACHE_KEY = "bpa_viacep_cache_v1";
-const VIACEP_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 dias
+const VIACEP_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 
 type CepCacheEntry = { info: CepInfo | null; ts: number };
 
@@ -233,7 +414,6 @@ async function fetchOneCep(cep: string): Promise<CepInfo | null> {
     if (ibge.length < 6) return null;
     return { cep, ibge6: ibge.slice(0, 6), uf: j.uf, localidade: j.localidade };
   } catch {
-    /* timeout/abort/rede — silencioso, fallback assume */
     return null;
   } finally {
     clearTimeout(timer);
@@ -241,6 +421,15 @@ async function fetchOneCep(cep: string): Promise<CepInfo | null> {
 }
 
 export async function fetchCepInfoMap(ceps: string[]): Promise<Map<string, CepInfo>> {
+  // O BPA-Exportar já passa por este ponto antes de montar Registros 03. A carga
+  // do DNE aqui reaproveita o fluxo existente sem criar uma segunda rotina de
+  // exportação. Falha do catálogo DNE não deve derrubar a consulta de CEP.
+  try {
+    await ensureDneLogradourosLoaded();
+  } catch (e) {
+    console.warn('[BPA-Exportar] logradouros_dne indisponível; normalização de tipo de logradouro será conservadora.', e);
+  }
+
   const out = new Map<string, CepInfo>();
   const unicos = Array.from(new Set(ceps.map(onlyDigits).filter(c => c.length === 8)));
   if (unicos.length === 0) return out;
@@ -276,21 +465,12 @@ export async function fetchCepInfoMap(ceps: string[]): Promise<Map<string, CepIn
   return out;
 }
 
-
-/**
- * Resolve município IBGE (6 dígitos) usando:
- *  1. Município do cadastro, se válido
- *  2. IBGE derivado do CEP (ViaCEP), somente se o cadastro estiver inválido
- *  3. Município padrão da exportação, como último recurso
- *
- * Retorna o código final + flag de correção automática (CEP→município).
- */
 export function resolveMunicipioBpa(opts: {
   municipioCadastro: any;
   cepInfo?: CepInfo;
   municipioPadrao: string;
 }): {
-  codigo: string;             // 6 dígitos ou '' se nada resolveu
+  codigo: string;
   fonte: 'cadastro' | 'cep' | 'padrao' | 'nenhum';
   autoCorrigido: boolean;
   motivo?: string;
