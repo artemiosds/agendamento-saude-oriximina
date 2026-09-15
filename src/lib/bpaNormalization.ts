@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { loadBpaDocumentoOrigemInstitucional } from './bpaHeaderSource';
 
 /**
  * Normalização e validação para BPA-Exportar.
@@ -421,13 +422,18 @@ async function fetchOneCep(cep: string): Promise<CepInfo | null> {
 }
 
 export async function fetchCepInfoMap(ceps: string[]): Promise<Map<string, CepInfo>> {
-  // O BPA-Exportar já passa por este ponto antes de montar Registros 03. A carga
-  // do DNE aqui reaproveita o fluxo existente sem criar uma segunda rotina de
-  // exportação. Falha do catálogo DNE não deve derrubar a consulta de CEP.
+  // O BPA-Exportar já passa por este ponto antes de montar Registros 03 e Header.
+  // Reaproveitamos esse ponto já aguardado pelo fluxo para garantir que tanto o
+  // catálogo DNE quanto o documento institucional estejam prontos antes do TXT.
   try {
     await ensureDneLogradourosLoaded();
   } catch (e) {
     console.warn('[BPA-Exportar] logradouros_dne indisponível; normalização de tipo de logradouro será conservadora.', e);
+  }
+  try {
+    await loadBpaDocumentoOrigemInstitucional();
+  } catch (e) {
+    console.warn('[BPA-Exportar] documento institucional indisponível; validação do Header será mantida.', e);
   }
 
   const out = new Map<string, CepInfo>();
