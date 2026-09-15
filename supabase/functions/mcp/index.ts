@@ -7,7 +7,7 @@ import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@2.1.0";
 
 // src/lib/mcp/tools/search-patients.ts
 import { defineTool, ToolError } from "npm:@lovable.dev/mcp-js@2.1.0";
-import { z } from "npm:zod@^4.6.5";
+import { z } from "npm:zod@3.25.76";
 
 // src/lib/mcp/supabase.ts
 import { createClient } from "npm:@supabase/supabase-js@^2.98.0";
@@ -84,7 +84,8 @@ var search_patients_default = defineTool({
   handler: async ({ name, limit }, ctx) => {
     try {
       const { supabase, unidadeId } = await getStaffScope(ctx);
-      let query = supabase.from("pacientes").select("id, nome, data_nascimento, unidade_id").ilike("nome", `%${name.replace(/[%_]/g, "")} %`.replace(" %", "%")).order("nome").limit(limit);
+      const safeName = name.replace(/[%_]/g, "").trim();
+      let query = supabase.from("pacientes").select("id, nome, data_nascimento, unidade_id").ilike("nome", `%${safeName}%`).order("nome").limit(limit);
       if (unidadeId) query = query.eq("unidade_id", unidadeId);
       const { data, error } = await query;
       if (error) throw error;
@@ -101,7 +102,7 @@ var search_patients_default = defineTool({
 
 // src/lib/mcp/tools/get-daily-agenda.ts
 import { defineTool as defineTool2, ToolError as ToolError2 } from "npm:@lovable.dev/mcp-js@2.1.0";
-import { z as z2 } from "npm:zod@^4.6.5";
+import { z as z2 } from "npm:zod@3.25.76";
 var get_daily_agenda_default = defineTool2({
   name: "get_daily_agenda",
   title: "Consultar agenda di\xE1ria",
@@ -132,7 +133,7 @@ var get_daily_agenda_default = defineTool2({
 
 // src/lib/mcp/tools/get-patient-appointments.ts
 import { defineTool as defineTool3, ToolError as ToolError3 } from "npm:@lovable.dev/mcp-js@2.1.0";
-import { z as z3 } from "npm:zod@^4.6.5";
+import { z as z3 } from "npm:zod@3.25.76";
 var get_patient_appointments_default = defineTool3({
   name: "get_patient_appointments",
   title: "Consultar hist\xF3rico de agendamentos",

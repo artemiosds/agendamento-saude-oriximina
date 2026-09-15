@@ -14,10 +14,11 @@ export default defineTool({
   handler: async ({ name, limit }, ctx) => {
     try {
       const { supabase, unidadeId } = await getStaffScope(ctx);
+      const safeName = name.replace(/[%_]/g, "").trim();
       let query = supabase
         .from("pacientes")
         .select("id, nome, data_nascimento, unidade_id")
-        .ilike("nome", `%${name.replace(/[%_]/g, "")} %`.replace(" %", "%"))
+        .ilike("nome", `%${safeName}%`)
         .order("nome")
         .limit(limit);
 
