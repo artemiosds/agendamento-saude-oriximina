@@ -1,3 +1,5 @@
+import { normalizeEnderecoBpaDne } from "./bpaNormalization";
+
 /**
  * Construtor posicional do arquivo BPA-I (SIA/SUS).
  * Referência: Layout de Exportação BPA — Registro 01 (130) e Registro 03 (338).
@@ -179,19 +181,44 @@ export function buildRegistro03(data: BpaRegistro03Data): BpaBuildResult {
   const errors: BpaLayoutIssue[] = [];
   const adjustments: BpaLayoutIssue[] = [];
 
-  // Correção apenas em memória: quando o número já está estruturado e também
-  // aparece como último token do logradouro, remove a duplicação antes do TXT.
-  // Nenhum dado do cadastro é persistido ou inventado.
-  const address = normalizeBpaStreetNumber(data.logradouro, data.numero);
-  const normalizedData: BpaRegistro03Data = address.adjusted
-    ? { ...data, logradouro: address.logradouro, numero: address.numero }
+  // A tabela logradouros_dne é carregada antes da montagem do TXT pelo fluxo
+  // de normalização BPA. Aqui apenas aplicamos o catálogo já existente em
+  // memória. Nenhum código é inventado e nenhum cadastro é persistido.
+  const dneAddress = normalizeEnderecoBpaDne({
+    codigoLogradouro: data.codigoLogradouro,
+    logradouro: data.logradouro,
+  });
+  const dataComDne: BpaRegistro03Data = dneAddress.correspondenciaSegura
+    ? {
+        ...data,
+        codigoLogradouro: dneAddress.codigoLogradouro,
+        logradouro: dneAddress.logradouro,
+      }
     : data;
-  if (address.adjusted) {
+
+  if (dneAddress.ajustado) {
     adjustments.push({
       field: "logradouro",
       start: BPA_I_FIELDS.logradouro.start,
       end: BPA_I_FIELDS.logradouro.end,
       value: String(data.logradouro ?? ""),
+      problem: "Tipo de logradouro estava duplicado no início do nome",
+      correction: `Tipo resolvido em logradouros_dne (${dneAddress.tipoDescricao}) e logradouro normalizado para "${dneAddress.logradouro}"`,
+    });
+  }
+
+  // Correção apenas em memória: quando o número já está estruturado e também
+  // aparece como último token do logradouro, remove a duplicação antes do TXT.
+  const address = normalizeBpaStreetNumber(dataComDne.logradouro, dataComDne.numero);
+  const normalizedData: BpaRegistro03Data = address.adjusted
+    ? { ...dataComDne, logradouro: address.logradouro, numero: address.numero }
+    : dataComDne;
+  if (address.adjusted) {
+    adjustments.push({
+      field: "logradouro",
+      start: BPA_I_FIELDS.logradouro.start,
+      end: BPA_I_FIELDS.logradouro.end,
+      value: String(dataComDne.logradouro ?? ""),
       problem: "Número do imóvel estava duplicado no final do logradouro",
       correction: `Logradouro normalizado para "${address.logradouro}"; número estruturado preservado`,
     });
