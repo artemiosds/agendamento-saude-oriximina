@@ -1,4 +1,5 @@
 import { normalizeEnderecoBpaDne } from "./bpaNormalization";
+import { getBpaDocumentoOrigemInstitucional } from "./bpaHeaderSource";
 
 /**
  * Construtor posicional do arquivo BPA-I (SIA/SUS).
@@ -258,6 +259,20 @@ export interface BpaHeaderData {
 export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
   const errors: BpaLayoutIssue[] = [];
   const adjustments: BpaLayoutIssue[] = [];
+  const documentoDireto = digits(data.documentoOrigem);
+  const documentoOrigem = documentoDireto || getBpaDocumentoOrigemInstitucional();
+
+  if (!documentoDireto && documentoOrigem) {
+    adjustments.push({
+      field: "documentoOrigem",
+      start: 66,
+      end: 79,
+      value: String(data.documentoOrigem ?? ""),
+      problem: "Documento não estava disponível na unidade usada para montar o header",
+      correction: "Reutilizado documento institucional real e único encontrado nas unidades ativas",
+    });
+  }
+
   const defs: Array<[string, BpaFieldDefinition, unknown]> = [
     ["tipoRegistro", { start: 1, end: 2, length: 2, kind: "digits", required: true }, "01"],
     ["identificacao", { start: 3, end: 7, length: 5, kind: "raw", required: true }, "#BPA#"],
@@ -267,7 +282,7 @@ export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
     ["campoControle", { start: 26, end: 29, length: 4, kind: "digits", required: true }, data.campoControle],
     ["orgaoOrigem", { start: 30, end: 59, length: 30, kind: "text", required: true }, data.orgaoOrigem],
     ["siglaOrigem", { start: 60, end: 65, length: 6, kind: "text", required: true }, data.siglaOrigem],
-    ["documentoOrigem", { start: 66, end: 79, length: 14, kind: "digits", required: true }, data.documentoOrigem],
+    ["documentoOrigem", { start: 66, end: 79, length: 14, kind: "digits", required: true }, documentoOrigem],
     ["orgaoDestino", { start: 80, end: 119, length: 40, kind: "text", required: true }, data.orgaoDestino],
     ["indicadorDestino", { start: 120, end: 120, length: 1, kind: "text", required: true }, data.indicadorDestino === "E" ? "E" : "M"],
     ["versaoSistema", { start: 121, end: 130, length: 10, kind: "text", required: true }, data.versaoSistema],
