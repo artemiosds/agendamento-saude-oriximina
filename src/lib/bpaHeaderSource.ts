@@ -84,7 +84,3 @@ export async function loadBpaDocumentoOrigemInstitucional(): Promise<string> {
 
   return loadPromise;
 }
-
-// Pré-carrega assim que o módulo BPA é carregado. O valor só é utilizado se o
-// documento recebido diretamente da unidade no fluxo atual estiver vazio.
-void loadBpaDocumentoOrigemInstitucional();
