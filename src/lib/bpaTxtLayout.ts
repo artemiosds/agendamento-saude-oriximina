@@ -1,5 +1,8 @@
 import { normalizeEnderecoBpaDne } from "./bpaNormalization";
-import { getBpaDocumentoOrigemInstitucional } from "./bpaHeaderSource";
+import {
+  debugBpaDocumentoOrigem,
+  getBpaDocumentoOrigemInstitucional,
+} from "./bpaHeaderSource";
 
 /**
  * Construtor posicional do arquivo BPA-I (SIA/SUS).
@@ -262,6 +265,12 @@ export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
   const documentoDireto = digits(data.documentoOrigem);
   const documentoOrigem = documentoDireto || getBpaDocumentoOrigemInstitucional();
 
+  debugBpaDocumentoOrigem({
+    valorOriginal: data.documentoOrigem,
+    valorEnviado: documentoOrigem,
+    fonteDireta: documentoDireto ? "mapeamento legado da unidade" : "unidade sem documento",
+  });
+
   if (!documentoDireto && documentoOrigem) {
     adjustments.push({
       field: "documentoOrigem",
@@ -269,7 +278,7 @@ export function buildHeaderBpa(data: BpaHeaderData): BpaBuildResult {
       end: 79,
       value: String(data.documentoOrigem ?? ""),
       problem: "Documento não estava disponível na unidade usada para montar o header",
-      correction: "Reutilizado documento institucional real e único encontrado nas unidades ativas",
+      correction: "Reutilizado CNPJ institucional já configurado no sistema ou, na ausência dele, documento institucional único das unidades ativas",
     });
   }
 
