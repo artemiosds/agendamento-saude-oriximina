@@ -33,6 +33,10 @@ import {
   calcularCampoControleBpa,
   type BpaLayoutIssue,
 } from "@/lib/bpaTxtLayout";
+import {
+  buildBpaProductionKey,
+  consolidateBpaProcedureCandidates,
+} from "@/lib/bpaDeduplication";
 
 
 // Comparador alfabético estável: nome → data
@@ -944,10 +948,12 @@ const BpaExportar: React.FC = () => {
     };
     resumo?: {
       totalAtendimentos: number;
+      totalOcorrenciasBrutas: number;
+      totalRepeticoesEntreFontes: number;
       totalProcedimentosEncontrados: number;
       totalProcedimentosValidos: number;
       totalRegistros03: number;
-      totalDuplicadosRemovidos: number;
+      totalEliminacoesFinais: number;
       rejeitados: Array<{ paciente: string; data: string; codigo: string; cbo: string; motivo: string }>;
       municipios: string[];
       codigosIbge: string[];
@@ -1246,10 +1252,12 @@ const BpaExportar: React.FC = () => {
     // Resumo de integridade final (permissivo para encontrar, rigoroso para exportar)
     const resumoIntegridade = {
       totalAtendimentos: 0,
+      totalOcorrenciasBrutas: 0,
+      totalRepeticoesEntreFontes: 0,
       totalProcedimentosEncontrados: 0,
       totalProcedimentosValidos: 0,
       totalRegistros03: 0,
-      totalDuplicadosRemovidos: 0,
+      totalEliminacoesFinais: 0,
       rejeitados: [] as Array<{ paciente: string; data: string; codigo: string; cbo: string; motivo: string }>,
       municipios: [] as string[],
       codigosIbge: [] as string[],
@@ -2237,38 +2245,6 @@ const BpaExportar: React.FC = () => {
             if (!c) return;
             codigosColetados.push({ codigo: c, origem, cid: cidNorm });
           };
-          const consolidarCodigosColetados = () => {
-            const codigosParaExportar: Array<{ codigo: string; origem: string; cid?: string }> = [];
-            const codigosVistos = new Set<string>();
-            for (const item of codigosColetados) {
-              const c = item.codigo;
-              const cidNorm = item.cid || "";
-              if (!c) continue;
-              if (dedupeSomentePorCodigo) {
-                const indiceMesmoCodigo = codigosParaExportar.findIndex((item) => item.codigo === c);
-                if (indiceMesmoCodigo >= 0) {
-                  if (cidNorm && !codigosParaExportar[indiceMesmoCodigo].cid) {
-                    codigosParaExportar[indiceMesmoCodigo] = { codigo: c, origem: item.origem, cid: cidNorm };
-                  }
-                  continue;
-                }
-                codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
-                continue;
-              }
-              const indiceMesmoCodigoSemCid = codigosParaExportar.findIndex((item) => item.codigo === c && !item.cid);
-              if (cidNorm && indiceMesmoCodigoSemCid >= 0) {
-                codigosVistos.delete(`${c}|`);
-                codigosParaExportar.splice(indiceMesmoCodigoSemCid, 1);
-              } else if (!cidNorm && codigosParaExportar.some((item) => item.codigo === c)) {
-                continue;
-              }
-              const chave = `${c}|${cidNorm}`;
-              if (codigosVistos.has(chave)) continue;
-              codigosVistos.add(chave);
-              codigosParaExportar.push({ codigo: c, origem: item.origem, cid: cidNorm });
-            }
-            return codigosParaExportar;
-          };
           // 1) Todos os SIGTAPs do prontuário (custom_data, campos fixos, arrays).
           for (const t of sigtapTodos) addCodigo(t.codigo, `Prontuário:${t.campo}`);
           // 2) Todos os SIGTAPs vinculados (prontuario_procedimentos).
@@ -2351,7 +2327,27 @@ const BpaExportar: React.FC = () => {
             }
           }
 
-          const codigosParaExportar = consolidarCodigosColetados();
+          const consolidacao = consolidateBpaProcedureCandidates(codigosColetados, dedupeSomentePorCodigo);
+          const codigosParaExportar = consolidacao.consolidated;
+          resumoIntegridade.totalOcorrenciasBrutas += codigosColetados.length;
+          resumoIntegridade.totalRepeticoesEntreFontes += consolidacao.repetitions.length;
+          if (import.meta.env.DEV && consolidacao.repetitions.length > 0) {
+            for (const repeticao of consolidacao.repetitions) {
+              console.debug("[BPA deduplicação entre fontes]", {
+                chave: `${pront.agendamento_id ? `agendamento:${pront.agendamento_id}` : `prontuario:${pront.id}`}|${repeticao.key}`,
+                agendamento_id: pront.agendamento_id || null,
+                prontuario_id: pront.id || null,
+                paciente: pront.paciente_id || null,
+                profissional: pront.profissional_id || null,
+                unidade: pront.unidade_id || null,
+                data: String(pront.data_atendimento || "").slice(0, 10),
+                sigtap: repeticao.repeated.codigo,
+                origem_mantida: repeticao.kept.origem,
+                origem_repetida: repeticao.repeated.origem,
+                motivo: repeticao.reason,
+              });
+            }
+          }
 
           // Regra oficial: SIGTAP só é obrigatório para Psicóloga, Fonoaudióloga,
           // Fisioterapeuta e Nutricionista. Médico e demais perfis não bloqueiam.
@@ -2390,10 +2386,6 @@ const BpaExportar: React.FC = () => {
           // os reaproveitados do histórico/PTS (que valem apenas como sugestão).
           resumoIntegridade.totalAtendimentos++;
           resumoIntegridade.totalProcedimentosEncontrados += codigosParaExportar.length;
-          resumoIntegridade.totalDuplicadosRemovidos += Math.max(
-            0,
-            codigosColetados.length - codigosParaExportar.length,
-          );
           if (municipio) {
             ibgeSet.add(municipio);
             if (munRes.fonte) municipiosSet.add(`${municipio} (${munRes.fonte})`);
@@ -2642,11 +2634,14 @@ const BpaExportar: React.FC = () => {
             let listaParaEmitir = codigosValidados;
             if (listaParaEmitir.length === 0 && fallbackPadrao.length > 0) {
               const valFallback = validarListaProcedimentosBpaI(fallbackPadrao, validacaoCtxLinha);
+              resumoIntegridade.totalOcorrenciasBrutas += fallbackPadrao.length;
+              resumoIntegridade.totalProcedimentosEncontrados += fallbackPadrao.length;
               listaParaEmitir = valFallback.validos.map((r) => ({
                 codigo: r.codigo,
                 origem: r.origem,
                 cid: r.cid,
               }));
+              resumoIntegridade.totalProcedimentosValidos += listaParaEmitir.length;
               for (const rej of valFallback.rejeitados) {
                 stats.rejectedProc++;
                 const motivo = rej.rejeicoes.join(" | ");
@@ -2683,12 +2678,35 @@ const BpaExportar: React.FC = () => {
                 ? ""
                 : procEntry.cid || cidProducaoLinha || pront.custom_data?.cid || pac?.cid || "";
               const { cid } = normalizarCidLinha(cidBrutoLinha);
-              const chaveLinhaBpa = profissionalPermiteMultiplosSigtap(prof)
-                ? [chaveAtendimento, proc].join("|")
-                : [chaveAtendimento, proc, cid].join("|");
+              const chaveLinhaBpa = buildBpaProductionKey(
+                {
+                  agendamentoId: pront.agendamento_id,
+                  prontuarioId: pront.id,
+                  pacienteId: pront.paciente_id,
+                  profissionalId: pront.profissional_id,
+                  unidadeId: pront.unidade_id,
+                  dataAtendimento: pront.data_atendimento,
+                },
+                { codigo: proc, cid },
+                profissionalPermiteMultiplosSigtap(prof),
+              );
               if (chavesLinhasBpa.has(chaveLinhaBpa)) {
                 stats.autoCorrected++;
-                resumoIntegridade.totalDuplicadosRemovidos++;
+                resumoIntegridade.totalEliminacoesFinais++;
+                if (import.meta.env.DEV) {
+                  console.debug("[BPA eliminação final]", {
+                    chave: chaveLinhaBpa,
+                    agendamento_id: pront.agendamento_id || null,
+                    prontuario_id: pront.id || null,
+                    paciente: pront.paciente_id || null,
+                    profissional: pront.profissional_id || null,
+                    unidade: pront.unidade_id || null,
+                    data: String(pront.data_atendimento || "").slice(0, 10),
+                    sigtap: proc,
+                    origem: procEntry.origem,
+                    motivo: "Mesma linha de produção já emitida para o mesmo atendimento",
+                  });
+                }
                 details.autoCorrected.push({
                   ...itemDetail,
                   pendencia: "Linha BPA-I duplicada removida",
@@ -4239,7 +4257,13 @@ const BpaExportar: React.FC = () => {
                         Atendimentos: <b>{results.resumo.totalAtendimentos}</b>
                       </div>
                       <div>
-                        Procedimentos encontrados: <b>{results.resumo.totalProcedimentosEncontrados}</b>
+                        Ocorrências brutas: <b>{results.resumo.totalOcorrenciasBrutas}</b>
+                      </div>
+                      <div>
+                        Repetições entre fontes: <b>{results.resumo.totalRepeticoesEntreFontes}</b>
+                      </div>
+                      <div>
+                        Procedimentos consolidados: <b>{results.resumo.totalProcedimentosEncontrados}</b>
                       </div>
                       <div>
                         Procedimentos válidos: <b>{results.resumo.totalProcedimentosValidos}</b>
@@ -4248,7 +4272,7 @@ const BpaExportar: React.FC = () => {
                         Registros 03 gerados: <b>{results.resumo.totalRegistros03}</b>
                       </div>
                       <div>
-                        Duplicados removidos: <b>{results.resumo.totalDuplicadosRemovidos}</b>
+                        Eliminações finais reais: <b>{results.resumo.totalEliminacoesFinais}</b>
                       </div>
                       <div>
                         Rejeitados: <b className="text-destructive">{results.resumo.rejeitados.length}</b>
