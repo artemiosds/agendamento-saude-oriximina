@@ -26,7 +26,6 @@
           "openWorldHint": false
         },
         "inputSchema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "properties": {
             "name": {
@@ -36,16 +35,18 @@
               "description": "Nome ou parte do nome do paciente."
             },
             "limit": {
-              "default": 10,
-              "description": "Máximo de resultados.",
               "type": "integer",
               "minimum": 1,
-              "maximum": 20
+              "maximum": 20,
+              "default": 10,
+              "description": "Máximo de resultados."
             }
           },
           "required": [
             "name"
-          ]
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
       },
@@ -59,7 +60,6 @@
           "openWorldHint": false
         },
         "inputSchema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "properties": {
             "date": {
@@ -68,15 +68,16 @@
               "description": "Data no formato AAAA-MM-DD."
             },
             "professional_id": {
-              "description": "ID opcional do profissional.",
               "type": "string",
               "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "description": "ID opcional do profissional."
             }
           },
           "required": [
             "date"
-          ]
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
       },
@@ -90,7 +91,6 @@
           "openWorldHint": false
         },
         "inputSchema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "properties": {
             "patient_id": {
@@ -100,16 +100,18 @@
               "description": "ID do paciente retornado pela busca."
             },
             "limit": {
-              "default": 10,
-              "description": "Máximo de agendamentos.",
               "type": "integer",
               "minimum": 1,
-              "maximum": 50
+              "maximum": 50,
+              "default": 10,
+              "description": "Máximo de agendamentos."
             }
           },
           "required": [
             "patient_id"
-          ]
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
       }
