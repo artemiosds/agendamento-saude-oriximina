@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const onlyDigits = (value: unknown): string => String(value ?? "").replace(/\D/g, "");
 
-function normalizeDocumento(value: unknown): string {
+function normalizeDocumentoLegado(value: unknown): string {
   const digits = onlyDigits(value);
   return digits.length === 11 || digits.length === 14 ? digits : "";
 }
@@ -31,14 +31,20 @@ function maskDocumento(value: unknown): string {
   return `${"*".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
 }
 
+/** Mantido para diagnóstico/regressão do mapeamento que existia no BPA. */
 export function documentoOrigemDaUnidade(unidade: any): string {
   const cd = (unidade?.custom_data as any) || {};
   return (
-    normalizeDocumento(cd.cnpj) ||
-    normalizeDocumento(unidade?.cnpj) ||
-    normalizeDocumento(cd.cpf) ||
+    normalizeDocumentoLegado(cd.cnpj) ||
+    normalizeDocumentoLegado(unidade?.cnpj) ||
+    normalizeDocumentoLegado(cd.cpf) ||
     ""
   );
+}
+
+function cnpjOrigemDaUnidade(unidade: any): string {
+  const cd = (unidade?.custom_data as any) || {};
+  return normalizeCnpj(cd.cnpj) || normalizeCnpj(unidade?.cnpj) || "";
 }
 
 export function documentoOrigemInstitucionalDaConfig(configuracoes: any): string {
@@ -51,7 +57,7 @@ let carregamentoConcluido = false;
 let loadPromise: Promise<string> | null = null;
 
 export function primeBpaDocumentoOrigemInstitucional(value: unknown): string {
-  documentoInstitucional = normalizeDocumento(value);
+  documentoInstitucional = normalizeCnpj(value);
   documentoInstitucionalFonte = documentoInstitucional ? "teste/manual" : "nenhuma";
   carregamentoConcluido = true;
   return documentoInstitucional;
@@ -88,8 +94,8 @@ export function debugBpaDocumentoOrigem(opts: {
     motivoVazio: enviadoDigits
       ? null
       : originalDigits
-        ? `Documento original possui ${originalDigits.length} dígitos; esperado 11 ou 14 no fluxo legado ou 14 no CNPJ institucional`
-        : "Unidade do Header sem documento e configuração institucional sem CNPJ válido",
+        ? `Documento recebido possui ${originalDigits.length} dígitos; o Header institucional exige CNPJ de 14 dígitos`
+        : "Unidade do Header sem CNPJ e configuração institucional sem CNPJ válido",
   });
 }
 
@@ -105,17 +111,20 @@ export async function loadBpaDocumentoOrigemInstitucional(): Promise<string> {
         .select("configuracoes")
         .eq("id", "default")
         .maybeSingle();
-      if (cfgError) throw cfgError;
 
-      const cnpjConfigurado = documentoOrigemInstitucionalDaConfig(cfgRow?.configuracoes);
-      if (cnpjConfigurado) {
-        documentoInstitucional = cnpjConfigurado;
-        documentoInstitucionalFonte = "system_config.default.config_sistema.instituicao.cnpj";
-        return documentoInstitucional;
+      if (!cfgError) {
+        const cnpjConfigurado = documentoOrigemInstitucionalDaConfig(cfgRow?.configuracoes);
+        if (cnpjConfigurado) {
+          documentoInstitucional = cnpjConfigurado;
+          documentoInstitucionalFonte = "system_config.default.config_sistema.instituicao.cnpj";
+          return documentoInstitucional;
+        }
+      } else if (import.meta.env.DEV) {
+        console.debug("[BPA-Exportar][Header] configuração institucional indisponível; tentando CNPJ das unidades.", cfgError);
       }
 
-      // Preserva o fallback legado das unidades, sem escolher documento
-      // arbitrariamente quando houver mais de uma identidade diferente.
+      // Fallback apenas para CNPJ real das unidades. CPF não é usado para
+      // satisfazer o campo institucional do Header.
       const { data, error } = await (supabase as any)
         .from("unidades")
         .select("*")
@@ -125,21 +134,21 @@ export async function loadBpaDocumentoOrigemInstitucional(): Promise<string> {
       const documentos = Array.from(
         new Set(
           ((data || []) as any[])
-            .map(documentoOrigemDaUnidade)
+            .map(cnpjOrigemDaUnidade)
             .filter(Boolean),
         ),
       );
 
       documentoInstitucional = documentos.length === 1 ? documentos[0] : "";
       documentoInstitucionalFonte = documentoInstitucional
-        ? "unidades: documento institucional único"
+        ? "unidades: CNPJ institucional único"
         : documentos.length > 1
-          ? "unidades: múltiplos documentos, sem escolha automática"
+          ? "unidades: múltiplos CNPJs, sem escolha automática"
           : "nenhuma";
       return documentoInstitucional;
     } catch (error) {
       console.warn(
-        "[BPA-Exportar] não foi possível resolver o documento institucional do Header.",
+        "[BPA-Exportar] não foi possível resolver o CNPJ institucional do Header.",
         error,
       );
       documentoInstitucional = "";
