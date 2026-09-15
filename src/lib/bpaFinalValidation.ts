@@ -260,10 +260,12 @@ export function validarListaProcedimentosBpaI(
 
 export interface ResumoIntegridadeBpa {
   totalAtendimentos: number;
+  totalOcorrenciasBrutas: number;
+  totalRepeticoesEntreFontes: number;
   totalProcedimentosEncontrados: number;
   totalProcedimentosValidos: number;
   totalRegistros03: number;
-  totalDuplicadosRemovidos: number;
+  totalEliminacoesFinais: number;
   rejeitados: Array<{ paciente: string; data: string; codigo: string; cbo: string; motivo: string }>;
   municipios: string[];
   codigosIbge: string[];
