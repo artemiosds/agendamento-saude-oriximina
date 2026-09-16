@@ -96,11 +96,14 @@ Adicionar testes unitários focados na fronteira `registro final → linha fixed
 
 ## Validação prática
 
-- Gerar novamente a competência `202608` pelo fluxo real, sem modificar dados.
-- Comparar automaticamente os registros finais usados pela conferência com os campos relidos do TXT: quantidade, paciente, CNS, atendimento, procedimento, DNE, logradouro, número, bairro, CID e município.
+- Gerar novamente a competência `202608` pelo mesmo fluxo real de produção, sem modificar dados, usando exatamente os filtros/opções do cenário que apresentou 245 atendimentos, 1.225 procedimentos consolidados, 1.223 válidos, 1.223 Registros 03, 2 rejeitados e 0 eliminações finais.
+- Gerar a conferência/PDF a partir do mesmo conjunto e comparar automaticamente os 1.223 registros válidos, salvo impossibilidade real individualmente demonstrada.
+- Comparar os registros finais usados pela conferência com os campos relidos do TXT: quantidade, paciente, CNS, atendimento, procedimento, DNE, logradouro, número, bairro, CID, município e quantidade.
 - Conferir especificamente Agatha, Alerrando, Andria e Ana Luisa.
-- Confirmar: cabeçalho 130; todas as linhas 338; quantidade, folhas e controle fechando; nenhum código DNE fora de `logradouros_dne`.
-- Confirmar que a quantidade de procedimentos válidos permanece preservada, salvo uma impossibilidade real e explicitamente identificada de representação obrigatória no BPA-I.
+- Comprovar que nenhum atendimento válido foi perdido por erro de serialização, nenhum CNS existente virou `000000000000000`, nenhum DNE já resolvido desapareceu e nenhum endereço estruturado teve logradouro, número ou bairro deslocado.
+- Confirmar: cabeçalho 130; todas as linhas 338; total de registros, folhas e campo de controle fechando; nenhum código DNE fora de `logradouros_dne`.
+- Listar qualquer registro ainda impossível de emitir com paciente, data, procedimento, motivo técnico exato e regra impeditiva.
+- A correção somente será considerada concluída após essa prova prática; testes unitários, verificação de tipos e build isoladamente não serão suficientes.
 - Executar testes, verificação de tipos, build e inspeção do download no navegador.
 
 ## Arquivos previstos
