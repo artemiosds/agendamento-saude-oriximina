@@ -43,6 +43,8 @@ import {
   normalizeBpaAddress,
   type DneLogradouroEntry,
 } from "@/lib/bpaAddressNormalization";
+import { resolveBpaHeaderDocument } from "@/lib/bpaHeaderSource";
+import { normalizeBpaPhone } from "@/lib/bpaPhoneNormalization";
 
 
 // Comparador alfabético estável: nome → data
@@ -1214,13 +1216,22 @@ const BpaExportar: React.FC = () => {
       // (e) Leitura única de system_config.bpa_config — antes era chamado 2x.
       let triagemSigtapDefault = "";
       let bpaConfigValue: any = {};
+      let systemConfigValue: any = {};
       try {
-        const { data: cfgRowTr } = await (supabase as any)
-          .from("system_config")
-          .select("configuracoes")
-          .eq("id", "bpa_config")
-          .maybeSingle();
+        const [{ data: cfgRowTr }, { data: systemCfgRow }] = await Promise.all([
+          (supabase as any)
+            .from("system_config")
+            .select("configuracoes")
+            .eq("id", "bpa_config")
+            .maybeSingle(),
+          (supabase as any)
+            .from("system_config")
+            .select("configuracoes")
+            .eq("id", "default")
+            .maybeSingle(),
+        ]);
         bpaConfigValue = cfgRowTr?.configuracoes || {};
+        systemConfigValue = systemCfgRow?.configuracoes || {};
         triagemSigtapDefault = String(bpaConfigValue.bpa_triagem_sigtap || "").replace(/\D/g, "");
       } catch {
         /* sem config → cai no procedimento padrão da exportação */
@@ -2500,7 +2511,7 @@ const BpaExportar: React.FC = () => {
           const complemento = primeiroValorPreenchido(pac?.complemento, pacCd.complemento) || "";
           const numeroOriginal = primeiroValorPreenchido(pac?.numero, pacCd.numero) || "S/N";
           const bairro = primeiroValorPreenchido(pac?.bairro, pacCd.bairro) || "";
-          const telefone = primeiroValorPreenchido(pac?.telefone, pacCd.telefone) || "";
+          const telefone = normalizeBpaPhone(primeiroValorPreenchido(pac?.telefone, pacCd.telefone));
           const email = primeiroValorPreenchido(pac?.email, pacCd.email) || "";
           const ineEquipe = fixedDigits(unidadeCd.ine || pront.custom_data?.ine_equipe || "", 10);
 
@@ -2814,7 +2825,12 @@ const BpaExportar: React.FC = () => {
         campoControle,
         orgaoOrigem: unidadeHeader?.nome || "SECRETARIA MUNICIPAL DE SAUDE",
         siglaOrigem: unidadeHeaderCd.sigla || "SMS",
-        documentoOrigem: unidadeHeaderCd.cnpj || unidadeHeader?.cnpj || unidadeHeaderCd.cpf || "",
+        documentoOrigem: resolveBpaHeaderDocument({
+          unidadeCustomData: unidadeHeaderCd,
+          unidade: unidadeHeader,
+          bpaConfig: bpaConfigValue,
+          systemConfig: systemConfigValue,
+        }),
         orgaoDestino:
           unidadeHeaderCd.orgao_destino_bpa || unidadeHeaderCd.orgao_saude_destino || "SECRETARIA MUNICIPAL DE SAUDE",
         indicadorDestino: unidadeHeaderCd.indicador_destino_bpa || "M",

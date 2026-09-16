@@ -11,3 +11,5 @@
 - [x] Executar geração real sem alterar o cadastro dos pacientes.
 - [ ] Validar a serialização BPA-I pelo fluxo normal para qualquer usuário autorizado, sem dependência de perfil, profissional ou sessão especial.
 - [ ] Comparar TXT e conferência da competência 202608 e comprovar preservação integral dos registros válidos.
+- [ ] Corrigir regressões localizadas do cabeçalho, telefone e validar estabilidade DNE no BPA-I.
+- [ ] Comparar os arquivos antigo e atual da competência 202608 e emitir o relatório obrigatório.

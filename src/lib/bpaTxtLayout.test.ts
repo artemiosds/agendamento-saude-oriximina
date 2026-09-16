@@ -10,6 +10,8 @@ import {
   readRegistro03Field,
 } from "./bpaTxtLayout";
 import { resolveMunicipioBpa } from "./bpaNormalization";
+import { resolveBpaHeaderDocument } from "./bpaHeaderSource";
+import { normalizeBpaPhone } from "./bpaPhoneNormalization";
 
 const registroValido = () => ({
   tipoRegistro: "03",
@@ -128,6 +130,30 @@ describe("layout TXT BPA-I", () => {
     expect(result.line).toHaveLength(BPA_HEADER_LENGTH);
     expect(result.line.slice(65, 79)).toBe(" ".repeat(14));
     expect(result.line.slice(65, 79)).not.toContain("8182574");
+  });
+
+  it("gera o documento compatível do fluxo antigo sem inventar CNPJ", () => {
+    const result = buildHeaderBpa({
+      competencia: "202608",
+      totalRegistros: 1206,
+      totalFolhas: 61,
+      campoControle: "1111",
+      orgaoOrigem: "Secretaria Municipal de Saúde",
+      siglaOrigem: "SMS",
+      documentoOrigem: resolveBpaHeaderDocument({}),
+      orgaoDestino: "Secretaria Municipal de Saúde",
+      indicadorDestino: "M",
+      versaoSistema: "SMSORIXI",
+    });
+    expect(result.line).toHaveLength(BPA_HEADER_LENGTH);
+    expect(result.line.slice(65, 79)).toBe("00000000000000");
+  });
+
+  it("serializa telefone internacional no formato nacional sem truncar", () => {
+    const data = { ...registroValido(), telefone: normalizeBpaPhone("+55 (93) 99112-3237") };
+    const { line } = buildRegistro03(data);
+    expect(readRegistro03Field(line, "telefone")).toBe("93991123237");
+    expect(auditRegistro03Serialization(data, line)).toEqual([]);
   });
 
   it("preserva uma linha por procedimento válido", () => {
