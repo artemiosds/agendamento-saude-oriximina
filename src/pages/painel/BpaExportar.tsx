@@ -1991,7 +1991,6 @@ const BpaExportar: React.FC = () => {
         // CNS Paciente — validação oficial (mod-11), com substituição automática
         // por outro CNS válido cadastrado, quando disponível.
         const cnsPick = pickValidCnsPaciente(pac);
-        const cns_pac_raw = cnsPick.cns || cnsPick.original || "";
         // Nunca substituir um CNS existente por 000000000000000. Um valor
         // cadastrado com 15 dígitos permanece rastreável no registro final;
         // ausência real é bloqueada pela auditoria antes do download.

@@ -112,6 +112,24 @@ describe("layout TXT BPA-I", () => {
     expect(result.line.slice(13, 19)).toBe("000002");
   });
 
+  it("mantém documento de origem ausente em branco sem usar zeros ou CNES", () => {
+    const result = buildHeaderBpa({
+      competencia: "202608",
+      totalRegistros: 1223,
+      totalFolhas: 62,
+      campoControle: "1111",
+      orgaoOrigem: "Secretaria Municipal de Saúde",
+      siglaOrigem: "SMS",
+      documentoOrigem: "",
+      orgaoDestino: "Secretaria Municipal de Saúde",
+      indicadorDestino: "M",
+      versaoSistema: "SMSORIXI",
+    });
+    expect(result.line).toHaveLength(BPA_HEADER_LENGTH);
+    expect(result.line.slice(65, 79)).toBe(" ".repeat(14));
+    expect(result.line.slice(65, 79)).not.toContain("8182574");
+  });
+
   it("preserva uma linha por procedimento válido", () => {
     const linhas = ["0301010048", "0301010072"].map((procedimento) =>
       buildRegistro03({ ...registroValido(), procedimento }).line,

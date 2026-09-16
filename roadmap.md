@@ -9,3 +9,5 @@
 - [x] Usar exclusivamente `logradouros_dne` na normalização de endereço do TXT BPA-I.
 - [x] Validar os cenários A–J e confirmar Registro 03 com 338 posições.
 - [x] Executar geração real sem alterar o cadastro dos pacientes.
+- [ ] Validar a serialização BPA-I pelo fluxo normal para qualquer usuário autorizado, sem dependência de perfil, profissional ou sessão especial.
+- [ ] Comparar TXT e conferência da competência 202608 e comprovar preservação integral dos registros válidos.
