@@ -62,6 +62,22 @@ export const BPA_I_FIELDS = {
 
 export type BpaRegistro03Data = { [K in keyof typeof BPA_I_FIELDS]?: unknown };
 
+/**
+ * Fonte única e já resolvida de uma linha BPA-I. Metadados de auditoria não
+ * participam do fixed-width, mas acompanham a mesma estrutura usada pelo TXT
+ * e pela conferência.
+ */
+export type BpaRegistroFinal = BpaRegistro03Data & {
+  tipoLogradouro?: unknown;
+  pacienteId?: unknown;
+  profissionalNome?: unknown;
+  unidadeNome?: unknown;
+  cpfPaciente?: unknown;
+  origemAtendimento?: unknown;
+  origemSigtap?: unknown;
+  categoriaProfissional?: unknown;
+};
+
 export interface BpaLayoutIssue {
   field: string;
   start: number;
@@ -75,6 +91,11 @@ export interface BpaBuildResult {
   line: string;
   errors: BpaLayoutIssue[];
   adjustments: BpaLayoutIssue[];
+}
+
+export interface BpaSerializedAuditIssue extends BpaLayoutIssue {
+  expected: string;
+  found: string;
 }
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
@@ -151,6 +172,86 @@ export function buildRegistro03(data: BpaRegistro03Data): BpaBuildResult {
     });
   }
   return { line, errors, adjustments };
+}
+
+export function readRegistro03Field(line: string, field: keyof typeof BPA_I_FIELDS): string {
+  const definition = BPA_I_FIELDS[field];
+  return line.slice(definition.start - 1, definition.end);
+}
+
+const AUDITED_REGISTRO_FIELDS: Array<keyof typeof BPA_I_FIELDS> = [
+  "cnes",
+  "competencia",
+  "cnsProfissional",
+  "cbo",
+  "dataAtendimento",
+  "procedimento",
+  "cnsPaciente",
+  "municipioIbge",
+  "cid",
+  "quantidade",
+  "codigoLogradouro",
+  "logradouro",
+  "numero",
+  "bairro",
+];
+
+/** Relê a linha fixed-width e prova que os campos críticos não mudaram ao serializar. */
+export function auditRegistro03Serialization(
+  data: BpaRegistroFinal,
+  line: string,
+): BpaSerializedAuditIssue[] {
+  const issues: BpaSerializedAuditIssue[] = [];
+  const cnsInformado = digits(data.cnsPaciente);
+
+  for (const field of AUDITED_REGISTRO_FIELDS) {
+    const definition = BPA_I_FIELDS[field];
+    const expected = formatField(field, definition, data[field], [], []);
+    const found = readRegistro03Field(line, field);
+    if (expected !== found) {
+      issues.push({
+        field,
+        start: definition.start,
+        end: definition.end,
+        value: String(data[field] ?? ""),
+        expected,
+        found,
+        problem: "O valor relido do TXT diverge do registro final usado na conferência",
+        correction: "Bloquear o download e revisar somente a serialização deste campo",
+      });
+    }
+  }
+
+  const cnsEncontrado = readRegistro03Field(line, "cnsPaciente");
+  if (cnsInformado.length === BPA_I_FIELDS.cnsPaciente.length && /^0+$/.test(cnsEncontrado)) {
+    const definition = BPA_I_FIELDS.cnsPaciente;
+    issues.push({
+      field: "cnsPaciente",
+      start: definition.start,
+      end: definition.end,
+      value: cnsInformado,
+      expected: cnsInformado,
+      found: cnsEncontrado,
+      problem: "CNS existente foi substituído por zeros durante a serialização",
+      correction: "Preservar o CNS presente no registro final; nunca aplicar fallback zerado",
+    });
+  }
+
+  if (!cnsInformado) {
+    const definition = BPA_I_FIELDS.cnsPaciente;
+    issues.push({
+      field: "cnsPaciente",
+      start: definition.start,
+      end: definition.end,
+      value: "",
+      expected: "CNS com 15 dígitos",
+      found: cnsEncontrado,
+      problem: "Registro final sem CNS do paciente",
+      correction: "Informar um CNS legítimo no cadastro antes de emitir esta linha",
+    });
+  }
+
+  return issues;
 }
 
 export interface BpaHeaderData {

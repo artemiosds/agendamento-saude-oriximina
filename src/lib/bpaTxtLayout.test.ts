@@ -5,7 +5,9 @@ import {
   BPA_I_RECORD_LENGTH,
   buildHeaderBpa,
   buildRegistro03,
+  auditRegistro03Serialization,
   calcularCampoControleBpa,
+  readRegistro03Field,
 } from "./bpaTxtLayout";
 import { resolveMunicipioBpa } from "./bpaNormalization";
 
@@ -128,6 +130,56 @@ describe("layout TXT BPA-I", () => {
     expect(result.codigo).toBe("150530");
     expect(result.fonte).toBe("cadastro");
     expect(result.autoCorrigido).toBe(false);
+  });
+
+  it("preserva CNS existente no campo 60–74 sem fallback zerado", () => {
+    const data = { ...registroValido(), cnsPaciente: "706030670706037" };
+    const { line } = buildRegistro03(data);
+    expect(readRegistro03Field(line, "cnsPaciente")).toBe("706030670706037");
+    expect(auditRegistro03Serialization(data, line)).toEqual([]);
+  });
+
+  it("bloqueia CNS realmente ausente em vez de serializar zeros", () => {
+    const data = { ...registroValido(), cnsPaciente: "" };
+    const { line } = buildRegistro03(data);
+    expect(readRegistro03Field(line, "cnsPaciente")).toBe(" ".repeat(15));
+    expect(auditRegistro03Serialization(data, line)).toEqual([
+      expect.objectContaining({ field: "cnsPaciente", problem: "Registro final sem CNS do paciente" }),
+    ]);
+  });
+
+  it("audita DNE, logradouro, número e bairro sem deslocamento", () => {
+    const data = {
+      ...registroValido(),
+      codigoLogradouro: "100",
+      logradouro: "LUIZ INACIO LULA DA SILVA",
+      numero: "1261",
+      bairro: "PENTA",
+    };
+    const { line } = buildRegistro03(data);
+    expect(readRegistro03Field(line, "codigoLogradouro")).toBe("100");
+    expect(readRegistro03Field(line, "logradouro").trim()).toBe("LUIZ INACIO LULA DA SILVA");
+    expect(readRegistro03Field(line, "numero").trim()).toBe("1261");
+    expect(readRegistro03Field(line, "bairro").trim()).toBe("PENTA");
+    expect(auditRegistro03Serialization(data, line)).toEqual([]);
+  });
+
+  it.each(["35B", "SN", "S/N"])("preserva número legítimo %s", (numero) => {
+    const data = { ...registroValido(), numero };
+    const { line } = buildRegistro03(data);
+    expect(readRegistro03Field(line, "numero").trim()).toBe(numero.replace("/", ""));
+    expect(auditRegistro03Serialization(data, line)).toEqual([]);
+  });
+
+  it("detecta divergência entre registro final e linha serializada", () => {
+    const data = registroValido();
+    const { line } = buildRegistro03(data);
+    const adulterada = `${line.slice(0, 59)}000000000000000${line.slice(74)}`;
+    expect(auditRegistro03Serialization(data, adulterada)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "cnsPaciente", start: 60, end: 74 }),
+      ]),
+    );
   });
 
   it("usa município do CEP somente quando o cadastro está ausente", () => {
