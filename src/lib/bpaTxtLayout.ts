@@ -199,6 +199,7 @@ const AUDITED_REGISTRO_FIELDS: Array<keyof typeof BPA_I_FIELDS> = [
   "complemento",
   "numero",
   "bairro",
+  "telefone",
 ];
 
 /** Relê a linha fixed-width e prova que os campos críticos não mudaram ao serializar. */

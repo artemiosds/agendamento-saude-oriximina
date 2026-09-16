@@ -41,6 +41,12 @@ describe("normalização DNE exclusiva da exportação BPA-I", () => {
     expect(normalize("Rua João Stumano", "", "Rua", "081").codigoLogradouro).toBe("081");
   });
 
+  it("não aceita código existente sem compatibilidade confirmada pelo endereço", () => {
+    const result = normalize("João Stumano", "", "", "081");
+    expect(result.codigoLogradouro).toBe("");
+    expect(result.alerts.join(" ")).toContain("não pôde ser confirmado");
+  });
+
   it("remove tipos repetidos", () => {
     expect(normalize("RUA RUA JOAO STUMANO").logradouro).toBe("JOAO STUMANO");
   });
