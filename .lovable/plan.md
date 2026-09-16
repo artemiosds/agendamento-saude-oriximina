@@ -25,15 +25,18 @@ Criar um tipo/objeto `BpaRegistroFinal` imediatamente antes da serialização, c
 - Não consultar novas fontes nem modificar o banco.
 - `buildRegistro03()` receberá esse objeto final.
 - `rowConf` do PDF/Excel será projetado desse mesmo objeto final, eliminando a montagem paralela.
+- Depois de montado, o registro final será tratado como semanticamente imutável: a serialização não fará novas consultas nem recalculará CNS, endereço, DNE ou SIGTAP.
+- A solução será geral; os pacientes citados serão apenas casos de regressão, sem condicionais por nome, CNS, endereço ou competência.
 
 ### 2. Corrigir o tratamento do CNS somente na saída final
 
 - Remover o fallback silencioso `000000000000000` do caminho de emissão.
 - O registro final usará uma única resolução de CNS, compartilhada por conferência e TXT.
 - Um CNS presente no registro final será serializado sem troca por zeros.
-- Se o registro final estiver realmente sem CNS, a linha não será emitida e o download será bloqueado com paciente e motivo identificados.
+- Antes de decidir sobre um CNS rejeitado, conferir o algoritmo atual contra as regras oficiais aplicáveis aos CNS iniciados por 1/2 e 7/8/9. Uma divergência do validador será corrigida na função comum, não por exceção de paciente.
+- Se o registro final estiver realmente sem CNS após todas as fontes legítimas, registrar paciente, data, procedimento, motivo técnico e regra impeditiva. O atendimento não desaparecerá silenciosamente; somente a linha impossível de representar será bloqueada.
 - Não alterar o cadastro nem inventar CNS.
-- Como o CNS de Agatha é rejeitado pela regra mod-11 atual, a implementação registrará essa condição de forma explícita, sem transformar o valor em zeros. O teste real confirmará que PDF e TXT recebem exatamente o mesmo CNS informado no registro final.
+- Como o CNS de Agatha é rejeitado pelo algoritmo atual apesar de existir no cadastro e na conferência, o algoritmo será primeiro verificado. O teste real exigirá que o CNS resolvido para o registro final seja idêntico no PDF e no TXT, nunca zeros.
 
 ### 3. Preservar endereço estruturado e DNE
 
@@ -43,6 +46,7 @@ Criar um tipo/objeto `BpaRegistroFinal` imediatamente antes da serialização, c
 - Quando houver código/tipo estruturado válido, como Alerrando, o TXT deverá manter `100`.
 - Quando só existir endereço livre, como Andria, preservar o texto disponível e gerar alerta; não deslocar/adivinhar número ou bairro.
 - Preservar integralmente os casos já corretos de Ana Luisa, `35B`, `SN` e `S/N`.
+- Uma falha corrigível de mapeamento ou serialização não removerá procedimento válido nem atendimento realizado.
 
 ### 4. Adicionar auditoria pós-serialização
 
@@ -62,12 +66,15 @@ Comparar pelo menos:
 
 A comparação considerará a sanitização e o corte oficial do campo. Qualquer alteração semântica, zeros indevidos ou deslocamento bloqueará o download pelo mecanismo de erro estrutural já existente, sem mudar a tela de validação.
 
+Cada erro pós-serialização identificará paciente, data do atendimento, procedimento, campo, posições inicial/final, valor esperado, valor encontrado e regra que impediu a correção automática.
+
 ### 5. Validar o documento do cabeçalho sem inventar dados
 
 - Manter as posições 66–79 como CNPJ/CPF do órgão de origem.
 - Não usar CNES como substituto.
 - Não hardcodar CNPJ/CPF.
-- Como a unidade atual não possui esse documento configurado, expor a causa claramente e bloquear a geração se o layout o exigir, em vez de produzir zeros silenciosos.
+- Confirmar na especificação de layout adotada pelo projeto se o campo é obrigatório ou pode ficar em branco antes de mudar seu comportamento.
+- A unidade atual não apresenta CNPJ/CPF nos dados consultados. Se a obrigatoriedade for confirmada, expor a causa e bloquear explicitamente; se o layout admitir branco, preservar branco. Em nenhum caso produzir zeros silenciosos ou usar CNES.
 - Preservar cabeçalho de 130 posições, total de registros, folhas e campo de controle.
 
 ## Testes
@@ -85,6 +92,7 @@ Adicionar testes unitários focados na fronteira `registro final → linha fixed
 9. Cabeçalho mantém 130 caracteres e documento de origem ausente não vira zeros/CNES.
 10. Quantidade de linhas, folhas e campo de controle continuam correspondendo aos procedimentos válidos.
 11. Reexecutar toda a suíte BPA-I para proteger múltiplos procedimentos, competência, idade, CBO, CID, município e deduplicação.
+12. Caso real de Andria com estrutura incompleta: preservar o texto disponível, sem inventar número ou bairro.
 
 ## Validação prática
 
@@ -92,6 +100,7 @@ Adicionar testes unitários focados na fronteira `registro final → linha fixed
 - Comparar automaticamente os registros finais usados pela conferência com os campos relidos do TXT: quantidade, paciente, CNS, atendimento, procedimento, DNE, logradouro, número, bairro, CID e município.
 - Conferir especificamente Agatha, Alerrando, Andria e Ana Luisa.
 - Confirmar: cabeçalho 130; todas as linhas 338; quantidade, folhas e controle fechando; nenhum código DNE fora de `logradouros_dne`.
+- Confirmar que a quantidade de procedimentos válidos permanece preservada, salvo uma impossibilidade real e explicitamente identificada de representação obrigatória no BPA-I.
 - Executar testes, verificação de tipos, build e inspeção do download no navegador.
 
 ## Arquivos previstos
