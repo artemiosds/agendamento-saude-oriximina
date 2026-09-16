@@ -26,9 +26,11 @@ Ela devolverá `codigoLogradouro`, `logradouro`, `numero`, tipo reconhecido, aju
 
 ### 2. Consultar a tabela existente antes de montar as linhas
 
-Na geração, carregar `codigo, descricao` de `logradouros_dne` uma vez, com paginação para não depender do limite de 1.000 linhas, e criar índices normalizados por código e descrição.
+Na geração, carregar `codigo, descricao` de `logradouros_dne` uma vez, com paginação para não depender do limite de 1.000 linhas, e criar índices normalizados por código e descrição. A sequência ativa será obrigatoriamente: paciente → endereço estruturado → catálogo real → correspondência segura → normalização → `buildRegistro03()` → validação de 338 posições.
 
 - Não criar tabela, coluna ou lista manual de códigos.
+- O catálogo `logradouros_dne` será a fonte exclusiva de código + descrição no caminho ativo do Registro 03.
+- O mapa manual atual não participará da resolução nem será usado como fallback no TXT.
 - Não alterar o cadastro.
 - Falha ao carregar o catálogo não inventará código: manterá o texto disponível e produzirá alerta auditável.
 
@@ -36,10 +38,10 @@ Na geração, carregar `codigo, descricao` de `logradouros_dne` uma vez, com pag
 
 A resolução seguirá esta ordem:
 
-1. preservar código salvo somente quando existir no catálogo e for compatível com o tipo/texto reconhecido;
-2. resolver descrição completa do tipo pela tabela;
-3. resolver abreviações explicitamente seguras e sem ambiguidade, vinculadas às descrições existentes no catálogo;
-4. se não houver correspondência única, deixar o código em branco e registrar alerta.
+1. validar o código salvo exclusivamente contra o catálogo e preservá-lo somente quando existir e for compatível com o tipo/texto reconhecido;
+2. resolver a descrição completa do tipo exclusivamente pelo catálogo;
+3. resolver abreviações explicitamente seguras e sem ambiguidade, sempre vinculadas a uma descrição presente no catálogo;
+4. se não houver correspondência única no catálogo, deixar o código em branco, preservar o texto e registrar alerta — sem consultar o mapa manual.
 
 Serão reconhecidos todos os tipos existentes no catálogo, inclusive nomes compostos. Prefixos repetidos serão removidos do campo textual apenas quando forem o mesmo tipo confirmado.
 
