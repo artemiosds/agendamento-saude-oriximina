@@ -30,7 +30,9 @@ import {
   BPA_I_RECORD_LENGTH,
   buildHeaderBpa,
   buildRegistro03,
+  auditRegistro03Serialization,
   calcularCampoControleBpa,
+  type BpaRegistroFinal,
   type BpaLayoutIssue,
 } from "@/lib/bpaTxtLayout";
 import {
@@ -1886,7 +1888,14 @@ const BpaExportar: React.FC = () => {
       const pendRows: any[] = [];
       const chavesAtendimentos = new Set<string>();
       const chavesLinhasBpa = new Set<string>();
-      const errosEstruturais: Array<BpaLayoutIssue & { paciente: string; data: string; linha: number }> = [];
+      const errosEstruturais: Array<BpaLayoutIssue & {
+        paciente: string;
+        data: string;
+        linha: number;
+        procedimento?: string;
+        expected?: string;
+        found?: string;
+      }> = [];
 
       let hasError = false;
 
@@ -1983,7 +1992,11 @@ const BpaExportar: React.FC = () => {
         // por outro CNS válido cadastrado, quando disponível.
         const cnsPick = pickValidCnsPaciente(pac);
         const cns_pac_raw = cnsPick.cns || cnsPick.original || "";
-        const cns_pac = cnsPick.cns ? cnsPick.cns : zfill("", 15);
+        // Nunca substituir um CNS existente por 000000000000000. Um valor
+        // cadastrado com 15 dígitos permanece rastreável no registro final;
+        // ausência real é bloqueada pela auditoria antes do download.
+        const cnsOriginalDigits = somenteNumeros(cnsPick.original);
+        const cns_pac = cnsPick.cns || (cnsOriginalDigits.length === 15 ? cnsOriginalDigits : "");
         if (!cnsPick.cns) {
           isCritical = true;
           errosCadastro.push(cnsPick.original ? `CNS inválido (${cnsPick.original})` : "CNS ausente");
@@ -2655,7 +2668,7 @@ const BpaExportar: React.FC = () => {
               const folhaBpa = Math.floor(exportedCount / 20) + 1;
               const sequenciaFolha = (exportedCount % 20) + 1;
 
-              const registro = buildRegistro03({
+              const registroFinal: BpaRegistroFinal = {
                 tipoRegistro: "03", cnes, competencia, cnsProfissional: cns_prof, cbo,
                 dataAtendimento: data_atend, folha: folhaBpa, sequencia: sequenciaFolha,
                 procedimento: proc, cnsPaciente: cns_pac, sexo, municipioIbge: municipio,
@@ -2664,7 +2677,16 @@ const BpaExportar: React.FC = () => {
                 nacionalidade, servico, classificacao, sequenciaEquipe, areaEquipe, cnpj,
                 cep, codigoLogradouro, logradouro: endereco, complemento, numero, bairro,
                 telefone, email, ineEquipe,
-              });
+                tipoLogradouro: enderecoBpa.tipoLogradouro,
+                pacienteId: pront.paciente_id,
+                profissionalNome: prof?.nome || "",
+                unidadeNome: unit?.nome || "",
+                cpfPaciente: primeiroValorPreenchido(pac?.cpf, pacCd.cpf) || "",
+                origemAtendimento: pront.origem || "Prontuário",
+                origemSigtap: procEntry.origem || (sigtapReq.exige ? "—" : "Padrão"),
+                categoriaProfissional: sigtapReq.categoria || "",
+              };
+              const registro = buildRegistro03(registroFinal);
               const l = registro.line;
               for (const issue of registro.errors) {
                 errosEstruturais.push({ ...issue, paciente: ident, data: data_atend, linha: exportedCount + 2 });
@@ -2675,35 +2697,46 @@ const BpaExportar: React.FC = () => {
                 );
               }
 
-              const pacCdAny = (pac?.custom_data as any) || {};
+              for (const issue of auditRegistro03Serialization(registroFinal, l)) {
+                errosEstruturais.push({
+                  ...issue,
+                  paciente: ident,
+                  data: data_atend,
+                  linha: exportedCount + 2,
+                  procedimento: proc,
+                });
+              }
+
+              // A conferência é uma projeção do mesmo registro final entregue
+              // ao serializer; não há uma segunda resolução de CNS/endereço.
               const rowConf = {
-                paciente_nome: String(pac?.nome || pront.paciente_nome || "").toUpperCase(),
-                paciente_cns: cns_pac_raw,
-                data_nascimento: formatarDataBR(raw_nasc),
-                sexo,
-                tipo_logradouro: enderecoBpa.tipoLogradouro,
-                logradouro: enderecoBpa.logradouro,
-                numero: enderecoBpa.numero,
-                bairro: String(pac?.bairro || pacCdAny.bairro || "").toUpperCase(),
-                data_atendimento: formatarDataBR(pront.data_atendimento),
+                paciente_nome: String(registroFinal.nomePaciente || "").toUpperCase(),
+                paciente_cns: String(registroFinal.cnsPaciente || ""),
+                data_nascimento: formatarDataBR(String(registroFinal.dataNascimento || "")),
+                sexo: registroFinal.sexo,
+                tipo_logradouro: String(registroFinal.tipoLogradouro || ""),
+                logradouro: String(registroFinal.logradouro || ""),
+                numero: String(registroFinal.numero || ""),
+                bairro: String(registroFinal.bairro || "").toUpperCase(),
+                data_atendimento: formatarDataBR(String(registroFinal.dataAtendimento || "")),
                 codigo_sigtap:
-                  sigtapCodigoExibicao(procEntry.codigo) || procEntry.codigo || formData.procedimento_padrao || "",
+                  sigtapCodigoExibicao(registroFinal.procedimento) || String(registroFinal.procedimento || ""),
                 tipo_procedimento: String(procEntry.origem || "").startsWith("Aditivo")
                   ? "Procedimento Aditivo"
                   : "Procedimento Clínico",
-                cid_usado: cidExibicao(cidBrutoLinha),
+                cid_usado: cidExibicao(registroFinal.cid),
                 _ctx: {
-                  profissional_nome: prof?.nome || "",
-                  cns_prof,
-                  cbo,
-                  unidade_nome: unit?.nome || "",
-                  cnes,
-                  cpf: primeiroValorPreenchido(pac?.cpf, pacCdAny.cpf) || "",
+                  profissional_nome: String(registroFinal.profissionalNome || ""),
+                  cns_prof: String(registroFinal.cnsProfissional || ""),
+                  cbo: String(registroFinal.cbo || ""),
+                  unidade_nome: String(registroFinal.unidadeNome || ""),
+                  cnes: String(registroFinal.cnes || ""),
+                  cpf: String(registroFinal.cpfPaciente || ""),
                   usou_padrao: !procEntry.codigo || procEntry.origem === "Padrão (form)",
-                  origem: pront.origem || "Prontuário",
-                  origem_sigtap: procEntry.origem || (sigtapReq.exige ? "—" : "Padrão"),
+                  origem: String(registroFinal.origemAtendimento || ""),
+                  origem_sigtap: String(registroFinal.origemSigtap || ""),
                   origem_sigtap_real: procEntry.origem,
-                  profissao_categoria: sigtapReq.categoria || "",
+                  profissao_categoria: String(registroFinal.categoriaProfissional || ""),
                 },
               };
 
@@ -2744,7 +2777,11 @@ const BpaExportar: React.FC = () => {
         hasError = true;
         criticalCount += errosEstruturais.length;
         for (const issue of errosEstruturais) {
-          const motivo = `Linha ${issue.linha}, campo ${issue.field} [${issue.start}-${issue.end}]: ${issue.problem}. ${issue.correction}.`;
+          const valoresAuditados = issue.expected !== undefined || issue.found !== undefined
+            ? ` Esperado: "${issue.expected || "vazio"}"; encontrado: "${issue.found || "vazio"}".`
+            : "";
+          const procedimentoAuditado = issue.procedimento ? ` Procedimento: ${issue.procedimento}.` : "";
+          const motivo = `Linha ${issue.linha}, campo ${issue.field} [${issue.start}-${issue.end}]: ${issue.problem}.${procedimentoAuditado}${valoresAuditados} ${issue.correction}.`;
           warnings.push(`${issue.paciente} (${issue.data}): ${motivo}`);
           details.critical.push({
             paciente_nome: issue.paciente,
