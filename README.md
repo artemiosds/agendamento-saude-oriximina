@@ -1,73 +1,50 @@
-# Welcome to your Lovable project
+# AGENDAMENTO SAÚDE ORIXIMINÁ
 
-## Project info
+Crie um site + sistema web completo (responsivo) no Wix (Wix Studio + Velo), para um hospital/clínica, funcionando no computador e no celular, com login individual, permissões por perfil e integrações com Google Agenda e WhatsApp para notificações automáticas. OBJETIVO - Agendamento de consultas feito pela recepção (interno) e também agendamento online pelo paciente (público). - Cadastro de pacientes, registro de atendimentos por funcionário e relatórios automáticos. - Usuários e registros ilimitados (sem limitações dentro do sistema). - Estrutura com Unidades e Salas: Eu devo conseguir cadastrar várias UNIDADES (ex.: Hospital Central, Unidade 2 etc.) e dentro de cada unidade cadastrar SALAS/CONSULTÓRIOS ilimitados. INTEGRAÇÕES OBRIGATÓRIAS (FAZER DE FORMA FÁCIL E FUNCIONAL) 1) Google Agenda (Google Calendar) - Implementar integração via Google Calendar API com OAuth 2.0 (Google) dentro do Wix Velo. - Permitir conectar 1 ou mais calendários (por unidade e/ou por profissional). - Sincronização bidirecional (quando possível): a) Ao criar um agendamento no sistema (online ou recepção), criar automaticamente um evento no Google Agenda correspondente. b) Ao alterar/remarcar/cancelar no sistema, atualizar o evento no Google Agenda e registrar o status da sincronização. c) Se ocorrer alteração de horário feita pela recepção, enviar notificação automática ao paciente (WhatsApp e/ou e-mail) e reenviar comprovante. - Exibição de eventos: - Crie uma página “Agenda (Visão Google)” que mostra os eventos da Agenda Google do período selecionado (dia/semana/mês) filtrando por unidade/profissional. - Comprovante de agendamento: - Ao concluir o agendamento, gerar e enviar automaticamente um “comprovante” (PDF ou link) com: Nome do paciente, telefone, unidade, sala (se aplicável), profissional/setor, data/hora, endereço e instruções. - Envie o comprovante por e-mail (Wix Automations ou serviço SMTP) e por WhatsApp (via integração abaixo). - Regras de duplicidade: - Evitar criar eventos duplicados: salvar o googleEventId no registro do agendamento. - Se o Google Agenda falhar, deixe o agendamento válido e marque como “pendente de sincronização”. 2) WhatsApp (Notificações automáticas) - Implementar envio de mensagens via WhatsApp Business API por provedor (escolher e deixar fácil trocar): - 360dialog OU Twilio OU Z-API (configurável no painel Admin). - Mensagens automáticas: a) Confirmação imediata após o agendamento (online e recepção). b) Lembrete automático (ex.: 24h e 2h antes, configurável). c) Notificação de recepção de alteração de horário (remarcação). d) Notificação de cancelamento. e) Mensagens de fila de espera (“Você foi chamado”, “Faltam X atendimentos”, opcional). - Registrador no banco o status do envio (enviado/erro/tentando) e dados/hora. - Modelos de mensagem editáveis ​​no Admin (templates) com variáveis: nome , data , hora , unidade ,endereco , profissional , setor , link_comprovante , link_remarcar. PÁGINAS DO SITE 1) Home - Botão “Agendar Online” - Botão “Entrar (Login)” - Informações gerais do hospital/clínica, endereços, horários e WhatsApp - Destaque dos serviços 2) Agendamento Online (Público) - Paciente escolhe: Unidade -> Sala (opcional) -> Profissional/Setor -> Tipo de atendimento -> Dados -> Horário - Formulário: nome, CPF (opcional), telefone, data de nascimento, e-mail (opcional), obs - Após agendar: mostrar confirmações e um link para comprovante - Criar evento no Google Agenda e disparar WhatsApp/e-mail automaticamente 3) Painel do Sistema (Área logada) - Menu: Dashboard, Agenda, Agenda (Visão Google), Fila de Espera, Pacientes, Atendimentos, Relatórios, Funcionários, Unidades/Salas, Configurações, Integrações 4) Dashboard (Admin e Gestão) - Cartões: consultas do dia, atendimentos realizados, faltas, atrasos, fila, produtividade por setor - Gráficos: - Atendimentos por dia/semana/mês - Atendimentos por funcionário - Faltas e atrasos por setor - Produtividade por setor e por funcionário - Filtros: período, unidade, setor, trabalho 5) Agenda (Recepção e Profissionais) - Visão dia/semana/mês - Agendar pela recepção - Campos: status (confirmado, pendente, cancelado, concluído), observações internas - Regras: - Bloquear conflito por profissional/sala - Permitir bloqueios de horários (intervalos/feriados) - Botões rápidos: “Chegou”, “Atrasou”, “Faltou”, “Atendido”, “Remarcou” - Quando recepção REMARCAR: - Atualizar Google Agenda - Enviar WhatsApp e e-mail com novo comprovante automaticamente - Registrar log de auditoria 6) Agenda (Visão Google) - Tela para listar/visualizar eventos vindos do Google Agenda por período - Filtro por unidade/profissional - Indicar quais eventos pertencem ao sistema (com tag) e quais são externos 7) Fila de Espera - Lista em tempo real - Ordenação por horário/prioridade - Botões: chamar, iniciar, finalizar, marcar falta/atraso - (Opcional) enviar WhatsApp ao chamar paciente 8) Pacientes (Cadastro) - CRUD completo - Histórico: agendamentos, atendimentos, faltas/atrasos, anexos - Busca rápida por nome/telefone/CPF 9) Atendimentos (Registro) - Baixa de atendimento - Registrar procedimento, setor, responsável, unidade, sala - Observações - Gerar relatório em PDF 10) Relatórios - Atendimentos/procedimentos por período - Produtividade por funcionário e setor - Faltas e atrasos - Exportar CSV e PDF - Relatório com gráficos 11) Funcionários (Usuários) - Cadastro por setor - Login individual - Permissões: - ADMIN: vê e configura tudo - RECEPÇÃO: agenda, fila, pacientes, registros básicos - PROFISSIONAL: só sua agenda/atendimentos e pacientes vinculados - GESTÃO: relatórios e dashboards - Auditoria:registrar quem criou/alterou agendamentos/atendimentos 12) Unidades e Salas - Unidades ilimitadas - Salas ilimitadas por unidade - Vincular profissionais a unidades/setores FUNCIONALIDADES PRINCIPAIS (OBRIGATÓRIAS) - Agenda de pacientes (interno e online) - Integração Google Agenda (criar/atualizar/cancelar evento + exibir eventos) - Envio automático de comprovante de agendamento (PDF ou link) + reenvio ao remarcar - Notificações automáticas: confirmação, lembrete, remarcação e cancelamento - Integração WhatsApp Business via provedor (360dialog/Twilio/Z-API) - Fila de espera - Cadastro de pacientes - Registro de atendimentos por pessoal - Gráficos e relatórios automáticos - Controle de faltas e atrasos - Cálculo de produtividade por setor e função - Login individual e permissões (admin vê tudo) - Mobile e desktop - Usuários e registros ilimitados BANCO DE DADOS (Wix Collections) Criar coleções: - Usuários (Membros Wix + campos extras: setor, papel, padrão unidade) - Unidades (unidades) - Salas (salas -> referência à unidade) - Setores (setores) - Profissionais (usuário + setor + unidade) - Pacientes (cadastro) - Agendamentos (agendamentos: paciente, data/hora, unidade, sala, setor, profissional, status, observações, origem) Campos extras: - googleCalendarId (qual calendário) - googleEventId - syncStatus (ok/pendente/erro) - lastSyncAt - reciboLink (link do comprovante) - Fila (fila) - Atendimentos (atendimentos) - AusênciasDelays (faltas/atrasos) - Notificações (logs WhatsApp/e-mail: tipo, status, API de retorno) - Integrações (config: Google OAuth, calendários, tokens; config WhatsApp provedor + credenciais) - AuditLogs (alterações) CONFIGURAÇÕES (ADMIN) - Escolher provedor WhatsApp (360dialog/Twilio/Z-API) - Campos para credenciais e modelos de mensagem - Regras de lembrete (24h, 2h, etc.) - Conectar Google Agenda por unidade/profissional - Ativar/desativar agendamento online por unidade/setor REGRAS IMPORTANTES - Bloquear conflito de horário - Evitar duplicar eventos no Google - Se conseguir integração, não perder agendamento (marcar pendente) - Logs claros para auditorias e Troubleshooting - Interface simples e rápida com botões de status ENTREGA - Criar site completo com todas as páginas - Criar coleções e relacionamentos - Criar painel logado com permissões - Implementar fluxo completo (agenda, confirmar, fila, atendimento, relatórios) - Implementar integrações Google Agenda e WhatsApp de forma funcional e fácil de configurar - Criar dados de exemplo para teste (1 unidade, 3 salas, 5 funcionários, 20 pacientes)remarcação e cancelamento - Integração WhatsApp Business via provedor (360dialog/Twilio/Z-API) - Fila de espera - Cadastro de pacientes - Registro de atendimentos por funcionário - Gráficos e relatórios automáticos - Controle de faltas e atrasos - Cálculo de produtividade por setor e função - Login individual e permissões (admin vê tudo) - Mobile e desktop - Usuários e registros ilimitados BANCO DE DADOS (Wix Collections) Criar coleções: - Usuários (Membros Wix + campos extras: setor, papel, padrão unidade) - Unidades (unidades) - Salas (salas -> referência à unidade) - Setores (setores) - Profissionais (usuário + setor + unidade) - Pacientes (cadastro) - Agendamentos (agendamentos: paciente, data/hora, unidade, sala, setor, profissional, status, observações, origem) Campos extras: - googleCalendarId (qual calendário) - googleEventId - syncStatus (ok/pendente/erro) - lastSyncAt - reciboLink (link do comprovante) - Fila (fila) - Atendimentos (atendimentos) - AusênciasAtrasos (faltas/atrasos) - Notificações (logs WhatsApp/e-mail: tipo, status, API de retorno) - Integrações (config: Google OAuth, calendários, tokens; config WhatsApp provedor + credenciais) - AuditLogs (alterações) CONFIGURAÇÕES (ADMIN) - Escolher provedor WhatsApp (360dialog/Twilio/Z-API) - Campos para credenciais e modelos de mensagem - Regras de lembrete (24h, 2h, etc.) - Conectar Google Agenda por unidade/profissional - Ativar/desativar agendamento online por unidade/setor REGRAS IMPORTANTES - Bloquear conflito de horário - Evitar duplicar eventos no Google - Se falhar integração, não perder agendamento (marcar pendente) - Logs claros para auditorias e solução de problemas - Interface simples e rápida com botões de status ENTREGA - Criar site completo com todas as páginas - Criar coleções e relacionamentos - Criar painel logado com - Implementar fluxo completo (agenda, confirmar, fila, atendimento, relatórios) - Implementar integrações Google Agenda e WhatsApp de forma funcional e fácil de configurar - Criar dados de exemplo para teste (1 unidade, 3 salas, 5 funcionários, 20 pacientes)remarcação e cancelamento - Integração WhatsApp Business via provedor (360dialog/Twilio/Z-API) - Fila de espera - Cadastro de pacientes - Registro de atendimentos por funcionário - Gráficos e relatórios automáticos - Controle de faltas e atrasos - Cálculo de produtividade por setor e função - Login individual e permissões (admin vê tudo) - Mobile e desktop - Usuários e registros ilimitados BANCO DE DADOS (Wix Collections) Criar coleções: - Usuários (Membros Wix + campos extras: setor, papel, padrão unidade) - Unidades (unidades) - Salas (salas -> referência à unidade) - Setores (setores) - Profissionais (usuário + setor + unidade) - Pacientes (cadastro) - Agendamentos (agendamentos: paciente, data/hora, unidade, sala, setor, profissional, status, observações, origem) Campos extras: - googleCalendarId (qual calendário) - googleEventId - syncStatus (ok/pendente/erro) - lastSyncAt - reciboLink (link do comprovante) - Fila (fila) - Atendimentos (atendimentos) - AusênciasAtrasos (faltas/atrasos) - Notificações (logs WhatsApp/e-mail: tipo, status, API de retorno) - Integrações (config: Google OAuth, calendários, tokens; config WhatsApp provedor + credenciais) - AuditLogs (alterações) CONFIGURAÇÕES (ADMIN) - Escolher provedor WhatsApp (360dialog/Twilio/Z-API) - Campos para credenciais e modelos de mensagem - Regras de lembrete (24h, 2h, etc.) - Conectar Google Agenda por unidade/profissional - Ativar/desativar agendamento online por unidade/setor REGRAS IMPORTANTES - Bloquear conflito de horário - Evitar duplicar eventos no Google - Se falhar integração, não perder agendamento (marcar pendente) - Logs claros para auditorias e solução de problemas - Interface simples e rápida com botões de status ENTREGA - Criar site completo com todas as páginas - Criar coleções e relacionamentos - Criar painel logado com - Implementar fluxo completo (agenda, confirmar, fila, atendimento, relatórios) - Implementar integrações Google Agenda e WhatsApp de forma funcional e fácil de configurar - Criar dados de exemplo para teste (1 unidade, 3 salas, 5 funcionários, 20 pacientes)fichas; config WhatsApp provedor + credenciais) - AuditLogs (alterações) CONFIGURAÇÕES (ADMIN) - Escolher provedor WhatsApp (360dialog/Twilio/Z-API) - Campos para credenciais e modelos de mensagem - Regras de lembrete (24h, 2h, etc.) - Conectar Google Agenda por unidade/profissional - Ativar/desativar agendamento online por unidade/setor REGRAS IMPORTANTES - Bloquear conflitos de horário - Evitar duplicar eventos no Google - Se falhar integração, não perder agendamento (marcar pendente) - Logs claros para auditorias e Troubleshooting - Interface simples e rápida com botões de status ENTREGA - Criar site completo com todas as páginas - Criar coleções e relacionamentos - Criar painel logado com permissões - Implementar fluxo completo (agenda, confirmar, fila, atendimento, relatórios) - Implementar integrações Google Agenda e WhatsApp de forma funcional e fácil de configurar - Criar dados de exemplo para teste (1 unidade, 3 salas, 5 funcionários, 20 pacientes)fichas; config WhatsApp provedor + credenciais) - AuditLogs (alterações) CONFIGURAÇÕES (ADMIN) - Escolher provedor WhatsApp (360dialog/Twilio/Z-API) - Campos para credenciais e modelos de mensagem - Regras de lembrete (24h, 2h, etc.) - Conectar Google Agenda por unidade/profissional - Ativar/desativar agendamento online por unidade/setor REGRAS IMPORTANTES - Bloquear conflitos de horário - Evitar duplicar eventos no Google - Se falhar integração, não perder agendamento (marcar pendente) - Logs claros para auditorias e Troubleshooting - Interface simples e rápida com botões de status ENTREGA - Criar site completo com todas as páginas - Criar coleções e relacionamentos - Criar painel logado com permissões - Implementar fluxo completo (agenda, confirmar, fila, atendimento, relatórios) - Implementar integrações Google Agenda e WhatsApp de forma funcional e fácil de configurar - Criar dados de exemplo para teste (1 unidade, 3 salas, 5 funcionários, 20 pacientes). Quero implementar DUAS FORMAS DE LOGIN: 1) LOGIN INTERNO (PRINCIPAL) - Usuário e senha criada pelo MASTER ou COORDENADOR. - Os funcionários NÃO precisam de conta do Google para acessar. - Campos obrigatórios: - usuário (ou email) - senha - A senha deve ser criptografada (hash). - Tela de login simples: - usuário/email - senha - botão "Entrar" 2) LOGIN COM GOOGLE (OPCIONAL) - Manter o login do Google como alternativa, não como único método. 3) CADASTRO DE USUÁRIOS Somente o MESTRE ou COORDENADOR podem criar funcionários. Campos do cadastro de funcionário: - nome - email ou usuário - senha inicial - setor - unidade - cargo - tipo de acesso (ROLE) ROLES DO SISTEMA: MASTER - acesso total - criar unidades, salas, funcionários, permissões COORDENADOR - gerencia disponibilidade e agendas da unidade - gerencia fila - cria funcionários da unidade RECEPÇÃO - agenda pacientes - remarca consultas - gerencia fila de espera - cadastra pacientes PROFISSIONAL - apenas vê sua agenda - registrar atendimento 4) REGRAS IMPORTANTES - Usuário só acessar o painel após login válido. - Não permite redirecionar automaticamente para Home. - Redirecionar apenas para /login quando não autenticado. - Criar sistema de sessão segura. 5) SEGURANÇA - Senha criptografada (bcrypt ou equivalente). - Registro de login (log de acesso). - Permitir troca de senha. e lembrando o login pelo email somente se o funcionário ativo esse email cadastrado no sistema pelo mestre ou coordenador. site para AGENDAMENTO SECRETARIA MUNICIPAL DE SAÚDE – SMS DE ORIXIMINÁ. lembrando as datas e horários tem que ser de acordo que la no painel dos funcionaro vai lebera por unidade as datas, horas e quantitativo po dias,personaliza tantoa sincronizacao no paineldos funcionaro com a permisaao de usuario master ou coordenador, lembrado tambem de configurair certo a lista de espera tambem, quero um sistema completo sem erros. e outra coisa no login não e para aparecer esss logins ai pra entrar, sendo assim tira e me manda por aqui o login de gestão para mim poder acessar. Credencial de Acesso — Administrador Master (SMS Oriximiná)
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+Campo	Valentia
+Usuário	admin.sms
+Senha	sms@2025
+Perfil	Mestre (acesso total)
+E-mail	admin@sms.oriximina.pa.gov.br. DENTRO DO PAINEL DO FUNCIONARO Disponibilidade Configurar horários disponíveis para profissionais com vagas simultâneas, ESSO SAO AS DATAS DE INICIO E FIM E HORAROS QUE FICA DISPNIVEL PARA PACIENTE ESCOLHER, ALEM DISSO DENTRO DESSA DISPONIBILIDADE TENHO OPCAO DE COLOCAR TOTAL DE VAGAS PO DIA E POR HORAS TAMBEM E VEREFICA SER POR EXEMPLO COLOQUEI NO HORAROS 30 VAGAS MAS NO TOTAL PODR DIA E 25 ELE NAO PERMITE E DAR UM AVISO, ISSO VAI FICAR LEGAL, COLOCA TAMBEM POP, Fila de Espera somenete com perfil: master, gestao, coordenador e recepacao pode cadastra paciente na fila de espera, essa função não está disponível no puplico. também não está funcionando como integração no painel dos funcionários, coloca a possibilidade de colocar o whatsapp via qgcod para fazer notificação automática para os pacientes quando eles fazem a agenda online ou pela recepção, e também na integração coloca conecatr o google agenda para enviar notificação por email. Agenda do Google
 
-## How can I edit this code?
+sincronizar agendamentos com Google Agenda
 
-There are several ways of editing your application.
+permitir enviar comprovante automático de agendamento
 
-**Use Lovable**
+se a recepção marcar/cancelar, enviar notificação automática e atualizar o evento
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+WhatsApp
 
-Changes made via Lovable will be committed automatically to this repo.
+integração para enviar:
 
-**Use your preferred IDE**
+confirmação do agendamento
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Lembrete (ex.: 24h antes)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+aviso de remarcação/cancelamento
 
-Follow these steps:
+permitir que a unidade configure o número/conta de envio
+
+This project was built with [Lovable](https://lovable.dev).
+
+**Live app**: https://agendamento-saude-oriximina.lovable.app
+
+## Build with Lovable
+
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/b31da743-ec3e-4875-9ddb-7d95bdbcdbae).
+
+- **Ship faster**: describe what you want to build and Lovable handles the code.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+
+## Development
+
+Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
+git clone <this-repository-url>
+cd <repository-name>
 npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
