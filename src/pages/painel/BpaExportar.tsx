@@ -3695,6 +3695,23 @@ const BpaExportar: React.FC = () => {
 
       {results && (
         <div ref={resultsRef} className="scroll-mt-4 space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          {results.blobUrl && (
+            <Alert className="border-primary/30 bg-card">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
+              <AlertTitle>Arquivo BPA-I pronto</AlertTitle>
+              <AlertDescription className="mt-3 flex flex-wrap items-center gap-3">
+                <span>{results.exportedCount} Registros 03 foram gerados.</span>
+                <a
+                  href={results.blobUrl}
+                  download={results.fileName}
+                  className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Baixar {results.fileName}
+                </a>
+              </AlertDescription>
+            </Alert>
+          )}
           {results.headerDetails && (
             <Card className="border-blue-200 bg-blue-50/30">
               <CardHeader className="pb-2">
