@@ -804,6 +804,7 @@ const BpaExportar: React.FC = () => {
   const [unidades, setUnidades] = useState<any[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generationSeconds, setGenerationSeconds] = useState(0);
   const [loadingData, setLoadingData] = useState(true);
   const [loadingProfissionais, setLoadingProfissionais] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -892,6 +893,26 @@ const BpaExportar: React.FC = () => {
     open: false,
     item: null,
   });
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!loading) {
+      setGenerationSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setGenerationSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [loading]);
+
+  useEffect(() => {
+    if (!results || loading) return;
+    window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [results, loading]);
 
   useEffect(() => {
     fetchInitialData();
@@ -3648,12 +3669,12 @@ const BpaExportar: React.FC = () => {
 
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <Button onClick={handleGerar} disabled={loading || loadingData} className="px-8">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Gerando...
+                    Gerando... {generationSeconds > 0 ? `${generationSeconds}s` : ""}
                   </>
                 ) : (
                   "Gerar Arquivo BPA-I"
@@ -3662,13 +3683,18 @@ const BpaExportar: React.FC = () => {
               <Button variant="outline" onClick={handleLimpar} disabled={loading}>
                 Limpar Filtros
               </Button>
+              {loading && (
+                <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+                  Consultando e validando os atendimentos. Competências com muitos registros podem levar até um minuto.
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
       {results && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div ref={resultsRef} className="scroll-mt-4 space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
           {results.headerDetails && (
             <Card className="border-blue-200 bg-blue-50/30">
               <CardHeader className="pb-2">
