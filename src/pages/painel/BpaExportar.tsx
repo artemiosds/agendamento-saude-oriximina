@@ -2025,7 +2025,7 @@ const BpaExportar: React.FC = () => {
         const cnsPick = pickValidCnsPaciente(pac);
         // Nunca substituir um CNS existente por 000000000000000. Um valor
         // cadastrado com 15 dígitos permanece rastreável no registro final;
-        // ausência real é bloqueada pela auditoria antes do download.
+        // ausência real só é emitida em branco quando o usuário autoriza pendências.
         const cnsOriginalDigits = somenteNumeros(cnsPick.original);
         const cns_pac = cnsPick.cns || (cnsOriginalDigits.length === 15 ? cnsOriginalDigits : "");
         if (!cnsPick.cns) {
