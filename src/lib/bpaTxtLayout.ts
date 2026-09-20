@@ -96,6 +96,7 @@ export interface BpaBuildResult {
 export interface BpaSerializedAuditIssue extends BpaLayoutIssue {
   expected: string;
   found: string;
+  category: "missing-required-data" | "serialization-corruption";
 }
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
@@ -222,6 +223,7 @@ export function auditRegistro03Serialization(
         value: String(data[field] ?? ""),
         expected,
         found,
+        category: "serialization-corruption",
         problem: "O valor relido do TXT diverge do registro final usado na conferência",
         correction: "Bloquear o download e revisar somente a serialização deste campo",
       });
@@ -238,6 +240,7 @@ export function auditRegistro03Serialization(
       value: cnsInformado,
       expected: cnsInformado,
       found: cnsEncontrado,
+      category: "serialization-corruption",
       problem: "CNS existente foi substituído por zeros durante a serialização",
       correction: "Preservar o CNS presente no registro final; nunca aplicar fallback zerado",
     });
@@ -252,6 +255,7 @@ export function auditRegistro03Serialization(
       value: "",
       expected: "CNS com 15 dígitos",
       found: cnsEncontrado,
+      category: "missing-required-data",
       problem: "Registro final sem CNS do paciente",
       correction: "Informar um CNS legítimo no cadastro antes de emitir esta linha",
     });

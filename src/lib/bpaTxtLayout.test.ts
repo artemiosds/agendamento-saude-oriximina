@@ -183,12 +183,16 @@ describe("layout TXT BPA-I", () => {
     expect(auditRegistro03Serialization(data, line)).toEqual([]);
   });
 
-  it("bloqueia CNS realmente ausente em vez de serializar zeros", () => {
+  it("classifica CNS realmente ausente como pendência de dado sem serializar zeros", () => {
     const data = { ...registroValido(), cnsPaciente: "" };
     const { line } = buildRegistro03(data);
     expect(readRegistro03Field(line, "cnsPaciente")).toBe(" ".repeat(15));
     expect(auditRegistro03Serialization(data, line)).toEqual([
-      expect.objectContaining({ field: "cnsPaciente", problem: "Registro final sem CNS do paciente" }),
+      expect.objectContaining({
+        field: "cnsPaciente",
+        category: "missing-required-data",
+        problem: "Registro final sem CNS do paciente",
+      }),
     ]);
   });
 
@@ -221,7 +225,12 @@ describe("layout TXT BPA-I", () => {
     const adulterada = `${line.slice(0, 59)}000000000000000${line.slice(74)}`;
     expect(auditRegistro03Serialization(data, adulterada)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ field: "cnsPaciente", start: 60, end: 74 }),
+        expect.objectContaining({
+          field: "cnsPaciente",
+          start: 60,
+          end: 74,
+          category: "serialization-corruption",
+        }),
       ]),
     );
   });

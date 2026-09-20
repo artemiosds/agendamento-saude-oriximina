@@ -2729,6 +2729,12 @@ const BpaExportar: React.FC = () => {
               }
 
               for (const issue of auditRegistro03Serialization(registroFinal, l)) {
+                if (issue.category === "missing-required-data" && formData.exportar_com_pendencias) {
+                  warnings.push(
+                    `${ident} (${data_atend}): ${issue.problem}. Linha emitida sem inventar ou substituir o dado ausente.`,
+                  );
+                  continue;
+                }
                 errosEstruturais.push({
                   ...issue,
                   paciente: ident,
@@ -3641,7 +3647,8 @@ const BpaExportar: React.FC = () => {
                 </label>
                 <p className="text-xs text-muted-foreground">
                   Marque esta opção para permitir o download mesmo que existam dados obrigatórios faltando (CNS, Sexo,
-                  Nascimento, Município).
+                  Nascimento, Município). As pendências continuarão identificadas no relatório; erros de tamanho ou
+                  deslocamento do TXT permanecem bloqueados.
                 </p>
             </div>
 
