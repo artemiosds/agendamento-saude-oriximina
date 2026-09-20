@@ -13,3 +13,4 @@
 - [ ] Comparar TXT e conferência da competência 202608 e comprovar preservação integral dos registros válidos.
 - [ ] Corrigir regressões localizadas do cabeçalho, telefone e validar estabilidade DNE no BPA-I.
 - [ ] Comparar os arquivos antigo e atual da competência 202608 e emitir o relatório obrigatório.
+- [x] Permitir a geração BPA-I com pendências cadastrais autorizadas, mantendo bloqueios de corrupção estrutural.
