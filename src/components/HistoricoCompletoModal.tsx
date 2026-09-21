@@ -79,32 +79,40 @@ function parseJsonSafe(json: string | null | undefined) {
 }
 
 // ── Data Loading ───────────────────────────────────────────
-function useFullHistory(pacienteId: string, unidades: { id: string; nome: string }[]) {
+function useFullHistory(open: boolean, pacienteId: string, unidades: { id: string; nome: string }[]) {
   const [events, setEvents] = useState<FullEvent[]>([]);
   const [professionals, setProfessionals] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const cancelRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
-    if (!pacienteId) { setEvents([]); setLoading(false); return; }
-    cancelRef.current = false;
+    abortControllerRef.current?.abort();
+    const requestId = ++requestIdRef.current;
+
+    if (!open || !pacienteId) {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     setError(null);
 
     try {
       const unidadeMap = new Map(unidades.map(u => [u.id, u.nome]));
 
-      const [prontuariosRes, faltasRes, sessionsRes, dischargesRes, triageRes, funcionariosRes] = await Promise.all([
-        (supabase as any).from("prontuarios").select("*").eq("paciente_id", pacienteId).order("data_atendimento", { ascending: false }),
-        supabase.from("agendamentos").select("id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id").eq("paciente_id", pacienteId).eq("status", "falta").order("data", { ascending: false }),
-        (supabase as any).from("treatment_sessions").select("id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id").eq("patient_id", pacienteId).neq("status", "agendada").order("scheduled_date", { ascending: false }),
-        (supabase as any).from("patient_discharges").select("id, cycle_id, professional_id, discharge_date, reason, final_notes").eq("patient_id", pacienteId),
-        (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").eq("agendamento_id", pacienteId).limit(0),
-        (supabase as any).from("funcionarios").select("id, profissao"),
+      const [prontuariosRes, faltasRes, sessionsRes, dischargesRes, funcionariosRes] = await Promise.all([
+        (supabase as any).from("prontuarios").select("*").eq("paciente_id", pacienteId).order("data_atendimento", { ascending: false }).abortSignal(controller.signal),
+        supabase.from("agendamentos").select("id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id").eq("paciente_id", pacienteId).eq("status", "falta").order("data", { ascending: false }).abortSignal(controller.signal),
+        (supabase as any).from("treatment_sessions").select("id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id").eq("patient_id", pacienteId).neq("status", "agendada").order("scheduled_date", { ascending: false }).abortSignal(controller.signal),
+        (supabase as any).from("patient_discharges").select("id, cycle_id, professional_id, discharge_date, reason, final_notes").eq("patient_id", pacienteId).abortSignal(controller.signal),
+        (supabase as any).from("funcionarios").select("id, profissao").abortSignal(controller.signal),
       ]);
 
-      if (cancelRef.current) return;
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
 
       // map professional → specialty
       const specialtyMap = new Map<string, string>();
@@ -117,7 +125,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
       const agendamentoIds = prontuarios.map((p: any) => p.agendamento_id).filter(Boolean);
       let triageMap = new Map<string, any>();
       if (agendamentoIds.length > 0) {
-        const { data: triageData } = await (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").in("agendamento_id", agendamentoIds);
+        const { data: triageData } = await (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").in("agendamento_id", agendamentoIds).abortSignal(controller.signal);
         if (triageData) {
           triageMap = new Map((triageData as any[]).map((t: any) => [t.agendamento_id, t]));
         }
@@ -129,11 +137,11 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
       const cycleIds = [...new Set([...sessions.map((s: any) => s.cycle_id), ...discharges.map((d: any) => d.cycle_id)].filter(Boolean))];
       let cycleMap = new Map<string, any>();
       if (cycleIds.length > 0) {
-        const { data: cycleData } = await (supabase as any).from("treatment_cycles").select("id, treatment_type, specialty, unit_id").in("id", cycleIds);
+        const { data: cycleData } = await (supabase as any).from("treatment_cycles").select("id, treatment_type, specialty, unit_id").in("id", cycleIds).abortSignal(controller.signal);
         if (cycleData) cycleMap = new Map((cycleData as any[]).map((c: any) => [c.id, c]));
       }
 
-      if (cancelRef.current) return;
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
 
       const profSet = new Set<string>();
       const allEvents: FullEvent[] = [];
@@ -252,21 +260,26 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
         return (b.time || "00:00").localeCompare(a.time || "00:00");
       });
 
-      if (!cancelRef.current) {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) {
         setEvents(allEvents);
         setProfessionals(Array.from(profSet).sort());
       }
     } catch (err) {
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       console.error("[HistoricoCompleto] Erro:", err);
-      if (!cancelRef.current) setError("Erro ao carregar histórico completo.");
+      setError("Erro ao carregar histórico completo.");
     } finally {
-      if (!cancelRef.current) setLoading(false);
+      if (!controller.signal.aborted && requestId === requestIdRef.current) setLoading(false);
     }
-  }, [pacienteId, unidades]);
+  }, [open, pacienteId, unidades]);
 
   useEffect(() => {
     load();
-    return () => { cancelRef.current = true; };
+    return () => {
+      requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
   }, [load]);
 
   return { events, professionals, loading, error, reload: load };
@@ -370,8 +383,12 @@ const EventDetail: React.FC<{ event: FullEvent }> = ({ event }) => {
 export const HistoricoCompletoModal: React.FC<Props> = ({
   open, onOpenChange, pacienteId, pacienteNome, unidades, currentProfissionalId, onViewProntuario,
 }) => {
-  const { events, professionals, loading, error, reload } = useFullHistory(pacienteId, unidades);
+  const { events, professionals, loading, error, reload } = useFullHistory(open, pacienteId, unidades);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) setExpandedId(null);
+  }, [open]);
 
   // Filters
   const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set());

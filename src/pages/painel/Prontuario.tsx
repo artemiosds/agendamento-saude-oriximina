@@ -3089,6 +3089,10 @@ const ProntuarioPage: React.FC = () => {
               pacienteNome={queryPacienteNome || ""}
               currentProfissionalId={user?.id}
               unidades={unidades}
+              onOpenFullHistory={() => {
+                setHistoricoPacienteId({ id: queryPacienteId, nome: queryPacienteNome || "Paciente" });
+                setHistoricoCompletoOpen(true);
+              }}
             />
           </CardContent>
         </Card>
