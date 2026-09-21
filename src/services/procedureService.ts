@@ -9,7 +9,7 @@ export interface ProcedimentoDB {
   profissao: string;   // nome da profissão (Fisioterapeuta, Psicólogo, ...)
   especialidade: string; // chave normalizada (fisioterapia, psicologia, ...)
   profissional_id: string | null;
-  profissionais_ids?: string[];
+  profissionais_ids: string[] | null;
   ativo: boolean;
   criado_em: string;
   atualizado_em: string;
