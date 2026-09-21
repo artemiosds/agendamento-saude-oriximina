@@ -376,7 +376,7 @@ const ProntuarioPage: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [debouncedListSearch, setDebouncedListSearch] = useState("");
-  const [listCursor, setListCursor] = useState<ProntuarioListCursor | null>(null);
+  const [listCursor, setListCursor] = useState<{ scope: string; value: ProntuarioListCursor } | null>(null);
   const [loadedListPages, setLoadedListPages] = useState<{ scope: string; pages: ProntuarioListPage[] }>({
     scope: "",
     pages: [],
@@ -978,7 +978,7 @@ const ProntuarioPage: React.FC = () => {
     }),
     [effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario],
   );
-  const activeListCursor = loadedListPages.scope === listScope ? listCursor : null;
+  const activeListCursor = listCursor?.scope === listScope ? listCursor.value : null;
   const cursorKey = activeListCursor
     ? `${activeListCursor.dataAtendimento}|${activeListCursor.criadoEm}|${activeListCursor.id}`
     : "first";
@@ -1096,11 +1096,14 @@ const ProntuarioPage: React.FC = () => {
     const last = currentProntuariosPage[PRONTUARIO_LIST_PAGE_SIZE - 1];
     if (!last || !hasMoreProntuarios || prontuariosFetching) return;
     setListCursor({
-      dataAtendimento: last.data_atendimento,
-      criadoEm: last.criado_em,
-      id: last.id,
+      scope: listScope,
+      value: {
+        dataAtendimento: last.data_atendimento,
+        criadoEm: last.criado_em,
+        id: last.id,
+      },
     });
-  }, [currentProntuariosPage, hasMoreProntuarios, prontuariosFetching]);
+  }, [currentProntuariosPage, hasMoreProntuarios, listScope, prontuariosFetching]);
 
   // Backwards-compat alias for legacy call sites that triggered a reload.
   const loadProntuarios = useCallback(() => {
