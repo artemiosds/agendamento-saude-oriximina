@@ -230,7 +230,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
     enabled: enabled && Boolean(pacienteId) && (isGlobalAdmin || Boolean(unidadeId)),
     queryFn: async ({ pageParam, signal }) => {
       const offset = Number(pageParam) || 0;
-      let query = (supabase as any)
+      let query = supabase
         .from("prontuarios")
         .select(HISTORY_CARD_COLUMNS)
         .eq("paciente_id", pacienteId)
@@ -277,7 +277,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
       const detail = await queryClient.fetchQuery<ProntuarioHistEntry>({
         queryKey: ["prontuarios", "historico-lateral-detalhe", pacienteId, entry.id, scope],
         queryFn: async ({ signal }) => {
-          let query = (supabase as any)
+          let query = supabase
             .from("prontuarios")
             .select(HISTORY_DETAIL_COLUMNS)
             .eq("id", entry.id)
@@ -346,7 +346,9 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Histórico de Atendimentos
         </h3>
-        <Badge variant="secondary" className="ml-auto text-[10px]">{sorted.length}</Badge>
+        <Badge variant="secondary" className="ml-auto min-w-6 justify-center text-[10px]">
+          {historyQuery.isLoading ? <Loader2 className="h-3 w-3 animate-spin" aria-label="Carregando histórico" /> : sorted.length}
+        </Badge>
       </div>
 
       {/* Date Filter */}
