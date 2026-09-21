@@ -1,19 +1,7 @@
 # Roadmap
 
-- [x] Separar os seis contadores da geração BPA-I e eliminações finais.
-- [x] Tornar a deduplicação final específica por agendamento_id, com fallback para prontuario.id e contexto seguro.
-- [x] Adicionar diagnóstico de deduplicação somente em desenvolvimento.
-- [x] Criar e executar testes A–G de deduplicação.
-- [x] Executar build e geração real da competência 202608 pela interface.
-- [x] Apresentar causa, chaves antiga/nova, arquivos, testes e contagem final.
-- [x] Usar exclusivamente `logradouros_dne` na normalização de endereço do TXT BPA-I.
-- [x] Validar os cenários A–J e confirmar Registro 03 com 338 posições.
-- [x] Executar geração real sem alterar o cadastro dos pacientes.
-- [ ] Validar a serialização BPA-I pelo fluxo normal para qualquer usuário autorizado, sem dependência de perfil, profissional ou sessão especial.
-- [ ] Comparar TXT e conferência da competência 202608 e comprovar preservação integral dos registros válidos.
-- [ ] Corrigir regressões localizadas do cabeçalho, telefone e validar estabilidade DNE no BPA-I.
-- [ ] Comparar os arquivos antigo e atual da competência 202608 e emitir o relatório obrigatório.
-- [x] Permitir a geração BPA-I com pendências cadastrais autorizadas, mantendo bloqueios de corrupção estrutural.
-- [ ] Implementar a Fase 2 da listagem de Prontuários com cursor composto por data_atendimento, criado_em e id, sem alterar fluxos protegidos.
-- [ ] Implementar a Fase 3 com filtros visuais server-side de período e profissional na listagem de Prontuários.
-- [ ] Confirmar o tipo real de prontuarios.data_atendimento e aplicar limites de período sem condições vazias.
+- [ ] Fase 4B: carregar o Histórico Completo progressivamente em faixas semiabertas de 90 dias.
+- [ ] Usar `data >= início` e `data < fim`; a faixa anterior termina no início da atual.
+- [ ] Ordenar sem horário como `00:00`; desempatar por prioridade fixa da fonte e ID.
+- [ ] Carregar detalhes clínicos por evento e drenar todas as faixas antes da impressão completa.
+- [ ] Validar isolamento por paciente, deduplicação, testes, tipos, build, lint e diff check.
