@@ -476,12 +476,23 @@ const ProntuarioPage: React.FC = () => {
       };
       const hydrated = await procedureService.getSpecific({ codes: limited.procedimentos.map((item) => item.codigo) });
       if (requestId !== unifiedRequestRef.current) return;
-      mergeProcedimentos(hydrated, true);
-      setUnifiedResults(limited);
+      const allowedHydrated = hydrated.filter((item) => {
+        if (item.profissionais_ids && item.profissionais_ids.length > 0 && !item.profissionais_ids.includes(user?.id || "")) return false;
+        if (!sigtapDisponibilizarTodos && user?.profissao && item.profissao) {
+          return item.profissao.toLowerCase() === user.profissao.toLowerCase();
+        }
+        return true;
+      });
+      const allowedCodes = new Set(allowedHydrated.map((item) => item.id));
+      mergeProcedimentos(allowedHydrated, true);
+      setUnifiedResults({
+        procedimentos: limited.procedimentos.filter((item) => allowedCodes.has(item.codigo)),
+        cids: limited.cids,
+      });
       setUnifiedLoading(false);
     }, 400);
     return () => { if (unifiedDebounceRef.current) window.clearTimeout(unifiedDebounceRef.current); };
-  }, [unifiedQuery, mergeProcedimentos]);
+  }, [unifiedQuery, mergeProcedimentos, sigtapDisponibilizarTodos, user?.id, user?.profissao]);
 
   const handlePickProcedimento = useCallback(async (codigo: string, nome: string) => {
     if (!procedimentos.some((item) => item.id === codigo)) {
@@ -911,6 +922,7 @@ const ProntuarioPage: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [user?.unidadeId]);
 
+  const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
   const listedProcedimentos = useMemo(() => {
     const resultCodes = new Set(unifiedResults.procedimentos.map((item) => item.codigo));
     return procedimentos.filter((item) => selectedProcIds.includes(item.id) || resultCodes.has(item.id));
