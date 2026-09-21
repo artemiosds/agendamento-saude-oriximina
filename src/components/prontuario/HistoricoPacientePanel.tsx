@@ -16,8 +16,6 @@ const HISTORY_CARD_COLUMNS = [
   "hora_atendimento",
   "profissional_nome",
   "queixa_principal",
-  "cid_codigo",
-  "cid_descricao",
   "tipo_registro",
   "paciente_nome",
 ].join(",");
@@ -62,8 +60,6 @@ type ProntuarioHistEntry = {
   soap_objetivo?: string;
   soap_avaliacao?: string;
   soap_plano?: string;
-  cid_codigo?: string;
-  cid_descricao?: string;
   tipo_registro?: string;
   paciente_nome?: string;
   [k: string]: any;
@@ -459,14 +455,6 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
                 </button>
                 {isExpanded && (
                   <div className="px-3 pb-3 pt-1 border-t border-border/40 space-y-2 text-[12px]">
-                    {(h.cid_codigo || h.cid_descricao) && (
-                      <div>
-                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">CID</p>
-                        <p className="text-foreground">
-                          {[h.cid_codigo, h.cid_descricao].filter(Boolean).join(" — ")}
-                        </p>
-                      </div>
-                    )}
                     {queixa && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Queixa</p>
