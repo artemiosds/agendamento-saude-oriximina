@@ -440,6 +440,9 @@ const ProntuarioPage: React.FC = () => {
   const [unifiedOpen, setUnifiedOpen] = useState(false);
   const unifiedDebounceRef = useRef<number | null>(null);
   const unifiedRequestRef = useRef(0);
+  const selectedProcIdsRef = useRef(selectedProcIds);
+  const procDetailsRef = useRef(procDetails);
+  const selectedCidsByProcRef = useRef(selectedCidsByProc);
 
   const mergeProcedimentos = useCallback((items: ProcedimentoDB[], replaceSearchResults = false) => {
     setProcedimentos((current) => {
@@ -565,10 +568,6 @@ const ProntuarioPage: React.FC = () => {
   const especialidadeFieldsRef = useRef(especialidadeFields);
   const listaExamesRef = useRef(listaExames);
   const listaPrescricaoRef = useRef(listaPrescricao);
-  const selectedProcIdsRef = useRef(selectedProcIds);
-  const procDetailsRef = useRef(procDetails);
-  const selectedCidsByProcRef = useRef(selectedCidsByProc);
-
   useEffect(() => { especialidadeFieldsRef.current = especialidadeFields; }, [especialidadeFields]);
   useEffect(() => { listaExamesRef.current = listaExames; }, [listaExames]);
   useEffect(() => { listaPrescricaoRef.current = listaPrescricao; }, [listaPrescricao]);
@@ -912,11 +911,10 @@ const ProntuarioPage: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [user?.unidadeId]);
 
-  const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
   const listedProcedimentos = useMemo(() => {
     const resultCodes = new Set(unifiedResults.procedimentos.map((item) => item.codigo));
-    return procedimentos.filter((item) => resultCodes.has(item.id) && !selectedProcIdSet.has(item.id));
-  }, [procedimentos, selectedProcIdSet, unifiedResults.procedimentos]);
+    return procedimentos.filter((item) => selectedProcIds.includes(item.id) || resultCodes.has(item.id));
+  }, [procedimentos, selectedProcIds, unifiedResults.procedimentos]);
 
   // Lighter projection for listing (avoid heavy text columns until detail)
   const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
@@ -1320,10 +1318,16 @@ const ProntuarioPage: React.FC = () => {
         .order("data_atendimento", { ascending: false })
         .limit(25);
 
+      const historyRows = [...(globalData || []), ...(prontuarioData || [])];
+      const hydrated = await procedureService.getSpecific({
+        uuids: historyRows.map((row: any) => row.procedimento_id).filter(Boolean),
+      });
+      mergeProcedimentos(hydrated);
+      const hydratedByUuid = new Map(hydrated.map((item) => [item.uuid, item]));
       const seen = new Map<string, { id: string; nome: string; ultima: string; isGlobal?: boolean }>();
       
       const processItem = (r: any, isGlobal = false) => {
-        const proc = procedimentos.find((p) => p.uuid === r.procedimento_id);
+        const proc = hydratedByUuid.get(r.procedimento_id);
         if (proc && !seen.has(proc.id)) {
           const dt = (r.prontuarios?.data_atendimento || r.data_atendimento || '');
           const ultima = dt ? new Date(dt + 'T12:00:00').toLocaleDateString('pt-BR') : '';
@@ -1336,13 +1340,16 @@ const ProntuarioPage: React.FC = () => {
       
       setPacienteProcHistory(Array.from(seen.values()));
     })();
-  }, [form.paciente_id, procedimentos]);
+  }, [form.paciente_id, mergeProcedimentos]);
 
   const openNew = (pacienteId?: string, pacienteNome?: string) => {
     setEditId(null);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
     setSelectedProcIds([]);
+    setProcedimentos([]);
+    setUnifiedQuery("");
+    setUnifiedResults({ procedimentos: [], cids: [] });
     setSelectedCidsByProc({});
     setProcDetails({});
     setEpisodios([]);
@@ -3941,7 +3948,7 @@ const ProntuarioPage: React.FC = () => {
                   {unifiedOpen && unifiedQuery.trim().length >= 2 && (
                     <div className="absolute z-50 left-0 right-0 mt-1 rounded-md border bg-popover shadow-lg max-h-[420px] overflow-y-auto">
                       {unifiedLoading && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">Buscando em 4.990 procedimentos e 81k+ CIDs...</div>
+                        <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Pesquisando procedimentos...</div>
                       )}
                       {!unifiedLoading && unifiedResults.procedimentos.length === 0 && unifiedResults.cids.length === 0 && (
                         <div className="px-3 py-3 text-xs text-muted-foreground text-center">Nenhum resultado encontrado.</div>
@@ -4000,17 +4007,6 @@ const ProntuarioPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Filtro local da lista de procedimentos disponíveis (mantido) */}
-                <div className="relative mb-2">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                  <Input
-                    value={procSearch}
-                    onChange={(e) => setProcSearch(e.target.value)}
-                    placeholder="Filtrar lista abaixo (nome, código SIGTAP, especialidade)..."
-                    className="pl-7 h-8 text-sm"
-                  />
-                </div>
-
                 {/* Display selected procedures first */}
                 {selectedProcIds.length > 0 && (
                   <div className="flex flex-col gap-1.5 mb-2 bg-primary/5 rounded-lg p-2 border border-primary/20">
@@ -4054,7 +4050,7 @@ const ProntuarioPage: React.FC = () => {
                   </div>
                 )}
 
-                {filteredProcedimentos.length > 0 ? (
+                {listedProcedimentos.length > 0 ? (
                   <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
                     {listedProcedimentos.map((proc) => {
                       const checked = selectedProcIdSet.has(proc.id);
@@ -4291,7 +4287,11 @@ const ProntuarioPage: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Nenhum procedimento disponível para sua profissão.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {unifiedQuery.trim() && !unifiedLoading
+                      ? "Nenhum procedimento encontrado"
+                      : "Digite código ou descrição para pesquisar procedimentos."}
+                  </p>
                 )}
               </div>
             )}
@@ -4307,8 +4307,8 @@ const ProntuarioPage: React.FC = () => {
               defaultProfissao={user?.profissao}
               criadoPor={user?.id}
               onCreated={async (codigo) => {
-                const list = await procedureService.getActive();
-                setProcedimentos(list as any);
+                const created = await procedureService.getSpecific({ codes: [codigo] });
+                mergeProcedimentos(created);
                 setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
                 setProcDetails(prev => ({ ...prev, [codigo]: { quantidade: 1, observacao: "" } }));
                 setExpandedProcId(codigo); // Auto-expand to show details/CIDs
