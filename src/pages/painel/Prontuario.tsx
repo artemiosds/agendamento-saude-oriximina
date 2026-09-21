@@ -1152,7 +1152,6 @@ const ProntuarioPage: React.FC = () => {
 
   const resetListPagination = useCallback(() => {
     setListCursor(null);
-    setLoadedListPages({ scope: "", pages: [] });
     listParentRef.current?.scrollTo({ top: 0 });
   }, []);
 
