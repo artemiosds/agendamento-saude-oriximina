@@ -14,4 +14,4 @@
 - [ ] Corrigir regressões localizadas do cabeçalho, telefone e validar estabilidade DNE no BPA-I.
 - [ ] Comparar os arquivos antigo e atual da competência 202608 e emitir o relatório obrigatório.
 - [x] Permitir a geração BPA-I com pendências cadastrais autorizadas, mantendo bloqueios de corrupção estrutural.
-- [ ] Implementar a Fase 2 da listagem de Prontuários com cursor composto por data_atendimento, criado_em e id, sem alterar fluxos protegidos.
+- [x] Implementar a Fase 2 da listagem de Prontuários com cursor composto por data_atendimento, criado_em e id, sem alterar fluxos protegidos.
