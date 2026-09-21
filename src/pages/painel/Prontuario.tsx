@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -120,6 +120,22 @@ interface ProcedimentoDB {
   ativo: boolean;
   origem?: 'SIGTAP' | 'PERSONALIZADO';
 }
+
+interface ProntuarioListCursor {
+  dataAtendimento: string;
+  criadoEm: string;
+  id: string;
+}
+
+interface ProntuarioListPage {
+  key: string;
+  rows: ProntuarioDB[];
+}
+
+const PRONTUARIO_LIST_PAGE_SIZE = 50;
+
+const sanitizePostgrestSearch = (value: string) =>
+  value.trim().replace(/[(),]/g, " ").replace(/\s+/g, " ").replace(/[%_]/g, "\\$&");
 
 const TIPOS_REGISTRO = [
   { value: 'avaliacao_inicial', label: '🟢 Avaliação Inicial' },
@@ -359,6 +375,14 @@ const ProntuarioPage: React.FC = () => {
 
 
   const [search, setSearch] = useState("");
+  const [debouncedListSearch, setDebouncedListSearch] = useState("");
+  const [listCursor, setListCursor] = useState<{ scope: string; value: ProntuarioListCursor } | null>(null);
+  const [loadedListPages, setLoadedListPages] = useState<{ scope: string; pages: ProntuarioListPage[] }>({
+    scope: "",
+    pages: [],
+  });
+  const queryPacienteId = searchParams.get("pacienteId") || "";
+  const queryAgendamentoId = searchParams.get("agendamentoId") || "";
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
     null,
   );
@@ -939,63 +963,147 @@ const ProntuarioPage: React.FC = () => {
   // Lighter projection for listing (avoid heavy text columns until detail)
   const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedListSearch(search.trim()), 350);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const effectiveListSearch = queryPacienteId ? "" : debouncedListSearch;
+  const listScope = useMemo(
+    () => JSON.stringify({
+      unidade: user?.usuario === "admin.sms" ? "all" : (user?.unidadeId || "none"),
+      pacienteId: queryPacienteId,
+      agendamentoId: queryAgendamentoId,
+      search: effectiveListSearch,
+    }),
+    [effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario],
+  );
+  const activeListCursor = listCursor?.scope === listScope ? listCursor.value : null;
+  const cursorKey = activeListCursor
+    ? `${activeListCursor.dataAtendimento}|${activeListCursor.criadoEm}|${activeListCursor.id}`
+    : "first";
   const prontuariosQueryKey = useMemo(
-    () => ['prontuarios', 'lista', user?.usuario === 'admin.sms' ? 'all' : (user?.unidadeId || 'none')] as const,
-    [user?.usuario, user?.unidadeId],
+    () => [
+      'prontuarios',
+      'lista',
+      user?.usuario === 'admin.sms' ? 'all' : (user?.unidadeId || 'none'),
+      queryPacienteId || 'todos',
+      queryAgendamentoId || 'sem-agendamento',
+      effectiveListSearch || 'sem-busca',
+      cursorKey,
+    ] as const,
+    [cursorKey, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.usuario, user?.unidadeId],
   );
 
-  // Two-phase fetch: paint first 100 instantly via setQueryData, then page the rest in background.
-  const fetchProntuariosLeve = useCallback(async (): Promise<ProntuarioDB[]> => {
+  const fetchProntuariosLeve = useCallback(async (signal?: AbortSignal): Promise<ProntuarioDB[]> => {
     const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
+    if (user?.usuario !== 'admin.sms' && !user?.unidadeId) return [];
 
-    // Phase 1 — first 100 most recent
-    let firstQuery = (supabase as any)
+    const searchTerm = sanitizePostgrestSearch(effectiveListSearch);
+    let matchingPatientIds: string[] = [];
+    if (searchTerm) {
+      const digits = searchTerm.replace(/\D/g, "");
+      const patientFilters = [`nome.ilike.%${searchTerm}%`];
+      if (digits) patientFilters.push(`cpf.ilike.%${digits}%`, `cns.ilike.%${digits}%`);
+      let patientQuery = (supabase as any)
+        .from("pacientes")
+        .select("id")
+        .or(patientFilters.join(","))
+        .limit(100);
+      if (restrictUnit) patientQuery = patientQuery.eq("unidade_id", user?.unidadeId);
+      if (signal) patientQuery = patientQuery.abortSignal(signal);
+      const { data: patientMatches, error: patientError } = await patientQuery;
+      if (patientError && patientError.name !== "AbortError") {
+        console.error("Error searching patients for prontuarios:", patientError);
+      }
+      matchingPatientIds = (patientMatches || []).map((item: any) => item.id).filter(Boolean);
+    }
+
+    let query = (supabase as any)
       .from("prontuarios")
       .select(LIST_COLS)
       .order("data_atendimento", { ascending: false })
       .order("criado_em", { ascending: false })
-      .range(0, 99);
-    if (restrictUnit) firstQuery = firstQuery.eq("unidade_id", user!.unidadeId);
-    const { data: first, error: firstErr } = await firstQuery;
-    if (firstErr) {
-      console.error("Error loading prontuarios:", firstErr);
-      return [];
+      .order("id", { ascending: false })
+      .limit(PRONTUARIO_LIST_PAGE_SIZE + 1);
+
+    if (restrictUnit) query = query.eq("unidade_id", user?.unidadeId);
+    if (queryPacienteId) query = query.eq("paciente_id", queryPacienteId);
+    if (queryAgendamentoId) query = query.eq("agendamento_id", queryAgendamentoId);
+    if (searchTerm) {
+      const filters = [
+        `paciente_nome.ilike.%${searchTerm}%`,
+        `profissional_nome.ilike.%${searchTerm}%`,
+      ];
+      if (matchingPatientIds.length > 0) filters.push(`paciente_id.in.(${matchingPatientIds.join(",")})`);
+      query = query.or(filters.join(","));
     }
-
-    const firstPage: any[] = (first as any) || [];
-    // Paint immediately while remaining pages stream in
-    queryClient.setQueryData(prontuariosQueryKey, firstPage);
-
-    // Phase 2 — paginate remaining silently
-    const PAGE_SIZE = 1000;
-    let fromIdx = 100;
-    const collected: any[] = [...firstPage];
-    while (true) {
-      let q = (supabase as any)
-        .from("prontuarios")
-        .select(LIST_COLS)
-        .order("data_atendimento", { ascending: false })
-        .order("criado_em", { ascending: false })
-        .range(fromIdx, fromIdx + PAGE_SIZE - 1);
-      if (restrictUnit) q = q.eq("unidade_id", user!.unidadeId);
-      const { data, error } = await q;
-      if (error) { console.error("Background load error:", error); break; }
-      if (!data || data.length === 0) break;
-      collected.push(...data);
-      queryClient.setQueryData(prontuariosQueryKey, [...collected]);
-      if (data.length < PAGE_SIZE) break;
-      fromIdx += PAGE_SIZE;
+    if (activeListCursor) {
+      query = query.or([
+        `data_atendimento.lt.${activeListCursor.dataAtendimento}`,
+        `and(data_atendimento.eq.${activeListCursor.dataAtendimento},criado_em.lt.${activeListCursor.criadoEm})`,
+        `and(data_atendimento.eq.${activeListCursor.dataAtendimento},criado_em.eq.${activeListCursor.criadoEm},id.lt.${activeListCursor.id})`,
+      ].join(","));
     }
-    if (import.meta.env.DEV) console.debug("[Prontuarios] total carregado:", collected.length);
-    return collected;
-  }, [user?.id, user?.usuario, user?.unidadeId, prontuariosQueryKey, queryClient]);
+    if (signal) query = query.abortSignal(signal);
 
-  const { data: prontuarios = [], isLoading: prontuariosLoading, refetch: refetchProntuarios } = useQuery<ProntuarioDB[]>({
+    const { data, error } = await query;
+    if (error) {
+      if (error.name !== "AbortError") console.error("Error loading prontuarios:", error);
+      throw error;
+    }
+    return (data || []) as ProntuarioDB[];
+  }, [activeListCursor, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario]);
+
+  const {
+    data: currentProntuariosPage = [],
+    isLoading: prontuariosLoading,
+    isFetching: prontuariosFetching,
+    refetch: refetchProntuarios,
+  } = useQuery<ProntuarioDB[]>({
     queryKey: prontuariosQueryKey,
-    queryFn: fetchProntuariosLeve,
+    queryFn: ({ signal }) => fetchProntuariosLeve(signal),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
+
+  useEffect(() => {
+    const pageRows = currentProntuariosPage.slice(0, PRONTUARIO_LIST_PAGE_SIZE);
+    setLoadedListPages((current) => {
+      const pages = current.scope === listScope ? current.pages : [];
+      const pageIndex = pages.findIndex((page) => page.key === cursorKey);
+      if (pageIndex >= 0) {
+        const nextPages = [...pages];
+        nextPages[pageIndex] = { key: cursorKey, rows: pageRows };
+        return { scope: listScope, pages: nextPages };
+      }
+      return { scope: listScope, pages: [...pages, { key: cursorKey, rows: pageRows }] };
+    });
+  }, [currentProntuariosPage, cursorKey, listScope]);
+
+  const prontuarios = useMemo(() => {
+    if (loadedListPages.scope !== listScope) return [];
+    const seen = new Set<string>();
+    return loadedListPages.pages.flatMap((page) => page.rows).filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [listScope, loadedListPages]);
+  const hasMoreProntuarios = currentProntuariosPage.length > PRONTUARIO_LIST_PAGE_SIZE;
+
+  const loadMoreProntuarios = useCallback(() => {
+    const last = currentProntuariosPage[PRONTUARIO_LIST_PAGE_SIZE - 1];
+    if (!last || !hasMoreProntuarios || prontuariosFetching) return;
+    setListCursor({
+      scope: listScope,
+      value: {
+        dataAtendimento: last.data_atendimento,
+        criadoEm: last.criado_em,
+        id: last.id,
+      },
+    });
+  }, [currentProntuariosPage, hasMoreProntuarios, listScope, prontuariosFetching]);
 
   // Backwards-compat alias for legacy call sites that triggered a reload.
   const loadProntuarios = useCallback(() => {
@@ -2756,8 +2864,6 @@ const ProntuarioPage: React.FC = () => {
     setCycleSaving(false);
   };
 
-  const queryPacienteId = searchParams.get("pacienteId");
-  const deferredSearch = useDeferredValue(search);
   const pacienteByIdMap = useMemo(() => {
     const m = new Map<string, any>();
     pacientes.forEach((p: any) => m.set(p.id, p));
@@ -2772,20 +2878,8 @@ const ProntuarioPage: React.FC = () => {
     return fallback || '';
   }, [pacienteByIdMap]);
   const filtered = useMemo(() => {
-    return prontuarios.filter((p) => {
-      if (queryPacienteId) return p.paciente_id === queryPacienteId;
-      if (!deferredSearch) return true;
-      const term = deferredSearch.toLowerCase();
-      const termDigits = term.replace(/[.\-/]/g, "");
-      const pac = pacienteByIdMap.get(p.paciente_id);
-      return (
-        p.paciente_nome.toLowerCase().includes(term) ||
-        p.profissional_nome.toLowerCase().includes(term) ||
-        ((pac?.cpf || "").replace(/[.\-/]/g, "").includes(termDigits)) ||
-        ((pac?.cns || "").includes(termDigits))
-      );
-    });
-  }, [prontuarios, queryPacienteId, deferredSearch, pacienteByIdMap]);
+    return prontuarios;
+  }, [prontuarios]);
 
   // Virtualized list — render only visible rows for instant scroll on huge lists
   const listParentRef = useRef<HTMLDivElement | null>(null);
@@ -2855,7 +2949,9 @@ const ProntuarioPage: React.FC = () => {
           <h1 className="text-2xl font-bold font-display text-foreground">
             {queryPacienteId ? `Prontuários — ${queryPacienteNome || "Paciente"}` : "Prontuários"}
           </h1>
-          <p className="text-muted-foreground text-sm">{filtered.length} registro(s)</p>
+          <p className="text-muted-foreground text-sm">
+            {filtered.length} registro(s) carregado(s){hasMoreProntuarios ? " · há mais resultados" : ""}
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap w-full sm:w-auto">
           {queryPacienteId && (
@@ -5050,6 +5146,20 @@ const ProntuarioPage: React.FC = () => {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {!loading && filtered.length > 0 && hasMoreProntuarios && (
+        <div className="flex justify-center pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={loadMoreProntuarios}
+            disabled={prontuariosFetching}
+          >
+            {prontuariosFetching ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ChevronDown className="w-4 h-4 mr-2" />}
+            {prontuariosFetching ? "Carregando…" : "Carregar mais"}
+          </Button>
         </div>
       )}
 
