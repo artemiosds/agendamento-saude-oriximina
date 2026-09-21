@@ -5,10 +5,10 @@ Carregar primeiro os 90 dias mais recentes do Histórico Completo e buscar perí
 
 ## Implementação
 - Alterar apenas `src/components/HistoricoCompletoModal.tsx` e, se necessário, testes diretamente ligados a ele.
-- Consultar separadamente prontuários, faltas, sessões e altas dentro de faixas consecutivas e não sobrepostas de 90 dias.
+- Consultar separadamente prontuários, faltas, sessões e altas dentro de faixas consecutivas e não sobrepostas de 90 dias, sempre com limites semiabertos (`data >= início` e `data < fim`), fazendo a faixa anterior terminar exatamente no início da atual.
 - Usar projeções resumidas para os cartões, limites e cursores próprios por fonte quando uma faixa exceder o limite.
 - Buscar triagens e ciclos somente para os IDs resumidos recebidos naquela página; buscar conteúdo clínico completo do prontuário somente ao expandir ou visualizar.
-- Consolidar por chave canônica `fonte:id` e ordenar por data, hora, prioridade fixa da fonte e ID, todos de forma determinística.
+- Consolidar por chave canônica `fonte:id` e ordenar por data, hora normalizada como `00:00` quando ausente, prioridade fixa da fonte e ID, todos de forma determinística.
 - Manter os eventos carregados ao avançar e só liberar a faixa anterior quando todas as fontes da faixa atual estiverem esgotadas.
 - Cancelar requisições e zerar paginação, expansão e continuação ao fechar ou trocar o paciente.
 - Fazer os dois comandos atuais de relatório/impressão drenarem todas as faixas ainda pendentes, com indicador de progresso, antes de chamar as rotinas existentes e respeitando os filtros atuais.
