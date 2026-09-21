@@ -148,7 +148,7 @@ async function fetchSourcePages(
   signal: AbortSignal,
 ): Promise<any[]> {
   const config = {
-    prontuario: { table: "prontuarios", patient: "paciente_id", date: "data_atendimento", time: "hora_atendimento", select: "id, agendamento_id, data_atendimento, hora_atendimento, profissional_nome, profissional_id, tipo_registro, queixa_principal, evolucao, unidade_id, procedimentos_texto" },
+    prontuario: { table: "prontuarios", patient: "paciente_id", date: "data_atendimento", time: "hora_atendimento", select: "id, agendamento_id, data_atendimento, hora_atendimento, profissional_nome, profissional_id, tipo_registro, queixa_principal, unidade_id, procedimentos_texto" },
     falta: { table: "agendamentos", patient: "paciente_id", date: "data", time: "hora", select: "id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id" },
     sessao: { table: "treatment_sessions", patient: "patient_id", date: "scheduled_date", select: "id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id" },
     alta: { table: "patient_discharges", patient: "patient_id", date: "discharge_date", select: "id, cycle_id, professional_id, discharge_date, reason, final_notes" },
@@ -208,11 +208,11 @@ function mapRangeEvents(
   for (const p of rows.prontuario) {
     let type: EventType = (p.tipo_registro || "consulta") as EventType;
     if (!TYPE_CONFIG[type]) type = "consulta";
-    const isReport = p.tipo_registro === "alta_multiprofissional" || p.tipo_registro === "alta_individual" || p.evolucao?.includes("Relatório de Alta");
+    const isReport = p.tipo_registro === "alta_multiprofissional" || p.tipo_registro === "alta_individual";
     result.push({
       id: `prontuario:${p.id}`, source: "prontuario", sourceId: String(p.id), type: isReport ? "alta" : type,
       date: p.data_atendimento, time: p.hora_atendimento || undefined, professional: p.profissional_nome || "",
-      professionalId: p.profissional_id, specialty: specialtyMap.get(p.profissional_id), summary: p.queixa_principal || p.evolucao || "",
+      professionalId: p.profissional_id, specialty: specialtyMap.get(p.profissional_id), summary: p.queixa_principal || "",
       queixaPrincipal: p.queixa_principal || undefined, unidade: unidadeMap.get(p.unidade_id), procedimentos: p.procedimentos_texto || undefined,
       rawProntuario: p, detailsLoaded: false,
     });
@@ -518,7 +518,10 @@ const EventDetail: React.FC<{ event: FullEvent }> = ({ event }) => {
 export const HistoricoCompletoModal: React.FC<Props> = ({
   open, onOpenChange, pacienteId, pacienteNome, unidades, currentProfissionalId, onViewProntuario,
 }) => {
-  const { events, professionals, loading, error, reload } = useFullHistory(open, pacienteId, unidades);
+  const {
+    events, professionals, loading, loadingMore, loadingDetailId, printingProgress,
+    hasOlder, error, reload, loadMore, loadDetail, drainAll,
+  } = useFullHistory(open, pacienteId, unidades);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -532,15 +535,17 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
   const [filterDateTo, setFilterDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
-  const filteredEvents = useMemo(() => {
-    return events.filter(ev => {
+  const applyFilters = useCallback((sourceEvents: FullEvent[]) => {
+    return sourceEvents.filter(ev => {
       if (filterTypes.size > 0 && !filterTypes.has(ev.type)) return false;
       if (filterProfissional !== "todos" && ev.professional !== filterProfissional) return false;
       if (filterDateFrom && ev.date < filterDateFrom) return false;
       if (filterDateTo && ev.date > filterDateTo) return false;
       return true;
     });
-  }, [events, filterTypes, filterProfissional, filterDateFrom, filterDateTo]);
+  }, [filterTypes, filterProfissional, filterDateFrom, filterDateTo]);
+
+  const filteredEvents = useMemo(() => applyFilters(events), [events, applyFilters]);
 
   const toggleType = (type: string) => {
     setFilterTypes(prev => {
@@ -570,10 +575,12 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
     };
   }, [events]);
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = async () => {
+    const completeEvents = applyFilters(await drainAll());
+    if (completeEvents.length === 0) return;
     downloadFullHistoryPdf(
       pacienteNome,
-      filteredEvents.map((e) => ({
+      completeEvents.map((e) => ({
         date: e.date,
         type: TYPE_CONFIG[e.type]?.label || e.type,
         professional: e.professional,
@@ -587,9 +594,10 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
   };
 
   const handlePrintOfficial = async () => {
-    if (filteredEvents.length === 0) return;
-    const rows = [...filteredEvents]
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+    const completeEvents = applyFilters(await drainAll());
+    if (completeEvents.length === 0) return;
+    const rows = [...completeEvents]
+      .sort(compareEvents)
       .map((e) => `
         <tr>
           <td>${formatDateBR(e.date)}${e.time ? ' ' + e.time : ''}</td>
@@ -616,7 +624,7 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
     `;
     openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, {
       'Paciente': pacienteNome,
-      'Total de eventos': String(filteredEvents.length),
+      'Total de eventos': String(completeEvents.length),
     });
   };
 
@@ -739,7 +747,11 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                     <div
                       key={event.id}
                       className={`border-l-4 rounded-lg bg-card shadow-sm p-3 sm:p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${specColors.border} ${isCurrent ? `ring-1 ${specColors.ring}` : ''}`}
-                      onClick={() => setExpandedId(prev => prev === event.id ? null : event.id)}
+                      onClick={async () => {
+                        if (isExpanded) { setExpandedId(null); return; }
+                        setExpandedId(event.id);
+                        await loadDetail(event);
+                      }}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -772,27 +784,54 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          {event.rawProntuario && onViewProntuario && (
+                          {event.source === "prontuario" && onViewProntuario && (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-xs gap-1"
-                              onClick={(e) => { e.stopPropagation(); onViewProntuario(event.rawProntuario); }}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const detailed = await loadDetail(event);
+                                if (detailed.rawProntuario) onViewProntuario(detailed.rawProntuario);
+                              }}
                               title="Visualizar prontuário"
                             >
                               <Eye className="w-3.5 h-3.5" /> Visualizar
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={e => { e.stopPropagation(); setExpandedId(prev => prev === event.id ? null : event.id); }}>
-                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={async e => {
+                            e.stopPropagation();
+                            if (isExpanded) { setExpandedId(null); return; }
+                            setExpandedId(event.id);
+                            await loadDetail(event);
+                          }}>
+                            {loadingDetailId === event.id ? <Loader2 className="w-4 h-4 animate-spin" /> : isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </Button>
                         </div>
                       </div>
 
-                      {isExpanded && <EventDetail event={event} />}
+                      {isExpanded && loadingDetailId === event.id && (
+                        <div className="mt-3 border-t pt-3 text-xs text-muted-foreground flex items-center gap-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando detalhes...
+                        </div>
+                      )}
+                      {isExpanded && loadingDetailId !== event.id && <EventDetail event={event} />}
                     </div>
                   );
                 })}
+
+                {!loading && !error && events.length > 0 && (
+                  <div className="flex flex-col items-center gap-2 py-4">
+                    {hasOlder ? (
+                      <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore || printingProgress !== null} className="gap-1.5">
+                        {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        Carregar atendimentos anteriores
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Não há atendimentos anteriores</p>
+                    )}
+                  </div>
+                )}
               </div>
             </ScrollArea>
           </div>
@@ -804,20 +843,21 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
             variant="outline"
             size="sm"
             onClick={handlePrintOfficial}
-            disabled={filteredEvents.length === 0 || loading}
+            disabled={filteredEvents.length === 0 || loading || loadingMore || printingProgress !== null}
             className="gap-1.5"
           >
-            <Printer className="w-4 h-4" />
+            {printingProgress !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
             Imprimir Oficial (A4)
+            {printingProgress !== null && ` — ${printingProgress} faixa(s)`}
           </Button>
           <Button
             variant="default"
             size="sm"
             onClick={handleGenerateReport}
-            disabled={filteredEvents.length === 0 || loading}
+            disabled={filteredEvents.length === 0 || loading || loadingMore || printingProgress !== null}
             className="gap-1.5"
           >
-            <FileDown className="w-4 h-4" />
+            {printingProgress !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
             Gerar Relatório Completo
           </Button>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
