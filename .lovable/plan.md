@@ -14,7 +14,8 @@ Adicionar filtros compactos de período e profissional à listagem principal, pr
 
 ## Consulta e paginação
 - Incluir data inicial, data final e profissional aplicado em `listScope` e na chave React Query.
-- Aplicar `data_atendimento >= dataInicial`, `data_atendimento <= dataFinal` e `profissional_id = profissional` diretamente na consulta do servidor.
+- A coluna `data_atendimento` foi confirmada no banco como tipo `date`; aplicar `>= dataInicial` e `<= dataFinal`, sem conversão de fuso. Aplicar `profissional_id = profissional` diretamente no servidor.
+- Não enviar condição de data ou profissional quando o respectivo filtro estiver vazio.
 - Ao aplicar ou limpar filtros, reiniciar o cursor e as páginas acumuladas para começar novamente pela primeira página.
 - Preservar os filtros no escopo usado por “Carregar mais”, mantendo páginas de 50 e o cursor composto `data_atendimento`, `criado_em`, `id`.
 - Manter o debounce de busca em 350 ms e a combinação entre busca textual, período e profissional.
