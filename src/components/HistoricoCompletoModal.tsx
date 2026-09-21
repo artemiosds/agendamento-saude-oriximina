@@ -150,7 +150,7 @@ async function fetchSourcePages(
   signal: AbortSignal,
 ): Promise<any[]> {
   const config = {
-    prontuario: { table: "prontuarios", patient: "paciente_id", date: "data_atendimento", time: "hora_atendimento", select: "id, agendamento_id, data_atendimento, hora_atendimento, profissional_nome, profissional_id, tipo_registro, queixa_principal, unidade_id, procedimentos_texto" },
+    prontuario: { table: "prontuarios", patient: "paciente_id", date: "data_atendimento", time: "hora_atendimento", select: "id, agendamento_id, data_atendimento, hora_atendimento, profissional_nome, profissional_id, tipo_registro, queixa_principal, evolucao, unidade_id, procedimentos_texto" },
     falta: { table: "agendamentos", patient: "paciente_id", date: "data", time: "hora", select: "id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id" },
     sessao: { table: "treatment_sessions", patient: "patient_id", date: "scheduled_date", select: "id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id" },
     alta: { table: "patient_discharges", patient: "patient_id", date: "discharge_date", select: "id, cycle_id, professional_id, discharge_date, reason, final_notes" },
@@ -210,11 +210,11 @@ function mapRangeEvents(
   for (const p of rows.prontuario) {
     let type: EventType = (p.tipo_registro || "consulta") as EventType;
     if (!TYPE_CONFIG[type]) type = "consulta";
-    const isReport = p.tipo_registro === "alta_multiprofissional" || p.tipo_registro === "alta_individual";
+    const isReport = p.tipo_registro === "alta_multiprofissional" || p.tipo_registro === "alta_individual" || p.evolucao?.includes("Relatório de Alta");
     result.push({
       id: `prontuario:${p.id}`, source: "prontuario", sourceId: String(p.id), type: isReport ? "alta" : type,
       date: p.data_atendimento, time: p.hora_atendimento || undefined, professional: p.profissional_nome || "",
-      professionalId: p.profissional_id, specialty: specialtyMap.get(p.profissional_id), summary: p.queixa_principal || "",
+      professionalId: p.profissional_id, specialty: specialtyMap.get(p.profissional_id), summary: p.queixa_principal || p.evolucao || "",
       queixaPrincipal: p.queixa_principal || undefined, unidade: unidadeMap.get(p.unidade_id), procedimentos: p.procedimentos_texto || undefined,
       rawProntuario: p, detailsLoaded: false,
     });
