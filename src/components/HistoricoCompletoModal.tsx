@@ -413,6 +413,12 @@ function useFullHistory(open: boolean, pacienteId: string, unidades: { id: strin
         setHasOlder(more);
       }
       return nextEvents;
+    } catch (err) {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) {
+        console.error("[HistoricoCompleto] Erro ao preparar histórico integral:", err);
+        setError("Não foi possível carregar todo o histórico para impressão.");
+      }
+      throw err;
     } finally {
       if (!controller.signal.aborted && requestId === requestIdRef.current) setPrintingProgress(null);
     }
@@ -527,8 +533,8 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) setExpandedId(null);
-  }, [open]);
+    setExpandedId(null);
+  }, [open, pacienteId]);
 
   // Filters
   const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set());
@@ -579,40 +585,44 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
   }, [events]);
 
   const handleGenerateReport = async () => {
-    const completeEvents = applyFilters(await drainAll());
-    if (completeEvents.length === 0) return;
-    downloadFullHistoryPdf(
-      pacienteNome,
-      completeEvents.map((e) => ({
-        date: e.date,
-        type: TYPE_CONFIG[e.type]?.label || e.type,
-        professional: e.professional,
-        specialty: e.specialty,
-        summary: e.summary || e.queixaPrincipal || e.conduta || "",
-        unidade: e.unidade,
-        sessionInfo: e.sessionInfo,
-      })),
-      currentProfissionalId,
-    );
+    try {
+      const completeEvents = applyFilters(await drainAll());
+      if (completeEvents.length === 0) return;
+      downloadFullHistoryPdf(
+        pacienteNome,
+        completeEvents.map((e) => ({
+          date: e.date,
+          type: TYPE_CONFIG[e.type]?.label || e.type,
+          professional: e.professional,
+          specialty: e.specialty,
+          summary: e.summary || e.queixaPrincipal || e.conduta || "",
+          unidade: e.unidade,
+          sessionInfo: e.sessionInfo,
+        })),
+        currentProfissionalId,
+      );
+    } catch {
+      // A impressão parcial é deliberadamente bloqueada quando a drenagem falha.
+    }
   };
 
   const handlePrintOfficial = async () => {
-    const completeEvents = applyFilters(await drainAll());
-    if (completeEvents.length === 0) return;
-    const rows = [...completeEvents]
-      .sort(compareEvents)
-      .map((e) => `
+    try {
+      const completeEvents = applyFilters(await drainAll());
+      if (completeEvents.length === 0) return;
+      const rows = [...completeEvents]
+        .sort(compareEvents)
+        .map((e) => `
         <tr>
           <td>${formatDateBR(e.date)}${e.time ? ' ' + e.time : ''}</td>
           <td>${TYPE_CONFIG[e.type]?.label || e.type}${e.sessionInfo ? ' — ' + e.sessionInfo : ''}</td>
           <td>${e.professional || '—'}</td>
           <td>${e.specialty || '—'}</td>
           <td><div style="font-size:9.5pt; line-height:1.2;">${(e.summary || e.queixaPrincipal || e.conduta || '').replace(/</g, '&lt;').slice(0, 800)}</div></td>
-        </tr>`).join('');
-    
-    const carimboHtml = currentProfissionalId ? await docCarimboFor(currentProfissionalId) : "";
+          </tr>`).join('');
+      const carimboHtml = currentProfissionalId ? await docCarimboFor(currentProfissionalId) : "";
 
-    const body = `
+      const body = `
       <h3 style="margin:12px 0 8px;font-size:12pt;font-weight:700;color:#0c4a6e;text-transform:uppercase;border-bottom:2px solid #0369a1;">Histórico Clínico Consolidado</h3>
       <table>
         <thead>
@@ -624,11 +634,14 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
       <div style="margin-top: 20px;">
         ${carimboHtml}
       </div>
-    `;
-    openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, {
-      'Paciente': pacienteNome,
-      'Total de eventos': String(completeEvents.length),
-    });
+      `;
+      openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, {
+        'Paciente': pacienteNome,
+        'Total de eventos': String(completeEvents.length),
+      });
+    } catch {
+      // A impressão parcial é deliberadamente bloqueada quando a drenagem falha.
+    }
   };
 
   return (
