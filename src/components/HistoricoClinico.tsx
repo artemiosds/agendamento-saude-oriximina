@@ -133,8 +133,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           .from("pacientes")
           .select("*")
           .eq("id", pacienteId)
-          .single()
-          .abortSignal(controller.signal),
+          .abortSignal(controller.signal)
+          .single(),
       ]);
 
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
