@@ -550,7 +550,8 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
   const toggleType = (type: string) => {
     setFilterTypes(prev => {
       const next = new Set(prev);
-      next.has(type) ? next.delete(type) : next.add(type);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
       return next;
     });
   };
