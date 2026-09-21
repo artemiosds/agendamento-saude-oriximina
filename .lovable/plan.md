@@ -18,8 +18,8 @@ Substituir a carga automática de todos os prontuários por páginas de 50 regis
 
 - Trocar a consulta React Query atual por uma consulta infinita paginada.
 - Buscar inicialmente 50 prontuários e somente buscar a próxima página após “Carregar mais”.
-- Usar intervalo controlado por página, sem qualquer laço ou pré-carregamento em segundo plano.
-- Ordenar sempre por `data_atendimento DESC`, `criado_em DESC` e `id DESC`, garantindo desempate estável.
+- Priorizar cursor composto por `data_atendimento`, `criado_em` e `id`, todos em ordem decrescente, para garantir desempate estável.
+- Usar intervalo controlado por página somente se o cursor for tecnicamente inviável sem alterar contratos; nesse caso, documentar explicitamente o risco de duplicação ou ausência temporária durante inclusões ou exclusões simultâneas.
 - Manter na listagem apenas a projeção leve já existente em `LIST_COLS`.
 - Preservar a virtualização sobre a união das páginas já carregadas.
 
@@ -40,7 +40,8 @@ Substituir a carga automática de todos os prontuários por páginas de 50 regis
 - Conservar páginas anteriores na tela enquanto a próxima página é buscada.
 - Usar o cancelamento/sinal da React Query e a identidade da chave para impedir que respostas antigas substituam a busca atual.
 - Em eventos Realtime, invalidar somente a consulta da listagem/filtro atual, sem recarregar todas as páginas automaticamente.
-- Adaptar as atualizações otimistas pós-save e pós-exclusão ao formato paginado, sem modificar os fluxos de persistência.
+- Não modificar `handleSave`, `performAutosave`, `handleRegistrarSessaoOnly`, rotinas de exclusão nem seus fluxos de atualização otimista.
+- Após salvar ou excluir, preservar o comportamento atual; qualquer invalidação necessária será feita fora dessas funções e limitada à consulta paginada atualmente visível.
 
 ### 4. Interface e ações
 
