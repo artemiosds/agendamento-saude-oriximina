@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import DocumentosHistorico from "@/components/DocumentosHistorico";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
@@ -64,6 +63,7 @@ interface Props {
   pacienteNome: string;
   currentProfissionalId?: string;
   unidades: { id: string; nome: string }[];
+  onOpenFullHistory?: () => void;
 }
 
 // Helpers
@@ -80,21 +80,23 @@ function formatDateBR(isoDate: string): string {
   return new Date(`${isoDate}T12:00:00`).toLocaleDateString("pt-BR");
 }
 
-export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, currentProfissionalId, unidades }) => {
+export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, currentProfissionalId, unidades, onOpenFullHistory }) => {
   const [prontuarios, setProntuarios] = useState<ProntuarioItem[]>([]);
   const [episodios, setEpisodios] = useState<EpisodioItem[]>([]);
-  const [encaminhamentosEnviados, setEncaminhamentosEnviados] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [viewerItem, setViewerItem] = useState<ProntuarioItem | null>(null);
-  const [historicoOpen, setHistoricoOpen] = useState(false);
   const [docModalOpen, setDocModalOpen] = useState(false);
-  const cancelledRef = useRef(false);
+  const [activeTab, setActiveTab] = useState("atendimentos");
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [pacienteData, setPacienteData] = useState<any>(null);
 
   const loadData = useCallback(async () => {
+    abortControllerRef.current?.abort();
+    const requestId = ++requestIdRef.current;
     if (!pacienteId) {
       setProntuarios([]);
       setEpisodios([]);
@@ -102,7 +104,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
       return;
     }
 
-    cancelledRef.current = false;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     setError(null);
 
@@ -110,8 +113,7 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
       const [
         { data: pData, error: pError }, 
         { data: eData, error: eError },
-        { data: pacData, error: pacError },
-        { data: encData, error: encError }
+        { data: pacData, error: pacError }
       ] = await Promise.all([
         supabase
           .from("prontuarios")
@@ -119,43 +121,37 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
             "id,data_atendimento,hora_atendimento,profissional_nome,profissional_id,queixa_principal,evolucao,conduta,indicacao_retorno,procedimentos_texto,outro_procedimento,unidade_id,episodio_id,anamnese,sinais_sintomas,exame_fisico,hipotese,prescricao,solicitacao_exames,observacoes",
           )
           .eq("paciente_id", pacienteId)
-          .order("data_atendimento", { ascending: false }),
+          .order("data_atendimento", { ascending: false })
+          .abortSignal(controller.signal),
         supabase
           .from("episodios_clinicos")
           .select("*")
           .eq("paciente_id", pacienteId)
-          .order("data_inicio", { ascending: false }),
+          .order("data_inicio", { ascending: false })
+          .abortSignal(controller.signal),
         supabase
           .from("pacientes")
           .select("*")
           .eq("id", pacienteId)
-          .single(),
-        supabase
-          .from("documentos_gerados")
-          .select("*")
-          .eq("paciente_id", pacienteId)
-          .ilike("tipo_documento", "%encaminhamento%")
-          .order("created_at", { ascending: false })
+          .single()
+          .abortSignal(controller.signal),
       ]);
 
-      if (cancelledRef.current) return;
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
 
       if (pError) throw pError;
       if (eError) throw eError;
       if (pacError) throw pacError;
-      if (encError) throw encError;
 
       setProntuarios(pData || []);
       setEpisodios(eData || []);
       setPacienteData(pacData);
-      setEncaminhamentosEnviados(encData || []);
     } catch (err) {
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       console.error("[Historico] Erro inesperado:", err);
-      if (!cancelledRef.current) {
-        setError("Erro ao carregar histórico. Tente novamente.");
-      }
+      setError("Erro ao carregar histórico. Tente novamente.");
     } finally {
-      if (!cancelledRef.current) {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) {
         setLoading(false);
       }
     }
@@ -164,9 +160,17 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   useEffect(() => {
     loadData();
     return () => {
-      cancelledRef.current = true;
+      requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
     };
   }, [loadData]);
+
+  useEffect(() => {
+    setExpandedId(null);
+    setViewerItem(null);
+    setActiveTab("atendimentos");
+  }, [pacienteId]);
 
   // Mapa de unidades (O(1) lookup)
   const unidadeMap = useMemo(() => new Map(unidades.map((u) => [u.id, u.nome])), [unidades]);
@@ -485,7 +489,7 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
       <Separator />
 
-      <Tabs defaultValue="atendimentos" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid grid-cols-4 w-full h-auto p-1 bg-muted/50 rounded-lg">
           <TabsTrigger value="atendimentos" className="gap-2 py-2">
             <History className="w-4 h-4" /> Atendimentos
@@ -507,7 +511,7 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
               <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
             </h3>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
+              <Button size="sm" variant="outline" onClick={onOpenFullHistory} className="h-8">
                 <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
               </Button>
               <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
@@ -717,15 +721,19 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
         </TabsContent>
 
         <TabsContent value="encaminhamentos" className="space-y-4 pt-4 animate-in fade-in duration-300">
-           <PatientReferralHistory patientId={pacienteId} patientData={pacienteData} />
+          {activeTab === "encaminhamentos" && (
+            <PatientReferralHistory patientId={pacienteId} patientData={pacienteData} />
+          )}
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-4 pt-4 animate-in fade-in duration-300">
-           <DocumentosHistorico pacienteId={pacienteId} pacienteNome={pacienteNome} />
+          {activeTab === "documentos" && (
+            <DocumentosHistorico pacienteId={pacienteId} pacienteNome={pacienteNome} />
+          )}
         </TabsContent>
 
         <TabsContent value="anexos" className="space-y-4 pt-4 animate-in fade-in duration-300">
-           <PatientAttachmentManager pacienteId={pacienteId} />
+          {activeTab === "anexos" && <PatientAttachmentManager pacienteId={pacienteId} />}
         </TabsContent>
       </Tabs>
 
@@ -768,15 +776,6 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           )}
         </SheetContent>
       </Sheet>
-
-      <HistoricoCompletoModal
-        open={historicoOpen}
-        onOpenChange={setHistoricoOpen}
-        pacienteId={pacienteId}
-        pacienteNome={pacienteNome}
-        unidades={unidades}
-        currentProfissionalId={currentProfissionalId}
-      />
 
       <GerarDocumentoModal
         open={docModalOpen}
