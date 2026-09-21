@@ -1490,6 +1490,15 @@ const ProntuarioPage: React.FC = () => {
     });
   }, [currentSessionForRegistration, editId, form.agendamento_id, form.tipo_registro]);
 
+  // Mantido somente para o resumo existente do formulário de retorno.
+  // O painel lateral consulta sua própria fonte e não depende desta lista paginada.
+  const listDerivedPatientHistory = useMemo(() => {
+    if (!form.paciente_id) return [];
+    return prontuarios
+      .filter((p) => p.paciente_id === form.paciente_id && p.id !== editId)
+      .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
+  }, [form.paciente_id, prontuarios, editId]);
+
   // Carrega histórico de procedimentos do paciente (sugestões)
   useEffect(() => {
     if (!form.paciente_id) { setPacienteProcHistory([]); return; }
@@ -3649,12 +3658,12 @@ const ProntuarioPage: React.FC = () => {
                     Retorno
                   </h4>
                   <div className="space-y-4">
-                    {patientHistory.length > 0 && (
+                    {listDerivedPatientHistory.length > 0 && (
                       <div className="bg-muted/50 rounded-md p-2 border">
                         <p className="text-xs font-semibold text-muted-foreground mb-1">Resumo do último atendimento (somente leitura)</p>
-                        <p className="text-sm text-foreground">{patientHistory[0]?.queixa_principal || "Sem queixa registrada"}</p>
+                        <p className="text-sm text-foreground">{listDerivedPatientHistory[0]?.queixa_principal || "Sem queixa registrada"}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(patientHistory[0]?.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} — {patientHistory[0]?.profissional_nome}
+                          {new Date(listDerivedPatientHistory[0]?.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} — {listDerivedPatientHistory[0]?.profissional_nome}
                         </p>
                       </div>
                     )}

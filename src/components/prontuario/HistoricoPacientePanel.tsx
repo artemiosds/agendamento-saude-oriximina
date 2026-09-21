@@ -247,7 +247,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
 
       const { data, error } = await query;
       if (error) throw error;
-      const rows = (data || []) as ProntuarioHistEntry[];
+      const rows = (data || []) as unknown as ProntuarioHistEntry[];
       return {
         rows: rows.slice(0, HISTORY_PAGE_SIZE),
         nextOffset: rows.length > HISTORY_PAGE_SIZE ? offset + HISTORY_PAGE_SIZE : undefined,
@@ -287,7 +287,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
           const { data, error } = await query.maybeSingle();
           if (error) throw error;
           if (!data) throw new Error("Prontuário não encontrado");
-          return data as ProntuarioHistEntry;
+          return data as unknown as ProntuarioHistEntry;
         },
         staleTime: 5 * 60_000,
       });
