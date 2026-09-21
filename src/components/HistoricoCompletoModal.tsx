@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- database rows preserve the existing polymorphic clinical payloads */
+/* eslint-disable react-refresh/only-export-components -- pure helpers are exported for boundary and ordering regression tests */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -46,6 +48,9 @@ interface FullEvent {
   procedimentos?: string;
   status?: string;
   rawProntuario?: any;
+  source: HistorySource;
+  sourceId: string;
+  detailsLoaded?: boolean;
 }
 
 interface Props {
@@ -79,191 +84,225 @@ function parseJsonSafe(json: string | null | undefined) {
 }
 
 // ── Data Loading ───────────────────────────────────────────
+const HISTORY_WINDOW_DAYS = 90;
+const SOURCE_PAGE_SIZE = 200;
+const SOURCE_PRIORITY: Record<HistorySource, number> = {
+  prontuario: 4,
+  falta: 3,
+  sessao: 2,
+  alta: 1,
+};
+
+type HistorySource = "prontuario" | "falta" | "sessao" | "alta";
+type DateRange = { start: string; end: string };
+type SourceCursor = { date: string; time?: string; sourceId: string };
+
+function localIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function previousRange(end: string): DateRange {
+  const endDate = new Date(`${end}T12:00:00`);
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - HISTORY_WINDOW_DAYS);
+  return { start: localIsoDate(startDate), end };
+}
+
+function initialRange(): DateRange {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return previousRange(localIsoDate(tomorrow));
+}
+
+export function compareEvents(a: FullEvent, b: FullEvent) {
+  const dateOrder = b.date.localeCompare(a.date);
+  if (dateOrder !== 0) return dateOrder;
+  const timeOrder = (b.time || "00:00").localeCompare(a.time || "00:00");
+  if (timeOrder !== 0) return timeOrder;
+  const sourceOrder = SOURCE_PRIORITY[b.source] - SOURCE_PRIORITY[a.source];
+  if (sourceOrder !== 0) return sourceOrder;
+  return b.sourceId.localeCompare(a.sourceId);
+}
+
+export function mergeEvents(current: FullEvent[], incoming: FullEvent[]) {
+  const byCanonicalKey = new Map(current.map(event => [event.id, event]));
+  for (const event of incoming) byCanonicalKey.set(event.id, { ...byCanonicalKey.get(event.id), ...event });
+  return Array.from(byCanonicalKey.values()).sort(compareEvents);
+}
+
+function cursorFilter(dateField: string, timeField: string | undefined, cursor: SourceCursor) {
+  if (!timeField) {
+    return `${dateField}.lt.${cursor.date},and(${dateField}.eq.${cursor.date},id.lt.${cursor.sourceId})`;
+  }
+  if (!cursor.time) {
+    return `${dateField}.lt.${cursor.date},and(${dateField}.eq.${cursor.date},${timeField}.is.null,id.lt.${cursor.sourceId})`;
+  }
+  return `${dateField}.lt.${cursor.date},and(${dateField}.eq.${cursor.date},${timeField}.lt.${cursor.time}),and(${dateField}.eq.${cursor.date},${timeField}.eq.${cursor.time},id.lt.${cursor.sourceId}),and(${dateField}.eq.${cursor.date},${timeField}.is.null)`;
+}
+
+async function fetchSourcePages(
+  source: HistorySource,
+  pacienteId: string,
+  range: DateRange,
+  signal: AbortSignal,
+): Promise<any[]> {
+  const config = {
+    prontuario: { table: "prontuarios", patient: "paciente_id", date: "data_atendimento", time: "hora_atendimento", select: "id, agendamento_id, data_atendimento, hora_atendimento, profissional_nome, profissional_id, tipo_registro, queixa_principal, evolucao, unidade_id, procedimentos_texto" },
+    falta: { table: "agendamentos", patient: "paciente_id", date: "data", time: "hora", select: "id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id" },
+    sessao: { table: "treatment_sessions", patient: "patient_id", date: "scheduled_date", select: "id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id" },
+    alta: { table: "patient_discharges", patient: "patient_id", date: "discharge_date", select: "id, cycle_id, professional_id, discharge_date, reason, final_notes" },
+  }[source];
+  const rows: any[] = [];
+  let cursor: SourceCursor | null = null;
+
+  while (!signal.aborted) {
+    let query = (supabase as any)
+      .from(config.table)
+      .select(config.select)
+      .eq(config.patient, pacienteId)
+      .gte(config.date, range.start)
+      .lt(config.date, range.end);
+    if (source === "falta") query = query.eq("status", "falta");
+    if (source === "sessao") query = query.neq("status", "agendada");
+    if (cursor) query = query.or(cursorFilter(config.date, config.time, cursor));
+    query = query.order(config.date, { ascending: false });
+    if (config.time) query = query.order(config.time, { ascending: false, nullsFirst: false });
+    query = query.order("id", { ascending: false }).limit(SOURCE_PAGE_SIZE).abortSignal(signal);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const page = (data || []) as any[];
+    rows.push(...page);
+    if (page.length < SOURCE_PAGE_SIZE) break;
+    const last = page[page.length - 1];
+    const nextCursor = { date: last[config.date], time: config.time ? last[config.time] || undefined : undefined, sourceId: String(last.id) };
+    if (cursor && cursor.date === nextCursor.date && cursor.time === nextCursor.time && cursor.sourceId === nextCursor.sourceId) break;
+    cursor = nextCursor;
+  }
+  return rows;
+}
+
+async function hasEventsBefore(source: HistorySource, pacienteId: string, before: string, signal: AbortSignal) {
+  const config = {
+    prontuario: { table: "prontuarios", patient: "paciente_id", date: "data_atendimento" },
+    falta: { table: "agendamentos", patient: "paciente_id", date: "data" },
+    sessao: { table: "treatment_sessions", patient: "patient_id", date: "scheduled_date" },
+    alta: { table: "patient_discharges", patient: "patient_id", date: "discharge_date" },
+  }[source];
+  let query = (supabase as any).from(config.table).select("id").eq(config.patient, pacienteId).lt(config.date, before);
+  if (source === "falta") query = query.eq("status", "falta");
+  if (source === "sessao") query = query.neq("status", "agendada");
+  const { data, error } = await query.limit(1).abortSignal(signal);
+  if (error) throw error;
+  return Boolean(data?.length);
+}
+
+function mapRangeEvents(
+  rows: Record<HistorySource, any[]>,
+  specialtyMap: Map<string, string>,
+  cycleMap: Map<string, any>,
+  unidadeMap: Map<string, string>,
+): FullEvent[] {
+  const result: FullEvent[] = [];
+  for (const p of rows.prontuario) {
+    let type: EventType = (p.tipo_registro || "consulta") as EventType;
+    if (!TYPE_CONFIG[type]) type = "consulta";
+    const isReport = p.tipo_registro === "alta_multiprofissional" || p.tipo_registro === "alta_individual" || p.evolucao?.includes("Relatório de Alta");
+    result.push({
+      id: `prontuario:${p.id}`, source: "prontuario", sourceId: String(p.id), type: isReport ? "alta" : type,
+      date: p.data_atendimento, time: p.hora_atendimento || undefined, professional: p.profissional_nome || "",
+      professionalId: p.profissional_id, specialty: specialtyMap.get(p.profissional_id), summary: p.queixa_principal || p.evolucao || "",
+      queixaPrincipal: p.queixa_principal || undefined, unidade: unidadeMap.get(p.unidade_id), procedimentos: p.procedimentos_texto || undefined,
+      rawProntuario: p, detailsLoaded: false,
+    });
+  }
+  for (const a of rows.falta) {
+    result.push({
+      id: `falta:${a.id}`, source: "falta", sourceId: String(a.id), type: "falta", date: a.data, time: a.hora || undefined,
+      professional: a.profissional_nome || "", professionalId: a.profissional_id, specialty: specialtyMap.get(a.profissional_id),
+      summary: "Paciente não compareceu", unidade: unidadeMap.get(a.unidade_id), status: "falta", detailsLoaded: true,
+    });
+  }
+  for (const s of rows.sessao) {
+    const cycle = cycleMap.get(s.cycle_id);
+    result.push({
+      id: `sessao:${s.id}`, source: "sessao", sourceId: String(s.id), type: "sessao", date: s.scheduled_date,
+      professional: "", professionalId: s.professional_id, specialty: specialtyMap.get(s.professional_id) || cycle?.specialty,
+      summary: s.clinical_notes || s.procedure_done || "", sessionInfo: `Sessão ${s.session_number}/${s.total_sessions}`,
+      unidade: cycle?.unit_id ? unidadeMap.get(cycle.unit_id) : undefined, status: s.status, detailsLoaded: true,
+    });
+  }
+  for (const d of rows.alta) {
+    const cycle = cycleMap.get(d.cycle_id);
+    result.push({
+      id: `alta:${d.id}`, source: "alta", sourceId: String(d.id), type: "alta", date: d.discharge_date,
+      professional: "", professionalId: d.professional_id, specialty: specialtyMap.get(d.professional_id) || cycle?.specialty,
+      summary: [d.reason, d.final_notes].filter(Boolean).join(" — "), detailsLoaded: true,
+    });
+  }
+  return result.sort(compareEvents);
+}
+
+async function fetchHistoryRange(pacienteId: string, range: DateRange, unidades: { id: string; nome: string }[], signal: AbortSignal) {
+  const sources: HistorySource[] = ["prontuario", "falta", "sessao", "alta"];
+  const [prontuario, falta, sessao, alta] = await Promise.all(sources.map(source => fetchSourcePages(source, pacienteId, range, signal)));
+  const rows = { prontuario, falta, sessao, alta };
+  const professionalIds = [...new Set(Object.values(rows).flat().map((row: any) => row.profissional_id || row.professional_id).filter(Boolean))];
+  const cycleIds = [...new Set([...sessao, ...alta].map((row: any) => row.cycle_id).filter(Boolean))];
+  const [professionalsRes, cyclesRes, olderFlags] = await Promise.all([
+    professionalIds.length ? (supabase as any).from("funcionarios").select("id, profissao").in("id", professionalIds).abortSignal(signal) : Promise.resolve({ data: [] }),
+    cycleIds.length ? (supabase as any).from("treatment_cycles").select("id, treatment_type, specialty, unit_id").in("id", cycleIds).abortSignal(signal) : Promise.resolve({ data: [] }),
+    Promise.all(sources.map(source => hasEventsBefore(source, pacienteId, range.start, signal))),
+  ]);
+  const specialtyMap = new Map<string, string>((professionalsRes.data || []).map((f: any) => [String(f.id), f.profissao]));
+  const cycleMap = new Map<string, any>((cyclesRes.data || []).map((cycle: any) => [String(cycle.id), cycle]));
+  const unidadeMap = new Map(unidades.map(unit => [unit.id, unit.nome]));
+  return { events: mapRangeEvents(rows, specialtyMap, cycleMap, unidadeMap), hasOlder: olderFlags.some(Boolean) };
+}
+
 function useFullHistory(open: boolean, pacienteId: string, unidades: { id: string; nome: string }[]) {
   const [events, setEvents] = useState<FullEvent[]>([]);
-  const [professionals, setProfessionals] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
+  const [printingProgress, setPrintingProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange>(() => initialRange());
+  const [hasOlder, setHasOlder] = useState(false);
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const eventsRef = useRef<FullEvent[]>([]);
+  const rangeRef = useRef(range);
+  const hasOlderRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const commitEvents = useCallback((next: FullEvent[]) => {
+    eventsRef.current = next;
+    setEvents(next);
+  }, []);
+
+  const loadInitial = useCallback(async () => {
     abortControllerRef.current?.abort();
     const requestId = ++requestIdRef.current;
-
-    if (!open || !pacienteId) {
-      setLoading(false);
-      return;
-    }
-
+    if (!open || !pacienteId) { setLoading(false); return; }
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    const firstRange = initialRange();
+    rangeRef.current = firstRange;
+    setRange(firstRange);
     setLoading(true);
     setError(null);
-
+    commitEvents([]);
+    setHasOlder(false);
+    hasOlderRef.current = false;
     try {
-      const unidadeMap = new Map(unidades.map(u => [u.id, u.nome]));
-
-      const [prontuariosRes, faltasRes, sessionsRes, dischargesRes, funcionariosRes] = await Promise.all([
-        (supabase as any).from("prontuarios").select("*").eq("paciente_id", pacienteId).order("data_atendimento", { ascending: false }).abortSignal(controller.signal),
-        supabase.from("agendamentos").select("id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id").eq("paciente_id", pacienteId).eq("status", "falta").order("data", { ascending: false }).abortSignal(controller.signal),
-        (supabase as any).from("treatment_sessions").select("id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id").eq("patient_id", pacienteId).neq("status", "agendada").order("scheduled_date", { ascending: false }).abortSignal(controller.signal),
-        (supabase as any).from("patient_discharges").select("id, cycle_id, professional_id, discharge_date, reason, final_notes").eq("patient_id", pacienteId).abortSignal(controller.signal),
-        (supabase as any).from("funcionarios").select("id, profissao").abortSignal(controller.signal),
-      ]);
-
+      const result = await fetchHistoryRange(pacienteId, firstRange, unidades, controller.signal);
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
-
-      // map professional → specialty
-      const specialtyMap = new Map<string, string>();
-      for (const f of (funcionariosRes.data || []) as any[]) {
-        if (f?.id && f?.profissao) specialtyMap.set(f.id, f.profissao);
-      }
-
-      // Fetch triage for all agendamento_ids from prontuarios
-      const prontuarios = (prontuariosRes.data || []) as any[];
-      const agendamentoIds = prontuarios.map((p: any) => p.agendamento_id).filter(Boolean);
-      let triageMap = new Map<string, any>();
-      if (agendamentoIds.length > 0) {
-        const { data: triageData } = await (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").in("agendamento_id", agendamentoIds).abortSignal(controller.signal);
-        if (triageData) {
-          triageMap = new Map((triageData as any[]).map((t: any) => [t.agendamento_id, t]));
-        }
-      }
-
-      // Fetch cycles for sessions/discharges
-      const sessions = (sessionsRes.data || []) as any[];
-      const discharges = (dischargesRes.data || []) as any[];
-      const cycleIds = [...new Set([...sessions.map((s: any) => s.cycle_id), ...discharges.map((d: any) => d.cycle_id)].filter(Boolean))];
-      let cycleMap = new Map<string, any>();
-      if (cycleIds.length > 0) {
-        const { data: cycleData } = await (supabase as any).from("treatment_cycles").select("id, treatment_type, specialty, unit_id").in("id", cycleIds).abortSignal(controller.signal);
-        if (cycleData) cycleMap = new Map((cycleData as any[]).map((c: any) => [c.id, c]));
-      }
-
-      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
-
-      const profSet = new Set<string>();
-      const allEvents: FullEvent[] = [];
-
-      // Transform prontuarios
-      for (const p of prontuarios) {
-        const triage = triageMap.get(p.agendamento_id);
-        const prescricaoParsed = parseJsonSafe(p.prescricao);
-        const examesParsed = parseJsonSafe(p.solicitacao_exames);
-        const obsParsed = parseJsonSafe(p.observacoes);
-        const espFields = obsParsed?.especialidade_fields || null;
-
-        let type: EventType = (p.tipo_registro || "consulta") as EventType;
-        if (!TYPE_CONFIG[type]) type = "consulta";
-
-        if (p.profissional_nome) profSet.add(p.profissional_nome);
-
-        const isReport = p.tipo_registro === "alta_multiprofissional" || p.tipo_registro === "alta_individual" || 
-                         (p.evolucao && (p.evolucao.includes("Relatório de Alta Multiprofissional") || p.evolucao.includes("Relatório de Alta Individual")));
-
-        let summary = p.queixa_principal || p.evolucao || "";
-        if (isReport && (p.observacoes?.startsWith("{") || p.evolucao?.startsWith("{"))) {
-          try {
-            const data = JSON.parse(p.observacoes?.startsWith("{") ? p.observacoes : p.evolucao);
-            const motivo = data.motivoAlta || data.motivo || "";
-            const sessoes = data.sessoes || "";
-            summary = `${isReport ? "Relatório de Alta" : "Registro"} — Motivo: ${motivo}${sessoes ? ` (${sessoes} sessões)` : ""}`;
-          } catch {}
-        }
-
-        allEvents.push({
-          id: `pront_${p.id}`,
-          type: isReport ? "alta" : type,
-          date: p.data_atendimento,
-          time: p.hora_atendimento || undefined,
-          professional: p.profissional_nome || "",
-          professionalId: p.profissional_id,
-          specialty: specialtyMap.get(p.profissional_id) || undefined,
-          summary: summary,
-          soapSubjetivo: p.soap_subjetivo || undefined,
-          soapObjetivo: p.soap_objetivo || undefined,
-          soapAvaliacao: p.soap_avaliacao || undefined,
-          soapPlano: p.soap_plano || undefined,
-          queixaPrincipal: p.queixa_principal || undefined,
-          conduta: p.conduta || undefined,
-          especialidadeFields: espFields,
-          prescricao: prescricaoParsed?.medicamentos ? prescricaoParsed : null,
-          exames: examesParsed?.exames ? examesParsed : null,
-          sinaisVitais: triage ? {
-            PA: triage.pressao_arterial,
-            FC: triage.frequencia_cardiaca,
-            Temp: triage.temperatura,
-            "SatO₂": triage.saturacao_oxigenio,
-            Glicemia: triage.glicemia,
-            Peso: triage.peso,
-            Altura: triage.altura,
-            IMC: triage.imc,
-          } : undefined,
-          unidade: unidadeMap.get(p.unidade_id),
-          procedimentos: p.procedimentos_texto || undefined,
-          rawProntuario: p,
-        });
-      }
-
-      // Faltas
-      for (const a of (faltasRes.data || []) as any[]) {
-        if (a.profissional_nome) profSet.add(a.profissional_nome);
-        allEvents.push({
-          id: `falta_${a.id}`,
-          type: "falta",
-          date: a.data,
-          time: a.hora || undefined,
-          professional: a.profissional_nome || "",
-          professionalId: a.profissional_id,
-          specialty: specialtyMap.get(a.profissional_id) || undefined,
-          summary: "Paciente não compareceu",
-          unidade: unidadeMap.get(a.unidade_id),
-          status: "falta",
-        });
-      }
-
-      // Sessions
-      for (const s of sessions) {
-        const cycle = cycleMap.get(s.cycle_id);
-        allEvents.push({
-          id: `session_${s.id}`,
-          type: "sessao",
-          date: s.scheduled_date,
-          professional: "",
-          professionalId: s.professional_id,
-          specialty: specialtyMap.get(s.professional_id) || cycle?.specialty || undefined,
-          summary: s.clinical_notes || s.procedure_done || "",
-          sessionInfo: `Sessão ${s.session_number}/${s.total_sessions}`,
-          unidade: cycle?.unit_id ? unidadeMap.get(cycle.unit_id) : undefined,
-          status: s.status,
-        });
-      }
-
-      // Discharges
-      for (const d of discharges) {
-        const cycle = cycleMap.get(d.cycle_id);
-        allEvents.push({
-          id: `alta_${d.id}`,
-          type: "alta",
-          date: d.discharge_date,
-          professional: "",
-          professionalId: d.professional_id,
-          specialty: specialtyMap.get(d.professional_id) || cycle?.specialty || undefined,
-          summary: [d.reason, d.final_notes].filter(Boolean).join(" — "),
-        });
-      }
-
-      allEvents.sort((a, b) => {
-        const dc = b.date.localeCompare(a.date);
-        if (dc !== 0) return dc;
-        return (b.time || "00:00").localeCompare(a.time || "00:00");
-      });
-
-      if (!controller.signal.aborted && requestId === requestIdRef.current) {
-        setEvents(allEvents);
-        setProfessionals(Array.from(profSet).sort());
-      }
+      commitEvents(result.events);
+      setHasOlder(result.hasOlder);
+      hasOlderRef.current = result.hasOlder;
     } catch (err) {
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       console.error("[HistoricoCompleto] Erro:", err);
@@ -271,18 +310,122 @@ function useFullHistory(open: boolean, pacienteId: string, unidades: { id: strin
     } finally {
       if (!controller.signal.aborted && requestId === requestIdRef.current) setLoading(false);
     }
-  }, [open, pacienteId, unidades]);
+  }, [open, pacienteId, unidades, commitEvents]);
 
   useEffect(() => {
-    load();
+    loadInitial();
     return () => {
       requestIdRef.current += 1;
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     };
-  }, [load]);
+  }, [loadInitial]);
 
-  return { events, professionals, loading, error, reload: load };
+  const loadMore = useCallback(async () => {
+    if (!open || !pacienteId || loadingMore || !hasOlderRef.current) return;
+    const requestId = requestIdRef.current;
+    const controller = abortControllerRef.current;
+    if (!controller || controller.signal.aborted) return;
+    const nextRange = previousRange(rangeRef.current.start);
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const result = await fetchHistoryRange(pacienteId, nextRange, unidades, controller.signal);
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+      commitEvents(mergeEvents(eventsRef.current, result.events));
+      rangeRef.current = nextRange;
+      setRange(nextRange);
+      hasOlderRef.current = result.hasOlder;
+      setHasOlder(result.hasOlder);
+    } catch (err) {
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+      console.error("[HistoricoCompleto] Erro ao carregar anteriores:", err);
+      setError("Erro ao carregar atendimentos anteriores.");
+    } finally {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) setLoadingMore(false);
+    }
+  }, [open, pacienteId, unidades, loadingMore, commitEvents]);
+
+  const loadDetail = useCallback(async (event: FullEvent) => {
+    if (event.source !== "prontuario" || event.detailsLoaded) return event;
+    const requestId = requestIdRef.current;
+    const controller = abortControllerRef.current;
+    if (!controller || controller.signal.aborted) return event;
+    setLoadingDetailId(event.id);
+    try {
+      const { data: prontuario, error: detailError } = await (supabase as any).from("prontuarios").select("*").eq("id", event.sourceId).single().abortSignal(controller.signal);
+      if (detailError) throw detailError;
+      let triage: any = null;
+      if (prontuario?.agendamento_id) {
+        const { data, error: triageError } = await (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").eq("agendamento_id", prontuario.agendamento_id).maybeSingle().abortSignal(controller.signal);
+        if (triageError) throw triageError;
+        triage = data;
+      }
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return event;
+      const prescricaoParsed = parseJsonSafe(prontuario.prescricao);
+      const examesParsed = parseJsonSafe(prontuario.solicitacao_exames);
+      const obsParsed = parseJsonSafe(prontuario.observacoes);
+      const detailed: FullEvent = {
+        ...event, summary: prontuario.queixa_principal || prontuario.evolucao || event.summary,
+        soapSubjetivo: prontuario.soap_subjetivo || undefined, soapObjetivo: prontuario.soap_objetivo || undefined,
+        soapAvaliacao: prontuario.soap_avaliacao || undefined, soapPlano: prontuario.soap_plano || undefined,
+        queixaPrincipal: prontuario.queixa_principal || undefined, conduta: prontuario.conduta || undefined,
+        especialidadeFields: obsParsed?.especialidade_fields || undefined,
+        prescricao: prescricaoParsed?.medicamentos ? prescricaoParsed : null,
+        exames: examesParsed?.exames ? examesParsed : null,
+        sinaisVitais: triage ? { PA: triage.pressao_arterial, FC: triage.frequencia_cardiaca, Temp: triage.temperatura, "SatO₂": triage.saturacao_oxigenio, Glicemia: triage.glicemia, Peso: triage.peso, Altura: triage.altura, IMC: triage.imc } : undefined,
+        rawProntuario: prontuario, detailsLoaded: true,
+      };
+      commitEvents(eventsRef.current.map(item => item.id === event.id ? detailed : item));
+      return detailed;
+    } catch (err) {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) console.error("[HistoricoCompleto] Erro no detalhe:", err);
+      return event;
+    } finally {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) setLoadingDetailId(null);
+    }
+  }, [commitEvents]);
+
+  const drainAll = useCallback(async () => {
+    if (!open || !pacienteId) return eventsRef.current;
+    const requestId = requestIdRef.current;
+    const controller = abortControllerRef.current;
+    if (!controller || controller.signal.aborted) return eventsRef.current;
+    let nextEvents = eventsRef.current;
+    let nextRange = rangeRef.current;
+    let more = hasOlderRef.current;
+    let loadedRanges = 0;
+    setPrintingProgress(0);
+    try {
+      while (more && !controller.signal.aborted && requestId === requestIdRef.current) {
+        nextRange = previousRange(nextRange.start);
+        const result = await fetchHistoryRange(pacienteId, nextRange, unidades, controller.signal);
+        nextEvents = mergeEvents(nextEvents, result.events);
+        more = result.hasOlder;
+        loadedRanges += 1;
+        setPrintingProgress(loadedRanges);
+      }
+      if (!controller.signal.aborted && requestId === requestIdRef.current) {
+        commitEvents(nextEvents);
+        rangeRef.current = nextRange;
+        setRange(nextRange);
+        hasOlderRef.current = more;
+        setHasOlder(more);
+      }
+      return nextEvents;
+    } catch (err) {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) {
+        console.error("[HistoricoCompleto] Erro ao preparar histórico integral:", err);
+        setError("Não foi possível carregar todo o histórico para impressão.");
+      }
+      throw err;
+    } finally {
+      if (!controller.signal.aborted && requestId === requestIdRef.current) setPrintingProgress(null);
+    }
+  }, [open, pacienteId, unidades, commitEvents]);
+
+  const professionals = useMemo(() => Array.from(new Set(events.map(event => event.professional).filter(Boolean))).sort(), [events]);
+  return { events, professionals, loading, loadingMore, loadingDetailId, printingProgress, hasOlder, error, reload: loadInitial, loadMore, loadDetail, drainAll };
 }
 
 // ── Expanded Event Detail ──────────────────────────────────
@@ -383,12 +526,15 @@ const EventDetail: React.FC<{ event: FullEvent }> = ({ event }) => {
 export const HistoricoCompletoModal: React.FC<Props> = ({
   open, onOpenChange, pacienteId, pacienteNome, unidades, currentProfissionalId, onViewProntuario,
 }) => {
-  const { events, professionals, loading, error, reload } = useFullHistory(open, pacienteId, unidades);
+  const {
+    events, professionals, loading, loadingMore, loadingDetailId, printingProgress,
+    hasOlder, error, reload, loadMore, loadDetail, drainAll,
+  } = useFullHistory(open, pacienteId, unidades);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) setExpandedId(null);
-  }, [open]);
+    setExpandedId(null);
+  }, [open, pacienteId]);
 
   // Filters
   const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set());
@@ -397,20 +543,23 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
   const [filterDateTo, setFilterDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
-  const filteredEvents = useMemo(() => {
-    return events.filter(ev => {
+  const applyFilters = useCallback((sourceEvents: FullEvent[]) => {
+    return sourceEvents.filter(ev => {
       if (filterTypes.size > 0 && !filterTypes.has(ev.type)) return false;
       if (filterProfissional !== "todos" && ev.professional !== filterProfissional) return false;
       if (filterDateFrom && ev.date < filterDateFrom) return false;
       if (filterDateTo && ev.date > filterDateTo) return false;
       return true;
     });
-  }, [events, filterTypes, filterProfissional, filterDateFrom, filterDateTo]);
+  }, [filterTypes, filterProfissional, filterDateFrom, filterDateTo]);
+
+  const filteredEvents = useMemo(() => applyFilters(events), [events, applyFilters]);
 
   const toggleType = (type: string) => {
     setFilterTypes(prev => {
       const next = new Set(prev);
-      next.has(type) ? next.delete(type) : next.add(type);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
       return next;
     });
   };
@@ -435,38 +584,45 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
     };
   }, [events]);
 
-  const handleGenerateReport = () => {
-    downloadFullHistoryPdf(
-      pacienteNome,
-      filteredEvents.map((e) => ({
-        date: e.date,
-        type: TYPE_CONFIG[e.type]?.label || e.type,
-        professional: e.professional,
-        specialty: e.specialty,
-        summary: e.summary || e.queixaPrincipal || e.conduta || "",
-        unidade: e.unidade,
-        sessionInfo: e.sessionInfo,
-      })),
-      currentProfissionalId,
-    );
+  const handleGenerateReport = async () => {
+    try {
+      const completeEvents = applyFilters(await drainAll());
+      if (completeEvents.length === 0) return;
+      downloadFullHistoryPdf(
+        pacienteNome,
+        completeEvents.map((e) => ({
+          date: e.date,
+          type: TYPE_CONFIG[e.type]?.label || e.type,
+          professional: e.professional,
+          specialty: e.specialty,
+          summary: e.summary || e.queixaPrincipal || e.conduta || "",
+          unidade: e.unidade,
+          sessionInfo: e.sessionInfo,
+        })),
+        currentProfissionalId,
+      );
+    } catch {
+      // A impressão parcial é deliberadamente bloqueada quando a drenagem falha.
+    }
   };
 
   const handlePrintOfficial = async () => {
-    if (filteredEvents.length === 0) return;
-    const rows = [...filteredEvents]
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-      .map((e) => `
+    try {
+      const completeEvents = applyFilters(await drainAll());
+      if (completeEvents.length === 0) return;
+      const rows = [...completeEvents]
+        .sort(compareEvents)
+        .map((e) => `
         <tr>
           <td>${formatDateBR(e.date)}${e.time ? ' ' + e.time : ''}</td>
           <td>${TYPE_CONFIG[e.type]?.label || e.type}${e.sessionInfo ? ' — ' + e.sessionInfo : ''}</td>
           <td>${e.professional || '—'}</td>
           <td>${e.specialty || '—'}</td>
           <td><div style="font-size:9.5pt; line-height:1.2;">${(e.summary || e.queixaPrincipal || e.conduta || '').replace(/</g, '&lt;').slice(0, 800)}</div></td>
-        </tr>`).join('');
-    
-    const carimboHtml = currentProfissionalId ? await docCarimboFor(currentProfissionalId) : "";
+          </tr>`).join('');
+      const carimboHtml = currentProfissionalId ? await docCarimboFor(currentProfissionalId) : "";
 
-    const body = `
+      const body = `
       <h3 style="margin:12px 0 8px;font-size:12pt;font-weight:700;color:#0c4a6e;text-transform:uppercase;border-bottom:2px solid #0369a1;">Histórico Clínico Consolidado</h3>
       <table>
         <thead>
@@ -478,11 +634,14 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
       <div style="margin-top: 20px;">
         ${carimboHtml}
       </div>
-    `;
-    openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, {
-      'Paciente': pacienteNome,
-      'Total de eventos': String(filteredEvents.length),
-    });
+      `;
+      openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, {
+        'Paciente': pacienteNome,
+        'Total de eventos': String(completeEvents.length),
+      });
+    } catch {
+      // A impressão parcial é deliberadamente bloqueada quando a drenagem falha.
+    }
   };
 
   return (
@@ -590,7 +749,7 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                 {!loading && !error && filteredEvents.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-16 gap-2">
                     <FileText className="w-10 h-10 text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">Nenhum evento encontrado.</p>
+                    <p className="text-sm text-muted-foreground">{hasOlder ? "Nenhum evento no período recente." : "Nenhum evento encontrado."}</p>
                   </div>
                 )}
 
@@ -604,7 +763,11 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                     <div
                       key={event.id}
                       className={`border-l-4 rounded-lg bg-card shadow-sm p-3 sm:p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${specColors.border} ${isCurrent ? `ring-1 ${specColors.ring}` : ''}`}
-                      onClick={() => setExpandedId(prev => prev === event.id ? null : event.id)}
+                      onClick={async () => {
+                        if (isExpanded) { setExpandedId(null); return; }
+                        setExpandedId(event.id);
+                        await loadDetail(event);
+                      }}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -637,27 +800,54 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          {event.rawProntuario && onViewProntuario && (
+                          {event.source === "prontuario" && onViewProntuario && (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-xs gap-1"
-                              onClick={(e) => { e.stopPropagation(); onViewProntuario(event.rawProntuario); }}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const detailed = await loadDetail(event);
+                                if (detailed.rawProntuario) onViewProntuario(detailed.rawProntuario);
+                              }}
                               title="Visualizar prontuário"
                             >
                               <Eye className="w-3.5 h-3.5" /> Visualizar
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={e => { e.stopPropagation(); setExpandedId(prev => prev === event.id ? null : event.id); }}>
-                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={async e => {
+                            e.stopPropagation();
+                            if (isExpanded) { setExpandedId(null); return; }
+                            setExpandedId(event.id);
+                            await loadDetail(event);
+                          }}>
+                            {loadingDetailId === event.id ? <Loader2 className="w-4 h-4 animate-spin" /> : isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </Button>
                         </div>
                       </div>
 
-                      {isExpanded && <EventDetail event={event} />}
+                      {isExpanded && loadingDetailId === event.id && (
+                        <div className="mt-3 border-t pt-3 text-xs text-muted-foreground flex items-center gap-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando detalhes...
+                        </div>
+                      )}
+                      {isExpanded && loadingDetailId !== event.id && <EventDetail event={event} />}
                     </div>
                   );
                 })}
+
+                {!loading && !error && (events.length > 0 || hasOlder) && (
+                  <div className="flex flex-col items-center gap-2 py-4">
+                    {hasOlder ? (
+                      <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore || printingProgress !== null} className="gap-1.5">
+                        {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        Carregar atendimentos anteriores
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Não há atendimentos anteriores</p>
+                    )}
+                  </div>
+                )}
               </div>
             </ScrollArea>
           </div>
@@ -669,20 +859,21 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
             variant="outline"
             size="sm"
             onClick={handlePrintOfficial}
-            disabled={filteredEvents.length === 0 || loading}
+            disabled={(filteredEvents.length === 0 && !hasOlder) || loading || loadingMore || printingProgress !== null}
             className="gap-1.5"
           >
-            <Printer className="w-4 h-4" />
+            {printingProgress !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
             Imprimir Oficial (A4)
+            {printingProgress !== null && ` — ${printingProgress} faixa(s)`}
           </Button>
           <Button
             variant="default"
             size="sm"
             onClick={handleGenerateReport}
-            disabled={filteredEvents.length === 0 || loading}
+            disabled={(filteredEvents.length === 0 && !hasOlder) || loading || loadingMore || printingProgress !== null}
             className="gap-1.5"
           >
-            <FileDown className="w-4 h-4" />
+            {printingProgress !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
             Gerar Relatório Completo
           </Button>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
