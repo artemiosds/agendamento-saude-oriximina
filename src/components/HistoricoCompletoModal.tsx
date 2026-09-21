@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- database rows preserve the existing polymorphic clinical payloads */
+/* eslint-disable react-refresh/only-export-components -- pure helpers are exported for boundary and ordering regression tests */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
