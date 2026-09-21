@@ -16,3 +16,4 @@
 - [x] Permitir a geração BPA-I com pendências cadastrais autorizadas, mantendo bloqueios de corrupção estrutural.
 - [ ] Implementar a Fase 2 da listagem de Prontuários com cursor composto por data_atendimento, criado_em e id, sem alterar fluxos protegidos.
 - [ ] Implementar a Fase 3 com filtros visuais server-side de período e profissional na listagem de Prontuários.
+- [ ] Confirmar o tipo real de prontuarios.data_atendimento e aplicar limites de período sem condições vazias.
