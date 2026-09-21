@@ -1,11 +1,47 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, X } from "lucide-react";
+import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
+import { supabase } from "@/integrations/supabase/client";
+
+const HISTORY_PAGE_SIZE = 20;
+const HISTORY_CARD_COLUMNS = [
+  "id",
+  "data_atendimento",
+  "hora_atendimento",
+  "profissional_nome",
+  "queixa_principal",
+  "cid_codigo",
+  "cid_descricao",
+  "tipo_registro",
+  "paciente_nome",
+].join(",");
+
+const HISTORY_DETAIL_COLUMNS = [
+  HISTORY_CARD_COLUMNS,
+  "conduta",
+  "anamnese",
+  "evolucao",
+  "observacoes",
+  "hipotese",
+  "exame_fisico",
+  "prescricao",
+  "solicitacao_exames",
+  "procedimentos_texto",
+  "soap_subjetivo",
+  "soap_objetivo",
+  "soap_avaliacao",
+  "soap_plano",
+  "sinais_sintomas",
+  "resultado_exame",
+  "indicacao_retorno",
+  "custom_data",
+].join(",");
 
 type ProntuarioHistEntry = {
   id: string;
@@ -34,6 +70,7 @@ type ProntuarioHistEntry = {
 };
 
 export interface HistoricoPacientePanelProps {
+  pacienteId?: string;
   paciente: {
     nome?: string;
     data_nascimento?: string;
@@ -41,9 +78,16 @@ export interface HistoricoPacientePanelProps {
     cns?: string;
     sexo?: string;
   } | null;
-  historico: ProntuarioHistEntry[];
   currentId?: string;
+  unidadeId?: string;
+  isGlobalAdmin?: boolean;
+  enabled?: boolean;
   onView?: (entry: ProntuarioHistEntry) => void;
+}
+
+interface HistoryPage {
+  rows: ProntuarioHistEntry[];
+  nextOffset?: number;
 }
 
 function calcIdade(dataNasc?: string): string {
@@ -157,24 +201,112 @@ export function printProntuario(h: ProntuarioHistEntry) {
   }
 }
 
-const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ paciente, historico, currentId, onView }) => {
+const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
+  pacienteId,
+  paciente,
+  currentId,
+  unidadeId,
+  isGlobalAdmin = false,
+  enabled = true,
+  onView,
+}) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, ProntuarioHistEntry>>({});
+  const queryClient = useQueryClient();
 
-  const sorted = useMemo(
-    () =>
-      [...(historico || [])]
-        .filter((h) => h.id !== currentId)
-        .filter((h) => {
-          const d = (h.data_atendimento || "").slice(0, 10);
-          if (dateFrom && d < dateFrom) return false;
-          if (dateTo && d > dateTo) return false;
-          return true;
-        })
-        .sort((a, b) => (b.data_atendimento || "").localeCompare(a.data_atendimento || "")),
-    [historico, currentId, dateFrom, dateTo],
-  );
+  const scope = isGlobalAdmin ? "all" : (unidadeId || "none");
+  const historyQueryKey = useMemo(() => [
+    "prontuarios",
+    "historico-lateral",
+    pacienteId || "sem-paciente",
+    currentId || "sem-atual",
+    scope,
+    dateFrom || "sem-data-inicial",
+    dateTo || "sem-data-final",
+  ] as const, [currentId, dateFrom, dateTo, pacienteId, scope]);
+
+  const historyQuery = useInfiniteQuery<HistoryPage>({
+    queryKey: historyQueryKey,
+    initialPageParam: 0,
+    enabled: enabled && Boolean(pacienteId) && (isGlobalAdmin || Boolean(unidadeId)),
+    queryFn: async ({ pageParam, signal }) => {
+      const offset = Number(pageParam) || 0;
+      let query = (supabase as any)
+        .from("prontuarios")
+        .select(HISTORY_CARD_COLUMNS)
+        .eq("paciente_id", pacienteId)
+        .order("data_atendimento", { ascending: false })
+        .order("hora_atendimento", { ascending: false, nullsFirst: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + HISTORY_PAGE_SIZE)
+        .abortSignal(signal);
+
+      if (currentId) query = query.neq("id", currentId);
+      if (!isGlobalAdmin && unidadeId) query = query.eq("unidade_id", unidadeId);
+      if (dateFrom) query = query.gte("data_atendimento", dateFrom);
+      if (dateTo) query = query.lte("data_atendimento", dateTo);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      const rows = (data || []) as ProntuarioHistEntry[];
+      return {
+        rows: rows.slice(0, HISTORY_PAGE_SIZE),
+        nextOffset: rows.length > HISTORY_PAGE_SIZE ? offset + HISTORY_PAGE_SIZE : undefined,
+      };
+    },
+    getNextPageParam: (lastPage) => lastPage.nextOffset,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+  });
+
+  useEffect(() => {
+    setExpandedId(null);
+    setLoadingDetailId(null);
+    setDetails({});
+  }, [pacienteId, currentId]);
+
+  useEffect(() => {
+    if (!enabled) {
+      void queryClient.cancelQueries({ queryKey: ["prontuarios", "historico-lateral"] });
+    }
+  }, [enabled, queryClient]);
+
+  const loadDetail = async (entry: ProntuarioHistEntry) => {
+    if (details[entry.id]) return details[entry.id];
+    setLoadingDetailId(entry.id);
+    try {
+      const detail = await queryClient.fetchQuery<ProntuarioHistEntry>({
+        queryKey: ["prontuarios", "historico-lateral-detalhe", pacienteId, entry.id, scope],
+        queryFn: async ({ signal }) => {
+          let query = (supabase as any)
+            .from("prontuarios")
+            .select(HISTORY_DETAIL_COLUMNS)
+            .eq("id", entry.id)
+            .eq("paciente_id", pacienteId)
+            .abortSignal(signal);
+          if (!isGlobalAdmin && unidadeId) query = query.eq("unidade_id", unidadeId);
+          const { data, error } = await query.maybeSingle();
+          if (error) throw error;
+          if (!data) throw new Error("Prontuário não encontrado");
+          return data as ProntuarioHistEntry;
+        },
+        staleTime: 5 * 60_000,
+      });
+      setDetails((current) => ({ ...current, [entry.id]: detail }));
+      return detail;
+    } catch (error) {
+      console.error("Erro ao carregar detalhe do histórico lateral:", error);
+      toast.error("Não foi possível carregar este atendimento.");
+      return null;
+    } finally {
+      setLoadingDetailId((id) => id === entry.id ? null : id);
+    }
+  };
+
+  const sorted = useMemo(() => historyQuery.data?.pages.flatMap((page) => page.rows) || [], [historyQuery.data]);
 
   const hasDateFilter = Boolean(dateFrom || dateTo);
 
@@ -263,7 +395,21 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
               Selecione um paciente para ver o histórico.
             </p>
           )}
-          {paciente && sorted.length === 0 && (
+          {paciente && historyQuery.isLoading && (
+            <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground" role="status">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Carregando histórico…
+            </div>
+          )}
+          {paciente && historyQuery.isError && !historyQuery.isLoading && (
+            <div className="text-center py-6 space-y-2">
+              <p className="text-xs text-destructive">Não foi possível carregar o histórico.</p>
+              <Button type="button" size="sm" variant="outline" onClick={() => historyQuery.refetch()}>
+                Tentar novamente
+              </Button>
+            </div>
+          )}
+          {paciente && historyQuery.isSuccess && sorted.length === 0 && (
             <div className="text-center py-6">
               <p className="text-xs text-muted-foreground italic">
                 {hasDateFilter ? "Nenhum atendimento no período selecionado" : "Primeiro atendimento deste paciente"}
@@ -272,7 +418,8 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
           )}
           {sorted.map((h) => {
             const isExpanded = expandedId === h.id;
-            const queixa = (h.queixa_principal || "").trim();
+            const displayed = details[h.id] || h;
+            const queixa = (displayed.queixa_principal || "").trim();
             return (
               <div
                 key={h.id}
@@ -280,7 +427,14 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
               >
                 <button
                   type="button"
-                  onClick={() => setExpandedId(isExpanded ? null : h.id)}
+                  onClick={async () => {
+                    if (isExpanded) {
+                      setExpandedId(null);
+                      return;
+                    }
+                    setExpandedId(h.id);
+                    await loadDetail(h);
+                  }}
                   className="w-full text-left px-3 py-2 flex items-start gap-2"
                 >
                   <ChevronDown
@@ -319,46 +473,51 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
                         <p className="text-foreground whitespace-pre-wrap">{queixa}</p>
                       </div>
                     )}
-                    {h.soap_subjetivo && (
+                    {loadingDetailId === h.id && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Carregando detalhes…
+                      </div>
+                    )}
+                    {displayed.soap_subjetivo && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Subjetivo (S)</p>
-                        <p className="text-foreground whitespace-pre-wrap">{h.soap_subjetivo}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{displayed.soap_subjetivo}</p>
                       </div>
                     )}
-                    {h.soap_objetivo && (
+                    {displayed.soap_objetivo && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Objetivo (O)</p>
-                        <p className="text-foreground whitespace-pre-wrap">{h.soap_objetivo}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{displayed.soap_objetivo}</p>
                       </div>
                     )}
-                    {h.soap_avaliacao && (
+                    {displayed.soap_avaliacao && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Avaliação (A)</p>
-                        <p className="text-foreground whitespace-pre-wrap">{h.soap_avaliacao}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{displayed.soap_avaliacao}</p>
                       </div>
                     )}
-                    {h.soap_plano && (
+                    {displayed.soap_plano && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Plano (P)</p>
-                        <p className="text-foreground whitespace-pre-wrap">{h.soap_plano}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{displayed.soap_plano}</p>
                       </div>
                     )}
-                    {h.anamnese && (
+                    {displayed.anamnese && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Anamnese</p>
-                        <p className="text-foreground whitespace-pre-wrap">{h.anamnese}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{displayed.anamnese}</p>
                       </div>
                     )}
-                    {h.conduta && (
+                    {displayed.conduta && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Conduta</p>
-                        <p className="text-foreground whitespace-pre-wrap">{h.conduta}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{displayed.conduta}</p>
                       </div>
                     )}
-                    {h.evolucao && (
+                    {displayed.evolucao && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Evolução</p>
-                        <p className="text-foreground whitespace-pre-wrap">{h.evolucao}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{displayed.evolucao}</p>
                       </div>
                     )}
                     <div className="flex flex-wrap gap-1.5 pt-2 border-t border-border/40">
@@ -378,7 +537,12 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
                         size="sm"
                         variant="outline"
                         className="h-7 text-[11px] px-2"
-                        onClick={(e) => { e.stopPropagation(); printProntuario(h); }}
+                        disabled={loadingDetailId === h.id}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const detail = await loadDetail(h);
+                          if (detail) printProntuario(detail);
+                        }}
                       >
                         <Printer className="w-3 h-3 mr-1" /> Imprimir
                       </Button>
@@ -387,7 +551,12 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
                         size="sm"
                         variant="outline"
                         className="h-7 text-[11px] px-2"
-                        onClick={(e) => { e.stopPropagation(); copyEvolucao(h); }}
+                        disabled={loadingDetailId === h.id}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const detail = await loadDetail(h);
+                          if (detail) await copyEvolucao(detail);
+                        }}
                       >
                         <Copy className="w-3 h-3 mr-1" /> Copiar evolução
                       </Button>
@@ -397,6 +566,19 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
               </div>
             );
           })}
+          {historyQuery.hasNextPage && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              disabled={historyQuery.isFetchingNextPage}
+              onClick={() => historyQuery.fetchNextPage()}
+            >
+              {historyQuery.isFetchingNextPage && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              Carregar atendimentos anteriores
+            </Button>
+          )}
         </div>
       </ScrollArea>
     </aside>

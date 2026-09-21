@@ -377,7 +377,7 @@ const isPtsSpecialtyCompatible = (pts: any, specialty?: string | null) => {
 };
 
 const ProntuarioPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isGlobalAdmin } = useAuth();
   const { can } = usePermissions();
   const { pacientes } = usePacientes();
   const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamento } = useAgendamentos();
@@ -1489,13 +1489,6 @@ const ProntuarioPage: React.FC = () => {
       return { ...prev, tipo_registro: 'sessao' };
     });
   }, [currentSessionForRegistration, editId, form.agendamento_id, form.tipo_registro]);
-
-  const patientHistory = useMemo(() => {
-    if (!form.paciente_id) return [];
-    return prontuarios
-      .filter((p) => p.paciente_id === form.paciente_id && p.id !== editId)
-      .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
-  }, [form.paciente_id, prontuarios, editId]);
 
   // Carrega histórico de procedimentos do paciente (sugestões)
   useEffect(() => {
@@ -4730,9 +4723,12 @@ const ProntuarioPage: React.FC = () => {
 
           {/* Painel direito fixo — Histórico do paciente */}
           <HistoricoPacientePanel
+            pacienteId={form.paciente_id || undefined}
             paciente={pacienteForPanel}
-            historico={patientHistory}
             currentId={editId || undefined}
+            unidadeId={user?.unidadeId}
+            isGlobalAdmin={isGlobalAdmin}
+            enabled={dialogOpen}
             onView={handleViewProntuarioFromHistory}
           />
           </div>{/* end grid split */}
