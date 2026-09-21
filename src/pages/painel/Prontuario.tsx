@@ -402,7 +402,6 @@ const ProntuarioPage: React.FC = () => {
   const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string; isGlobal?: boolean }[]>([]);
   const [novoProcOpen, setNovoProcOpen] = useState(false);
   const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
-  const [procSearch, setProcSearch] = useState("");
   const [cidSearchByProc, setCidSearchByProc] = useState<Record<string, string>>({});
   const [cidSearchResults, setCidSearchResults] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
   const [cidSearchLoading, setCidSearchLoading] = useState<Record<string, boolean>>({});
@@ -440,25 +439,70 @@ const ProntuarioPage: React.FC = () => {
   const [unifiedLoading, setUnifiedLoading] = useState(false);
   const [unifiedOpen, setUnifiedOpen] = useState(false);
   const unifiedDebounceRef = useRef<number | null>(null);
+  const unifiedRequestRef = useRef(0);
+  const selectedProcIdsRef = useRef(selectedProcIds);
+  const procDetailsRef = useRef(procDetails);
+  const selectedCidsByProcRef = useRef(selectedCidsByProc);
+
+  const mergeProcedimentos = useCallback((items: ProcedimentoDB[], replaceSearchResults = false) => {
+    setProcedimentos((current) => {
+      const selected = replaceSearchResults
+        ? current.filter((item) => selectedProcIdsRef.current.includes(item.id))
+        : current;
+      const merged = new Map(selected.map((item) => [item.uuid, item]));
+      items.forEach((item) => merged.set(item.uuid, item));
+      return Array.from(merged.values());
+    });
+  }, []);
 
   useEffect(() => {
     if (unifiedDebounceRef.current) window.clearTimeout(unifiedDebounceRef.current);
     const q = unifiedQuery.trim();
-    if (q.length < 2) {
+    const isCodeSearch = /^[0-9][0-9.-]*$/.test(q) && q.replace(/\D/g, '').length >= 2;
+    if (!q || (!isCodeSearch && q.length < 3)) {
+      unifiedRequestRef.current += 1;
       setUnifiedResults({ procedimentos: [], cids: [] });
       setUnifiedLoading(false);
       return;
     }
+    const requestId = ++unifiedRequestRef.current;
     setUnifiedLoading(true);
     unifiedDebounceRef.current = window.setTimeout(async () => {
-      const res = await procedureService.searchUnified(q, 50);
-      setUnifiedResults(res);
+      const res = await procedureService.searchUnified(q, 30);
+      if (requestId !== unifiedRequestRef.current) return;
+      const limited = {
+        procedimentos: res.procedimentos.slice(0, 30),
+        cids: res.cids.slice(0, 30),
+      };
+      const hydrated = await procedureService.getSpecific({ codes: limited.procedimentos.map((item) => item.codigo) });
+      if (requestId !== unifiedRequestRef.current) return;
+      const allowedHydrated = hydrated.filter((item) => {
+        if (item.profissionais_ids && item.profissionais_ids.length > 0 && !item.profissionais_ids.includes(user?.id || "")) return false;
+        if (!sigtapDisponibilizarTodos && user?.profissao && item.profissao) {
+          return item.profissao.toLowerCase() === user.profissao.toLowerCase();
+        }
+        return true;
+      });
+      const allowedCodes = new Set(allowedHydrated.map((item) => item.id));
+      mergeProcedimentos(allowedHydrated, true);
+      setUnifiedResults({
+        procedimentos: limited.procedimentos.filter((item) => allowedCodes.has(item.codigo)),
+        cids: limited.cids,
+      });
       setUnifiedLoading(false);
-    }, 300);
+    }, 400);
     return () => { if (unifiedDebounceRef.current) window.clearTimeout(unifiedDebounceRef.current); };
-  }, [unifiedQuery]);
+  }, [unifiedQuery, mergeProcedimentos, sigtapDisponibilizarTodos, user?.id, user?.profissao]);
 
-  const handlePickProcedimento = useCallback((codigo: string, nome: string) => {
+  const handlePickProcedimento = useCallback(async (codigo: string, nome: string) => {
+    if (!procedimentos.some((item) => item.id === codigo)) {
+      const hydrated = await procedureService.getSpecific({ codes: [codigo] });
+      if (hydrated.length === 0) {
+        toast.error("Não foi possível carregar os dados deste procedimento.");
+        return;
+      }
+      mergeProcedimentos(hydrated);
+    }
     setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
     setProcDetails((prev) => ({ ...prev, [codigo]: prev[codigo] || { quantidade: 1, observacao: "" } }));
     loadCidsForProc(codigo);
@@ -466,7 +510,7 @@ const ProntuarioPage: React.FC = () => {
     setUnifiedQuery("");
     setUnifiedOpen(false);
     toast.success(`Procedimento adicionado: ${codigo} — ${nome}`);
-  }, [loadCidsForProc]);
+  }, [loadCidsForProc, mergeProcedimentos, procedimentos]);
 
   const handlePickCid = useCallback(async (cid: { codigo: string; descricao: string }) => {
     // 1) If there is an expanded/selected procedure, attach there
@@ -535,10 +579,6 @@ const ProntuarioPage: React.FC = () => {
   const especialidadeFieldsRef = useRef(especialidadeFields);
   const listaExamesRef = useRef(listaExames);
   const listaPrescricaoRef = useRef(listaPrescricao);
-  const selectedProcIdsRef = useRef(selectedProcIds);
-  const procDetailsRef = useRef(procDetails);
-  const selectedCidsByProcRef = useRef(selectedCidsByProc);
-
   useEffect(() => { especialidadeFieldsRef.current = especialidadeFields; }, [especialidadeFields]);
   useEffect(() => { listaExamesRef.current = listaExames; }, [listaExames]);
   useEffect(() => { listaPrescricaoRef.current = listaPrescricao; }, [listaPrescricao]);
@@ -857,13 +897,11 @@ const ProntuarioPage: React.FC = () => {
     const profId = user.id;
     const loadAll = async () => {
       const { procedureService } = await import("@/services/procedureService");
-      const [procsList, medsRes, prefsRes, sigCfg] = await Promise.all([
-        procedureService.getActive(),
+      const [medsRes, prefsRes, sigCfg] = await Promise.all([
         (supabase as any).from("medications").select("*").or(`is_global.eq.true,profissional_id.eq.${profId}`),
         supabase.from("professional_preferences").select("tipo,item_id,desabilitado").eq("profissional_id", profId),
         procedureService.getSigtapConfig(user?.unidadeId || null),
       ]);
-      setProcedimentos(procsList as any as ProcedimentoDB[]);
       if (medsRes.data) setMedications(medsRes.data as MedicationDB[]);
       if (prefsRes.data) setProfPreferences(prefsRes.data as any[]);
       setSigtapDisponibilizarTodos(!!sigCfg?.disponibilizarTodos);
@@ -884,40 +922,19 @@ const ProntuarioPage: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [user?.unidadeId]);
 
-  const filteredProcedimentos = useMemo(() => {
-    if (!user) return [];
-    const q = procSearch.trim().toLowerCase();
-    
-    // Agora a base SIGTAP importada é completa e disponível para todos por padrão.
-    // O filtro por profissão/especialidade só é aplicado se a flag de disponibilização estiver desativada.
-    const semFiltroProfissao = sigtapDisponibilizarTodos;
-
-    return procedimentos.filter((p) => {
-      // Filtro de segurança/associação específica por profissional continua valendo
-      if (p.profissionais_ids && p.profissionais_ids.length > 0) {
-        if (!p.profissionais_ids.includes(user.id)) return false;
-      }
-
-      // Filtro por profissão só se a config global 'disponibilizarTodos' for false
-      if (!semFiltroProfissao) {
-        if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
-      }
-
-      if (q) {
-        const hay = `${p.nome} ${p.id} ${p.especialidade}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [procedimentos, user, procSearch, sigtapDisponibilizarTodos]);
-
   const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
   const listedProcedimentos = useMemo(() => {
-    const available = filteredProcedimentos.filter((p) => !selectedProcIdSet.has(p.id));
-    // Sem busca: corta para evitar render pesado (todos seguem acessíveis via busca unificada acima).
-    // Com busca: NÃO cortar — todos os resultados compatíveis devem aparecer.
-    return procSearch.trim() ? available : available.slice(0, 200);
-  }, [filteredProcedimentos, selectedProcIdSet, procSearch]);
+    const resultCodes = new Set(unifiedResults.procedimentos.map((item) => item.codigo));
+    const selected = selectedProcIds
+      .map((id) => procedimentos.find((item) => item.id === id))
+      .filter((item): item is ProcedimentoDB => Boolean(item));
+    const results = procedimentos.filter((item) => resultCodes.has(item.id) && !selectedProcIdSet.has(item.id));
+    return [...selected, ...results];
+  }, [procedimentos, selectedProcIds, unifiedResults.procedimentos]);
+  const unifiedSearchReady = useMemo(() => {
+    const query = unifiedQuery.trim();
+    return query.length >= 3 || (/^[0-9][0-9.-]*$/.test(query) && query.replace(/\D/g, '').length >= 2);
+  }, [unifiedQuery]);
 
   // Lighter projection for listing (avoid heavy text columns until detail)
   const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
@@ -1136,12 +1153,17 @@ const ProntuarioPage: React.FC = () => {
     });
     
     if (combinedData.length > 0) {
+      const hydrated = await procedureService.getSpecific({
+        uuids: combinedData.map((item: any) => item.procedimento_id).filter(Boolean),
+      });
+      mergeProcedimentos(hydrated);
+      const hydratedByUuid = new Map(hydrated.map((item) => [item.uuid, item]));
       const ids: string[] = [];
       const cidsMap: Record<string, string[]> = {};
       const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
       
       combinedData.forEach((d: any) => {
-        const proc = procedimentos.find(p => p.uuid === d.procedimento_id);
+        const proc = hydratedByUuid.get(d.procedimento_id) || procedimentos.find(p => p.uuid === d.procedimento_id);
         const displayId = proc ? proc.id : d.procedimento_id;
         
         ids.push(displayId);
@@ -1316,10 +1338,16 @@ const ProntuarioPage: React.FC = () => {
         .order("data_atendimento", { ascending: false })
         .limit(25);
 
+      const historyRows = [...(globalData || []), ...(prontuarioData || [])];
+      const hydrated = await procedureService.getSpecific({
+        uuids: historyRows.map((row: any) => row.procedimento_id).filter(Boolean),
+      });
+      mergeProcedimentos(hydrated);
+      const hydratedByUuid = new Map(hydrated.map((item) => [item.uuid, item]));
       const seen = new Map<string, { id: string; nome: string; ultima: string; isGlobal?: boolean }>();
       
       const processItem = (r: any, isGlobal = false) => {
-        const proc = procedimentos.find((p) => p.uuid === r.procedimento_id);
+        const proc = hydratedByUuid.get(r.procedimento_id);
         if (proc && !seen.has(proc.id)) {
           const dt = (r.prontuarios?.data_atendimento || r.data_atendimento || '');
           const ultima = dt ? new Date(dt + 'T12:00:00').toLocaleDateString('pt-BR') : '';
@@ -1332,13 +1360,16 @@ const ProntuarioPage: React.FC = () => {
       
       setPacienteProcHistory(Array.from(seen.values()));
     })();
-  }, [form.paciente_id, procedimentos]);
+  }, [form.paciente_id, mergeProcedimentos]);
 
   const openNew = (pacienteId?: string, pacienteNome?: string) => {
     setEditId(null);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
     setSelectedProcIds([]);
+    setProcedimentos([]);
+    setUnifiedQuery("");
+    setUnifiedResults({ procedimentos: [], cids: [] });
     setSelectedCidsByProc({});
     setProcDetails({});
     setEpisodios([]);
@@ -3929,15 +3960,15 @@ const ProntuarioPage: React.FC = () => {
                   <Input
                     value={unifiedQuery}
                     onChange={(e) => { setUnifiedQuery(e.target.value); setUnifiedOpen(true); }}
-                    onFocus={() => unifiedQuery.trim().length >= 2 && setUnifiedOpen(true)}
+                    onFocus={() => unifiedSearchReady && setUnifiedOpen(true)}
                     onBlur={() => setTimeout(() => setUnifiedOpen(false), 150)}
                     placeholder="🔎 Buscar SIGTAP ou CID-10 (código ou descrição)..."
                     className="pl-7 h-9 text-sm border-primary/30 focus-visible:ring-primary"
                   />
-                  {unifiedOpen && unifiedQuery.trim().length >= 2 && (
+                  {unifiedOpen && unifiedSearchReady && (
                     <div className="absolute z-50 left-0 right-0 mt-1 rounded-md border bg-popover shadow-lg max-h-[420px] overflow-y-auto">
                       {unifiedLoading && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">Buscando em 4.990 procedimentos e 81k+ CIDs...</div>
+                        <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Pesquisando procedimentos...</div>
                       )}
                       {!unifiedLoading && unifiedResults.procedimentos.length === 0 && unifiedResults.cids.length === 0 && (
                         <div className="px-3 py-3 text-xs text-muted-foreground text-center">Nenhum resultado encontrado.</div>
@@ -3996,61 +4027,7 @@ const ProntuarioPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Filtro local da lista de procedimentos disponíveis (mantido) */}
-                <div className="relative mb-2">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                  <Input
-                    value={procSearch}
-                    onChange={(e) => setProcSearch(e.target.value)}
-                    placeholder="Filtrar lista abaixo (nome, código SIGTAP, especialidade)..."
-                    className="pl-7 h-8 text-sm"
-                  />
-                </div>
-
-                {/* Display selected procedures first */}
-                {selectedProcIds.length > 0 && (
-                  <div className="flex flex-col gap-1.5 mb-2 bg-primary/5 rounded-lg p-2 border border-primary/20">
-                    <Label className="text-[10px] uppercase text-primary mb-1">Selecionados</Label>
-                    {selectedProcIds.map(id => {
-                      const proc = procedimentos.find(p => p.id === id);
-                      if (!proc) return null;
-                      
-                      // Check if it's already in the filtered list to avoid duplication if user wants
-                      // But for now, showing it here is enough.
-                      const isExpanded = expandedProcId === proc.id;
-                      const selCids = selectedCidsByProc[proc.id] || [];
-                      
-                      return (
-                        <div key={`sel-${proc.id}`} className="rounded-md border bg-background border-primary/40 p-1.5 flex items-center gap-2">
-                           <Checkbox
-                              id={`sel-proc-${proc.id}`}
-                              checked={true}
-                              onCheckedChange={(c) => {
-                                if (!c) setSelectedProcIds((prev) => prev.filter((pid) => pid !== id));
-                              }}
-                            />
-                            <div className="flex-1 truncate cursor-pointer" onClick={() => toggleExpandProc(proc.id)}>
-                              <span className="text-sm">
-                                <span className="font-mono text-[10px] text-muted-foreground mr-2">{proc.id}</span>
-                                {proc.nome}
-                              </span>
-                            </div>
-                            {selCids.length > 0 && (
-                              <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
-                            )}
-                            {pacienteProcHistory.find(h => h.id === proc.id)?.isGlobal && (
-                              <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-primary text-primary">Vínculo Global</Badge>
-                            )}
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleExpandProc(proc.id)}>
-                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                            </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {filteredProcedimentos.length > 0 ? (
+                {listedProcedimentos.length > 0 ? (
                   <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
                     {listedProcedimentos.map((proc) => {
                       const checked = selectedProcIdSet.has(proc.id);
@@ -4287,7 +4264,11 @@ const ProntuarioPage: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Nenhum procedimento disponível para sua profissão.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {unifiedSearchReady && !unifiedLoading
+                      ? "Nenhum procedimento encontrado"
+                      : "Digite código ou descrição para pesquisar procedimentos."}
+                  </p>
                 )}
               </div>
             )}
@@ -4303,8 +4284,8 @@ const ProntuarioPage: React.FC = () => {
               defaultProfissao={user?.profissao}
               criadoPor={user?.id}
               onCreated={async (codigo) => {
-                const list = await procedureService.getActive();
-                setProcedimentos(list as any);
+                const created = await procedureService.getSpecific({ codes: [codigo] });
+                mergeProcedimentos(created);
                 setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
                 setProcDetails(prev => ({ ...prev, [codigo]: { quantidade: 1, observacao: "" } }));
                 setExpandedProcId(codigo); // Auto-expand to show details/CIDs

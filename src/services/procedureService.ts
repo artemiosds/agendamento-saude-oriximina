@@ -9,7 +9,7 @@ export interface ProcedimentoDB {
   profissao: string;   // nome da profissão (Fisioterapeuta, Psicólogo, ...)
   especialidade: string; // chave normalizada (fisioterapia, psicologia, ...)
   profissional_id: string | null;
-  profissionais_ids?: string[];
+  profissionais_ids: string[] | null;
   ativo: boolean;
   criado_em: string;
   atualizado_em: string;
@@ -164,6 +164,43 @@ async function fetchAll(): Promise<{ procs: ProcedimentoDB[]; links: Map<string,
   return { procs, links };
 }
 
+function mapSigtapProcedure(p: any, profissionaisIds: string[] = []): ProcedimentoDB {
+  const profissaoNome = SIGTAP_ESPECIALIDADE_TO_PROFISSAO[p.especialidade]?.[0] || p.especialidade || '';
+  return {
+    uuid: p.id,
+    id: p.codigo,
+    nome: p.nome,
+    descricao: p.descricao || '',
+    profissao: profissaoNome,
+    especialidade: p.especialidade || '',
+    profissional_id: null,
+    profissionais_ids: profissionaisIds,
+    ativo: p.ativo ?? true,
+    criado_em: p.created_at || '',
+    atualizado_em: p.updated_at || '',
+    total_cids: p.total_cids || 0,
+    origem: (p.origem || 'SIGTAP') as 'SIGTAP' | 'PERSONALIZADO',
+    valor: p.valor ?? null,
+  };
+}
+
+function mapLegacyProcedure(p: any): ProcedimentoDB {
+  return {
+    uuid: p.id,
+    id: p.codigo_sigtap || p.id,
+    nome: p.nome || p.descricao || p.codigo_sigtap || p.id,
+    descricao: p.descricao || '',
+    profissao: p.profissao || '',
+    especialidade: p.especialidade || '',
+    profissional_id: null,
+    profissionais_ids: p.profissionais_ids || [],
+    ativo: p.ativo ?? true,
+    criado_em: p.criado_em || '',
+    atualizado_em: p.atualizado_em || '',
+    origem: 'PERSONALIZADO',
+  };
+}
+
 export const procedureService = {
   async getAll(forceRefresh = false): Promise<ProcedimentoDB[]> {
     if (!forceRefresh && cached && Date.now() - cacheTimestamp < CACHE_TTL) return cached;
@@ -176,6 +213,48 @@ export const procedureService = {
 
   async getActive(): Promise<ProcedimentoDB[]> {
     return (await this.getAll()).filter((p) => p.ativo);
+  },
+
+  /** Carrega somente procedimentos específicos, sem materializar o catálogo SIGTAP completo. */
+  async getSpecific({ uuids = [], codes = [] }: { uuids?: string[]; codes?: string[] }): Promise<ProcedimentoDB[]> {
+    const uniqueUuids = Array.from(new Set(uuids.filter(Boolean)));
+    const uniqueCodes = Array.from(new Set(codes.filter(Boolean)));
+    if (uniqueUuids.length === 0 && uniqueCodes.length === 0) return [];
+
+    const sigtapByUuid = uniqueUuids.length > 0
+      ? (supabase as any).from('sigtap_procedimentos').select('id,codigo,nome,descricao,especialidade,ativo,created_at,updated_at,total_cids,origem,valor').in('id', uniqueUuids)
+      : Promise.resolve({ data: [], error: null });
+    const sigtapByCode = uniqueCodes.length > 0
+      ? (supabase as any).from('sigtap_procedimentos').select('id,codigo,nome,descricao,especialidade,ativo,created_at,updated_at,total_cids,origem,valor').in('codigo', uniqueCodes)
+      : Promise.resolve({ data: [], error: null });
+    const legacyByUuid = uniqueUuids.length > 0
+      ? (supabase as any).from('procedimentos').select('id,codigo_sigtap,nome,descricao,profissao,especialidade,profissionais_ids,ativo,criado_em,atualizado_em').in('id', uniqueUuids)
+      : Promise.resolve({ data: [], error: null });
+    const legacyByCode = uniqueCodes.length > 0
+      ? (supabase as any).from('procedimentos').select('id,codigo_sigtap,nome,descricao,profissao,especialidade,profissionais_ids,ativo,criado_em,atualizado_em').in('codigo_sigtap', uniqueCodes)
+      : Promise.resolve({ data: [], error: null });
+
+    const [sigtapUuidRes, sigtapCodeRes, legacyUuidRes, legacyCodeRes] = await Promise.all([
+      sigtapByUuid, sigtapByCode, legacyByUuid, legacyByCode,
+    ]);
+    const sigtapRows = [...(sigtapUuidRes.data || []), ...(sigtapCodeRes.data || [])];
+    const codesFound = Array.from(new Set(sigtapRows.map((row: any) => row.codigo).filter(Boolean)));
+    const { data: links } = codesFound.length > 0
+      ? await (supabase as any).from('procedimento_profissionais').select('procedimento_codigo,profissional_id').in('procedimento_codigo', codesFound)
+      : { data: [] };
+    const linksByCode = new Map<string, string[]>();
+    (links || []).forEach((link: any) => {
+      const current = linksByCode.get(link.procedimento_codigo) || [];
+      current.push(link.profissional_id);
+      linksByCode.set(link.procedimento_codigo, current);
+    });
+
+    const byUuid = new Map<string, ProcedimentoDB>();
+    sigtapRows.forEach((row: any) => byUuid.set(row.id, mapSigtapProcedure(row, linksByCode.get(row.codigo) || [])));
+    [...(legacyUuidRes.data || []), ...(legacyCodeRes.data || [])].forEach((row: any) => {
+      if (!byUuid.has(row.id)) byUuid.set(row.id, mapLegacyProcedure(row));
+    });
+    return Array.from(byUuid.values());
   },
 
   /**
