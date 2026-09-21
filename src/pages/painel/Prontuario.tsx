@@ -382,6 +382,7 @@ const ProntuarioPage: React.FC = () => {
     pages: [],
   });
   const queryPacienteId = searchParams.get("pacienteId") || "";
+  const queryAgendamentoId = searchParams.get("agendamentoId") || "";
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
     null,
   );
@@ -972,9 +973,10 @@ const ProntuarioPage: React.FC = () => {
     () => JSON.stringify({
       unidade: user?.usuario === "admin.sms" ? "all" : (user?.unidadeId || "none"),
       pacienteId: queryPacienteId,
+      agendamentoId: queryAgendamentoId,
       search: effectiveListSearch,
     }),
-    [effectiveListSearch, queryPacienteId, user?.unidadeId, user?.usuario],
+    [effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario],
   );
   const activeListCursor = loadedListPages.scope === listScope ? listCursor : null;
   const cursorKey = activeListCursor
@@ -986,10 +988,11 @@ const ProntuarioPage: React.FC = () => {
       'lista',
       user?.usuario === 'admin.sms' ? 'all' : (user?.unidadeId || 'none'),
       queryPacienteId || 'todos',
+      queryAgendamentoId || 'sem-agendamento',
       effectiveListSearch || 'sem-busca',
       cursorKey,
     ] as const,
-    [cursorKey, effectiveListSearch, queryPacienteId, user?.usuario, user?.unidadeId],
+    [cursorKey, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.usuario, user?.unidadeId],
   );
 
   const fetchProntuariosLeve = useCallback(async (signal?: AbortSignal): Promise<ProntuarioDB[]> => {
@@ -1026,6 +1029,7 @@ const ProntuarioPage: React.FC = () => {
 
     if (restrictUnit) query = query.eq("unidade_id", user?.unidadeId);
     if (queryPacienteId) query = query.eq("paciente_id", queryPacienteId);
+    if (queryAgendamentoId) query = query.eq("agendamento_id", queryAgendamentoId);
     if (searchTerm) {
       const filters = [
         `paciente_nome.ilike.%${searchTerm}%`,
@@ -1049,7 +1053,7 @@ const ProntuarioPage: React.FC = () => {
       throw error;
     }
     return (data || []) as ProntuarioDB[];
-  }, [activeListCursor, effectiveListSearch, queryPacienteId, user?.unidadeId, user?.usuario]);
+  }, [activeListCursor, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario]);
 
   const {
     data: currentProntuariosPage = [],
