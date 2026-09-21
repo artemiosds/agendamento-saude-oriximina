@@ -102,7 +102,7 @@ function localIsoDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function previousRange(end: string): DateRange {
+export function previousRange(end: string): DateRange {
   const endDate = new Date(`${end}T12:00:00`);
   const startDate = new Date(endDate);
   startDate.setDate(startDate.getDate() - HISTORY_WINDOW_DAYS);
@@ -115,7 +115,7 @@ function initialRange(): DateRange {
   return previousRange(localIsoDate(tomorrow));
 }
 
-function compareEvents(a: FullEvent, b: FullEvent) {
+export function compareEvents(a: FullEvent, b: FullEvent) {
   const dateOrder = b.date.localeCompare(a.date);
   if (dateOrder !== 0) return dateOrder;
   const timeOrder = (b.time || "00:00").localeCompare(a.time || "00:00");
@@ -125,7 +125,7 @@ function compareEvents(a: FullEvent, b: FullEvent) {
   return b.sourceId.localeCompare(a.sourceId);
 }
 
-function mergeEvents(current: FullEvent[], incoming: FullEvent[]) {
+export function mergeEvents(current: FullEvent[], incoming: FullEvent[]) {
   const byCanonicalKey = new Map(current.map(event => [event.id, event]));
   for (const event of incoming) byCanonicalKey.set(event.id, { ...byCanonicalKey.get(event.id), ...event });
   return Array.from(byCanonicalKey.values()).sort(compareEvents);
@@ -733,7 +733,7 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                 {!loading && !error && filteredEvents.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-16 gap-2">
                     <FileText className="w-10 h-10 text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">Nenhum evento encontrado.</p>
+                    <p className="text-sm text-muted-foreground">{hasOlder ? "Nenhum evento no período recente." : "Nenhum evento encontrado."}</p>
                   </div>
                 )}
 
@@ -820,7 +820,7 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                   );
                 })}
 
-                {!loading && !error && events.length > 0 && (
+                {!loading && !error && (events.length > 0 || hasOlder) && (
                   <div className="flex flex-col items-center gap-2 py-4">
                     {hasOlder ? (
                       <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore || printingProgress !== null} className="gap-1.5">
@@ -843,7 +843,7 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
             variant="outline"
             size="sm"
             onClick={handlePrintOfficial}
-            disabled={filteredEvents.length === 0 || loading || loadingMore || printingProgress !== null}
+            disabled={(filteredEvents.length === 0 && !hasOlder) || loading || loadingMore || printingProgress !== null}
             className="gap-1.5"
           >
             {printingProgress !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
@@ -854,7 +854,7 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
             variant="default"
             size="sm"
             onClick={handleGenerateReport}
-            disabled={filteredEvents.length === 0 || loading || loadingMore || printingProgress !== null}
+            disabled={(filteredEvents.length === 0 && !hasOlder) || loading || loadingMore || printingProgress !== null}
             className="gap-1.5"
           >
             {printingProgress !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
