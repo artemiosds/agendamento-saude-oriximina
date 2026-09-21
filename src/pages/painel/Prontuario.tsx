@@ -32,9 +32,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical, ChevronRight, Calendar, User, MapPin, Target, CalendarClock, Eraser } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical, ChevronRight, Calendar, User, MapPin, Target, CalendarClock, Eraser, ListFilter } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
@@ -132,10 +134,40 @@ interface ProntuarioListPage {
   rows: ProntuarioDB[];
 }
 
+interface ProntuarioListFilters {
+  dataInicial: string;
+  dataFinal: string;
+  profissionalId: string;
+}
+
 const PRONTUARIO_LIST_PAGE_SIZE = 50;
+const EMPTY_PRONTUARIO_LIST_FILTERS: ProntuarioListFilters = {
+  dataInicial: "",
+  dataFinal: "",
+  profissionalId: "",
+};
 
 const sanitizePostgrestSearch = (value: string) =>
   value.trim().replace(/[(),]/g, " ").replace(/\s+/g, " ").replace(/[%_]/g, "\\$&");
+
+const localDateFromYmd = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+};
+
+const localYmdFromDate = (value?: Date) => {
+  if (!value) return "";
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const formatFilterDate = (value: string) => {
+  const date = localDateFromYmd(value);
+  return date ? date.toLocaleDateString("pt-BR") : "Selecionar data";
+};
 
 const TIPOS_REGISTRO = [
   { value: 'avaliacao_inicial', label: '🟢 Avaliação Inicial' },
@@ -376,6 +408,10 @@ const ProntuarioPage: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [debouncedListSearch, setDebouncedListSearch] = useState("");
+  const [listFiltersOpen, setListFiltersOpen] = useState(false);
+  const [draftListFilters, setDraftListFilters] = useState<ProntuarioListFilters>(EMPTY_PRONTUARIO_LIST_FILTERS);
+  const [appliedListFilters, setAppliedListFilters] = useState<ProntuarioListFilters>(EMPTY_PRONTUARIO_LIST_FILTERS);
+  const [listFiltersError, setListFiltersError] = useState("");
   const [listCursor, setListCursor] = useState<{ scope: string; value: ProntuarioListCursor } | null>(null);
   const [loadedListPages, setLoadedListPages] = useState<{ scope: string; pages: ProntuarioListPage[] }>({
     scope: "",
@@ -975,8 +1011,11 @@ const ProntuarioPage: React.FC = () => {
       pacienteId: queryPacienteId,
       agendamentoId: queryAgendamentoId,
       search: effectiveListSearch,
+      dataInicial: appliedListFilters.dataInicial,
+      dataFinal: appliedListFilters.dataFinal,
+      profissionalId: appliedListFilters.profissionalId,
     }),
-    [effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario],
+    [appliedListFilters, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario],
   );
   const activeListCursor = listCursor?.scope === listScope ? listCursor.value : null;
   const cursorKey = activeListCursor
@@ -990,9 +1029,12 @@ const ProntuarioPage: React.FC = () => {
       queryPacienteId || 'todos',
       queryAgendamentoId || 'sem-agendamento',
       effectiveListSearch || 'sem-busca',
+      appliedListFilters.dataInicial || 'sem-data-inicial',
+      appliedListFilters.dataFinal || 'sem-data-final',
+      appliedListFilters.profissionalId || 'todos-profissionais',
       cursorKey,
     ] as const,
-    [cursorKey, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.usuario, user?.unidadeId],
+    [appliedListFilters, cursorKey, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.usuario, user?.unidadeId],
   );
 
   const fetchProntuariosLeve = useCallback(async (signal?: AbortSignal): Promise<ProntuarioDB[]> => {
@@ -1030,6 +1072,9 @@ const ProntuarioPage: React.FC = () => {
     if (restrictUnit) query = query.eq("unidade_id", user?.unidadeId);
     if (queryPacienteId) query = query.eq("paciente_id", queryPacienteId);
     if (queryAgendamentoId) query = query.eq("agendamento_id", queryAgendamentoId);
+    if (appliedListFilters.dataInicial) query = query.gte("data_atendimento", appliedListFilters.dataInicial);
+    if (appliedListFilters.dataFinal) query = query.lte("data_atendimento", appliedListFilters.dataFinal);
+    if (appliedListFilters.profissionalId) query = query.eq("profissional_id", appliedListFilters.profissionalId);
     if (searchTerm) {
       const filters = [
         `paciente_nome.ilike.%${searchTerm}%`,
@@ -1053,7 +1098,7 @@ const ProntuarioPage: React.FC = () => {
       throw error;
     }
     return (data || []) as ProntuarioDB[];
-  }, [activeListCursor, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario]);
+  }, [activeListCursor, appliedListFilters, effectiveListSearch, queryAgendamentoId, queryPacienteId, user?.unidadeId, user?.usuario]);
 
   const {
     data: currentProntuariosPage = [],
@@ -1104,6 +1149,32 @@ const ProntuarioPage: React.FC = () => {
       },
     });
   }, [currentProntuariosPage, hasMoreProntuarios, listScope, prontuariosFetching]);
+
+  const resetListPagination = useCallback(() => {
+    setListCursor(null);
+    listParentRef.current?.scrollTo({ top: 0 });
+  }, []);
+
+  const applyListFilters = useCallback(() => {
+    if (draftListFilters.dataInicial && draftListFilters.dataFinal && draftListFilters.dataFinal < draftListFilters.dataInicial) {
+      setListFiltersError("A data final não pode ser anterior à data inicial.");
+      return;
+    }
+    setListFiltersError("");
+    resetListPagination();
+    setAppliedListFilters({ ...draftListFilters });
+  }, [draftListFilters, resetListPagination]);
+
+  const clearListFilters = useCallback(() => {
+    setListFiltersError("");
+    setDraftListFilters(EMPTY_PRONTUARIO_LIST_FILTERS);
+    resetListPagination();
+    setAppliedListFilters(EMPTY_PRONTUARIO_LIST_FILTERS);
+  }, [resetListPagination]);
+
+  const clearDraftProfessionalFilter = useCallback(() => {
+    setDraftListFilters((current) => ({ ...current, profissionalId: "" }));
+  }, []);
 
   // Backwards-compat alias for legacy call sites that triggered a reload.
   const loadProntuarios = useCallback(() => {
@@ -2904,6 +2975,17 @@ const ProntuarioPage: React.FC = () => {
     () => funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true })),
     [funcionarios],
   );
+  const listFilterProfessionals = useMemo(
+    () => funcionarios
+      .filter((funcionario) => funcionario.ativo !== false)
+      .filter((funcionario) => user?.usuario === "admin.sms" || funcionario.unidadeId === user?.unidadeId)
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    [funcionarios, user?.unidadeId, user?.usuario],
+  );
+  const appliedListFilterCount = useMemo(
+    () => [appliedListFilters.dataInicial, appliedListFilters.dataFinal, appliedListFilters.profissionalId].filter(Boolean).length,
+    [appliedListFilters],
+  );
 
   const handleViewProntuarioFromHistory = useCallback((p: any) => {
     loadFullProntuario(p.id)
@@ -3027,14 +3109,125 @@ const ProntuarioPage: React.FC = () => {
       )}
 
       {!queryPacienteId && (
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por paciente, profissional, CPF ou CNS..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por paciente, profissional, CPF ou CNS..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button
+              type="button"
+              variant={appliedListFilterCount > 0 ? "secondary" : "outline"}
+              onClick={() => setListFiltersOpen((current) => !current)}
+              aria-expanded={listFiltersOpen}
+              aria-controls="prontuario-list-filters"
+              className="shrink-0"
+            >
+              <ListFilter className="mr-2 h-4 w-4" />
+              Filtros{appliedListFilterCount > 0 ? ` (${appliedListFilterCount})` : ""}
+              <ChevronDown className={cn("ml-2 h-4 w-4 transition-transform", listFiltersOpen && "rotate-180")} />
+            </Button>
+          </div>
+
+          {listFiltersOpen && (
+            <div id="prontuario-list-filters" className="rounded-md border bg-card p-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(260px,1.4fr)_auto] xl:items-end">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Data inicial</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className={cn("w-full justify-start font-normal", !draftListFilters.dataInicial && "text-muted-foreground")}>
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {formatFilterDate(draftListFilters.dataInicial)}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarPicker
+                        mode="single"
+                        selected={localDateFromYmd(draftListFilters.dataInicial)}
+                        onSelect={(date) => {
+                          setDraftListFilters((current) => ({ ...current, dataInicial: localYmdFromDate(date) }));
+                          setListFiltersError("");
+                        }}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Data final</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className={cn("w-full justify-start font-normal", !draftListFilters.dataFinal && "text-muted-foreground")}>
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {formatFilterDate(draftListFilters.dataFinal)}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarPicker
+                        mode="single"
+                        selected={localDateFromYmd(draftListFilters.dataFinal)}
+                        onSelect={(date) => {
+                          setDraftListFilters((current) => ({ ...current, dataFinal: localYmdFromDate(date) }));
+                          setListFiltersError("");
+                        }}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Profissional responsável</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={draftListFilters.profissionalId || "all"}
+                      onValueChange={(value) => {
+                        setDraftListFilters((current) => ({ ...current, profissionalId: value === "all" ? "" : value }));
+                        setListFiltersError("");
+                      }}
+                    >
+                      <SelectTrigger className="min-w-0 flex-1 bg-background">
+                        <SelectValue placeholder="Todos os profissionais" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        <SelectItem value="all">Todos os profissionais</SelectItem>
+                        {listFilterProfessionals.map((funcionario) => (
+                          <SelectItem key={funcionario.id} value={funcionario.id}>
+                            {funcionario.nome}{funcionario.profissao ? ` — ${funcionario.profissao}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {draftListFilters.profissionalId && (
+                      <Button type="button" variant="ghost" size="icon" onClick={clearDraftProfessionalFilter} title="Limpar profissional" aria-label="Limpar profissional">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 xl:justify-end">
+                  <Button type="button" onClick={applyListFilters}>Aplicar</Button>
+                  <Button type="button" variant="ghost" onClick={clearListFilters}>Limpar filtros</Button>
+                </div>
+              </div>
+              {listFiltersError && (
+                <p className="mt-2 flex items-center gap-1.5 text-sm text-destructive" role="alert">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {listFiltersError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
