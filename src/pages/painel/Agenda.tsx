@@ -287,12 +287,17 @@ const Agenda: React.FC = () => {
   // dos contextos, mas evitam buscas lineares repetidas durante filtros e ordenação.
   const pacienteById = React.useMemo(() => {
     const map = new Map<string, any>();
-    pacientes.forEach((p) => map.set(p.id, p));
+    pacientes.forEach((p) => {
+      // Array.find retornava a primeira ocorrência; preserve essa semântica.
+      if (!map.has(p.id)) map.set(p.id, p);
+    });
     return map;
   }, [pacientes]);
   const unidadeById = React.useMemo(() => {
     const map = new Map<string, any>();
-    unidades.forEach((u) => map.set(u.id, u));
+    unidades.forEach((u) => {
+      if (!map.has(u.id)) map.set(u.id, u);
+    });
     return map;
   }, [unidades]);
 
@@ -411,14 +416,20 @@ const Agenda: React.FC = () => {
 
   // Load raw iniciado_em only for visible, new or changed appointments.
   // Results are merged into a per-ID cache instead of replacing the whole map.
-  const rawSourceByIdRef = React.useRef(new Map<string, any>());
+  const rawSignatureByIdRef = React.useRef(new Map<string, string>());
   React.useEffect(() => {
     const candidates = agendamentosDoDia.filter(
       (a) => a.status === 'em_atendimento' || a.status === 'concluido',
     );
     const changedIds = candidates.flatMap((a) => {
-      if (rawSourceByIdRef.current.get(a.id) === a) return [];
-      rawSourceByIdRef.current.set(a.id, a);
+      const signature = [
+        a.status,
+        (a as any).atualizadoEm,
+        (a as any).atualizado_em,
+        (a as any).updated_at,
+      ].filter(Boolean).join('|');
+      if (rawSignatureByIdRef.current.get(a.id) === signature) return [];
+      rawSignatureByIdRef.current.set(a.id, signature);
       return [a.id];
     });
     if (changedIds.length === 0) return;
