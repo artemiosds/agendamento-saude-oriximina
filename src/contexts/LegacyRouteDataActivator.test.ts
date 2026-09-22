@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getLegacyRouteDataNeeds } from "./LegacyRouteDataActivator";
+import { getLegacyRouteDataNeeds } from "./legacyRouteDataNeeds";
 
 describe("A1.1 route data activation", () => {
   it("keeps Dashboard free from legacy global loads", () => {
