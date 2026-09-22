@@ -1,6 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
-import { useAgendamentos } from '@/contexts/AgendamentosContext';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useFila } from '@/contexts/FilaContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,6 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { DashboardSkeleton } from '@/components/skeletons';
+import { localDateStr } from '@/lib/utils';
+import type { Agendamento } from '@/types';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(38, 92%, 50%)', 'hsl(280, 60%, 50%)', 'hsl(0, 72%, 51%)'];
 
@@ -40,45 +40,122 @@ interface AtendimentoDB {
   sala_id: string;
 }
 
+const DASHBOARD_AGENDAMENTO_COLUMNS = 'id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,criado_em,criado_por';
+const TERMINAL_PAST_STATUSES = [
+  'cancelado', 'cancelada', 'falta', 'faltou', 'concluido', 'finalizado',
+  'atendido', 'atendimento_encerrado', 'prontuario_finalizado', 'excluido',
+  'removido', 'inativo',
+];
+
+const mapDashboardAgendamento = (row: any): Agendamento => ({
+  id: row.id,
+  pacienteId: row.paciente_id,
+  pacienteNome: row.paciente_nome,
+  unidadeId: row.unidade_id,
+  salaId: row.sala_id || '',
+  setorId: row.setor_id || '',
+  profissionalId: row.profissional_id,
+  profissionalNome: row.profissional_nome,
+  data: row.data,
+  hora: row.hora,
+  status: row.status,
+  tipo: row.tipo,
+  observacoes: row.observacoes || '',
+  origem: row.origem || 'recepcao',
+  criadoEm: row.criado_em || '',
+  criadoPor: row.criado_por || '',
+});
+
 const Dashboard: React.FC = () => {
-  const { agendamentos } = useAgendamentos();
   const { fila } = useFila();
   const { funcionarios, unidades, disponibilidades, salas } = useOperacional();
-  const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const isGlobalAdmin = user?.usuario === 'admin.sms';
   const userUnidadeId = user?.unidadeId || '';
   const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
+  const [dashboardAgendamentos, setDashboardAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
+    const requestId = ++requestIdRef.current;
     const load = async () => {
       try {
-        let query = (supabase as any).from('atendimentos').select('id,profissional_nome,unidade_id,setor,data,status,duracao_minutos,sala_id').order('data', { ascending: false }).limit(1000);
-        // Universal unit isolation (admin.sms sees all)
-        if (user?.unidadeId && user?.usuario !== 'admin.sms') query = query.eq('unidade_id', user.unidadeId);
-        if (user?.role === 'profissional' && user.id) query = query.eq('profissional_id', user.id);
-        const { data } = await query;
-        if (data) setAtendimentosDB(data);
+        setLoading(true);
+        const today = localDateStr(new Date());
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 14);
+        const cutoff = localDateStr(cutoffDate);
+
+        const applyUserScope = (query: any) => {
+          let scoped = query;
+          if (user?.unidadeId && user?.usuario !== 'admin.sms') scoped = scoped.eq('unidade_id', user.unidadeId);
+          if (user?.role === 'profissional' && user.id) scoped = scoped.eq('profissional_id', user.id);
+          return scoped;
+        };
+
+        const fetchAppointmentScope = async (scope: 'recent' | 'openPast') => {
+          const rows: any[] = [];
+          const pageSize = 1000;
+          let from = 0;
+          while (true) {
+            let query = (supabase as any)
+              .from('agendamentos')
+              .select(scope === 'recent' ? DASHBOARD_AGENDAMENTO_COLUMNS : 'id,profissional_id,profissional_nome,data,status')
+              .order('data', { ascending: false })
+              .range(from, from + pageSize - 1);
+            query = scope === 'recent'
+              ? query.gte('data', cutoff)
+              : query.lt('data', cutoff).not('status', 'in', `(${TERMINAL_PAST_STATUSES.join(',')})`);
+            const { data, error } = await applyUserScope(query);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            rows.push(...data);
+            if (data.length < pageSize) break;
+            from += pageSize;
+          }
+          return rows;
+        };
+
+        let atendimentosQuery = (supabase as any).from('atendimentos').select('id,profissional_nome,unidade_id,setor,data,status,duracao_minutos,sala_id').order('data', { ascending: false }).limit(1000);
+        atendimentosQuery = applyUserScope(atendimentosQuery);
+
+        const [atendimentosResult, recentRows, openPastRows] = await Promise.all([
+          atendimentosQuery,
+          fetchAppointmentScope('recent'),
+          fetchAppointmentScope('openPast'),
+        ]);
+        if (requestIdRef.current !== requestId) return;
+
+        const recentMapped = recentRows.map(mapDashboardAgendamento);
+        const compactPast = openPastRows.map((row: any) => ({
+          id: row.id,
+          profissionalId: row.profissional_id,
+          profissionalNome: row.profissional_nome,
+          data: row.data,
+          status: row.status,
+        }));
+        const reportingRows = [...recentMapped, ...compactPast];
+        setAtendimentosDB(atendimentosResult.data || []);
+        setDashboardAgendamentos(reportingRows as Agendamento[]);
       } catch (err) {
         console.error('Error loading atendimentos for dashboard:', err);
       } finally {
-        setLoading(false);
+        if (requestIdRef.current === requestId) setLoading(false);
       }
     };
-    load();
+    void load();
+    return () => {
+      if (requestIdRef.current === requestId) requestIdRef.current += 1;
+    };
   }, [user]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr(new Date());
 
   const filteredAgendamentos = useMemo(() => {
-    return agendamentos.filter(a => {
-      if (user?.role === 'profissional' && a.profissionalId !== user.id) return false;
-      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
-      return true;
-    });
-  }, [agendamentos, user]);
+    return dashboardAgendamentos;
+  }, [dashboardAgendamentos]);
 
   const todayAg = filteredAgendamentos.filter(a => a.data === today);
   const confirmados = todayAg.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
@@ -246,7 +323,7 @@ const Dashboard: React.FC = () => {
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span className="text-sm font-mono font-medium text-foreground w-14 shrink-0">{ag.hora}</span>
                       <span className="text-sm shrink-0" title={ag.tipo}>{tipoLabel}</span>
-                      <span className="text-sm text-foreground truncate">{resolvePaciente(ag.pacienteId, ag.pacienteNome)}</span>
+                      <span className="text-sm text-foreground truncate">{ag.pacienteNome || 'Paciente não encontrado'}</span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap pl-0 sm:pl-0">
                       <span className="text-xs text-muted-foreground truncate max-w-[150px]">{ag.profissionalNome}</span>
