@@ -283,6 +283,34 @@ const Agenda: React.FC = () => {
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
 
+  // Índices locais derivados dos dados já carregados. Mantêm os mesmos objetos
+  // dos contextos, mas evitam buscas lineares repetidas durante filtros e ordenação.
+  const pacienteById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    pacientes.forEach((p) => {
+      // Array.find retornava a primeira ocorrência; preserve essa semântica.
+      if (!map.has(p.id)) map.set(p.id, p);
+    });
+    return map;
+  }, [pacientes]);
+  const unidadeById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    unidades.forEach((u) => {
+      if (!map.has(u.id)) map.set(u.id, u);
+    });
+    return map;
+  }, [unidades]);
+
+  const agendamentosDoDia = React.useMemo(
+    () => agendamentos.filter((ag) => ag.data === selectedDate),
+    [agendamentos, selectedDate],
+  );
+  const dayAgIds = React.useMemo(
+    () => agendamentosDoDia.map((ag) => ag.id).sort(),
+    [agendamentosDoDia],
+  );
+  const dayAgIdsKey = React.useMemo(() => dayAgIds.join(","), [dayAgIds]);
+
   // Past-date hydration: when navigating to a date outside the default
   // 14-day window, on-demand fetch ALL agendamentos for that date so the
   // status panels (Confirmados, Aptos, Em atendimento, Concluídos, Faltou,
@@ -386,31 +414,49 @@ const Agenda: React.FC = () => {
     })();
   }, []);
 
-  // Load raw iniciado_em for em_atendimento agendamentos to compute alerts
+  // Load raw iniciado_em only for visible, new or changed appointments.
+  // Results are merged into a per-ID cache instead of replacing the whole map.
+  const rawSignatureByIdRef = React.useRef(new Map<string, string>());
   React.useEffect(() => {
-    const ids = agendamentos.filter(a => a.status === 'em_atendimento' || a.status === 'concluido').map(a => a.id);
-    if (ids.length === 0) { setAgendamentosRaw({}); return; }
+    const candidates = agendamentosDoDia.filter(
+      (a) => a.status === 'em_atendimento' || a.status === 'concluido',
+    );
+    const changedIds = candidates.flatMap((a) => {
+      const signature = [
+        a.status,
+        (a as any).atualizadoEm,
+        (a as any).atualizado_em,
+        (a as any).updated_at,
+      ].filter(Boolean).join('|');
+      if (rawSignatureByIdRef.current.get(a.id) === signature) return [];
+      rawSignatureByIdRef.current.set(a.id, signature);
+      return [a.id];
+    });
+    if (changedIds.length === 0) return;
+    let cancelled = false;
     (async () => {
       const map: Record<string, { iniciado_em: string | null; concluido_em: string | null }> = {};
       const chunk = 500;
-      for (let i = 0; i < ids.length; i += chunk) {
-        const slice = ids.slice(i, i + chunk);
+      for (let i = 0; i < changedIds.length; i += chunk) {
+        const slice = changedIds.slice(i, i + chunk);
         const { data } = await supabase
           .from('agendamentos')
           .select('id, iniciado_em, concluido_em')
           .in('id', slice);
         (data || []).forEach((r: any) => { map[r.id] = { iniciado_em: r.iniciado_em, concluido_em: r.concluido_em }; });
       }
-      setAgendamentosRaw(map);
+      if (!cancelled && Object.keys(map).length > 0) {
+        setAgendamentosRaw((prev) => ({ ...prev, ...map }));
+      }
     })();
-  }, [agendamentos]);
+    return () => { cancelled = true; };
+  }, [agendamentosDoDia]);
 
   // ── Triage records + arrival times for priority sorting ──
   const [triageMap, setTriageMap] = useState<Record<string, { risco: string; tea: boolean }>>({});
   const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
-    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
     if (dayAgIds.length === 0) { setTriageMap({}); setArrivalMap({}); return; }
     (async () => {
       const [triageRes, filaRes] = await Promise.all([
@@ -443,12 +489,12 @@ const Agenda: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [agendamentos, selectedDate]);
+  }, [dayAgIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime: refletir imediatamente nova classificação de risco da triagem
   useEffect(() => {
-    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
     if (dayAgIds.length === 0) return;
+    const visibleIds = new Set(dayAgIds);
     const channel = supabase
       .channel(`triage-agenda-${selectedDate}`)
       .on(
@@ -457,7 +503,7 @@ const Agenda: React.FC = () => {
         (payload) => {
           const row: any = (payload.new as any) || (payload.old as any);
           if (!row?.agendamento_id) return;
-          if (!dayAgIds.includes(row.agendamento_id)) return;
+          if (!visibleIds.has(row.agendamento_id)) return;
           setTriageMap((prev) => {
             const comorb: any[] = Array.isArray(row?.custom_data?.comorbidades) ? row.custom_data.comorbidades : [];
             const tea = comorb.some((c: any) => String(c || "").toUpperCase().includes("TEA"));
@@ -470,7 +516,7 @@ const Agenda: React.FC = () => {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [agendamentos, selectedDate]);
+  }, [dayAgIdsKey, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // NOVO: aba pendentes / agenda / pendencias_revisao
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes" | "pendencias_revisao">("agenda");
@@ -749,8 +795,7 @@ const Agenda: React.FC = () => {
     // O bloco da tarde só assume o topo quando entrar de fato o turno da tarde
     // (usa o menor horário ≥ 12:00 configurado no dia, ou 13:30 como fallback).
     const TARDE_INICIO_PADRAO_MIN = 13 * 60 + 30;
-    const tardeInicioConfigurado = agendamentos.reduce((menor, ag) => {
-      if (ag.data !== selectedDate) return menor;
+    const tardeInicioConfigurado = agendamentosDoDia.reduce((menor, ag) => {
       if (filterUnit !== "all" && ag.unidadeId !== filterUnit) return menor;
       if (filterProf !== "all" && ag.profissionalId !== filterProf) return menor;
       if (isProfissional && user && ag.profissionalId !== user.id) return menor;
@@ -781,7 +826,7 @@ const Agenda: React.FC = () => {
 
     // Idade (número) — usado para prioridade legal (≥80, ≥60)
     const getIdade = (ag: any): number => {
-      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      const pac = pacienteById.get(ag.pacienteId);
       const nasc = (pac as any)?.dataNascimento || (pac as any)?.data_nascimento;
       if (!nasc) return -1;
       try {
@@ -801,9 +846,8 @@ const Agenda: React.FC = () => {
       return `99:${(ag.hora || "99:99")}`;
     };
 
-    const base = agendamentos
+    const base = agendamentosDoDia
       .filter((a) => {
-        if (a.data !== selectedDate) return false;
         if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
         if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
         if (isProfissional && user) {
@@ -812,53 +856,66 @@ const Agenda: React.FC = () => {
         // Universal unit isolation: any user with unidadeId only sees their unit (except admin.sms)
         if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
         return true;
-      })
-      .sort((a, b) => {
+      });
+
+    // Todas as chaves clínicas são calculadas uma vez por item. O comparador
+    // conserva exatamente a sequência de critérios usada anteriormente.
+    const sortKeys = new Map<string, {
+      turno: number;
+      concluido: number;
+      risco: number;
+      idade: number;
+      prioridade: number;
+      apto: number;
+      chegada: string;
+    }>();
+    for (const ag of base) {
+      const idade = getIdade(ag);
+      const pac = pacienteById.get(ag.pacienteId);
+      sortKeys.set(ag.id, {
+        turno: getTurnoSortGroup(ag),
+        concluido: isConcluido(ag) ? 1 : 0,
+        risco: getPesoClassificacaoRisco(ag),
+        idade,
+        prioridade: (idade >= 60 || isTea(ag) || !!pac?.isGestante || !!pac?.isPne) ? 0 : 1,
+        apto: isApto(ag) ? 0 : 1,
+        chegada: getArrivalKey(ag),
+      });
+    }
+
+    base.sort((a, b) => {
+        const keyA = sortKeys.get(a.id);
+        const keyB = sortKeys.get(b.id);
+        if (!keyA || !keyB) return 0;
         // 1. Turno — manhã antes de tarde (respeitando tardeAtiva do dia atual)
-        const groupA = getTurnoSortGroup(a);
-        const groupB = getTurnoSortGroup(b);
-        if (groupA !== groupB) return groupA - groupB;
+        if (keyA.turno !== keyB.turno) return keyA.turno - keyB.turno;
 
         // 2. Concluídos vão para o fim absoluto
-        const concluidoA = isConcluido(a) ? 1 : 0;
-        const concluidoB = isConcluido(b) ? 1 : 0;
-        if (concluidoA !== concluidoB) return concluidoA - concluidoB;
+        if (keyA.concluido !== keyB.concluido) return keyA.concluido - keyB.concluido;
 
         // 3. Risco Clínico (Soberania de Manchester) — fura qualquer fila administrativa
-        const riscoA = getPesoClassificacaoRisco(a);
-        const riscoB = getPesoClassificacaoRisco(b);
-        if (riscoA !== riscoB) return riscoA - riscoB;
+        if (keyA.risco !== keyB.risco) return keyA.risco - keyB.risco;
 
         // 4. Prioridade Legal Especial (Lei 13.466/2017) — ≥80 anos, dentro do mesmo risco
-        const idadeA = getIdade(a);
-        const idadeB = getIdade(b);
-        const super80A = idadeA >= 80 ? 0 : 1;
-        const super80B = idadeB >= 80 ? 0 : 1;
+        const super80A = keyA.idade >= 80 ? 0 : 1;
+        const super80B = keyB.idade >= 80 ? 0 : 1;
         if (super80A !== super80B) return super80A - super80B;
 
         // 5. Prioridade Legal Padrão — ≥60 anos OU TEA OU Gestante OU PNE (empatam entre si)
-        const pacA = pacientes.find((p) => p.id === a.pacienteId);
-        const pacB = pacientes.find((p) => p.id === b.pacienteId);
-        const prioA = (idadeA >= 60 || isTea(a) || !!pacA?.isGestante || !!pacA?.isPne) ? 0 : 1;
-        const prioB = (idadeB >= 60 || isTea(b) || !!pacB?.isGestante || !!pacB?.isPne) ? 0 : 1;
-        if (prioA !== prioB) return prioA - prioB;
+        if (keyA.prioridade !== keyB.prioridade) return keyA.prioridade - keyB.prioridade;
 
         // 6. Status da fila — apto_atendimento sobe frente aos que aguardam triagem
-        const aptoA = isApto(a) ? 0 : 1;
-        const aptoB = isApto(b) ? 0 : 1;
-        if (aptoA !== aptoB) return aptoA - aptoB;
+        if (keyA.apto !== keyB.apto) return keyA.apto - keyB.apto;
 
         // 7. Desempate final — ordem real de chegada (fallback: hora agendada)
-        const keyA = getArrivalKey(a);
-        const keyB = getArrivalKey(b);
-        return keyA.localeCompare(keyB);
+        return keyA.chegada.localeCompare(keyB.chegada);
       });
 
     let result = base;
 
     if (debouncedSearch) {
       result = result.filter((a) => {
-        const pac = pacientes.find((p) => p.id === a.pacienteId);
+        const pac = pacienteById.get(a.pacienteId);
         const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
         const cpf = pac?.cpf?.toLowerCase() || "";
         const cns = pac?.cns?.toLowerCase() || "";
@@ -886,7 +943,7 @@ const Agenda: React.FC = () => {
     return result;
 
 
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
+  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, pacienteById, triageMap, arrivalMap, nowMinutes, resolvePaciente]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
@@ -898,7 +955,7 @@ const Agenda: React.FC = () => {
     const fmtCpf = (v?: string) => v ? v.replace(/\D/g, '').replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4") : "-";
     const ordered = [...filtered].sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
     const rows = ordered.map((ag, idx) => {
-      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      const pac = pacienteById.get(ag.pacienteId);
       const nome = resolvePaciente(ag.pacienteId, ag.pacienteNome) || "-";
       const cpf = fmtCpf(pac?.cpf);
       const cns = pac?.cns ? formatCNS(pac.cns) : "-";
@@ -953,29 +1010,18 @@ const Agenda: React.FC = () => {
       Status: statusLabel,
       Total: String(ordered.length),
     });
-  }, [filtered, pacientes, resolvePaciente, filterProf, filterUnit, statusFilter, selectedDate, profissionais, unidades]);
+  }, [filtered, pacienteById, resolvePaciente, filterProf, filterUnit, statusFilter, selectedDate, profissionais, unidades]);
 
 
   // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
   const statusCounts = React.useMemo(() => {
-    // Regra centralizada de ocupação de vaga
-    const STATUS_NAO_OCUPA_VAGA = new Set([
-      "cancelado",
-      "falta",
-      "excluido",
-      "removido",
-      "inativo",
-    ]);
-    const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
-
-    const base = agendamentos.filter((a) => {
-      if (a.data !== selectedDate) return false;
+    const base = agendamentosDoDia.filter((a) => {
       if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
       if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
       if (isProfissional && a.profissionalId !== user?.id) return false;
       if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
       if (debouncedSearch) {
-        const pac = pacientes.find((p) => p.id === a.pacienteId);
+        const pac = pacienteById.get(a.pacienteId);
         const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
         const cpf = pac?.cpf?.toLowerCase() || "";
         const cns = pac?.cns?.toLowerCase() || "";
@@ -984,27 +1030,30 @@ const Agenda: React.FC = () => {
       return true;
     });
 
-    const activeBase = base.filter(a => selectedDate < todayLocalStr() ? true : statusOcupaVaga(a.status));
-
-    const byGroup: Record<string, number> = {};
+    let total = 0;
+    const byGroup: Record<string, number> = Object.fromEntries(
+      Object.keys(STATUS_FILTER_GROUPS).map((key) => [key, 0]),
+    );
     const todayStr = todayLocalStr();
-    for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
-      const allowed = STATUS_FILTER_GROUPS[key];
-      byGroup[key] = base.filter((a) => allowed.includes(getDisplayStatus(a, todayStr))).length;
+    for (const ag of base) {
+      if (selectedDate < todayStr || statusOcupaVaga(ag.status)) total += 1;
+      const displayStatus = getDisplayStatus(ag, todayStr);
+      for (const [key, allowed] of Object.entries(STATUS_FILTER_GROUPS)) {
+        if (allowed.includes(displayStatus)) byGroup[key] += 1;
+      }
     }
     
     // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
-    return { total: activeBase.length, byGroup };
+    return { total, byGroup };
 
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
+  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacienteById, resolvePaciente]);
 
 
   // (primeiro item da manhã que ainda não foi concluído).
   const idxPendentesManha = React.useMemo(() => {
     const isToday = selectedDate === todayLocalStr();
     const TARDE_INICIO_PADRAO_MIN = 13 * 60 + 30;
-    const tardeInicio = agendamentos.reduce((menor, ag) => {
-      if (ag.data !== selectedDate) return menor;
+    const tardeInicio = agendamentosDoDia.reduce((menor, ag) => {
       const [hh, mm] = (ag.hora || "").split(":").map((n) => parseInt(n, 10));
       const min = (hh || 0) * 60 + (mm || 0);
       return min >= 12 * 60 ? Math.min(menor, min) : menor;
@@ -1019,7 +1068,7 @@ const Agenda: React.FC = () => {
       const concluido = CONCLUIDO.has(String(ag.status || "").toLowerCase());
       return isManha && !concluido;
     });
-  }, [filtered, agendamentos, selectedDate, nowMinutes]);
+  }, [filtered, agendamentosDoDia, selectedDate, nowMinutes]);
 
   React.useEffect(() => {
     const pacienteIds = filteredPacienteKey.split(",").filter(Boolean);
@@ -2280,18 +2329,6 @@ const Agenda: React.FC = () => {
       toast.error("Erro ao editar agendamento.");
     }
   }, [editAg, profissionais, agendamentos, updateAgendamento, logAction, user, refreshAgendamentos]);
-
-  // Maps memoizados para lookup O(1) por id ao renderizar cada item da agenda
-  const pacienteById = React.useMemo(() => {
-    const map = new Map<string, any>();
-    pacientes.forEach((p) => map.set(p.id, p));
-    return map;
-  }, [pacientes]);
-  const unidadeById = React.useMemo(() => {
-    const map = new Map<string, any>();
-    unidades.forEach((u) => map.set(u.id, u));
-    return map;
-  }, [unidades]);
 
   // Refs para handlers estáveis passados ao AgendaItemCard memoizado.
   const handleOpenEditRef = React.useRef(handleOpenEdit);
