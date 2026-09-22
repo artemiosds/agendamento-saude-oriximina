@@ -74,7 +74,10 @@ const Dashboard: React.FC = () => {
   const userUnidadeId = user?.unidadeId || '';
   const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
-  const [dashboardAgendamentos, setDashboardAgendamentos] = useState<Agendamento[]>([]);
+  const [todayAg, setTodayAg] = useState<Agendamento[]>([]);
+  const [weekAgendamentos, setWeekAgendamentos] = useState<Array<{ id: string; data: string; status: string }>>([]);
+  const [profAgendamentos, setProfAgendamentos] = useState<Array<{ profissional_nome: string | null }>>([]);
+  const [appointmentCounts, setAppointmentCounts] = useState({ total: 0, faltas: 0, cancelados: 0 });
   const [loading, setLoading] = useState(true);
   const requestIdRef = useRef(0);
 
@@ -95,19 +98,17 @@ const Dashboard: React.FC = () => {
           return scoped;
         };
 
-        const fetchAppointmentScope = async (scope: 'recent' | 'openPast') => {
+        const fetchPaged = async (columns: string, configure: (query: any) => any) => {
           const rows: any[] = [];
           const pageSize = 1000;
           let from = 0;
           while (true) {
             let query = (supabase as any)
               .from('agendamentos')
-              .select(scope === 'recent' ? DASHBOARD_AGENDAMENTO_COLUMNS : 'id,profissional_id,profissional_nome,data,status')
+              .select(columns)
               .order('data', { ascending: false })
               .range(from, from + pageSize - 1);
-            query = scope === 'recent'
-              ? query.gte('data', cutoff)
-              : query.lt('data', cutoff).not('status', 'in', `(${TERMINAL_PAST_STATUSES.join(',')})`);
+            query = configure(query);
             const { data, error } = await applyUserScope(query);
             if (error) throw error;
             if (!data || data.length === 0) break;
@@ -118,27 +119,46 @@ const Dashboard: React.FC = () => {
           return rows;
         };
 
+        const countAppointments = async (configure: (query: any) => any) => {
+          let query = (supabase as any).from('agendamentos').select('id', { count: 'exact', head: true });
+          query = configure(query);
+          const { count, error } = await applyUserScope(query);
+          if (error) throw error;
+          return count || 0;
+        };
+
+        const recentScope = (query: any) => query.gte('data', cutoff);
+        const openPastScope = (query: any) => query.lt('data', cutoff).not('status', 'in', `(${TERMINAL_PAST_STATUSES.join(',')})`);
+        const recentStatus = (status: string) => (query: any) => recentScope(query).eq('status', status);
+        const weekStartDate = new Date();
+        weekStartDate.setDate(weekStartDate.getDate() - 6);
+        const weekStart = localDateStr(weekStartDate);
+
         let atendimentosQuery = (supabase as any).from('atendimentos').select('id,profissional_nome,unidade_id,setor,data,status,duracao_minutos,sala_id').order('data', { ascending: false }).limit(1000);
         atendimentosQuery = applyUserScope(atendimentosQuery);
 
-        const [atendimentosResult, recentRows, openPastRows] = await Promise.all([
+        const [atendimentosResult, todayRows, weekRows, recentProfRows, openPastProfRows, recentCount, openPastCount, faltaCount, canceladoCount] = await Promise.all([
           atendimentosQuery,
-          fetchAppointmentScope('recent'),
-          fetchAppointmentScope('openPast'),
+          fetchPaged(DASHBOARD_AGENDAMENTO_COLUMNS, (query) => query.eq('data', today)),
+          fetchPaged('id,data,status', (query) => query.gte('data', weekStart).lte('data', today)),
+          fetchPaged('profissional_nome', recentScope),
+          fetchPaged('profissional_nome', openPastScope),
+          countAppointments(recentScope),
+          countAppointments(openPastScope),
+          countAppointments(recentStatus('falta')),
+          countAppointments(recentStatus('cancelado')),
         ]);
         if (requestIdRef.current !== requestId) return;
 
-        const recentMapped = recentRows.map(mapDashboardAgendamento);
-        const compactPast = openPastRows.map((row: any) => ({
-          id: row.id,
-          profissionalId: row.profissional_id,
-          profissionalNome: row.profissional_nome,
-          data: row.data,
-          status: row.status,
-        }));
-        const reportingRows = [...recentMapped, ...compactPast];
         setAtendimentosDB(atendimentosResult.data || []);
-        setDashboardAgendamentos(reportingRows as Agendamento[]);
+        setTodayAg(todayRows.map(mapDashboardAgendamento));
+        setWeekAgendamentos(weekRows);
+        setProfAgendamentos([...recentProfRows, ...openPastProfRows]);
+        setAppointmentCounts({
+          total: recentCount + openPastCount,
+          faltas: faltaCount,
+          cancelados: canceladoCount,
+        });
       } catch (err) {
         console.error('Error loading atendimentos for dashboard:', err);
       } finally {
@@ -153,20 +173,15 @@ const Dashboard: React.FC = () => {
 
   const today = localDateStr(new Date());
 
-  const filteredAgendamentos = useMemo(() => {
-    return dashboardAgendamentos;
-  }, [dashboardAgendamentos]);
-
-  const todayAg = filteredAgendamentos.filter(a => a.data === today);
   const confirmados = todayAg.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
   const pendentes = todayAg.filter(a => a.status === 'pendente').length;
   const aguardando = fila.filter(f => f.status === 'aguardando').length;
 
   // KPIs
   const kpis = useMemo(() => {
-    const totalAg = filteredAgendamentos.length;
-    const faltas = filteredAgendamentos.filter(a => a.status === 'falta').length;
-    const cancelados = filteredAgendamentos.filter(a => a.status === 'cancelado').length;
+    const totalAg = appointmentCounts.total;
+    const faltas = appointmentCounts.faltas;
+    const cancelados = appointmentCounts.cancelados;
     const noShowRate = totalAg > 0 ? Math.round((faltas / totalAg) * 100) : 0;
 
     const finalizados = atendimentosDB.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
@@ -186,7 +201,7 @@ const Dashboard: React.FC = () => {
     const prioAguardando = prioritarios.filter(f => f.status === 'aguardando' || f.status === 'chamado').length;
 
     return { noShowRate, avgTime, occupancyRate, cancelados, faltas, prioAtendidos, prioAguardando, totalFinalizados: finalizados.length };
-  }, [filteredAgendamentos, atendimentosDB, today, salas, fila]);
+  }, [appointmentCounts, atendimentosDB, today, salas, fila]);
 
   const weekChartData = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -199,20 +214,20 @@ const Dashboard: React.FC = () => {
       // Use atendimentos (finalized) as primary source; only add agendamentos not yet in atendimentos
       const atendimentoCount = atendimentosDB.filter(a => a.data === dateStr).length;
       const agendamentoIds = new Set(atendimentosDB.filter(a => a.data === dateStr).map(a => a.id));
-      const extraFromAgendamentos = filteredAgendamentos.filter(a => a.data === dateStr && (a.status === 'concluido' || a.status === 'em_atendimento') && !agendamentoIds.has(a.id)).length;
+       const extraFromAgendamentos = weekAgendamentos.filter(a => a.data === dateStr && (a.status === 'concluido' || a.status === 'em_atendimento') && !agendamentoIds.has(a.id)).length;
       result.push({ name: days[d.getDay()], atendimentos: atendimentoCount + extraFromAgendamentos });
     }
     return result;
-  }, [atendimentosDB, filteredAgendamentos]);
+  }, [atendimentosDB, weekAgendamentos]);
 
   const profData = useMemo(() => {
     // Use agendamentos as the single source to avoid double-counting
     const map: Record<string, number> = {};
-    filteredAgendamentos.forEach(a => {
-      if (a.profissionalNome) map[a.profissionalNome] = (map[a.profissionalNome] || 0) + 1;
+    profAgendamentos.forEach(a => {
+      if (a.profissional_nome) map[a.profissional_nome] = (map[a.profissional_nome] || 0) + 1;
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
-  }, [filteredAgendamentos]);
+  }, [profAgendamentos]);
 
   const totalAtendimentos = atendimentosDB.filter(a => a.status === 'finalizado').length;
 
@@ -240,7 +255,7 @@ const Dashboard: React.FC = () => {
           value={`${kpis.noShowRate}%`} 
           icon={<XCircle className="w-5 h-5 text-destructive-foreground" />} 
           color="bg-destructive"
-          subtitle={`${kpis.faltas} faltas de ${filteredAgendamentos.length}`}
+          subtitle={`${kpis.faltas} faltas de ${appointmentCounts.total}`}
           onClick={() => navigate('/painel/relatorios')}
           critical={kpis.noShowRate > 20}
         />
