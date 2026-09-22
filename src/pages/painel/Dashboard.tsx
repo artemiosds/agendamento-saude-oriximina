@@ -72,6 +72,9 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const isGlobalAdmin = user?.usuario === 'admin.sms';
   const userUnidadeId = user?.unidadeId || '';
+  const userId = user?.id || '';
+  const userRole = user?.role || '';
+  const userLogin = user?.usuario || '';
   const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [todayAg, setTodayAg] = useState<Agendamento[]>([]);
@@ -93,8 +96,8 @@ const Dashboard: React.FC = () => {
 
         const applyUserScope = (query: any) => {
           let scoped = query;
-          if (user?.unidadeId && user?.usuario !== 'admin.sms') scoped = scoped.eq('unidade_id', user.unidadeId);
-          if (user?.role === 'profissional' && user.id) scoped = scoped.eq('profissional_id', user.id);
+          if (userUnidadeId && userLogin !== 'admin.sms') scoped = scoped.eq('unidade_id', userUnidadeId);
+          if (userRole === 'profissional' && userId) scoped = scoped.eq('profissional_id', userId);
           return scoped;
         };
 
@@ -169,7 +172,7 @@ const Dashboard: React.FC = () => {
     return () => {
       if (requestIdRef.current === requestId) requestIdRef.current += 1;
     };
-  }, [user]);
+  }, [userId, userLogin, userRole, userUnidadeId]);
 
   const today = localDateStr(new Date());
 
