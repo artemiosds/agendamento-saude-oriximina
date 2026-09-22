@@ -1,125 +1,124 @@
-# Fase Agenda A1 — Dados sob demanda sem mudar o fluxo
+# Fase Agenda A1.1 — Ativação explícita e compatibilidade
 
-## Resumo da causa
+## Objetivo
 
-Os quatro providers de domínio envolvem todas as rotas e são montados antes delas. Após a autenticação, `PacientesContext` percorre todos os pacientes em lotes de 1.000 e `AgendamentosContext` carrega os últimos 14 dias mais todos os agendamentos antigos não finalizados, mesmo quando a rota aberta não precisa desses dados. Os dois também mantêm Realtime ativo desde o login. A Agenda já possui carregamento complementar por data/faixa, mas ele hoje apenas acrescenta registros à carga inicial ampla.
+Impedir a carga integral de pacientes e agendamentos imediatamente após o login, mantendo os providers montados, as APIs públicas atuais dos contexts e o comportamento de todas as rotas.
 
-A retirada direta desses carregamentos não é segura: 15 arquivos consomem `usePacientes`, 11 consomem `useAgendamentos`, e os cálculos de vagas do `OperacionalContext` leem agendamentos pelo bridge. A migração deve manter as APIs e mutações atuais enquanto ativa cada conjunto somente na rota que realmente o utiliza.
+Esta implementação será limitada à A1.1. Não inclui consultas da Agenda por faixa, pacientes mínimos, LRU/TTL, Realtime por escopo nem qualquer mudança no calendário, lista, pendências ou Novo Agendamento.
 
-## Arquivos envolvidos
+## Causa confirmada
 
-### Núcleo a modificar
-- `src/App.tsx` e/ou `src/contexts/DomainProviders.tsx`: informar a necessidade de dados conforme a rota autenticada, sem desmontar os providers.
-- `src/contexts/PacientesContext.tsx`: remover a carga total automática no login; adicionar hidratação por IDs, busca remota e modo legado sob demanda.
-- `src/contexts/AgendamentosContext.tsx`: remover a carga ampla automática; manter cache delimitado por unidade/faixa e atualizar somente escopos ativos.
-- `src/contexts/_agendamentosBridge.ts`: preservar o contrato do snapshot usado nos cálculos de vagas; alterar somente se necessário para identificar o escopo carregado.
-- `src/pages/painel/Agenda.tsx`: declarar as faixas e conjuntos necessários, hidratar pacientes dos agendamentos exibidos e manter as ações existentes.
-- `src/pages/painel/CalendarioAgenda.tsx`: somente comunicar a faixa visível já calculada; nenhuma alteração visual ou de regra.
-- `src/components/BuscaPaciente.tsx`: consolidar busca remota com escopo de unidade, debounce e proteção contra respostas antigas.
-- `src/components/AgendaNotificacoes.tsx`: receber/hidratar apenas contatos dos agendamentos que serão avisados.
-- `src/hooks/queries/queryKeys.ts`: chaves por unidade, faixa, data, pendências e IDs.
+`DomainProviders` envolve todas as rotas. Assim que o usuário autentica:
 
-### Compatibilidade a revisar ou adaptar
-- `src/pages/painel/Dashboard.tsx`: substituir dependência dos arrays completos por consultas mínimas para os indicadores e períodos já exibidos; isso é necessário para o login não reativar a carga ampla na rota inicial.
-- Consumidores legados de pacientes/agendamentos: Agenda, Dashboard, Pacientes, Prontuário, Fila, Triagem, Tratamentos, PTS, Relatórios, Relatório de Alta, Atualização Cadastral, Avaliações e componentes auxiliares. Nesta fase, cada rota ainda dependente do conjunto completo acionará explicitamente o modo legado ao abrir, preservando seu comportamento atual.
-- `src/contexts/OperacionalContext.tsx`, `src/contexts/FilaContext.tsx` e `src/contexts/_filaBridge.ts`: somente ajustes mínimos de ativação/compatibilidade se necessários; regras, cálculos e mutações permanecem iguais.
+- `PacientesContext` percorre todos os pacientes permitidos em páginas de 1.000.
+- `AgendamentosContext` carrega os últimos 14 dias e todos os registros antigos não finalizados.
+- Isso ocorre mesmo no Dashboard e em rotas que não precisam desses arrays.
 
-## Dados realmente necessários pela Agenda
+Apenas remover esses efeitos quebraria consumidores existentes: há 15 arquivos ligados a `usePacientes`, 11 ligados a `useAgendamentos`, e o `OperacionalContext` usa o snapshot de agendamentos para vagas e turnos.
 
-| Necessidade | Consulta sob demanda |
-|---|---|
-| Calendário mensal/semanal/diário | `agendamentos` entre o início e o fim exatos da faixa visível, com a projeção atual e escopo de unidade/profissional aplicável |
-| Lista do dia | todos os status da data selecionada; a consulta da faixa é reaproveitada e a data é garantida separadamente quando necessário |
-| Pendências antigas | somente status atualmente considerados pendentes, anteriores ao momento atual, com o mesmo escopo e campos usados no painel |
-| Pendentes online | somente `origem = online` e `status = pendente`, mantendo a ordenação atual |
-| Busca de paciente | consulta remota após 2 caracteres, debounce de 300 ms, limite de 20 e escopo permitido |
-| Dados dos cartões/ordenação | pacientes únicos referenciados pelos agendamentos carregados, buscados em lotes por UUID |
-| Novo Agendamento | paciente selecionado por UUID; profissionais, unidades, salas, disponibilidades e bloqueios atuais; ocupação da data escolhida |
-| Notificações | telefone/e-mail apenas dos pacientes pertencentes à lista efetivamente escolhida |
-| Tempos e triagem | somente IDs visíveis do dia, preservando a otimização da Fase A0 |
-| Realtime | eventos de agendamentos e pacientes relevantes aos escopos atualmente carregados |
+## Implementação
 
-## Plano de implementação por etapas
+### 1. Ativação explícita nos contexts
 
-### A1.1 — Ativação explícita e compatibilidade
-1. Manter os providers globais e suas APIs públicas para não quebrar consumidores.
-2. Remover apenas os efeitos que carregam pacientes e agendamentos automaticamente ao autenticar.
-3. Introduzir estados explícitos de carga (`idle/loading/ready/error`), geração por unidade e funções idempotentes: carregar modo legado, faixa, data, pendências, IDs de pacientes e atualizar escopos ativos.
-4. Criar uma política de necessidade por rota. Rotas ainda não migradas acionam o carregamento legado somente ao serem abertas; rotas públicas e a rota inicial não pagam esse custo.
-5. Adaptar o Dashboard para consultas mínimas dos mesmos períodos e indicadores, evitando que ele reative os arrays completos logo após o login.
+- Manter `PacientesSliceProvider` e `AgendamentosSliceProvider` montados na posição atual.
+- Manter todas as propriedades e funções públicas hoje expostas por `usePacientes()` e `useAgendamentos()`.
+- Remover somente o disparo automático de `loadPacientes()` e `loadAgendamentos()` baseado exclusivamente em autenticação.
+- Adicionar funções idempotentes de ativação legada aos contexts. Chamadas repetidas para o mesmo usuário/unidade compartilharão a mesma carga em andamento e não iniciarão novas varreduras.
+- Preservar integralmente consultas, projeções, mapeamentos, paginação atual, mutações, payloads, atualizações otimistas, auditoria e bridges quando o modo legado for ativado.
+- Manter as assinaturas Realtime existentes. Enquanto o conjunto ainda não tiver sido ativado, callbacks de recarga não iniciarão uma carga integral; após a ativação, continuam com o comportamento atual.
+- Reiniciar a marca de ativação na troca de usuário ou unidade, antes de aceitar o resultado da nova carga, evitando que uma resposta anterior preencha o escopo atual.
 
-### A1.2 — Agenda com agendamentos por escopo
-1. Ao abrir a Agenda, buscar em paralelo a faixa visível inicial, a data selecionada, pendências antigas e pendentes online.
-2. Reutilizar o callback de faixa do calendário para mês, semana e dia; deduplicar por `id`.
-3. Preservar integralmente a projeção/mapeamento atual, filtros, ordem, contadores, ocupação, bloqueios, salas, cotas e disponibilidade.
-4. Fazer `refreshAgendamentos` atualizar somente os escopos ativos na Agenda. As mutações continuam com os mesmos payloads, auditoria e atualização otimista.
-5. Garantir a data de destino antes de calcular vaga em Novo Agendamento, retorno, edição ou remarcação.
+### 2. Ativador por rota
 
-### A1.3 — Pacientes mínimos na Agenda
-1. Extrair os UUIDs únicos dos agendamentos carregados e hidratar apenas esses pacientes, em lotes limitados e com projeção dos campos realmente usados.
-2. Usar a busca remota já existente no Novo Agendamento, aplicando de fato o filtro de unidade e mantendo o limite de 20.
-3. Ao selecionar, abrir detalhe, aprovar, rejeitar, cancelar, registrar falta, iniciar atendimento, imprimir ou notificar, garantir o paciente por UUID antes da ação quando ele não estiver no cache.
-4. Preservar o nome desnormalizado do agendamento como fallback visual, sem inventar CPF, contato, idade ou condição clínica.
+Criar um ativador sem interface, montado dentro dos providers e do roteamento autenticado, que chama explicitamente os loaders legados conforme a rota aberta. Ele não altera menus, navegação, conteúdo, textos ou layout.
 
-### A1.4 — Cache delimitado e concorrência
-1. Chavear todo cache por usuário/unidade e por faixa ou ID; nunca reutilizar dados entre unidades.
-2. Usar `AbortController` e contador monotônico de requisição para que uma resposta antiga não substitua unidade, data ou pesquisa mais recente.
-3. Compartilhar promessas em andamento e deduplicar IDs/faixas sobrepostas.
-4. Manter somente a faixa atual, a anterior e a próxima, além da data selecionada, pendências e registros alterados na sessão. Descartar faixas mais antigas por LRU/TTL; não acumular meses indefinidamente.
-5. Na troca de usuário ou unidade, cancelar requisições, limpar arrays, índices, bridges, IDs carregados e caches antes da nova consulta.
+| Rota | Pacientes legado | Agendamentos legado |
+|---|---:|---:|
+| `/painel/agenda` | Sim | Sim |
+| `/painel/pacientes` | Sim | Sim |
+| `/painel/atualizacao-cadastral` | Sim | Não |
+| `/painel/fila` | Sim | Sim, necessário pelas rotinas de encaixe/vaga |
+| `/painel/prontuario` | Sim | Sim |
+| `/painel/triagem` | Sim | Sim |
+| `/painel/tratamentos` | Sim | Sim |
+| `/painel/pts` | Sim | Não |
+| `/painel/relatorios` | Sim | Não |
+| `/painel/alta` | Sim | Não |
+| `/painel/multiprofissional` | Não | Sim |
+| Dashboard `/painel` | Não | Não |
 
-### A1.5 — Realtime e consumidores legados
-1. Ativar canais de pacientes/agendamentos somente depois que o respectivo conjunto tiver sido solicitado.
-2. Aplicar INSERT/UPDATE/DELETE por ID. Na Agenda, manter o evento apenas se ele pertencer à faixa, data, pendências ou pendentes online ativos; remover quando deixar de pertencer.
-3. No fallback de conexão, recarregar somente os escopos ativos, nunca a tabela inteira por padrão.
-4. Manter o bridge de agendamentos sincronizado com o cache atual para que `getTurnoInfo`, `getAvailableSlots` e `getDayInfoMap` preservem os cálculos atuais.
-5. Nas rotas legadas, ativar o carregamento atual somente ao entrar e manter seu comportamento até uma fase futura específica; não migrar Prontuário, BPA ou regras clínicas nesta fase.
+Componentes auxiliares continuarão cobertos pela rota que os monta: conferência cadastral, importação, relatório fonoaudiológico, resolução de nomes, fila automática e indicador de vagas.
 
-## Dados que deixarão de carregar após o login
+Antes de concluir, será feita uma busca final de consumidores. Se uma rota depender de um conjunto não ativado, a implementação será interrompida e o consumidor será informado, conforme solicitado.
 
-- Todos os pacientes da unidade — e todas as unidades para `admin.sms`.
-- A janela global de agendamentos dos últimos 14 dias.
-- Todo o histórico antigo de agendamentos ainda não finalizados.
-- Recarregamentos completos de pacientes causados por Realtime quando nenhuma tela solicitou esses dados.
-- Canal/poll de pacientes e agendamentos quando nenhum consumidor ativo os requisitou.
+### 3. Dashboard com consultas mínimas
 
-`unidades`, `salas`, `funcionarios`, `configuracoes`, `disponibilidades`, `bloqueios` e a fila operacional permanecem como estão nesta fase, pois têm menor volume e ampla dependência. A sua migração não faz parte da A1.
+O Dashboard deixará de consumir os arrays globais de pacientes e agendamentos.
 
-## Dados carregados somente ao abrir a Agenda
+Serão feitas consultas próprias, somente leitura, com o mesmo isolamento atual por unidade e profissional:
 
-- Agendamentos da faixa visível do calendário e da data selecionada.
-- Agendamentos antigos realmente pendentes e solicitações online pendentes.
-- Pacientes referenciados por esses agendamentos, sem varrer o cadastro inteiro.
-- Resultados de pacientes somente após pesquisa.
-- Tempos de atendimento e triagens somente para os IDs visíveis do dia.
-- Dados operacionais já usados hoje: profissionais, unidades, salas, disponibilidades, bloqueios, configurações e fila operacional.
+- **Agenda de hoje / Consultas Hoje / Confirmados-Chegou:** registros de hoje com somente os campos usados na lista e nos contadores; o nome já armazenado no agendamento será mantido como hoje.
+- **Taxa No-Show:** contagens exatas separadas para total, faltas e cancelados, reproduzindo exatamente o universo atual de 14 dias mais registros antigos não finalizados, sem transferir todas as linhas.
+- **Atendimentos da Semana:** somente os sete dias exibidos e os campos necessários para preservar a regra atual de composição com `atendimentos`.
+- **Agendamentos por Profissional:** somente nome do profissional no mesmo universo usado hoje; sem carregar objetos completos de agendamento.
+- **Atendimentos, fila, salas, funcionários, unidades e disponibilidades:** permanecem nas fontes atuais.
 
-## Riscos e proteções
+As consultas serão executadas em paralelo, terão descarte de resposta obsoleta na troca de usuário/unidade e manterão o mesmo estado de carregamento já exibido pelo Dashboard. Não haverá tabela, função, RPC ou índice novo.
 
-- **Dados incompletos confundidos com ausência:** cada escopo terá estado de carregamento próprio; contadores só serão considerados prontos após todas as fontes necessárias concluírem.
-- **Cálculo incorreto de vagas:** nenhuma vaga será calculada antes da hidratação da data/faixa correspondente; bridge e funções atuais serão preservados.
-- **Mistura entre unidades:** chaves incluem unidade/usuário, e a troca limpa estado e cancela respostas antigas. `admin.sms` mantém visão global quando nenhum filtro de unidade é aplicado.
-- **Eventos perdidos no Realtime:** upsert por ID mais reconciliação limitada dos escopos ativos; fallback nunca transforma uma atualização em carga global silenciosa.
-- **Ações sem contato/dados clínicos:** hidratação por UUID antes da ação; em falha, a ação informa o erro em vez de usar dado vazio.
-- **Diferenças em pendências e notificações:** reproduzir exatamente os conjuntos de status, recortes de tempo, ordenação e permissões existentes em testes de equivalência.
-- **Regressão em outras telas:** modo legado explícito por rota durante a transição; nenhuma assinatura pública ou payload de mutação é removido.
-- **Crescimento de memória:** limite de faixas, deduplicação por ID, TTL/LRU e limpeza em logout/troca de unidade.
+### 4. Compatibilidade entre rotas
+
+- Abrir diretamente uma rota legada ativa os mesmos dados que ela recebia após o login.
+- Voltar para uma rota já ativada reaproveita o estado atual do context; não será implementado descarte LRU/TTL nesta etapa.
+- Agenda continuará recebendo o mesmo conjunto legado atual: últimos 14 dias, futuros e pendências antigas, além da hidratação de datas passadas já existente.
+- Pacientes continuará recebendo o mesmo conjunto integral atual quando sua rota for aberta.
+- `admin.sms` mantém visão global; Master com unidade e demais perfis mantêm o isolamento atual.
+- Bridges de agendamentos e fila continuam com o mesmo formato e finalidade.
+
+## Arquivos previstos
+
+- `src/contexts/PacientesContext.tsx`
+- `src/contexts/AgendamentosContext.tsx`
+- `src/App.tsx` ou um pequeno ativador de rota criado em `src/contexts/`
+- `src/pages/painel/Dashboard.tsx`
+- Testes diretamente relacionados à ativação e às consultas do Dashboard
+
+`OperacionalContext`, `FilaContext`, bridges e páginas legadas só serão alterados se a verificação de consumidores provar ser indispensável para compatibilidade. Se isso exigir mudança de regra, fluxo ou item proibido, a implementação será interrompida.
+
+## Cargas que deixarão de ocorrer no login
+
+- Varredura integral de `pacientes`.
+- Carga global de `agendamentos` dos últimos 14 dias/futuro.
+- Carga de todos os agendamentos antigos ainda não finalizados.
+- Recarga integral desses conjuntos antes de alguma rota explicitamente ativá-los.
+
+Dados operacionais e fila permanecem fora desta alteração.
+
+## Proteções
+
+- Nenhuma mudança visual, textual ou de navegação.
+- Nenhuma mudança nas regras de Agenda, vagas, turnos, disponibilidade, bloqueios, status, prioridades, pendências ou notificações.
+- Nenhuma mudança em criação, edição, conclusão, cancelamento, falta, exclusão, impressão ou Novo Agendamento.
+- Nenhuma mudança em banco, tabelas, migrations, RPC, RLS, permissões, BPA, Prontuário ou SIGTAP.
+- Nenhuma mudança nas consultas por período da Agenda nesta etapa.
+- Nenhuma mudança na configuração, filtro ou estratégia dos canais Realtime; somente o loader integral ficará inativo até a rota solicitar o conjunto.
 
 ## Testes obrigatórios
 
-1. **Login:** recepção, profissional, Master de unidade e `admin.sms`; confirmar ausência de consultas completas a pacientes/agendamentos antes de uma rota solicitá-las.
-2. **Agenda:** mesma lista, ordem clínica, busca, filtros, abas, contadores, pendências, pendentes online, calendário mensal/semanal/diário, ocupação, vagas e bloqueios.
-3. **Ações:** Novo Agendamento, retorno, editar, remarcar, concluir, cancelar, falta, excluir, iniciar atendimento, impressão e notificações individuais/em massa, com os mesmos payloads e resultados.
-4. **Navegação:** trocar dia/semana/mês rapidamente; confirmar deduplicação, cancelamento de respostas antigas e ausência de mistura entre pacientes.
-5. **Realtime:** inserir, editar, mover de data, alterar status e excluir um agendamento; atualizar um paciente carregado; simular queda e reconexão.
-6. **Unidades e perfis:** trocar unidade como Master autorizado; profissional vê somente sua agenda; Master de unidade permanece isolado; `admin.sms` mantém visão global.
-7. **Outros módulos:** Dashboard, Pacientes, Fila, Prontuário, Triagem, Tratamentos, PTS, Relatórios e Avaliações mantêm dados e ações atuais ao navegar diretamente e ao voltar da Agenda.
-8. **Cache:** navegar por muitos meses e verificar limite de memória; logout/login e troca de unidade devem zerar dados anteriores.
-9. **Medição antes/depois:** quantidade de requisições, linhas transferidas, bytes, tempo até interatividade e memória após login, ao abrir Agenda e após alterar um agendamento.
-10. **Automação:** testes determinísticos de merge/deduplicação/expulsão, equivalência de pendências/contadores/ordem/vagas, testes de corrida; suíte existente, tipos, build, lint e `git diff --check`.
+1. **Login:** confirmar na rede que nenhuma paginação integral de pacientes nem as duas cargas globais de agendamentos ocorre antes de uma rota ativadora.
+2. **Dashboard:** comparar todos os cartões, gráfico semanal, gráfico por profissional e Agenda de Hoje antes/depois, para cada perfil e unidade.
+3. **Agenda:** abrir diretamente e após o Dashboard; comparar calendário, lista, filtros, pendências, contadores, vagas e todas as ações existentes.
+4. **Pacientes:** listagem, pesquisa, abertura por URL, criação e edição após ativação legada.
+5. **Fila:** listagem, detalhes, encaixe e vaga liberada com pacientes/agendamentos disponíveis.
+6. **Prontuário:** abertura direta, vínculo por paciente/agendamento e retorno à Agenda.
+7. **Demais ativadores:** Triagem, Tratamentos, PTS, Relatórios, Alta, Atualização Cadastral e Avaliação Multiprofissional.
+8. **Escopo:** recepção, profissional, Master de unidade e `admin.sms`; troca de unidade/usuário sem dados cruzados.
+9. **Navegação:** Dashboard → Agenda → Pacientes → Fila → Prontuário → Dashboard e sequência inversa.
+10. **Realtime:** confirmar que os canais e o comportamento atual permanecem funcionais depois da ativação, sem introduzir nova estratégia por escopo.
+11. **Concorrência:** duas ativações simultâneas fazem uma única carga; resposta de unidade anterior não substitui a atual.
+12. **Validação técnica:** suíte existente e novos testes, tipos, build, lint e `git diff --check`; débitos de lint preexistentes serão relatados separadamente.
 
-## Limites desta fase
+## Fora desta etapa
 
-Nenhuma alteração em banco, tabelas, migrations, RPC, RLS, permissões, BPA, Prontuário, SIGTAP, regras da Agenda, disponibilidade, pendências, status, prioridade, bloqueios, salas, notificações, interface ou fluxo. A implementação deve ser interrompida se a equivalência depender de modificar qualquer item proibido.
+A1.2, A1.3, A1.4 e A1.5 permanecem adiadas. Não haverá paginação/faixa nova na Agenda, hidratação mínima de pacientes, LRU/TTL nem Realtime filtrado por escopo.
 
-Nenhum arquivo de aplicação ou banco foi alterado nesta etapa; somente este plano foi registrado para revisão.
+Nenhum arquivo de aplicação ou banco foi alterado nesta etapa de revisão; apenas o plano foi restringido à A1.1.
