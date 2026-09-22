@@ -283,6 +283,29 @@ const Agenda: React.FC = () => {
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
 
+  // Índices locais derivados dos dados já carregados. Mantêm os mesmos objetos
+  // dos contextos, mas evitam buscas lineares repetidas durante filtros e ordenação.
+  const pacienteById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    pacientes.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [pacientes]);
+  const unidadeById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    unidades.forEach((u) => map.set(u.id, u));
+    return map;
+  }, [unidades]);
+
+  const agendamentosDoDia = React.useMemo(
+    () => agendamentos.filter((ag) => ag.data === selectedDate),
+    [agendamentos, selectedDate],
+  );
+  const dayAgIds = React.useMemo(
+    () => agendamentosDoDia.map((ag) => ag.id).sort(),
+    [agendamentosDoDia],
+  );
+  const dayAgIdsKey = React.useMemo(() => dayAgIds.join(","), [dayAgIds]);
+
   // Past-date hydration: when navigating to a date outside the default
   // 14-day window, on-demand fetch ALL agendamentos for that date so the
   // status panels (Confirmados, Aptos, Em atendimento, Concluídos, Faltou,
@@ -386,31 +409,49 @@ const Agenda: React.FC = () => {
     })();
   }, []);
 
-  // Load raw iniciado_em for em_atendimento agendamentos to compute alerts
+  // Load raw iniciado_em only for visible, new or changed appointments.
+  // Results are merged into a per-ID cache instead of replacing the whole map.
+  const rawSignatureByIdRef = React.useRef(new Map<string, string>());
   React.useEffect(() => {
-    const ids = agendamentos.filter(a => a.status === 'em_atendimento' || a.status === 'concluido').map(a => a.id);
-    if (ids.length === 0) { setAgendamentosRaw({}); return; }
+    const candidates = agendamentosDoDia.filter(
+      (a) => a.status === 'em_atendimento' || a.status === 'concluido',
+    );
+    const changedIds = candidates.flatMap((a) => {
+      const signature = [
+        a.status,
+        (a as any).atualizadoEm,
+        (a as any).atualizado_em,
+        (a as any).updated_at,
+      ].filter(Boolean).join('|');
+      if (rawSignatureByIdRef.current.get(a.id) === signature) return [];
+      rawSignatureByIdRef.current.set(a.id, signature);
+      return [a.id];
+    });
+    if (changedIds.length === 0) return;
+    let cancelled = false;
     (async () => {
       const map: Record<string, { iniciado_em: string | null; concluido_em: string | null }> = {};
       const chunk = 500;
-      for (let i = 0; i < ids.length; i += chunk) {
-        const slice = ids.slice(i, i + chunk);
+      for (let i = 0; i < changedIds.length; i += chunk) {
+        const slice = changedIds.slice(i, i + chunk);
         const { data } = await supabase
           .from('agendamentos')
           .select('id, iniciado_em, concluido_em')
           .in('id', slice);
         (data || []).forEach((r: any) => { map[r.id] = { iniciado_em: r.iniciado_em, concluido_em: r.concluido_em }; });
       }
-      setAgendamentosRaw(map);
+      if (!cancelled && Object.keys(map).length > 0) {
+        setAgendamentosRaw((prev) => ({ ...prev, ...map }));
+      }
     })();
-  }, [agendamentos]);
+    return () => { cancelled = true; };
+  }, [agendamentosDoDia]);
 
   // ── Triage records + arrival times for priority sorting ──
   const [triageMap, setTriageMap] = useState<Record<string, { risco: string; tea: boolean }>>({});
   const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
-    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
     if (dayAgIds.length === 0) { setTriageMap({}); setArrivalMap({}); return; }
     (async () => {
       const [triageRes, filaRes] = await Promise.all([
@@ -443,12 +484,12 @@ const Agenda: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [agendamentos, selectedDate]);
+  }, [dayAgIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime: refletir imediatamente nova classificação de risco da triagem
   useEffect(() => {
-    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
     if (dayAgIds.length === 0) return;
+    const visibleIds = new Set(dayAgIds);
     const channel = supabase
       .channel(`triage-agenda-${selectedDate}`)
       .on(
@@ -457,7 +498,7 @@ const Agenda: React.FC = () => {
         (payload) => {
           const row: any = (payload.new as any) || (payload.old as any);
           if (!row?.agendamento_id) return;
-          if (!dayAgIds.includes(row.agendamento_id)) return;
+          if (!visibleIds.has(row.agendamento_id)) return;
           setTriageMap((prev) => {
             const comorb: any[] = Array.isArray(row?.custom_data?.comorbidades) ? row.custom_data.comorbidades : [];
             const tea = comorb.some((c: any) => String(c || "").toUpperCase().includes("TEA"));
@@ -470,7 +511,7 @@ const Agenda: React.FC = () => {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [agendamentos, selectedDate]);
+  }, [dayAgIdsKey, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // NOVO: aba pendentes / agenda / pendencias_revisao
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes" | "pendencias_revisao">("agenda");
