@@ -45,6 +45,25 @@ interface CalendarioAgendaProps {
   unidades: any[];
 }
 
+const STATUS_NAO_OCUPA = new Set(["cancelado", "falta", "excluido", "removido", "inativo"]);
+const STATUS_POSTERIORES = new Set([
+  "confirmado_chegada", "chegada_confirmada", "aguardando_triagem", "triagem_concluida",
+  "aguardando_atendimento", "aguardando_profissional", "apto_atendimento", "apto",
+  "em_atendimento", "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
+]);
+
+type DayCounts = DiaInfo["counts"];
+
+const emptyCounts = (): DayCounts => ({
+  confirmados: 0,
+  aptos: 0,
+  emAtendimento: 0,
+  concluidos: 0,
+  faltou: 0,
+  cancelados: 0,
+  pendentes: 0,
+});
+
 export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   selectedDate,
   onDateChange,
@@ -82,7 +101,56 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     onVisibleRangeChange(day, day);
   }, [currentDate, view, onVisibleRangeChange]);
 
-  const STATUS_NAO_OCUPA = new Set(["cancelado", "falta", "excluido", "removido", "inativo"]);
+  const profsFiltrados = useMemo(() => effectiveProfFilter !== "all" ? profissionais.filter(p => p.id === effectiveProfFilter) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [effectiveProfFilter, filterUnit, profissionais]);
+
+  // Um único percurso calcula todos os totais por data já com os filtros atuais.
+  const dayAppointmentSummaries = useMemo(() => {
+    const todayStrCal = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
+    const summaries = new Map<string, { agendamentosCount: number; counts: DayCounts }>();
+    for (const ag of agendamentos) {
+      if (effectiveProfFilter !== "all" && ag.profissionalId !== effectiveProfFilter) continue;
+      if (filterUnit !== "all" && ag.unidadeId !== filterUnit) continue;
+      let summary = summaries.get(ag.data);
+      if (!summary) {
+        summary = { agendamentosCount: 0, counts: emptyCounts() };
+        summaries.set(ag.data, summary);
+      }
+      if (!STATUS_NAO_OCUPA.has(ag.status)) summary.agendamentosCount += 1;
+      const rawStatus = String(ag.status || "").toLowerCase();
+      const status = ag.data && ag.data > todayStrCal && STATUS_POSTERIORES.has(rawStatus)
+        ? "confirmado"
+        : rawStatus;
+      if (status === "confirmado") summary.counts.confirmados += 1;
+      if (status === "apto_atendimento") summary.counts.aptos += 1;
+      if (status === "em_atendimento") summary.counts.emAtendimento += 1;
+      if (status === "concluido" || status === "finalizado") summary.counts.concluidos += 1;
+      if (status === "falta") summary.counts.faltou += 1;
+      if (status === "cancelado") summary.counts.cancelados += 1;
+      if (status === "pendente") summary.counts.pendentes += 1;
+    }
+    return summaries;
+  }, [agendamentos, effectiveProfFilter, filterUnit]);
+
+  // Disponibilidades têm identidade exata profissional/unidade. A ordem dentro
+  // de cada grupo é preservada para manter a regra atual de "primeiro registro".
+  const disponibilidadesByProfUnit = useMemo(() => {
+    const index = new Map<string, any[]>();
+    for (const disp of disponibilidades) {
+      const key = `${disp.profissionalId}|${disp.unidadeId}`;
+      const entries = index.get(key);
+      if (entries) entries.push(disp);
+      else index.set(key, [disp]);
+    }
+    return index;
+  }, [disponibilidades]);
+
+  const bloqueiosDiaInteiro = useMemo(
+    () => bloqueios.filter((bloqueio: any) => bloqueio.diaInteiro),
+    [bloqueios],
+  );
 
   const getDayStatus = (dateStr: string, profs: any[]): DiaInfo => {
     const date = dateStrToUtcDate(dateStr);
@@ -90,61 +158,27 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     const isToday = dateStr === todayLocalStr();
     const isPast = dateStr < todayLocalStr();
 
-    let agendamentosCount = 0;
+    const appointmentSummary = dayAppointmentSummaries.get(dateStr);
+    const agendamentosCount = appointmentSummary?.agendamentosCount || 0;
     let totalVagas = 0;
     let hasDisponibilidade = false;
     let allBlocked = profs.length > 0;
 
-    const dayAgendamentos = agendamentos.filter(a => a.data === dateStr);
-    
-    // Filtro por profissional e unidade
-    const relevantAgs = dayAgendamentos.filter(a => {
-      const matchProf = effectiveProfFilter === "all" || a.profissionalId === effectiveProfFilter;
-      const matchUnit = filterUnit === "all" || a.unidadeId === filterUnit;
-      return matchProf && matchUnit;
-    });
-
-    // Normaliza status para datas futuras: agendamentos cuja data ainda não chegou
-    // não podem ter status pós-chegada (apto/em atendimento/concluído). Tratamos como "confirmado".
-    const todayStrCal = (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })();
-    const POSTERIORES = new Set([
-      "confirmado_chegada","chegada_confirmada","aguardando_triagem","triagem_concluida",
-      "aguardando_atendimento","aguardando_profissional","apto_atendimento","apto",
-      "em_atendimento","concluido","finalizado","atendido","atendimento_encerrado","prontuario_finalizado",
-    ]);
-    const effectiveStatus = (a: any): string => {
-      const s = String(a.status || "").toLowerCase();
-      if (a.data && a.data > todayStrCal && POSTERIORES.has(s)) return "confirmado";
-      return s;
-    };
-
-    const counts = {
-      confirmados: relevantAgs.filter(a => effectiveStatus(a) === "confirmado").length,
-      aptos: relevantAgs.filter(a => effectiveStatus(a) === "apto_atendimento").length,
-      emAtendimento: relevantAgs.filter(a => effectiveStatus(a) === "em_atendimento").length,
-      concluidos: relevantAgs.filter(a => ["concluido", "finalizado"].includes(effectiveStatus(a))).length,
-      faltou: relevantAgs.filter(a => effectiveStatus(a) === "falta").length,
-      cancelados: relevantAgs.filter(a => effectiveStatus(a) === "cancelado").length,
-      pendentes: relevantAgs.filter(a => effectiveStatus(a) === "pendente").length,
-    };
-
-    agendamentosCount = relevantAgs.filter(a => !STATUS_NAO_OCUPA.has(a.status)).length;
+    const counts = appointmentSummary?.counts || emptyCounts();
 
     for (const prof of profs) {
       const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-      const isBlocked = bloqueios.some((b: any) => {
+      const isBlocked = bloqueiosDiaInteiro.some((b: any) => {
         if (dateStr < b.dataInicio || dateStr > b.dataFim) return false;
-        return (b.diaInteiro && ((!b.unidadeId || b.unidadeId === profUnit) && (!b.profissionalId || b.profissionalId === prof.id)));
+        return ((!b.unidadeId || b.unidadeId === profUnit) && (!b.profissionalId || b.profissionalId === prof.id));
       });
       allBlocked = allBlocked && isBlocked;
-      const profHasDisp = disponibilidades.some((d) => (d.profissionalId === prof.id && d.unidadeId === profUnit && dateStr >= d.dataInicio && dateStr <= d.dataFim && d.diasSemana.includes(dayOfWeek)));
+      const profDisponibilidades = disponibilidadesByProfUnit.get(`${prof.id}|${profUnit}`) || [];
+      const disp = profDisponibilidades.find((d) => dateStr >= d.dataInicio && dateStr <= d.dataFim && d.diasSemana.includes(dayOfWeek));
+      const profHasDisp = !!disp;
       hasDisponibilidade = hasDisponibilidade || profHasDisp;
 
       if (!isBlocked && profUnit) {
-        const disp = disponibilidades.find((d) => (d.profissionalId === prof.id && d.unidadeId === profUnit && dateStr >= d.dataInicio && dateStr <= d.dataFim && d.diasSemana.includes(dayOfWeek)));
         if (disp) totalVagas += (disp.vagasPorDia || 25);
       }
     }
@@ -160,8 +194,6 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
     return { date: dateStr, dayNumber: date.getUTCDate(), isToday, isSelected: dateStr === selectedDate, status, agendamentosCount, totalVagas, counts };
   };
-
-  const profsFiltrados = useMemo(() => effectiveProfFilter !== "all" ? profissionais.filter(p => p.id === effectiveProfFilter) : profissionais.filter(p => filterUnit === "all" || p.unidadeId === filterUnit), [effectiveProfFilter, filterUnit, profissionais]);
 
   const navDate = (delta: number) => {
     const next = new Date(currentDate);

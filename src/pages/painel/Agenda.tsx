@@ -411,20 +411,14 @@ const Agenda: React.FC = () => {
 
   // Load raw iniciado_em only for visible, new or changed appointments.
   // Results are merged into a per-ID cache instead of replacing the whole map.
-  const rawSignatureByIdRef = React.useRef(new Map<string, string>());
+  const rawSourceByIdRef = React.useRef(new Map<string, any>());
   React.useEffect(() => {
     const candidates = agendamentosDoDia.filter(
       (a) => a.status === 'em_atendimento' || a.status === 'concluido',
     );
     const changedIds = candidates.flatMap((a) => {
-      const signature = [
-        a.status,
-        (a as any).atualizadoEm,
-        (a as any).atualizado_em,
-        (a as any).updated_at,
-      ].filter(Boolean).join('|');
-      if (rawSignatureByIdRef.current.get(a.id) === signature) return [];
-      rawSignatureByIdRef.current.set(a.id, signature);
+      if (rawSourceByIdRef.current.get(a.id) === a) return [];
+      rawSourceByIdRef.current.set(a.id, a);
       return [a.id];
     });
     if (changedIds.length === 0) return;
