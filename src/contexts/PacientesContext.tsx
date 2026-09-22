@@ -24,6 +24,7 @@ interface PacientesContextType {
   addPaciente: (p: Paciente) => Promise<void>;
   updatePaciente: (id: string, data: Partial<Paciente>) => Promise<void>;
   refreshPacientes: () => Promise<void>;
+  activateLegacyPacientes: () => Promise<void>;
 }
 
 const PacientesContext = createContext<PacientesContextType | null>(null);
@@ -82,6 +83,12 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   const isGlobalAdmin = authUser?.usuario === "admin.sms";
 
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
+  const legacyActiveRef = useRef(false);
+  const legacyLoadedRef = useRef(false);
+  const legacyLoadRef = useRef<Promise<void> | null>(null);
+  const scopeKey = `${authUser?.id || "anonymous"}|${isGlobalAdmin ? "all" : authUser?.unidadeId || "none"}`;
+  const scopeKeyRef = useRef(scopeKey);
+  scopeKeyRef.current = scopeKey;
 
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
@@ -91,6 +98,7 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   );
 
   const loadPacientes = useCallback(async () => {
+    const requestedScope = scopeKey;
     try {
       const scopedUnidadeId = await resolveScopedUnidadeId();
       if (!isGlobalAdmin && !scopedUnidadeId) {
@@ -121,15 +129,33 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
         if (data.length < PAGE) break;
         from += PAGE;
       }
-      setPacientes(allData.map(mapPacienteRow));
+      if (scopeKeyRef.current === requestedScope) {
+        setPacientes(allData.map(mapPacienteRow));
+      }
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
-  }, [isGlobalAdmin, resolveScopedUnidadeId]);
+  }, [isGlobalAdmin, resolveScopedUnidadeId, scopeKey]);
 
   const refreshPacientes = useCallback(async () => {
+    legacyActiveRef.current = true;
     await loadPacientes();
-  }, [loadPacientes]);
+    if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
+  }, [loadPacientes, scopeKey]);
+
+  const activateLegacyPacientes = useCallback(async () => {
+    legacyActiveRef.current = true;
+    if (legacyLoadedRef.current) return;
+    if (legacyLoadRef.current) return legacyLoadRef.current;
+
+    const pending = loadPacientes().then(() => {
+      if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
+    }).finally(() => {
+      if (legacyLoadRef.current === pending) legacyLoadRef.current = null;
+    });
+    legacyLoadRef.current = pending;
+    return pending;
+  }, [loadPacientes, scopeKey]);
 
   const addPaciente = useCallback(
     async (p: Paciente) => {
@@ -215,25 +241,30 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     [authUser?.role, invalidateCache, queryClient, resolveScopedUnidadeId],
   );
 
-  // Carrega quando o usuário autenticar
+  // A1.1: mantém o provider montado, mas só ativa a carga legada sob demanda.
   useEffect(() => {
-    if (!authUser) return;
-    loadPacientes();
-  }, [authUser, loadPacientes]);
+    legacyActiveRef.current = false;
+    legacyLoadedRef.current = false;
+    legacyLoadRef.current = null;
+    setPacientes([]);
+  }, [scopeKey]);
 
   // Realtime — full-reload debounced pelo próprio hook (poll fallback)
   useRealtimeSync({
     enabled: !!authUser,
     table: "pacientes",
     onEvent: () => {
-      refreshPacientes();
+      if (legacyActiveRef.current) loadPacientes();
     },
-    poll: refreshPacientes,
+    poll: () => {
+      if (legacyActiveRef.current) return loadPacientes();
+      return Promise.resolve();
+    },
   });
 
   const value = useMemo<PacientesContextType>(
-    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes }),
-    [pacientes, addPaciente, updatePaciente, refreshPacientes],
+    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes }),
+    [pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes],
   );
 
   return <PacientesContext.Provider value={value}>{children}</PacientesContext.Provider>;

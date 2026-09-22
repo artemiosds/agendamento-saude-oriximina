@@ -3,6 +3,7 @@ import { AgendamentosSliceProvider } from "@/contexts/AgendamentosContext";
 import { PacientesSliceProvider } from "@/contexts/PacientesContext";
 import { FilaSliceProvider } from "@/contexts/FilaContext";
 import { OperacionalSliceProvider } from "@/contexts/OperacionalContext";
+import { LegacyRouteDataActivator } from "@/contexts/LegacyRouteDataActivator";
 
 /**
  * DomainProviders — aninha os 4 sub-contextos de domínio
@@ -13,7 +14,10 @@ export const DomainProviders: React.FC<{ children: React.ReactNode }> = ({ child
     <OperacionalSliceProvider>
       <PacientesSliceProvider>
         <AgendamentosSliceProvider>
-          <FilaSliceProvider>{children}</FilaSliceProvider>
+          <FilaSliceProvider>
+            <LegacyRouteDataActivator />
+            {children}
+          </FilaSliceProvider>
         </AgendamentosSliceProvider>
       </PacientesSliceProvider>
     </OperacionalSliceProvider>

@@ -37,6 +37,7 @@ interface AgendamentosContextType {
   cancelAgendamento: (id: string) => Promise<FilaEspera[]>;
   deleteAgendamento: (id: string) => Promise<void>;
   refreshAgendamentos: () => Promise<void>;
+  activateLegacyAgendamentos: () => Promise<void>;
   ensureAgendamentosForDate: (date: string) => Promise<void>;
   ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
   atendimentos: Atendimento[];
@@ -122,6 +123,12 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
   const agendamentosRef = useRef(agendamentos);
   agendamentosRef.current = agendamentos;
   const loadedExtraDatesRef = useRef<Set<string>>(new Set());
+  const legacyActiveRef = useRef(false);
+  const legacyLoadedRef = useRef(false);
+  const legacyLoadRef = useRef<Promise<void> | null>(null);
+  const scopeKey = `${authUser?.id || "anonymous"}|${isGlobalAdmin ? "all" : userUnidadeId || "none"}`;
+  const scopeKeyRef = useRef(scopeKey);
+  scopeKeyRef.current = scopeKey;
 
   // Mantém o snapshot module-level em dia para o bridge com o DataProvider
   // (memos `appointmentCountsByKey`/`appointmentsByDateProfUnit`).
@@ -137,6 +144,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
   );
 
   const loadAgendamentos = useCallback(async () => {
+    const requestedScope = scopeKey;
     try {
       // PERF: reduced window from 30 to 14 days back to keep startup fast.
       // Older appointments remain accessible through the Histórico/Auditoria pages,
@@ -197,6 +205,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         ).values(),
       );
       const mapped = allData.map(mapAgendamentoRow);
+      if (scopeKeyRef.current !== requestedScope) return;
       setAgendamentos((prev) => {
         const scopeKey = userUnidadeId || "all";
         const map = new Map<string, Agendamento>();
@@ -212,7 +221,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
-  }, [isGlobalAdmin, userUnidadeId]);
+  }, [isGlobalAdmin, userUnidadeId, scopeKey]);
 
   // On-demand loaders: fetch ALL agendamentos (any status) for past days/ranges
   // and merge into memory, preserving them across realtime polling refreshes.
@@ -283,8 +292,24 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
   );
 
   const refreshAgendamentos = useCallback(async () => {
+    legacyActiveRef.current = true;
     await loadAgendamentos();
-  }, [loadAgendamentos]);
+    if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
+  }, [loadAgendamentos, scopeKey]);
+
+  const activateLegacyAgendamentos = useCallback(async () => {
+    legacyActiveRef.current = true;
+    if (legacyLoadedRef.current) return;
+    if (legacyLoadRef.current) return legacyLoadRef.current;
+
+    const pending = loadAgendamentos().then(() => {
+      if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
+    }).finally(() => {
+      if (legacyLoadRef.current === pending) legacyLoadRef.current = null;
+    });
+    legacyLoadRef.current = pending;
+    return pending;
+  }, [loadAgendamentos, scopeKey]);
 
   // Handler de upsert incremental do canal `agendamentos`.
   const applyAgendamentoRealtimeEvent = useCallback(
@@ -610,11 +635,14 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     [invalidateCache],
   );
 
-  // Carrega quando o usuário autenticar
+  // A1.1: mantém o provider montado, mas só ativa a carga legada sob demanda.
   useEffect(() => {
-    if (!authUser) return;
-    loadAgendamentos();
-  }, [authUser, loadAgendamentos]);
+    legacyActiveRef.current = false;
+    legacyLoadedRef.current = false;
+    legacyLoadRef.current = null;
+    loadedExtraDatesRef.current.clear();
+    setAgendamentos([]);
+  }, [scopeKey]);
 
   // Realtime ownership migrado do DataProvider (rt:public:agendamentos:all).
   // Handler preserva upsert incremental interiorizado neste slice.
@@ -622,7 +650,10 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     enabled: !!authUser,
     table: "agendamentos",
     onEvent: applyAgendamentoRealtimeEvent,
-    poll: refreshAgendamentos,
+    poll: () => {
+      if (legacyActiveRef.current) return loadAgendamentos();
+      return Promise.resolve();
+    },
   });
 
   const value = useMemo<AgendamentosContextType>(
@@ -633,6 +664,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       cancelAgendamento,
       deleteAgendamento,
       refreshAgendamentos,
+      activateLegacyAgendamentos,
       ensureAgendamentosForDate,
       ensureAgendamentosForRange,
       atendimentos,
@@ -646,6 +678,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       cancelAgendamento,
       deleteAgendamento,
       refreshAgendamentos,
+      activateLegacyAgendamentos,
       ensureAgendamentosForDate,
       ensureAgendamentosForRange,
       atendimentos,
