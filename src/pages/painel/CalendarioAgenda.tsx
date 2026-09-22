@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar, CalendarDays, CalendarRange } from "lucide-react";
@@ -152,7 +152,23 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     [bloqueios],
   );
 
-  const getDayStatus = (dateStr: string, profs: any[]): DiaInfo => {
+  const visibleDateStrings = useMemo(() => {
+    if (view === "month") {
+      return eachDayOfInterval({
+        start: startOfWeek(startOfMonth(currentDate)),
+        end: endOfWeek(endOfMonth(currentDate)),
+      }).map(localDateStr);
+    }
+    if (view === "week") {
+      return eachDayOfInterval({
+        start: startOfWeek(currentDate),
+        end: endOfWeek(currentDate),
+      }).map(localDateStr);
+    }
+    return [selectedDate];
+  }, [currentDate, selectedDate, view]);
+
+  const getDayStatus = useCallback((dateStr: string, profs: any[]): DiaInfo => {
     const date = dateStrToUtcDate(dateStr);
     const dayOfWeek = date.getUTCDay();
     const isToday = dateStr === todayLocalStr();
@@ -193,7 +209,15 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     } else if (hasDisponibilidade) status = "full";
 
     return { date: dateStr, dayNumber: date.getUTCDate(), isToday, isSelected: dateStr === selectedDate, status, agendamentosCount, totalVagas, counts };
-  };
+  }, [bloqueiosDiaInteiro, dayAppointmentSummaries, disponibilidadesByProfUnit, filterUnit, selectedDate]);
+
+  const dayInfoByDate = useMemo(() => {
+    const index = new Map<string, DiaInfo>();
+    for (const dateStr of visibleDateStrings) {
+      index.set(dateStr, getDayStatus(dateStr, profsFiltrados));
+    }
+    return index;
+  }, [getDayStatus, profsFiltrados, visibleDateStrings]);
 
   const navDate = (delta: number) => {
     const next = new Date(currentDate);
@@ -217,7 +241,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
         ))}
         {days.map(d => {
           const ds = localDateStr(d);
-          const info = getDayStatus(ds, profsFiltrados);
+          const info = dayInfoByDate.get(ds)!;
           const isCurrMonth = isSameMonth(d, currentDate);
           
           return (
@@ -300,7 +324,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       <div className="grid grid-cols-7 gap-2">
         {days.map(d => {
           const ds = localDateStr(d);
-          const info = getDayStatus(ds, profsFiltrados);
+          const info = dayInfoByDate.get(ds)!;
           return (
             <div 
               key={ds} 
@@ -327,7 +351,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
   const renderDay = () => {
     const date = dateStrToUtcDate(selectedDate);
-    const info = getDayStatus(selectedDate, profsFiltrados);
+    const info = dayInfoByDate.get(selectedDate)!;
     return (
       <div className="p-4 border rounded-xl bg-card shadow-sm border-primary/10">
         <div className="flex justify-between items-center mb-4">
