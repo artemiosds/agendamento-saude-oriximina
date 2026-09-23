@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
+import { compareClinicalAndLegalPriority, hasTriageTea, legalPriorityKey } from '@/lib/queuePriority';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
 import { isSameDay } from "date-fns";
@@ -474,7 +475,7 @@ const Agenda: React.FC = () => {
           const m: Record<string, { risco: string; tea: boolean }> = {};
           for (const r of triageRes.data as any[]) {
             const comorb: any[] = Array.isArray(r?.custom_data?.comorbidades) ? r.custom_data.comorbidades : [];
-            const tea = comorb.some((c) => String(c || "").toUpperCase().includes("TEA"));
+            const tea = hasTriageTea(comorb);
             m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase(), tea };
           }
           setTriageMap(m);
@@ -506,7 +507,7 @@ const Agenda: React.FC = () => {
           if (!visibleIds.has(row.agendamento_id)) return;
           setTriageMap((prev) => {
             const comorb: any[] = Array.isArray(row?.custom_data?.comorbidades) ? row.custom_data.comorbidades : [];
-            const tea = comorb.some((c: any) => String(c || "").toUpperCase().includes("TEA"));
+            const tea = hasTriageTea(comorb);
             return {
               ...prev,
               [row.agendamento_id]: { risco: String(row.classificacao_risco || "").toLowerCase(), tea },
@@ -753,16 +754,8 @@ const Agenda: React.FC = () => {
     // Peso da classificação de risco (Manchester) — menor = mais urgente
     // 1=Vermelho, 2=Laranja, 3=Amarelo, 4=Verde, 5=Azul, 6=Sem classificação
     const getPesoClassificacaoRisco = (ag: any): number => {
-      const triage = triageMap[ag.id];
-      const raw =
-        triage?.risco ||
-        ag.classificacaoRisco ||
-        ag.classificacao_risco ||
-        ag.risco ||
-        ag.corRisco ||
-        ag.triagem?.classificacaoRisco ||
-        ag.triagem?.classificacao_risco ||
-        "";
+      // Only a triage record can assign clinical risk. Cadastro/agenda priority cannot.
+      const raw = triageMap[ag.id]?.risco || "";
       const r = String(raw).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       if (!r) return 6;
       if (r.includes("vermelho") || r.includes("emergencia") || r.includes("imediato")) return 1;
@@ -824,20 +817,6 @@ const Agenda: React.FC = () => {
       return String(ag.status || "").toLowerCase() === "apto_atendimento";
     };
 
-    // Idade (número) — usado para prioridade legal (≥80, ≥60)
-    const getIdade = (ag: any): number => {
-      const pac = pacienteById.get(ag.pacienteId);
-      const nasc = (pac as any)?.dataNascimento || (pac as any)?.data_nascimento;
-      if (!nasc) return -1;
-      try {
-        const idade = calcularIdade(nasc);
-        return typeof idade === "number" && !isNaN(idade) ? idade : -1;
-      } catch { return -1; }
-    };
-
-    // TEA vem de triage_records.custom_data.comorbidades
-    const isTea = (ag: any): boolean => !!triageMap[ag.id]?.tea;
-
     // Chave de desempate: hora_chegada real (arrivalMap) → fallback hora agendada
     const getArrivalKey = (ag: any): string => {
       const chegada = arrivalMap[ag.id];
@@ -863,21 +842,22 @@ const Agenda: React.FC = () => {
     const sortKeys = new Map<string, {
       turno: number;
       concluido: number;
+      chegou: number;
       risco: number;
-      idade: number;
-      prioridade: number;
+      prioridade: ReturnType<typeof legalPriorityKey>;
       apto: number;
       chegada: string;
     }>();
     for (const ag of base) {
-      const idade = getIdade(ag);
       const pac = pacienteById.get(ag.pacienteId);
+      const status = String(ag.status || "").toLowerCase();
+      const chegou = ["confirmado_chegada", "chegada_confirmada", "aguardando_triagem", "triagem_concluida", "aguardando_enfermagem", "aguardando_atendimento", "apto_atendimento", "chamado", "em_atendimento"].includes(status);
       sortKeys.set(ag.id, {
         turno: getTurnoSortGroup(ag),
         concluido: isConcluido(ag) ? 1 : 0,
+        chegou: isToday && !chegou ? 1 : 0,
         risco: getPesoClassificacaoRisco(ag),
-        idade,
-        prioridade: (idade >= 60 || isTea(ag) || !!pac?.isGestante || !!pac?.isPne) ? 0 : 1,
+        prioridade: legalPriorityKey(pac, !!triageMap[ag.id]?.tea),
         apto: isApto(ag) ? 0 : 1,
         chegada: getArrivalKey(ag),
       });
@@ -887,24 +867,19 @@ const Agenda: React.FC = () => {
         const keyA = sortKeys.get(a.id);
         const keyB = sortKeys.get(b.id);
         if (!keyA || !keyB) return 0;
-        // 1. Turno — manhã antes de tarde (respeitando tardeAtiva do dia atual)
-        if (keyA.turno !== keyB.turno) return keyA.turno - keyB.turno;
-
-        // 2. Concluídos vão para o fim absoluto
+        // Concluídos vão para o fim; quem ainda não chegou não disputa a fila.
         if (keyA.concluido !== keyB.concluido) return keyA.concluido - keyB.concluido;
+        if (keyA.chegou !== keyB.chegou) return keyA.chegou - keyB.chegou;
 
-        // 3. Risco Clínico (Soberania de Manchester) — fura qualquer fila administrativa
-        if (keyA.risco !== keyB.risco) return keyA.risco - keyB.risco;
+        // Agendamentos sem chegada mantêm os turnos; pacientes presentes
+        // respeitam o risco clínico mesmo se chegaram em turnos diferentes.
+        if ((!isToday || keyA.chegou === 1) && keyA.turno !== keyB.turno) return keyA.turno - keyB.turno;
 
-        // 4. Prioridade Legal Especial (Lei 13.466/2017) — ≥80 anos, dentro do mesmo risco
-        const super80A = keyA.idade >= 80 ? 0 : 1;
-        const super80B = keyB.idade >= 80 ? 0 : 1;
-        if (super80A !== super80B) return super80A - super80B;
+        // Risco clínico precede a prioridade automática pelo cadastro/triagem.
+        const prioridade = compareClinicalAndLegalPriority(keyA.risco, keyA.prioridade, keyB.risco, keyB.prioridade);
+        if (prioridade) return prioridade;
 
-        // 5. Prioridade Legal Padrão — ≥60 anos OU TEA OU Gestante OU PNE (empatam entre si)
-        if (keyA.prioridade !== keyB.prioridade) return keyA.prioridade - keyB.prioridade;
-
-        // 6. Status da fila — apto_atendimento sobe frente aos que aguardam triagem
+        // Status da fila — apto_atendimento sobe frente aos que aguardam triagem
         if (keyA.apto !== keyB.apto) return keyA.apto - keyB.apto;
 
         // 7. Desempate final — ordem real de chegada (fallback: hora agendada)

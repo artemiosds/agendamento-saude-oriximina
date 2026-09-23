@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MANCHESTER_LEVELS, type ManchesterLevel } from "@/lib/manchesterProtocol";
+import { compareLegalPriority, legalPriorityKey } from "@/lib/queuePriority";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMinutes } from "date-fns";
@@ -39,6 +40,7 @@ interface Agendamento {
   filaId: string;
   filaStatus: string;
   filaCriadoEm?: string;
+  filaHoraChegada?: string;
   pacienteId: string;
   pacienteNome: string;
   pacienteDataNascimento?: string;
@@ -46,6 +48,7 @@ interface Agendamento {
   pacienteIsGestante?: boolean;
   pacienteIsPne?: boolean;
   pacienteIsAutista?: boolean;
+  prioridadeLegal?: ReturnType<typeof legalPriorityKey>;
   unidadeId: string;
   profissionalId: string;
   profissionalNome: string;
@@ -452,6 +455,7 @@ const Triagem: React.FC = () => {
           filaId: item.id,
           filaStatus: item.status,
           filaCriadoEm: item.criadoEm,
+          filaHoraChegada: item.horaChegada,
           pacienteId: item.pacienteId,
           pacienteNome: agendamentoRelacionado?.pacienteNome || item.pacienteNome,
           pacienteDataNascimento: formatted,
@@ -459,6 +463,7 @@ const Triagem: React.FC = () => {
           pacienteIsGestante: !!pac?.isGestante,
           pacienteIsPne: !!pac?.isPne,
           pacienteIsAutista: !!pac?.isAutista,
+          prioridadeLegal: legalPriorityKey(pac),
           unidadeId: item.unidadeId,
           profissionalId,
           profissionalNome: agendamentoRelacionado?.profissionalNome || "—",
@@ -474,14 +479,13 @@ const Triagem: React.FC = () => {
       .filter((item): item is Agendamento => Boolean(item))
       .filter((item) => !termo || item.pacienteNome.toLowerCase().includes(termo))
       .sort((a, b) => {
-        // Grupo prioritário: Idoso ≥60 (Lei 10.741/2003) OU Gestante OU PNE OU TEA/Autista
-        const aPrio = ((a.pacienteIdade ?? -1) >= 60 || a.pacienteIsGestante || a.pacienteIsPne || a.pacienteIsAutista) ? 1 : 0;
-        const bPrio = ((b.pacienteIdade ?? -1) >= 60 || b.pacienteIsGestante || b.pacienteIsPne || b.pacienteIsAutista) ? 1 : 0;
-        if (aPrio !== bPrio) return bPrio - aPrio;
-        // Dentro do grupo, ordena por horário de chegada (mais antigo primeiro)
-        const aChegada = a.filaCriadoEm || '';
-        const bChegada = b.filaCriadoEm || '';
-        if (aChegada && bChegada) return aChegada.localeCompare(bChegada);
+        const prioridade = compareLegalPriority(a.prioridadeLegal!, b.prioridadeLegal!);
+        if (prioridade) return prioridade;
+        // Entre prioridades equivalentes, prevalece a chegada mais antiga.
+        if (a.filaHoraChegada && b.filaHoraChegada && a.filaHoraChegada !== b.filaHoraChegada) {
+          return a.filaHoraChegada.localeCompare(b.filaHoraChegada);
+        }
+        if (a.filaCriadoEm && b.filaCriadoEm) return a.filaCriadoEm.localeCompare(b.filaCriadoEm);
         return (a.hora || '').localeCompare(b.hora || '');
       });
   }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca, profTriageDisabled]);

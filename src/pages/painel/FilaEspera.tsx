@@ -68,6 +68,7 @@ import { checkPatientDuplicity } from "@/lib/paciente-duplicity";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { getManchesterConfig } from "@/lib/manchesterProtocol";
+import { compareClinicalAndLegalPriority, hasTriageTea, legalPriorityKey } from "@/lib/queuePriority";
 import FilaEsperaItemRow from "./fila/FilaEsperaItemRow";
 
 const ABSENCE_REASONS = [
@@ -416,41 +417,53 @@ const FilaEspera: React.FC = () => {
     azul: 5,
   };
 
+  // FilaContext stores administrative priority, not the clinical triage record.
+  const filaIds = useMemo(() => fila.map((f) => f.id).sort().join(","), [fila]);
+  const [triageByFilaId, setTriageByFilaId] = useState<Record<string, { risco: string; tea: boolean }>>({});
+  useEffect(() => {
+    const ids = filaIds ? filaIds.split(",") : [];
+    if (!ids.length) { setTriageByFilaId({}); return; }
+    let cancelled = false;
+    (async () => {
+      const records: Record<string, { risco: string; tea: boolean }> = {};
+      for (let i = 0; i < ids.length; i += 500) {
+        const { data, error } = await supabase.from("triage_records")
+          .select("agendamento_id, classificacao_risco, custom_data")
+          .in("agendamento_id", ids.slice(i, i + 500));
+        if (error) break;
+        for (const row of data || []) {
+          const custom = row.custom_data as { comorbidades?: unknown } | null;
+          records[row.agendamento_id] = {
+            risco: String(row.classificacao_risco || "").toLowerCase(),
+            tea: hasTriageTea(custom?.comorbidades),
+          };
+        }
+      }
+      if (!cancelled) setTriageByFilaId(records);
+    })();
+    const visible = new Set(ids);
+    const channel = supabase.channel("triage-fila-priority")
+      .on("postgres_changes", { event: "*", schema: "public", table: "triage_records" }, (payload) => {
+        const row = (payload.new || payload.old) as { agendamento_id?: string; classificacao_risco?: string; custom_data?: { comorbidades?: unknown } };
+        if (!row.agendamento_id || !visible.has(row.agendamento_id)) return;
+        setTriageByFilaId((previous) => ({ ...previous, [row.agendamento_id!]: {
+          risco: String(row.classificacao_risco || "").toLowerCase(),
+          tea: hasTriageTea(row.custom_data?.comorbidades),
+        } }));
+      }).subscribe();
+    return () => { cancelled = true; void supabase.removeChannel(channel); };
+  }, [filaIds]);
+
   const sortTimestamp = sortField === "tempo" ? now : 0;
 
   const filteredFila = useMemo(() => {
-    const ageCache = new Map<string, number>();
-
-    // Helper: calculate age from dataNascimento
-    const getAge = (pacienteId: string): number => {
-      const cachedAge = ageCache.get(pacienteId);
-      if (cachedAge !== undefined) return cachedAge;
-
-      const pac = pacienteMap.get(pacienteId);
-      if (!pac?.dataNascimento) {
-        ageCache.set(pacienteId, 0);
-        return 0;
-      }
-      const birth = new Date(pac.dataNascimento);
-      if (isNaN(birth.getTime())) {
-        ageCache.set(pacienteId, 0);
-        return 0;
-      }
-      const today = new Date();
-      let age = today.getFullYear() - birth.getFullYear();
-      const m = today.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-      ageCache.set(pacienteId, age);
-      return age;
-    };
-
-    // Legal priority order (idoso 60+, gestante, pcd, crianca de colo)
-    const legalPrioOrder: Record<string, number> = {
-      gestante: 0,
-      idoso: 1,
-      pcd: 2,
-      crianca: 3,
-    };
+    const keys = new Map(fila.map((f) => {
+      const patient = pacienteMap.get(f.pacienteId);
+      const priority = legalPriorityKey(patient, triageByFilaId[f.id]?.tea);
+      // Keep an explicitly registered queue priority when the patient record is incomplete.
+      if (priority.tier === 2 && ["gestante", "idoso", "pcd", "crianca"].includes(f.prioridade)) priority.tier = 1;
+      return [f.id, { priority, risk: manchesterOrder[triageByFilaId[f.id]?.risco] ?? 6 }] as const;
+    }));
 
     const query = debouncedSearchQuery.toLowerCase().trim();
     return [...fila]
@@ -462,30 +475,14 @@ const FilaEspera: React.FC = () => {
       .filter((f) => filterEspecialidade === "all" || (f as any).especialidadeDestino === filterEspecialidade)
       .sort((a, b) => {
         if (sortField === "prioridade") {
-          // 1º Manchester classification
-          const aManchester = manchesterOrder[(a as any).classificacaoRisco] ?? 6;
-          const bManchester = manchesterOrder[(b as any).classificacaoRisco] ?? 6;
-          if (aManchester !== bManchester) return aManchester - bManchester;
-
-          // 2º Prioridade Especial: 80+ years
-          const aAge = getAge(a.pacienteId);
-          const bAge = getAge(b.pacienteId);
-          const aIs80Plus = aAge >= 80 ? 0 : 1;
-          const bIs80Plus = bAge >= 80 ? 0 : 1;
-          if (aIs80Plus !== bIs80Plus) return aIs80Plus - bIs80Plus;
-
-          // 3º Prioridade Legal: idoso 60+, gestante, PCD, criança de colo
-          const aHasLegal = ["gestante", "idoso", "pcd", "crianca"].includes(a.prioridade);
-          const bHasLegal = ["gestante", "idoso", "pcd", "crianca"].includes(b.prioridade);
-          if (aHasLegal !== bHasLegal) return aHasLegal ? -1 : 1;
-          if (aHasLegal && bHasLegal) {
-            const aLegal = legalPrioOrder[a.prioridade] ?? 99;
-            const bLegal = legalPrioOrder[b.prioridade] ?? 99;
-            if (aLegal !== bLegal) return aLegal - bLegal;
+          const aKey = keys.get(a.id);
+          const bKey = keys.get(b.id);
+          if (aKey && bKey) {
+            const order = compareClinicalAndLegalPriority(aKey.risk, aKey.priority, bKey.risk, bKey.priority);
+            if (order) return order;
           }
-
-          // 4º Horário de chegada
-          return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
+          // Same clinical and legal priority: first arrival first.
+          return (a.horaChegada || a.criadoEm).localeCompare(b.horaChegada || b.criadoEm);
         }
         if (sortField === "tempo") {
           const aMin = getWaitMinutes(a, sortTimestamp);
@@ -504,6 +501,7 @@ const FilaEspera: React.FC = () => {
   }, [
     fila,
     pacienteMap,
+    triageByFilaId,
     filterUnidade,
     filterProf,
     filterStatus,
@@ -2185,7 +2183,7 @@ const FilaEspera: React.FC = () => {
             const isActive = ["aguardando", "chamado", "em_atendimento"].includes(f.status);
             const waitMin = getWaitMinutes(f, now);
             const waitColor = getWaitColor(waitMin, f.prioridade);
-            const manchesterRisco = getManchesterConfig((f as any).classificacaoRisco);
+            const manchesterRisco = getManchesterConfig(triageByFilaId[f.id]?.risco);
             const profLabel = prof
               ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}`
               : (f as any).especialidadeDestino
