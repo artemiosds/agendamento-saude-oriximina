@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,36 +52,9 @@ interface TriageRecordRow extends TriageRecord {
   custom_data?: { paciente_nome?: string } | null;
 }
 
-interface FuncionarioRow {
-  id: string;
-  nome: string;
-  auth_user_id: string | null;
-}
-
-interface LookupRow {
-  id: string;
-  paciente_id: string | null;
-  paciente_nome: string | null;
-  unidade_id: string | null;
-}
-
-interface PacienteLookupRow {
-  id: string;
-  nome: string | null;
-}
-
-interface NursingEvalRow extends NursingEval {
-  agendamento_id: string | null;
-}
-
-interface QueryResponse<T> {
-  data: T[] | null;
-  error: { message: string } | null;
-}
-
-interface RangeQuery<T> {
-  range: (from: number, to: number) => PromiseLike<QueryResponse<T>>;
-}
+type TriageIndexRow = Pick<TriageRecordRow,
+  "id" | "agendamento_id" | "tecnico_id" | "classificacao_risco" | "criado_em" | "confirmado_em" | "custom_data"
+>;
 
 interface EnrichedRecord extends TriageRecord {
   pacienteNome: string;
@@ -91,6 +64,7 @@ interface EnrichedRecord extends TriageRecord {
 }
 
 const PAGE_SIZE = 20;
+const SCAN_SIZE = 100;
 
 const riskBadge = (risk: string) => {
   const config = getManchesterConfig(risk);
@@ -114,132 +88,165 @@ const HistoricoTriagem: React.FC = () => {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [hasNext, setHasNext] = useState(false);
   const [selected, setSelected] = useState<EnrichedRecord | null>(null);
   const [editing, setEditing] = useState<EnrichedRecord | null>(null);
+  const requestId = useRef(0);
+  const scanCache = useRef({ key: "", matched: [] as string[], offset: 0, exhausted: false });
 
-  // Recursive pagination helper to bypass 1000-row default limit
-  const fetchAll = async <T,>(createQuery: () => RangeQuery<T>): Promise<T[]> => {
-    const PAGE = 1000;
-    const all: T[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await createQuery().range(offset, offset + PAGE - 1);
+  // Only triage records on the requested page receive their clinical details.
+  const resolveNames = async <T extends TriageIndexRow,>(rows: T[]) => {
+    if (!rows.length) return [];
+    const ids = [...new Set(rows.map((r) => r.agendamento_id))];
+    const [agRes, filaRes] = await Promise.all([
+      supabase.from("agendamentos").select("id, paciente_id, paciente_nome, unidade_id").in("id", ids),
+      supabase.from("fila_espera").select("id, paciente_id, paciente_nome, unidade_id").in("id", ids),
+    ]);
+    if (agRes.error) throw agRes.error;
+    if (filaRes.error) throw filaRes.error;
+    const agMap = new Map((agRes.data || []).map((a) => [a.id, a]));
+    const filaMap = new Map((filaRes.data || []).map((f) => [f.id, f]));
+    const patientIds = [...new Set([...agMap.values(), ...filaMap.values()].map((r) => r.paciente_id).filter((id): id is string => !!id))];
+    const pacMap = new Map<string, string>();
+    if (patientIds.length) {
+      const { data, error } = await supabase.from("pacientes").select("id, nome").in("id", patientIds);
       if (error) throw error;
-      const chunk = data || [];
-      all.push(...chunk);
-      if (chunk.length < PAGE) break;
-      offset += PAGE;
+      (data || []).forEach((p) => { if (p.nome) pacMap.set(p.id, p.nome); });
     }
-    return all;
+    return rows.map((r) => {
+      const ag = agMap.get(r.agendamento_id);
+      const filaItem = filaMap.get(r.agendamento_id);
+      const pacienteNome =
+        (ag?.paciente_id && pacMap.get(ag.paciente_id)) ||
+        (filaItem?.paciente_id && pacMap.get(filaItem.paciente_id)) ||
+        ag?.paciente_nome || filaItem?.paciente_nome ||
+        r.custom_data?.paciente_nome ||
+        (r.agendamento_id ? `Agendamento ${String(r.agendamento_id).slice(0, 8)}` : "Paciente não encontrado");
+      return { record: r, pacienteNome, unidadeId: ag?.unidade_id, filaUnidadeId: filaItem?.unidade_id };
+    });
   };
 
-  // Map tecnico_id -> nome from funcionarios
   const loadData = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    const role = user?.role?.toLowerCase().trim();
+    if (role !== "master" && role !== "tecnico") return;
     setLoading(true);
+    setTotalCount(null);
     try {
-      const [trAll, funcRes, agAll, filaAll, pacAll, nursAll] = await Promise.all([
-        fetchAll<TriageRecordRow>(() => supabase.from("triage_records").select("*").order("criado_em", { ascending: false }) as unknown as RangeQuery<TriageRecordRow>),
-        supabase.from("funcionarios").select("id, nome, auth_user_id"),
-        fetchAll<LookupRow>(() => supabase.from("agendamentos").select("id, paciente_id, paciente_nome, unidade_id") as unknown as RangeQuery<LookupRow>),
-        fetchAll<LookupRow>(() => supabase.from("fila_espera").select("id, paciente_id, paciente_nome, unidade_id") as unknown as RangeQuery<LookupRow>),
-        fetchAll<PacienteLookupRow>(() => supabase.from("pacientes").select("id, nome") as unknown as RangeQuery<PacienteLookupRow>),
-        fetchAll<NursingEvalRow>(() => supabase.from("nursing_evaluations").select("agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado") as unknown as RangeQuery<NursingEvalRow>),
+      const needsLookup = !!search.trim() || !!(user?.unidadeId && user.usuario !== "admin.sms");
+      const makeQuery = (columns: string, count: "exact" | undefined = undefined) => {
+        // Supabase's generated SelectQueryError cannot infer a runtime column list.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query = (supabase.from("triage_records") as any).select(columns, count ? { count } : undefined);
+        if (riskFilter !== "todos") query = query.ilike("classificacao_risco", riskFilter);
+        if (dateFrom || dateTo) {
+          const from = dateFrom ? `,confirmado_em.gte.${dateFrom}T00:00:00` : "";
+          const to = dateTo ? `,confirmado_em.lte.${dateTo}T23:59:59` : "";
+          const createdFrom = dateFrom ? `,criado_em.gte.${dateFrom}T00:00:00` : "";
+          const createdTo = dateTo ? `,criado_em.lte.${dateTo}T23:59:59` : "";
+          query = query.or(`and(confirmado_em.not.is.null${from}${to}),and(confirmado_em.is.null${createdFrom}${createdTo})`);
+        }
+        return query.order("criado_em", { ascending: false }).order("id", { ascending: false });
+      };
+
+      let pageIds: string[] = [];
+      let count: number | null = null;
+      let more = false;
+      if (!needsLookup) {
+        const { data, count: exactCount, error } = await makeQuery("id", "exact")
+          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+        if (error) throw error;
+        pageIds = (data || []).map((r) => r.id);
+        count = exactCount ?? 0;
+        more = (page + 1) * PAGE_SIZE < count;
+      } else {
+        // No FK from triage_records to appointments: resolve only small index batches
+        // until this page and one following record are known, preserving name fallback.
+        const key = JSON.stringify([user?.unidadeId, user?.usuario, search, riskFilter, dateFrom, dateTo]);
+        if (scanCache.current.key !== key) {
+          scanCache.current = { key, matched: [], offset: 0, exhausted: false };
+        }
+        const cache = scanCache.current;
+        const target = (page + 1) * PAGE_SIZE + 1;
+        while (cache.matched.length < target && !cache.exhausted) {
+          const { data, error } = await makeQuery("id, agendamento_id, tecnico_id, classificacao_risco, criado_em, confirmado_em, custom_data")
+            .range(cache.offset, cache.offset + SCAN_SIZE - 1);
+          if (error) throw error;
+          if (currentRequest !== requestId.current) return;
+          const batch = (data || []) as TriageIndexRow[];
+          const resolved = await resolveNames(batch);
+          if (currentRequest !== requestId.current) return;
+          for (const item of resolved) {
+            if (user?.unidadeId && user.usuario !== "admin.sms" && item.unidadeId !== user.unidadeId && item.filaUnidadeId !== user.unidadeId) continue;
+            if (search.trim() && !item.pacienteNome.toLowerCase().includes(search.toLowerCase())) continue;
+            cache.matched.push(item.record.id);
+          }
+          cache.offset += batch.length;
+          cache.exhausted = batch.length < SCAN_SIZE;
+        }
+        if (cache.exhausted) count = cache.matched.length;
+        pageIds = cache.matched.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+        more = cache.matched.length > (page + 1) * PAGE_SIZE;
+      }
+
+      if (currentRequest !== requestId.current) return;
+      const { data: detailRows, error: detailError } = pageIds.length
+        ? await supabase.from("triage_records").select("*").in("id", pageIds)
+        : { data: [] as TriageRecordRow[], error: null };
+      if (detailError) throw detailError;
+      const byId = new Map<string, TriageRecordRow>((detailRows || []).map((r: TriageRecordRow) => [r.id, r] as const));
+      const rows = pageIds.map((id) => byId.get(id)).filter((r): r is TriageRecordRow => !!r);
+      const names = await resolveNames(rows);
+      const appointmentIds = [...new Set(rows.map((r) => r.agendamento_id))];
+      // Both funcionario keys are UUIDs, while historical tecnico_id is free text.
+      const techIds = [...new Set(rows.map((r) => r.tecnico_id).filter((id) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
+      ))];
+      const [nursRes, funcIdRes, funcAuthRes] = await Promise.all([
+        appointmentIds.length ? supabase.from("nursing_evaluations").select("agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado").in("agendamento_id", appointmentIds) : Promise.resolve({ data: [], error: null }),
+        techIds.length ? supabase.from("funcionarios").select("id, nome, auth_user_id").in("id", techIds) : Promise.resolve({ data: [], error: null }),
+        techIds.length ? supabase.from("funcionarios").select("id, nome, auth_user_id").in("auth_user_id", techIds) : Promise.resolve({ data: [], error: null }),
       ]);
-
+      if (nursRes.error) throw nursRes.error;
+      if (funcIdRes.error) throw funcIdRes.error;
+      if (funcAuthRes.error) throw funcAuthRes.error;
       const funcMap = new Map<string, string>();
-      ((funcRes.data || []) as FuncionarioRow[]).forEach((f) => {
-        funcMap.set(String(f.id), f.nome);
-        if (f.auth_user_id) funcMap.set(String(f.auth_user_id), f.nome);
+      [...(funcIdRes.data || []), ...(funcAuthRes.data || [])].forEach((f) => {
+        funcMap.set(f.id, f.nome);
+        if (f.auth_user_id) funcMap.set(f.auth_user_id, f.nome);
       });
-
-      const pacMap = new Map<string, string>();
-      pacAll.forEach((p) => {
-        if (p.nome) pacMap.set(String(p.id), p.nome);
-      });
-
-      const agMap = new Map<string, { nome: string | null; pacienteId: string | null; unidadeId: string | null }>();
-      agAll.forEach((a) => {
-        agMap.set(a.id, { nome: a.paciente_nome, pacienteId: a.paciente_id, unidadeId: a.unidade_id });
-      });
-
-      const filaMap = new Map<string, { nome: string | null; pacienteId: string | null; unidadeId: string | null }>();
-      filaAll.forEach((f) => {
-        filaMap.set(f.id, { nome: f.paciente_nome, pacienteId: f.paciente_id, unidadeId: f.unidade_id });
-      });
-
       const nursMap = new Map<string, NursingEval>();
-      nursAll.forEach((n) => {
-        if (n.agendamento_id) nursMap.set(n.agendamento_id, n);
-      });
-
-      const enriched: EnrichedRecord[] = trAll
-        .filter((r) => {
-          if (user?.usuario === 'admin.sms' || !user?.unidadeId) return true;
-          const ag = agMap.get(r.agendamento_id);
-          const filaItem = filaMap.get(r.agendamento_id);
-          return ag?.unidadeId === user.unidadeId || filaItem?.unidadeId === user.unidadeId;
-        })
-        .map((r) => {
-          const ag = agMap.get(r.agendamento_id);
-          const filaItem = filaMap.get(r.agendamento_id);
-          // Fallback chain: live patient name -> denormalized appointment name -> custom_data -> truncated ID
-          const nomeReal =
-            (ag?.pacienteId && pacMap.get(ag.pacienteId)) ||
-            (filaItem?.pacienteId && pacMap.get(filaItem.pacienteId)) ||
-            ag?.nome ||
-            filaItem?.nome ||
-            r?.custom_data?.paciente_nome ||
-            (r.agendamento_id ? `Agendamento ${String(r.agendamento_id).slice(0, 8)}` : "Paciente não encontrado");
-          return {
-            ...r,
-            pacienteNome: nomeReal,
-            profissionalNome: funcMap.get(r.tecnico_id) || "—",
-            classificacaoRisco: r.classificacao_risco || "",
-            nursing: nursMap.get(r.agendamento_id) || null,
-          };
-        });
-
-      setRecords(enriched);
+      (nursRes.data || []).forEach((n) => { if (n.agendamento_id) nursMap.set(n.agendamento_id, n); });
+      if (currentRequest !== requestId.current) return;
+      setRecords(names.map(({ record, pacienteNome }) => ({
+        ...record,
+        pacienteNome,
+        profissionalNome: funcMap.get(record.tecnico_id) || "—",
+        classificacaoRisco: record.classificacao_risco || "",
+        nursing: nursMap.get(record.agendamento_id) || null,
+      })));
+      setTotalCount(count);
+      setHasNext(more);
     } catch (err) {
       console.error("Erro ao carregar histórico de triagem:", err);
+      if (currentRequest === requestId.current) {
+        setRecords([]);
+        setHasNext(false);
+      }
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
-  }, [user]);
+  }, [user?.role, user?.usuario, user?.unidadeId, page, search, riskFilter, dateFrom, dateTo]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    void loadData();
+    const activeRequest = requestId.current;
+    return () => { requestId.current = activeRequest + 1; };
+  }, [loadData]);
 
-  const filtered = useMemo(() => {
-    let list = records;
-
-    if (search.trim()) {
-      const s = search.toLowerCase();
-      list = list.filter((r) => r.pacienteNome.toLowerCase().includes(s));
-    }
-
-    if (riskFilter !== "todos") {
-      list = list.filter((r) => r.classificacaoRisco?.toLowerCase() === riskFilter);
-    }
-
-    if (dateFrom) {
-      list = list.filter((r) => {
-        const d = r.confirmado_em || r.criado_em;
-        return d && d >= dateFrom;
-      });
-    }
-    if (dateTo) {
-      const toEnd = dateTo + "T23:59:59";
-      list = list.filter((r) => {
-        const d = r.confirmado_em || r.criado_em;
-        return d && d <= toEnd;
-      });
-    }
-
-    return list;
-  }, [records, search, riskFilter, dateFrom, dateTo]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = totalCount === null ? null : Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const paged = records;
 
   useEffect(() => { setPage(0); }, [search, riskFilter, dateFrom, dateTo]);
 
@@ -262,7 +269,7 @@ const HistoricoTriagem: React.FC = () => {
     <div className="space-y-4 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold font-display text-foreground">Histórico de Triagem</h1>
-        <p className="text-muted-foreground text-sm">{filtered.length} registro(s) encontrado(s)</p>
+        <p className="text-muted-foreground text-sm">{totalCount === null ? `${records.length} registro(s) nesta página` : `${totalCount} registro(s) encontrado(s)`}</p>
       </div>
 
       {/* Filters */}
@@ -349,12 +356,12 @@ const HistoricoTriagem: React.FC = () => {
 
           {/* Pagination */}
           <div className="flex items-center justify-between border-t px-4 py-3">
-            <span className="text-sm text-muted-foreground">Página {page + 1} de {totalPages}</span>
+            <span className="text-sm text-muted-foreground">Página {page + 1}{totalPages !== null ? ` de ${totalPages}` : ""}</span>
             <div className="flex gap-1">
               <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
+              <Button size="sm" variant="outline" disabled={!hasNext} onClick={() => setPage((p) => p + 1)}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -485,7 +492,7 @@ const HistoricoTriagem: React.FC = () => {
         open={!!editing}
         onOpenChange={(o) => !o && setEditing(null)}
         record={editing}
-        onSuccess={loadData}
+        onSuccess={() => { scanCache.current.key = ""; void loadData(); }}
       />
     </div>
   );
