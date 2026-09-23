@@ -90,11 +90,6 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
   }, [form.peso, form.altura]);
 
   const handleSave = async () => {
-    if (!form.classificacaoRisco) {
-      toast.error("Selecione a Classificação de Risco.");
-      return;
-    }
-
     setSaving(true);
     try {
       const payload: any = {
@@ -109,7 +104,7 @@ export const ModalEdicaoTriagem: React.FC<ModalEdicaoTriagemProps> = ({ open, on
         alergias: form.alergias,
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
-        classificacao_risco: form.classificacaoRisco,
+        classificacao_risco: form.classificacaoRisco || "",
         observacoes: form.observacoes || "",
         custom_data: {
           ...customData,

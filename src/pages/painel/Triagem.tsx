@@ -627,12 +627,6 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
 
-    if (!form.classificacaoRisco) {
-      toast.error("Por favor, selecione a Classificação de Risco.");
-      setSaving(false);
-      return;
-    }
-
     try {
       const novoStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_atendimento";
 
@@ -835,7 +829,9 @@ const Triagem: React.FC = () => {
               </div>
             </div>
             <div>
-              <Label className="text-base font-semibold">Classificação de Risco — Protocolo Manchester *</Label>
+              <Label className="text-base font-semibold">
+                Classificação de Risco — Protocolo Manchester (opcional)
+              </Label>
               <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {MANCHESTER_LEVELS.map((m) => {
                   const isSelected = form.classificacaoRisco === m.level;
@@ -866,9 +862,6 @@ const Triagem: React.FC = () => {
                   );
                 })}
               </div>
-              {!form.classificacaoRisco && (
-                <p className="mt-1 text-xs text-destructive">Seleção obrigatória</p>
-              )}
             </div>
             <div>
               <Label>Queixa Principal</Label>
