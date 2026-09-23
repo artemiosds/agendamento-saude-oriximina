@@ -461,7 +461,7 @@ const FilaEspera: React.FC = () => {
       const patient = pacienteMap.get(f.pacienteId);
       const priority = legalPriorityKey(patient, triageByFilaId[f.id]?.tea);
       // Keep an explicitly registered queue priority when the patient record is incomplete.
-      if (priority.tier === 2 && ["gestante", "idoso", "pcd", "crianca"].includes(f.prioridade)) priority.tier = 1;
+      if (priority.tier === 3 && ["gestante", "idoso", "pcd", "crianca"].includes(f.prioridade)) priority.tier = 2;
       return [f.id, { priority, risk: manchesterOrder[triageByFilaId[f.id]?.risco] ?? 6 }] as const;
     }));
 

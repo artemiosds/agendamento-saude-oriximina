@@ -28,10 +28,20 @@ export function hasTriageTea(comorbidities: unknown): boolean {
 
 export function legalPriorityKey(patient?: QueuePriorityPatient | null, triageTea = false, today = new Date()) {
   const age = patientAge(patient?.dataNascimento, today);
+  const dob = patient?.dataNascimento;
+  const iso = dob?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const br = dob?.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  const birthDate = age === null ? null : iso
+    ? `${iso[1]}-${iso[2]}-${iso[3]}`
+    : br ? `${br[3]}-${br[2]}-${br[1]}` : null;
   return {
+    // Fixed groups make the ordering consistent even when several priority
+    // categories are mixed in the same queue.
     tier: age !== null && age >= 80 ? 0 :
-      (age !== null && age >= 60) || !!patient?.isGestante || !!patient?.isPne || !!patient?.isAutista || triageTea ? 1 : 2,
+      age !== null && age >= 60 ? 1 :
+      patient?.isGestante || patient?.isPne || patient?.isAutista || triageTea ? 2 : 3,
     age,
+    birthDate,
   };
 }
 
@@ -40,8 +50,10 @@ export function compareLegalPriority(
   b: ReturnType<typeof legalPriorityKey>,
 ): number {
   if (a.tier !== b.tier) return a.tier - b.tier;
-  // Among older patients in the same priority group, the older goes first.
-  if (a.age !== null && b.age !== null && a.age >= 60 && b.age >= 60) return b.age - a.age;
+  // Within an elderly group, the earlier date of birth goes first.
+  if (a.birthDate && b.birthDate && a.age !== null && b.age !== null && a.age >= 60 && b.age >= 60) {
+    return a.birthDate.localeCompare(b.birthDate);
+  }
   return 0;
 }
 
