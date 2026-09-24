@@ -564,12 +564,6 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
-      const { data: existing } = await supabase
-        .from("triage_records")
-        .select("id")
-        .eq("agendamento_id", selectedItem.id)
-        .maybeSingle();
-
       const triagePayload: any = {
         agendamento_id: selectedItem.id,
         tecnico_id: user?.id || "",
@@ -590,11 +584,13 @@ const Triagem: React.FC = () => {
         iniciado_em: new Date().toISOString(),
       };
 
-      if (existing?.id) {
-        await supabase.from("triage_records").update(triagePayload).eq("id", existing.id);
-      } else {
-        await supabase.from("triage_records").insert(triagePayload);
-      }
+      const { data: savedRecord, error: saveError } = await supabase
+        .from("triage_records")
+        .upsert(triagePayload, { onConflict: "agendamento_id" })
+        .select("id")
+        .single();
+      if (saveError) throw saveError;
+      if (!savedRecord) throw new Error("A ficha de triagem não foi gravada.");
       toast.success("Rascunho da triagem salvo!");
     } catch (error) {
       console.error("Erro ao salvar rascunho:", error);
@@ -610,12 +606,6 @@ const Triagem: React.FC = () => {
 
     try {
       const novoStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_atendimento";
-
-      const { data: existing } = await supabase
-        .from("triage_records")
-        .select("id")
-        .eq("agendamento_id", selectedItem.id)
-        .maybeSingle();
 
       const triagePayload: any = {
         agendamento_id: selectedItem.id,
@@ -637,37 +627,51 @@ const Triagem: React.FC = () => {
         confirmado_em: new Date().toISOString(),
       };
 
-      // 🚀 Salvamento otimizado: apenas as queries essenciais
-      if (existing?.id) {
-        await supabase.from("triage_records").update(triagePayload).eq("id", existing.id);
-      } else {
-        await supabase.from("triage_records").insert(triagePayload);
-      }
+      const { data: savedRecord, error: saveError } = await supabase
+        .from("triage_records")
+        .upsert(triagePayload, { onConflict: "agendamento_id" })
+        .select("id")
+        .single();
+      if (saveError) throw saveError;
+      if (!savedRecord) throw new Error("A ficha de triagem não foi gravada.");
 
-      await Promise.all([
-        supabase.from('fila_espera').update({ status: novoStatus as any }).eq('id', selectedItem.filaId),
-        supabase.from('agendamentos').update({ status: novoStatus as any }).eq('id', selectedItem.id),
-      ]);
+      const { data: updatedAgendamento, error: agendamentoError } = await supabase
+        .from("agendamentos")
+        .update({ status: novoStatus as any })
+        .eq("id", selectedItem.id)
+        .select("id")
+        .single();
+      if (agendamentoError) throw agendamentoError;
+      if (!updatedAgendamento) throw new Error("O agendamento não foi atualizado.");
+
+      const { data: updatedFila, error: filaError } = await supabase
+        .from("fila_espera")
+        .update({ status: novoStatus as any })
+        .eq("id", selectedItem.filaId)
+        .select("id")
+        .single();
+      if (filaError) throw filaError;
+      if (!updatedFila) throw new Error("A fila não foi atualizada.");
 
       // Log silent para não bloquear o encerramento do modal
-      logAction({
+      void Promise.resolve().then(() => logAction({
         acao: "finalizar_triagem",
         entidade: "agendamento",
         entidadeId: selectedItem.id,
         modulo: "triagem",
         user,
         detalhes: { paciente: selectedItem.pacienteNome, status: novoStatus, classificacaoRisco: form.classificacaoRisco },
-      });
+      })).catch((error) => console.error("Erro ao registrar finalização da triagem:", error));
 
       toast.success(encaminharEnfermagem ? "Encaminhado para enfermagem!" : "Encaminhado diretamente!");
       setDialogOpen(false);
       setSelectedItem(null);
 
       // Atualiza caches ao final
-      await Promise.all([refreshFila(), refreshAgendamentos()]);
+      void Promise.allSettled([refreshFila(), refreshAgendamentos()]);
     } catch (error) {
       console.error("Erro ao finalizar triagem:", error);
-      toast.error("Erro ao processar triagem.");
+      toast.error("Não foi possível concluir a triagem. Confira a ficha e tente novamente.");
     } finally {
       setSaving(false);
     }
