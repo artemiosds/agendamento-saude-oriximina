@@ -411,23 +411,6 @@ const Triagem: React.FC = () => {
 
   const now = useMemo(() => new Date(), []);
 
-  // Load per-professional triage disabled list
-  const [profTriageDisabled, setProfTriageDisabled] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from('triage_settings')
-          .select('profissional_id, enabled')
-          .not('profissional_id', 'is', null);
-        if (data) {
-          const disabled = new Set(data.filter(d => d.enabled === false).map(d => d.profissional_id!));
-          setProfTriageDisabled(disabled);
-        }
-      } catch {}
-    })();
-  }, []);
-
   const filaFiltrada = useMemo(() => {
     const termo = busca.trim().toLowerCase();
 
@@ -444,8 +427,6 @@ const Triagem: React.FC = () => {
           );
 
         const profissionalId = agendamentoRelacionado?.profissionalId || item.profissionalId || "";
-
-        if (profissionalId && profTriageDisabled.has(profissionalId)) return null;
 
         const pac = pacientes.find((p) => p.id === item.pacienteId);
         const { age, formatted } = parseDob(pac?.dataNascimento);
@@ -488,7 +469,7 @@ const Triagem: React.FC = () => {
         if (a.filaCriadoEm && b.filaCriadoEm) return a.filaCriadoEm.localeCompare(b.filaCriadoEm);
         return (a.hora || '').localeCompare(b.hora || '');
       });
-  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca, profTriageDisabled]);
+  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca]);
 
   const imc = useMemo(() => {
     const peso = parseFloat(form.peso);

@@ -38,7 +38,7 @@ export interface ConferirDadosPacienteModalProps {
   };
   modo: "agendamento" | "chegada";
   /** Chamado após o usuário confirmar (com checkbox marcado). */
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   confirmLabel?: string;
 }
 
@@ -592,7 +592,7 @@ export function ConferirDadosPacienteModal({
 
                   await Promise.resolve(onConfirm());
                   console.log("[ConferirDados] Operação concluída com sucesso");
-                  toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos com sucesso!");
+                  if (modo !== "chegada") toast.success("Dados conferidos com sucesso!");
                   onOpenChange(false);
                 } catch (e: any) {
                   console.error("[ConferirDados] Erro ao confirmar:", e);

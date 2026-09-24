@@ -590,7 +590,7 @@ const Agenda: React.FC = () => {
       profissionalCbo?: string;
       unidadeNome?: string;
     };
-    onConfirm: () => void;
+    onConfirm: () => void | Promise<void>;
   }>({ open: false, pacienteId: "", modo: "agendamento", onConfirm: () => {} });
 
   // Pacientes já conferidos durante a sessão atual do diálogo de Novo Agendamento
@@ -1538,7 +1538,7 @@ const Agenda: React.FC = () => {
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
           unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
         },
-        onConfirm: () => { void executarStatusChange(agId, newStatus); },
+        onConfirm: () => executarStatusChange(agId, newStatus),
       });
       return;
     }
@@ -1548,7 +1548,10 @@ const Agenda: React.FC = () => {
 
   const executarStatusChange = async (agId: string, newStatus: string) => {
     const ag = agendamentos.find((a) => a.id === agId);
-    if (!ag) return;
+    if (!ag) {
+      if (newStatus === "confirmado_chegada") throw new Error("Agendamento não encontrado. Atualize a Agenda e tente novamente.");
+      return;
+    }
 
     if (newStatus === "concluido") {
       // Block concluding appointments for future dates
@@ -1575,196 +1578,176 @@ const Agenda: React.FC = () => {
     try {
       if (newStatus === "confirmado_chegada") {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        // Update local arrival map immediately for correct sorting
-        setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
-
         // Triage routing is OPT-IN. Default = direct to professional's queue.
         // Only routes to triage when explicitly enabled (per professional or globally).
         let triagemHabilitada = false;
-        try {
-          // 1) Per-professional setting takes precedence
-          const { data: profSetting } = await supabase
+        // A failure to read the configuration must not silently skip triage.
+        const { data: profSetting, error: profError } = await supabase
+          .from('triage_settings')
+          .select('enabled')
+          .eq('profissional_id', ag.profissionalId)
+          .maybeSingle();
+        if (profError) throw profError;
+        if (profSetting) {
+          triagemHabilitada = !!profSetting.enabled;
+        } else {
+          const { data: globalSetting, error: globalError } = await supabase
             .from('triage_settings')
             .select('enabled')
-            .eq('profissional_id', ag.profissionalId)
+            .is('profissional_id', null)
             .maybeSingle();
-          if (profSetting) {
-            triagemHabilitada = !!profSetting.enabled;
-          } else {
-            // 2) Fallback to global setting (profissional_id IS NULL)
-            const { data: globalSetting } = await supabase
-              .from('triage_settings')
-              .select('enabled')
-              .is('profissional_id', null)
-              .maybeSingle();
-            if (globalSetting) triagemHabilitada = !!globalSetting.enabled;
+          if (globalError) throw globalError;
+          if (globalSetting) triagemHabilitada = !!globalSetting.enabled;
+        }
+
+        const filaExistente = fila.find((item) => item.id === agId);
+        const statusFila = triagemHabilitada ? "chegada_confirmada" : "apto_atendimento";
+        const dadosFila = {
+          status: statusFila as any,
+          pacienteId: ag.pacienteId,
+          pacienteNome: ag.pacienteNome,
+          unidadeId: ag.unidadeId,
+          profissionalId: ag.profissionalId,
+          horaChegada,
+          observacoes: ag.observacoes || "",
+        };
+        const encaminharParaFila = async () => {
+          if (filaExistente) {
+            await updateFila(agId, dadosFila, true);
+            return;
           }
-        } catch {}
+          try {
+            await addToFila({
+              id: agId,
+              ...dadosFila,
+              setor: "",
+              prioridade: "normal",
+              posicao: fila.length + 1,
+              criadoPor: user?.nome || "recepcao",
+            } as any, true);
+          } catch (error) {
+            if ((error as { code?: string })?.code !== "23505") throw error;
+            // Another session already inserted this arrival; reuse its row.
+            await updateFila(agId, dadosFila, true);
+          }
+        };
 
         if (triagemHabilitada) {
           // Normal flow: go to triage
           await updateAgendamento(agId, { status: "confirmado_chegada" as any });
-          try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: ag.pacienteId }); } catch {}
 
-          const filaExistente = fila.find(
-            (item) => item.id === agId,
-          );
+          await encaminharParaFila();
 
-          if (filaExistente) {
-            await updateFila(filaExistente.id, {
-              status: "chegada_confirmada" as any,
-              pacienteId: ag.pacienteId,
-              pacienteNome: ag.pacienteNome,
-              unidadeId: ag.unidadeId,
-              profissionalId: ag.profissionalId,
-              horaChegada,
-              observacoes: ag.observacoes || "",
-            } as any);
-          } else {
-            await addToFila({
-              id: agId,
-              pacienteId: ag.pacienteId,
-              pacienteNome: ag.pacienteNome,
-              unidadeId: ag.unidadeId,
-              profissionalId: ag.profissionalId,
-              setor: "",
-              prioridade: "normal",
-              status: "chegada_confirmada" as any,
-              posicao: fila.length + 1,
-              horaChegada,
-              observacoes: ag.observacoes || "",
-              criadoPor: user?.nome || "recepcao",
-            } as any);
-          }
-
-          await Promise.all([refreshAgendamentos(), refreshFila()]);
+          void (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: ag.pacienteId })
+            .then(({ error }: { error?: unknown }) => { if (error) console.error("Erro ao atualizar faltas:", error); })
+            .catch((error: unknown) => console.error("Erro ao atualizar faltas:", error));
           toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
         } else {
           // Triage disabled for this professional: skip triage
           await updateAgendamento(agId, { status: "apto_atendimento" as any });
 
-          const filaExistente = fila.find(
-            (item) => item.id === agId,
-          );
+          await encaminharParaFila();
 
-          if (filaExistente) {
-            await updateFila(filaExistente.id, {
-              status: "apto_atendimento" as any,
-              pacienteId: ag.pacienteId,
-              pacienteNome: ag.pacienteNome,
-              unidadeId: ag.unidadeId,
-              profissionalId: ag.profissionalId,
-              horaChegada,
-              observacoes: ag.observacoes || "",
-            } as any);
-          } else {
-            await addToFila({
-              id: agId,
-              pacienteId: ag.pacienteId,
-              pacienteNome: ag.pacienteNome,
-              unidadeId: ag.unidadeId,
-              profissionalId: ag.profissionalId,
-              setor: "",
-              prioridade: "normal",
-              status: "apto_atendimento" as any,
-              posicao: fila.length + 1,
-              horaChegada,
-              observacoes: ag.observacoes || "",
-              criadoPor: user?.nome || "recepcao",
-            } as any);
-          }
-
-          await Promise.all([refreshAgendamentos(), refreshFila()]);
           toast.success(`Triagem desabilitada para este profissional. ${ag.pacienteNome} liberado para atendimento direto.`);
         }
+        setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
+        void Promise.allSettled([refreshAgendamentos(), refreshFila()]);
       } else {
         await updateAgendamento(agId, { status: newStatus as any });
         await Promise.all([refreshAgendamentos(), refreshFila()]);
       }
     } catch (err) {
       console.error("Error updating appointment status:", err);
+      if (newStatus === "confirmado_chegada") throw err;
       toast.error("Erro ao atualizar status do agendamento.");
       return;
     }
 
-    const paciente = pacientes.find((p) => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
-    const unidade = unidades.find((u) => u.id === ag.unidadeId);
-    const statusToEvento: Record<string, string> = {
-      cancelado: "cancelamento",
-      remarcado: "reagendamento",
-      falta: "nao_compareceu",
-      confirmado: "confirmacao",
-      confirmado_chegada: "confirmacao",
-      concluido: "atendimento_finalizado",
-    };
-    const evento = statusToEvento[newStatus];
-    if (evento) {
-      await notify({
-        evento: evento as any,
-        paciente_nome: ag.pacienteNome,
-        telefone: paciente?.telefone || "",
-        email: paciente?.email || "",
-        data_consulta: ag.data,
-        hora_consulta: ag.hora,
-        unidade: unidade?.nome || "",
-        profissional: ag.profissionalNome,
-        tipo_atendimento: ag.tipo,
-        status_agendamento: newStatus,
-        id_agendamento: agId,
-      });
-    }
-    // WhatsApp: handled via notify webhook hook
-
-
-    // Log the status change
-    await logAction({
-      acao: "status_change",
-      entidade: "agendamento",
-      entidadeId: agId,
-      modulo: "agenda",
-      user,
-      pacienteId: ag.pacienteId,
-      pacienteNome: ag.pacienteNome,
-      profissionalId: ag.profissionalId,
-      profissionalNome: ag.profissionalNome,
-      agendamentoId: agId,
-      before: { status: ag.status },
-      after: { status: newStatus },
-      detalhes: { novo_status: newStatus, status_anterior: ag.status },
-    });
-
-    if (newStatus === "cancelado" || newStatus === "falta") {
-      await handleVagaLiberada(
-        {
-          id: agId,
-          data: ag.data,
-          hora: ag.hora,
-          profissionalId: ag.profissionalId,
-          profissionalNome: ag.profissionalNome,
-          unidadeId: ag.unidadeId,
-          salaId: ag.salaId,
-          tipo: ag.tipo,
-        },
-        newStatus === "cancelado" ? "cancelamento" : "falta",
-        user,
-      );
-    }
-    if (ag.googleEventId) {
-      try {
-        if (newStatus === "cancelado" && configuracoes.googleCalendar.removerCancelar) {
-          await gcal.deleteEvent(ag.googleEventId);
-          await updateAgendamento(agId, { syncStatus: "ok" });
-          await refreshAgendamentos();
-          toast.success("Evento removido do Google Agenda.");
-        } else if (newStatus === "remarcado" && configuracoes.googleCalendar.atualizarRemarcar) {
-          toast.info("Remarcação registrada.");
-        }
-      } catch (err) {
-        console.error("Google Calendar sync error:", err);
-        await updateAgendamento(agId, { syncStatus: "erro" });
-        await refreshAgendamentos();
+    const afterStatusChange = async () => {
+      const paciente = pacientes.find((p) => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
+      const unidade = unidades.find((u) => u.id === ag.unidadeId);
+      const statusToEvento: Record<string, string> = {
+        cancelado: "cancelamento",
+        remarcado: "reagendamento",
+        falta: "nao_compareceu",
+        confirmado: "confirmacao",
+        confirmado_chegada: "confirmacao",
+        concluido: "atendimento_finalizado",
+      };
+      const evento = statusToEvento[newStatus];
+      if (evento) {
+        await notify({
+          evento: evento as any,
+          paciente_nome: ag.pacienteNome,
+          telefone: paciente?.telefone || "",
+          email: paciente?.email || "",
+          data_consulta: ag.data,
+          hora_consulta: ag.hora,
+          unidade: unidade?.nome || "",
+          profissional: ag.profissionalNome,
+          tipo_atendimento: ag.tipo,
+          status_agendamento: newStatus,
+          id_agendamento: agId,
+        });
       }
+      // WhatsApp: handled via notify webhook hook
+
+
+      // Log the status change
+      await logAction({
+        acao: "status_change",
+        entidade: "agendamento",
+        entidadeId: agId,
+        modulo: "agenda",
+        user,
+        pacienteId: ag.pacienteId,
+        pacienteNome: ag.pacienteNome,
+        profissionalId: ag.profissionalId,
+        profissionalNome: ag.profissionalNome,
+        agendamentoId: agId,
+        before: { status: ag.status },
+        after: { status: newStatus },
+        detalhes: { novo_status: newStatus, status_anterior: ag.status },
+      });
+
+      if (newStatus === "cancelado" || newStatus === "falta") {
+        await handleVagaLiberada(
+          {
+            id: agId,
+            data: ag.data,
+            hora: ag.hora,
+            profissionalId: ag.profissionalId,
+            profissionalNome: ag.profissionalNome,
+            unidadeId: ag.unidadeId,
+            salaId: ag.salaId,
+            tipo: ag.tipo,
+          },
+          newStatus === "cancelado" ? "cancelamento" : "falta",
+          user,
+        );
+      }
+      if (ag.googleEventId) {
+        try {
+          if (newStatus === "cancelado" && configuracoes.googleCalendar.removerCancelar) {
+            await gcal.deleteEvent(ag.googleEventId);
+            await updateAgendamento(agId, { syncStatus: "ok" });
+            await refreshAgendamentos();
+            toast.success("Evento removido do Google Agenda.");
+          } else if (newStatus === "remarcado" && configuracoes.googleCalendar.atualizarRemarcar) {
+            toast.info("Remarcação registrada.");
+          }
+        } catch (err) {
+          console.error("Google Calendar sync error:", err);
+          await updateAgendamento(agId, { syncStatus: "erro" });
+          await refreshAgendamentos();
+        }
+      }
+    };
+    if (newStatus === "confirmado_chegada") {
+      void afterStatusChange().catch((error) => console.error("Erro nas ações posteriores à chegada:", error));
+      return;
     }
+    await afterStatusChange();
   };
 
   const handleCancelarAgendamento = async () => {

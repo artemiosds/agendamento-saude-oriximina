@@ -24,8 +24,8 @@ import type { Agendamento, FilaEspera } from "@/types";
  */
 interface FilaContextType {
   fila: FilaEspera[];
-  addToFila: (f: FilaEspera) => Promise<void>;
-  updateFila: (id: string, data: Partial<FilaEspera>) => Promise<void>;
+  addToFila: (f: FilaEspera, throwOnError?: boolean) => Promise<void>;
+  updateFila: (id: string, data: Partial<FilaEspera>, throwOnError?: boolean) => Promise<void>;
   removeFromFila: (id: string) => Promise<void>;
   refreshFila: () => Promise<void>;
   checkFilaForSlot: (
@@ -143,7 +143,9 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         if (!isGlobalAdmin && userUnidadeId)
           query = query.eq("unidade_id", userUnidadeId);
         const { data, error } = await query;
-        if (error || !data || data.length === 0) break;
+        if (error) throw error;
+        if (!data) throw new Error("Não foi possível consultar a fila.");
+        if (data.length === 0) break;
         allData = allData.concat(data);
         if (data.length < PAGE) break;
         from += PAGE;
@@ -160,7 +162,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [loadFila]);
 
   const addToFila = useCallback(
-    async (f: FilaEspera) => {
+    async (f: FilaEspera, throwOnError = false) => {
       const { error } = await supabase.from("fila_espera" as any).insert({
         id: f.id,
         paciente_id: f.pacienteId,
@@ -196,13 +198,16 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
           },
         });
         invalidateCache(queryKeys.fila.all);
-      } else console.error("Error adding to fila:", error);
+      } else {
+        console.error("Error adding to fila:", error);
+        if (throwOnError) throw error;
+      }
     },
     [logAction, invalidateCache],
   );
 
   const updateFila = useCallback(
-    async (id: string, data: Partial<FilaEspera>) => {
+    async (id: string, data: Partial<FilaEspera>, throwOnError = false) => {
       const dbData: any = {};
       if (data.status !== undefined) dbData.status = data.status;
       if (data.prioridade !== undefined) {
@@ -228,10 +233,13 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
       if (data.setor !== undefined) dbData.setor = data.setor;
       if ((data as any).especialidadeDestino !== undefined)
         dbData.especialidade_destino = (data as any).especialidadeDestino;
-      const { error } = await supabase
-        .from("fila_espera" as any)
-        .update(dbData)
-        .eq("id", id);
+      const query = supabase.from("fila_espera" as any).update(dbData).eq("id", id);
+      const { data: updatedRows, error } = throwOnError
+        ? await query.select("id")
+        : await query;
+      if (throwOnError && !error && !updatedRows?.length) {
+        throw new Error("Registro da fila não encontrado para atualizar.");
+      }
       if (!error) {
         setFila((prev) =>
           prev.map((f) => (f.id === id ? { ...f, ...data } : f)),
@@ -243,7 +251,10 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
           detalhes: data as Record<string, unknown>,
         });
         invalidateCache(queryKeys.fila.all);
-      } else console.error("Error updating fila:", error);
+      } else {
+        console.error("Error updating fila:", error);
+        if (throwOnError) throw error;
+      }
     },
     [logAction, invalidateCache],
   );
