@@ -109,6 +109,8 @@ interface TriagemForm {
   observacoes: string;
 }
 
+const VERSAO_FLUXO_TRIAGEM = "triagem-diagnostico-20260925-v1";
+
 const COMORBIDADES_COMUNS = [
   "Hipertensão",
   "Diabetes",
@@ -603,6 +605,7 @@ const Triagem: React.FC = () => {
   const confirmarTriagem = async (encaminharEnfermagem: boolean) => {
     if (!selectedItem) return;
     setSaving(true);
+    let etapa = "gravar_ficha";
 
     try {
       const novoStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_atendimento";
@@ -635,6 +638,7 @@ const Triagem: React.FC = () => {
       if (saveError) throw saveError;
       if (!savedRecord) throw new Error("A ficha de triagem não foi gravada.");
 
+      etapa = "atualizar_agendamento";
       const { data: updatedAgendamento, error: agendamentoError } = await supabase
         .from("agendamentos")
         .update({ status: novoStatus as any })
@@ -644,6 +648,7 @@ const Triagem: React.FC = () => {
       if (agendamentoError) throw agendamentoError;
       if (!updatedAgendamento) throw new Error("O agendamento não foi atualizado.");
 
+      etapa = "atualizar_fila";
       const { data: updatedFila, error: filaError } = await supabase
         .from("fila_espera")
         .update({ status: novoStatus as any })
@@ -652,6 +657,7 @@ const Triagem: React.FC = () => {
         .single();
       if (filaError) throw filaError;
       if (!updatedFila) throw new Error("A fila não foi atualizada.");
+      etapa = "pos_gravacao";
 
       // Log silent para não bloquear o encerramento do modal
       void Promise.resolve().then(() => logAction({
@@ -660,7 +666,7 @@ const Triagem: React.FC = () => {
         entidadeId: selectedItem.id,
         modulo: "triagem",
         user,
-        detalhes: { paciente: selectedItem.pacienteNome, status: novoStatus, classificacaoRisco: form.classificacaoRisco },
+        detalhes: { paciente: selectedItem.pacienteNome, status: novoStatus, classificacaoRisco: form.classificacaoRisco, versao_fluxo: VERSAO_FLUXO_TRIAGEM },
       })).catch((error) => console.error("Erro ao registrar finalização da triagem:", error));
 
       toast.success(encaminharEnfermagem ? "Encaminhado para enfermagem!" : "Encaminhado diretamente!");
@@ -671,6 +677,28 @@ const Triagem: React.FC = () => {
       void Promise.allSettled([refreshFila(), refreshAgendamentos()]);
     } catch (error) {
       console.error("Erro ao finalizar triagem:", error);
+      const rawCode = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      const errorCode = /^[a-zA-Z0-9_-]{1,32}$/.test(rawCode) ? rawCode : null;
+      void supabase.from("action_logs").insert({
+        acao: "falha_finalizar_triagem",
+        modulo: "triagem",
+        entidade: "agendamento",
+        entidade_id: selectedItem.id,
+        user_id: user?.id || "",
+        user_nome: user?.nome || "",
+        role: user?.role || "",
+        unidade_id: user?.unidadeId || "",
+        status: "erro",
+        error_code: errorCode,
+        error_message: `Falha em ${etapa}`,
+        detalhes: {
+          etapa,
+          versao_fluxo: VERSAO_FLUXO_TRIAGEM,
+          encaminhamento: encaminharEnfermagem ? "enfermagem" : "direto",
+        },
+      }).then(({ error: logError }) => {
+        if (logError) console.error("Erro ao registrar falha da triagem:", logError);
+      });
       toast.error("Não foi possível concluir a triagem. Confira a ficha e tente novamente.");
     } finally {
       setSaving(false);
