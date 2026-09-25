@@ -679,7 +679,7 @@ const Triagem: React.FC = () => {
       console.error("Erro ao finalizar triagem:", error);
       const rawCode = error && typeof error === "object" && "code" in error ? String(error.code) : "";
       const errorCode = /^[a-zA-Z0-9_-]{1,32}$/.test(rawCode) ? rawCode : null;
-      void supabase.from("action_logs").insert({
+      void Promise.resolve(supabase.from("action_logs").insert({
         acao: "falha_finalizar_triagem",
         modulo: "triagem",
         entidade: "agendamento",
@@ -696,9 +696,9 @@ const Triagem: React.FC = () => {
           versao_fluxo: VERSAO_FLUXO_TRIAGEM,
           encaminhamento: encaminharEnfermagem ? "enfermagem" : "direto",
         },
-      }).then(({ error: logError }) => {
+      })).then(({ error: logError }) => {
         if (logError) console.error("Erro ao registrar falha da triagem:", logError);
-      });
+      }).catch((logError) => console.error("Erro ao registrar falha da triagem:", logError));
       toast.error("Não foi possível concluir a triagem. Confira a ficha e tente novamente.");
     } finally {
       setSaving(false);
