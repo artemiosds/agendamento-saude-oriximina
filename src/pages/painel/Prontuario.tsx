@@ -431,6 +431,7 @@ const ProntuarioPage: React.FC = () => {
     return ag && ag.status === 'em_atendimento';
   }, [activeAtendimento, form.agendamento_id, agendamentos]);
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
+  const triagemRequestRef = useRef(0);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -1250,7 +1251,9 @@ const ProntuarioPage: React.FC = () => {
     return data as ProntuarioDB;
   }, [queryClient]);
 
-  const loadTriagem = async (agendamentoId: string) => {
+  const loadTriagem = async (agendamentoId: string, pacienteId?: string) => {
+    const requestId = ++triagemRequestRef.current;
+    setTriagem(null);
     try {
       // Try to find triage by agendamento_id first
       let { data } = await (supabase as any)
@@ -1262,7 +1265,6 @@ const ProntuarioPage: React.FC = () => {
 
       // If not found, also try searching by patient + recent date (for demanda reprimida)
       if (!data) {
-        const pacienteId = searchParams.get("pacienteId");
         if (pacienteId) {
           const { data: fallback } = await (supabase as any)
             .from("triage_records")
@@ -1288,16 +1290,16 @@ const ProntuarioPage: React.FC = () => {
           .select("nome, coren")
           .eq("id", data.tecnico_id)
           .maybeSingle();
-        setTriagem({
-          ...data,
-          tecnico_nome: (tecnico as any)?.nome || "",
-          tecnico_coren: (tecnico as any)?.coren || "",
-        });
-      } else {
-        setTriagem(null);
+        if (requestId === triagemRequestRef.current) {
+          setTriagem({
+            ...data,
+            tecnico_nome: (tecnico as any)?.nome || "",
+            tecnico_coren: (tecnico as any)?.coren || "",
+          });
+        }
       }
     } catch {
-      setTriagem(null);
+      if (requestId === triagemRequestRef.current) setTriagem(null);
     }
   };
 
@@ -1420,7 +1422,9 @@ const ProntuarioPage: React.FC = () => {
       }
       initializedRef.current = true;
 
-      loadTriagem(agendamentoId);
+      if (!prontuarios.some((p) => p.agendamento_id === agendamentoId)) {
+        void loadTriagem(agendamentoId, pacienteId);
+      }
       loadEpisodios(pacienteId);
       const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
       if (existingForAgendamento) {
@@ -1544,6 +1548,8 @@ const ProntuarioPage: React.FC = () => {
   }, [form.paciente_id, mergeProcedimentos]);
 
   const openNew = (pacienteId?: string, pacienteNome?: string) => {
+    triagemRequestRef.current += 1;
+    setTriagem(null);
     setEditId(null);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
@@ -1576,6 +1582,14 @@ const ProntuarioPage: React.FC = () => {
 
   const openEdit = async (item: ProntuarioDB) => {
     const p = await loadFullProntuario(item.id);
+
+    if (p.agendamento_id) {
+      // Um prontuário existente só pode mostrar sinais vitais do seu próprio atendimento.
+      void loadTriagem(p.agendamento_id);
+    } else {
+      triagemRequestRef.current += 1;
+      setTriagem(null);
+    }
 
     setEditId(p.id);
     setActiveAtendimento(null);
