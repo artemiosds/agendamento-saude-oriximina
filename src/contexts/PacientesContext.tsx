@@ -25,9 +25,14 @@ interface PacientesContextType {
   updatePaciente: (id: string, data: Partial<Paciente>) => Promise<void>;
   refreshPacientes: () => Promise<void>;
   activateLegacyPacientes: () => Promise<void>;
+  activateAgendaPatients: () => void;
+  hydrateAgendaPatients: (ids: string[], force?: boolean) => Promise<Paciente[]>;
 }
 
 const PacientesContext = createContext<PacientesContextType | null>(null);
+
+const pacienteColumns =
+  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
 
 const mapPacienteRow = (p: any): Paciente => ({
   id: p.id,
@@ -83,12 +88,58 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   const isGlobalAdmin = authUser?.usuario === "admin.sms";
 
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
+  const pacientesRef = useRef(pacientes);
+  pacientesRef.current = pacientes;
   const legacyActiveRef = useRef(false);
   const legacyLoadedRef = useRef(false);
   const legacyLoadRef = useRef<Promise<void> | null>(null);
-  const scopeKey = `${authUser?.id || "anonymous"}|${isGlobalAdmin ? "all" : authUser?.unidadeId || "none"}`;
+  const agendaModeRef = useRef(false);
+  const agendaPatientIdsRef = useRef(new Set<string>());
+  const agendaEpochRef = useRef(0);
+  const scopeKey = `${authUser?.id || "anonymous"}|${authUser?.role || "none"}|${isGlobalAdmin ? "all" : authUser?.unidadeId || "none"}`;
   const scopeKeyRef = useRef(scopeKey);
   scopeKeyRef.current = scopeKey;
+
+  const activateAgendaPatients = useCallback(() => {
+    if (agendaModeRef.current) return;
+    agendaModeRef.current = true;
+    agendaEpochRef.current++;
+    agendaPatientIdsRef.current.clear();
+    legacyActiveRef.current = false;
+    legacyLoadedRef.current = false;
+    legacyLoadRef.current = null;
+    pacientesRef.current = [];
+    setPacientes([]);
+  }, []);
+
+  const hydrateAgendaPatients = useCallback(async (ids: string[], force = false) => {
+    activateAgendaPatients();
+    const unique = [...new Set(ids.filter(Boolean))].filter(id => force || !agendaPatientIdsRef.current.has(id));
+    if (!unique.length) return pacientesRef.current.filter(p => ids.includes(p.id));
+    const epoch = agendaEpochRef.current;
+    const scope = scopeKey;
+    const scopedUnit = await resolveScopedUnidadeId();
+    if (!isGlobalAdmin && !scopedUnit) throw new Error('Unidade do usuário indisponível');
+    const rows: Paciente[] = [];
+    for (let offset = 0; offset < unique.length; offset += 100) {
+      let query = supabase.from('pacientes' as any).select(pacienteColumns)
+        .in('id', unique.slice(offset, offset + 100));
+      if (!isGlobalAdmin) query = query.or(`unidade_id.eq.${scopedUnit},unidade_id.is.null,unidade_id.eq.`);
+      const { data, error } = await query;
+      if (error || !data) throw error || new Error('Resposta de pacientes ausente');
+      rows.push(...data.map(mapPacienteRow));
+    }
+    if (epoch !== agendaEpochRef.current || scope !== scopeKeyRef.current || !agendaModeRef.current) {
+      throw new Error('Leitura de pacientes obsoleta');
+    }
+    rows.forEach(p => agendaPatientIdsRef.current.add(p.id));
+    const byId = new Map(pacientesRef.current.map(p => [p.id, p] as const));
+    rows.forEach(p => byId.set(p.id, p));
+    const next = [...byId.values()].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+    pacientesRef.current = next;
+    setPacientes(next);
+    return ids.map(id => byId.get(id)).filter((p): p is Paciente => !!p);
+  }, [activateAgendaPatients, isGlobalAdmin, resolveScopedUnidadeId, scopeKey]);
 
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
@@ -106,14 +157,12 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
         return;
       }
       const PAGE = 1000;
-      const columns =
-        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
       let allData: any[] = [];
       let from = 0;
       while (true) {
         let query = supabase
           .from("pacientes" as any)
-          .select(columns)
+          .select(pacienteColumns)
           .order("criado_em", { ascending: false })
           .range(from, from + PAGE - 1);
         if (!isGlobalAdmin && scopedUnidadeId) {
@@ -129,7 +178,7 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
         if (data.length < PAGE) break;
         from += PAGE;
       }
-      if (scopeKeyRef.current === requestedScope) {
+      if (scopeKeyRef.current === requestedScope && !agendaModeRef.current) {
         setPacientes(allData.map(mapPacienteRow));
       }
     } catch (err) {
@@ -138,12 +187,23 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   }, [isGlobalAdmin, resolveScopedUnidadeId, scopeKey]);
 
   const refreshPacientes = useCallback(async () => {
+    if (agendaModeRef.current && window.location.pathname === '/painel/agenda') {
+      await hydrateAgendaPatients([...agendaPatientIdsRef.current], true);
+      return;
+    }
+    agendaModeRef.current = false;
     legacyActiveRef.current = true;
     await loadPacientes();
     if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
-  }, [loadPacientes, scopeKey]);
+  }, [loadPacientes, hydrateAgendaPatients, scopeKey]);
 
   const activateLegacyPacientes = useCallback(async () => {
+    if (agendaModeRef.current) {
+      agendaModeRef.current = false;
+      agendaEpochRef.current++;
+      agendaPatientIdsRef.current.clear();
+      legacyLoadedRef.current = false;
+    }
     legacyActiveRef.current = true;
     if (legacyLoadedRef.current) return;
     if (legacyLoadRef.current) return legacyLoadRef.current;
@@ -243,6 +303,10 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
 
   // A1.1: mantém o provider montado, mas só ativa a carga legada sob demanda.
   useEffect(() => {
+    agendaModeRef.current = false;
+    agendaEpochRef.current++;
+    agendaPatientIdsRef.current.clear();
+    pacientesRef.current = [];
     legacyActiveRef.current = false;
     legacyLoadedRef.current = false;
     legacyLoadRef.current = null;
@@ -254,17 +318,22 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     enabled: !!authUser,
     table: "pacientes",
     onEvent: () => {
+      if (agendaModeRef.current && window.location.pathname === '/painel/agenda') {
+        void refreshPacientes();
+        return;
+      }
       if (legacyActiveRef.current) loadPacientes();
     },
     poll: () => {
+      if (agendaModeRef.current && window.location.pathname === '/painel/agenda') return refreshPacientes();
       if (legacyActiveRef.current) return loadPacientes();
       return Promise.resolve();
     },
   });
 
   const value = useMemo<PacientesContextType>(
-    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes }),
-    [pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes],
+    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients }),
+    [pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients],
   );
 
   return <PacientesContext.Provider value={value}>{children}</PacientesContext.Provider>;

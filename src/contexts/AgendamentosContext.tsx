@@ -17,9 +17,9 @@ import {
   type RealtimeSyncPayload,
 } from "@/hooks/useRealtimeSync";
 import { queryKeys } from "@/hooks/queries/queryKeys";
-import { localDateStr } from "@/lib/utils";
+import { addDaysToDateStr, localDateStr, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 import { getFilaSnapshot } from "@/contexts/_filaBridge";
-import { setAgendamentosSnapshot } from "@/contexts/_agendamentosBridge";
+import { setAgendamentosSnapshot, setCompleteAgendaDates } from "@/contexts/_agendamentosBridge";
 import type { Agendamento, Atendimento, FilaEspera } from "@/types";
 
 /**
@@ -40,6 +40,12 @@ interface AgendamentosContextType {
   activateLegacyAgendamentos: () => Promise<void>;
   ensureAgendamentosForDate: (date: string) => Promise<void>;
   ensureAgendamentosForRange: (startDate: string, endDate: string) => Promise<void>;
+  activateAgendaMode: () => void;
+  loadAgendaRange: (startDate: string, endDate: string, options?: { force?: boolean; visible?: boolean }) => Promise<void>;
+  completeAgendaDates: ReadonlySet<string>;
+  setAgendaSelectedDate: (date: string) => void;
+  loadAgendaExceptions: (kind: 'online' | 'historical') => Promise<Agendamento[]>;
+  agendaRevision: number;
   atendimentos: Atendimento[];
   addAtendimento: (a: Atendimento) => Promise<void>;
   updateAtendimento: (id: string, data: Partial<Atendimento>) => void;
@@ -123,12 +129,158 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
   const agendamentosRef = useRef(agendamentos);
   agendamentosRef.current = agendamentos;
   const loadedExtraDatesRef = useRef<Set<string>>(new Set());
+  const agendaModeRef = useRef(false);
+  const agendaDatesRef = useRef(new Set<string>());
+  const [completeAgendaDates, setCompleteAgendaDatesState] = useState<ReadonlySet<string>>(new Set());
+  const agendaVisibleRef = useRef<[string, string] | null>(null);
+  const agendaSelectedRef = useRef<string | null>(null);
+  const agendaVisibleAbortRef = useRef<AbortController | null>(null);
+  const agendaEpochRef = useRef(0);
+  const agendaDateGenerationRef = useRef(new Map<string, number>());
+  const agendaExceptionIdsRef = useRef({ online: new Set<string>(), historical: new Set<string>() });
+  const agendaRequestSequenceRef = useRef(0);
+  const [agendaRevision, setAgendaRevision] = useState(0);
   const legacyActiveRef = useRef(false);
   const legacyLoadedRef = useRef(false);
   const legacyLoadRef = useRef<Promise<void> | null>(null);
-  const scopeKey = `${authUser?.id || "anonymous"}|${isGlobalAdmin ? "all" : userUnidadeId || "none"}`;
+  const scopeKey = `${authUser?.id || "anonymous"}|${authUser?.role || "none"}|${isGlobalAdmin ? "all" : userUnidadeId || "none"}`;
   const scopeKeyRef = useRef(scopeKey);
   scopeKeyRef.current = scopeKey;
+
+  const publishAgendaDates = useCallback(() => {
+    const dates = new Set(agendaDatesRef.current);
+    setCompleteAgendaDates(dates);
+    setCompleteAgendaDatesState(dates);
+  }, []);
+
+  const activateAgendaMode = useCallback(() => {
+    if (agendaModeRef.current) return;
+    agendaModeRef.current = true;
+    agendaEpochRef.current++;
+    legacyActiveRef.current = false;
+    legacyLoadedRef.current = false;
+    legacyLoadRef.current = null;
+    agendaVisibleAbortRef.current?.abort();
+    agendaDatesRef.current.clear();
+    agendaDateGenerationRef.current.clear();
+    agendaExceptionIdsRef.current = { online: new Set(), historical: new Set() };
+    agendaVisibleRef.current = null;
+    agendaSelectedRef.current = null;
+    publishAgendaDates();
+    agendamentosRef.current = [];
+    setAgendamentosSnapshot([]);
+    setAgendamentos([]);
+  }, [publishAgendaDates]);
+
+  const setAgendaSelectedDate = useCallback((date: string) => {
+    agendaSelectedRef.current = date;
+  }, []);
+
+  const loadAgendaRange = useCallback(async (
+    startDate: string, endDate: string, options: { force?: boolean; visible?: boolean } = {},
+  ) => {
+    if (!startDate || !endDate || startDate > endDate) return;
+    activateAgendaMode();
+    if (options.visible) {
+      agendaVisibleRef.current = [startDate, endDate];
+      agendaVisibleAbortRef.current?.abort();
+    }
+    const missing = dateKeysBetween(startDate, endDate).filter(date => options.force || !agendaDatesRef.current.has(date));
+    if (!missing.length) return;
+    const epoch = agendaEpochRef.current;
+    const token = ++agendaRequestSequenceRef.current;
+    missing.forEach(date => agendaDateGenerationRef.current.set(date, token));
+    const controller = new AbortController();
+    if (options.visible) agendaVisibleAbortRef.current = controller;
+    const rows: any[] = [];
+    try {
+      // Dias já completos não são consultados novamente ao alternar mês, semana e dia.
+      const spans: Array<[string, string]> = [];
+      for (const date of missing) {
+        const last = spans[spans.length - 1];
+        if (last && date === addDaysToDateStr(last[1], 1)) last[1] = date;
+        else spans.push([date, date]);
+      }
+      for (const [first, last] of spans) {
+        for (let from = 0; ; from += 1000) {
+          let query = supabase.from('agendamentos' as any).select(agendamentoColumns)
+            .gte('data', first).lte('data', last)
+            .order('data', { ascending: false }).order('hora', { ascending: true })
+            .order('id', { ascending: true }).range(from, from + 999)
+            .abortSignal(controller.signal);
+          if (!isGlobalAdmin) {
+            if (!userUnidadeId) throw new Error('Unidade do usuário indisponível');
+            query = query.eq('unidade_id', userUnidadeId);
+          }
+          if (authUser?.role === 'profissional') query = query.eq('profissional_id', authUser.id);
+          const { data, error } = await query;
+          if (error || !data) throw error || new Error('Resposta de agendamentos ausente');
+          rows.push(...data);
+          if (data.length < 1000) break;
+        }
+      }
+      if (controller.signal.aborted || epoch !== agendaEpochRef.current || scopeKeyRef.current !== scopeKey ||
+        missing.some(date => agendaDateGenerationRef.current.get(date) !== token)) {
+        throw new Error('Leitura da Agenda substituída por outra mais recente');
+      }
+      const days = new Set(missing);
+      const merged = new Map(agendamentosRef.current.filter(a => !days.has(a.data)).map(a => [a.id, a] as const));
+      rows.map(mapAgendamentoRow).forEach(a => merged.set(a.id, a));
+      const next = [...merged.values()];
+      agendamentosRef.current = next;
+      setAgendamentosSnapshot(next);
+      setAgendamentos(next);
+      missing.forEach(date => agendaDatesRef.current.add(date));
+      publishAgendaDates();
+    } catch (error) {
+      if (!controller.signal.aborted && epoch === agendaEpochRef.current) throw error;
+    }
+  }, [activateAgendaMode, isGlobalAdmin, userUnidadeId, authUser?.role, authUser?.id, scopeKey, publishAgendaDates]);
+
+  const loadAgendaExceptions = useCallback(async (kind: 'online' | 'historical') => {
+    activateAgendaMode();
+    const epoch = agendaEpochRef.current;
+    const scope = scopeKey;
+    const today = todayLocalStr();
+    const now = nowMinutesInBrazil();
+    const hour = `${String(Math.floor(now / 60)).padStart(2, '0')}:${String(now % 60).padStart(2, '0')}`;
+    const pending = ['confirmado', 'aguardando', 'confirmado_chegada', 'chegada_confirmada',
+      'apto_atendimento', 'chamado', 'em_atendimento', 'triagem_concluida',
+      'aguardando_atendimento', 'aguardando_triagem'];
+    const rows: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      let query = supabase.from('agendamentos' as any).select(agendamentoColumns)
+        .order('data', { ascending: false }).order('hora', { ascending: true })
+        .order('id', { ascending: true }).range(from, from + 999);
+      query = kind === 'online'
+        ? query.eq('origem', 'online').eq('status', 'pendente')
+        : query.in('status', pending).or(`data.lt.${today},and(data.eq.${today},hora.lt.${hour})`);
+      if (!isGlobalAdmin) {
+        if (!userUnidadeId) throw new Error('Unidade do usuário indisponível');
+        query = query.eq('unidade_id', userUnidadeId);
+      }
+      if (authUser?.role === 'profissional') query = query.eq('profissional_id', authUser.id);
+      const { data, error } = await query;
+      if (error || !data) throw error || new Error('Resposta de pendências ausente');
+      rows.push(...data);
+      if (data.length < 1000) break;
+    }
+    if (epoch !== agendaEpochRef.current || scope !== scopeKeyRef.current || !agendaModeRef.current) {
+      throw new Error('Leitura de pendências obsoleta');
+    }
+    const mapped = rows.map(mapAgendamentoRow);
+    const previousIds = agendaExceptionIdsRef.current[kind];
+    const byId = new Map(agendamentosRef.current
+      .filter(a => agendaDatesRef.current.has(a.data) || !previousIds.has(a.id))
+      .map(a => [a.id, a] as const));
+    mapped.forEach(a => byId.set(a.id, a));
+    agendaExceptionIdsRef.current[kind] = new Set(mapped.map(a => a.id));
+    const next = [...byId.values()];
+    agendamentosRef.current = next;
+    setAgendamentosSnapshot(next);
+    setAgendamentos(next);
+    return mapped;
+  }, [activateAgendaMode, scopeKey, isGlobalAdmin, userUnidadeId, authUser?.role, authUser?.id]);
 
   // Mantém o snapshot module-level em dia para o bridge com o DataProvider
   // (memos `appointmentCountsByKey`/`appointmentsByDateProfUnit`).
@@ -205,7 +357,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         ).values(),
       );
       const mapped = allData.map(mapAgendamentoRow);
-      if (scopeKeyRef.current !== requestedScope) return;
+      if (scopeKeyRef.current !== requestedScope || agendaModeRef.current) return;
       setAgendamentos((prev) => {
         const scopeKey = userUnidadeId || "all";
         const map = new Map<string, Agendamento>();
@@ -292,12 +444,30 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
   );
 
   const refreshAgendamentos = useCallback(async () => {
+    if (agendaModeRef.current && window.location.pathname === '/painel/agenda') {
+      const visible = agendaVisibleRef.current;
+      if (visible) await loadAgendaRange(visible[0], visible[1], { force: true });
+      const selected = agendaSelectedRef.current;
+      if (selected && (!visible || selected < visible[0] || selected > visible[1])) {
+        await loadAgendaRange(selected, selected, { force: true });
+      }
+      return;
+    }
+    agendaModeRef.current = false;
     legacyActiveRef.current = true;
     await loadAgendamentos();
     if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
-  }, [loadAgendamentos, scopeKey]);
+  }, [loadAgendamentos, loadAgendaRange, scopeKey]);
 
   const activateLegacyAgendamentos = useCallback(async () => {
+    if (agendaModeRef.current) {
+      agendaModeRef.current = false;
+      agendaVisibleAbortRef.current?.abort();
+      agendaEpochRef.current++;
+      agendaDatesRef.current.clear();
+      publishAgendaDates();
+      legacyLoadedRef.current = false;
+    }
     legacyActiveRef.current = true;
     if (legacyLoadedRef.current) return;
     if (legacyLoadRef.current) return legacyLoadRef.current;
@@ -309,11 +479,51 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     });
     legacyLoadRef.current = pending;
     return pending;
-  }, [loadAgendamentos, scopeKey]);
+  }, [loadAgendamentos, scopeKey, publishAgendaDates]);
 
   // Handler de upsert incremental do canal `agendamentos`.
   const applyAgendamentoRealtimeEvent = useCallback(
     (payload: RealtimeSyncPayload) => {
+      if (agendaModeRef.current && window.location.pathname === '/painel/agenda') {
+        const oldRow = payload.old as any;
+        const row = payload.new as any;
+        const existing = agendamentosRef.current.find(a => a.id === (row?.id || oldRow?.id));
+        const inScope = row && (isGlobalAdmin || row.unidade_id === userUnidadeId) &&
+          (authUser?.role !== 'profissional' || row.profissional_id === authUser.id);
+        const isException = row && inScope &&
+          ((row.origem === 'online' && row.status === 'pendente') ||
+            (row.data < todayLocalStr() && ['confirmado', 'aguardando', 'confirmado_chegada',
+              'chegada_confirmada', 'apto_atendimento', 'chamado', 'em_atendimento',
+              'triagem_concluida', 'aguardando_atendimento', 'aguardando_triagem'].includes(row.status)));
+        if (existing && !agendaDatesRef.current.has(existing.data)) {
+          const next = payload.eventType === 'DELETE' || !isException
+            ? removeById(agendamentosRef.current, existing.id)
+            : upsertById(agendamentosRef.current, mapAgendamentoRow(row));
+          agendamentosRef.current = next;
+          setAgendamentos(next);
+        } else if (!existing && isException &&
+          (authUser?.role !== 'profissional' || row.profissional_id === authUser.id)) {
+          const next = upsertById(agendamentosRef.current, mapAgendamentoRow(row));
+          agendamentosRef.current = next;
+          setAgendamentos(next);
+        }
+        setAgendaRevision(v => v + 1);
+        const affected = [...new Set([oldRow?.data, existing?.data, row?.data].filter(Boolean) as string[])];
+        const visible = agendaVisibleRef.current;
+        const loaded = affected.filter(date => agendaDatesRef.current.has(date));
+        loaded.forEach(date => agendaDatesRef.current.delete(date));
+        if (loaded.length) publishAgendaDates();
+        if (visible && affected.some(date => date >= visible[0] && date <= visible[1]) &&
+          affected.some(date => !loaded.includes(date))) {
+          void loadAgendaRange(visible[0], visible[1], { force: true, visible: true })
+            .catch(error => console.error('Erro ao atualizar Agenda em Realtime:', error));
+        } else {
+          void (async () => {
+            for (const date of loaded) await loadAgendaRange(date, date, { force: true });
+          })().catch(error => console.error('Erro ao atualizar data da Agenda:', error));
+        }
+        return;
+      }
       if (payload.eventType === "DELETE") {
         const id = String((payload.old as any)?.id || "");
         if (id) setAgendamentos((prev) => removeById(prev, id));
@@ -354,11 +564,15 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         }),
       );
     },
-    [isGlobalAdmin, userUnidadeId],
+    [isGlobalAdmin, userUnidadeId, authUser?.role, authUser?.id, loadAgendaRange, publishAgendaDates],
   );
 
   const addAgendamento = useCallback(
     async (ag: Agendamento) => {
+      if (agendaModeRef.current && !agendaDatesRef.current.has(ag.data)) {
+        await loadAgendaRange(ag.data, ag.data);
+        if (!agendaDatesRef.current.has(ag.data)) throw new Error('Ocupação da data indisponível');
+      }
       const userRole = authUser?.role || "";
       const rolesToBlock = ["recepcao", "gestao", "coordenador"];
 
@@ -428,7 +642,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         throw error;
       }
     },
-    [logAction, invalidateCache, authUser?.role, getTurnoInfo],
+    [logAction, invalidateCache, authUser?.role, getTurnoInfo, loadAgendaRange],
   );
 
   const updateAgendamento = useCallback(
@@ -466,6 +680,10 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         const agOriginal = agendamentosRef.current.find((a) => a.id === id);
         if (agOriginal) {
           const newData = data.data || agOriginal.data;
+          if (agendaModeRef.current && !agendaDatesRef.current.has(newData)) {
+            await loadAgendaRange(newData, newData);
+            if (!agendaDatesRef.current.has(newData)) throw new Error('Ocupação da data indisponível');
+          }
           const newHora = data.hora || agOriginal.hora;
           const newProfId = data.profissionalId || agOriginal.profissionalId;
           const newUnidId = agOriginal.unidadeId;
@@ -520,7 +738,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         throw error;
       }
     },
-    [logAction, invalidateCache, authUser?.role, getTurnoInfo],
+    [logAction, invalidateCache, authUser?.role, getTurnoInfo, loadAgendaRange],
   );
 
   const cancelAgendamento = useCallback(
@@ -637,6 +855,14 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
 
   // A1.1: mantém o provider montado, mas só ativa a carga legada sob demanda.
   useEffect(() => {
+    agendaVisibleAbortRef.current?.abort();
+    agendaEpochRef.current++;
+    agendaDatesRef.current.clear();
+    agendaDateGenerationRef.current.clear();
+    agendaExceptionIdsRef.current = { online: new Set(), historical: new Set() };
+    agendaRequestSequenceRef.current = 0;
+    agendaModeRef.current = false;
+    publishAgendaDates();
     legacyActiveRef.current = false;
     legacyLoadedRef.current = false;
     legacyLoadRef.current = null;
@@ -651,6 +877,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     table: "agendamentos",
     onEvent: applyAgendamentoRealtimeEvent,
     poll: () => {
+      if (agendaModeRef.current && window.location.pathname === '/painel/agenda') return refreshAgendamentos();
       if (legacyActiveRef.current) return loadAgendamentos();
       return Promise.resolve();
     },
@@ -667,6 +894,12 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       activateLegacyAgendamentos,
       ensureAgendamentosForDate,
       ensureAgendamentosForRange,
+      activateAgendaMode,
+      loadAgendaRange,
+      completeAgendaDates,
+      setAgendaSelectedDate,
+      loadAgendaExceptions,
+      agendaRevision,
       atendimentos,
       addAtendimento,
       updateAtendimento,
@@ -681,6 +914,12 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       activateLegacyAgendamentos,
       ensureAgendamentosForDate,
       ensureAgendamentosForRange,
+      activateAgendaMode,
+      loadAgendaRange,
+      completeAgendaDates,
+      setAgendaSelectedDate,
+      loadAgendaExceptions,
+      agendaRevision,
       atendimentos,
       addAtendimento,
       updateAtendimento,

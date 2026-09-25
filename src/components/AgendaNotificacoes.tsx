@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { whatsappService } from "@/services/whatsappService";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
 import { addDaysToDateStr, todayLocalStr } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Agendamento {
   id: string;
@@ -118,28 +119,61 @@ export const AgendaNotificacaoIndividual: React.FC<IndividualProps> = ({ ag, pac
 };
 
 export const AgendaNotificacoesMassa: React.FC<MassaProps> = ({
-  agendamentos,
-  pacientes,
   unidades,
-  selectedDate,
   userUnidadeId,
   userUsuario,
 }) => {
   const [loading, setLoading] = useState<string | null>(null);
   const { notify } = useWebhookNotify();
 
-  // Filter by unit (same logic as Agenda) and exclude cancelled/completed
-  const agAtivos = React.useMemo(() => {
-    return agendamentos.filter((a) => {
-      if (CANCELADOS.has(a.status)) return false;
-      // Unit isolation: if user has a unit and is not admin.sms, only their unit
-      if (userUnidadeId && userUsuario !== "admin.sms" && a.unidadeId !== userUnidadeId) return false;
-      return true;
-    });
-  }, [agendamentos, userUnidadeId, userUsuario]);
+  const consultarDestinatarios = async (date: string, filtro?: (ag: Agendamento) => boolean) => {
+    if (userUsuario !== 'admin.sms' && !userUnidadeId) throw new Error('Unidade indisponível');
+    const rows: Agendamento[] = [];
+    for (let from = 0; ; from += 1000) {
+      let query = supabase.from('agendamentos').select('id,paciente_id,paciente_nome,profissional_nome,data,hora,status,unidade_id,tipo,observacoes')
+        .eq('data', date).order('data', { ascending: false }).order('id', { ascending: true })
+        .range(from, from + 999);
+      if (userUsuario !== 'admin.sms') query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
+      if (error || !data) throw error || new Error('Resposta de agendamentos ausente');
+      rows.push(...data.map(a => ({ id: a.id, pacienteId: a.paciente_id,
+        pacienteNome: a.paciente_nome, profissionalNome: a.profissional_nome,
+        data: a.data, hora: a.hora, status: a.status, unidadeId: a.unidade_id,
+        tipo: a.tipo, observacoes: a.observacoes || '' })));
+      if (data.length < 1000) break;
+    }
+    const active = rows.filter(a => !CANCELADOS.has(a.status) && (!filtro || filtro(a)));
+    const contacts = new Map<string, Paciente>();
+    const ids = [...new Set(active.map(a => a.pacienteId))];
+    for (let from = 0; from < ids.length; from += 100) {
+      let query = supabase.from('pacientes').select('id,nome,telefone,email,unidade_id')
+        .in('id', ids.slice(from, from + 100));
+      if (userUsuario !== 'admin.sms') query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+      const { data, error } = await query;
+      if (error || !data) throw error || new Error('Resposta de pacientes ausente');
+      data.forEach(p => contacts.set(p.id, p));
+    }
+    if (ids.some(id => !contacts.has(id))) throw new Error('Contato de paciente indisponível');
+    return { active, contacts };
+  };
 
-  const enviarParaLista = async (lista: Agendamento[], tipo: string) => {
+  const enviarParaLista = async (date: string, tipo: string, filtro?: (ag: Agendamento) => boolean) => {
+    if (loading) return;
+    setLoading(tipo);
+    let lista: Agendamento[];
+    let contacts: Map<string, Paciente>;
+    try {
+      const result = await consultarDestinatarios(date, filtro);
+      lista = result.active;
+      contacts = result.contacts;
+    } catch (error) {
+      console.error('Erro ao consultar destinatários:', error);
+      toast.error('Não foi possível consultar os destinatários. Tente novamente.');
+      setLoading(null);
+      return;
+    }
     if (lista.length === 0) {
+      setLoading(null);
       toast.info("Nenhum agendamento ativo para enviar aviso.");
       return;
     }
@@ -147,14 +181,14 @@ export const AgendaNotificacoesMassa: React.FC<MassaProps> = ({
     const confirmou = window.confirm(
       `Enviar aviso para ${lista.length} paciente(s)?`,
     );
-    if (!confirmou) return;
+    if (!confirmou) { setLoading(null); return; }
 
     setLoading(tipo);
     let enviados = 0;
     let erros = 0;
 
     for (const ag of lista) {
-      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      const pac = contacts.get(ag.pacienteId);
       const telefone = pac?.telefone || "";
       const email = pac?.email || "";
       const unidade = unidades.find((u) => u.id === ag.unidadeId);
@@ -202,29 +236,26 @@ export const AgendaNotificacoesMassa: React.FC<MassaProps> = ({
 
   const handleHoje = () => {
     const hoje = todayLocalStr();
-    const hojeAgs = agAtivos.filter((a) => a.data === hoje);
-    enviarParaLista(hojeAgs, "hoje");
+    void enviarParaLista(hoje, "hoje");
   };
 
   const handleAmanha = () => {
     const amanha = addDaysToDateStr(todayLocalStr(), 1);
-    const amanhaAgs = agAtivos.filter((a) => a.data === amanha);
-    enviarParaLista(amanhaAgs, "amanha");
+    void enviarParaLista(amanha, "amanha");
   };
 
   const handle1Hora = () => {
     const agora = new Date();
     const hoje = todayLocalStr();
-    const proximos = agAtivos.filter((a) => {
-      if (a.data !== hoje) return false;
+    const filtro = (a: Agendamento) => {
       const [h, m] = a.hora.split(":").map(Number);
       if (isNaN(h) || isNaN(m)) return false;
       const horaAg = new Date();
       horaAg.setHours(h, m, 0, 0);
       const diff = horaAg.getTime() - agora.getTime();
       return diff > 0 && diff <= 3600000;
-    });
-    enviarParaLista(proximos, "1hora");
+    };
+    void enviarParaLista(hoje, "1hora", filtro);
   };
 
   return (

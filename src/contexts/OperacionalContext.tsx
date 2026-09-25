@@ -17,6 +17,7 @@ import { addDaysToDateStr, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } fro
 import { auditService } from "@/services/auditService";
 import {
   getAgendamentosSnapshot,
+  isCompleteAgendaDate,
   subscribeAgendamentosSnapshot,
 } from "@/contexts/_agendamentosBridge";
 import type {
@@ -601,6 +602,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
   const getTurnoInfo = useCallback(
     (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
+      const agendaMode = window.location.pathname === '/painel/agenda';
+      if (agendaMode && !isCompleteAgendaDate(date)) return [];
       const dayOfWeek = isoDayOfWeek(date);
       const disps = disponibilidadesRef.current;
       const turnoDisps = disps.filter(
@@ -615,7 +618,9 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
       if (turnoDisps.length === 0) return [];
 
       const key = `${profissionalId}|${unidadeId}|${date}`;
-      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+      const dayAppointments = agendaMode
+        ? getAgendamentosSnapshot().filter(a => a.data === date && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status))
+        : appointmentsByDateProfUnitRef.current.get(key) || [];
 
       const sortedTurnos = [...turnoDisps].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 
@@ -1026,6 +1031,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
   const getAvailableSlots = useCallback(
     (profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
+      const agendaMode = window.location.pathname === '/painel/agenda';
+      if (agendaMode && !isCompleteAgendaDate(date)) return [];
       const todayStr = todayLocalStr();
       if (date < todayStr) return [];
 
@@ -1042,7 +1049,9 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
       if (allDisps.length === 0) return [];
 
       const key = `${profissionalId}|${unidadeId}|${date}`;
-      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+      const dayAppointments = agendaMode
+        ? getAgendamentosSnapshot().filter(a => a.data === date && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status))
+        : appointmentsByDateProfUnitRef.current.get(key) || [];
 
       const turnoDisps = allDisps.filter((d) => d.vagasPorHora === 0);
       const horaDisps = allDisps.filter((d) => d.vagasPorHora > 0);
@@ -1130,6 +1139,13 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
   const getAvailableDatesInternal = useCallback(
     (profissionalId: string, unidadeId: string): string[] => {
+      const agendaMode = window.location.pathname === '/painel/agenda';
+      const agendaCounts = new Map<string, number>();
+      if (agendaMode) for (const a of getAgendamentosSnapshot()) {
+        if (a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status)) {
+          agendaCounts.set(a.data, (agendaCounts.get(a.data) || 0) + 1);
+        }
+      }
       const disps = disponibilidadesRef.current;
       const filteredDisps = disps.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
       if (filteredDisps.length === 0) return [];
@@ -1143,8 +1159,13 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         while (currentDate <= disp.dataFim) {
           const dayOfWeek = isoDayOfWeek(currentDate);
           if (disp.diasSemana.includes(dayOfWeek) && !processedDates.has(currentDate)) {
+            if (agendaMode && !isCompleteAgendaDate(currentDate)) {
+              processedDates.add(currentDate);
+              currentDate = addDaysToDateStr(currentDate, 1);
+              continue;
+            }
             const key = `${profissionalId}|${unidadeId}|${currentDate}`;
-            const dayCount = appointmentCountsByKeyRef.current.get(key) || 0;
+            const dayCount = agendaMode ? agendaCounts.get(currentDate) || 0 : appointmentCountsByKeyRef.current.get(key) || 0;
             const dateDisps = filteredDisps.filter(
               (d) => d.diasSemana.includes(dayOfWeek) && currentDate >= d.dataInicio && currentDate <= d.dataFim,
             );

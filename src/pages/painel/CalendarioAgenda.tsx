@@ -34,6 +34,7 @@ interface CalendarioAgendaProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
   onVisibleRangeChange?: (startDate: string, endDate: string) => void;
+  completeDates?: ReadonlySet<string>;
   agendamentos: any[];
   bloqueios: any[];
   disponibilidades: any[];
@@ -68,6 +69,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   selectedDate,
   onDateChange,
   onVisibleRangeChange,
+  completeDates,
   agendamentos,
   bloqueios,
   disponibilidades,
@@ -173,6 +175,11 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     const dayOfWeek = date.getUTCDay();
     const isToday = dateStr === todayLocalStr();
     const isPast = dateStr < todayLocalStr();
+    if (completeDates && !completeDates.has(dateStr)) {
+      return { date: dateStr, dayNumber: date.getUTCDate(), isToday,
+        isSelected: dateStr === selectedDate, status: 'empty', agendamentosCount: 0,
+        totalVagas: 0, counts: emptyCounts() };
+    }
 
     const appointmentSummary = dayAppointmentSummaries.get(dateStr);
     const agendamentosCount = appointmentSummary?.agendamentosCount || 0;
@@ -209,7 +216,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     } else if (hasDisponibilidade) status = "full";
 
     return { date: dateStr, dayNumber: date.getUTCDate(), isToday, isSelected: dateStr === selectedDate, status, agendamentosCount, totalVagas, counts };
-  }, [bloqueiosDiaInteiro, dayAppointmentSummaries, disponibilidadesByProfUnit, filterUnit, selectedDate]);
+  }, [bloqueiosDiaInteiro, dayAppointmentSummaries, disponibilidadesByProfUnit, filterUnit, selectedDate, completeDates]);
 
   const dayInfoByDate = useMemo(() => {
     const index = new Map<string, DiaInfo>();

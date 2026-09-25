@@ -1,5 +1,4 @@
 const PATIENT_ROUTES = new Set([
-  "/painel/agenda",
   "/painel/pacientes",
   "/painel/atualizacao-cadastral",
   "/painel/fila",
@@ -12,7 +11,6 @@ const PATIENT_ROUTES = new Set([
 ]);
 
 const APPOINTMENT_ROUTES = new Set([
-  "/painel/agenda",
   "/painel/pacientes",
   "/painel/fila",
   "/painel/prontuario",

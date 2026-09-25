@@ -9,9 +9,15 @@ describe("A1.1 route data activation", () => {
     });
   });
 
-  it("activates both legacy datasets for operational routes", () => {
+  it("keeps Agenda free from both legacy global loads", () => {
+    expect(getLegacyRouteDataNeeds("/painel/agenda")).toEqual({
+      pacientes: false,
+      agendamentos: false,
+    });
+  });
+
+  it("activates both legacy datasets for the other operational routes", () => {
     for (const pathname of [
-      "/painel/agenda",
       "/painel/pacientes",
       "/painel/fila",
       "/painel/prontuario",

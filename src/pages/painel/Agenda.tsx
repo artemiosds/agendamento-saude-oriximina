@@ -248,14 +248,17 @@ const Agenda: React.FC = () => {
   const { user } = useAuth();
   const isProfissional = user?.role === "profissional";
 
-  const { pacientes } = usePacientes();
+  const { pacientes, hydrateAgendaPatients } = usePacientes();
   const {
     agendamentos,
     addAgendamento,
     updateAgendamento,
     refreshAgendamentos,
-    ensureAgendamentosForDate,
-    ensureAgendamentosForRange,
+    loadAgendaRange,
+    completeAgendaDates,
+    setAgendaSelectedDate,
+    loadAgendaExceptions,
+    agendaRevision,
     addAtendimento,
   } = useAgendamentos();
   const { fila, addToFila, updateFila, refreshFila } = useFila();
@@ -302,9 +305,26 @@ const Agenda: React.FC = () => {
     return map;
   }, [unidades]);
 
-  const agendamentosDoDia = React.useMemo(
+  const rawAgendamentosDoDia = React.useMemo(
     () => agendamentos.filter((ag) => ag.data === selectedDate),
     [agendamentos, selectedDate],
+  );
+  const dayPatientKey = React.useMemo(() =>
+    `${selectedDate}|${rawAgendamentosDoDia.map(a => a.pacienteId).sort().join(',')}`,
+    [selectedDate, rawAgendamentosDoDia]);
+  const [hydratedDayKey, setHydratedDayKey] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    const ids = rawAgendamentosDoDia.map(a => a.pacienteId).filter(Boolean);
+    if (!completeAgendaDates.has(selectedDate)) return;
+    void hydrateAgendaPatients(ids).then(() => {
+      if (!cancelled) setHydratedDayKey(dayPatientKey);
+    }).catch(error => console.error('Erro ao carregar pacientes do dia da Agenda:', error));
+    return () => { cancelled = true; };
+  }, [rawAgendamentosDoDia, selectedDate, completeAgendaDates, hydrateAgendaPatients, dayPatientKey]);
+  const agendamentosDoDia = React.useMemo(
+    () => completeAgendaDates.has(selectedDate) && hydratedDayKey === dayPatientKey ? rawAgendamentosDoDia : [],
+    [completeAgendaDates, selectedDate, hydratedDayKey, dayPatientKey, rawAgendamentosDoDia],
   );
   const dayAgIds = React.useMemo(
     () => agendamentosDoDia.map((ag) => ag.id).sort(),
@@ -312,25 +332,45 @@ const Agenda: React.FC = () => {
   );
   const dayAgIdsKey = React.useMemo(() => dayAgIds.join(","), [dayAgIds]);
 
-  // Past-date hydration: when navigating to a date outside the default
-  // 14-day window, on-demand fetch ALL agendamentos for that date so the
-  // status panels (Confirmados, Aptos, Em atendimento, Concluídos, Faltou,
-  // Cancelados, Pendentes) are populated for past months.
   useEffect(() => {
-    if (!selectedDate) return;
-    const today = todayLocalStr();
-    if (selectedDate >= today) return;
-    // Always call — the context dedupes per (date, unidade) and merges.
-    ensureAgendamentosForDate(selectedDate);
-  }, [selectedDate, ensureAgendamentosForDate]);
+    setAgendaSelectedDate(selectedDate);
+  }, [selectedDate, setAgendaSelectedDate]);
 
   const handleAgendaVisibleRangeChange = useCallback((startDate: string, endDate: string) => {
-    const today = todayLocalStr();
-    const pastEnd = endDate < today ? endDate : addDaysToDateStr(today, -1);
-    if (startDate > pastEnd) return;
-    ensureAgendamentosForRange(startDate, pastEnd);
-  }, [ensureAgendamentosForRange]);
+    void loadAgendaRange(startDate, endDate, { visible: true })
+      .catch(error => console.error('Erro ao carregar intervalo visível da Agenda:', error));
+  }, [loadAgendaRange]);
   const [filterUnit, setFilterUnit] = useState("all");
+  const [pendenciasCount, setPendenciasCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const today = todayLocalStr();
+    const now = nowMinutesInBrazil();
+    const hour = `${String(Math.floor(now / 60)).padStart(2, '0')}:${String(now % 60).padStart(2, '0')}`;
+    const statuses = ['confirmado', 'aguardando', 'confirmado_chegada', 'chegada_confirmada',
+      'apto_atendimento', 'chamado', 'em_atendimento', 'triagem_concluida',
+      'aguardando_atendimento', 'aguardando_triagem'];
+    let query = supabase.from('agendamentos' as any).select('id', { count: 'exact', head: true })
+      .in('status', statuses).or(`data.lt.${today},and(data.eq.${today},hora.lt.${hour})`);
+    if (user.unidadeId && user.usuario !== 'admin.sms') query = query.eq('unidade_id', user.unidadeId);
+    if (isProfissional) query = query.eq('profissional_id', user.id);
+    void query.then(({ count, error }) => {
+      if (cancelled) return;
+      if (error || count === null) {
+        console.error('Erro ao contar pendências da Agenda:', error);
+        toast.error('Não foi possível consultar as pendências da Agenda.');
+        return;
+      }
+      setPendenciasCount(count);
+    });
+    return () => { cancelled = true; };
+  }, [user, isProfissional, agendaRevision]);
+
+  useEffect(() => {
+    void loadAgendaExceptions('online')
+      .catch(error => console.error('Erro ao consultar pendentes online:', error));
+  }, [loadAgendaExceptions]);
   const [filterProf, setFilterProf] = useState(isProfissional ? (user?.id || "all") : "all");
   const [searchProf, setSearchProf] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -605,6 +645,8 @@ const Agenda: React.FC = () => {
     }
     // Atualiza imediatamente o paciente selecionado
     setNewAg((p) => ({ ...p, pacienteId }));
+    void hydrateAgendaPatients([pacienteId])
+      .catch(error => console.error('Erro ao consultar paciente selecionado:', error));
     // Se já foi conferido nesta sessão, não reabre o modal
     if (pacientesConferidos.has(pacienteId)) return;
     setConferenciaModal({
@@ -698,6 +740,11 @@ const Agenda: React.FC = () => {
       })
       .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
   }, [agendamentos, user]);
+  useEffect(() => {
+    const ids = agendamentosPendentesOnline.map(a => a.pacienteId).filter(Boolean);
+    if (ids.length) void hydrateAgendaPatients(ids)
+      .catch(error => console.error('Erro ao carregar pacientes pendentes online:', error));
+  }, [agendamentosPendentesOnline, hydrateAgendaPatients]);
 
   const blockedForDate = React.useMemo(() => {
     return bloqueios.filter((b) => selectedDate >= b.dataInicio && selectedDate <= b.dataFim && b.diaInteiro);
@@ -718,15 +765,16 @@ const Agenda: React.FC = () => {
   const newAgTurnoInfo = React.useMemo(() => {
     if (!newAg.profissionalId || !selectedProfUnit) return [];
     return getTurnoInfo(newAg.profissionalId, selectedProfUnit, selectedDate);
-  }, [newAg.profissionalId, selectedProfUnit, selectedDate, getTurnoInfo]);
+  }, [newAg.profissionalId, selectedProfUnit, selectedDate, getTurnoInfo, completeAgendaDates]);
 
   const isTurnoMode = newAgTurnoInfo.length > 0;
 
   const newAgSlots = React.useMemo(() => {
+    if (!completeAgendaDates.has(selectedDate)) return [];
     if (!newAg.profissionalId) return [];
     if (!selectedProfUnit) return [];
     return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate);
-  }, [newAg.profissionalId, selectedProfUnit, selectedDate, getAvailableSlots]);
+  }, [newAg.profissionalId, selectedProfUnit, selectedDate, getAvailableSlots, completeAgendaDates]);
 
   // Clear selected hora when it's no longer in available slots (skip for master — they can type any time)
   React.useEffect(() => {
@@ -742,7 +790,7 @@ const Agenda: React.FC = () => {
   const retornoAvailableDates = React.useMemo(() => {
     if (!user || !retornoDialogOpen) return [];
     return getAvailableDates(user.id, user.unidadeId);
-  }, [user, retornoDialogOpen, getAvailableDates]);
+  }, [user, retornoDialogOpen, getAvailableDates, completeAgendaDates]);
 
   const retornoAvailableSlots = React.useMemo(() => {
     if (!user || !retornoForm.data) return [];
@@ -1175,7 +1223,19 @@ const Agenda: React.FC = () => {
   };
 
   const executarCreate = async () => {
-    let pac = pacientes.find((p) => p.id === newAg.pacienteId);
+    try {
+      await loadAgendaRange(selectedDate, selectedDate);
+    } catch {
+      toast.error('Não foi possível verificar a ocupação desta data. Tente novamente.');
+      return;
+    }
+    let pac;
+    try {
+      pac = (await hydrateAgendaPatients([newAg.pacienteId]))[0] || pacientes.find((p) => p.id === newAg.pacienteId);
+    } catch {
+      toast.error('Não foi possível consultar os dados do paciente. Tente novamente.');
+      return;
+    }
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
 
     if (!pac && newAg.pacienteId) {
@@ -2210,12 +2270,18 @@ const Agenda: React.FC = () => {
   };
 
   // EDITAR agendamento
+  useEffect(() => {
+    if (editDialogOpen && editAg?.data) {
+      void loadAgendaRange(editAg.data, editAg.data)
+        .catch(error => console.error('Erro ao consultar ocupação para edição:', error));
+    }
+  }, [editDialogOpen, editAg?.data, loadAgendaRange]);
   const editAvailableSlots = useMemo(() => {
     if (!editAg?.profissionalId) return [];
     const prof = profissionais.find((p) => p.id === editAg.profissionalId);
     if (!prof?.unidadeId) return [];
     return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data);
-  }, [editAg?.profissionalId, editAg?.data, profissionais, getAvailableSlots]);
+  }, [editAg?.profissionalId, editAg?.data, profissionais, getAvailableSlots, completeAgendaDates]);
 
   const handleOpenEdit = useCallback((ag: (typeof agendamentos)[0]) => {
     setEditAg({
@@ -2233,6 +2299,7 @@ const Agenda: React.FC = () => {
   const handleSaveEdit = useCallback(async () => {
     if (!editAg) return;
     try {
+      await loadAgendaRange(editAg.data, editAg.data);
       const prof = profissionais.find((p) => p.id === editAg.profissionalId);
       const originalAg = agendamentos.find((a) => a.id === editAg.id);
       const dateOrHourChanged =
@@ -2286,7 +2353,7 @@ const Agenda: React.FC = () => {
       console.error(err);
       toast.error("Erro ao editar agendamento.");
     }
-  }, [editAg, profissionais, agendamentos, updateAgendamento, logAction, user, refreshAgendamentos]);
+  }, [editAg, profissionais, agendamentos, updateAgendamento, logAction, user, refreshAgendamentos, loadAgendaRange]);
 
   // Refs para handlers estáveis passados ao AgendaItemCard memoizado.
   const handleOpenEditRef = React.useRef(handleOpenEdit);
@@ -2341,11 +2408,21 @@ const Agenda: React.FC = () => {
     });
     navigate(`/painel/prontuario?${params.toString()}`);
   }, [navigate]);
-  const stableAbrirRetorno = React.useCallback((ag: any) => {
+  const stableAbrirRetorno = React.useCallback(async (ag: any) => {
+    const today = todayLocalStr();
+    const last = disponibilidades
+      .filter(d => d.profissionalId === user?.id && d.unidadeId === user?.unidadeId)
+      .reduce((date, d) => d.dataFim > date ? d.dataFim : date, today);
+    try {
+      await loadAgendaRange(today, last);
+    } catch {
+      toast.error('Não foi possível verificar a disponibilidade para retorno. Tente novamente.');
+      return;
+    }
     setRetornoAg({ pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome });
     setRetornoForm({ data: "", hora: "" });
     setRetornoDialogOpen(true);
-  }, []);
+  }, [disponibilidades, user?.id, user?.unidadeId, loadAgendaRange]);
   const stableStatusChange = React.useCallback(
     (id: string, key: string) => handleStatusChangeRef.current(id, key),
     [],
@@ -2414,20 +2491,28 @@ const Agenda: React.FC = () => {
         
         <div className="flex flex-col gap-2">
           {/* Lembrete de Pendências (Req 5 & 9) */}
-          {(isMaster || isProfissional) && agendamentosPendentesRevisao.length > 0 && (
+          {(isMaster || isProfissional) && pendenciasCount !== null && pendenciasCount > 0 && (
             <Alert className="bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-primary/10 border-l-4 border-l-amber-500 border border-amber-500/30 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
                 <div className="pr-4">
                   <AlertTitle className="text-sm font-semibold text-foreground">Pendências de agenda</AlertTitle>
                   <AlertDescription className="text-xs text-foreground/70">
-                    Existem <span className="font-semibold text-amber-700 dark:text-amber-300">{agendamentosPendentesRevisao.length}</span> pacientes sem conclusão no período. Revise agora.
+                    Existem <span className="font-semibold text-amber-700 dark:text-amber-300">{pendenciasCount}</span> pacientes sem conclusão no período. Revise agora.
                   </AlertDescription>
                 </div>
                 <Button 
                   size="sm" 
                   className="h-8 bg-amber-500 hover:bg-amber-600 text-white text-xs shrink-0 shadow-sm"
-                  onClick={() => setPendenciasDialogOpen(true)}
+                  onClick={() => {
+                    void loadAgendaExceptions('historical')
+                      .then(rows => hydrateAgendaPatients(rows.map(a => a.pacienteId)))
+                      .then(() => setPendenciasDialogOpen(true))
+                      .catch(error => {
+                        console.error('Erro ao abrir pendências:', error);
+                        toast.error('Não foi possível carregar as pendências. Tente novamente.');
+                      });
+                  }}
                 >
                   <ListChecks className="w-3.5 h-3.5 mr-1" />
                   Ver pendências
@@ -2875,6 +2960,7 @@ const Agenda: React.FC = () => {
                   selectedDate={selectedDate}
                   onDateChange={(date) => setSelectedDate(date)}
                   onVisibleRangeChange={handleAgendaVisibleRangeChange}
+                  completeDates={completeAgendaDates}
                   agendamentos={agendamentos}
                   bloqueios={bloqueios}
                   disponibilidades={disponibilidades}

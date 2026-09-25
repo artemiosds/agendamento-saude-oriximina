@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useFila } from '@/contexts/FilaContext';
-import { usePacientes } from '@/contexts/PacientesContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAgendamentos } from '@/contexts/AgendamentosContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
@@ -21,8 +22,8 @@ interface SlotInfo {
 }
 
 export function useFilaAutomatica() {
+  const { user: authUser } = useAuth();
   const { fila, updateFila, refreshFila } = useFila();
-  const { pacientes } = usePacientes();
   const { funcionarios, unidades, logAction, configuracoes } = useOperacional();
   // Trava de chamada (Configurações → Fila de espera → Modo de encaixe).
   // 'assistido' = chamada manual: a fila nunca avança sozinha.
@@ -30,6 +31,21 @@ export function useFilaAutomatica() {
   const { addAgendamento, refreshAgendamentos } = useAgendamentos();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
+
+  const consultarContato = useCallback(async (pacienteId: string, unidadeId: string) => {
+    if (!authUser || (authUser.usuario !== 'admin.sms' && authUser.unidadeId !== unidadeId)) {
+      throw new Error('Sem acesso ao contato deste paciente na unidade.');
+    }
+    let query = supabase.from('pacientes').select('id,telefone,email,unidade_id').eq('id', pacienteId);
+    if (authUser.usuario !== 'admin.sms') {
+      query = query.or(`unidade_id.eq.${unidadeId},unidade_id.is.null,unidade_id.eq.`);
+    }
+    const { data, error } = await query.maybeSingle();
+    if (error || !data || data.id !== pacienteId || (!data.telefone && !data.email)) {
+      throw new Error('Não foi possível obter o contato do paciente escolhido.');
+    }
+    return { telefone: data.telefone || '', email: data.email || '' };
+  }, [authUser]);
 
   /**
    * Find the next eligible patient in the queue for a given slot,
@@ -78,7 +94,13 @@ export function useFilaAutomatica() {
     if (candidates.length === 0) return false;
 
     const next = candidates[0];
-    const pac = pacientes.find(p => p.id === next.pacienteId);
+    let contato;
+    try {
+      contato = await consultarContato(next.pacienteId, slot.unidadeId);
+    } catch (error) {
+      toast.error((error as Error).message);
+      return false;
+    }
     const unidade = unidades.find(u => u.id === slot.unidadeId);
     const prof = funcionarios.find(f => f.id === slot.profissionalId);
 
@@ -112,8 +134,8 @@ export function useFilaAutomatica() {
     await notify({
       evento: 'vaga_liberada',
       paciente_nome: next.pacienteNome,
-      telefone: pac?.telefone || '',
-      email: pac?.email || '',
+      telefone: contato.telefone,
+      email: contato.email,
       data_consulta: slot.data,
       hora_consulta: slot.hora,
       unidade: unidade?.nome || '',
@@ -146,7 +168,7 @@ export function useFilaAutomatica() {
     }, RESERVA_TIMEOUT_MS);
 
     return true;
-  }, [getNextInQueue, pacientes, unidades, funcionarios, updateFila, logAction, notify]);
+  }, [getNextInQueue, consultarContato, unidades, funcionarios, updateFila, logAction, notify]);
 
   /**
    * Confirm a queue patient into the slot — creates the appointment.
@@ -154,6 +176,13 @@ export function useFilaAutomatica() {
   const confirmarEncaixe = useCallback(async (filaId: string, slot: SlotInfo, user?: any) => {
     const filaItem = fila.find(f => f.id === filaId);
     if (!filaItem) return;
+    let contato;
+    try {
+      contato = await consultarContato(filaItem.pacienteId, slot.unidadeId);
+    } catch (error) {
+      toast.error((error as Error).message);
+      return;
+    }
 
     const agId = `ag${Date.now()}`;
     await addAgendamento({
@@ -206,13 +235,12 @@ export function useFilaAutomatica() {
       },
     });
 
-    const pac = pacientes.find(p => p.id === filaItem.pacienteId);
     const unidade = unidades.find(u => u.id === slot.unidadeId);
     await notify({
       evento: 'novo_agendamento',
       paciente_nome: filaItem.pacienteNome,
-      telefone: pac?.telefone || '',
-      email: pac?.email || '',
+      telefone: contato.telefone,
+      email: contato.email,
       data_consulta: slot.data,
       hora_consulta: slot.hora,
       unidade: unidade?.nome || '',
@@ -226,7 +254,7 @@ export function useFilaAutomatica() {
     toast.success(`${filaItem.pacienteNome} encaixado na agenda!`);
     await refreshAgendamentos();
     await refreshFila();
-  }, [fila, pacientes, unidades, addAgendamento, updateFila, logAction, notify, refreshAgendamentos, refreshFila]);
+  }, [fila, consultarContato, unidades, addAgendamento, updateFila, logAction, notify, refreshAgendamentos, refreshFila]);
 
   /**
    * Expire a reservation — return patient to "aguardando" and call next.

@@ -6,21 +6,26 @@ import { getLegacyRouteDataNeeds } from "@/contexts/legacyRouteDataNeeds";
 
 export const LegacyRouteDataActivator = () => {
   const { pathname } = useLocation();
-  const { activateLegacyPacientes } = usePacientes();
-  const { activateLegacyAgendamentos } = useAgendamentos();
+  const { activateLegacyPacientes, activateAgendaPatients } = usePacientes();
+  const { activateLegacyAgendamentos, activateAgendaMode } = useAgendamentos();
 
   useEffect(() => {
     const needs = getLegacyRouteDataNeeds(pathname);
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
+      if (pathname === '/painel/agenda') {
+        activateAgendaPatients();
+        activateAgendaMode();
+        return;
+      }
       if (needs.pacientes) void activateLegacyPacientes();
       if (needs.agendamentos) void activateLegacyAgendamentos();
     });
     return () => {
       cancelled = true;
     };
-  }, [pathname, activateLegacyPacientes, activateLegacyAgendamentos]);
+  }, [pathname, activateLegacyPacientes, activateLegacyAgendamentos, activateAgendaPatients, activateAgendaMode]);
 
   return null;
 };

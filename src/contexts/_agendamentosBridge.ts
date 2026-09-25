@@ -11,6 +11,7 @@
 import type { Agendamento } from "@/types";
 
 let snapshot: Agendamento[] = [];
+let completeAgendaDates = new Set<string>();
 const listeners = new Set<() => void>();
 
 export const setAgendamentosSnapshot = (next: Agendamento[]) => {
@@ -19,6 +20,12 @@ export const setAgendamentosSnapshot = (next: Agendamento[]) => {
 };
 
 export const getAgendamentosSnapshot = (): Agendamento[] => snapshot;
+
+export const setCompleteAgendaDates = (dates: ReadonlySet<string>) => {
+  completeAgendaDates = new Set(dates);
+};
+
+export const isCompleteAgendaDate = (date: string) => completeAgendaDates.has(date);
 
 export const subscribeAgendamentosSnapshot = (listener: () => void) => {
   listeners.add(listener);
