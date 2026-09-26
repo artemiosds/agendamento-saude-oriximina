@@ -244,6 +244,24 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
 
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
+export const getAgendaDayListState = (
+  date: string,
+  completeDates: ReadonlySet<string>,
+  hydratedDayKey: string,
+  dayPatientKey: string,
+  rangeError: { date: string; generation: number } | null,
+  hydrationError: { key: string; generation: number } | null,
+  generation: number,
+  visibleCount: number,
+): 'loading' | 'error' | 'empty' | 'results' => {
+  if (!completeDates.has(date)) {
+    return rangeError?.date === date && rangeError.generation === generation ? 'error' : 'loading';
+  }
+  if (hydratedDayKey === dayPatientKey) return visibleCount === 0 ? 'empty' : 'results';
+  return hydrationError?.key === dayPatientKey && hydrationError.generation === generation ? 'error' : 'loading';
+};
+
 const Agenda: React.FC = () => {
   const { user } = useAuth();
   const isProfissional = user?.role === "profissional";
@@ -286,6 +304,19 @@ const Agenda: React.FC = () => {
   const navigate = useNavigate();
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
+  const selectedDateRef = React.useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
+  const selectionGenerationRef = React.useRef(0);
+  const rangeRequestRef = React.useRef(0);
+  const [rangeError, setRangeError] = useState<{ date: string; generation: number } | null>(null);
+  const [hydrationError, setHydrationError] = useState<{ key: string; generation: number } | null>(null);
+  const selectAgendaDate = useCallback((date: string) => {
+    if (date !== selectedDateRef.current) {
+      selectionGenerationRef.current += 1;
+      selectedDateRef.current = date;
+    }
+    setSelectedDate(date);
+  }, []);
 
   // Índices locais derivados dos dados já carregados. Mantêm os mesmos objetos
   // dos contextos, mas evitam buscas lineares repetidas durante filtros e ordenação.
@@ -310,16 +341,23 @@ const Agenda: React.FC = () => {
     [agendamentos, selectedDate],
   );
   const dayPatientKey = React.useMemo(() =>
-    `${selectedDate}|${rawAgendamentosDoDia.map(a => a.pacienteId).sort().join(',')}`,
-    [selectedDate, rawAgendamentosDoDia]);
+    `${user?.id || ''}|${user?.role || ''}|${user?.unidadeId || ''}|${selectedDate}|${selectionGenerationRef.current}|${rawAgendamentosDoDia.map(a => a.pacienteId).sort().join(',')}`,
+    [user?.id, user?.role, user?.unidadeId, selectedDate, rawAgendamentosDoDia]);
   const [hydratedDayKey, setHydratedDayKey] = useState('');
   useEffect(() => {
     let cancelled = false;
     const ids = rawAgendamentosDoDia.map(a => a.pacienteId).filter(Boolean);
     if (!completeAgendaDates.has(selectedDate)) return;
+    const generation = selectionGenerationRef.current;
+    setHydrationError(null);
     void hydrateAgendaPatients(ids).then(() => {
       if (!cancelled) setHydratedDayKey(dayPatientKey);
-    }).catch(error => console.error('Erro ao carregar pacientes do dia da Agenda:', error));
+    }).catch(error => {
+      console.error('Erro ao carregar pacientes do dia da Agenda:', error);
+      if (!cancelled && generation === selectionGenerationRef.current) {
+        setHydrationError({ key: dayPatientKey, generation });
+      }
+    });
     return () => { cancelled = true; };
   }, [rawAgendamentosDoDia, selectedDate, completeAgendaDates, hydrateAgendaPatients, dayPatientKey]);
   const agendamentosDoDia = React.useMemo(
@@ -337,8 +375,18 @@ const Agenda: React.FC = () => {
   }, [selectedDate, setAgendaSelectedDate]);
 
   const handleAgendaVisibleRangeChange = useCallback((startDate: string, endDate: string) => {
+    const date = selectedDateRef.current;
+    const generation = selectionGenerationRef.current;
+    const request = ++rangeRequestRef.current;
+    if (date >= startDate && date <= endDate) setRangeError(null);
     void loadAgendaRange(startDate, endDate, { visible: true })
-      .catch(error => console.error('Erro ao carregar intervalo visível da Agenda:', error));
+      .catch(error => {
+        console.error('Erro ao carregar intervalo visível da Agenda:', error);
+        if (request === rangeRequestRef.current && generation === selectionGenerationRef.current &&
+            selectedDateRef.current === date && date >= startDate && date <= endDate) {
+          setRangeError({ date, generation });
+        }
+      });
   }, [loadAgendaRange]);
   const [filterUnit, setFilterUnit] = useState("all");
   const [pendenciasCount, setPendenciasCount] = useState<number | null>(null);
@@ -972,6 +1020,10 @@ const Agenda: React.FC = () => {
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
     [filtered],
   );
+  const dayListState = getAgendaDayListState(
+    selectedDate, completeAgendaDates, hydratedDayKey, dayPatientKey,
+    rangeError, hydrationError, selectionGenerationRef.current, filtered.length,
+  );
 
   const handleImprimirLista = React.useCallback(() => {
     const fmtDate = (s: string) => { if (!s) return "-"; const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; };
@@ -1133,7 +1185,7 @@ const Agenda: React.FC = () => {
   }, [filteredPacienteKey]); // eslint-disable-line
 
   const changeDate = (days: number) => {
-    setSelectedDate((prev) => addDaysToDateStr(prev, days));
+    selectAgendaDate(addDaysToDateStr(selectedDateRef.current, days));
   };
 
   const syncToGoogleCalendar = async (ag: {
@@ -2958,7 +3010,7 @@ const Agenda: React.FC = () => {
               <div className="p-4 border-b bg-muted/5">
                 <CalendarioAgenda
                   selectedDate={selectedDate}
-                  onDateChange={(date) => setSelectedDate(date)}
+                  onDateChange={selectAgendaDate}
                   onVisibleRangeChange={handleAgendaVisibleRangeChange}
                   completeDates={completeAgendaDates}
                   agendamentos={agendamentos}
@@ -3160,6 +3212,7 @@ const Agenda: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleImprimirLista}
+                      disabled={dayListState === 'loading' || dayListState === 'error'}
                       className="h-11 px-3 flex items-center gap-1.5 print:hidden"
                       title="Imprimir lista de agendamentos filtrados"
                     >
@@ -3175,7 +3228,7 @@ const Agenda: React.FC = () => {
           </div>
 
           {/* Chips rápidos de status */}
-          <div className="flex flex-wrap gap-2">
+          {(dayListState === 'empty' || dayListState === 'results') && <div className="flex flex-wrap gap-2">
             {STATUS_QUICK_CHIPS.map((chip) => {
               const count = chip.value === "all"
                 ? statusCounts.total
@@ -3198,7 +3251,7 @@ const Agenda: React.FC = () => {
                 </button>
               );
             })}
-          </div>
+          </div>}
 
           {/* Slot availability summary for selected professional */}
           {(isProfissional || filterProf !== "all") && (
@@ -3264,7 +3317,15 @@ const Agenda: React.FC = () => {
 
           <div className={`space-y-2 ${filtered.length > 50 ? 'perf-dense' : ''}`}>
 
-            {filtered.length === 0 ? (
+            {dayListState === 'loading' || dayListState === 'error' ? (
+              <Card className="shadow-card border-0">
+                <CardContent className="p-8 text-center text-sm text-muted-foreground" role="status">
+                  {dayListState === 'error'
+                    ? 'Não foi possível carregar os agendamentos desta data. Tente novamente.'
+                    : 'Carregando agendamentos desta data...'}
+                </CardContent>
+              </Card>
+            ) : dayListState === 'empty' ? (
               <Card className="shadow-card border-0">
                 <CardContent className="p-8 text-center">
                   <p className="text-muted-foreground mb-3">
