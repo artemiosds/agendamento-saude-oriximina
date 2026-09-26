@@ -83,6 +83,8 @@ const HistoricoTriagem: React.FC = () => {
   const { user } = useAuth();
   const [records, setRecords] = useState<EnrichedRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState("todos");
   const [dateFrom, setDateFrom] = useState("");
@@ -132,7 +134,7 @@ const HistoricoTriagem: React.FC = () => {
     const role = user?.role?.toLowerCase().trim();
     if (role !== "master" && role !== "tecnico") return;
     setLoading(true);
-    setTotalCount(null);
+    setLoadError(false);
     try {
       const needsLookup = !!search.trim() || !!(user?.unidadeId && user.usuario !== "admin.sms");
       const makeQuery = (columns: string, count: "exact" | undefined = undefined) => {
@@ -228,11 +230,11 @@ const HistoricoTriagem: React.FC = () => {
       })));
       setTotalCount(count);
       setHasNext(more);
-    } catch (err) {
-      console.error("Erro ao carregar histórico de triagem:", err);
+      setHasLoaded(true);
+    } catch {
+      console.error("Erro ao carregar histórico de triagem.");
       if (currentRequest === requestId.current) {
-        setRecords([]);
-        setHasNext(false);
+        setLoadError(true);
       }
     } finally {
       if (currentRequest === requestId.current) setLoading(false);
@@ -310,13 +312,20 @@ const HistoricoTriagem: React.FC = () => {
       </Card>
 
       {/* Table */}
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-      ) : paged.length === 0 ? (
+      {loading && !hasLoaded ? (
+        <div role="status" aria-label="Carregando histórico de triagem" className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+      ) : loadError && paged.length === 0 ? (
+        <Card className="border-0 shadow-card">
+          <CardContent role="alert" className="p-8 text-center text-destructive">Não foi possível carregar o histórico de triagem. Tente novamente.</CardContent>
+        </Card>
+      ) : !loading && !loadError && paged.length === 0 ? (
         <Card className="border-0 shadow-card">
           <CardContent className="p-8 text-center text-muted-foreground">Nenhum registro encontrado.</CardContent>
         </Card>
       ) : (
+        <div className="space-y-2">
+          {loading && <p role="status" className="text-sm text-muted-foreground">Atualizando histórico de triagem...</p>}
+          {loadError && <p role="alert" className="text-sm text-destructive">Não foi possível atualizar o histórico de triagem. Exibindo os últimos resultados carregados.</p>}
         <Card className="border-0 shadow-card overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
@@ -367,6 +376,7 @@ const HistoricoTriagem: React.FC = () => {
             </div>
           </div>
         </Card>
+        </div>
       )}
 
       {/* Detail Modal */}
