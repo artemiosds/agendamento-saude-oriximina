@@ -33,9 +33,15 @@ import type { Agendamento, Atendimento, FilaEspera } from "@/types";
 interface AgendamentosContextType {
   agendamentos: Agendamento[];
   addAgendamento: (ag: Agendamento) => Promise<void>;
+  addAgendamentoTransactionally: (
+    ag: Agendamento,
+    persist: (normalized: Agendamento) => Promise<{ appointment: Agendamento; created: boolean }>,
+  ) => Promise<{ appointment: Agendamento; created: boolean }>;
   updateAgendamento: (id: string, data: Partial<Agendamento>) => Promise<void>;
   cancelAgendamento: (id: string) => Promise<FilaEspera[]>;
   deleteAgendamento: (id: string) => Promise<void>;
+  deleteAgendamentoTransactionally: (id: string, persist: () => Promise<void>) => Promise<void>;
+  applyTreatmentAgendamentoUpdate: (appointment: Agendamento) => void;
   refreshAgendamentos: () => Promise<void>;
   activateLegacyAgendamentos: () => Promise<void>;
   ensureAgendamentosForDate: (date: string) => Promise<void>;
@@ -567,8 +573,11 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     [isGlobalAdmin, userUnidadeId, authUser?.role, authUser?.id, loadAgendaRange, publishAgendaDates],
   );
 
-  const addAgendamento = useCallback(
-    async (ag: Agendamento) => {
+  const addAgendamentoTransactionally = useCallback(
+    async (
+      ag: Agendamento,
+      persist: (normalized: Agendamento) => Promise<{ appointment: Agendamento; created: boolean }>,
+    ) => {
       if (agendaModeRef.current && !agendaDatesRef.current.has(ag.data)) {
         await loadAgendaRange(ag.data, ag.data);
         if (!agendaDatesRef.current.has(ag.data)) throw new Error('Ocupação da data indisponível');
@@ -598,51 +607,60 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       )
         ? ag.status
         : "confirmado";
-
-      const { error } = await supabase.from("agendamentos" as any).insert({
-        id: ag.id,
-        paciente_id: ag.pacienteId,
-        paciente_nome: ag.pacienteNome,
-        unidade_id: ag.unidadeId,
-        sala_id: ag.salaId,
-        setor_id: ag.setorId,
-        profissional_id: ag.profissionalId,
-        profissional_nome: ag.profissionalNome,
-        data: ag.data,
-        hora: ag.hora,
-        status: statusInicial,
-        tipo: ag.tipo,
-        observacoes: ag.observacoes,
-        origem: ag.origem,
-        google_event_id: ag.googleEventId || "",
-        sync_status: ag.syncStatus || "pendente",
-        criado_por: ag.criadoPor || "",
-        prioridade_perfil: "normal",
-      } as any);
-
-      if (!error) {
-        setAgendamentos((prev) => [
-          ...prev,
-          { ...ag, status: statusInicial as any },
-        ]);
+      const normalized = { ...ag, status: statusInicial as Agendamento["status"] };
+      const result = await persist(normalized);
+      const committedAppointment = result.appointment;
+      setAgendamentos((prev) => upsertById(prev, committedAppointment));
+      if (result.created) {
         await logAction({
           acao: "criar",
           entidade: "agendamento",
-          entidadeId: ag.id,
-          unidadeId: ag.unidadeId,
+          entidadeId: committedAppointment.id,
+          unidadeId: committedAppointment.unidadeId,
           detalhes: {
-            data: ag.data,
-            hora: ag.hora,
-            profissionalId: ag.profissionalId,
+            data: committedAppointment.data,
+            hora: committedAppointment.hora,
+            profissionalId: committedAppointment.profissionalId,
           },
         });
         invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
-      } else {
-        console.error("Error adding agendamento:", error);
-        throw error;
-      }
+      } else invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
+      return result;
     },
     [logAction, invalidateCache, authUser?.role, getTurnoInfo, loadAgendaRange],
+  );
+
+  const addAgendamento = useCallback(
+    async (ag: Agendamento) => {
+      await addAgendamentoTransactionally(ag, async (normalized) => {
+        const { error } = await supabase.from("agendamentos" as any).insert({
+          id: normalized.id,
+          paciente_id: normalized.pacienteId,
+          paciente_nome: normalized.pacienteNome,
+          unidade_id: normalized.unidadeId,
+          sala_id: normalized.salaId,
+          setor_id: normalized.setorId,
+          profissional_id: normalized.profissionalId,
+          profissional_nome: normalized.profissionalNome,
+          data: normalized.data,
+          hora: normalized.hora,
+          status: normalized.status,
+          tipo: normalized.tipo,
+          observacoes: normalized.observacoes,
+          origem: normalized.origem,
+          google_event_id: normalized.googleEventId || "",
+          sync_status: normalized.syncStatus || "pendente",
+          criado_por: normalized.criadoPor || "",
+          prioridade_perfil: "normal",
+        } as any);
+        if (error) {
+          console.error("Error adding agendamento:", error);
+          throw error;
+        }
+        return { appointment: normalized, created: true };
+      });
+    },
+    [addAgendamentoTransactionally],
   );
 
   const updateAgendamento = useCallback(
@@ -790,24 +808,43 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
    * DELETE real do agendamento — usado por "Desmarcar" (libera o slot).
    * Diferente de cancelAgendamento (que mantém histórico com status "cancelado").
    */
-  const deleteAgendamento = useCallback(
-    async (id: string): Promise<void> => {
+  const deleteAgendamentoTransactionally = useCallback(
+    async (id: string, persist: () => Promise<void>): Promise<void> => {
       const previous = agendamentosRef.current.find((a) => a.id === id);
       // Optimistic remove
       setAgendamentos((prev) => prev.filter((a) => a.id !== id));
-      const { error } = await supabase
-        .from("agendamentos" as any)
-        .delete()
-        .eq("id", id);
-      if (error) {
+      try {
+        await persist();
+      } catch (error) {
         // Rollback: reinsere o registro se o delete falhar.
         if (previous)
           setAgendamentos((prev) =>
             prev.some((a) => a.id === id) ? prev : [...prev, previous],
           );
         console.error("Error deleting agendamento:", error);
-        throw new Error("Erro ao excluir agendamento.");
+        throw error instanceof Error ? error : new Error("Erro ao excluir agendamento.");
       }
+      invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
+    },
+    [invalidateCache],
+  );
+
+  const deleteAgendamento = useCallback(
+    async (id: string): Promise<void> => {
+      await deleteAgendamentoTransactionally(id, async () => {
+        const { error } = await supabase
+          .from("agendamentos" as any)
+          .delete()
+          .eq("id", id);
+        if (error) throw new Error("Erro ao excluir agendamento.");
+      });
+    },
+    [deleteAgendamentoTransactionally],
+  );
+
+  const applyTreatmentAgendamentoUpdate = useCallback(
+    (appointment: Agendamento) => {
+      setAgendamentos((prev) => upsertById(prev, appointment));
       invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
     },
     [invalidateCache],
@@ -887,9 +924,12 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     () => ({
       agendamentos,
       addAgendamento,
+      addAgendamentoTransactionally,
       updateAgendamento,
       cancelAgendamento,
       deleteAgendamento,
+      deleteAgendamentoTransactionally,
+      applyTreatmentAgendamentoUpdate,
       refreshAgendamentos,
       activateLegacyAgendamentos,
       ensureAgendamentosForDate,
@@ -907,9 +947,12 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     [
       agendamentos,
       addAgendamento,
+      addAgendamentoTransactionally,
       updateAgendamento,
       cancelAgendamento,
       deleteAgendamento,
+      deleteAgendamentoTransactionally,
+      applyTreatmentAgendamentoUpdate,
       refreshAgendamentos,
       activateLegacyAgendamentos,
       ensureAgendamentosForDate,

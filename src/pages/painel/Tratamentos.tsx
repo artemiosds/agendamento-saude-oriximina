@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 38756)
+Total output lines: 3695
+
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
@@ -8,6 +11,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
 import { normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
+import { createTreatmentSessionOperations, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
 import { getSoapOptions, hasDropdownSoap, isMedico, normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 
@@ -170,7 +174,13 @@ const Tratamentos: React.FC = () => {
   const { pacientes } = usePacientes();
   const { funcionarios, unidades, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates } = useOperacional();
   const { fila, addToFila } = useFila();
-  const { addAgendamento, cancelAgendamento, deleteAgendamento } = useAgendamentos();
+  const {
+    addAgendamento,
+    addAgendamentoTransactionally,
+    cancelAgendamento,
+    deleteAgendamentoTransactionally,
+    applyTreatmentAgendamentoUpdate,
+  } = useAgendamentos();
   const { user } = useAuth();
   const { can } = usePermissions();
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
@@ -285,6 +295,50 @@ const Tratamentos: React.FC = () => {
   const canManageFull = can('tratamento', 'can_delete');
   const isProfissional = user?.role === "profissional";
   const canAgendarSessao = can('tratamento', 'can_execute');
+
+  const treatmentSessionOperations = useMemo(() => createTreatmentSessionOperations({
+    client: supabase as unknown as TreatmentOperationRpcClient,
+    agenda: {
+      addAgendamentoTransactionally,
+      deleteAgendamentoTransactionally,
+      applyTreatmentAgendamentoUpdate,
+    },
+    findDuplicate: async ({ patientId, professionalId, date, time, exceptAppointmentId }) => {
+      let query = (supabase as any)
+        .from('agendamentos')
+        .select('id, profissional_nome')
+        .eq('paciente_id', patientId)
+        .eq('data', date)
+        .eq('hora', time)
+        .not('status', 'in', '("cancelado","falta","remarcado")');
+      if (professionalId) query = query.eq('profissional_id', professionalId);
+      if (exceptAppointmentId) query = query.neq('id', exceptAppointmentId);
+      const { data, error } = await query.limit(1).maybeSingle();
+      if (error) throw error;
+      return data ? { professionalName: data.profissional_nome || undefined } : null;
+    },
+    ensurePatientCanBeScheduled: async (patientId, professionalId) => {
+      const patient = pacientes.find((item) => item.id === patientId);
+      if (!patient) throw new Error('Paciente não encontrado.');
+      const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+      if (isPacienteIsentoBloqueio(patient)) {
+        toast.info('Paciente possui exceção administrativa (TFD/Ordem Judicial). Agendamento permitido.');
+        return;
+      }
+      if (await isPacienteBloqueadoParaProfissional(patientId, professionalId)) {
+        throw new Error('Paciente bloqueado por faltas injustificadas para este profissional.');
+      }
+    },
+    isDateBlocked: async (date, professionalId, unitId) => {
+      const { data, error } = await (supabase as any).rpc('is_date_blocked', {
+        p_date: date,
+        p_profissional_id: professionalId,
+        p_unidade_id: unitId,
+      });
+      if (error) throw error;
+      return data === true;
+    },
+  }), [addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate, pacientes]);
 
   // Total of cycles (server-side count)
   const [totalCycles, setTotalCycles] = useState(0);
@@ -1048,6 +1102,83 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  const scheduleTreatmentSession = async (
+    session: TreatmentSession,
+    cycle: TreatmentCycle,
+    data: string,
+    hora: string,
+    salaId: string,
+    duplicateScope: 'patient' | 'patient_professional',
+    checkPatientAbsenceBlock = false,
+  ) => {
+    const prof = funcionarios.find((f) => f.id === cycle.professional_id);
+    const pac = pacientes.find((p) => p.id === cycle.patient_id);
+    if (!prof || !pac) throw new Error('Profissional ou paciente não encontrado.');
+
+    const appointment: import('@/types').Agendamento = {
+      id: `ag${Date.now()}`,
+      pacienteId: cycle.patient_id,
+      pacienteNome: pac.nome,
+      unidadeId: cycle.unit_id,
+      salaId: salaId || '',
+      setorId: '',
+      profissionalId: cycle.professional_id,
+      profissionalNome: prof.nome,
+      data,
+      hora,
+      status: 'confirmado',
+      tipo: 'Sessão de Tratamento',
+      observacoes: `Sessão ${session.session_number}/${session.total_sessions} — ${cycle.treatment_type}`,
+      origem: 'recepcao',
+      criadoEm: new Date().toISOString(),
+      criadoPor: user?.id || '',
+    };
+
+    const result = await treatmentSessionOperations.schedule({
+      session,
+      cycle,
+      appointment,
+      duplicateScope,
+      checkPatientAbsenceBlock,
+    });
+    const appointmentId = result.appointment?.id || null;
+    setSessions((previous) => previous.map((item) => item.id === session.id
+      ? {
+          ...item,
+          status: result.session.status || 'agendada',
+          appointment_id: result.session.appointment_id ?? appointmentId,
+          scheduled_date: result.session.scheduled_date || data,
+        }
+      : item));
+
+    if (result.status === 'agendado') {
+      await logAction({
+        acao: 'agendar_sessao_tratamento',
+        entidade: 'treatment_session',
+        entidadeId: session.id,
+        modulo: 'tratamentos',
+        user,
+        detalhes: {
+          ciclo: cycle.id,
+          sessao: session.session_number,
+          data,
+          hora,
+          agendamento_id: appointmentId,
+        },
+      });
+      toast.success(`Sessão ${session.session_number} agendada para ${new Date(data + 'T12:00:00').toLocaleDateString('pt-BR')} às ${hora}!`);
+    } else {
+      toast.info(`Sessão ${session.session_number} já estava agendada.`);
+    }
+
+    setAgendarSessaoTarget(null);
+    setAgendarSessaoData('');
+    setAgendarSessaoHora('');
+    setAgendarSessaoSalaId('');
+    await loadData(true);
+    return result;
+  };
+
   const handleDesmarcarSessao = async (session: TreatmentSession) => {
     if (!selectedCycle) return;
 
@@ -1063,21 +1194,7 @@ const Tratamentos: React.FC = () => {
     if (!confirmed) return;
 
     try {
-      // 1. EXCLUIR (DELETE) o agendamento da agenda — não apenas cancelar.
-      // Isso libera o slot para reagendamento imediato.
-      if (session.appointment_id) {
-        await deleteAgendamento(session.appointment_id);
-      }
-
-      // 2. Reverter sessão do ciclo para aguardando agendamento
-      const { error } = await supabase
-        .from("treatment_sessions")
-        .update({
-          status: "pendente_agendamento",
-          appointment_id: null,
-        })
-        .eq("id", session.id);
-      if (error) throw error;
+      const result = await treatmentSessionOperations.unschedule({ session, cycle: selectedCycle });
 
       await logAction({
         acao: "desmarcar_sessao",
@@ -1092,8 +1209,7 @@ const Tratamentos: React.FC = () => {
         },
       });
 
-      // 3. Atualização otimista — o estado global de agendamentos já foi
-      // atualizado por deleteAgendamento. Aqui só limpamos o mapa local.
+      // A exclusão otimista e seu rollback são mantidos pelo AgendamentosContext.
       if (session.appointment_id) {
         setAgendamentoMap((prev) => {
           const next = { ...prev };
@@ -1105,7 +1221,7 @@ const Tratamentos: React.FC = () => {
       setSessions((prev) =>
         prev.map((x) =>
           x.id === session.id
-            ? { ...x, status: "pendente_agendamento", appointment_id: null }
+            ? { ...x, status: result.session.status || "pendente_agendamento", appointment_id: result.session.appointment_id ?? null }
             : x,
         ),
       );
@@ -1150,98 +1266,15 @@ const Tratamentos: React.FC = () => {
     if (agendandoSessao) return; // Idempotency
     setAgendandoSessao(true);
     try {
-      // Duplicity check: is there already an appointment for this patient/professional on this date/time?
-      const { data: existingAg, error: checkAgError } = await supabase
-        .from("agendamentos")
-        .select("id")
-        .eq("paciente_id", selectedCycle.patient_id)
-        .eq("profissional_id", selectedCycle.professional_id)
-        .eq("data", agendarSessaoData)
-        .eq("hora", agendarSessaoHora)
-        .not("status", "in", '("cancelado","falta","remarcado")')
-        .maybeSingle();
-
-      if (checkAgError) throw checkAgError;
-      if (existingAg) {
-        toast.error("Já existe um agendamento para este paciente, profissional e horário.");
-        setAgendandoSessao(false);
-        return;
-      }
-
-      const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
-      const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
-      if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
-
-      const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
-      const isento = isPacienteIsentoBloqueio(pac);
-      if (isento) {
-        toast.info("Paciente possui exceção administrativa (TFD/Ordem Judicial). Agendamento permitido.");
-      } else {
-        const bloqueado = await isPacienteBloqueadoParaProfissional(selectedCycle.patient_id, selectedCycle.professional_id);
-        if (bloqueado) {
-          toast.error("Paciente bloqueado por faltas injustificadas para este profissional.");
-          setAgendandoSessao(false);
-          return;
-        }
-      }
-
-
-
-      const agId = `ag${Date.now()}`;
-      await addAgendamento({
-        id: agId,
-        pacienteId: selectedCycle.patient_id,
-        pacienteNome: pac.nome,
-        unidadeId: selectedCycle.unit_id,
-        salaId: agendarSessaoSalaId || "",
-        setorId: "",
-        profissionalId: selectedCycle.professional_id,
-        profissionalNome: prof.nome,
-        data: agendarSessaoData,
-        hora: agendarSessaoHora,
-        status: "confirmado" as const,
-        tipo: "Sessão de Tratamento" as const,
-
-        observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${selectedCycle.treatment_type}`,
-        origem: "recepcao",
-        criadoEm: new Date().toISOString(),
-        criadoPor: user?.id || "",
-      });
-
-      const { error: updateError } = await supabase
-        .from("treatment_sessions")
-        .update({
-          appointment_id: agId,
-          status: "agendada",
-          scheduled_date: agendarSessaoData,
-        })
-        .eq("id", agendarSessaoTarget.id);
-
-      if (updateError) throw updateError;
-
-      await logAction({
-        acao: "agendar_sessao_tratamento",
-        entidade: "treatment_session",
-        entidadeId: agendarSessaoTarget.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: {
-          ciclo: selectedCycle.id,
-          sessao: agendarSessaoTarget.session_number,
-          data: agendarSessaoData,
-          hora: agendarSessaoHora,
-          agendamento_id: agId,
-        },
-      });
-
-      toast.success(
-        `Sessão ${agendarSessaoTarget.session_number} agendada para ${new Date(agendarSessaoData + "T12:00:00").toLocaleDateString("pt-BR")} às ${agendarSessaoHora}!`,
+      await scheduleTreatmentSession(
+        agendarSessaoTarget,
+        selectedCycle,
+        agendarSessaoData,
+        agendarSessaoHora,
+        agendarSessaoSalaId,
+        "patient_professional",
+        true,
       );
-      setAgendarSessaoTarget(null);
-      setAgendarSessaoData("");
-      setAgendarSessaoHora("");
-      setAgendarSessaoSalaId("");
-      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Erro ao agendar sessão.");
@@ -1521,891 +1554,27 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  const handleRemarcarSessao = async () => {
-    if (!remarcarTarget || !remarcarData || !selectedCycle || remarcarBlockedMsg) return;
-    setRemarcarSaving(true);
-    try {
-      const oldDate = remarcarTarget.scheduled_date;
-      if (!isMaster && !isProfissional) {
-        const { data: blocked } = await supabase.rpc("is_date_blocked", {
-          p_date: remarcarData,
-          p_profissional_id: selectedCycle.professional_id,
-          p_unidade_id: selectedCycle.unit_id,
-        });
-        if (blocked === true) {
-          toast.error("Data bloqueada.");
-          setRemarcarSaving(false);
-          return;
-        }
-      }
-
-      const { error } = await supabase
-        .from("treatment_sessions")
-        .update({ scheduled_date: remarcarData })
-        .eq("id", remarcarTarget.id);
-      if (error) throw error;
-
-      if (remarcarTarget.appointment_id) {
-        await supabase.from("agendamentos").update({ data: remarcarData }).eq("id", remarcarTarget.appointment_id);
-      }
-
-      await logAction({
-        acao: "remarcar_sessao",
-        entidade: "treatment_session",
-        entidadeId: remarcarTarget.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: {
-          ciclo: selectedCycle.id,
-          sessao: remarcarTarget.session_number,
-          data_anterior: oldDate,
-          data_nova: remarcarData,
-          agendamento_vinculado: remarcarTarget.appointment_id || null,
-          old_value: { scheduled_date: oldDate },
-          new_value: { scheduled_date: remarcarData },
-        },
-      });
-
-      toast.success(
-        `Sessão ${remarcarTarget.session_number} remarcada de ${new Date(oldDate + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(remarcarData + "T12:00:00").toLocaleDateString("pt-BR")}`,
-      );
-      setRemarcarTarget(null);
-      setRemarcarData("");
-      loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
-    } finally {
-      setRemarcarSaving(false);
-    }
-  };
-
-  const handleAddIntermediateSession = async () => {
-    if (!selectedCycle) {
-      toast.error("Selecione um ciclo.");
-      return;
-    }
-    if (!intermediateDate) {
-      toast.error("Informe a data da nova sessão.");
-      return;
-    }
-    if (intermediateAfterSession < 0) {
-      toast.error("Selecione onde a sessão será inserida.");
-      return;
-    }
-    if (addingIntermediate) return; // Double-click guard
-    setAddingIntermediate(true);
-    try {
-      // SEMPRE busca sessões REAIS do banco (não confia no estado local)
-      // para evitar duplicações causadas por estado defasado/otimista.
-      const { data: freshSessions, error: fetchErr } = await supabase
-        .from("treatment_sessions")
-        .select("id, session_number, scheduled_date")
-        .eq("cycle_id", selectedCycle.id)
-        .order("session_number", { ascending: true });
-      if (fetchErr) throw fetchErr;
-
-      const currentSessions = (freshSessions || []) as Array<{
-        id: string;
-        session_number: number;
-        scheduled_date: string;
-      }>;
-
-      const insertPos = intermediateAfterSession; // posição-base: 0 = antes da 1ª
-      const novaNumeroSessao = insertPos + 1;
-      const newTotal = currentSessions.length + 1;
-
-      // Guard anti-duplicidade: já existe sessão neste ciclo, na mesma data
-      // e mesma numeração calculada? Aborta para não duplicar.
-      const possibleDup = currentSessions.find(
-        (s) => s.scheduled_date === intermediateDate && s.session_number === novaNumeroSessao,
-      );
-      if (possibleDup) {
-        toast.error("Já existe uma sessão registrada nesta data e posição.");
-        setAddingIntermediate(false);
-        return;
-      }
-
-      // 1) Renumera APENAS sessões >= novaNumeroSessao, em ordem DESC para
-      //    evitar colisões temporárias (sem unique constraint, mas é a
-      //    ordem segura caso seja adicionada futuramente).
-      const toRenumber = currentSessions
-        .filter((s) => s.session_number >= novaNumeroSessao)
-        .sort((a, b) => b.session_number - a.session_number);
-
-      for (const s of toRenumber) {
-        const { error: upErr } = await supabase
-          .from("treatment_sessions")
-          .update({ session_number: s.session_number + 1, total_sessions: newTotal })
-          .eq("id", s.id);
-        if (upErr) throw upErr;
-      }
-
-      // 2) Atualiza total_sessions nas sessões que ficaram antes da nova
-      const toUpdateTotal = currentSessions.filter((s) => s.session_number < novaNumeroSessao);
-      for (const s of toUpdateTotal) {
-        const { error: upErr } = await supabase
-          .from("treatment_sessions")
-          .update({ total_sessions: newTotal })
-          .eq("id", s.id);
-        if (upErr) throw upErr;
-      }
-
-      // 3) Insere UMA ÚNICA sessão intermediária na posição escolhida.
-      //    NÃO chama nenhuma função de "próxima sessão" e NÃO cria nada
-      //    extra no final.
-      const { error: insertError } = await supabase.from("treatment_sessions").insert({
-        cycle_id: selectedCycle.id,
-        patient_id: selectedCycle.patient_id,
-        professional_id: selectedCycle.professional_id,
-        session_number: novaNumeroSessao,
-        total_sessions: newTotal,
-        scheduled_date: intermediateDate,
-        status: "pendente_agendamento",
-      });
-      if (insertError) throw insertError;
-
-      // 4) Atualiza total do ciclo (apenas +1, nunca mais)
-      const { error: cycleErr } = await supabase
-        .from("treatment_cycles")
-        .update({ total_sessions: newTotal })
-        .eq("id", selectedCycle.id);
-      if (cycleErr) throw cycleErr;
-
-      await logAction({
-        acao: "adicionar_sessao_intermediaria",
-        entidade: "treatment_session",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: {
-          ciclo: selectedCycle.id,
-          posicao: novaNumeroSessao,
-          data: intermediateDate,
-          total_anterior: currentSessions.length,
-          total_novo: newTotal,
-        },
-      });
-
-      toast.success("Sessão intermediária criada com sucesso.");
-      setAddIntermediateOpen(false);
-      setIntermediateDate("");
-      setIntermediateAfterSession(0);
-
-      // Atualiza UI com dados REAIS do banco (evita estado otimista duplicado)
-      await loadSessionsForCycle(selectedCycle, true);
-      await loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(
-        "Não foi possível criar a sessão intermediária. Nenhuma alteração foi salva. " +
-          (err?.message || ""),
-      );
-    } finally {
-      setAddingIntermediate(false);
-    }
-  };
-  const handleExtension = async () => {
-    if (!selectedCycle || !extensionForm.reason || extensionForm.new_sessions <= 0) {
-      toast.error("Informe a quantidade de sessões e o motivo.");
-      return;
-    }
-    try {
-      const newTotal = selectedCycle.total_sessions + extensionForm.new_sessions;
-
-      // Determine weekdays from existing sessions or fallback
-      const existingSessions = sessions.filter(s => s.cycle_id === selectedCycle.id);
-      const weekdaysFromExisting = [...new Set(existingSessions.map(s => {
-        const d = new Date(s.scheduled_date + 'T12:00:00');
-        const dow = d.getDay();
-        return dow === 0 ? 7 : dow;
-      }))].sort((a, b) => a - b);
-
-      // Find last existing session date as start for new sessions
-      const lastSessionDate = existingSessions.length > 0
-        ? existingSessions.sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date))[0].scheduled_date
-        : selectedCycle.start_date;
-
-      const nextDay = new Date(lastSessionDate + 'T12:00:00');
-      nextDay.setDate(nextDay.getDate() + 1);
-      const startForNew = nextDay.toISOString().split('T')[0];
-
-      const blockedRanges = buildBlockedRanges(bloqueios, selectedCycle.professional_id, selectedCycle.unit_id);
-      const { dates: newDates, skippedCount } = generateSessionDatesWithInfo(
-        startForNew,
-        selectedCycle.frequency,
-        weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [],
-        extensionForm.new_sessions,
-        blockedRanges,
-      );
-
-      if (skippedCount > 0) {
-        toast.info(`${skippedCount} sessão(ões) da extensão foram realocadas devido a feriados ou bloqueios.`);
-      }
-
-      const newEndDate = newDates.length > 0 ? newDates[newDates.length - 1] : selectedCycle.end_date_predicted || new Date().toISOString().split('T')[0];
-
-      await supabase.from("treatment_extensions").insert({
-        cycle_id: selectedCycle.id,
-        previous_sessions: selectedCycle.total_sessions,
-        new_sessions: newTotal,
-        previous_end_date: selectedCycle.end_date_predicted,
-        new_end_date: newEndDate,
-        reason: extensionForm.reason,
-        changed_by: user?.id || "",
-      });
-
-      const newSessions = newDates.map((date, idx) => ({
-        cycle_id: selectedCycle.id,
-        patient_id: selectedCycle.patient_id,
-        professional_id: selectedCycle.professional_id,
-        session_number: selectedCycle.total_sessions + idx + 1,
-        total_sessions: newTotal,
-        scheduled_date: date,
-        status: "pendente_agendamento",
-      }));
-      await supabase.from("treatment_sessions").insert(newSessions);
-
-      await supabase
-        .from("treatment_cycles")
-        .update({
-          total_sessions: newTotal,
-          end_date_predicted: newEndDate,
-          status: "em_andamento",
-        })
-        .eq("id", selectedCycle.id);
-
-      await logAction({
-        acao: "extensao_tratamento",
-        entidade: "treatment_cycle",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: { anterior: selectedCycle.total_sessions, novo: newTotal, motivo: extensionForm.reason },
-      });
-
-      toast.success("Extensão registrada com sucesso!");
-      setExtensionOpen(false);
-      setExtensionForm({ new_sessions: 0, reason: "" });
-      loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao registrar extensão: " + err.message);
-    }
-  };
-
-  const loadDischargeFutureCount = async () => {
-    if (!selectedCycle || !user) return;
-    const today = new Date().toISOString().split("T")[0];
-    const { count } = await supabase
-      .from("agendamentos")
-      .select("id", { count: "exact", head: true })
-      .eq("paciente_id", selectedCycle.patient_id)
-      .eq("profissional_id", user.id)
-      .gt("data", today)
-      .not("status", "in", '("cancelado","falta","remarcado")');
-    setDischargeFutureCount(count || 0);
-  };
-
-  const handleDischarge = async () => {
-    if (!selectedCycle || !dischargeForm.reason) {
-      toast.error("Informe o motivo da alta.");
-      return;
-    }
-    setDischargeLoading(true);
-    try {
-      // 1. Register discharge
-      await supabase.from("patient_discharges").insert({
-        cycle_id: selectedCycle.id,
-        patient_id: selectedCycle.patient_id,
-        professional_id: user?.id || "",
-        discharge_date: new Date().toISOString().split("T")[0],
-        reason: dischargeForm.reason,
-        final_notes: dischargeForm.final_notes,
-      });
-
-      // 2. Update cycle status
-      await supabase.from("treatment_cycles").update({ status: "finalizado_alta" }).eq("id", selectedCycle.id);
-
-      // 3. REMOVER (não cancelar) sessões futuras não realizadas deste ciclo
-      // Alta clínica não é cancelamento — sessões futuras são excluídas para
-      // não inflarem o relatório de cancelamentos e liberarem vagas na agenda.
-      const today = new Date().toISOString().split("T")[0];
-
-      // 3a. Buscar sessões futuras pendentes/agendadas do ciclo (preserva realizadas/faltas)
-      const { data: futureSessions } = await supabase
-        .from("treatment_sessions")
-        .select("id, appointment_id, scheduled_date, status")
-        .eq("cycle_id", selectedCycle.id)
-        .in("status", ["pendente_agendamento", "agendada"]);
-
-      const sessionIds = (futureSessions || []).map((s: any) => s.id);
-      const linkedApptIds = (futureSessions || [])
-        .map((s: any) => s.appointment_id)
-        .filter((id: any) => !!id);
-
-      // 3b. Buscar agendamentos futuros (incluindo hoje) do paciente com este profissional ainda ativos
-      const { data: futureAppts } = await supabase
-        .from("agendamentos")
-        .select("id, data, hora")
-        .eq("paciente_id", selectedCycle.patient_id)
-        .eq("profissional_id", user?.id || "")
-        .gte("data", today)
-        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido","concluido")');
-
-      const apptIdsToDelete = Array.from(
-        new Set([...(linkedApptIds as string[]), ...((futureAppts || []).map((a: any) => a.id))])
-      );
-
-      // 3c. Excluir sessões futuras (não realizadas) do ciclo
-      if (sessionIds.length > 0) {
-        await supabase.from("treatment_sessions").delete().in("id", sessionIds);
-      }
-
-      // 3d. Excluir agendamentos futuros vinculados (libera vagas na agenda)
-      if (apptIdsToDelete.length > 0) {
-        await supabase.from("agendamentos").delete().in("id", apptIdsToDelete);
-      }
-
-      // 3e. Remoção defensiva de duplicatas remanescentes (mesmo paciente+profissional+data+hora)
-      const { data: remaining } = await supabase
-        .from("agendamentos")
-        .select("id, data, hora, status, criado_em")
-        .eq("paciente_id", selectedCycle.patient_id)
-        .eq("profissional_id", user?.id || "")
-        .gte("data", today)
-        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido","concluido")')
-        .order("criado_em", { ascending: true });
-
-      const dupIds: string[] = [];
-      const seen = new Set<string>();
-      (remaining || []).forEach((a: any) => {
-        const key = `${a.data}|${a.hora}`;
-        if (seen.has(key)) dupIds.push(a.id);
-        else seen.add(key);
-      });
-      if (dupIds.length > 0) {
-        await supabase.from("agendamentos").delete().in("id", dupIds);
-      }
-
-      const removedCount = apptIdsToDelete.length;
-      const removedSessions = sessionIds.length;
-
-      await logAction({
-        acao: "alta_paciente",
-        entidade: "treatment_cycle",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: {
-          paciente: selectedCycle.patient_id,
-          motivo: dischargeForm.reason,
-          sessoes_futuras_removidas: removedSessions,
-          agendamentos_futuros_removidos: removedCount,
-          observacao: "Removidas por alta clínica (não contam como cancelamento)",
-        },
-      });
-
-      toast.success(
-        removedCount > 0 || removedSessions > 0
-          ? `Alta realizada. ${removedSessions} sessão(ões) e ${removedCount} agendamento(s) futuro(s) removido(s) da agenda.`
-          : "Alta registrada com sucesso!"
-      );
-      setDischargeOpen(false);
-      setDischargeForm({ reason: "", final_notes: "" });
-      setDischargeFutureCount(0);
-      loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao registrar alta: " + err.message);
-    } finally {
-      setDischargeLoading(false);
-    }
-  };
-
-  const handleSendToQueue = async (cycle: TreatmentCycle) => {
-    const alreadyInQueue = fila.find(
-      (f) => f.pacienteId === cycle.patient_id && ["aguardando", "chamado"].includes(f.status),
-    );
-    if (alreadyInQueue) {
-      toast.error("Paciente já está na fila de espera.");
-      return;
-    }
-
-    const pac = pacientes.find((p) => p.id === cycle.patient_id);
-    const newId = `f${Date.now()}`;
-    await addToFila({
-      id: newId,
-      pacienteId: cycle.patient_id,
-      pacienteNome: pac?.nome || "",
-      unidadeId: cycle.unit_id,
-      profissionalId: cycle.professional_id,
-      setor: cycle.specialty,
-      prioridade: "normal",
-      status: "aguardando",
-      posicao: fila.length + 1,
-      horaChegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      criadoPor: user?.id || "sistema",
-      observacoes: `Reencaminhado após alta do tratamento: ${cycle.treatment_type}`,
+  const remarcationTreatmentSession = async (
+    session: TreatmentSession,
+    cycle: TreatmentCycle,
+    newDate: string,
+    newTime?: string,
+    checkPatientConflict = false,
+  ) => {
+    const oldDate = session.scheduled_date;
+    const result = await treatmentSessionOperations.reschedule({
+      session,
+      cycle,
+      newDate,
+      newTime,
+      checkPatientConflict,
+      bypassBlockCheck: canControlSessions,
     });
-
+    setSessions((previous) => previous.map((item) => item.id === session.id
+      ? { ...item, scheduled_date: result.session.scheduled_date || newDate }
+      : item));
     await logAction({
-      acao: "reencaminhar_fila",
-      entidade: "fila_espera",
-      entidadeId: newId,
-      modulo: "tratamentos",
-      user,
-      detalhes: { ciclo: cycle.id, paciente: pac?.nome },
-    });
-    toast.success("Paciente encaminhado para a fila de espera!");
-  };
-
-  const handleVincularPts = async () => {
-    if (!selectedCycle || !selectedPtsId) {
-      toast.error("Selecione um PTS.");
-      return;
-    }
-    setVinculandoPts(true);
-    try {
-      const { error } = await supabase
-        .from("treatment_cycles")
-        .update({ pts_id: selectedPtsId } as any)
-        .eq("id", selectedCycle.id);
-      if (error) throw error;
-
-      await logAction({
-        acao: "vincular_pts",
-        entidade: "treatment_cycle",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: { pts_id: selectedPtsId, paciente: selectedCycle.patient_id },
-      });
-
-      toast.success("PTS vinculado ao ciclo de tratamento!");
-      setVincularPtsOpen(false);
-      setSelectedPtsId("");
-      loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao vincular PTS: " + (err?.message || ""));
-    } finally {
-      setVinculandoPts(false);
-    }
-  };
-
-  const handleDesvincularPts = async () => {
-    if (!selectedCycle) return;
-    try {
-      const { error } = await supabase
-        .from("treatment_cycles")
-        .update({ pts_id: null } as any)
-        .eq("id", selectedCycle.id);
-      if (error) throw error;
-
-      await logAction({
-        acao: "desvincular_pts",
-        entidade: "treatment_cycle",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: { pts_id_anterior: selectedCycle.pts_id, paciente: selectedCycle.patient_id },
-      });
-
-      toast.success("PTS desvinculado do ciclo.");
-      loadData(true);
-    } catch (err: any) {
-      toast.error("Erro ao desvincular: " + (err?.message || ""));
-    }
-  };
-
-  const renderSessionNotes = (notes: string) => {
-    if (!notes) return null;
-    try {
-      const parsed = JSON.parse(notes);
-      if (parsed.tipo === "soap") {
-        return (
-          <div className="text-xs space-y-0.5 mt-1">
-            <p>
-              <span className="font-semibold text-blue-600">S:</span>{" "}
-              <span className="text-muted-foreground">{parsed.subjetivo}</span>
-            </p>
-            <p>
-              <span className="font-semibold text-green-600">O:</span>{" "}
-              <span className="text-muted-foreground">{parsed.objetivo}</span>
-            </p>
-            <p>
-              <span className="font-semibold text-orange-600">A:</span>{" "}
-              <span className="text-muted-foreground">{parsed.avaliacao}</span>
-            </p>
-            <p>
-              <span className="font-semibold text-purple-600">P:</span>{" "}
-              <span className="text-muted-foreground">{parsed.plano}</span>
-            </p>
-          </div>
-        );
-      }
-    } catch {
-      /* not JSON, render as text */
-    }
-    return <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{notes}</p>;
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (selectedCycle) {
-    const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
-    const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
-    const unidade = unidades.find((u) => u.id === selectedCycle.unit_id);
-    const progressPct =
-      selectedCycle.total_sessions > 0
-        ? Math.round((selectedCycle.sessions_done / selectedCycle.total_sessions) * 100)
-        : 0;
-    const pendingCount = cycleSessions.filter((s) => {
-      if (s.status !== "pendente_agendamento") return false;
-      const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
-      return !agendamentoMap[agKey]; // only truly pending if no matching agendamento
-    }).length;
-    const scheduledCount = cycleSessions.filter((s) => {
-      if (s.status === "agendada") return true;
-      if (s.status === "pendente_agendamento") {
-        const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
-        return !!agendamentoMap[agKey];
-      }
-      return false;
-    }).length;
-
-    return (
-      <div className="space-y-4 animate-fade-in overflow-y-auto max-h-[calc(100vh-80px)] pr-1">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedCycle(null)}>
-            <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
-          </Button>
-          <h1 className="text-xl font-bold font-display text-foreground">Detalhe do Ciclo</h1>
-          {canAgendarSessao && selectedCycle.status === "em_andamento" && pendingCount > 0 && (
-            <Button
-              size="sm"
-              onClick={handleAgendarCicloCompleto}
-              disabled={agendandoCiclo}
-              className="ml-auto bg-primary hover:bg-primary/90"
-            >
-              {agendandoCiclo ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <CalendarCheck className="w-4 h-4 mr-2" />
-              )}
-              {agendandoCiclo
-                ? "Agendando..."
-                : `Agendar Todas as Sessões (${pendingCount})`}
-            </Button>
-          )}
-        </div>
-
-        {resumoCiclo && (
-          <ResumoAgendamentoCiclo
-            pacienteNome={pac?.nome || "Paciente"}
-            pacienteTelefone={(pac as any)?.telefone}
-            profissionalNome={prof?.nome || "Profissional"}
-            tratamento={selectedCycle.treatment_type}
-            itens={resumoCiclo}
-            onClose={() => setResumoCiclo(null)}
-          />
-        )}
-
-
-        <Card className="shadow-card border-0">
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-foreground">{selectedCycle.treatment_type}</h2>
-                <p className="text-sm text-muted-foreground">{selectedCycle.specialty}</p>
-              </div>
-              <Badge className={cn("border", statusColors[selectedCycle.status])}>
-                {statusLabels[selectedCycle.status]}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div>
-                <span className="text-muted-foreground text-xs">Paciente</span>
-                <p className="font-medium">{pac?.nome || selectedCycle.paciente_nome || "Paciente não encontrado"}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-xs">Profissional</span>
-                <p className="font-medium">{prof?.nome || "—"}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-xs">Unidade</span>
-                <p className="font-medium">{unidade?.nome || "—"}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-xs">Frequência</span>
-                <p className="font-medium capitalize">{selectedCycle.frequency}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-xs">Início</span>
-                <p className="font-medium">
-                  {new Date(selectedCycle.start_date + "T12:00:00").toLocaleDateString("pt-BR")}
-                </p>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-xs">Previsão Término</span>
-                <p className="font-medium">
-                  {selectedCycle.end_date_predicted
-                    ? new Date(selectedCycle.end_date_predicted + "T12:00:00").toLocaleDateString("pt-BR")
-                    : "—"}
-                </p>
-              </div>
-            </div>
-            {selectedCycle.clinical_notes && (
-              <p className="text-sm text-muted-foreground border-t pt-2">{selectedCycle.clinical_notes}</p>
-            )}
-
-            {faltaStats?.alerta && (
-              <div
-                className={cn(
-                  "p-3 rounded-lg border text-sm flex items-start gap-2",
-                  faltaStats.critico
-                    ? "bg-destructive/10 border-destructive/30 text-destructive"
-                    : "bg-warning/10 border-warning/30 text-warning",
-                )}
-              >
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <div>
-                  {faltaStats.critico ? (
-                    <p>
-                      <strong>⚠️ ATENÇÃO:</strong> {faltaStats.total} faltas — considerar desligamento do tratamento.
-                    </p>
-                  ) : faltaStats.alerta === "consecutivas" ? (
-                    <p>
-                      <strong>Alerta:</strong> {faltaStats.consecutivas} faltas consecutivas — entrar em contato com
-                      paciente.
-                    </p>
-                  ) : (
-                    <p>
-                      <strong>Alerta:</strong> {faltaStats.total} faltas alternadas — revisar adesão ao tratamento.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {pendingCount > 0 && (
-              <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning">
-                ⏳ <strong>{pendingCount} sessão(ões)</strong> aguardando agendamento pela recepção.
-                {scheduledCount > 0 && ` • ${scheduledCount} já agendada(s).`}
-                {canAgendarSessao && (
-                  <span className="block text-xs mt-0.5 text-warning/80">
-                    Clique em "Agendar" em cada sessão abaixo para confirmar na agenda.
-                  </span>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Progresso</span>
-                <span>
-                  {selectedCycle.sessions_done}/{selectedCycle.total_sessions} sessões ({progressPct}%)
-                </span>
-              </div>
-              <Progress value={progressPct} className="h-3" />
-            </div>
-
-            <div className="flex gap-2 flex-wrap pt-2">
-              {selectedCycle.status === "em_andamento" && (isProfissional || canManageFull) && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setSelectedSessionForRegister(null);
-                      setSelectSessionOpen(true);
-                    }}
-                  >
-                    <Play className="w-3.5 h-3.5 mr-1" /> Registrar Sessão
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setExtensionForm({ new_sessions: 0, reason: "" });
-                      setExtensionOpen(true);
-                    }}
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 mr-1" /> Solicitar Extensão
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-destructive text-destructive"
-                    onClick={() => {
-                      setDischargeForm({ reason: "", final_notes: "" });
-                      setDischargeFutureCount(0);
-                      setDischargeOpen(true);
-                      // load count async
-                      setTimeout(() => loadDischargeFutureCount(), 0);
-                    }}
-                  >
-                    <CheckCircle className="w-3.5 h-3.5 mr-1" /> Dar Alta
-                  </Button>
-                </>
-              )}
-              {selectedCycle.status === "finalizado_alta" && canManageFull && (
-                <Button size="sm" variant="outline" onClick={() => handleSendToQueue(selectedCycle)}>
-                  <ListOrdered className="w-3.5 h-3.5 mr-1" /> Encaminhar para Fila
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {ptsVinculado ? (
-          <Card className="shadow-card border-0 border-l-4 border-l-purple-500">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground text-sm">PTS Vinculado</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Criado em {new Date(ptsVinculado.created_at).toLocaleDateString("pt-BR")}
-                      {" • "}
-                      {funcionarios.find((f) => f.id === ptsVinculado.professional_id)?.nome || "—"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    className={cn(
-                      "border text-xs",
-                      ptsVinculado.status === "ativo"
-                        ? "bg-success/15 text-success border-success/30"
-                        : "bg-muted text-muted-foreground border-border",
-                    )}
-                  >
-                    {ptsVinculado.status === "ativo" ? "Ativo" : "Encerrado"}
-                  </Badge>
-                  {(isProfissional || canManageFull) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={handleDesvincularPts}
-                      title="Desvincular PTS"
-                    >
-                      <Unlink className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              <div className="mb-3">
-                <p className="text-xs text-muted-foreground font-semibold mb-1">Diagnóstico Funcional</p>
-                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{ptsVinculado.diagnostico_funcional}</p>
-              </div>
-
-              <div className="mb-3">
-                <p className="text-xs text-muted-foreground font-semibold mb-1">Objetivos Terapêuticos</p>
-                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{ptsVinculado.objetivos_terapeuticos}</p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-                {ptsVinculado.metas_curto_prazo && (
-                  <div className="p-2 rounded bg-blue-500/5 border border-blue-500/20">
-                    <p className="text-xs font-semibold text-blue-600 mb-1">📌 Curto Prazo</p>
-                    <p className="text-xs text-foreground">{ptsVinculado.metas_curto_prazo}</p>
-                  </div>
-                )}
-                {ptsVinculado.metas_medio_prazo && (
-                  <div className="p-2 rounded bg-orange-500/5 border border-orange-500/20">
-                    <p className="text-xs font-semibold text-orange-600 mb-1">📋 Médio Prazo</p>
-                    <p className="text-xs text-foreground">{ptsVinculado.metas_medio_prazo}</p>
-                  </div>
-                )}
-                {ptsVinculado.metas_longo_prazo && (
-                  <div className="p-2 rounded bg-green-500/5 border border-green-500/20">
-                    <p className="text-xs font-semibold text-green-600 mb-1">🎯 Longo Prazo</p>
-                    <p className="text-xs text-foreground">{ptsVinculado.metas_longo_prazo}</p>
-                  </div>
-                )}
-              </div>
-
-              {ptsVinculado.especialidades_envolvidas && ptsVinculado.especialidades_envolvidas.length > 0 && (
-                <div>
-                  <p className="text-xs text-muted-foreground font-semibold mb-1">Especialidades Envolvidas</p>
-                  <div className="flex flex-wrap gap-1">
-                    {ptsVinculado.especialidades_envolvidas.map((spec, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
-                        {spec}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : selectedCycle.status === "em_andamento" && (isProfissional || canManageFull) ? (
-          <Card className="shadow-card border-0 border-dashed border">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">Nenhum PTS vinculado</p>
-                  <p className="text-xs text-muted-foreground">
-                    Vincule um Projeto Terapêutico Singular para acompanhar objetivos e metas.
-                  </p>
-                </div>
-                {ptsDosPacienteCiclo.length > 0 ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedPtsId("");
-                      setVincularPtsOpen(true);
-                    }}
-                  >
-                    <Link2 className="w-3 h-3 mr-1" /> Vincular PTS
-                  </Button>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Nenhum PTS ativo para este paciente.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="shadow-card border-0">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-foreground">Sessões</h3>
-              {canControlSessions && selectedCycle.status === "em_andamento" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => setAddIntermediateOpen(true)}
-                >
-                  <Plus className="w-3 h-3 mr-1" /> Sessão Intermediária
-                </Button>
-              )}
-            </div>
-            <div className="max-h-[500px] overflow-y-auto border rounded-lg">
-              <div className="space-y-2">
-                {cycleSessions.map((s) => {
-                  const isPendente = s.status === "pendente_agendamento";
-                  const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
-                  const matchedAg = isPendente ? agendamentoMap[agKey] : null;
-                  const effectiveStatus = matchedAg ? "agendada" : s.status;
-                  const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
+      acao: "remar…8756 tokens truncated…dente = effectiveStatus === "pendente_agendamento";
                   const isAgendada = effectiveStatus === "agendada";
 
                   // Master can reschedule ANY session (including realizada)
@@ -2998,81 +2167,20 @@ const Tratamentos: React.FC = () => {
           availableDates={agendarSessaoDatesDisponiveis}
           getAvailableSlots={getAvailableSlots}
           onConfirm={async (data, hora, salaId) => {
+            if (!agendarSessaoTarget || !selectedCycle || agendandoSessao) return;
             setAgendarSessaoData(data);
             setAgendarSessaoHora(hora);
             setAgendarSessaoSalaId(salaId);
-            // Inline the confirm logic
-            if (!agendarSessaoTarget || !selectedCycle) return;
             setAgendandoSessao(true);
             try {
-              // Duplicate check: verify patient doesn't already have appointment at same date+time
-              const { data: existingAppts } = await supabase
-                .from("agendamentos")
-                .select("id, profissional_nome, hora")
-                .eq("paciente_id", selectedCycle.patient_id)
-                .eq("data", data)
-                .eq("hora", hora)
-                .not("status", "in", '("cancelado","falta","remarcado")');
-              if (existingAppts && existingAppts.length > 0) {
-                const profName = existingAppts[0].profissional_nome || "outro profissional";
-                toast.error(`Este paciente já possui agendamento em ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora} com ${profName}. Escolha outro horário.`);
-                setAgendandoSessao(false);
-                throw new Error("Agendamento duplicado detectado.");
-              }
-
-              const prof = funcionarios.find(f => f.id === selectedCycle.professional_id);
-              const pac = pacientes.find(p => p.id === selectedCycle.patient_id);
-              if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
-              const agId = `ag${Date.now()}`;
-              await addAgendamento({
-                id: agId,
-                pacienteId: selectedCycle.patient_id,
-                pacienteNome: pac.nome,
-                unidadeId: selectedCycle.unit_id,
-                salaId: salaId || "",
-                setorId: "",
-                profissionalId: selectedCycle.professional_id,
-                profissionalNome: prof.nome,
+              await scheduleTreatmentSession(
+                agendarSessaoTarget,
+                selectedCycle,
                 data,
                 hora,
-                status: "confirmado",
-                tipo: "Sessão de Tratamento",
-                observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${selectedCycle.treatment_type}`,
-                origem: "recepcao",
-                criadoEm: new Date().toISOString(),
-                criadoPor: user?.id || "",
-              });
-              const { error: updateError } = await supabase
-                .from("treatment_sessions")
-                .update({ appointment_id: agId, status: "agendada", scheduled_date: data })
-                .eq("id", agendarSessaoTarget.id);
-              if (updateError) throw updateError;
-
-              // Optimistic local update — instant UI feedback
-              setSessions((prev) =>
-                prev.map((s) =>
-                  s.id === agendarSessaoTarget.id
-                    ? { ...s, status: "agendada", appointment_id: agId, scheduled_date: data }
-                    : s
-                )
+                salaId,
+                "patient",
               );
-
-              logAction({
-                acao: "agendar_sessao_tratamento",
-                entidade: "treatment_session",
-                entidadeId: agendarSessaoTarget.id,
-                modulo: "tratamentos",
-                user,
-                detalhes: { ciclo: selectedCycle.id, sessao: agendarSessaoTarget.session_number, data, hora, agendamento_id: agId },
-              });
-              toast.success(`Sessão ${agendarSessaoTarget.session_number} agendada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora}!`);
-              setAgendarSessaoTarget(null);
-              // Background refresh — no blocking
-              loadData(true);
-            } catch (err: any) {
-              console.error(err);
-              toast.error(err?.message || "Erro ao agendar sessão.");
-              throw err;
             } finally {
               setAgendandoSessao(false);
             }
@@ -3101,73 +2209,11 @@ const Tratamentos: React.FC = () => {
           salas={salasDisponiveis}
           availableDates={agendarSessaoDatesDisponiveis}
           getAvailableSlots={getAvailableSlots}
-          onConfirm={async (data, hora, salaId) => {
-            if (!remarcarTarget || !selectedCycle) return;
+          onConfirm={async (data, hora, _salaId) => {
+            if (!remarcarTarget || !selectedCycle || remarcarSaving) return;
             setRemarcarSaving(true);
             try {
-              const oldDate = remarcarTarget.scheduled_date;
-              // Duplicate check: verify patient doesn't already have appointment at same date+time
-              const { data: existingAppts } = await supabase
-                .from("agendamentos")
-                .select("id, profissional_nome, hora")
-                .eq("paciente_id", selectedCycle.patient_id)
-                .eq("data", data)
-                .eq("hora", hora)
-                .not("status", "in", '("cancelado","falta","remarcado")')
-                .neq("id", remarcarTarget.appointment_id || "___none___");
-              if (existingAppts && existingAppts.length > 0) {
-                const profName = existingAppts[0].profissional_nome || "outro profissional";
-                toast.error(`Este paciente já possui agendamento em ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora} com ${profName}. Escolha outro horário.`);
-                setRemarcarSaving(false);
-                throw new Error("Agendamento duplicado detectado.");
-              }
-              if (!isMaster && !isProfissional) {
-                const { data: blocked } = await supabase.rpc("is_date_blocked", {
-                  p_date: data,
-                  p_profissional_id: selectedCycle.professional_id,
-                  p_unidade_id: selectedCycle.unit_id,
-                });
-                if (blocked === true) { toast.error("Data bloqueada."); return; }
-              }
-              const { error } = await supabase
-                .from("treatment_sessions")
-                .update({ scheduled_date: data })
-                .eq("id", remarcarTarget.id);
-              if (error) throw error;
-
-              // Optimistic local update
-              setSessions((prev) =>
-                prev.map((s) =>
-                  s.id === remarcarTarget.id
-                    ? { ...s, scheduled_date: data }
-                    : s
-                )
-              );
-
-              if (remarcarTarget.appointment_id) {
-                await supabase.from("agendamentos").update({ data, hora }).eq("id", remarcarTarget.appointment_id);
-              }
-              logAction({
-                acao: "remarcar_sessao",
-                entidade: "treatment_session",
-                entidadeId: remarcarTarget.id,
-                modulo: "tratamentos",
-                user,
-                detalhes: {
-                  ciclo: selectedCycle.id,
-                  sessao: remarcarTarget.session_number,
-                  data_anterior: oldDate,
-                  data_nova: data,
-                  agendamento_vinculado: remarcarTarget.appointment_id || null,
-                },
-              });
-              toast.success(`Sessão ${remarcarTarget.session_number} remarcada de ${new Date(oldDate + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
-              setRemarcarTarget(null);
-              loadData(true);
-            } catch (err: any) {
-              console.error(err);
-              toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
-              throw err;
+              await remarcationTreatmentSession(remarcarTarget, selectedCycle, data, hora, true);
             } finally {
               setRemarcarSaving(false);
             }
