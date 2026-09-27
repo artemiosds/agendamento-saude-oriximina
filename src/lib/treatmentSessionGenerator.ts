@@ -113,9 +113,12 @@ export function buildBlockedRanges(
       dataFim: b.dataFim || b.data_fim || b.dataInicio || b.data_inicio || '',
       profissionalId: b.profissionalId ?? b.profissional_id ?? '',
       unidadeId: b.unidadeId ?? b.unidade_id ?? '',
+      diaInteiro: b.diaInteiro ?? b.dia_inteiro ?? true,
+      horaInicio: b.horaInicio ?? b.hora_inicio ?? '',
     }))
     .filter((b) => {
       if (!b.dataInicio) return false;
+      if (!b.diaInteiro && b.horaInicio) return false;
       const isGlobal = !b.profissionalId && !b.unidadeId;
       const isUnit = !!unidadeId && b.unidadeId === unidadeId && !b.profissionalId;
       const isProfessional = !!profissionalId && b.profissionalId === profissionalId;
