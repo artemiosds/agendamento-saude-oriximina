@@ -129,6 +129,27 @@ function requireOperationResult(data: Record<string, unknown> | null, accepted: 
 
 export function createTreatmentSessionOperations(deps: TreatmentSessionOperationsDependencies) {
   return {
+    async linkExistingAppointment(input: {
+      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
+      cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };
+      appointmentId: string;
+    }): Promise<TreatmentSessionOperationResult> {
+      if (!input.appointmentId) {
+        throw new Error('Vínculo inconsistente: o agendamento não foi informado. Nenhum dado foi alterado.');
+      }
+      const { data, error } = await deps.client.rpc('link_existing_treatment_session_appointment', {
+        p_session_id: input.session.id,
+        p_cycle_id: input.cycle.id,
+        p_expected_session_date: input.session.scheduled_date,
+        p_appointment_id: input.appointmentId,
+      });
+      if (error) throwRpcError(error);
+      const result = requireOperationResult(data, ['ja_agendado']);
+      if (!result.appointment) throw new Error('A operação não retornou o agendamento vinculado.');
+      deps.agenda.applyTreatmentAgendamentoUpdate(result.appointment);
+      return result;
+    },
+
     async schedule(input: {
       session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
       cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };

@@ -4414,6 +4414,15 @@ export type Database = {
             }
             Returns: Json
           }
+      link_existing_treatment_session_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_cycle_id: string
+          p_expected_session_date: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
       refresh_paciente_profissional_status: { Args: never; Returns: undefined }
       register_whatsapp_inbound: {

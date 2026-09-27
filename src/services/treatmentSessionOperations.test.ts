@@ -29,6 +29,71 @@ const appointmentRow = {
   google_event_id: '', sync_status: 'pendente', criado_em: appointment.criadoEm, criado_por: appointment.criadoPor,
 };
 
+describe('treatmentSessionOperations: batch link to existing appointment', () => {
+  it('links an existing appointment through the scoped server RPC and synchronizes the Agenda cache', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({
+      data: {
+        status: 'ja_agendado',
+        session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data },
+        appointment: appointmentRow,
+      },
+      error: null,
+    });
+
+    const result = await ctx.service.linkExistingAppointment({
+      session: session(), cycle: cycle(), appointmentId: appointment.id,
+    });
+
+    expect(result.status).toBe('ja_agendado');
+    expect(result.appointment?.id).toBe(appointment.id);
+    expect(ctx.rpc).toHaveBeenCalledWith('link_existing_treatment_session_appointment', {
+      p_session_id: 'session-1',
+      p_cycle_id: 'cycle-1',
+      p_expected_session_date: '2026-09-28',
+      p_appointment_id: appointment.id,
+    });
+    expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id }));
+  });
+
+  it('does not call the server when the existing appointment identifier is missing', async () => {
+    const ctx = setup();
+    await expect(ctx.service.linkExistingAppointment({ session: session(), cycle: cycle(), appointmentId: '' }))
+      .rejects.toThrow(/não foi informado/);
+    expect(ctx.rpc).not.toHaveBeenCalled();
+    expect(ctx.applyTreatmentAgendamentoUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'vínculo divergente', response: { data: { status: 'vinculo_inconsistente', reason: 'agendamento_divergente' }, error: null } },
+    { label: 'estado protegido', response: { data: { status: 'estado_protegido', reason: 'sessao_alterada' }, error: null } },
+    { label: 'unidade ou permissão negada', response: { data: null, error: { code: '42501', message: 'permission denied' } } },
+  ])('não sincroniza estado local quando a operação é recusada: $label', async ({ response }) => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue(response);
+    await expect(ctx.service.linkExistingAppointment({ session: session(), cycle: cycle(), appointmentId: appointment.id }))
+      .rejects.toThrow();
+    expect(ctx.applyTreatmentAgendamentoUpdate).not.toHaveBeenCalled();
+  });
+
+  it('trata duas chamadas concorrentes idempotentes sem duplicar o agendamento', async () => {
+    const ctx = setup();
+    ctx.rpc
+      .mockResolvedValueOnce({ data: { status: 'ja_agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'ja_agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null });
+    const input = { session: session(), cycle: cycle(), appointmentId: appointment.id };
+
+    const results = await Promise.all([
+      ctx.service.linkExistingAppointment(input),
+      ctx.service.linkExistingAppointment(input),
+    ]);
+
+    expect(results.map((result) => result.status)).toEqual(['ja_agendado', 'ja_agendado']);
+    expect(ctx.rpc).toHaveBeenCalledTimes(2);
+    expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledTimes(2);
+  });
+});
+
 function setup() {
   const rpc = vi.fn();
   const scheduleCommits: Array<{ appointment: Agendamento; created: boolean }> = [];

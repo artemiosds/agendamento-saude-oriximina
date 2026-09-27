@@ -58,6 +58,7 @@ import { CalendarCheck } from "lucide-react";
 import { CardListSkeleton } from "@/components/skeletons/CardListSkeleton";
 import { createRequestGeneration, isRequestCurrent } from "@/lib/requestGeneration";
 import { useTreatmentPtsData, type TreatmentPtsRecord } from "@/hooks/useTreatmentPtsData";
+import type { Agendamento } from "@/types";
 
 interface TreatmentCycle {
   id: string;
@@ -157,7 +158,6 @@ const Tratamentos: React.FC = () => {
   const { funcionarios, unidades, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates } = useOperacional();
   const { fila, addToFila } = useFila();
   const {
-    addAgendamento,
     addAgendamentoTransactionally,
     cancelAgendamento,
     deleteAgendamentoTransactionally,
@@ -216,6 +216,7 @@ const Tratamentos: React.FC = () => {
 
   // Agendar ciclo completo
   const [agendandoCiclo, setAgendandoCiclo] = useState(false);
+  const agendarCicloInFlightRef = useRef(false);
   const [resumoCiclo, setResumoCiclo] = useState<ResumoSessaoItem[] | null>(null);
 
   // Master: add intermediate session
@@ -1305,9 +1306,10 @@ const Tratamentos: React.FC = () => {
    * - Mostra resumo no fim com opção de notificar paciente via WhatsApp
    */
   const handleAgendarCicloCompleto = async () => {
-    if (!selectedCycle) return;
-    const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
-    const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
+    const cycle = selectedCycle;
+    if (!cycle || agendarCicloInFlightRef.current) return;
+    const pac = pacientes.find((p) => p.id === cycle.patient_id);
+    const prof = funcionarios.find((f) => f.id === cycle.professional_id);
     if (!pac || !prof) {
       toast.error("Paciente ou profissional não encontrado.");
       return;
@@ -1322,16 +1324,8 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
-    // 1) Verificar se o paciente está bloqueado por faltas para este profissional
-    try {
-      const { isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
-      const bloqueado = await isPacienteBloqueadoParaProfissional(selectedCycle.patient_id, selectedCycle.professional_id);
-      if (bloqueado) {
-        toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Agendamento em lote cancelado.");
-        return;
-      }
-    } catch {}
-
+    // Bloqueio síncrono: evita duas execuções antes que o botão seja desabilitado no próximo render.
+    agendarCicloInFlightRef.current = true;
     setAgendandoCiclo(true);
 
     const resumo: ResumoSessaoItem[] = [];
@@ -1360,16 +1354,26 @@ const Tratamentos: React.FC = () => {
       let dataAtual = dataSugerida;
       for (let tentativa = 0; tentativa < 30; tentativa++) {
         const slots = getAvailableSlots(profId, unidadeId, dataAtual);
-        // Filtrar slots que já foram pegos por outras sessões NESTE lote
         const slotLivre = slots.find((s) => estaLivreNoLote(dataAtual, s));
         if (slotLivre) return { data: dataAtual, hora: slotLivre };
-        // Avança 1 dia
         const d = new Date(dataAtual + "T12:00:00");
         d.setDate(d.getDate() + 1);
         dataAtual = d.toISOString().split("T")[0];
       }
       return null;
     };
+
+    // 1) Verificar se o paciente está bloqueado por faltas para este profissional
+    try {
+      const { isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+      const bloqueado = await isPacienteBloqueadoParaProfissional(cycle.patient_id, cycle.professional_id);
+      if (bloqueado) {
+        toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Agendamento em lote cancelado.");
+        agendarCicloInFlightRef.current = false;
+        setAgendandoCiclo(false);
+        return;
+      }
+    } catch {}
 
     try {
       for (const sess of pendentes) {
@@ -1392,6 +1396,7 @@ const Tratamentos: React.FC = () => {
             .select("id, hora, status")
             .eq("paciente_id", sess.patient_id)
             .eq("profissional_id", sess.professional_id)
+            .eq("unidade_id", cycle.unit_id)
             .eq("data", sess.scheduled_date)
             .not("status", "in", '("cancelado","falta","remarcado")')
             .order("criado_em", { ascending: false })
@@ -1401,26 +1406,40 @@ const Tratamentos: React.FC = () => {
           if (checkErr) throw checkErr;
 
           if (existente) {
-            // Se já existe um agendamento manual para este paciente/prof/data, apenas vincula
-            const { error: linkErr } = await supabase
-              .from("treatment_sessions")
-              .update({ appointment_id: existente.id, status: "agendada" })
-              .eq("id", sess.id);
-            
-            if (linkErr) throw linkErr;
+            // O vínculo é validado e gravado no servidor, sob as mesmas travas de unidade/permissão.
+            const linked = await treatmentSessionOperations.linkExistingAppointment({
+              session: sess,
+              cycle,
+              appointmentId: existente.id,
+            });
+            const linkedAppointment = linked.appointment;
+            if (!linkedAppointment) throw new Error("O vínculo não retornou o agendamento existente.");
 
             // Atualização local imediata para o resumo
             setSessions((prev) =>
               prev.map((x) =>
-                x.id === sess.id ? { ...x, appointment_id: existente.id, status: "agendada" } : x
+                x.id === sess.id ? {
+                  ...x,
+                  appointment_id: linked.session.appointment_id || linkedAppointment.id,
+                  status: linked.session.status || "agendada",
+                  scheduled_date: linked.session.scheduled_date || x.scheduled_date,
+                } : x
               )
             );
 
-            usar(sess.scheduled_date, existente.hora);
+            setAgendamentoMap((prev) => ({
+              ...prev,
+              [`${sess.patient_id}|${sess.professional_id}|${linkedAppointment.data}`]: {
+                id: linkedAppointment.id,
+                hora: linkedAppointment.hora,
+                status: linkedAppointment.status,
+              },
+            }));
+            usar(linkedAppointment.data, linkedAppointment.hora);
             resumo.push({
               numero: sess.session_number,
-              data: sess.scheduled_date,
-              hora: existente.hora,
+              data: linkedAppointment.data,
+              hora: linkedAppointment.hora,
               status: "ja_agendada",
             });
             continue;
@@ -1430,7 +1449,7 @@ const Tratamentos: React.FC = () => {
           const slot = encontrarSlotValido(
             sess.scheduled_date,
             sess.professional_id,
-            selectedCycle.unit_id,
+            cycle.unit_id,
           );
 
           if (!slot) {
@@ -1444,12 +1463,11 @@ const Tratamentos: React.FC = () => {
           }
 
           // 4) Inserir novo agendamento no horário válido
-          const agId = `ag${Date.now()}${sess.session_number}`;
-          const newAgData = {
-            id: agId,
+          const newAgData: Agendamento = {
+            id: `ag${crypto.randomUUID()}`,
             pacienteId: sess.patient_id,
             pacienteNome: pac.nome,
-            unidadeId: selectedCycle.unit_id,
+            unidadeId: cycle.unit_id,
             salaId: "",
             setorId: "",
             profissionalId: sess.professional_id,
@@ -1458,50 +1476,49 @@ const Tratamentos: React.FC = () => {
             hora: slot.hora,
             status: "confirmado" as const,
             tipo: "Sessão de Tratamento" as const,
-            observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${selectedCycle.treatment_type} (lote)`,
+            observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${cycle.treatment_type} (lote)`,
             origem: "recepcao" as const,
             criadoEm: new Date().toISOString(),
             criadoPor: user?.id || "",
           };
 
-          // Usa o service addAgendamento do DataContext para garantir que a Agenda atualize em tempo real
-          await addAgendamento(newAgData);
+          // A operação transacional grava sessão + agendamento; o bridge mantém cotas, auditoria e cache da Agenda.
+          const scheduled = await treatmentSessionOperations.schedule({
+            session: sess,
+            cycle,
+            appointment: newAgData,
+            duplicateScope: "patient_professional",
+          });
+          const scheduledAppointment = scheduled.appointment;
+          if (!scheduledAppointment) throw new Error("A operação não retornou o agendamento confirmado.");
 
-          // 5) Atualizar sessão como agendada
-          const updates: any = { appointment_id: agId, status: "agendada" };
-          if (slot.data !== sess.scheduled_date) updates.scheduled_date = slot.data;
-          
-          const { error: updErr } = await supabase
-            .from("treatment_sessions")
-            .update(updates)
-            .eq("id", sess.id);
-          
-          if (updErr) throw updErr;
-
-
-          // 5) Atualização otimista da UI
           setSessions((prev) =>
             prev.map((x) =>
               x.id === sess.id
-                ? { ...x, appointment_id: agId, status: "agendada", scheduled_date: slot.data }
+                ? {
+                    ...x,
+                    appointment_id: scheduled.session.appointment_id || scheduledAppointment.id,
+                    status: scheduled.session.status || "agendada",
+                    scheduled_date: scheduled.session.scheduled_date || scheduledAppointment.data,
+                  }
                 : x,
             ),
           );
           setAgendamentoMap((prev) => ({
             ...prev,
-            [`${sess.patient_id}|${sess.professional_id}|${slot.data}`]: {
-              id: agId,
-              hora: slot.hora,
-              status: "confirmado",
+            [`${sess.patient_id}|${sess.professional_id}|${scheduledAppointment.data}`]: {
+              id: scheduledAppointment.id,
+              hora: scheduledAppointment.hora,
+              status: scheduledAppointment.status,
             },
           }));
 
-          usar(slot.data, slot.hora);
+          usar(scheduledAppointment.data, scheduledAppointment.hora);
           resumo.push({
             numero: sess.session_number,
-            data: slot.data,
-            hora: slot.hora,
-            status: "agendada",
+            data: scheduledAppointment.data,
+            hora: scheduledAppointment.hora,
+            status: scheduled.status === "agendado" ? "agendada" : "ja_agendada",
           });
         } catch (innerErr: any) {
           console.error(`[AgendarCiclo] sessão ${sess.session_number}:`, innerErr);
@@ -1521,7 +1538,7 @@ const Tratamentos: React.FC = () => {
       await logAction({
         acao: "agendar_ciclo_completo",
         entidade: "treatment_cycle",
-        entidadeId: selectedCycle.id,
+        entidadeId: cycle.id,
         modulo: "tratamentos",
         user,
         detalhes: { total: pendentes.length, novas, ja_existiam: jaExist, erros },
@@ -1543,6 +1560,7 @@ const Tratamentos: React.FC = () => {
       toast.error(err?.message || "Erro ao agendar ciclo completo.");
     } finally {
       setAgendandoCiclo(false);
+      agendarCicloInFlightRef.current = false;
     }
   };
 
