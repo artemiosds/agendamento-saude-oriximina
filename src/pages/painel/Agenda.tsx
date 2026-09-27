@@ -19,9 +19,7 @@ import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, History, ListChecks } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -276,7 +274,6 @@ const Agenda: React.FC = () => {
     completeAgendaDates,
     setAgendaSelectedDate,
     loadAgendaExceptions,
-    agendaRevision,
     addAtendimento,
   } = useAgendamentos();
   const { fila, addToFila, updateFila, refreshFila } = useFila();
@@ -389,32 +386,6 @@ const Agenda: React.FC = () => {
       });
   }, [loadAgendaRange]);
   const [filterUnit, setFilterUnit] = useState("all");
-  const [pendenciasCount, setPendenciasCount] = useState<number | null>(null);
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    const today = todayLocalStr();
-    const now = nowMinutesInBrazil();
-    const hour = `${String(Math.floor(now / 60)).padStart(2, '0')}:${String(now % 60).padStart(2, '0')}`;
-    const statuses = ['confirmado', 'aguardando', 'confirmado_chegada', 'chegada_confirmada',
-      'apto_atendimento', 'chamado', 'em_atendimento', 'triagem_concluida',
-      'aguardando_atendimento', 'aguardando_triagem'];
-    let query = supabase.from('agendamentos' as any).select('id', { count: 'exact', head: true })
-      .in('status', statuses).or(`data.lt.${today},and(data.eq.${today},hora.lt.${hour})`);
-    if (user.unidadeId && user.usuario !== 'admin.sms') query = query.eq('unidade_id', user.unidadeId);
-    if (isProfissional) query = query.eq('profissional_id', user.id);
-    void query.then(({ count, error }) => {
-      if (cancelled) return;
-      if (error || count === null) {
-        console.error('Erro ao contar pendências da Agenda:', error);
-        toast.error('Não foi possível consultar as pendências da Agenda.');
-        return;
-      }
-      setPendenciasCount(count);
-    });
-    return () => { cancelled = true; };
-  }, [user, isProfissional, agendaRevision]);
-
   useEffect(() => {
     void loadAgendaExceptions('online')
       .catch(error => console.error('Erro ao consultar pendentes online:', error));
@@ -607,9 +578,8 @@ const Agenda: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [dayAgIdsKey, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // NOVO: aba pendentes / agenda / pendencias_revisao
-  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes" | "pendencias_revisao">("agenda");
-  const [pendenciasDialogOpen, setPendenciasDialogOpen] = useState(false);
+  // Aba de pendentes online e agenda
+  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
   // BUSCA na agenda
   const [searchTerm, setSearchTerm] = useState("");
@@ -714,39 +684,6 @@ const Agenda: React.FC = () => {
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   // isProfissional já definido no topo
 
-  // Memo para agendamentos pendentes (Requirement 5-10)
-  const agendamentosPendentesRevisao = React.useMemo(() => {
-    const today = todayLocalStr();
-    const nowMin = nowMinutesInBrazil();
-    
-    return agendamentos.filter(ag => {
-      // Regra de permissão: profissional vê só os seus, Master vê todos (Req 6)
-      if (isProfissional && ag.profissionalId !== user?.id) return false;
-      // Universal unit isolation
-      if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return false;
-
-      // Mostrar TODOS os pendentes passados (sem recorte mensal) para garantir
-      // que pacientes ainda aptos a iniciar atendimento sejam reexibidos.
-      
-      const [hh, mm] = (ag.hora || "00:00").split(":").map(Number);
-      const agMin = hh * 60 + mm;
-      const isPast = ag.data < today || (ag.data === today && agMin < nowMin);
-      
-      if (!isPast) return false;
-
-      const pendenteStatuses = [
-        "confirmado", "aguardando", "confirmado_chegada", "chegada_confirmada", 
-        "apto_atendimento", "chamado", "em_atendimento", "triagem_concluida",
-        "aguardando_atendimento", "aguardando_triagem"
-      ];
-      const concluidoStatuses = [
-        "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
-        "faltou", "cancelado", "excluido"
-      ];
-
-      return pendenteStatuses.includes(ag.status) && !concluidoStatuses.includes(ag.status);
-    });
-  }, [agendamentos, user, isProfissional, nowMinutes]);
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
@@ -2542,37 +2479,6 @@ const Agenda: React.FC = () => {
         </div>
         
         <div className="flex flex-col gap-2">
-          {/* Lembrete de Pendências (Req 5 & 9) */}
-          {(isMaster || isProfissional) && pendenciasCount !== null && pendenciasCount > 0 && (
-            <Alert className="bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-primary/10 border-l-4 border-l-amber-500 border border-amber-500/30 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
-              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
-                <div className="pr-4">
-                  <AlertTitle className="text-sm font-semibold text-foreground">Pendências de agenda</AlertTitle>
-                  <AlertDescription className="text-xs text-foreground/70">
-                    Existem <span className="font-semibold text-amber-700 dark:text-amber-300">{pendenciasCount}</span> pacientes sem conclusão no período. Revise agora.
-                  </AlertDescription>
-                </div>
-                <Button 
-                  size="sm" 
-                  className="h-8 bg-amber-500 hover:bg-amber-600 text-white text-xs shrink-0 shadow-sm"
-                  onClick={() => {
-                    void loadAgendaExceptions('historical')
-                      .then(rows => hydrateAgendaPatients(rows.map(a => a.pacienteId)))
-                      .then(() => setPendenciasDialogOpen(true))
-                      .catch(error => {
-                        console.error('Erro ao abrir pendências:', error);
-                        toast.error('Não foi possível carregar as pendências. Tente novamente.');
-                      });
-                  }}
-                >
-                  <ListChecks className="w-3.5 h-3.5 mr-1" />
-                  Ver pendências
-                </Button>
-              </div>
-            </Alert>
-          )}
-
           <div className="flex gap-2 flex-wrap justify-end">
             {!isProfissional && (
               <>
@@ -3889,94 +3795,6 @@ const Agenda: React.FC = () => {
         onClose={() => setConcluirTarget(null)}
         onConcluded={async () => { await refreshAgendamentos(); }}
       />
-      {/* Modal de Pendências de Revisão (Req 9 & 10) */}
-      <Dialog open={pendenciasDialogOpen} onOpenChange={setPendenciasDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-display">
-              <ListChecks className="w-5 h-5 text-warning" />
-              Pendências de Agenda
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {agendamentosPendentesRevisao.length === 0 ? (
-              <div className="text-center py-8">
-                <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-success/40" />
-                <p className="text-muted-foreground">Nenhuma pendência encontrada.</p>
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {agendamentosPendentesRevisao.map(ag => (
-                  <div key={ag.id} className="flex items-center justify-between p-3 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-colors">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{ag.pacienteNome}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                        <span>{new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR')} às {ag.hora}</span>
-                        <span>•</span>
-                        <span className="truncate">{ag.profissionalNome}</span>
-                      </div>
-                      <div className="mt-1">
-                        <StatusBadge
-                          label={statusLabels[getDisplayStatus(ag, todayLocalStr())] || ag.status}
-                          className={statusBadgeClass[getDisplayStatus(ag, todayLocalStr())]}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleStatusChange(ag.id, "falta")}
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Marcar Falta</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
-                            onClick={() => {
-                              setDetalheAg(ag);
-                              setDetalheOpen(true);
-                            }}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Ver Detalhes</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <ActionButton
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0 text-success hover:bg-success/10"
-                            onClick={() => handleIniciarAtendimento(ag)}
-                            hideSpinner
-                          >
-                            <Play className="w-4 h-4" />
-                          </ActionButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Iniciar Atendimento</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendenciasDialogOpen(false)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <RegistrarFaltaModal
         open={faltaTarget !== null}
         onOpenChange={(v) => { if (!v) setFaltaTarget(null); }}
