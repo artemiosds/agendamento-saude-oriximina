@@ -4426,6 +4426,18 @@ export type Database = {
         }
         Returns: Json
       }
+      reschedule_treatment_session: {
+        Args: {
+          p_check_patient_conflict?: boolean
+          p_cycle_id: string
+          p_expected_appointment_id: string
+          p_expected_session_date: string
+          p_new_date: string
+          p_new_time?: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       resetar_faltas_paciente: {
         Args: { p_paciente_id: string }
         Returns: undefined
@@ -4473,6 +4485,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      schedule_treatment_session: {
+        Args: {
+          p_appointment: Json
+          p_check_patient_conflict: boolean
+          p_cycle_id: string
+          p_expected_session_date: string
+          p_session_id: string
+        }
+        Returns: Json
       }
       search_patients: {
         Args: { p_limit?: number; p_search: string; p_unit_id?: string }
@@ -4574,6 +4596,15 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }
+      unschedule_treatment_session: {
+        Args: {
+          p_cycle_id: string
+          p_expected_appointment_id: string
+          p_expected_session_date: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
