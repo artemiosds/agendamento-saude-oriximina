@@ -1,134 +1,72 @@
-/**
- * Auto-fix utility: detects treatment_sessions agendadas em datas inválidas
- * (sábado, domingo, feriado, bloqueio manual) e as devolve para
- * "pendente_agendamento", desvinculando a data e o agendamento — sem excluir
- * a sessão nem perder histórico.
- */
 import { supabase } from '@/integrations/supabase/client';
-import { buildBlockedRanges, isInvalidSessionDate, type BlockedRange } from './treatmentSessionGenerator';
 
-interface SessionRow {
-  id: string;
-  cycle_id: string;
-  patient_id: string;
-  professional_id: string;
-  scheduled_date: string;
-  status: string;
-  appointment_id: string | null;
+export type AutoFixItemStatus =
+  | 'corrigido'
+  | 'data_valida'
+  | 'ja_pendente'
+  | 'vinculo_inconsistente'
+  | 'estado_protegido'
+  | 'falha';
+
+export interface AutoFixItemResult {
+  session_id: string;
+  status: AutoFixItemStatus;
+  reason?: string;
 }
 
-interface CycleRow {
-  id: string;
-  professional_id: string;
-  unit_id: string;
+interface AutoFixBatchResponse {
+  results: AutoFixItemResult[];
+  next_cursor: string | null;
+  has_more: boolean;
 }
 
 export interface AutoFixResult {
   scanned: number;
   fixed: number;
   errors: number;
+  items: AutoFixItemResult[];
 }
 
-/**
- * Scans all treatment_sessions still pending or scheduled and clears the
- * scheduled_date/appointment_id when the date is invalid (weekend or blocked).
- *
- * Scoped by professionalId/unitId when provided so we don't touch data
- * outside the current user's reach.
- */
-export async function autoFixInvalidTreatmentSessions(params: {
-  bloqueios: any[];
-  professionalId?: string;
-  unitId?: string;
-}): Promise<AutoFixResult> {
-  const result: AutoFixResult = { scanned: 0, fixed: 0, errors: 0 };
+/** Each batch rechecks current blocks and protects each pair with a subtransaction. */
+export async function autoFixInvalidTreatmentSessions(): Promise<AutoFixResult> {
+  const result: AutoFixResult = { scanned: 0, fixed: 0, errors: 0, items: [] };
+  let cursor: string | null = null;
+  let hasMore = true;
+  const client = supabase as unknown as {
+    rpc: (name: string, args: { p_after: string | null; p_limit: number }) =>
+      Promise<{ data: unknown; error: { message: string } | null }>;
+  };
 
   try {
-    // Load candidate sessions: only those still scheduled or pending and
-    // with a date set. Realizadas/canceladas/falta NÃO são tocadas.
-    let q = (supabase as any)
-      .from('treatment_sessions')
-      .select('id, cycle_id, patient_id, professional_id, scheduled_date, status, appointment_id')
-      .in('status', ['agendada', 'pendente_agendamento'])
-      .not('scheduled_date', 'is', null);
+    while (hasMore) {
+      const { data, error } = await client.rpc('auto_fix_invalid_treatment_sessions_batch', {
+        p_after: cursor,
+        p_limit: 100,
+      });
+      if (error) throw error;
 
-    if (params.professionalId) q = q.eq('professional_id', params.professionalId);
-
-    const { data: sessions, error } = await q;
-    if (error) throw error;
-
-    // Filtra fora as datas vazias/nulas no JS (evita 22007 no Postgres ao usar .neq('','') em coluna date)
-    const sessionList = ((sessions || []) as SessionRow[]).filter(
-      (s) => !!s.scheduled_date && String(s.scheduled_date).trim() !== ''
-    );
-    result.scanned = sessionList.length;
-    if (sessionList.length === 0) return result;
-
-    // If unitId restriction is needed, fetch the cycles for the involved sessions
-    let cyclesById: Record<string, CycleRow> = {};
-    if (params.unitId) {
-      const cycleIds = Array.from(new Set(sessionList.map((s) => s.cycle_id)));
-      const { data: cycles } = await (supabase as any)
-        .from('treatment_cycles')
-        .select('id, professional_id, unit_id')
-        .in('id', cycleIds);
-      cyclesById = Object.fromEntries(((cycles || []) as CycleRow[]).map((c) => [c.id, c]));
-    }
-
-    // Build per-cycle blocked ranges cache
-    const rangesCache: Record<string, BlockedRange[]> = {};
-
-    for (const s of sessionList) {
-      const cycle = cyclesById[s.cycle_id];
-      if (params.unitId && cycle && cycle.unit_id !== params.unitId) continue;
-
-      const profId = s.professional_id;
-      const unitId = cycle?.unit_id || params.unitId || '';
-      const cacheKey = `${profId}|${unitId}`;
-      if (!rangesCache[cacheKey]) {
-        rangesCache[cacheKey] = buildBlockedRanges(params.bloqueios || [], profId, unitId);
+      const batch = data as AutoFixBatchResponse | null;
+      if (!batch || !Array.isArray(batch.results) || typeof batch.has_more !== 'boolean') {
+        throw new Error('Resposta inválida do autoajuste de sessões.');
       }
-      const ranges = rangesCache[cacheKey];
-
-      if (!isInvalidSessionDate(s.scheduled_date, ranges)) continue;
-
-      // Invalid date — clear scheduling and (best-effort) cancel a linked agendamento
-      try {
-        const { error: updErr } = await (supabase as any)
-          .from('treatment_sessions')
-          .update({
-            status: 'pendente_agendamento',
-            scheduled_date: null as any,
-            appointment_id: null,
-          })
-          .eq('id', s.id);
-
-        if (updErr) {
-          // Some schemas don't allow null on scheduled_date — fallback: only clear status/appointment
-          await (supabase as any)
-            .from('treatment_sessions')
-            .update({
-              status: 'pendente_agendamento',
-              appointment_id: null,
-            })
-            .eq('id', s.id);
-        }
-
-        if (s.appointment_id) {
-          await (supabase as any)
-            .from('agendamentos')
-            .update({ status: 'cancelado', observacoes: 'Cancelado automaticamente: data inválida (feriado/fim de semana/bloqueio)' })
-            .eq('id', s.appointment_id);
-        }
-
-        result.fixed += 1;
-      } catch (err) {
-        console.error('[autoFixInvalidTreatmentSessions] failed for session', s.id, err);
-        result.errors += 1;
+      if (batch.has_more && (!batch.next_cursor || batch.next_cursor === cursor)) {
+        throw new Error('Cursor inválido do autoajuste de sessões.');
       }
+
+      result.items.push(...batch.results);
+      result.scanned += batch.results.length;
+      result.fixed += batch.results.filter((item) => item.status === 'corrigido').length;
+      result.errors += batch.results.filter((item) => item.status === 'falha').length;
+      cursor = batch.next_cursor;
+      hasMore = batch.has_more;
     }
-  } catch (err) {
-    console.error('[autoFixInvalidTreatmentSessions] fatal', err);
+  } catch (error) {
+    result.errors += 1;
+    console.error('[autoFixInvalidTreatmentSessions] batch failed', error);
+    throw Object.assign(new Error('Não foi possível concluir o autoajuste de todas as sessões.'), {
+      result,
+      cause: error,
+    });
   }
 
   return result;

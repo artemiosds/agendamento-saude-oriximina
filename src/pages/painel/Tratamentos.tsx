@@ -407,25 +407,23 @@ const Tratamentos: React.FC = () => {
 
   // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
   // (sábado, domingo, feriado, bloqueio manual) e devolve para "pendente_agendamento".
-  // Roda uma vez quando bloqueios + user estão prontos.
+  // Roda uma vez após identificar o usuário; a função consulta bloqueios no banco.
   const autoFixRanRef = React.useRef(false);
   useEffect(() => {
     if (autoFixRanRef.current) return;
-    if (!user || !bloqueios) return;
+    if (!user) return;
     autoFixRanRef.current = true;
-    const isProf = user.role === "profissional";
-    const restrictUnit = !!(user.unidadeId && user.usuario !== 'admin.sms');
-    autoFixInvalidTreatmentSessions({
-      bloqueios,
-      professionalId: isProf ? user.id : undefined,
-      unitId: restrictUnit ? user.unidadeId : undefined,
-    }).then((res) => {
+    autoFixInvalidTreatmentSessions().then((res) => {
       if (res.fixed > 0) {
         toast.info(`${res.fixed} sessão(ões) em datas inválidas foram devolvidas para "Aguardando agendamento".`);
         loadData(true);
       }
-    }).catch(() => { /* silent */ });
-  }, [user, bloqueios, loadData]);
+      if (res.errors > 0) toast.error(`Falha ao corrigir ${res.errors} sessão(ões).`);
+    }).catch((error) => {
+      if (error?.result?.fixed > 0) loadData(true);
+      toast.error(error?.message || 'Erro ao corrigir sessões em datas inválidas.');
+    });
+  }, [user, loadData]);
 
   // Lazy load sessions when a cycle is selected
   useEffect(() => {
