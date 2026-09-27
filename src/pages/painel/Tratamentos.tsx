@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
 import { useFila } from "@/contexts/FilaContext";
@@ -6,7 +6,6 @@ import { useAgendamentos } from "@/contexts/AgendamentosContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
-import { procedureService, ProcedimentoDB } from "@/services/procedureService";
 import { normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { createTreatmentSessionOperations, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
 import { getSoapOptions, hasDropdownSoap, isMedico, normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
@@ -57,6 +56,8 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { ResumoAgendamentoCiclo, type ResumoSessaoItem } from "@/components/ResumoAgendamentoCiclo";
 import { CalendarCheck } from "lucide-react";
 import { CardListSkeleton } from "@/components/skeletons/CardListSkeleton";
+import { createRequestGeneration, isRequestCurrent } from "@/lib/requestGeneration";
+import { useTreatmentPtsData, type TreatmentPtsRecord } from "@/hooks/useTreatmentPtsData";
 
 interface TreatmentCycle {
   id: string;
@@ -111,22 +112,6 @@ interface TreatmentExtension {
   changed_at: string;
 }
 
-interface PTSRecord {
-  id: string;
-  patient_id: string;
-  professional_id: string;
-  unit_id: string;
-  diagnostico_funcional: string;
-  objetivos_terapeuticos: string;
-  metas_curto_prazo: string;
-  metas_medio_prazo: string;
-  metas_longo_prazo: string;
-  especialidades_envolvidas: string[];
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
 const statusColors: Record<string, string> = {
   em_andamento: "bg-success/15 text-success border-success/30",
   concluido: "bg-success/10 text-success border-success/30",
@@ -179,6 +164,8 @@ const Tratamentos: React.FC = () => {
     applyTreatmentAgendamentoUpdate,
   } = useAgendamentos();
   const { user } = useAuth();
+  const restrictTreatmentUnit = !!(user?.unidadeId && user?.usuario !== "admin.sms");
+  const treatmentUnitId = restrictTreatmentUnit ? user?.unidadeId : undefined;
   const { can } = usePermissions();
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
@@ -186,13 +173,10 @@ const Tratamentos: React.FC = () => {
   const [cycles, setCycles] = useState<TreatmentCycle[]>([]);
   const [sessions, setSessions] = useState<TreatmentSession[]>([]);
   const [extensions, setExtensions] = useState<TreatmentExtension[]>([]);
-  const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
-  const [ptsList, setPtsList] = useState<PTSRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
   // Map: "patientId|profId|date" -> { id, hora, status }
   const [agendamentoMap, setAgendamentoMap] = useState<Record<string, { id: string; hora: string; status: string }>>({}); 
-  const [ptsVinculado, setPtsVinculado] = useState<PTSRecord | null>(null);
   const [vincularPtsOpen, setVincularPtsOpen] = useState(false);
   const [selectedPtsId, setSelectedPtsId] = useState("");
   const [vinculandoPts, setVinculandoPts] = useState(false);
@@ -264,6 +248,46 @@ const Tratamentos: React.FC = () => {
     pts_id: "",
     weekdays: [] as number[],
     duration_months: 3,
+  });
+
+  const handlePtsLoadError = useCallback((error: unknown) => {
+    console.error("Error loading treatment PTS:", error);
+    toast.error("Erro ao carregar PTS do paciente.");
+  }, []);
+
+  const loadActivePtsForPatient = useCallback(async (patientId: string) => {
+    let query = supabase
+      .from("pts")
+      .select("*")
+      .eq("patient_id", patientId)
+      .eq("status", "ativo")
+      .order("created_at", { ascending: false });
+    if (treatmentUnitId) query = query.eq("unit_id", treatmentUnitId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []) as TreatmentPtsRecord[];
+  }, [treatmentUnitId]);
+
+  const loadPtsById = useCallback(async (ptsId: string) => {
+    let query = supabase.from("pts").select("*").eq("id", ptsId);
+    if (treatmentUnitId) query = query.eq("unit_id", treatmentUnitId);
+    const { data, error } = await query.maybeSingle();
+    if (error) throw error;
+    return (data as TreatmentPtsRecord | null) || null;
+  }, [treatmentUnitId]);
+
+  const { createPts, cyclePts, linkedPts, createPtsLoading, cyclePtsLoading, linkedPtsLoading } = useTreatmentPtsData({
+    createOpen,
+    createPatientId: createOpen ? newCycle.patient_id || null : null,
+    cyclePatientId:
+      selectedCycle?.status === "em_andamento" && !selectedCycle.pts_id && (user?.role === "profissional" || can("tratamento", "can_delete"))
+        ? selectedCycle.patient_id
+        : null,
+    linkedPtsId: selectedCycle?.pts_id || null,
+    scopeKey: `${user?.id || ""}|${user?.role || ""}|${user?.unidadeId || ""}|${user?.usuario || ""}`,
+    loadActivePtsForPatient,
+    loadPtsById,
+    onError: handlePtsLoadError,
   });
 
   const [newSession, setNewSession] = useState({
@@ -341,56 +365,86 @@ const Tratamentos: React.FC = () => {
   const [totalCycles, setTotalCycles] = useState(0);
   // Tracks which cycle has had its sessions loaded (lazy load)
   const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
+  const loadDataRequestsRef = useRef(createRequestGeneration());
+  const loadSessionsRequestsRef = useRef(createRequestGeneration());
+  const selectedCycleIdRef = useRef<string | null>(selectedCycle?.id || null);
+  const loadDataScopeRef = useRef("");
+  const sessionsScopeRef = useRef("");
+  selectedCycleIdRef.current = selectedCycle?.id || null;
+  loadDataScopeRef.current = JSON.stringify([
+    user?.id,
+    user?.role,
+    user?.unidadeId,
+    user?.usuario,
+    currentPage,
+    filterProf,
+    filterUnit,
+    filterStatus,
+    debouncedSearchTerm,
+  ]);
+  sessionsScopeRef.current = JSON.stringify([
+    selectedCycle?.id,
+    user?.id,
+    user?.role,
+    user?.unidadeId,
+    user?.usuario,
+  ]);
+
+  useEffect(() => () => {
+    loadDataRequestsRef.current.invalidate();
+    loadSessionsRequestsRef.current.invalidate();
+  }, []);
 
   const loadData = useCallback(async (silent = false) => {
+    const requestId = loadDataRequestsRef.current.next();
+    const requestScope = loadDataScopeRef.current;
+    const isCurrentRequest = () =>
+      isRequestCurrent(loadDataRequestsRef.current, requestId, requestScope, loadDataScopeRef.current);
     if (!silent) setLoading(true);
     try {
       // Server-side paginated cycles via RPC (lightweight, with stats only)
       const isProf = user?.role === "profissional";
-      const restrictUnit = !!(user?.unidadeId && user?.usuario !== 'admin.sms');
 
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
         p_page: currentPage,
         p_page_size: PAGE_SIZE,
         p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
-        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
+        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictTreatmentUnit ? user?.unidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
         p_search: debouncedSearchTerm || null,
         p_only_own_professional: false, // already handled via p_professional_id
       });
 
       if (rpcError) throw rpcError;
+      if (!isCurrentRequest()) return;
 
       const cyclesData = (rpcData?.cycles || []) as TreatmentCycle[];
       setCycles(cyclesData);
       setTotalCycles(rpcData?.total || 0);
       setSelectedCycle((current) => (current ? cyclesData.find((cycle) => cycle.id === current.id) || current : current));
-
-      // PTS list (lightweight, scoped by unit)
-      let qPts = supabase.from("pts").select("*").order("created_at", { ascending: false });
-      if (restrictUnit) qPts = qPts.eq("unit_id", user!.unidadeId!);
-      const [{ data: ptsData }, procsData] = await Promise.all([
-        qPts,
-        procedureService.getActive(),
-      ]);
-
-      setProcedimentos(procsData);
-      if (ptsData) setPtsList(ptsData as PTSRecord[]);
     } catch (err: any) {
+      if (!isCurrentRequest()) return;
       console.error("Error loading treatments:", err);
       toast.error(`Erro ao carregar dados de tratamento: ${err.message || 'Erro desconhecido'}`);
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
-  }, [user, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
+  }, [user, restrictTreatmentUnit, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
+    const requestId = loadSessionsRequestsRef.current.next();
+    const requestScope = JSON.stringify([cycle.id, user?.id, user?.role, user?.unidadeId, user?.usuario]);
+    const isCurrentRequest = () =>
+      isRequestCurrent(loadSessionsRequestsRef.current, requestId, requestScope, sessionsScopeRef.current) &&
+      selectedCycleIdRef.current === cycle.id;
+    if (!isCurrentRequest()) return;
     try {
       const [sData, eData] = await Promise.all([
         treatmentService.getSessions(cycle.id),
         supabase.from("treatment_extensions").select("*").eq("cycle_id", cycle.id).order("changed_at", { ascending: false }),
       ]);
+      if (!isCurrentRequest()) return;
       const sessionsData = (sData || []) as TreatmentSession[];
       // Replace only this cycle's sessions in the global state
       setSessions((prev) => {
@@ -415,7 +469,7 @@ const Tratamentos: React.FC = () => {
           agQuery = agQuery.eq("unidade_id", user.unidadeId);
         }
         const { data: agData } = await agQuery;
-        if (agData) {
+        if (agData && isCurrentRequest()) {
           setAgendamentoMap((prev) => {
             const next = { ...prev };
             for (const ag of agData) {
@@ -427,6 +481,7 @@ const Tratamentos: React.FC = () => {
         }
       }
     } catch (err) {
+      if (!isCurrentRequest()) return;
       console.error("Error loading cycle sessions:", err);
       if (!silent) toast.error("Erro ao carregar sessões do ciclo.");
     }
@@ -545,27 +600,8 @@ const Tratamentos: React.FC = () => {
     setCurrentPage(1);
   }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
-  useEffect(() => {
-    if (selectedCycle?.pts_id) {
-      const pts = ptsList.find((p) => p.id === selectedCycle.pts_id);
-      setPtsVinculado(pts || null);
-    } else {
-      setPtsVinculado(null);
-    }
-  }, [selectedCycle, ptsList]);
-
   // Remove sync filters that cause auto-resetting bugs when lists load asynchronously
   // The Select component handles missing values gracefully by showing placeholder/Todos
-
-  const ptsDosPacienteCiclo = useMemo(() => {
-    if (!selectedCycle) return [];
-    return ptsList.filter((pts) => pts.patient_id === selectedCycle.patient_id && pts.status === "ativo");
-  }, [selectedCycle, ptsList]);
-
-  const ptsDisponiveis = useMemo(() => {
-    if (!newCycle.patient_id) return [];
-    return ptsList.filter((pts) => pts.patient_id === newCycle.patient_id && pts.status === "ativo");
-  }, [newCycle.patient_id, ptsList]);
 
   const faltaStats = useMemo(() => {
     if (!selectedCycle) return null;
@@ -620,34 +656,6 @@ const Tratamentos: React.FC = () => {
     if (!selectedCycle || !salas) return [];
     return salas.filter((s: any) => s.unidadeId === selectedCycle.unit_id && s.ativo);
   }, [selectedCycle, salas]);
-
-  const filteredProcedimentos = useMemo(() => {
-    const profId = newCycle.professional_id || (isProfissional ? user?.id : "");
-    const prof = profissionais.find((p) => p.id === profId);
-    if (!prof?.profissao) return procedimentos;
-    const profNorm = prof.profissao.toLowerCase().trim();
-    return procedimentos.filter((p) => {
-      const pNorm = p.profissao.toLowerCase().trim();
-      return (
-        (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
-        (!p.profissional_id || p.profissional_id === profId)
-      );
-    });
-  }, [procedimentos, newCycle.professional_id, profissionais, user, isProfissional]);
-
-  const sessionProcedimentos = useMemo(() => {
-    if (!selectedCycle) return procedimentos;
-    const prof = profissionais.find((p) => p.id === selectedCycle.professional_id);
-    if (!prof?.profissao) return procedimentos;
-    const profNorm = prof.profissao.toLowerCase().trim();
-    return procedimentos.filter((p) => {
-      const pNorm = p.profissao.toLowerCase().trim();
-      return (
-        (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
-        (!p.profissional_id || p.profissional_id === selectedCycle.professional_id)
-      );
-    });
-  }, [procedimentos, selectedCycle, profissionais]);
 
   const sessionRegisterHint = useMemo(() => {
     if (newSession.status !== "realizada") return null;
@@ -2292,7 +2300,11 @@ const Tratamentos: React.FC = () => {
           </CardContent>
         </Card>
 
-        {ptsVinculado ? (
+        {selectedCycle.pts_id && linkedPtsLoading ? (
+          <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando PTS vinculado...
+          </div>
+        ) : linkedPts ? (
           <Card className="shadow-card border-0 border-l-4 border-l-purple-500">
             <CardContent className="p-5">
               <div className="flex items-start justify-between mb-3">
@@ -2303,9 +2315,9 @@ const Tratamentos: React.FC = () => {
                   <div>
                     <h3 className="font-semibold text-foreground text-sm">PTS Vinculado</h3>
                     <p className="text-xs text-muted-foreground">
-                      Criado em {new Date(ptsVinculado.created_at).toLocaleDateString("pt-BR")}
+                      Criado em {new Date(linkedPts.created_at).toLocaleDateString("pt-BR")}
                       {" • "}
-                      {funcionarios.find((f) => f.id === ptsVinculado.professional_id)?.nome || "—"}
+                      {funcionarios.find((f) => f.id === linkedPts.professional_id)?.nome || "—"}
                     </p>
                   </div>
                 </div>
@@ -2313,12 +2325,12 @@ const Tratamentos: React.FC = () => {
                   <Badge
                     className={cn(
                       "border text-xs",
-                      ptsVinculado.status === "ativo"
+                      linkedPts.status === "ativo"
                         ? "bg-success/15 text-success border-success/30"
                         : "bg-muted text-muted-foreground border-border",
                     )}
                   >
-                    {ptsVinculado.status === "ativo" ? "Ativo" : "Encerrado"}
+                    {linkedPts.status === "ativo" ? "Ativo" : "Encerrado"}
                   </Badge>
                   {(isProfissional || canManageFull) && (
                     <Button
@@ -2336,40 +2348,40 @@ const Tratamentos: React.FC = () => {
 
               <div className="mb-3">
                 <p className="text-xs text-muted-foreground font-semibold mb-1">Diagnóstico Funcional</p>
-                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{ptsVinculado.diagnostico_funcional}</p>
+                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{linkedPts.diagnostico_funcional}</p>
               </div>
 
               <div className="mb-3">
                 <p className="text-xs text-muted-foreground font-semibold mb-1">Objetivos Terapêuticos</p>
-                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{ptsVinculado.objetivos_terapeuticos}</p>
+                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{linkedPts.objetivos_terapeuticos}</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-                {ptsVinculado.metas_curto_prazo && (
+                {linkedPts.metas_curto_prazo && (
                   <div className="p-2 rounded bg-blue-500/5 border border-blue-500/20">
                     <p className="text-xs font-semibold text-blue-600 mb-1">📌 Curto Prazo</p>
-                    <p className="text-xs text-foreground">{ptsVinculado.metas_curto_prazo}</p>
+                    <p className="text-xs text-foreground">{linkedPts.metas_curto_prazo}</p>
                   </div>
                 )}
-                {ptsVinculado.metas_medio_prazo && (
+                {linkedPts.metas_medio_prazo && (
                   <div className="p-2 rounded bg-orange-500/5 border border-orange-500/20">
                     <p className="text-xs font-semibold text-orange-600 mb-1">📋 Médio Prazo</p>
-                    <p className="text-xs text-foreground">{ptsVinculado.metas_medio_prazo}</p>
+                    <p className="text-xs text-foreground">{linkedPts.metas_medio_prazo}</p>
                   </div>
                 )}
-                {ptsVinculado.metas_longo_prazo && (
+                {linkedPts.metas_longo_prazo && (
                   <div className="p-2 rounded bg-green-500/5 border border-green-500/20">
                     <p className="text-xs font-semibold text-green-600 mb-1">🎯 Longo Prazo</p>
-                    <p className="text-xs text-foreground">{ptsVinculado.metas_longo_prazo}</p>
+                    <p className="text-xs text-foreground">{linkedPts.metas_longo_prazo}</p>
                   </div>
                 )}
               </div>
 
-              {ptsVinculado.especialidades_envolvidas && ptsVinculado.especialidades_envolvidas.length > 0 && (
+              {linkedPts.especialidades_envolvidas && linkedPts.especialidades_envolvidas.length > 0 && (
                 <div>
                   <p className="text-xs text-muted-foreground font-semibold mb-1">Especialidades Envolvidas</p>
                   <div className="flex flex-wrap gap-1">
-                    {ptsVinculado.especialidades_envolvidas.map((spec, idx) => (
+                    {linkedPts.especialidades_envolvidas.map((spec, idx) => (
                       <Badge key={idx} variant="outline" className="text-xs">
                         {spec}
                       </Badge>
@@ -2392,7 +2404,9 @@ const Tratamentos: React.FC = () => {
                     Vincule um Projeto Terapêutico Singular para acompanhar objetivos e metas.
                   </p>
                 </div>
-                {ptsDosPacienteCiclo.length > 0 ? (
+                {cyclePtsLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : cyclePts.length > 0 ? (
                   <Button
                     size="sm"
                     variant="outline"
@@ -3148,14 +3162,18 @@ const Tratamentos: React.FC = () => {
                 Selecione um PTS ativo do paciente <strong>{pac?.nome || selectedCycle?.paciente_nome || "Paciente não encontrado"}</strong> para vincular a este ciclo de
                 tratamento.
               </p>
-              {ptsDosPacienteCiclo.length === 0 ? (
+              {cyclePtsLoading ? (
+                <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Carregando PTS do paciente...
+                </div>
+              ) : cyclePts.length === 0 ? (
                 <div className="p-4 bg-muted/30 rounded-lg text-center">
                   <p className="text-sm text-muted-foreground">Nenhum PTS ativo encontrado para este paciente.</p>
                   <p className="text-xs text-muted-foreground mt-1">Crie um PTS no módulo PTS primeiro.</p>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {ptsDosPacienteCiclo.map((pts) => {
+                  {cyclePts.map((pts) => {
                     const ptsProfName = funcionarios.find((f) => f.id === pts.professional_id)?.nome || "—";
                     return (
                       <div
@@ -3604,7 +3622,13 @@ const Tratamentos: React.FC = () => {
 
 
 
-              {newCycle.patient_id && ptsDisponiveis.length > 0 && (
+              {newCycle.patient_id && createPtsLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando PTS do paciente...
+                </div>
+              )}
+
+              {newCycle.patient_id && !createPtsLoading && createPts.length > 0 && (
                 <div>
                   <Label>Vincular ao PTS (opcional)</Label>
                   <Select
@@ -3616,7 +3640,7 @@ const Tratamentos: React.FC = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhum</SelectItem>
-                      {ptsDisponiveis.map((pts) => (
+                      {createPts.map((pts) => (
                         <SelectItem key={pts.id} value={pts.id}>
                           {pts.diagnostico_funcional.substring(0, 60)} —{" "}
                           {new Date(pts.created_at).toLocaleDateString("pt-BR")}
@@ -3630,7 +3654,7 @@ const Tratamentos: React.FC = () => {
                 </div>
               )}
 
-              {newCycle.patient_id && ptsDisponiveis.length === 0 && (
+              {newCycle.patient_id && !createPtsLoading && createPts.length === 0 && (
                 <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
                   ℹ️ Este paciente não possui PTS ativo. Você pode criar um no módulo PTS e vincular depois.
                 </div>
