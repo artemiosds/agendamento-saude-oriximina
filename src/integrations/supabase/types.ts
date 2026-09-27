@@ -4274,6 +4274,10 @@ export type Database = {
             Args: { p_paciente_id: string; p_profissional_id?: string }
             Returns: Json
           }
+      auto_fix_invalid_treatment_sessions_batch: {
+        Args: { p_after?: string; p_limit?: number }
+        Returns: Json
+      }
       bpa_profissionais_com_atendimento: {
         Args: { p_end: string; p_start: string; p_unidade_id?: string }
         Returns: {
