@@ -14,6 +14,8 @@ interface UseRealtimeOptions {
 export function useRealtimeSubscription({ tables, onchange, enabled = true, debounceMs = 300 }: UseRealtimeOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const onchangeRef = useRef(onchange);
+  onchangeRef.current = onchange;
 
   useEffect(() => {
     if (!enabled || tables.length === 0) return;
@@ -21,7 +23,7 @@ export function useRealtimeSubscription({ tables, onchange, enabled = true, debo
     const debouncedHandler = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
-        onchange();
+        onchangeRef.current();
       }, debounceMs);
     };
 
