@@ -367,6 +367,7 @@ const Tratamentos: React.FC = () => {
   const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
   const loadDataRequestsRef = useRef(createRequestGeneration());
   const loadSessionsRequestsRef = useRef(createRequestGeneration());
+  const pageMountedRef = useRef(false);
   const selectedCycleIdRef = useRef<string | null>(selectedCycle?.id || null);
   const loadDataScopeRef = useRef("");
   const sessionsScopeRef = useRef("");
@@ -390,16 +391,23 @@ const Tratamentos: React.FC = () => {
     user?.usuario,
   ]);
 
-  useEffect(() => () => {
-    loadDataRequestsRef.current.invalidate();
-    loadSessionsRequestsRef.current.invalidate();
+  useEffect(() => {
+    const loadDataGeneration = loadDataRequestsRef.current;
+    const loadSessionsGeneration = loadSessionsRequestsRef.current;
+    pageMountedRef.current = true;
+    return () => {
+      pageMountedRef.current = false;
+      loadDataGeneration.invalidate();
+      loadSessionsGeneration.invalidate();
+    };
   }, []);
 
   const loadData = useCallback(async (silent = false) => {
+    if (!pageMountedRef.current) return;
     const requestId = loadDataRequestsRef.current.next();
     const requestScope = loadDataScopeRef.current;
     const isCurrentRequest = () =>
-      isRequestCurrent(loadDataRequestsRef.current, requestId, requestScope, loadDataScopeRef.current);
+      isRequestCurrent(loadDataRequestsRef.current, requestId, requestScope, loadDataScopeRef.current, pageMountedRef.current);
     if (!silent) setLoading(true);
     try {
       // Server-side paginated cycles via RPC (lightweight, with stats only)
@@ -433,10 +441,11 @@ const Tratamentos: React.FC = () => {
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
+    if (!pageMountedRef.current) return;
     const requestId = loadSessionsRequestsRef.current.next();
     const requestScope = JSON.stringify([cycle.id, user?.id, user?.role, user?.unidadeId, user?.usuario]);
     const isCurrentRequest = () =>
-      isRequestCurrent(loadSessionsRequestsRef.current, requestId, requestScope, sessionsScopeRef.current) &&
+      isRequestCurrent(loadSessionsRequestsRef.current, requestId, requestScope, sessionsScopeRef.current, pageMountedRef.current) &&
       selectedCycleIdRef.current === cycle.id;
     if (!isCurrentRequest()) return;
     try {

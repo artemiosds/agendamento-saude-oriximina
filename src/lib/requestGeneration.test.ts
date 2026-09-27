@@ -57,5 +57,6 @@ describe("createRequestGeneration", () => {
     expect(isRequestCurrent(requests, requestId, "unit-a|page-1|status-all", "unit-a|page-2|status-all")).toBe(false);
     expect(isRequestCurrent(requests, requestId, "cycle-a", "cycle-b")).toBe(false);
     expect(isRequestCurrent(requests, requestId, "unit-a|page-1|status-all", "unit-a|page-1|status-all")).toBe(true);
+    expect(isRequestCurrent(requests, requestId, "unit-a|page-1|status-all", "unit-a|page-1|status-all", false)).toBe(false);
   });
 });

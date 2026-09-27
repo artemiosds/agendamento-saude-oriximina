@@ -22,6 +22,7 @@ export function isRequestCurrent(
   requestId: number,
   requestScope: string,
   currentScope: string,
+  isMounted = true,
 ) {
-  return generation.isCurrent(requestId) && requestScope === currentScope;
+  return isMounted && generation.isCurrent(requestId) && requestScope === currentScope;
 }
