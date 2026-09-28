@@ -666,7 +666,9 @@ const ProntuarioPage: React.FC = () => {
     }
     let cancelled = false;
     const paciente = pacientes.find((p: any) => p.id === form.paciente_id) as any;
-    const profissionalId = form.profissional_id || (!editId ? user?.id : "") || user?.id || "";
+    const profissionalId = editId
+      ? (form.profissional_id || "")
+      : (form.profissional_id || user?.id || "");
     const profissional =
       funcionarios.find((f: any) => f.id === profissionalId) ||
       (user?.id === profissionalId ? user : null);
@@ -2645,6 +2647,63 @@ const ProntuarioPage: React.FC = () => {
     const soapPayload = sessionSoapPayload;
     const soapError = null;
     setSoapErrors(false);
+
+    const pacValidacaoSessao = pacientes.find((p: any) => p.id === form.paciente_id) as any;
+    const profIdValidacaoSessao = editId ? (form.profissional_id || "") : (form.profissional_id || user?.id || "");
+    const profValidacaoSessao =
+      funcionarios.find((f: any) => f.id === profIdValidacaoSessao) ||
+      (!editId && user?.id === profIdValidacaoSessao ? user : null);
+    const cboValidacaoSessao = resolveProfessionalCbo(profValidacaoSessao);
+    const competenciaValidacaoSessao = competenciaFromDate(form.data_atendimento);
+    const nascimentoValidacaoSessao =
+      pacValidacaoSessao?.data_nascimento ||
+      pacValidacaoSessao?.dataNascimento ||
+      pacValidacaoSessao?.custom_data?.data_nascimento ||
+      pacValidacaoSessao?.custom_data?.dataNascimento ||
+      "";
+    const sexoValidacaoSessao = pacValidacaoSessao?.sexo || pacValidacaoSessao?.custom_data?.sexo || "";
+
+    const validacoesSessao = await Promise.all(
+      selectedProcIds.map(async (codigo) => [
+        codigo,
+        /^\d{10}$/.test(String(codigo))
+          ? await validarCompatibilidadeClinicaSigtap({
+              procedimento: codigo,
+              competencia: competenciaValidacaoSessao,
+              cbo: cboValidacaoSessao,
+              dataNascimento: nascimentoValidacaoSessao,
+              dataAtendimento: form.data_atendimento,
+              sexo: sexoValidacaoSessao,
+            })
+          : ({
+              status: "indeterminado",
+              procedimento: String(codigo),
+              competencia: competenciaValidacaoSessao,
+              cbo: cboValidacaoSessao,
+              motivos: [],
+              avisos: ["Procedimento sem código SIGTAP de 10 dígitos."],
+              idadeMeses: null,
+              instrumentos: [],
+              bpaICompativel: null,
+            } satisfies SigtapClinicalValidationResult),
+      ] as const),
+    );
+    setSigtapValidationByProc(Object.fromEntries(validacoesSessao));
+    const sessaoSemJustificativa = validacoesSessao.filter(
+      ([codigo, resultado]) =>
+        resultado.status === "incompatível" &&
+        !String(sigtapJustificationByProc[codigo] || "").trim(),
+    );
+    if (sessaoSemJustificativa.length > 0) {
+      const [codigo, resultado] = sessaoSemJustificativa[0];
+      setExpandedProcId(codigo);
+      toast.error(
+        `O procedimento ${codigo} está incompatível com o SIGTAP e precisa de justificativa clínica antes de registrar a sessão: ${resultado.motivos.join(" ")}`,
+      );
+      registeringSessionRef.current = false;
+      return;
+    }
+
     setSaving(true);
     let insertedNewProntuario = false;
     let prontuarioId: string | null = editId;
@@ -2675,7 +2734,25 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes, dynamic_fields: dynamicFields }),
-        custom_data: mergeFullCustomData(form, especialidadeFields, dynamicFields),
+        custom_data: {
+          ...mergeFullCustomData(form, especialidadeFields, dynamicFields),
+          sigtap_justificativas: Object.fromEntries(
+            validacoesSessao
+              .filter(([, resultado]) => resultado.status === "incompatível")
+              .map(([codigo, resultado]) => [
+                codigo,
+                {
+                  justificativa: String(sigtapJustificationByProc[codigo] || "").trim(),
+                  competencia: resultado.competencia,
+                  cbo: resultado.cbo,
+                  motivos: resultado.motivos,
+                  usuario_id: user?.id || "",
+                  usuario_nome: user?.nome || "",
+                  registrado_em: new Date().toISOString(),
+                },
+              ]),
+          ),
+        },
 
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
@@ -2746,7 +2823,23 @@ const ProntuarioPage: React.FC = () => {
         entidadeId: currentSessionForRegistration.id,
         modulo: 'prontuario',
         user,
-        detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+        detalhes: {
+          paciente: form.paciente_nome,
+          sessao_numero: currentSessionForRegistration.session_number,
+          ciclo_id: sessaoCycle.id,
+          sigtap_excecoes: validacoesSessao
+            .filter(([, resultado]) => resultado.status === "incompatível")
+            .map(([codigo, resultado]) => ({
+              procedimento: codigo,
+              cbo: resultado.cbo,
+              competencia: resultado.competencia,
+              idade_meses: resultado.idadeMeses,
+              motivos: resultado.motivos,
+              justificativa: String(sigtapJustificationByProc[codigo] || "").trim(),
+              usuario_confirmou_id: user?.id || "",
+              usuario_confirmou_nome: user?.nome || "",
+            })),
+        },
       });
       toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
 
