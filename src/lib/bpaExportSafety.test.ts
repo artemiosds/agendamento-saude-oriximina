@@ -60,6 +60,73 @@ describe("segurança da exportação BPA-I", () => {
     }
   });
 
+  it("valida idade em meses, quantidade, serviço/classificação e CID do SIGTAP oficial", () => {
+    const layout = [
+      "Coluna,Tamanho,Inicio,Fim,Tipo",
+      "CO_PROCEDIMENTO,10,1,10,VARCHAR2",
+      "TP_SEXO,1,262,262,VARCHAR2",
+      "QT_MAXIMA_EXECUCAO,4,263,266,NUMBER",
+      "VL_IDADE_MINIMA,4,275,278,NUMBER",
+      "VL_IDADE_MAXIMA,4,279,282,NUMBER",
+      "DT_COMPETENCIA,6,331,336,CHAR",
+    ].join("\n");
+    const row = Array(336).fill(" ");
+    const put = (inicio: number, fim: number, value: string) => {
+      const txt = value.padEnd(fim - inicio + 1, " ").slice(0, fim - inicio + 1);
+      for (let i = 0; i < txt.length; i++) row[inicio - 1 + i] = txt[i];
+    };
+    put(1, 10, "0301010048");
+    put(262, 262, "I");
+    put(263, 266, "0002");
+    put(275, 278, "0012");
+    put(279, 282, "0240");
+    put(331, 336, comp);
+    const oficial = parseBpaSigtapCatalog(comp, {
+      procedimentos: row.join(""),
+      procedimentosLayout: layout,
+      registros: `030101004802${comp}`,
+      ocupacoes: `0301010048223810${comp}`,
+      servicos: `0301010048123123${comp}`,
+      cids: `0301010048F8401${comp}`,
+    });
+    const base = {
+      ...ctx,
+      catalogoOficial: oficial,
+      cbo: "223810",
+      idadePaciente: 10,
+      idadePacienteMeses: 120,
+      quantidade: 1,
+      servico: "123",
+      classificacao: "123",
+    };
+
+    expect(validarListaProcedimentosBpaI([{ codigo: "0301010048", cid: "F840" }], base).validos).toHaveLength(1);
+
+    const menor = validarListaProcedimentosBpaI(
+      [{ codigo: "0301010048", cid: "F840" }],
+      { ...base, idadePacienteMeses: 11 },
+    );
+    expect(menor.rejeitados[0].rejeicoes.join(" ")).toContain("Idade incompatível");
+
+    const excesso = validarListaProcedimentosBpaI(
+      [{ codigo: "0301010048", cid: "F840" }],
+      { ...base, quantidade: 3 },
+    );
+    expect(excesso.rejeitados[0].rejeicoes.join(" ")).toContain("Quantidade incompatível");
+
+    const servico = validarListaProcedimentosBpaI(
+      [{ codigo: "0301010048", cid: "F840" }],
+      { ...base, servico: "999", classificacao: "999" },
+    );
+    expect(servico.rejeitados[0].rejeicoes.join(" ")).toContain("Serviço/classificação incompatível");
+
+    const cid = validarListaProcedimentosBpaI(
+      [{ codigo: "0301010048", cid: "M545" }],
+      base,
+    );
+    expect(cid.rejeitados[0].rejeicoes.join(" ")).toContain("CID incompatível");
+  });
+
   it("audita 338 posições, cabeçalho 130, competência, controle e sequência do TXT final", () => {
     const record = buildRegistro03({
       tipoRegistro: "03", cnes: "1234567", competencia: comp,
