@@ -136,6 +136,12 @@ describe("segurança da exportação BPA-I", () => {
       base,
     );
     expect(cid.rejeitados[0].rejeicoes.join(" ")).toContain("CID incompatível");
+
+    const allowlistLocalNaoPodeNegarOficial = validarListaProcedimentosBpaI(
+      [{ codigo: "0301010048", cid: "F840" }],
+      { ...base, permitidosPorCbo: { "223810": ["9999999999"] } },
+    );
+    expect(allowlistLocalNaoPodeNegarOficial.validos).toHaveLength(1);
   });
 
   it("audita 338 posições, cabeçalho 130, competência, controle e sequência do TXT final", () => {
