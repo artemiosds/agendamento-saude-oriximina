@@ -58,7 +58,11 @@ export const competenciaFromDate = (date?: string | null): string => {
 
 export const resolveProfessionalCbo = (professional: any): string => {
   if (!professional) return "";
-  const cd = professional.custom_data || {};
+
+  // O cadastro bruto do banco usa custom_data, mas os contextos da aplicação
+  // normalizam esse mesmo objeto para customData (camelCase). A validação deve
+  // aceitar ambos para não "perder" o CBO já cadastrado ao passar pelo contexto.
+  const cd = professional.custom_data || professional.customData || {};
   const candidates = [
     cd.cbo_codigo,
     cd.cbo,
