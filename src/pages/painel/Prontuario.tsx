@@ -4543,6 +4543,7 @@ const ProntuarioPage: React.FC = () => {
                       const selCids = selectedCidsByProc[proc.id] || [];
                       const isCustom = proc.origem === 'PERSONALIZADO';
                       const isExpanded = expandedProcId === proc.id;
+                      const sigtapStatus = sigtapValidationByProc[proc.id];
                       const cidQuery = (cidSearchByProc[proc.id] || '').trim().toLowerCase();
                       const filteredCids = cidQuery
                         ? cids.filter((c) => c.codigo.toLowerCase().includes(cidQuery) || (c.descricao || '').toLowerCase().includes(cidQuery))
@@ -4582,11 +4583,67 @@ const ProntuarioPage: React.FC = () => {
                             {checked && selCids.length > 0 && (
                               <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
                             )}
+                            {checked && sigtapStatus?.status === "compatível" && (
+                              <Badge className="h-5 text-[10px] shrink-0 bg-emerald-600 hover:bg-emerald-600">SIGTAP compatível</Badge>
+                            )}
+                            {checked && sigtapStatus?.status === "incompatível" && (
+                              <Badge variant="destructive" className="h-5 text-[10px] shrink-0">SIGTAP incompatível</Badge>
+                            )}
+                            {checked && sigtapStatus?.status === "indeterminado" && (
+                              <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-amber-400 text-amber-700">Validação pendente</Badge>
+                            )}
                           </div>
                           {isExpanded && (
                             <div className="px-3 pb-3 pt-1 border-t bg-muted/10 space-y-3">
                               {proc.especialidade && (
                                 <p className="text-[11px] text-muted-foreground">{proc.especialidade}</p>
+                              )}
+
+                              {checked && sigtapStatus?.status === "compatível" && (
+                                <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">
+                                  <div className="font-medium flex items-center gap-1">
+                                    <CheckCircle className="h-3.5 w-3.5" /> Procedimento compatível com SIGTAP
+                                  </div>
+                                  <div className="mt-1 text-[11px]">
+                                    Competência {sigtapStatus.competencia} · CBO {sigtapStatus.cbo}
+                                  </div>
+                                </div>
+                              )}
+
+                              {checked && sigtapStatus?.status === "incompatível" && (
+                                <div className="rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-800 space-y-2">
+                                  <div className="font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5" /> Procedimento incompatível com o SIGTAP da competência
+                                  </div>
+                                  <div className="text-[11px] space-y-0.5">
+                                    <div>Competência: {sigtapStatus.competencia || "—"} · CBO: {sigtapStatus.cbo || "—"}</div>
+                                    {sigtapStatus.motivos.map((motivo, idx) => <div key={idx}>• {motivo}</div>)}
+                                    <div className="font-medium pt-1">
+                                      Pode permanecer no registro clínico mediante justificativa, mas não será incluído no BPA-I enquanto incompatível.
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] uppercase text-red-800">Justificativa clínica obrigatória para manter</Label>
+                                    <Textarea
+                                      rows={2}
+                                      value={sigtapJustificationByProc[proc.id] || ""}
+                                      onChange={(e) => setSigtapJustificationByProc((prev) => ({ ...prev, [proc.id]: e.target.value }))}
+                                      placeholder="Descreva por que este procedimento deve permanecer no registro clínico..."
+                                      className="mt-1 bg-background text-foreground"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {checked && sigtapStatus?.status === "indeterminado" && (
+                                <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                                  <div className="font-medium flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5" /> Não foi possível validar este procedimento
+                                  </div>
+                                  <div className="mt-1 text-[11px]">
+                                    {(sigtapStatus.avisos || []).join(" ") || "Verifique CBO, nascimento, sexo e competência SIGTAP."}
+                                  </div>
+                                </div>
                               )}
 
                               <div className="grid grid-cols-2 gap-3">
