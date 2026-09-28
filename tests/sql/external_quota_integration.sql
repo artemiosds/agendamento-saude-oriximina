@@ -129,7 +129,7 @@ END $$;
 -- An audit failure must roll back both status and quota update.
 RESET ROLE;
 ALTER TABLE public.action_logs ADD CONSTRAINT test_rollback
-  CHECK (acao <> 'cancelar_agendamento_externo');
+  CHECK (acao <> 'cancelar_agendamento_externo') NOT VALID;
 SET ROLE authenticated;
 SET request.jwt.claim.sub = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 SELECT public.expect_failure(
