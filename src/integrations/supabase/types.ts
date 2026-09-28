@@ -4284,6 +4284,10 @@ export type Database = {
           profissional_id: string
         }[]
       }
+      cancel_external_appointment: {
+        Args: { p_agendamento_id: string; p_motivo: string }
+        Returns: Json
+      }
       check_slot_availability: {
         Args: {
           p_data: string
@@ -4303,6 +4307,15 @@ export type Database = {
           p_procedimento: string
           p_user_id: string
           p_user_nome: string
+        }
+        Returns: Json
+      }
+      create_external_appointment: {
+        Args: {
+          p_cota_id: string
+          p_data: string
+          p_hora: string
+          p_paciente_id: string
         }
         Returns: Json
       }
