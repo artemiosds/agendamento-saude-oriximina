@@ -112,6 +112,7 @@ const ProfissionaisExternos: React.FC = () => {
   const [agendaDialogOpen, setAgendaDialogOpen] = useState(false);
   const [selectedExternoId, setSelectedExternoId] = useState<string>("");
   const [selectedQuota, setSelectedQuota] = useState<QuotaRow | null>(null);
+  const [newQuotaUnitId, setNewQuotaUnitId] = useState("");
   const [quotaAppointments, setQuotaAppointments] = useState<ExternalAppointment[]>([]);
   const [loadingAgenda, setLoadingAgenda] = useState(false);
   const [selectedProfIds, setSelectedProfIds] = useState<string[]>([]);
@@ -123,6 +124,7 @@ const ProfissionaisExternos: React.FC = () => {
   }>>({});
   const [savingQuota, setSavingQuota] = useState(false);
   const [quotaForm, setQuotaForm] = useState({
+    unidade_id: "",
     vagas_total: 0,
     turno: "",
     horario_inicio: "",
@@ -139,7 +141,6 @@ const ProfissionaisExternos: React.FC = () => {
       setExternos(data?.profissionais || []);
       const { data: quotasData } = await supabase.from("quotas_externas").select("*").order('criado_em', { ascending: false });
       setQuotas(quotasData || []);
-      (window as any).__quotasExternasCached = quotasData || [];
     } catch (err) {
       console.error(err);
     }
@@ -273,6 +274,7 @@ const ProfissionaisExternos: React.FC = () => {
   // Quota management – multi-select
   const openQuotaDialog = (externoId: string) => {
     setSelectedExternoId(externoId);
+    setNewQuotaUnitId(externos.find(e => e.id === externoId)?.unidade_id || "");
     // Pre-select already configured professionals
     const existing = quotas.filter(q => q.profissional_externo_id === externoId);
     const existingIds = existing.map(q => q.profissional_interno_id);
@@ -295,10 +297,19 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleSaveQuotas = async () => {
+    if (!newQuotaUnitId) { toast.error("Selecione a unidade da cota."); return; }
     if (selectedProfIds.length === 0) {
       toast.error("Selecione ao menos um profissional.");
       return;
     }
+    if (selectedProfIds.some(id => !disponibilidades.some((d: any) => d.profissionalId === id && d.unidadeId === newQuotaUnitId))) {
+      toast.error("O profissional precisa ter disponibilidade nessa unidade.");
+      return;
+    }
+    if (selectedProfIds.some(id => {
+      const q = vagasPorProf[id];
+      return q?.turno !== "integral" && (!q?.horario_inicio || !q?.horario_fim || q.horario_inicio >= q.horario_fim);
+    })) { toast.error("O horário inicial deve ser anterior ao final, exceto no turno integral."); return; }
     setSavingQuota(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -307,7 +318,7 @@ const ProfissionaisExternos: React.FC = () => {
       const inserts = selectedProfIds.map(profId => ({
         profissional_externo_id: selectedExternoId,
         profissional_interno_id: profId,
-        unidade_id: form.unidade_id || "",
+        unidade_id: newQuotaUnitId,
         vagas_total: vagasPorProf[profId]?.vagas || 5,
         vagas_usadas: 0,
         periodo_inicio: today,
@@ -333,6 +344,7 @@ const ProfissionaisExternos: React.FC = () => {
   const handleEditQuota = (quota: QuotaRow) => {
     setSelectedQuota(quota);
     setQuotaForm({
+      unidade_id: quota.unidade_id,
       vagas_total: quota.vagas_total,
       turno: quota.turno || "manha",
       horario_inicio: quota.horario_inicio || "07:30",
@@ -346,6 +358,13 @@ const ProfissionaisExternos: React.FC = () => {
 
   const handleUpdateQuota = async () => {
     if (!selectedQuota) return;
+    if (!quotaForm.unidade_id) { toast.error("Selecione a unidade da cota."); return; }
+    if (selectedQuota.vagas_usadas > 0 && quotaForm.unidade_id !== selectedQuota.unidade_id) {
+      toast.error("A unidade de uma cota com agendamentos vinculados não pode ser alterada."); return;
+    }
+    if (quotaForm.turno !== "integral" && (!quotaForm.horario_inicio || !quotaForm.horario_fim || quotaForm.horario_inicio >= quotaForm.horario_fim)) {
+      toast.error("O horário inicial deve ser anterior ao final, exceto no turno integral."); return;
+    }
     
     if (quotaForm.vagas_total < selectedQuota.vagas_usadas) {
       toast.error(`Não é possível reduzir para ${quotaForm.vagas_total} vagas, pois já existem ${selectedQuota.vagas_usadas} agendamentos vinculados a esta cota.`);
@@ -357,6 +376,7 @@ const ProfissionaisExternos: React.FC = () => {
       const { error } = await supabase
         .from("quotas_externas")
         .update({
+          unidade_id: quotaForm.unidade_id,
           vagas_total: quotaForm.vagas_total,
           turno: quotaForm.turno,
           horario_inicio: quotaForm.horario_inicio,
@@ -681,6 +701,13 @@ const ProfissionaisExternos: React.FC = () => {
             <p className="text-sm text-muted-foreground">
               Selecione os profissionais internos e defina a quantidade de vagas para cada um.
             </p>
+            <div className="space-y-2">
+              <Label>Unidade da cota</Label>
+              <Select value={newQuotaUnitId} onValueChange={setNewQuotaUnitId}>
+                <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                <SelectContent>{unidadesVisiveis.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
 
             {availableForQuota.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
@@ -819,7 +846,12 @@ const ProfissionaisExternos: React.FC = () => {
                       const prof = funcionarios.find((f: any) => f.id === q.profissional_interno_id);
                       return (
                         <tr key={q.id} className="hover:bg-accent/5 transition-colors">
-                          <td className="px-3 py-2 font-medium">{prof?.nome || "—"}</td>
+                          <td className="px-3 py-2 font-medium">
+                            {prof?.nome || "—"}
+                            <span className="block text-[10px] text-muted-foreground">{unidades.find(u => u.id === q.unidade_id)?.nome || "Unidade não informada"}</span>
+                            {(!q.unidade_id || (q.turno !== "integral" && (!q.horario_inicio || !q.horario_fim || q.horario_inicio >= q.horario_fim))) &&
+                              <span className="block text-[10px] text-destructive">Cota bloqueada para novos agendamentos; corrija na edição.</span>}
+                          </td>
                           <td className="px-3 py-2">{q.especialidade || "—"}</td>
                           <td className="px-3 py-2">
                             <div className="flex flex-col">
@@ -892,6 +924,14 @@ const ProfissionaisExternos: React.FC = () => {
             </div>
             
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label>Unidade da cota</Label>
+                <Select value={quotaForm.unidade_id} onValueChange={v => setQuotaForm(p => ({ ...p, unidade_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                  <SelectContent>{unidadesVisiveis.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                </Select>
+                {!selectedQuota?.unidade_id && <p className="text-xs text-destructive">Cota sem unidade: novos agendamentos ficam bloqueados até a correção.</p>}
+              </div>
               <div className="space-y-2">
                 <Label>Vagas Totais</Label>
                 <Input 

@@ -8,6 +8,7 @@ import { startOfWeek, endOfWeek, eachDayOfInterval, format, startOfMonth, endOfM
 import { ptBR } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 
 type AgendaView = "month" | "week" | "day";
 
@@ -46,7 +47,6 @@ interface CalendarioAgendaProps {
   unidades: any[];
 }
 
-const STATUS_NAO_OCUPA = new Set(["cancelado", "falta", "excluido", "removido", "inativo"]);
 const STATUS_POSTERIORES = new Set([
   "confirmado_chegada", "chegada_confirmada", "aguardando_triagem", "triagem_concluida",
   "aguardando_atendimento", "aguardando_profissional", "apto_atendimento", "apto",
@@ -120,7 +120,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
         summary = { agendamentosCount: 0, counts: emptyCounts() };
         summaries.set(ag.data, summary);
       }
-      if (!STATUS_NAO_OCUPA.has(ag.status)) summary.agendamentosCount += 1;
+      if (statusOcupaVaga(ag.status)) summary.agendamentosCount += 1;
       const rawStatus = String(ag.status || "").toLowerCase();
       const status = ag.data && ag.data > todayStrCal && STATUS_POSTERIORES.has(rawStatus)
         ? "confirmado"

@@ -17,6 +17,8 @@ import { LogOut, Search, Plus, CalendarDays, Clock, User, Loader2, CheckCircle, 
 import { format } from "date-fns";
 import { CalendarioDisponibilidade, type DayInfo } from "@/components/CalendarioDisponibilidade";
 import { todayLocalStr } from "@/lib/utils";
+import { isQuotaConfigurationUsable, quotaAllowsSlot } from "@/lib/externalQuota";
+import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 
 interface ExternalUser {
   id: string;
@@ -34,6 +36,11 @@ interface Quota {
   vagas_usadas: number;
   periodo_inicio: string;
   periodo_fim: string;
+  turno: string | null;
+  horario_inicio: string | null;
+  horario_fim: string | null;
+  dia_semana: number | null;
+  ativo: boolean;
 }
 
 interface Professional {
@@ -59,6 +66,7 @@ const AgendamentoExterno: React.FC = () => {
   // Selection
   const [selectedUnidade, setSelectedUnidade] = useState("");
   const [selectedProfissional, setSelectedProfissional] = useState("");
+  const [selectedQuotaId, setSelectedQuotaId] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedHora, setSelectedHora] = useState("");
 
@@ -76,6 +84,7 @@ const AgendamentoExterno: React.FC = () => {
 
   // Scheduling
   const [scheduling, setScheduling] = useState(false);
+  const [cancellingId, setCancellingId] = useState("");
   const [myAppointments, setMyAppointments] = useState<any[]>([]);
 
   // ── Auth check ──
@@ -120,7 +129,7 @@ const AgendamentoExterno: React.FC = () => {
   // Auto-select unidade if only one available via quotas
   useEffect(() => {
     if (!selectedUnidade && quotas.length > 0 && unidades.length > 0) {
-      const quotaUnidades = [...new Set(quotas.map(q => q.unidade_id))];
+      const quotaUnidades = [...new Set(quotas.filter(q => q.unidade_id).map(q => q.unidade_id))];
       if (quotaUnidades.length === 1) {
         setSelectedUnidade(quotaUnidades[0]);
       }
@@ -129,20 +138,19 @@ const AgendamentoExterno: React.FC = () => {
 
   // ── Active quotas (with remaining slots) ──
   const activeQuotas = useMemo(() => {
-    return quotas.filter(q => q.vagas_usadas < q.vagas_total);
+    return quotas.filter(q => q.ativo && isQuotaConfigurationUsable(q) && q.vagas_usadas < q.vagas_total);
   }, [quotas]);
 
   // All quotas for display (including exhausted)
   const filteredQuotas = useMemo(() => {
     if (!selectedUnidade) return quotas;
-    return quotas.filter(q => !q.unidade_id || q.unidade_id === selectedUnidade);
+    return quotas.filter(q => q.unidade_id === selectedUnidade);
   }, [quotas, selectedUnidade]);
 
   const availableProfessionals = useMemo(() => {
     return activeQuotas
       .filter(q => {
-        if (selectedUnidade && q.unidade_id && q.unidade_id !== selectedUnidade) return false;
-        return true;
+        return q.unidade_id === selectedUnidade;
       })
       .map(q => {
         const prof = professionals.find(p => p.id === q.profissional_interno_id);
@@ -151,9 +159,13 @@ const AgendamentoExterno: React.FC = () => {
       .filter(Boolean) as (Professional & { quota: Quota })[];
   }, [activeQuotas, selectedUnidade, professionals]);
 
+  const selectedQuota = useMemo(() => activeQuotas.find(q => q.id === selectedQuotaId), [activeQuotas, selectedQuotaId]);
+  const quotaAllows = useCallback((quota: Quota, date: string, hour?: string) =>
+    quotaAllowsSlot(quota, selectedUnidade, date, hour), [selectedUnidade]);
+
   // ── Available dates for selected professional ──
   const { availableDates, dayInfoMap } = useMemo(() => {
-    if (!selectedProfissional) return { availableDates: [] as string[], dayInfoMap: {} as Record<string, DayInfo> };
+    if (!selectedProfissional || !selectedQuota) return { availableDates: [] as string[], dayInfoMap: {} as Record<string, DayInfo> };
 
     const today = todayLocalStr();
     const dates: string[] = [];
@@ -170,8 +182,9 @@ const AgendamentoExterno: React.FC = () => {
       const dayOfWeek = d.getDay();
       const matching = disponibilidades.filter(disp =>
         disp.profissional_id === selectedProfissional &&
+        disp.unidade_id === selectedUnidade &&
         dateStr >= disp.data_inicio && dateStr <= disp.data_fim &&
-        disp.dias_semana?.includes(dayOfWeek)
+        disp.dias_semana?.includes(dayOfWeek) && quotaAllows(selectedQuota, dateStr)
       );
 
       if (matching.length > 0) {
@@ -185,56 +198,53 @@ const AgendamentoExterno: React.FC = () => {
     }
 
     return { availableDates: dates, dayInfoMap: infoMap };
-  }, [selectedProfissional, disponibilidades, selectedDate]);
+  }, [selectedProfissional, selectedUnidade, selectedQuota, quotaAllows, disponibilidades, selectedDate]);
 
   // ── Generate slots for selected date ──
   const availableSlots = useMemo(() => {
-    if (!selectedProfissional || !selectedDate) return [];
+    if (!selectedProfissional || !selectedDate || !selectedQuota) return [];
     const dateObj = new Date(selectedDate + "T12:00:00");
     const dayOfWeek = dateObj.getDay();
 
     const matching = disponibilidades.filter(d =>
       d.profissional_id === selectedProfissional &&
+      d.unidade_id === selectedUnidade &&
       selectedDate >= d.data_inicio && selectedDate <= d.data_fim &&
       d.dias_semana?.includes(dayOfWeek)
     );
 
     if (!matching.length) return [];
-    const d = matching[0];
-
-    // Turno mode (vagas_por_hora === 0): show turno label instead of individual slots
-    if (d.vagas_por_hora === 0) {
-      return [`${d.hora_inicio}`];
-    }
-
     const slots: string[] = [];
-    const [startH, startM] = d.hora_inicio.split(":").map(Number);
-    const [endH, endM] = d.hora_fim.split(":").map(Number);
-    const startMinutes = startH * 60 + startM;
-    const endMinutes = endH * 60 + endM;
-    const duration = d.duracao_consulta || 30;
-
-    for (let m = startMinutes; m + duration <= endMinutes; m += duration) {
-      const h = String(Math.floor(m / 60)).padStart(2, "0");
-      const min = String(m % 60).padStart(2, "0");
-      slots.push(`${h}:${min}`);
+    for (const d of matching) {
+      if (d.vagas_por_hora === 0) {
+        if (quotaAllows(selectedQuota, selectedDate, d.hora_inicio)) slots.push(d.hora_inicio.slice(0, 5));
+        continue;
+      }
+      const [startH, startM] = d.hora_inicio.split(":").map(Number);
+      const [endH, endM] = d.hora_fim.split(":").map(Number);
+      const duration = d.duracao_consulta || 30;
+      for (let m = startH * 60 + startM; m + duration <= endH * 60 + endM; m += duration) {
+        const h = String(Math.floor(m / 60)).padStart(2, "0");
+        const min = String(m % 60).padStart(2, "0");
+        slots.push(`${h}:${min}`);
+      }
     }
 
     // Filter booked
     const bookedSlots = agendamentos
-      .filter(a => a.profissional_id === selectedProfissional && a.data === selectedDate && !["cancelado", "falta"].includes(a.status))
+      .filter(a => a.profissional_id === selectedProfissional && a.data === selectedDate && statusOcupaVaga(a.status))
       .map(a => a.hora);
 
-    return slots.filter(s => !bookedSlots.includes(s));
-  }, [selectedProfissional, selectedDate, disponibilidades, agendamentos]);
+    return [...new Set(slots)].filter(s => quotaAllows(selectedQuota, selectedDate, s) && !bookedSlots.includes(s));
+  }, [selectedProfissional, selectedUnidade, selectedDate, selectedQuota, quotaAllows, disponibilidades, agendamentos]);
 
   // Load agendamentos when profissional/date changes
   useEffect(() => {
     if (!selectedProfissional || !selectedDate) return;
     supabase.from("agendamentos").select("hora, status, profissional_id, data")
-      .eq("profissional_id", selectedProfissional).eq("data", selectedDate)
+      .eq("profissional_id", selectedProfissional).eq("unidade_id", selectedUnidade).eq("data", selectedDate)
       .then(({ data }) => setAgendamentos(data || []));
-  }, [selectedProfissional, selectedDate]);
+  }, [selectedProfissional, selectedUnidade, selectedDate]);
 
   // ── Patient search ──
   const handlePatientSearch = async () => {
@@ -296,44 +306,26 @@ const AgendamentoExterno: React.FC = () => {
 
   // ── Schedule appointment ──
   const handleSchedule = async () => {
+    if (scheduling) return;
     if (!selectedPatient || !selectedProfissional || !selectedDate || !selectedHora) {
       toast.error("Selecione paciente, profissional, data e horário.");
       return;
     }
 
-    const quota = availableProfessionals.find(p => p.id === selectedProfissional)?.quota;
-    if (!quota || quota.vagas_usadas >= quota.vagas_total) {
-      toast.error("Quota esgotada para este profissional.");
+    const quota = selectedQuota;
+    if (!quota || quota.unidade_id !== selectedUnidade || quota.profissional_interno_id !== selectedProfissional ||
+        !quotaAllows(quota, selectedDate, selectedHora)) {
+      toast.error("Cota inválida para a unidade, data ou horário selecionado.");
       return;
     }
 
     setScheduling(true);
     try {
-      const prof = professionals.find(p => p.id === selectedProfissional);
-      const agendamentoId = `ag_${Date.now()}`;
-
-      const { error: agErr } = await supabase.from("agendamentos").insert({
-        id: agendamentoId,
-        paciente_id: selectedPatient.id,
-        paciente_nome: selectedPatient.nome,
-        profissional_id: selectedProfissional,
-        profissional_nome: prof?.nome || "",
-        unidade_id: selectedUnidade || extUser?.unidade_id || "",
-        data: selectedDate,
-        hora: selectedHora,
-        tipo: "Consulta",
-        status: "pendente",
-        origem: "externo",
-        criado_por: extUser?.id || "",
-        agendado_por_externo: extUser?.id || "",
-        observacoes: `Agendado por ${extUser?.nome || "externo"}`,
-      });
-      if (agErr) throw agErr;
-
-      const { error: qErr } = await supabase.from("quotas_externas")
-        .update({ vagas_usadas: quota.vagas_usadas + 1 })
-        .eq("id", quota.id);
-      if (qErr) console.error("Quota update error:", qErr);
+      const { error } = await supabase.rpc("create_external_appointment" as any, {
+        p_cota_id: quota.id, p_paciente_id: selectedPatient.id,
+        p_data: selectedDate, p_hora: selectedHora,
+      } as any);
+      if (error) throw error;
 
       toast.success("Agendamento realizado com sucesso!");
       setSelectedHora("");
@@ -350,28 +342,21 @@ const AgendamentoExterno: React.FC = () => {
 
   // ── Cancel appointment ──
   const handleCancel = async (agId: string) => {
+    if (cancellingId) return;
+    const motivo = window.prompt("Informe o motivo do cancelamento:")?.trim();
+    if (!motivo) return;
+    if (motivo.length < 3) { toast.error("Informe um motivo com pelo menos 3 caracteres."); return; }
+    setCancellingId(agId);
     try {
-      const appt = myAppointments.find(a => a.id === agId);
-      const { error } = await supabase.from("agendamentos").update({ status: "cancelado" }).eq("id", agId);
+      const { error } = await supabase.rpc("cancel_external_appointment" as any, { p_agendamento_id: agId, p_motivo: motivo } as any);
       if (error) throw error;
-
-      if (appt) {
-        const quota = quotas.find(q =>
-          q.profissional_interno_id === appt.profissional_id &&
-          q.profissional_externo_id === extUser?.id
-        );
-        if (quota && quota.vagas_usadas > 0) {
-          await supabase.from("quotas_externas")
-            .update({ vagas_usadas: quota.vagas_usadas - 1 })
-            .eq("id", quota.id);
-        }
-      }
 
       toast.success("Agendamento cancelado. Vaga devolvida.");
       await loadData();
     } catch (err: any) {
       toast.error(err.message || "Erro ao cancelar.");
     }
+    setCancellingId("");
   };
 
   const handleLogout = async () => {
@@ -382,7 +367,7 @@ const AgendamentoExterno: React.FC = () => {
 
   if (!extUser) return null;
 
-  const selectedProf = availableProfessionals.find(p => p.id === selectedProfissional);
+  const selectedProf = availableProfessionals.find(p => p.quota.id === selectedQuotaId);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -439,7 +424,7 @@ const AgendamentoExterno: React.FC = () => {
                   <CardContent className="space-y-4">
                     <div>
                       <Label className="flex items-center gap-1.5 mb-1.5"><Building2 className="w-3.5 h-3.5" /> Unidade</Label>
-                      <Select value={selectedUnidade} onValueChange={v => { setSelectedUnidade(v); setSelectedProfissional(""); setSelectedDate(""); setSelectedHora(""); }}>
+                      <Select value={selectedUnidade} onValueChange={v => { setSelectedUnidade(v); setSelectedProfissional(""); setSelectedQuotaId(""); setSelectedDate(""); setSelectedHora(""); }}>
                         <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
                         <SelectContent>
                           {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
@@ -464,11 +449,11 @@ const AgendamentoExterno: React.FC = () => {
                             <div className="grid gap-2 sm:grid-cols-2">
                               {availableProfessionals.map(p => {
                                 const remaining = p.quota.vagas_total - p.quota.vagas_usadas;
-                                const isSelected = selectedProfissional === p.id;
+                                const isSelected = selectedQuotaId === p.quota.id;
                                 return (
                                   <button
-                                    key={p.id}
-                                    onClick={() => { setSelectedProfissional(p.id); setSelectedDate(""); setSelectedHora(""); }}
+                                    key={p.quota.id}
+                                    onClick={() => { setSelectedProfissional(p.id); setSelectedQuotaId(p.quota.id); setSelectedDate(""); setSelectedHora(""); }}
                                     className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
                                       isSelected
                                         ? "border-primary bg-primary/5 shadow-sm"
@@ -721,8 +706,8 @@ const AgendamentoExterno: React.FC = () => {
                         </p>
                         <Badge variant="outline" className="mt-1.5 capitalize">{a.status.replace(/_/g, ' ')}</Badge>
                       </div>
-                      <Button variant="destructive" size="sm" onClick={() => handleCancel(a.id)} className="shrink-0">
-                        Cancelar
+                      <Button variant="destructive" size="sm" onClick={() => handleCancel(a.id)} disabled={!!cancellingId} className="shrink-0">
+                        {cancellingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cancelar"}
                       </Button>
                     </CardContent>
                   </Card>

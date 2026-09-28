@@ -15,6 +15,7 @@ import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { addDaysToDateStr, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 import { auditService } from "@/services/auditService";
+import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import {
   getAgendamentosSnapshot,
   isCompleteAgendaDate,
@@ -150,15 +151,6 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
   };
 };
 
-// Lista única de status que NÃO ocupam vaga na agenda.
-const STATUS_NAO_OCUPA_VAGA = new Set([
-  "cancelado",
-  "falta",
-  "excluido",
-  "removido",
-  "inativo",
-]);
-const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
 
 export interface LogActionInput {
   acao: string;
@@ -636,19 +628,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           return isInRange;
         }).length;
 
-        const turnoQuotas = (window as any).__quotasExternasCached || [];
-        const quotasTurno = turnoQuotas.filter(
-          (q: any) =>
-            q.profissional_interno_id === profissionalId &&
-            q.unidade_id === unidadeId &&
-            q.ativo === true &&
-            q.turno?.toLowerCase() === (td.horaInicio < "12:00" ? "manha" : td.horaInicio < "18:00" ? "tarde" : "noite"),
-        );
-
-        const vagasReservadasExterno = quotasTurno.reduce(
-          (acc: number, curr: any) => acc + (curr.vagas_total || 0),
-          0,
-        );
+        // A cota limita o total do período; apenas agendamentos criados ocupam o dia.
+        const vagasReservadasExterno = 0;
         const vagasOcupadasExterno = dayAppointments.filter((a) => {
           if (a.origem !== "externo") return false;
           const aHora = a.hora;
@@ -663,7 +644,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
         const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
         const vagasTotal = td.vagasPorDia || 0;
-        const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
+        const vagasLivresInternas = Math.max(0, vagasTotal - turnoAppCount);
         const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
         const periodo = td.horaInicio < "12:00" ? "Manhã" : td.horaInicio < "18:00" ? "Tarde" : "Noite";
 

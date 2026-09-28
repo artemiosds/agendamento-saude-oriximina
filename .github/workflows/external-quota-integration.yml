@@ -1,0 +1,36 @@
+name: External quota PostgreSQL integration
+
+on:
+  push:
+    branches: [codex/external-quotas-atomic]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: external_quota_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d external_quota_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: test-only
+      PGDATABASE: external_quota_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise candidate migration and transactional RPCs
+        run: bash tests/sql/run_external_quota_integration.sh
