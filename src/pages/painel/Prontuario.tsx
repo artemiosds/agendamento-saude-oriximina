@@ -46,6 +46,12 @@ import { imprimirVisitaDomiciliar } from "@/lib/visitaDomiciliarPdf";
 import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
+import {
+  competenciaFromDate,
+  resolveProfessionalCbo,
+  validarCompatibilidadeClinicaSigtap,
+  type SigtapClinicalValidationResult,
+} from "@/lib/sigtapClinicalValidation";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
@@ -457,6 +463,8 @@ const ProntuarioPage: React.FC = () => {
   const [sigtapDisponibilizarTodos, setSigtapDisponibilizarTodos] = useState<boolean>(false);
   const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
   const [procDetails, setProcDetails] = useState<Record<string, { quantidade: number; observacao: string }>>({});
+  const [sigtapValidationByProc, setSigtapValidationByProc] = useState<Record<string, SigtapClinicalValidationResult>>({});
+  const [sigtapJustificationByProc, setSigtapJustificationByProc] = useState<Record<string, string>>({});
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
   const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
   const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
@@ -646,6 +654,78 @@ const ProntuarioPage: React.FC = () => {
   useEffect(() => { selectedProcIdsRef.current = selectedProcIds; }, [selectedProcIds]);
   useEffect(() => { procDetailsRef.current = procDetails; }, [procDetails]);
   useEffect(() => { selectedCidsByProcRef.current = selectedCidsByProc; }, [selectedCidsByProc]);
+
+
+  // Validação clínica SIGTAP em tempo real. Usa o profissional executor real do
+  // atendimento e o paciente/data do prontuário; indisponibilidade do catálogo
+  // gera estado "indeterminado", nunca incompatibilidade presumida.
+  useEffect(() => {
+    if (!dialogOpen || selectedProcIds.length === 0) {
+      setSigtapValidationByProc({});
+      return;
+    }
+    let cancelled = false;
+    const paciente = pacientes.find((p: any) => p.id === form.paciente_id) as any;
+    const profissionalId = form.profissional_id || (!editId ? user?.id : "") || user?.id || "";
+    const profissional =
+      funcionarios.find((f: any) => f.id === profissionalId) ||
+      (user?.id === profissionalId ? user : null);
+    const cbo = resolveProfessionalCbo(profissional);
+    const competencia = competenciaFromDate(form.data_atendimento);
+    const nascimento =
+      paciente?.data_nascimento ||
+      paciente?.dataNascimento ||
+      paciente?.custom_data?.data_nascimento ||
+      paciente?.custom_data?.dataNascimento ||
+      "";
+    const sexo = paciente?.sexo || paciente?.custom_data?.sexo || "";
+
+    void Promise.all(
+      selectedProcIds.map(async (codigo) => {
+        if (!/^\d{10}$/.test(String(codigo))) {
+          return [
+            codigo,
+            {
+              status: "indeterminado",
+              procedimento: String(codigo),
+              competencia,
+              cbo,
+              motivos: [],
+              avisos: ["Procedimento sem código SIGTAP de 10 dígitos."],
+              idadeMeses: null,
+              instrumentos: [],
+              bpaICompativel: null,
+            } satisfies SigtapClinicalValidationResult,
+          ] as const;
+        }
+        const result = await validarCompatibilidadeClinicaSigtap({
+          procedimento: codigo,
+          competencia,
+          cbo,
+          dataNascimento: nascimento,
+          dataAtendimento: form.data_atendimento,
+          sexo,
+        });
+        return [codigo, result] as const;
+      }),
+    ).then((entries) => {
+      if (!cancelled) setSigtapValidationByProc(Object.fromEntries(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dialogOpen,
+    selectedProcIds,
+    form.paciente_id,
+    form.profissional_id,
+    form.data_atendimento,
+    editId,
+    pacientes,
+    funcionarios,
+    user,
+  ]);
 
 
   // Sessão: cycle + PTS state
@@ -1559,6 +1639,8 @@ const ProntuarioPage: React.FC = () => {
     setUnifiedResults({ procedimentos: [], cids: [] });
     setSelectedCidsByProc({});
     setProcDetails({});
+    setSigtapValidationByProc({});
+    setSigtapJustificationByProc({});
     setEpisodios([]);
     setListaExames([]);
     setListaPrescricao([]);
@@ -1599,6 +1681,16 @@ const ProntuarioPage: React.FC = () => {
     setSelectedProcIds([]);
     setSelectedCidsByProc({});
     setProcDetails({});
+    setSigtapValidationByProc({});
+    const justificativasPersistidas = getCustomDataObject(p)?.sigtap_justificativas || {};
+    setSigtapJustificationByProc(
+      Object.fromEntries(
+        Object.entries(justificativasPersistidas).map(([codigo, value]: [string, any]) => [
+          codigo,
+          typeof value === "string" ? value : String(value?.justificativa || ""),
+        ]),
+      ),
+    );
     setSessaoCycle(null);
     setSessaoCycleSessions([]);
     setSessaoPts(null);
@@ -1733,9 +1825,71 @@ const ProntuarioPage: React.FC = () => {
     // Motivo da alteração agora é opcional ao editar.
     if (sessionRegistrationError) {
       toast.error(sessionRegistrationError);
+      savingRef.current = false;
       return false;
     }
-    
+
+    // Revalida na hora do salvamento para evitar confiar apenas no estado visual.
+    // Procedimento incompatível pode permanecer clinicamente, mas exige justificativa
+    // e continuará sendo filtrado do BPA-I pela validação de exportação.
+    const pacValidacao = pacientes.find((p: any) => p.id === f.paciente_id) as any;
+    const profIdValidacao = (editId || editIdRef.current) ? (f.profissional_id || "") : (user?.id || "");
+    const profValidacao =
+      funcionarios.find((fx: any) => fx.id === profIdValidacao) ||
+      (user?.id === profIdValidacao ? user : null);
+    const cboValidacao = resolveProfessionalCbo(profValidacao);
+    const competenciaValidacao = competenciaFromDate(f.data_atendimento);
+    const nascimentoValidacao =
+      pacValidacao?.data_nascimento ||
+      pacValidacao?.dataNascimento ||
+      pacValidacao?.custom_data?.data_nascimento ||
+      pacValidacao?.custom_data?.dataNascimento ||
+      "";
+    const sexoValidacao = pacValidacao?.sexo || pacValidacao?.custom_data?.sexo || "";
+
+    const validacoesSalvar = await Promise.all(
+      spi.map(async (codigo) => [
+        codigo,
+        /^\d{10}$/.test(String(codigo))
+          ? await validarCompatibilidadeClinicaSigtap({
+              procedimento: codigo,
+              competencia: competenciaValidacao,
+              cbo: cboValidacao,
+              dataNascimento: nascimentoValidacao,
+              dataAtendimento: f.data_atendimento,
+              sexo: sexoValidacao,
+            })
+          : ({
+              status: "indeterminado",
+              procedimento: String(codigo),
+              competencia: competenciaValidacao,
+              cbo: cboValidacao,
+              motivos: [],
+              avisos: ["Procedimento sem código SIGTAP de 10 dígitos."],
+              idadeMeses: null,
+              instrumentos: [],
+              bpaICompativel: null,
+            } satisfies SigtapClinicalValidationResult),
+      ] as const),
+    );
+    const validacaoSalvarMap = Object.fromEntries(validacoesSalvar) as Record<string, SigtapClinicalValidationResult>;
+    setSigtapValidationByProc(validacaoSalvarMap);
+
+    const incompatSemJustificativa = validacoesSalvar.filter(
+      ([codigo, resultado]) =>
+        resultado.status === "incompatível" &&
+        !String(sigtapJustificationByProc[codigo] || "").trim(),
+    );
+    if (incompatSemJustificativa.length > 0) {
+      const [codigo, resultado] = incompatSemJustificativa[0];
+      setExpandedProcId(codigo);
+      toast.error(
+        `O procedimento ${codigo} está incompatível com o SIGTAP e precisa de justificativa clínica antes de salvar: ${resultado.motivos.join(" ")}`,
+      );
+      savingRef.current = false;
+      return false;
+    }
+
     // Normalize SOAP values
     const soapPayload = normalizeSoapPayload({
       subjetivo: f.soap_subjetivo,
@@ -1808,7 +1962,25 @@ const ProntuarioPage: React.FC = () => {
           texto: f.observacoes,
           dynamic_fields: dynamicFields
         }),
-        custom_data: mergeFullCustomData(f, ef, dynamicFields),
+        custom_data: {
+          ...mergeFullCustomData(f, ef, dynamicFields),
+          sigtap_justificativas: Object.fromEntries(
+            validacoesSalvar
+              .filter(([, resultado]) => resultado.status === "incompatível")
+              .map(([codigo, resultado]) => [
+                codigo,
+                {
+                  justificativa: String(sigtapJustificationByProc[codigo] || "").trim(),
+                  competencia: resultado.competencia,
+                  cbo: resultado.cbo,
+                  motivos: resultado.motivos,
+                  usuario_id: user?.id || "",
+                  usuario_nome: user?.nome || "",
+                  registrado_em: new Date().toISOString(),
+                },
+              ]),
+          ),
+        },
 
         resultado_exame: f.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
@@ -1902,6 +2074,18 @@ const ProntuarioPage: React.FC = () => {
             campos_alterados: camposAlterados,
             editado_por_id: user?.id || "",
             editado_por_nome: user?.nome || "",
+            sigtap_excecoes: validacoesSalvar
+              .filter(([, resultado]) => resultado.status === "incompatível")
+              .map(([codigo, resultado]) => ({
+                procedimento: codigo,
+                cbo: resultado.cbo,
+                competencia: resultado.competencia,
+                idade_meses: resultado.idadeMeses,
+                motivos: resultado.motivos,
+                justificativa: String(sigtapJustificationByProc[codigo] || "").trim(),
+                usuario_confirmou_id: user?.id || "",
+                usuario_confirmou_nome: user?.nome || "",
+              })),
           },
         });
 
@@ -2035,7 +2219,22 @@ const ProntuarioPage: React.FC = () => {
           profissionalNome: profNomeToSave,
           prontuarioId: prontuarioId || "",
           after: record,
-          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || "" },
+          detalhes: {
+            paciente_nome: form.paciente_nome,
+            paciente_cpf: pac?.cpf || "",
+            sigtap_excecoes: validacoesSalvar
+              .filter(([, resultado]) => resultado.status === "incompatível")
+              .map(([codigo, resultado]) => ({
+                procedimento: codigo,
+                cbo: resultado.cbo,
+                competencia: resultado.competencia,
+                idade_meses: resultado.idadeMeses,
+                motivos: resultado.motivos,
+                justificativa: String(sigtapJustificationByProc[codigo] || "").trim(),
+                usuario_confirmou_id: user?.id || "",
+                usuario_confirmou_nome: user?.nome || "",
+              })),
+          },
         });
 
       }
