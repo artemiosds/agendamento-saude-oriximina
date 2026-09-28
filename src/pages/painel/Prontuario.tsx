@@ -4789,10 +4789,10 @@ const ProntuarioPage: React.FC = () => {
                                 </div>
                               </div>
 
-                              {!isCustom && !proc.id.includes('.') && (
+                              {(isCustom || !/^\d{10}$/.test(String(proc.id))) && (
                                 <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
                                   <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                                  <p className="text-[10px] text-amber-700">Procedimento sem SIGTAP não será validado para produção BPA-I.</p>
+                                  <p className="text-[10px] text-amber-700">Procedimento sem código SIGTAP válido não será validado para produção BPA-I.</p>
                                 </div>
                               )}
 
