@@ -2678,6 +2678,49 @@ const BpaExportar: React.FC = () => {
                 ? ""
                 : procEntry.cid || cidProducaoLinha || pront.custom_data?.cid || pac?.cid || "";
               const { cid } = normalizarCidLinha(cidBrutoLinha);
+
+              // Revalida a combinação FINAL procedimento × CID que realmente iria
+              // para o Registro 03. A validação anterior acontece antes dos
+              // fallbacks de CID; portanto um CID herdado do prontuário/paciente
+              // poderia tornar a linha incompatível somente nesta etapa.
+              //
+              // Regra: rejeitar SOMENTE esta linha/procedimento e continuar a
+              // geração do restante do arquivo. Nunca bloquear todo o TXT por uma
+              // incompatibilidade clínica localizada.
+              const validacaoLinhaFinal = validarListaProcedimentosBpaI(
+                [{ codigo: procEntry.codigo, origem: procEntry.origem, cid: cid.trim() }],
+                validacaoCtxLinha,
+              );
+              if (validacaoLinhaFinal.rejeitados.length > 0) {
+                const rejFinal = validacaoLinhaFinal.rejeitados[0];
+                const motivoFinal = rejFinal.rejeicoes.join(" | ");
+                stats.rejectedProc++;
+                resumoIntegridade.rejeitados.push({
+                  paciente: nome_pac || ident,
+                  data: String(pront.data_atendimento || "").slice(0, 10),
+                  codigo: rejFinal.codigo || procEntry.codigo || "—",
+                  cbo,
+                  motivo: motivoFinal,
+                });
+                warnings.push(
+                  `${ident}: linha BPA-I NÃO exportada — procedimento ${rejFinal.codigo || procEntry.codigo || "(vazio)"} / CID ${cid.trim() || "vazio"} — ${motivoFinal}`,
+                );
+                details.rejectedProc.push({
+                  ...itemDetail,
+                  pendencia: "Linha BPA-I incompatível — não exportada",
+                  valor_atual: `${rejFinal.codigo || procEntry.codigo || "vazio"}${cid.trim() ? ` / CID ${cid.trim()}` : ""} → ${motivoFinal}`,
+                  codigo_sigtap: rejFinal.codigo || procEntry.codigo,
+                  cbo,
+                  origem_sigtap: procEntry.origem,
+                  motivo: motivoFinal,
+                });
+                resumoIntegridade.totalProcedimentosValidos = Math.max(
+                  0,
+                  resumoIntegridade.totalProcedimentosValidos - 1,
+                );
+                continue;
+              }
+
               const chaveLinhaBpa = buildBpaProductionKey(
                 {
                   agendamentoId: pront.agendamento_id,
