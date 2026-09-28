@@ -411,6 +411,24 @@ const Triagem: React.FC = () => {
   const [newAlergia, setNewAlergia] = useState("");
   const [newMedicamento, setNewMedicamento] = useState("");
 
+  const normalizarAlturaCm = useCallback((value: string): number | null => {
+    if (!value) return null;
+    const alturaInformada = Number(String(value).replace(",", "."));
+    if (!Number.isFinite(alturaInformada) || alturaInformada <= 0) return null;
+    // A tela historicamente pede centímetros, mas equipes também informam metros
+    // (ex.: 1,56). Aceita os dois formatos e persiste sempre em centímetros.
+    return alturaInformada <= 3 ? alturaInformada * 100 : alturaInformada;
+  }, []);
+
+  const calcularImcTriagem = useCallback((pesoValue: string, alturaValue: string): number | null => {
+    const peso = Number(String(pesoValue || "").replace(",", "."));
+    const alturaCm = normalizarAlturaCm(alturaValue);
+    if (!Number.isFinite(peso) || peso <= 0 || !alturaCm || alturaCm <= 0) return null;
+    const alturaM = alturaCm / 100;
+    const imcCalculado = peso / (alturaM * alturaM);
+    return Number.isFinite(imcCalculado) ? Number(imcCalculado.toFixed(2)) : null;
+  }, [normalizarAlturaCm]);
+
   const now = useMemo(() => new Date(), []);
 
   const filaFiltrada = useMemo(() => {
@@ -474,10 +492,8 @@ const Triagem: React.FC = () => {
   }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca]);
 
   const imc = useMemo(() => {
-    const peso = parseFloat(form.peso);
-    const altura = parseFloat(form.altura) / 100;
-    if (isNaN(peso) || isNaN(altura) || altura === 0) return null;
-    const value = peso / (altura * altura);
+    const value = calcularImcTriagem(form.peso, form.altura);
+    if (value == null) return null;
     let label = "";
     if (value < 18.5) label = "Abaixo do peso";
     else if (value < 24.9) label = "Peso normal";
@@ -486,7 +502,7 @@ const Triagem: React.FC = () => {
     else if (value < 39.9) label = "Obesidade Grau II";
     else label = "Obesidade Grau III";
     return { value: value.toFixed(2), label };
-  }, [form.peso, form.altura]);
+  }, [calcularImcTriagem, form.peso, form.altura]);
 
   const [openingTriagemId, setOpeningTriagemId] = useState<string | null>(null);
 
@@ -570,13 +586,13 @@ const Triagem: React.FC = () => {
         agendamento_id: selectedItem.id,
         tecnico_id: user?.id || "",
         peso: form.peso ? parseFloat(form.peso) : null,
-        altura: form.altura ? parseFloat(form.altura) : null,
+        altura: normalizarAlturaCm(form.altura),
         pressao_arterial: form.pressaoArterial || null,
         temperatura: form.temperatura ? parseFloat(form.temperatura) : null,
         frequencia_cardiaca: form.frequenciaCardiaca ? parseInt(form.frequenciaCardiaca) : null,
         saturacao_oxigenio: form.saturacaoOxigenio ? parseInt(form.saturacaoOxigenio) : null,
         glicemia: form.glicemia ? parseFloat(form.glicemia) : null,
-        imc: form.peso && form.altura ? parseFloat((parseFloat(form.peso) / Math.pow(parseFloat(form.altura) / 100, 2)).toFixed(1)) : null,
+        imc: calcularImcTriagem(form.peso, form.altura),
         alergias: form.alergias,
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
@@ -614,13 +630,13 @@ const Triagem: React.FC = () => {
         agendamento_id: selectedItem.id,
         tecnico_id: user?.id || "",
         peso: form.peso ? parseFloat(form.peso) : null,
-        altura: form.altura ? parseFloat(form.altura) : null,
+        altura: normalizarAlturaCm(form.altura),
         pressao_arterial: form.pressaoArterial || null,
         temperatura: form.temperatura ? parseFloat(form.temperatura) : null,
         frequencia_cardiaca: form.frequenciaCardiaca ? parseInt(form.frequenciaCardiaca) : null,
         saturacao_oxigenio: form.saturacaoOxigenio ? parseInt(form.saturacaoOxigenio) : null,
         glicemia: form.glicemia ? parseFloat(form.glicemia) : null,
-        imc: form.peso && form.altura ? parseFloat((parseFloat(form.peso) / Math.pow(parseFloat(form.altura) / 100, 2)).toFixed(1)) : null,
+        imc: calcularImcTriagem(form.peso, form.altura),
         alergias: form.alergias,
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
@@ -695,6 +711,16 @@ const Triagem: React.FC = () => {
           etapa,
           versao_fluxo: VERSAO_FLUXO_TRIAGEM,
           encaminhamento: encaminharEnfermagem ? "enfermagem" : "direto",
+          valores_triagem: {
+            peso: form.peso || null,
+            altura_informada: form.altura || null,
+            altura_cm_normalizada: normalizarAlturaCm(form.altura),
+            imc_calculado: calcularImcTriagem(form.peso, form.altura),
+            temperatura: form.temperatura || null,
+            frequencia_cardiaca: form.frequenciaCardiaca || null,
+            saturacao_oxigenio: form.saturacaoOxigenio || null,
+            glicemia: form.glicemia || null,
+          },
         },
       })).then(({ error: logError }) => {
         if (logError) console.error("Erro ao registrar falha da triagem:", logError);
@@ -797,8 +823,9 @@ const Triagem: React.FC = () => {
                 <Input type="number" step="0.01" value={form.peso} onChange={(e) => setForm((p) => ({ ...p, peso: e.target.value }))} placeholder="70.5" />
               </div>
               <div>
-                <Label>Altura (cm)</Label>
-                <Input type="number" step="0.01" value={form.altura} onChange={(e) => setForm((p) => ({ ...p, altura: e.target.value }))} placeholder="170" />
+                <Label>Altura (cm ou m)</Label>
+                <Input type="number" step="0.01" value={form.altura} onChange={(e) => setForm((p) => ({ ...p, altura: e.target.value }))} placeholder="170 ou 1.70" />
+                <p className="mt-1 text-[10px] text-muted-foreground">Aceita 156 cm ou 1,56 m; o sistema normaliza automaticamente.</p>
               </div>
               <div>
                 <Label>IMC</Label>
