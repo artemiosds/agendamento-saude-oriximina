@@ -273,14 +273,22 @@ const PTS: React.FC = () => {
 
   const resolvePtsProcedureProfessional = useCallback((especialidade?: string) => {
     const esp = normalize(especialidade || "");
-    const responsaveisMeta = metas
-      .filter((meta) => meta.responsavel && (!esp || normalize(meta.especialidade || "") === esp))
-      .map((meta) => normalize(meta.responsavel || ""))
+    const nomesResponsaveis = Array.from(new Set(
+      metas
+        .filter((meta) => meta.responsavel && (!esp || normalize(meta.especialidade || "") === esp))
+        .map((meta) => normalize(meta.responsavel || ""))
+        .filter(Boolean),
+    ));
+    const profissionaisMeta = nomesResponsaveis
+      .map((nome) => funcionarios.find((f: any) => normalize(f.nome || "") === nome))
       .filter(Boolean);
-    for (const nome of responsaveisMeta) {
-      const profissional = funcionarios.find((f: any) => normalize(f.nome || "") === nome);
-      if (profissional) return profissional;
-    }
+
+    // Se houver mais de um responsável possível para a mesma especialidade,
+    // não escolhe arbitrariamente: a validação ficará indeterminada por falta
+    // de um único executor responsável.
+    if (profissionaisMeta.length === 1) return profissionaisMeta[0];
+    if (profissionaisMeta.length > 1) return null;
+
     const overallId = editingPts?.professional_id || user?.id || "";
     return (
       funcionarios.find((f: any) => f.id === overallId) ||
