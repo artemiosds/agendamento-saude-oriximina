@@ -70,7 +70,7 @@ const priorityRank: Record<string, number> = {
 };
 
 const agendamentoColumns =
-  "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
+  "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,agendado_por_externo,google_event_id,sync_status,criado_em,criado_por";
 
 const mapAgendamentoRow = (a: any): Agendamento => ({
   id: a.id,

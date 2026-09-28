@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAgendamentos } from '@/contexts/AgendamentosContext';
 import { cn, isoDayOfWeek, todayLocalStr } from '@/lib/utils';
+import { statusOcupaVaga } from '@/lib/appointmentCapacity';
 
 interface SlotInfoBadgeProps {
   profissionalId: string;
@@ -34,20 +35,11 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
 
     const isTurnoMode = allDisps.some(d => d.vagasPorHora === 0);
 
-    // Status que NÃO ocupam vaga (mantém em sincronia com DataContext.statusOcupaVaga)
-    const STATUS_NAO_OCUPA_VAGA = new Set([
-      "cancelado",
-      "falta",
-      "excluido",
-      "removido",
-      "inativo",
-    ]);
-
     const active = agendamentos.filter(
       a => a.profissionalId === profissionalId &&
         a.unidadeId === unidadeId &&
         a.data === date &&
-        !STATUS_NAO_OCUPA_VAGA.has(a.status),
+        statusOcupaVaga(a.status),
     );
 
     // Contagem real de pacientes ativos no dia para este profissional/unidade

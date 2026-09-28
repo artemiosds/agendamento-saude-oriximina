@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { DayInfo } from '@/components/CalendarioDisponibilidade';
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from '@/lib/utils';
 import DadosPacienteBlocos, { emptyDadosPaciente, serializeDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
+import { statusOcupaVaga } from '@/lib/appointmentCapacity';
 
 const applyDateMask = (value: string): string => {
   const digits = value.replace(/\D/g, '');
@@ -48,8 +49,6 @@ interface PublicDisp { id: string; profissional_id: string; unidade_id: string; 
 interface PublicBloqueio { id: string; data_inicio: string; data_fim: string; dia_inteiro: boolean; hora_inicio: string; hora_fim: string; profissional_id: string; unidade_id: string; tipo: string; titulo: string }
 interface PublicAg { id: string; profissional_id: string; unidade_id: string; data: string; hora: string; status: string; origem?: string }
 interface OnlineConfig { habilitado: boolean; antecedencia_minima_dias: number; antecedencia_maxima_dias: number; limite_por_dia_profissional: number; mensagem_confirmacao: string; exigir_confirmacao_sms: boolean }
-
-const statusOcupaVaga = (s: string) => !['cancelado','falta'].includes(s);
 
 const AgendarOnline: React.FC = () => {
   const [step, setStep] = useState(1);

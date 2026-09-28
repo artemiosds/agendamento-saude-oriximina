@@ -15,6 +15,7 @@ import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { addDaysToDateStr, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 import { auditService } from "@/services/auditService";
+import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import {
   getAgendamentosSnapshot,
   isCompleteAgendaDate,
@@ -150,15 +151,6 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
   };
 };
 
-// Lista única de status que NÃO ocupam vaga na agenda.
-const STATUS_NAO_OCUPA_VAGA = new Set([
-  "cancelado",
-  "falta",
-  "excluido",
-  "removido",
-  "inativo",
-]);
-const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
 
 export interface LogActionInput {
   acao: string;

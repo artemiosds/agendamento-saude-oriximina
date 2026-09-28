@@ -56,9 +56,17 @@ DECLARE
   v_count integer;
   v_hour_count integer;
   v_matching integer := 0;
+  v_valid_grid boolean := false;
+  v_duration integer;
   v_master boolean;
   v_hora time;
 BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.origem = 'externo' OR nullif(OLD.agendado_por_externo, '') IS NOT NULL THEN
+      RAISE EXCEPTION 'Agendamento externo vinculado não pode ser excluído diretamente';
+    END IF;
+    RETURN OLD;
+  END IF;
   IF TG_OP = 'UPDATE' AND OLD.origem = 'externo' THEN
     IF (NEW.paciente_id, NEW.profissional_id, NEW.unidade_id, NEW.data, NEW.hora,
         NEW.agendado_por_externo, NEW.origem) IS DISTINCT FROM
@@ -105,6 +113,16 @@ BEGIN
   IF public.is_date_blocked(NEW.data, NEW.profissional_id, NEW.unidade_id) THEN
     RAISE EXCEPTION 'Data bloqueada';
   END IF;
+  IF EXISTS (SELECT 1 FROM public.bloqueios b
+    WHERE NEW.data BETWEEN b.data_inicio AND b.data_fim
+      AND ((coalesce(b.unidade_id, '') = '' AND coalesce(b.profissional_id, '') = '')
+        OR (b.unidade_id = NEW.unidade_id AND coalesce(b.profissional_id, '') = '')
+        OR b.profissional_id = NEW.profissional_id)
+      AND (b.dia_inteiro = true OR coalesce(b.hora_inicio, '') = ''
+        OR (v_hora >= b.hora_inicio::time AND
+            v_hora < coalesce(nullif(b.hora_fim, ''), '23:59')::time))) THEN
+    RAISE EXCEPTION 'Horário bloqueado';
+  END IF;
 
   FOR v_slot IN SELECT d.* FROM public.disponibilidades d
     WHERE d.profissional_id = NEW.profissional_id AND d.unidade_id = NEW.unidade_id
@@ -114,6 +132,18 @@ BEGIN
     ORDER BY d.id FOR SHARE OF d
   LOOP
     v_matching := v_matching + 1;
+    IF v_slot.vagas_por_hora = 0 THEN
+      IF v_hora <> v_slot.hora_inicio::time THEN CONTINUE; END IF;
+    ELSE
+      v_duration := coalesce(nullif(v_slot.duracao_consulta, 0), 30);
+      IF v_duration <= 0 THEN RAISE EXCEPTION 'Duração da disponibilidade inválida'; END IF;
+      IF mod(extract(epoch FROM (v_hora - v_slot.hora_inicio::time))::numeric,
+             (v_duration * 60)::numeric) <> 0
+         OR extract(epoch FROM (v_slot.hora_fim::time - v_hora)) < v_duration * 60 THEN
+        CONTINUE;
+      END IF;
+    END IF;
+    v_valid_grid := true;
     SELECT count(*) INTO v_count FROM public.agendamentos a
     WHERE a.id <> NEW.id AND a.profissional_id = NEW.profissional_id
       AND a.unidade_id = NEW.unidade_id AND a.data = NEW.data
@@ -132,11 +162,12 @@ BEGIN
     END IF;
   END LOOP;
   IF v_matching = 0 THEN RAISE EXCEPTION 'Sem disponibilidade para a unidade, data e horário'; END IF;
+  IF NOT v_valid_grid THEN RAISE EXCEPTION 'Horário fora da grade da disponibilidade'; END IF;
   RETURN NEW;
 END;
 $$;
 DROP TRIGGER IF EXISTS trg_external_shared_capacity ON public.agendamentos;
-CREATE TRIGGER trg_external_shared_capacity BEFORE INSERT OR UPDATE ON public.agendamentos
+CREATE TRIGGER trg_external_shared_capacity BEFORE INSERT OR UPDATE OR DELETE ON public.agendamentos
   FOR EACH ROW EXECUTE FUNCTION public.guard_external_shared_capacity();
 REVOKE ALL ON FUNCTION public.guard_external_shared_capacity() FROM PUBLIC, anon, authenticated;
 
@@ -240,20 +271,58 @@ CREATE OR REPLACE FUNCTION public.cancel_external_appointment(p_agendamento_id t
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_user public.profissionais_externos%ROWTYPE;
+  v_staff public.funcionarios%ROWTYPE;
   v_appt public.agendamentos%ROWTYPE;
   v_aux public.agendamentos_externos%ROWTYPE;
   v_quota public.quotas_externas%ROWTYPE;
   v_uuid uuid;
+  v_actor_id text;
+  v_actor_name text;
+  v_actor_role text;
+  v_profile text;
+  v_authorized boolean := false;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Autenticação necessária'; END IF;
   IF coalesce(length(btrim(p_motivo)), 0) < 3 THEN RAISE EXCEPTION 'Informe o motivo do cancelamento'; END IF;
   SELECT * INTO v_user FROM public.profissionais_externos
     WHERE auth_user_id = auth.uid() AND ativo = true;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Profissional externo inativo ou não encontrado'; END IF;
+  SELECT * INTO v_staff FROM public.funcionarios
+    WHERE auth_user_id = auth.uid() AND ativo = true LIMIT 1;
   SELECT * INTO v_appt FROM public.agendamentos WHERE id = p_agendamento_id FOR UPDATE;
-  IF NOT FOUND OR v_appt.origem <> 'externo' OR
-     v_appt.agendado_por_externo <> v_user.id::text OR v_appt.criado_por <> v_user.id::text THEN
-    RAISE EXCEPTION 'Agendamento externo não encontrado para este usuário';
+  IF NOT FOUND OR v_appt.origem <> 'externo' THEN
+    RAISE EXCEPTION 'Agendamento externo não encontrado';
+  END IF;
+  IF v_user.id IS NOT NULL AND v_appt.agendado_por_externo = v_user.id::text THEN
+    v_actor_id := v_user.id::text;
+    v_actor_name := v_user.nome;
+    v_actor_role := 'externo';
+    v_authorized := true;
+  ELSIF v_staff.id IS NOT NULL THEN
+    v_profile := CASE lower(btrim(v_staff.role))
+      WHEN 'coordenador' THEN 'gestao' WHEN 'coordenacao' THEN 'gestao'
+      WHEN 'gestor' THEN 'gestao' WHEN 'gestão' THEN 'gestao'
+      WHEN 'recepção' THEN 'recepcao' ELSE lower(btrim(v_staff.role)) END;
+    IF v_profile = 'master' THEN
+      v_authorized := true;
+    ELSIF v_staff.unidade_id = v_appt.unidade_id THEN
+      SELECT coalesce(
+        (SELECT pu.can_edit FROM public.permissoes_usuario pu
+         WHERE pu.user_id = v_staff.id::text AND pu.modulo = 'agenda'
+           AND pu.unidade_id IN ('', v_appt.unidade_id)
+         ORDER BY (pu.unidade_id = v_appt.unidade_id) DESC LIMIT 1),
+        (SELECT p.can_edit FROM public.permissoes p
+         WHERE p.perfil IN (v_profile, lower(btrim(v_staff.role))) AND p.modulo = 'agenda'
+           AND p.unidade_id IN ('', v_appt.unidade_id)
+         ORDER BY (p.unidade_id = v_appt.unidade_id) DESC,
+                  (p.perfil = v_profile) DESC LIMIT 1), false)
+      INTO v_authorized;
+    END IF;
+    v_actor_id := v_staff.id::text;
+    v_actor_name := v_staff.nome;
+    v_actor_role := v_staff.role;
+  END IF;
+  IF NOT v_authorized THEN
+    RAISE EXCEPTION 'Sem permissão para cancelar este agendamento externo nesta unidade';
   END IF;
   IF p_agendamento_id !~ '^ag_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     RAISE EXCEPTION 'Vínculo externo inválido; solicite revisão ao Master';
@@ -261,7 +330,8 @@ BEGIN
   v_uuid := substring(p_agendamento_id FROM 4)::uuid;
   SELECT * INTO v_aux FROM public.agendamentos_externos WHERE id = v_uuid FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Vínculo externo ausente; solicite revisão ao Master'; END IF;
-  IF v_aux.profissional_externo_id IS DISTINCT FROM v_user.id
+  IF v_aux.profissional_externo_id::text IS DISTINCT FROM v_appt.agendado_por_externo
+     OR v_aux.profissional_externo_id::text IS DISTINCT FROM v_appt.criado_por
      OR v_aux.paciente_id IS DISTINCT FROM v_appt.paciente_id
      OR v_aux.profissional_interno_id::text IS DISTINCT FROM v_appt.profissional_id
      OR v_aux.unidade_id IS DISTINCT FROM v_appt.unidade_id
@@ -273,7 +343,7 @@ BEGIN
     RETURN jsonb_build_object('id', v_appt.id, 'already_cancelled', true);
   END IF;
   SELECT * INTO v_quota FROM public.quotas_externas WHERE id = v_aux.cota_id FOR UPDATE;
-  IF NOT FOUND OR v_quota.profissional_externo_id IS DISTINCT FROM v_user.id OR
+  IF NOT FOUND OR v_quota.profissional_externo_id IS DISTINCT FROM v_aux.profissional_externo_id OR
      v_quota.profissional_interno_id IS DISTINCT FROM v_aux.profissional_interno_id OR
      v_quota.unidade_id IS DISTINCT FROM v_aux.unidade_id THEN
     RAISE EXCEPTION 'Cota vinculada divergente; solicite revisão ao Master';
@@ -289,12 +359,13 @@ BEGIN
   UPDATE public.quotas_externas SET vagas_usadas = vagas_usadas - 1 WHERE id = v_quota.id;
   INSERT INTO public.action_logs (user_id, user_nome, role, unidade_id, acao, entidade,
     entidade_id, modulo, agendamento_id, paciente_id, profissional_id, before, after, detalhes)
-  VALUES (v_user.id::text, v_user.nome, 'externo', v_quota.unidade_id,
+  VALUES (v_actor_id, v_actor_name, v_actor_role, v_quota.unidade_id,
     'cancelar_agendamento_externo', 'agendamento', v_appt.id, 'agenda', v_appt.id,
     v_appt.paciente_id, v_appt.profissional_id,
     jsonb_build_object('status', v_appt.status, 'vagas_usadas', v_quota.vagas_usadas),
     jsonb_build_object('status', 'cancelado', 'vagas_usadas', v_quota.vagas_usadas - 1),
-    jsonb_build_object('cota_id', v_quota.id, 'motivo_alteracao', btrim(p_motivo)));
+    jsonb_build_object('cota_id', v_quota.id, 'profissional_externo_id', v_aux.profissional_externo_id,
+      'motivo_alteracao', btrim(p_motivo)));
   RETURN jsonb_build_object('id', v_appt.id, 'already_cancelled', false);
 END;
 $$;

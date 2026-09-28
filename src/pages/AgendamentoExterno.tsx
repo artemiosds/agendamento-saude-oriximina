@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { CalendarioDisponibilidade, type DayInfo } from "@/components/CalendarioDisponibilidade";
 import { todayLocalStr } from "@/lib/utils";
 import { isQuotaConfigurationUsable, quotaAllowsSlot } from "@/lib/externalQuota";
+import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 
 interface ExternalUser {
   id: string;
@@ -231,7 +232,7 @@ const AgendamentoExterno: React.FC = () => {
 
     // Filter booked
     const bookedSlots = agendamentos
-      .filter(a => a.profissional_id === selectedProfissional && a.data === selectedDate && !["cancelado", "falta"].includes(a.status))
+      .filter(a => a.profissional_id === selectedProfissional && a.data === selectedDate && statusOcupaVaga(a.status))
       .map(a => a.hora);
 
     return [...new Set(slots)].filter(s => quotaAllows(selectedQuota, selectedDate, s) && !bookedSlots.includes(s));

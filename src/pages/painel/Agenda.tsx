@@ -4,6 +4,7 @@ import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { compareClinicalAndLegalPriority, hasTriageTea, legalPriorityKey } from '@/lib/queuePriority';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
+import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import { isSameDay } from "date-fns";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useAgendamentos } from "@/contexts/AgendamentosContext";
@@ -180,18 +181,6 @@ const getDisplayStatus = (ag: { status?: string; data?: string }, todayStr: stri
   }
   return raw;
 };
-
-// Lista única de status que NÃO ocupam vaga na agenda.
-const STATUS_NAO_OCUPA_VAGA = new Set([
-  "cancelado",
-  "falta",
-  "excluido",
-  "removido",
-  "inativo",
-]);
-
-const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
-
 
 
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
@@ -1459,13 +1448,21 @@ const Agenda: React.FC = () => {
       return;
     }
     try {
-      await updateAgendamento(rejeicaoTarget.id, { status: "cancelado" } as any);
-      await (supabase as any)
-        .from("agendamentos")
-        .update({
-          rejeitado_motivo: rejeicaoMotivo,
-        })
-        .eq("id", rejeicaoTarget.id);
+      const externo = rejeicaoTarget.origem === "externo" || !!rejeicaoTarget.agendadoPorExterno;
+      if (externo) {
+        const { error } = await supabase.rpc("cancel_external_appointment" as any, {
+          p_agendamento_id: rejeicaoTarget.id,
+          p_motivo: rejeicaoMotivo.trim(),
+        } as any);
+        if (error) throw error;
+        await refreshAgendamentos();
+      } else {
+        await updateAgendamento(rejeicaoTarget.id, { status: "cancelado" } as any);
+        await (supabase as any)
+          .from("agendamentos")
+          .update({ rejeitado_motivo: rejeicaoMotivo })
+          .eq("id", rejeicaoTarget.id);
+      }
 
       const paciente = pacientes.find((p) => p.id === rejeicaoTarget.pacienteId);
       const unidade = unidades.find((u) => u.id === rejeicaoTarget.unidadeId);
@@ -1485,7 +1482,7 @@ const Agenda: React.FC = () => {
         observacoes: `Motivo da rejeição: ${rejeicaoMotivo}`,
       });
 
-      await logAction({
+      if (!externo) await logAction({
         acao: "rejeitar_agendamento_online",
         entidade: "agendamento",
         entidadeId: rejeicaoTarget.id,
@@ -1771,6 +1768,8 @@ const Agenda: React.FC = () => {
     setCancelLoading(true);
     try {
       const ag = cancelTarget;
+      const motivo = cancelMotivo.trim();
+      const externo = ag.origem === "externo" || !!ag.agendadoPorExterno;
       const paciente = pacientes.find(p => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
 
       // Check cancellation limit for this patient this month
@@ -1790,9 +1789,18 @@ const Agenda: React.FC = () => {
 
       // Append motivo to observacoes
       const obsAnterior = ag.observacoes || '';
-      const novaObs = `${obsAnterior}\n[CANCELAMENTO] Motivo: ${cancelMotivo} | Por: ${user?.nome || 'Sistema'} | Em: ${new Date().toLocaleString('pt-BR')}`.trim();
+      const novaObs = `${obsAnterior}\n[CANCELAMENTO] Motivo: ${motivo} | Por: ${user?.nome || 'Sistema'} | Em: ${new Date().toLocaleString('pt-BR')}`.trim();
 
-      await updateAgendamento(ag.id, { status: 'cancelado' as any });
+      if (externo) {
+        const { error } = await supabase.rpc("cancel_external_appointment" as any, {
+          p_agendamento_id: ag.id,
+          p_motivo: motivo,
+        } as any);
+        if (error) throw error;
+        await refreshAgendamentos();
+      } else {
+        await updateAgendamento(ag.id, { status: 'cancelado' as any });
+      }
 
       // Close dialog immediately for instant feedback
       toast.success('Agendamento cancelado com sucesso.');
@@ -1802,8 +1810,8 @@ const Agenda: React.FC = () => {
       // Side-effects fire-and-forget in background
       void (async () => {
         await Promise.allSettled([
-          (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id),
-          logAction({
+          externo ? Promise.resolve() : (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id),
+          externo ? Promise.resolve() : logAction({
             acao: 'cancelar_agendamento',
             entidade: 'agendamento',
             entidadeId: ag.id,
@@ -1814,7 +1822,7 @@ const Agenda: React.FC = () => {
             profissionalId: ag.profissionalId,
             profissionalNome: ag.profissionalNome,
             agendamentoId: ag.id,
-            detalhes: { motivo: cancelMotivo },
+            detalhes: { motivo },
             status: 'sucesso'
           }),
           cancelConfig.notificar_profissional
@@ -1832,7 +1840,7 @@ const Agenda: React.FC = () => {
                   tipo_atendimento: ag.tipo,
                   status_agendamento: 'cancelado',
                   id_agendamento: ag.id,
-                  observacoes: `Motivo: ${cancelMotivo}`,
+                  observacoes: `Motivo: ${motivo}`,
                 });
               })()
             : Promise.resolve(),
@@ -2032,6 +2040,10 @@ const Agenda: React.FC = () => {
     }
     try {
       const ag = agendamentos.find(a => a.id === agId);
+      if (ag?.origem === "externo" || ag?.agendadoPorExterno) {
+        setCancelTarget(ag);
+        return;
+      }
       await (supabase as any).from("agendamentos").delete().eq("id", agId);
       await logAction({
         acao: "excluir_agendamento",
