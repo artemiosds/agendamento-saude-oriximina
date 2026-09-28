@@ -44,6 +44,7 @@ describe("validação clínica SIGTAP", () => {
 
   it("resolve CBO por campos usuais do profissional", () => {
     expect(resolveProfessionalCbo({ custom_data: { cbo_codigo: "223810" } })).toBe("223810");
+    expect(resolveProfessionalCbo({ customData: { cbo_codigo: "223605" } })).toBe("223605");
     expect(resolveProfessionalCbo({ cbo: "2236-05" })).toBe("223605");
   });
 
