@@ -38,6 +38,15 @@ const parseDate = (value?: string | null): { y: number; m: number; d: number } |
   return null;
 };
 
+const formatarIdadeMesesHumana = (meses: number | null): string => {
+  if (meses == null || !Number.isFinite(meses) || meses < 0) return "idade não disponível";
+  const anos = Math.floor(meses / 12);
+  const resto = meses % 12;
+  if (anos === 0) return `${resto} ${resto === 1 ? "mês" : "meses"}`;
+  if (resto === 0) return `${anos} ${anos === 1 ? "ano" : "anos"}`;
+  return `${anos} ${anos === 1 ? "ano" : "anos"} e ${resto} ${resto === 1 ? "mês" : "meses"}`;
+};
+
 export const calcularIdadeMesesSigtap = (
   dataNascimento?: string | null,
   dataAtendimento?: string | null,
@@ -158,12 +167,12 @@ export async function validarCompatibilidadeClinicaSigtap(
     } else {
       if (proc.idadeMinimaMeses != null && idadeMeses < proc.idadeMinimaMeses) {
         motivos.push(
-          `Paciente abaixo da idade mínima SIGTAP: ${idadeMeses} meses; mínimo ${proc.idadeMinimaMeses} meses.`,
+          `Atenção: paciente fora da faixa etária permitida pelo SIGTAP. Idade do paciente: ${formatarIdadeMesesHumana(idadeMeses)}. Idade mínima permitida: ${formatarIdadeMesesHumana(proc.idadeMinimaMeses)}.`,
         );
       }
       if (proc.idadeMaximaMeses != null && idadeMeses > proc.idadeMaximaMeses) {
         motivos.push(
-          `Paciente acima da idade máxima SIGTAP: ${idadeMeses} meses; máximo ${proc.idadeMaximaMeses} meses.`,
+          `Atenção: paciente fora da faixa etária permitida pelo SIGTAP. Idade do paciente: ${formatarIdadeMesesHumana(idadeMeses)}. Idade máxima permitida: ${formatarIdadeMesesHumana(proc.idadeMaximaMeses)}.`,
         );
       }
     }
