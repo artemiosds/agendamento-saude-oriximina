@@ -156,6 +156,15 @@ const calcularIdade = (dataNasc: any, dataAtendimento: any): string => {
   return zfill(Math.max(0, idade), 3);
 };
 
+const calcularIdadeMeses = (dataNasc: any, dataAtendimento: any): number | null => {
+  const nasc = parseDataSegura(dataNasc);
+  const aten = parseDataSegura(dataAtendimento);
+  if (!nasc || !aten) return null;
+  let meses = (aten.ano - nasc.ano) * 12 + (aten.mes - nasc.mes);
+  if (aten.dia < nasc.dia) meses--;
+  return meses >= 0 ? meses : null;
+};
+
 // PostgREST limita a resposta a 1000 linhas mesmo com .range(0, 9999). Sem
 // paginação recursiva, competências com muitas triagens/agendamentos perdem
 // registros — e profissionais (ex.: técnicos de enfermagem) desaparecem do
@@ -2348,6 +2357,16 @@ const BpaExportar: React.FC = () => {
             if (munRes.fonte) municipiosSet.add(`${municipio} (${munRes.fonte})`);
           }
 
+          const quantidadeValidacao = Number(
+            somenteNumeros(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1),
+          ) || 1;
+          const servicoValidacao = somenteNumeros(
+            pront.custom_data?.servico || pront.custom_data?.servico_codigo || "",
+          ).slice(-3);
+          const classificacaoValidacao = somenteNumeros(
+            pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || "",
+          ).slice(-3);
+
           const validacaoCtxLinha = {
             ...validacaoCtxBase,
             cbo,
@@ -2356,6 +2375,10 @@ const BpaExportar: React.FC = () => {
             municipioPaciente: municipio,
             sexoPaciente: sexo,
             idadePaciente: raw_nasc && /^\d{3}$/.test(idade) ? Number(idade) : null,
+            idadePacienteMeses: calcularIdadeMeses(raw_nasc, pront.data_atendimento),
+            quantidade: quantidadeValidacao,
+            servico: servicoValidacao,
+            classificacao: classificacaoValidacao,
           };
           const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar, validacaoCtxLinha);
 
@@ -2460,7 +2483,7 @@ const BpaExportar: React.FC = () => {
             return { cid: "    ", cidBruto };
           };
 
-          const quantidade = zfill(pront.custom_data?.quantidade_bpa || pront.custom_data?.quantidade || 1, 6);
+          const quantidade = zfill(quantidadeValidacao, 6);
           const carater = zfill(pront.custom_data?.carater_atendimento || pront.custom_data?.carater || "01", 2);
           const autorizacao = rpad(
             somenteNumeros(pront.custom_data?.numero_autorizacao || pacCd.numero_autorizacao || ""),
@@ -2512,11 +2535,8 @@ const BpaExportar: React.FC = () => {
             warnings.push(`${ident}: ${etniaRes.motivo}.`);
           }
 
-          const servico = fixedDigits(pront.custom_data?.servico || pront.custom_data?.servico_codigo || "", 3);
-          const classificacao = fixedDigits(
-            pront.custom_data?.classificacao || pront.custom_data?.classificacao_codigo || "",
-            3,
-          );
+          const servico = fixedDigits(servicoValidacao, 3);
+          const classificacao = fixedDigits(classificacaoValidacao, 3);
           const sequenciaEquipe = fixedDigits(
             pront.custom_data?.sequencia_equipe || unidadeCd.sequencia_equipe || "",
             8,
