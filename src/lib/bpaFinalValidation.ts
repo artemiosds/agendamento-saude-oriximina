@@ -277,11 +277,11 @@ export function validarProcedimentoBpaI(
   }
   if (bloqueadoExplicito) {
     rejeicoes.push(`Procedimento ${codigo} bloqueado para o CBO ${cbo} na configuração do Master`);
-  } else if (permitidoExplicito || ctx.liberarTodos) {
+  } else if (!ctx.catalogoOficial && (permitidoExplicito || ctx.liberarTodos)) {
     if (ctx.liberarTodos && !permitidoExplicito) {
       avisos.push("Compatibilidade CBO × SIGTAP liberada pelo switch Master (disponibilizar todos)");
     }
-  } else if (permitidos.length > 0) {
+  } else if (!ctx.catalogoOficial && permitidos.length > 0) {
     rejeicoes.push(
       `Procedimento ${codigo} não consta na lista de procedimentos liberados para o CBO ${cbo} na competência ${competencia}`,
     );
