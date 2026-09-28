@@ -1069,6 +1069,10 @@ const PTS: React.FC = () => {
                 profissional_responsavel_id: profissional?.id || editingPts?.professional_id || user?.id || '',
                 profissional_responsavel_nome: profissional?.nome || user?.nome || '',
                 idade_meses: result.idadeMeses,
+                sexo:
+                  (pacientes.find((p: any) => p.id === form.patient_id) as any)?.sexo ||
+                  (pacientes.find((p: any) => p.id === form.patient_id) as any)?.custom_data?.sexo ||
+                  "",
                 competencia: result.competencia,
                 motivos: result.motivos,
                 justificativa: String(sigtapJustificationByCode[codigo] || '').trim(),
