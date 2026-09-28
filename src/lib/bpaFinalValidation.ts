@@ -44,6 +44,13 @@ export interface BpaValidacaoContexto {
   municipioPaciente: string;
   sexoPaciente: string;
   idadePaciente: number | null;
+  /** Idade exata em meses na data do atendimento (SIGTAP armazena faixa etária em meses). */
+  idadePacienteMeses?: number | null;
+  /** Quantidade produzida nesta linha. */
+  quantidade?: number | null;
+  /** Serviço/classificação informados na linha, quando existentes. */
+  servico?: string;
+  classificacao?: string;
   /** Códigos ativos existentes em sigtap_procedimentos (quando carregado). */
   codigosConhecidos?: Set<string>;
   /** Tabela oficial do mês, incluindo instrumento e ocupações vinculadas. */
@@ -114,6 +121,10 @@ export function validarProcedimentoBpaI(
   const municipio = digits(ctx.municipioPaciente);
   const sexo = String(ctx.sexoPaciente || "").trim().toUpperCase();
   const idade = ctx.idadePaciente;
+  const idadeMeses = ctx.idadePacienteMeses;
+  const quantidade = ctx.quantidade;
+  const servico = digits(ctx.servico);
+  const classificacao = digits(ctx.classificacao);
 
   // 1) Código SIGTAP
   if (!codigo) {
@@ -178,8 +189,26 @@ export function validarProcedimentoBpaI(
     }
   }
 
-  // 8) Idade / faixa etária, quando houver restrição
-  if (restricao && (restricao.idadeMin != null || restricao.idadeMax != null)) {
+  // 8) Idade / faixa etária.
+  // O SIGTAP oficial guarda VL_IDADE_MINIMA/VL_IDADE_MAXIMA em MESES.
+  if (oficial && (oficial.idadeMinimaMeses != null || oficial.idadeMaximaMeses != null)) {
+    if (idadeMeses == null || Number.isNaN(idadeMeses)) {
+      rejeicoes.push(`Procedimento ${codigo} tem restrição etária no SIGTAP e a idade em meses não pôde ser apurada`);
+    } else {
+      if (oficial.idadeMinimaMeses != null && idadeMeses < oficial.idadeMinimaMeses) {
+        rejeicoes.push(
+          `Idade incompatível com o procedimento: ${codigo}, mínimo ${oficial.idadeMinimaMeses} meses, paciente ${idadeMeses} meses, competência ${competencia}`,
+        );
+      }
+      if (oficial.idadeMaximaMeses != null && idadeMeses > oficial.idadeMaximaMeses) {
+        rejeicoes.push(
+          `Idade incompatível com o procedimento: ${codigo}, máximo ${oficial.idadeMaximaMeses} meses, paciente ${idadeMeses} meses, competência ${competencia}`,
+        );
+      }
+    }
+  } else if (restricao && (restricao.idadeMin != null || restricao.idadeMax != null)) {
+    // Compatibilidade com regras locais antigas somente quando a tabela oficial
+    // não define faixa etária.
     if (idade == null || Number.isNaN(idade)) {
       rejeicoes.push(`Procedimento ${codigo} tem restrição de faixa etária e a idade do paciente não foi apurada`);
     } else {
@@ -190,6 +219,33 @@ export function validarProcedimentoBpaI(
         rejeicoes.push(`Procedimento ${codigo} exige idade máxima ${restricao.idadeMax} (paciente ${idade})`);
       }
     }
+  }
+
+  // 8.1) Quantidade máxima oficial do procedimento.
+  if (
+    oficial?.quantidadeMaxima != null &&
+    quantidade != null &&
+    Number.isFinite(quantidade) &&
+    quantidade > oficial.quantidadeMaxima
+  ) {
+    rejeicoes.push(
+      `Quantidade incompatível com o procedimento: ${codigo}, máximo ${oficial.quantidadeMaxima}, informado ${quantidade}, competência ${competencia}`,
+    );
+  }
+
+  // 8.2) Serviço/classificação: quando a linha informar os dois campos,
+  // valida o par contra a relação oficial. Ausência não é inventada nem
+  // bloqueada automaticamente, pois a obrigatoriedade depende do contexto CNES.
+  if (
+    oficial &&
+    oficial.servicosClassificacoes.size > 0 &&
+    servico.length === 3 &&
+    classificacao.length === 3 &&
+    !oficial.servicosClassificacoes.has(`${servico}|${classificacao}`)
+  ) {
+    rejeicoes.push(
+      `Serviço/classificação incompatível com o procedimento: ${codigo}, ${servico}/${classificacao}, competência ${competencia}`,
+    );
   }
 
   // 9) Instrumento de registro
@@ -240,11 +296,13 @@ export function validarProcedimentoBpaI(
   }
 
   // 11) CID, quando exigido ou aplicável
-  const cidsDoProc = ctx.cidsVinculados?.get(codigo);
+  const cidsDoProc = oficial?.cids?.size ? oficial.cids : ctx.cidsVinculados?.get(codigo);
   if (restricao?.cidObrigatorio && !cid) {
     rejeicoes.push(`Procedimento ${codigo} exige CID e a linha está sem CID`);
   } else if (cid && cidsDoProc && cidsDoProc.size > 0 && !cidsDoProc.has(cid)) {
-    avisos.push(`CID ${cid} não consta entre os CIDs vinculados ao procedimento ${codigo}`);
+    rejeicoes.push(
+      `CID incompatível com o procedimento: ${codigo}, CID ${cid}, competência ${competencia}`,
+    );
   }
 
   const valido = rejeicoes.length === 0;
