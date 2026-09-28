@@ -13,7 +13,9 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), mode === "development" && componentTagger(), mcpPlugin()].filter(Boolean),
+  // The MCP bundler in mcp-js 2.3 treats Windows absolute paths as npm imports.
+  // Keep the committed Deno bundle intact on Windows; Linux builds regenerate it.
+  plugins: [react(), mode === "development" && componentTagger(), process.platform !== "win32" && mcpPlugin()].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
