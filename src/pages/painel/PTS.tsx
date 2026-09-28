@@ -1657,6 +1657,42 @@ const PTS: React.FC = () => {
                         </div>
                       )}
 
+                      {selectedProcCodigo && sigtapValidationByCode[selectedProcCodigo] && (
+                        <div
+                          className={cn(
+                            "rounded-md border p-2 text-xs",
+                            sigtapValidationByCode[selectedProcCodigo].status === "compatível" && "border-emerald-300 bg-emerald-50 text-emerald-800",
+                            sigtapValidationByCode[selectedProcCodigo].status === "incompatível" && "border-red-300 bg-red-50 text-red-800",
+                            sigtapValidationByCode[selectedProcCodigo].status === "indeterminado" && "border-amber-300 bg-amber-50 text-amber-800",
+                          )}
+                        >
+                          {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && (
+                            <div className="font-medium">Procedimento compatível com SIGTAP.</div>
+                          )}
+                          {sigtapValidationByCode[selectedProcCodigo].status === "incompatível" && (
+                            <>
+                              <div className="font-semibold">Procedimento incompatível com SIGTAP.</div>
+                              <div className="mt-1">
+                                {sigtapValidationByCode[selectedProcCodigo].motivos.map((motivo, idx) => (
+                                  <div key={idx}>• {motivo}</div>
+                                ))}
+                              </div>
+                              <div className="mt-1 font-medium">
+                                Pode permanecer clinicamente mediante justificativa, mas não será incluído no BPA-I enquanto incompatível.
+                              </div>
+                            </>
+                          )}
+                          {sigtapValidationByCode[selectedProcCodigo].status === "indeterminado" && (
+                            <>
+                              <div className="font-medium">Não foi possível validar este procedimento.</div>
+                              <div className="mt-1">
+                                {(sigtapValidationByCode[selectedProcCodigo].avisos || []).join(" ") || "Verifique CBO, nascimento, sexo e competência SIGTAP."}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       {sigtapProcs.length === 0 && !loadingProcs && (
                         <p className="text-xs text-muted-foreground">
                           {form.especialidades_envolvidas.length === 0
@@ -1668,16 +1704,62 @@ const PTS: React.FC = () => {
                       {sigtapSelecionados.length > 0 && (
                         <div className="space-y-1">
                           <Label className="text-xs text-muted-foreground">Procedimentos adicionados ({sigtapSelecionados.length}):</Label>
-                          {sigtapSelecionados.map(s => (
-                            <div key={s.procedimento_codigo} className="flex items-center gap-2 bg-background rounded px-2 py-1 text-xs">
-                              <Badge variant="secondary" className="font-mono text-xs shrink-0">{s.procedimento_codigo}</Badge>
-                              <span className="flex-1 truncate">{s.procedimento_nome}</span>
-                              <span className="text-muted-foreground shrink-0">{getSpecLabelForSigtap(s.especialidade)}</span>
-                              <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => removeSigtap(s.procedimento_codigo)}>
-                                <Trash2 className="w-3 h-3 text-destructive" />
-                              </Button>
-                            </div>
-                          ))}
+                          {sigtapSelecionados.map(s => {
+                            const status = sigtapValidationByCode[s.procedimento_codigo];
+                            return (
+                              <div key={s.procedimento_codigo} className="bg-background rounded px-2 py-2 text-xs border space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="font-mono text-xs shrink-0">{s.procedimento_codigo}</Badge>
+                                  <span className="flex-1 truncate">{s.procedimento_nome}</span>
+                                  <span className="text-muted-foreground shrink-0">{getSpecLabelForSigtap(s.especialidade)}</span>
+                                  {status?.status === "compatível" && (
+                                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">Compatível</Badge>
+                                  )}
+                                  {status?.status === "incompatível" && (
+                                    <Badge variant="destructive" className="text-[10px]">Incompatível</Badge>
+                                  )}
+                                  {status?.status === "indeterminado" && (
+                                    <Badge variant="outline" className="border-amber-400 text-amber-700 text-[10px]">Não validado</Badge>
+                                  )}
+                                  <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => removeSigtap(s.procedimento_codigo)}>
+                                    <Trash2 className="w-3 h-3 text-destructive" />
+                                  </Button>
+                                </div>
+
+                                {status?.status === "incompatível" && (
+                                  <div className="rounded border border-red-200 bg-red-50 p-2 text-red-800 space-y-2">
+                                    <div className="space-y-0.5">
+                                      {status.motivos.map((motivo, idx) => <div key={idx}>• {motivo}</div>)}
+                                    </div>
+                                    <div className="font-medium">
+                                      Este procedimento pode permanecer no PTS mediante justificativa, mas não será incluído no BPA-I enquanto incompatível.
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] uppercase text-red-800">Justificativa clínica obrigatória</Label>
+                                      <Textarea
+                                        rows={2}
+                                        value={sigtapJustificationByCode[s.procedimento_codigo] || ""}
+                                        onChange={(e) =>
+                                          setSigtapJustificationByCode((prev) => ({
+                                            ...prev,
+                                            [s.procedimento_codigo]: e.target.value,
+                                          }))
+                                        }
+                                        placeholder="Justifique a manutenção clínica deste procedimento..."
+                                        className="mt-1 bg-background text-foreground"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {status?.status === "indeterminado" && (
+                                  <div className="rounded border border-amber-200 bg-amber-50 p-2 text-amber-800">
+                                    {(status.avisos || []).join(" ") || "Não foi possível validar CBO, faixa etária ou competência SIGTAP."}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
