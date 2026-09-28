@@ -22,7 +22,13 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
-import { cn } from '@/lib/utils';
+import { cn, todayLocalStr } from '@/lib/utils';
+import {
+  competenciaFromDate,
+  resolveProfessionalCbo,
+  validarCompatibilidadeClinicaSigtap,
+  type SigtapClinicalValidationResult,
+} from '@/lib/sigtapClinicalValidation';
 import { 
   loadDocumentConfig, 
   buildDocumentShell, 
@@ -202,6 +208,8 @@ const PTS: React.FC = () => {
   const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [sigtapSelecionados, setSigtapSelecionados] = useState<SelectedSigtap[]>([]);
   const [cidsSelecionados, setCidsSelecionados] = useState<SelectedCid[]>([]);
+  const [sigtapValidationByCode, setSigtapValidationByCode] = useState<Record<string, SigtapClinicalValidationResult>>({});
+  const [sigtapJustificationByCode, setSigtapJustificationByCode] = useState<Record<string, string>>({});
 
   // Structured metas state
   const [metas, setMetas] = useState<PTSMeta[]>([]);
@@ -262,6 +270,81 @@ const PTS: React.FC = () => {
   };
 
   const [form, setForm] = useState(emptyForm);
+
+  const resolvePtsProcedureProfessional = useCallback((especialidade?: string) => {
+    const esp = normalize(especialidade || "");
+    const responsaveisMeta = metas
+      .filter((meta) => meta.responsavel && (!esp || normalize(meta.especialidade || "") === esp))
+      .map((meta) => normalize(meta.responsavel || ""))
+      .filter(Boolean);
+    for (const nome of responsaveisMeta) {
+      const profissional = funcionarios.find((f: any) => normalize(f.nome || "") === nome);
+      if (profissional) return profissional;
+    }
+    const overallId = editingPts?.professional_id || user?.id || "";
+    return (
+      funcionarios.find((f: any) => f.id === overallId) ||
+      (user?.id === overallId ? user : null)
+    );
+  }, [editingPts?.professional_id, funcionarios, metas, normalize, user]);
+
+  const validatePtsProcedure = useCallback(async (
+    codigo: string,
+    especialidade?: string,
+  ): Promise<SigtapClinicalValidationResult> => {
+    const paciente = pacientes.find((p: any) => p.id === form.patient_id) as any;
+    const profissional = resolvePtsProcedureProfessional(especialidade);
+    const cbo = resolveProfessionalCbo(profissional);
+    const dataRef = todayLocalStr();
+    const nascimento =
+      paciente?.data_nascimento ||
+      paciente?.dataNascimento ||
+      paciente?.custom_data?.data_nascimento ||
+      paciente?.custom_data?.dataNascimento ||
+      "";
+    const sexo = paciente?.sexo || paciente?.custom_data?.sexo || "";
+    return validarCompatibilidadeClinicaSigtap({
+      procedimento: codigo,
+      competencia: competenciaFromDate(dataRef),
+      cbo,
+      dataNascimento: nascimento,
+      dataAtendimento: dataRef,
+      sexo,
+    });
+  }, [form.patient_id, pacientes, resolvePtsProcedureProfessional]);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const selectedPreview = selectedProcCodigo
+      ? sigtapProcs.find((p) => p.codigo === selectedProcCodigo)
+      : null;
+    const items = [
+      ...sigtapSelecionados,
+      ...(selectedPreview && !sigtapSelecionados.some((s) => s.procedimento_codigo === selectedPreview.codigo)
+        ? [{
+            procedimento_codigo: selectedPreview.codigo,
+            procedimento_nome: selectedPreview.nome,
+            especialidade: selectedPreview.especialidade,
+          }]
+        : []),
+    ];
+    if (items.length === 0) {
+      setSigtapValidationByCode({});
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      items.map(async (item) => [
+        item.procedimento_codigo,
+        await validatePtsProcedure(item.procedimento_codigo, item.especialidade),
+      ] as const),
+    ).then((entries) => {
+      if (!cancelled) setSigtapValidationByCode(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dialogOpen, selectedProcCodigo, sigtapProcs, sigtapSelecionados, validatePtsProcedure]);
 
   const loadSigtapProcsForSpecialties = useCallback(async (specialties: string[]) => {
     if (!user) return;
@@ -621,6 +704,8 @@ const PTS: React.FC = () => {
       procedimento_nome: proc.nome,
       especialidade: proc.especialidade,
     };
+    const compatibilidade = await validatePtsProcedure(proc.codigo, proc.especialidade);
+    setSigtapValidationByCode((prev) => ({ ...prev, [proc.codigo]: compatibilidade }));
     setSigtapSelecionados(prev => [...prev, newItem]);
     setSelectedProcCodigo('');
     if (proc.especialidade === 'fonoaudiologia') {
@@ -637,8 +722,14 @@ const PTS: React.FC = () => {
           return [...prev, ...toAdd];
         });
       }
-      await saveImmediateFono(newItem, cidsToAdd);
-      toast.success('Procedimento e CIDs de Fonoaudiologia vinculados.');
+      if (compatibilidade.status === 'compatível') {
+        await saveImmediateFono(newItem, cidsToAdd);
+        toast.success('Procedimento e CIDs de Fonoaudiologia vinculados.');
+      } else if (compatibilidade.status === 'incompatível') {
+        toast.warning('Procedimento mantido para avaliação clínica. Informe a justificativa antes de salvar o PTS.');
+      } else {
+        toast.info('Procedimento adicionado, mas a compatibilidade SIGTAP não pôde ser confirmada agora.');
+      }
     } else {
       toast.success('Procedimento SIGTAP adicionado.');
     }
@@ -686,6 +777,7 @@ const PTS: React.FC = () => {
   const resetSigtapState = () => {
     setSelectedProcCodigo(''); setCidSearch(''); setSigtapProcs([]);
     setSigtapSelecionados([]); setCidsSelecionados([]); setValidCids([]); setCidWarning(false);
+    setSigtapValidationByCode({}); setSigtapJustificationByCode({});
   };
 
   const loadPtsSigtapCid = useCallback(async (ptsId: string) => {
@@ -831,6 +923,32 @@ const PTS: React.FC = () => {
       toast.error('Preencha paciente, diagnóstico funcional e objetivos.');
       return;
     }
+
+    // Revalida todos os procedimentos com o profissional responsável aplicável
+    // antes do salvamento. Incompatibilidade clínica pode permanecer no PTS,
+    // mas exige justificativa; a exportação BPA-I continuará filtrando a linha.
+    const validationEntries = await Promise.all(
+      finalSigtap.map(async (item) => [
+        item.procedimento_codigo,
+        await validatePtsProcedure(item.procedimento_codigo, item.especialidade),
+      ] as const),
+    );
+    const validationMap = Object.fromEntries(validationEntries) as Record<string, SigtapClinicalValidationResult>;
+    setSigtapValidationByCode(validationMap);
+    const semJustificativa = validationEntries.filter(
+      ([codigo, result]) =>
+        result.status === 'incompatível' &&
+        !String(sigtapJustificationByCode[codigo] || '').trim(),
+    );
+    if (semJustificativa.length > 0) {
+      const [codigo, result] = semJustificativa[0];
+      setActiveTab('sigtap');
+      toast.error(
+        `O procedimento ${codigo} está incompatível com o SIGTAP e precisa de justificativa clínica antes de salvar: ${result.motivos.join(' ')}`,
+      );
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: any = {
@@ -932,6 +1050,25 @@ const PTS: React.FC = () => {
           especialidades: form.especialidades_envolvidas,
           cid_count: finalCids.length,
           metas_count: metas.length,
+          sigtap_excecoes: validationEntries
+            .filter(([, result]) => result.status === 'incompatível')
+            .map(([codigo, result]) => {
+              const proc = finalSigtap.find((item) => item.procedimento_codigo === codigo);
+              const profissional = resolvePtsProcedureProfessional(proc?.especialidade);
+              return {
+                procedimento: codigo,
+                cbo: result.cbo,
+                profissional_responsavel_id: profissional?.id || editingPts?.professional_id || user?.id || '',
+                profissional_responsavel_nome: profissional?.nome || user?.nome || '',
+                idade_meses: result.idadeMeses,
+                competencia: result.competencia,
+                motivos: result.motivos,
+                justificativa: String(sigtapJustificationByCode[codigo] || '').trim(),
+                usuario_confirmou_id: user?.id || '',
+                usuario_confirmou_nome: user?.nome || '',
+                registrado_em: new Date().toISOString(),
+              };
+            }),
         },
       });
 
