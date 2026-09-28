@@ -2,7 +2,7 @@ name: External quota PostgreSQL integration
 
 on:
   push:
-    branches: [codex/external-quotas-atomic]
+    branches: [main, codex/external-quotas-atomic]
   workflow_dispatch:
 
 permissions:
