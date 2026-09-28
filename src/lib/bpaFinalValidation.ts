@@ -15,6 +15,7 @@
  */
 
 import { isValidCnsAlgo } from "./bpaNormalization";
+import type { BpaSigtapCatalog } from "./bpaSigtapCatalog";
 
 const digits = (v: any) => String(v ?? "").replace(/\D/g, "");
 
@@ -45,6 +46,8 @@ export interface BpaValidacaoContexto {
   idadePaciente: number | null;
   /** Códigos ativos existentes em sigtap_procedimentos (quando carregado). */
   codigosConhecidos?: Set<string>;
+  /** Tabela oficial do mês, incluindo instrumento e ocupações vinculadas. */
+  catalogoOficial?: BpaSigtapCatalog;
   /** codigo SIGTAP → CIDs vinculados (sigtap_procedimento_cids). */
   cidsVinculados?: Map<string, Set<string>>;
   /** Restrições declaradas pelo Master (sexo/idade/CID/instrumento). */
@@ -119,7 +122,7 @@ export function validarProcedimentoBpaI(
     rejeicoes.push(`Código SIGTAP com ${codigo.length} dígitos (o BPA-I exige 10): ${codigo}`);
   } else if (/^0+$/.test(codigo)) {
     rejeicoes.push("Código SIGTAP zerado");
-  } else if (ctx.codigosConhecidos && ctx.codigosConhecidos.size > 0 && !ctx.codigosConhecidos.has(codigo)) {
+  } else if (!ctx.catalogoOficial && ctx.codigosConhecidos && ctx.codigosConhecidos.size > 0 && !ctx.codigosConhecidos.has(codigo)) {
     rejeicoes.push(`Código ${codigo} não encontrado na tabela SIGTAP ativa do sistema`);
   }
 
@@ -157,6 +160,13 @@ export function validarProcedimentoBpaI(
   }
 
   const restricao = (ctx.restricoes || {})[codigo];
+  const oficial = ctx.catalogoOficial?.get(codigo);
+  if (ctx.catalogoOficial && !oficial && codigo.length === 10) {
+    rejeicoes.push(`Procedimento ${codigo} não vigente no SIGTAP da competência ${competencia}`);
+  }
+  if (oficial && ["M", "F"].includes(oficial.sexo) && sexo !== oficial.sexo) {
+    rejeicoes.push(`Procedimento ${codigo} restrito ao sexo ${oficial.sexo} no SIGTAP da competência ${competencia}`);
+  }
 
   // 7) Sexo, quando houver restrição
   if (restricao?.sexo) {
@@ -183,7 +193,11 @@ export function validarProcedimentoBpaI(
   }
 
   // 9) Instrumento de registro
-  if (restricao?.instrumento) {
+  if (ctx.catalogoOficial) {
+    if (oficial && !oficial.instrumentos.has("02")) {
+      rejeicoes.push(`Instrumento incompatível com BPA-I: procedimento ${codigo}, instrumentos SIGTAP ${[...oficial.instrumentos].join(", ") || "nenhum"}, competência ${competencia}`);
+    }
+  } else if (restricao?.instrumento) {
     const inst = restricao.instrumento.toUpperCase().replace(/[\s-]/g, "");
     if (!inst.includes("BPAI") && !inst.includes("BPAINDIVIDUALIZADO")) {
       rejeicoes.push(`Instrumento de registro do procedimento ${codigo} é ${restricao.instrumento} — não é BPA-I`);
@@ -202,6 +216,9 @@ export function validarProcedimentoBpaI(
   const bloqueadoExplicito = bloqueados.some((r) => combina(codigo, r));
   const permitidoExplicito = permitidos.some((r) => combina(codigo, r));
 
+  if (oficial && !oficial.cbos.has(cbo)) {
+    rejeicoes.push(`CBO incompatível com o procedimento: ${codigo}, CBO ${cbo}, competência ${competencia}`);
+  }
   if (bloqueadoExplicito) {
     rejeicoes.push(`Procedimento ${codigo} bloqueado para o CBO ${cbo} na configuração do Master`);
   } else if (permitidoExplicito || ctx.liberarTodos) {
@@ -212,7 +229,7 @@ export function validarProcedimentoBpaI(
     rejeicoes.push(
       `Procedimento ${codigo} não consta na lista de procedimentos liberados para o CBO ${cbo} na competência ${competencia}`,
     );
-  } else if (
+  } else if (!ctx.catalogoOficial &&
     cbo.length === 6 &&
     cboEhNivelTecnico(cbo) &&
     SUBGRUPOS_NIVEL_SUPERIOR.some((s) => codigo.startsWith(s))

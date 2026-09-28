@@ -25,12 +25,16 @@ import {
   type CepInfo,
 } from "@/lib/bpaNormalization";
 import { validarListaProcedimentosBpaI } from "@/lib/bpaFinalValidation";
+import { loadBpaSigtapCatalog } from "@/lib/bpaSigtapCatalog";
+import { isBpaAttendanceInCompetence } from "@/lib/bpaCompetencia";
 import {
   BPA_HEADER_LENGTH,
   BPA_I_RECORD_LENGTH,
   buildHeaderBpa,
   buildRegistro03,
   auditRegistro03Serialization,
+  auditBpaTxtFinal,
+  readRegistro03Field,
   calcularCampoControleBpa,
   type BpaRegistroFinal,
   type BpaLayoutIssue,
@@ -1204,6 +1208,8 @@ const BpaExportar: React.FC = () => {
       const endDate =
         formData.data_especifica ||
         new Date(parseInt(ano), parseInt(mes), 0).toISOString().split("T")[0];
+      // Sem metadados oficiais desta competência, não há como atestar BPA-I/CBO.
+      const catalogoOficial = await loadBpaSigtapCatalog(competencia);
 
       const prontuariosOriginais: any[] = [];
       const PAGE = 1000;
@@ -1259,27 +1265,9 @@ const BpaExportar: React.FC = () => {
       }
 
       // === Base da validação final BPA-I (SIGTAP × CBO × competência) ===
-      // Catálogo SIGTAP ativo do sistema: usado apenas para reprovar códigos
-      // inexistentes/inativos. Se a carga falhar, a checagem é ignorada.
-      const codigosSigtapAtivos = new Set<string>();
-      try {
-        const catalogo = await fetchAllRowsBpa<any>(() =>
-          (supabase as any)
-            .from("sigtap_procedimentos")
-            .select("codigo")
-            .eq("ativo", true)
-            .order("codigo", { ascending: true }),
-        );
-        (catalogo || []).forEach((r: any) => {
-          const c = String(r.codigo || "").replace(/\D/g, "");
-          if (c) codigosSigtapAtivos.add(c);
-        });
-      } catch {
-        /* sem catálogo → validação de existência do código é ignorada */
-      }
       const validacaoCtxBase = {
         competencia: formData.competencia,
-        codigosConhecidos: codigosSigtapAtivos,
+        catalogoOficial,
         restricoes: (bpaConfigValue.sigtap_restricoes || {}) as Record<string, any>,
         permitidosPorCbo: (bpaConfigValue.sigtap_permitidos_por_cbo || {}) as Record<string, string[]>,
         bloqueadosPorCbo: (bpaConfigValue.sigtap_bloqueados_por_cbo || {}) as Record<string, string[]>,
@@ -1961,6 +1949,18 @@ const BpaExportar: React.FC = () => {
           agendamento_id: pront.agendamento_id || null,
           origem: pront.tipo_registro === "agenda_sem_prontuario" ? "AGENDA_SEM_PRONTUARIO" : undefined,
         };
+
+        if (!isBpaAttendanceInCompetence(pront.data_atendimento, competencia, formData.data_especifica)) {
+          const motivo = "Atendimento fora da competência selecionada";
+          resumoIntegridade.rejeitados.push({
+            paciente: ident, data: String(pront.data_atendimento || ""), codigo: "—",
+            cbo: String(itemDetail.cbo || ""), motivo,
+          });
+          warnings.push(`${ident}: ${motivo} (${String(pront.data_atendimento || "sem data")}).`);
+          details.rejectedProc.push({ ...itemDetail, pendencia: motivo, valor_atual: String(pront.data_atendimento || "sem data"), motivo });
+          stats.rejectedProc++;
+          return;
+        }
 
         // Lista mestre: TODOS os registros da competência (com ou sem pendência).
         // Permite ao usuário abrir o modal e adicionar Procedimentos Aditivos
@@ -2880,6 +2880,20 @@ const BpaExportar: React.FC = () => {
       total.set(headerBytes, 0);
       total.set(CRLF_BYTES, headerBytes.length);
       total.set(prodBytes, headerBytes.length + CRLF_BYTES.length);
+
+      const serialized = new TextDecoder("iso-8859-1").decode(total);
+      const auditErrors = auditBpaTxtFinal(serialized, competencia);
+      linhasProducao.forEach((line, index) => {
+        const codigo = readRegistro03Field(line, "procedimento");
+        const cboLinha = readRegistro03Field(line, "cbo");
+        const meta = catalogoOficial.get(codigo);
+        if (!meta) auditErrors.push(`Registro 03 ${index + 1}: procedimento não vigente no SIGTAP ${competencia}`);
+        else {
+          if (!meta.instrumentos.has("02")) auditErrors.push(`Registro 03 ${index + 1}: instrumento incompatível com BPA-I`);
+          if (!meta.cbos.has(cboLinha)) auditErrors.push(`Registro 03 ${index + 1}: CBO incompatível com o procedimento`);
+        }
+      });
+      if (auditErrors.length) throw new Error(`TXT bloqueado pela auditoria final: ${auditErrors.slice(0, 5).join(" | ")}`);
 
       const blob = new Blob([total], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
@@ -4312,6 +4326,15 @@ const BpaExportar: React.FC = () => {
                       </div>
                       <div>
                         Rejeitados: <b className="text-destructive">{results.resumo.rejeitados.length}</b>
+                      </div>
+                      <div>
+                        Fora da competência: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Atendimento fora da competência")).length}</b>
+                      </div>
+                      <div>
+                        Instrumento incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Instrumento incompatível")).length}</b>
+                      </div>
+                      <div>
+                        CBO incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO incompatível")).length}</b>
                       </div>
                     </div>
 

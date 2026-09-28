@@ -317,3 +317,33 @@ export function calcularCampoControleBpa(
   );
   return String((soma % 1111) + 1111).padStart(4, "0").slice(-4);
 }
+
+/** Audita novamente o TXT efetivamente serializado, antes de liberar o download. */
+export function auditBpaTxtFinal(content: string, competencia: string): string[] {
+  const errors: string[] = [];
+  if (!content.endsWith("\r\n") || content.replace(/\r\n/g, "").includes("\n")) {
+    errors.push("Quebras de linha diferentes de CRLF");
+  }
+  const lines = content.split("\r\n").filter(Boolean);
+  const header = lines[0] || "";
+  const records = lines.slice(1);
+  if (header.length !== BPA_HEADER_LENGTH || header.slice(0, 7) !== "01#BPA#") errors.push("Cabeçalho BPA inválido");
+  if (header.slice(7, 13) !== competencia) errors.push("Competência do cabeçalho divergente");
+  if (header.slice(13, 19) !== String(records.length).padStart(6, "0")) errors.push("Total de Registros 03 divergente");
+  if (header.slice(19, 25) !== String(Math.max(1, Math.ceil(records.length / 20))).padStart(6, "0")) errors.push("Total de folhas divergente");
+  const items: Array<{ procedimento: string; quantidade: string }> = [];
+  records.forEach((line, index) => {
+    const label = `Registro 03 ${index + 1}`;
+    if (line.length !== BPA_I_RECORD_LENGTH || line.slice(0, 2) !== "03") errors.push(`${label}: tamanho ou tipo inválido`);
+    if (readRegistro03Field(line, "competencia") !== competencia) errors.push(`${label}: competência divergente`);
+    const date = readRegistro03Field(line, "dataAtendimento");
+    if (!/^\d{8}$/.test(date) || date.slice(0, 6) !== competencia) errors.push(`${label}: Atendimento fora da competência selecionada`);
+    if (readRegistro03Field(line, "folha") !== String(Math.floor(index / 20) + 1).padStart(3, "0") ||
+        readRegistro03Field(line, "sequencia") !== String((index % 20) + 1).padStart(2, "0")) {
+      errors.push(`${label}: folha ou sequência divergente`);
+    }
+    items.push({ procedimento: readRegistro03Field(line, "procedimento"), quantidade: readRegistro03Field(line, "quantidade") });
+  });
+  if (header.slice(25, 29) !== calcularCampoControleBpa(items)) errors.push("Campo de controle divergente");
+  return errors;
+}
