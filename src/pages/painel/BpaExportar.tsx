@@ -2907,10 +2907,57 @@ const BpaExportar: React.FC = () => {
         const codigo = readRegistro03Field(line, "procedimento");
         const cboLinha = readRegistro03Field(line, "cbo");
         const meta = catalogoOficial.get(codigo);
-        if (!meta) auditErrors.push(`Registro 03 ${index + 1}: procedimento não vigente no SIGTAP ${competencia}`);
-        else {
-          if (!meta.instrumentos.has("02")) auditErrors.push(`Registro 03 ${index + 1}: instrumento incompatível com BPA-I`);
-          if (!meta.cbos.has(cboLinha)) auditErrors.push(`Registro 03 ${index + 1}: CBO incompatível com o procedimento`);
+        const label = `Registro 03 ${index + 1}`;
+        if (!meta) {
+          auditErrors.push(`${label}: procedimento não vigente no SIGTAP ${competencia}`);
+          return;
+        }
+
+        if (!meta.instrumentos.has("02")) auditErrors.push(`${label}: instrumento incompatível com BPA-I`);
+        if (!meta.cbos.has(cboLinha)) auditErrors.push(`${label}: CBO incompatível com o procedimento`);
+
+        const nasc = readRegistro03Field(line, "dataNascimento");
+        const atend = readRegistro03Field(line, "dataAtendimento");
+        if (/^\d{8}$/.test(nasc) && /^\d{8}$/.test(atend)) {
+          const ny = Number(nasc.slice(0, 4));
+          const nm = Number(nasc.slice(4, 6));
+          const nd = Number(nasc.slice(6, 8));
+          const ay = Number(atend.slice(0, 4));
+          const am = Number(atend.slice(4, 6));
+          const ad = Number(atend.slice(6, 8));
+          let idadeMeses = (ay - ny) * 12 + (am - nm);
+          if (ad < nd) idadeMeses--;
+          if (meta.idadeMinimaMeses != null && idadeMeses < meta.idadeMinimaMeses) {
+            auditErrors.push(`${label}: idade abaixo do mínimo SIGTAP (${idadeMeses} < ${meta.idadeMinimaMeses} meses)`);
+          }
+          if (meta.idadeMaximaMeses != null && idadeMeses > meta.idadeMaximaMeses) {
+            auditErrors.push(`${label}: idade acima do máximo SIGTAP (${idadeMeses} > ${meta.idadeMaximaMeses} meses)`);
+          }
+        }
+
+        const quantidadeLinha = Number(readRegistro03Field(line, "quantidade"));
+        if (
+          meta.quantidadeMaxima != null &&
+          Number.isFinite(quantidadeLinha) &&
+          quantidadeLinha > meta.quantidadeMaxima
+        ) {
+          auditErrors.push(`${label}: quantidade acima do máximo SIGTAP (${quantidadeLinha} > ${meta.quantidadeMaxima})`);
+        }
+
+        const servicoLinha = readRegistro03Field(line, "servico").trim();
+        const classificacaoLinha = readRegistro03Field(line, "classificacao").trim();
+        if (
+          meta.servicosClassificacoes.size > 0 &&
+          /^\d{3}$/.test(servicoLinha) &&
+          /^\d{3}$/.test(classificacaoLinha) &&
+          !meta.servicosClassificacoes.has(`${servicoLinha}|${classificacaoLinha}`)
+        ) {
+          auditErrors.push(`${label}: serviço/classificação incompatível com o procedimento`);
+        }
+
+        const cidLinha = readRegistro03Field(line, "cid").trim().toUpperCase();
+        if (cidLinha && meta.cids.size > 0 && !meta.cids.has(cidLinha)) {
+          auditErrors.push(`${label}: CID incompatível com o procedimento`);
         }
       });
       if (auditErrors.length) throw new Error(`TXT bloqueado pela auditoria final: ${auditErrors.slice(0, 5).join(" | ")}`);
@@ -4355,6 +4402,18 @@ const BpaExportar: React.FC = () => {
                       </div>
                       <div>
                         CBO incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO incompatível")).length}</b>
+                      </div>
+                      <div>
+                        Idade incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Idade incompatível")).length}</b>
+                      </div>
+                      <div>
+                        Quantidade incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Quantidade incompatível")).length}</b>
+                      </div>
+                      <div>
+                        Serviço/classificação incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Serviço/classificação incompatível")).length}</b>
+                      </div>
+                      <div>
+                        CID incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CID incompatível")).length}</b>
                       </div>
                     </div>
 
