@@ -162,6 +162,29 @@ SELECT public.expect_failure(
   'Vínculo externo ausente');
 RESET ROLE;
 
+-- In turno mode only the configured start exists; another overlapping grid may
+-- independently provide a valid slot.
+UPDATE public.disponibilidades SET hora_inicio = '14:00', hora_fim = '17:00',
+  vagas_por_hora = 0, vagas_por_dia = 2 WHERE id = 'd1';
+UPDATE public.quotas_externas SET turno = 'integral', vagas_total = 3
+  WHERE id = '77777777-7777-4777-8777-777777777777';
+SET ROLE authenticated;
+SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+SELECT public.create_external_appointment(
+  '77777777-7777-4777-8777-777777777777', 'p1', current_date + 9, '14:00');
+SELECT public.expect_failure(format(
+  'SELECT public.create_external_appointment(''77777777-7777-4777-8777-777777777777'', ''p2'', %L::date, ''14:30'')',
+  current_date + 9), 'fora da grade');
+RESET ROLE;
+INSERT INTO public.disponibilidades VALUES
+  ('d2', '11111111-1111-4111-8111-111111111111', 'u1', current_date + 1, current_date + 30,
+   ARRAY[0,1,2,3,4,5,6], '15:15', '16:15', 1, 2, 30);
+SET ROLE authenticated;
+SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+SELECT public.create_external_appointment(
+  '77777777-7777-4777-8777-777777777777', 'p2', current_date + 9, '15:15');
+RESET ROLE;
+
 SET ROLE anon;
 SELECT public.expect_failure(format(
   'SELECT public.create_external_appointment(''77777777-7777-4777-8777-777777777777'', ''p5'', %L::date, ''08:30'')',
