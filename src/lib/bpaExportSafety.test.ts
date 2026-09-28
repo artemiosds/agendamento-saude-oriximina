@@ -39,11 +39,22 @@ describe("segurança da exportação BPA-I", () => {
     expect(result.rejeitados[2].rejeicoes.join(" ")).toContain("não vigente");
   });
 
-  it("carrega os três arquivos do ZIP da competência sem gravar no banco", async () => {
+  it("carrega os arquivos oficiais necessários do ZIP da competência sem gravar no banco", async () => {
     const zip = new JSZip();
     zip.file("tb_procedimento.txt", proc("0301100039"));
+    zip.file("tb_procedimento_layout.txt", [
+      "Coluna,Tamanho,Inicio,Fim,Tipo",
+      "CO_PROCEDIMENTO,10,1,10,VARCHAR2",
+      "TP_SEXO,1,262,262,VARCHAR2",
+      "QT_MAXIMA_EXECUCAO,4,263,266,NUMBER",
+      "VL_IDADE_MINIMA,4,275,278,NUMBER",
+      "VL_IDADE_MAXIMA,4,279,282,NUMBER",
+      "DT_COMPETENCIA,6,331,336,CHAR",
+    ].join("\n"));
     zip.file("rl_procedimento_registro.txt", `030110003902${comp}`);
     zip.file("rl_procedimento_ocupacao.txt", `0301100039322205${comp}`);
+    zip.file("rl_procedimento_servico.txt", "");
+    zip.file("rl_procedimento_cid.txt", "");
     const archive = await zip.generateAsync({ type: "arraybuffer" });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       if (String(url).includes("api.github.com")) return { ok: true, json: async () => [
