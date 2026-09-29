@@ -289,6 +289,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   const [status, setStatus] = useState<"rascunho" | "concluido" | "finalizado" | "validado" | "emitido">("rascunho");
 
   const [reportId, setReportId] = useState<string | null>(null);
+  const [reportOwnerId, setReportOwnerId] = useState("");
   const [ptsMetas, setPtsMetas] = useState<MetaPTS[]>([]);
   const [loading, setLoading] = useState(false);
   const activePatientRef = React.useRef("");
@@ -297,6 +298,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
 
   const resetReportTracking = () => {
     setReportId(null);
+    setReportOwnerId("");
     setStatus("rascunho");
     setVersion(1);
     setHistory([]);
@@ -525,6 +527,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
 
       if (existingDraft) {
         setReportId(existingDraft.id);
+        setReportOwnerId(existingDraft.profissional_id || "");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
         
@@ -606,6 +609,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
 
       if (existingDraft) {
         setReportId(existingDraft.id);
+        setReportOwnerId(existingDraft.profissional_id || "");
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
         // Load all data from draft
@@ -732,6 +736,9 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
 
   const userRoleNorm = String(user?.role || "").toLowerCase().trim();
   const canManageOtherContribution = ["master", "gestao", "gestão", "coordenador"].includes(userRoleNorm);
+  const canReopenReport =
+    !!reportId &&
+    (modo === "individual" || reportOwnerId === user?.id || canManageOtherContribution);
 
   const canEditContribution = (section: ProfSection) =>
     !isReportLocked &&
@@ -818,41 +825,94 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
   };
 
   const handleReopen = async () => {
-    if (!reopenReason) { toast.error("Informe o motivo da reabertura"); return; }
-    
-    const newVersion = version + 1;
-    const actionDate = new Date().toISOString();
-    const newHistoryEntry: VersionRecord = {
-      version: newVersion,
-      data: actionDate,
-      user_nome: user?.nome || "Sistema",
-      action: "Reabertura de Relatório",
-      reason: reopenReason
-    };
+    const reason = reopenReason.trim();
+    if (!reason) { toast.error("Informe o motivo da reabertura"); return; }
+    if (!reportId || !pacienteId || !user?.id) {
+      toast.error("Não há relatório carregado para reabrir.");
+      return;
+    }
+    if (!canReopenReport) {
+      toast.error("Você não tem permissão para reabrir este relatório.");
+      return;
+    }
 
-    const updatedHistory = [...history, newHistoryEntry];
-    setStatus("rascunho");
-    setVersion(newVersion);
-    setHistory(updatedHistory);
-    setIsReopening(false);
-    
-    // Save state change
-    await handleSave(modo === "individual" ? "individual" : "multi", true, "rascunho");
+    setLoading(true);
+    try {
+      // Relê o registro persistido para não incorporar alterações feitas
+      // acidentalmente na tela enquanto o documento estava finalizado.
+      const { data: persisted, error: readError } = await supabase
+        .from("prontuarios")
+        .select("id, paciente_id, profissional_id, tipo_registro, observacoes, status")
+        .eq("id", reportId)
+        .eq("paciente_id", pacienteId)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!persisted) throw new Error("Relatório não encontrado ou não pertence ao paciente selecionado.");
 
-    await auditService.log({
-      acao: "reabrir_relatorio_alta",
-      modulo: "prontuario",
-      entidade: "prontuario",
-      entidadeId: reportId || "",
-      pacienteId: pacienteId,
-      pacienteNome: paciente?.nome,
-      profissionalId: user?.id,
-      profissionalNome: user?.nome,
-      detalhes: { motivo: reopenReason, version: newVersion }
-    });
-    
-    setReopenReason("");
-    toast.success("Relatório reaberto para edição");
+      const expectedType = modo === "individual" ? "alta_individual" : "alta_multiprofissional";
+      if (persisted.tipo_registro !== expectedType) {
+        throw new Error("O tipo do relatório carregado não corresponde ao fluxo atual.");
+      }
+
+      const persistedPayload = parseAltaPayload(persisted.observacoes);
+      const currentVersion = Number(persistedPayload.version || version || 1);
+      const newVersion = currentVersion + 1;
+      const actionDate = new Date().toISOString();
+      const newHistoryEntry: VersionRecord = {
+        version: newVersion,
+        data: actionDate,
+        user_nome: user?.nome || "Sistema",
+        action: "Reabertura de Relatório",
+        reason,
+      };
+      const updatedHistory = [...(Array.isArray(persistedPayload.history) ? persistedPayload.history : []), newHistoryEntry];
+      const updatedPayload = {
+        ...persistedPayload,
+        version: newVersion,
+        history: updatedHistory,
+      };
+
+      const { data: reopened, error: updateError } = await supabase
+        .from("prontuarios")
+        .update({
+          status: "rascunho",
+          observacoes: JSON.stringify(updatedPayload),
+          evolucao: modo === "individual"
+            ? `Relatório de Alta Individual — Versão ${newVersion}`
+            : `Relatório de Alta Multiprofissional — Versão ${newVersion}`,
+        })
+        .eq("id", reportId)
+        .eq("paciente_id", pacienteId)
+        .select("id")
+        .maybeSingle();
+      if (updateError) throw updateError;
+      if (!reopened) throw new Error("Nenhum relatório foi reaberto. O vínculo do registro foi preservado.");
+
+      setStatus("rascunho");
+      setVersion(newVersion);
+      setHistory(updatedHistory);
+      setIsReopening(false);
+      setReopenReason("");
+
+      await auditService.log({
+        acao: "reabrir_relatorio_alta",
+        modulo: "prontuario",
+        entidade: "prontuario",
+        entidadeId: reportId,
+        pacienteId,
+        pacienteNome: paciente?.nome,
+        profissionalId: user?.id,
+        profissionalNome: user?.nome,
+        detalhes: { motivo: reason, version: newVersion, status_anterior: persisted.status }
+      });
+
+      toast.success("Relatório reaberto para edição em nova versão.");
+    } catch (error: any) {
+      console.error("[RelatorioAlta] erro ao reabrir:", error);
+      toast.error(error?.message || "Não foi possível reabrir o relatório.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ── PRINT ─── */
@@ -1203,6 +1263,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
     } else {
       toast.success(isDraft ? "Rascunho salvo com sucesso" : "Relatório de alta atualizado");
       setStatus(targetStatus as any);
+      setReportOwnerId(user.id);
       setVersion(newVersion);
       setHistory(updatedHistory);
       
@@ -1354,9 +1415,24 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
               <Badge variant={status === "rascunho" ? "secondary" : "default"} className="px-3 py-1">
                 {status === "rascunho" ? "Rascunho" : "Finalizado"}
               </Badge>
+              {isReportLocked && canReopenReport && (
+                <Button variant="outline" size="sm" onClick={() => setIsReopening(true)} disabled={loading}>
+                  <Unlock className="w-4 h-4 mr-1" /> Reabrir relatório
+                </Button>
+              )}
             </div>
           )}
         </div>
+
+        {isReportLocked && (
+          <Alert className="border-amber-300 bg-amber-50">
+            <Lock className="h-4 w-4 text-amber-700" />
+            <AlertTitle className="text-amber-800">Relatório finalizado — modo somente leitura</AlertTitle>
+            <AlertDescription className="text-amber-700">
+              Para fazer qualquer alteração, utilize “Reabrir relatório”. A reabertura cria nova versão e registra o motivo na auditoria.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Tabs defaultValue="identificacao" className="w-full">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
@@ -1488,7 +1564,40 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
           </TabsContent>
 
           <TabsContent value="alta" className="space-y-4 pt-4">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {isReportLocked && (
+        <Alert className="border-amber-300 bg-amber-50">
+          <Lock className="h-4 w-4 text-amber-700" />
+          <AlertTitle className="text-amber-800">Relatório finalizado — modo somente leitura</AlertTitle>
+          <AlertDescription className="text-amber-700">
+            Reabra o relatório para editar. O sistema criará uma nova versão e registrará o motivo na auditoria.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Dialog open={isReopening} onOpenChange={setIsReopening}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reabertura de Relatório</DialogTitle>
+            <DialogDescription>
+              O documento finalizado será reaberto como nova versão. Os dados persistidos serão preservados e o motivo ficará registrado na auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Label>Motivo da Reabertura *</Label>
+            <Textarea
+              value={reopenReason}
+              onChange={e => setReopenReason(e.target.value)}
+              placeholder="Descreva o motivo pelo qual este documento precisa ser alterado..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsReopening(false)}>Cancelar</Button>
+            <Button onClick={handleReopen} disabled={loading}>Confirmar Reabertura</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
               <div className="lg:col-span-3 space-y-4">
                 <Card>
                   <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Conclusão Multiprofissional</CardTitle></CardHeader>
@@ -1551,7 +1660,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
 
         {/* Footer Actions */}
         <div className="flex gap-3 pt-6 border-t">
-          <Button onClick={() => handleSave("multi", false)}>Finalizar Consolidação</Button>
+          <Button onClick={() => handleSave("multi", false)} disabled={isReportLocked || loading}>Finalizar Consolidação</Button>
         </div>
       </div>
     );
@@ -1579,11 +1688,15 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
             <Badge variant={status === "rascunho" ? "secondary" : "default"} className="px-3 py-1">
               {status === "rascunho" ? "Rascunho" : "Finalizado"}
             </Badge>
-            {status === "rascunho" && (
+            {status === "rascunho" ? (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3 h-3" /> Editando...
               </span>
-            )}
+            ) : canReopenReport ? (
+              <Button variant="outline" size="sm" onClick={() => setIsReopening(true)} disabled={loading}>
+                <Unlock className="w-4 h-4 mr-1" /> Reabrir relatório
+              </Button>
+            ) : null}
           </div>
         )}
       </div>
@@ -1982,7 +2095,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                   variant="outline" 
                   className="w-full justify-start h-9" 
                   onClick={() => handleSave("individual", true)}
-                  disabled={!pacienteId || loading}
+                  disabled={!pacienteId || loading || isReportLocked}
                 >
                   <Clock className="w-4 h-4 mr-2 text-muted-foreground" />
                   Salvar Rascunho
@@ -1991,7 +2104,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                 <Button 
                   className="w-full justify-start h-9 bg-primary" 
                   onClick={() => handleSave("individual", false)}
-                  disabled={!pacienteId || loading}
+                  disabled={!pacienteId || loading || isReportLocked}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Finalizar Relatório
