@@ -954,11 +954,20 @@ const Agenda: React.FC = () => {
   const handleImprimirLista = React.useCallback(() => {
     const fmtDate = (s: string) => { if (!s) return "-"; const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; };
     const fmtCpf = (v?: string) => v ? v.replace(/\D/g, '').replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4") : "-";
+    const fmtTelefone = (v?: string) => {
+      if (!v) return "-";
+      let d = v.replace(/\D/g, "");
+      if ((d.length === 12 || d.length === 13) && d.startsWith("55")) d = d.slice(2);
+      if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+      if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+      return v;
+    };
     const ordered = [...filtered].sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
     const rows = ordered.map((ag, idx) => {
       const pac = pacienteById.get(ag.pacienteId);
       const nome = resolvePaciente(ag.pacienteId, ag.pacienteNome) || "-";
       const cpf = fmtCpf(pac?.cpf);
+      const telefone = fmtTelefone(pac?.telefone);
       const cns = pac?.cns ? formatCNS(pac.cns) : "-";
       const nasc = pac?.dataNascimento || "";
       const idade = nasc ? calcularIdade(nasc) : "-";
@@ -967,6 +976,7 @@ const Agenda: React.FC = () => {
         <td style="text-align:center">${ag.hora || "-"}</td>
         <td>${nome}</td>
         <td>${cpf}</td>
+        <td style="white-space:nowrap">${telefone}</td>
         <td>${cns}</td>
         <td style="text-align:center">${fmtDate(nasc)}</td>
         <td style="text-align:center">${idade}</td>
@@ -977,7 +987,7 @@ const Agenda: React.FC = () => {
       <style>
         .agenda-print-table { width:100%; border-collapse:collapse; font-family: Arial, Helvetica, sans-serif; }
         .agenda-print-table th, .agenda-print-table td {
-          border:1px solid #333; padding:3px 5px; font-size:10px; vertical-align:middle;
+          border:1px solid #333; padding:3px 4px; font-size:9px; vertical-align:middle;
         }
         .agenda-print-table th { background:#e8eef5; text-align:center; font-weight:bold; text-transform:uppercase; letter-spacing:0.3px; }
         .agenda-print-table tbody tr:nth-child(even) td { background:#f7f9fc; }
@@ -985,17 +995,18 @@ const Agenda: React.FC = () => {
       <table class="agenda-print-table">
         <thead>
           <tr>
-            <th style="width:5%">Nº</th>
-            <th style="width:8%">Hora</th>
-            <th style="width:32%">Paciente</th>
-            <th style="width:15%">CPF</th>
-            <th style="width:18%">Cartão SUS</th>
-            <th style="width:12%">Nascimento</th>
-            <th style="width:10%">Idade</th>
+            <th style="width:4%">Nº</th>
+            <th style="width:7%">Hora</th>
+            <th style="width:27%">Paciente</th>
+            <th style="width:14%">CPF</th>
+            <th style="width:14%">Telefone</th>
+            <th style="width:15%">Cartão SUS</th>
+            <th style="width:10%">Nascimento</th>
+            <th style="width:9%">Idade</th>
           </tr>
         </thead>
         <tbody>
-          ${rows || `<tr><td colspan="7" style="text-align:center;padding:10px">Nenhum agendamento para os filtros selecionados.</td></tr>`}
+          ${rows || `<tr><td colspan="8" style="text-align:center;padding:10px">Nenhum agendamento para os filtros selecionados.</td></tr>`}
         </tbody>
       </table>
     `;
