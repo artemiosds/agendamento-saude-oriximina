@@ -4447,6 +4447,9 @@ const BpaExportar: React.FC = () => {
                         CBO incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO incompatível")).length}</b>
                       </div>
                       <div>
+                        CBO ausente/inválido: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO do profissional inválido ou ausente")).length}</b>
+                      </div>
+                      <div>
                         Idade incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Idade incompatível")).length}</b>
                       </div>
                       <div>

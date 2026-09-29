@@ -272,7 +272,9 @@ export function validarProcedimentoBpaI(
   const bloqueadoExplicito = bloqueados.some((r) => combina(codigo, r));
   const permitidoExplicito = permitidos.some((r) => combina(codigo, r));
 
-  if (oficial && !oficial.cbos.has(cbo)) {
+  // CBO ausente/inválido já foi rejeitado acima. Não o classifique também como
+  // incompatibilidade SIGTAP, que pressupõe um CBO válido para comparação.
+  if (oficial && cbo.length === 6 && !/^0+$/.test(cbo) && !oficial.cbos.has(cbo)) {
     rejeicoes.push(`CBO incompatível com o procedimento: ${codigo}, CBO ${cbo}, competência ${competencia}`);
   }
   if (bloqueadoExplicito) {

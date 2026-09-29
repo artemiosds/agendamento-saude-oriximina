@@ -39,6 +39,16 @@ describe("segurança da exportação BPA-I", () => {
     expect(result.rejeitados[2].rejeicoes.join(" ")).toContain("não vigente");
   });
 
+  it("mantém CBO ausente fora do TXT sem classificá-lo como incompatibilidade SIGTAP", () => {
+    for (const cbo of ["", "000000"]) {
+      const result = validarListaProcedimentosBpaI([{ codigo: "0301100039" }], { ...ctx, cbo });
+      expect(result.validos).toHaveLength(0);
+      expect(result.rejeitados).toHaveLength(1);
+      expect(result.rejeitados[0].rejeicoes).toContain(`CBO do profissional inválido ou ausente (${cbo || "vazio"})`);
+      expect(result.rejeitados[0].rejeicoes.join(" ")).not.toContain("CBO incompatível");
+    }
+  });
+
   it("carrega os arquivos oficiais necessários do ZIP da competência sem gravar no banco", async () => {
     const zip = new JSZip();
     zip.file("tb_procedimento.txt", proc("0301100039"));
