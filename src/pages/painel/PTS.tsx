@@ -25,7 +25,7 @@ import { BuscaPaciente } from '@/components/BuscaPaciente';
 import { cn, todayLocalStr } from '@/lib/utils';
 import {
   competenciaFromDate,
-  resolveProfessionalCbo,
+  resolveProfessionalCboReliable,
   validarCompatibilidadeClinicaSigtap,
   type SigtapClinicalValidationResult,
 } from '@/lib/sigtapClinicalValidation';
@@ -302,8 +302,13 @@ const PTS: React.FC = () => {
   ): Promise<SigtapClinicalValidationResult> => {
     const paciente = pacientes.find((p: any) => p.id === form.patient_id) as any;
     const profissional = resolvePtsProcedureProfessional(especialidade);
-    const cbo = resolveProfessionalCbo(profissional);
     const dataRef = todayLocalStr();
+    const fallbackProfessionalId =
+      profissional?.id ||
+      editingPts?.professional_id ||
+      user?.id ||
+      "";
+    const cbo = await resolveProfessionalCboReliable(profissional, fallbackProfessionalId);
     const nascimento =
       paciente?.data_nascimento ||
       paciente?.dataNascimento ||
