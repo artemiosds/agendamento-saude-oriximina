@@ -17,11 +17,12 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Loader2, Plus, Search, Eye, Edit2, AlertTriangle, Trash2, Save,
-  RefreshCw, Clock, Target, CheckSquare, ChevronRight, Printer
+  RefreshCw, Clock, Target, CheckSquare, ChevronRight, Printer, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
+import GerarDocumentoModal from '@/components/GerarDocumentoModal';
 import { cn, todayLocalStr } from '@/lib/utils';
 import {
   competenciaFromDate,
@@ -195,6 +196,7 @@ const PTS: React.FC = () => {
   const [detailPts, setDetailPts] = useState<PTSRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('identificacao');
+  const [documentOpen, setDocumentOpen] = useState(false);
 
   // SIGTAP catalog state (preserved from original)
   const [sigtapProcs, setSigtapProcs] = useState<SigtapProcedimento[]>([]);
@@ -1252,6 +1254,43 @@ const PTS: React.FC = () => {
     return entry ? entry[0] : key;
   }, []);
 
+  const documentPaciente = useMemo(() => {
+    const p: any = pacientes.find((item: any) => item.id === form.patient_id);
+    if (!p) return undefined;
+    const custom = p.custom_data || p.customData || {};
+    return {
+      id: p.id,
+      nome: p.nome || form.patient_name || "",
+      cpf: p.cpf || custom.cpf || "",
+      cns: p.cns || custom.cns || "",
+      data_nascimento: p.data_nascimento || p.dataNascimento || custom.data_nascimento || "",
+      cid: cidsSelecionados[0]?.cid_codigo || p.cid || custom.cid || "",
+      especialidade_destino: "",
+      endereco: p.endereco || custom.endereco || "",
+      bairro: p.bairro || custom.bairro || "",
+      telefone: p.telefone || custom.telefone || "",
+      nome_mae: p.nome_mae || p.nomeMae || custom.nome_mae || "",
+    };
+  }, [pacientes, form.patient_id, form.patient_name, cidsSelecionados]);
+
+  const documentProfissional = useMemo(() => {
+    const f: any = funcionarios.find((item: any) => item.id === user?.id) || user;
+    if (!f) return undefined;
+    return {
+      id: f.id,
+      nome: f.nome || "",
+      profissao: f.profissao || "",
+      numero_conselho: f.numeroConselho || f.numero_conselho || "",
+      tipo_conselho: f.tipoConselho || f.tipo_conselho || "",
+      uf_conselho: f.ufConselho || f.uf_conselho || "",
+    };
+  }, [funcionarios, user]);
+
+  const documentUnidade = useMemo(() => {
+    const u: any = unidades.find((item: any) => item.id === user?.unidadeId);
+    return u?.nomeExibicao || u?.nome || "";
+  }, [unidades, user?.unidadeId]);
+
   if (!can('tratamento', 'can_view')) {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
@@ -1909,6 +1948,11 @@ const PTS: React.FC = () => {
           </div>
 
           <div className="flex gap-2 justify-end px-6 py-4 border-t shrink-0 bg-background">
+            {form.patient_id && (
+              <Button variant="outline" onClick={() => setDocumentOpen(true)} className="mr-auto">
+                <FileText className="w-4 h-4 mr-2" /> Gerar documento / OCI
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving} className="gradient-primary text-primary-foreground">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
@@ -2295,6 +2339,15 @@ const PTS: React.FC = () => {
           })()}
         </DialogContent>
       </Dialog>
+
+      <GerarDocumentoModal
+        open={documentOpen}
+        onOpenChange={setDocumentOpen}
+        paciente={documentPaciente}
+        profissional={documentProfissional}
+        unidade={documentUnidade}
+        dataAtendimento={todayLocalStr()}
+      />
     </div>
   );
 };
