@@ -14,13 +14,25 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature } from 'lucide-react';
-import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, buildDocumentShell, type DocumentConfig } from '@/lib/printLayout';
+import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, buildDocumentShell, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
 import { htmlToPdfBase64 } from '@/lib/htmlToPdfBase64';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData } from '@/lib/documentSignature';
 import { applyTemplateValues } from '@/lib/templateVariables';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
+import StructuredOciForm from '@/components/documents/StructuredOciForm';
+import {
+  buildOciAddress,
+  createEmptyOciData,
+  renderOciDocument,
+  type OciStructuredData,
+  type OciTemplateMeta,
+} from '@/lib/ociDocument';
+import {
+  competenciaFromDate,
+  resolveProfessionalCboReliable,
+} from '@/lib/sigtapClinicalValidation';
 
 interface Props {
   open: boolean;
@@ -135,6 +147,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [medicamentos, setMedicamentos] = useState<MedicamentoRow[]>([emptyMedicamento()]);
   const [exibirCid, setExibirCid] = useState(false);
   const [pacienteExtra, setPacienteExtra] = useState<Record<string, any> | null>(null);
+  const [unidadeExtra, setUnidadeExtra] = useState<Record<string, any> | null>(null);
+  const [ociData, setOciData] = useState<OciStructuredData | null>(null);
+  const [ociCbo, setOciCbo] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -142,6 +157,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       loadCarimbo();
       loadDocConfig();
       loadPacienteExtra();
+      loadUnidadeExtra();
       resetFields();
     }
   }, [open]);
@@ -158,6 +174,16 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   };
 
 
+  const loadUnidadeExtra = async () => {
+    if (!user?.unidadeId) { setUnidadeExtra(null); return; }
+    const { data } = await (supabase as any)
+      .from('unidades')
+      .select('id,nome,nome_exibicao,endereco,telefone,custom_data')
+      .eq('id', user.unidadeId)
+      .maybeSingle();
+    setUnidadeExtra((data as any) || null);
+  };
+
   const loadDocConfig = async () => {
     const cfg = await loadDocumentConfig();
     setDocConfig(cfg);
@@ -170,6 +196,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     setCampos({});
     setMedicamentos([emptyMedicamento()]);
     setExibirCid(false);
+    setOciData(null);
+    setOciCbo("");
   };
 
   const loadModelos = async () => {
@@ -417,10 +445,18 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
 
   const selected = modelos.find(x => x.id === selectedId);
+  const selectedMeta = ((selected?.blocos_clinicos as any) || {}) as OciTemplateMeta & Record<string, any>;
+  const isOciStructured = !!selected && (
+    selectedMeta.structured_type === 'OCI' ||
+    selected.nome.trim().toUpperCase().startsWith('OCI ')
+  );
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
   const tipoLower = selected?.tipo.toLowerCase() || '';
 
   const buildHtmlBody = (signatureHtml: string) => {
+    if (isOciStructured && ociData) {
+      return renderOciDocument(ociData, docConfig, selectedMeta);
+    }
     // Content may already be rich HTML from TipTap or plain text
     const raw = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
     const html = normalizeForAbntPrint(stripConditionalBlocks(raw, paciente?.data_nascimento || pacienteExtra?.data_nascimento));
@@ -435,6 +471,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       </div>
     `;
   };
+
+  const buildOciPrintShell = (body: string) => `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>${selected?.nome || 'OCI'}</title>
+  <style>
+    @page { size: A4 portrait; margin: 8mm; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  </style>
+</head>
+<body>${body}</body>
+</html>`;
 
 
   const handleSaveDraft = async () => {
