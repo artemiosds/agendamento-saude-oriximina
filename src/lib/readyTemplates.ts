@@ -22,7 +22,7 @@ const ociSeedHtml = (procedimentoPrincipal: string) => `
 const ociReady = (
   id: string,
   nome: string,
-  linhasSecundarias = 14,
+  linhasSecundarias = 20,
 ): ReadyTemplate => ({
   id,
   nome,
