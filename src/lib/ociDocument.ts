@@ -181,7 +181,7 @@ export const renderOciDocument = (
   const logosHtml = config?.mostrarLogos === false
     ? '<span class="oci-logo-placeholder">&nbsp;</span>'
     : `<div class="oci-official-logos" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
-         <svg viewBox="171 368 229 39" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
+         <svg viewBox="183 369 215 35" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
            <image href="${logoCerIi}" width="800" height="450" />
          </svg>
        </div>`;

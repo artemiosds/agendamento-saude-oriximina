@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature, Search, Play, ArrowLeft } from 'lucide-react';
+import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature, Search, Play, ArrowLeft, Printer } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, buildDocumentShell, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
 import { htmlToPdfBase64 } from '@/lib/htmlToPdfBase64';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
@@ -658,6 +658,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 </html>`;
 
 
+  const handlePrintOci = () => {
+    if (!isOciStructured || !ociData || !selected || !ociReady || !docConfig) return;
+    printViaIframe(buildOciPrintShell(renderOciDocument(ociData, docConfig, selectedMeta)));
+  };
+
   const handleSaveDraft = async () => {
     if (!selected) return;
     setSalvando(true);
@@ -1295,6 +1300,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSignature className="w-4 h-4" />}
                 Enviar para Assinatura Eletrônica
               </Button>
+              {isOciStructured && (
+                <Button variant="outline" onClick={handlePrintOci} disabled={salvando || !ociReady || !docConfig} className="gap-1.5" title="Imprime o OCI diretamente, sem assinar ou salvar no histórico.">
+                  <Printer className="w-4 h-4" /> Imprimir
+                </Button>
+              )}
               <Button
                 onClick={handleSignAndFinalize}
                 disabled={salvando || (isEncaminhamento && !profDestinoId) || !ociReady}
