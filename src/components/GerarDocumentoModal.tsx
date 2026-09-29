@@ -12,8 +12,9 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature } from 'lucide-react';
+import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature, Search, Play, ArrowLeft } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, buildDocumentShell, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
 import { htmlToPdfBase64 } from '@/lib/htmlToPdfBase64';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
@@ -136,6 +137,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [docConfig, setDocConfig] = useState<DocumentConfig | null>(null);
   const [modelos, setModelos] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState('');
+  const [modelSearch, setModelSearch] = useState('');
+  const [modelCategory, setModelCategory] = useState<'Todos' | 'Cadastro' | 'Clínico' | 'Regulação' | 'CER'>('Todos');
   const [conteudoFinal, setConteudoFinal] = useState('');
   const [profDestinoId, setProfDestinoId] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -192,6 +195,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const resetFields = () => {
     setSelectedId('');
+    setModelSearch('');
+    setModelCategory('Todos');
     setConteudoFinal('');
     setProfDestinoId('');
     setCampos({});
@@ -465,6 +470,22 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     setConteudoFinal(substituir(base));
   }, [campos, medicamentos, carimbo, selectedId, pacienteExtra, docConfig, dataAtendimento, paciente, profissional, unidade, user?.nome]);
 
+
+  const classifyModel = (m: DocumentTemplate): 'Cadastro' | 'Clínico' | 'Regulação' | 'CER' => {
+    const raw = `${m.tipo || ''} ${m.nome || ''}`.toLowerCase();
+    if (raw.includes('oci') || raw.includes('apac') || raw.includes('regula')) return 'Regulação';
+    if (raw.includes('cer') || raw.includes('alta')) return 'CER';
+    if (raw.includes('cadastr') || raw.includes('ficha')) return 'Cadastro';
+    return 'Clínico';
+  };
+
+  const visibleModels = modelos.filter((m) => {
+    const category = classifyModel(m);
+    if (modelCategory !== 'Todos' && category !== modelCategory) return false;
+    const q = modelSearch.trim().toLowerCase();
+    if (q && !`${m.nome} ${m.tipo}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
 
   const selected = modelos.find(x => x.id === selectedId);
   const selectedMeta = ((selected?.blocos_clinicos as any) || {}) as OciTemplateMeta & Record<string, any>;
@@ -1046,29 +1067,94 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Model selector */}
-          <div className="space-y-1.5">
-            <Label className="text-[13px] font-bold">Selecionar modelo</Label>
-            {modelos.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum modelo disponível para seu perfil.</p>
-            ) : (
-              <Select value={selectedId} onValueChange={handleSelect}>
-                <SelectTrigger><SelectValue placeholder="Escolha um modelo..." /></SelectTrigger>
-                <SelectContent>
-                  {modelos.map(m => (
-                    <SelectItem key={m.id} value={m.id}>{m.nome} — {m.tipo}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+          {/* Central visual de modelos — mesmo padrão da Central de Documentos */}
+          {!selected ? (
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                  placeholder="Buscar documento..."
+                  className="pl-9"
+                />
+              </div>
 
-          {selected && (
+              <Tabs value={modelCategory} onValueChange={(v) => setModelCategory(v as any)}>
+                <TabsList className="w-full grid grid-cols-5 h-9">
+                  {(['Todos','Cadastro','Clínico','Regulação','CER'] as const).map((cat) => (
+                    <TabsTrigger key={cat} value={cat} className="text-xs px-1">{cat}</TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+
+              <div className="max-h-[52vh] overflow-y-auto pr-1 space-y-2">
+                {modelos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    Nenhum modelo disponível para seu perfil.
+                  </p>
+                ) : visibleModels.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    Nenhum documento encontrado para este filtro.
+                  </p>
+                ) : (
+                  visibleModels.map((m) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/50 p-3 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary/10 text-primary shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium break-words leading-snug">{m.nome}</div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                            {classifyModel(m)}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground truncate">{m.tipo}</span>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 gap-1.5 shrink-0"
+                        onClick={() => handleSelect(m.id)}
+                      >
+                        <Play className="w-3.5 h-3.5" /> Gerar
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
             <>
-              {/* Type badge */}
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">{selected.tipo}</Badge>
-                {paciente?.nome && <span className="text-sm font-medium">{paciente.nome}</span>}
+              <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold break-words">{selected.nome}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="outline" className="text-xs">{classifyModel(selected)}</Badge>
+                    <span className="text-xs text-muted-foreground">{selected.tipo}</span>
+                  </div>
+                </div>
+                {!templateId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      setSelectedId('');
+                      setConteudoFinal('');
+                      setCampos({});
+                      setMedicamentos([emptyMedicamento()]);
+                      setOciData(null);
+                    }}
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-1" /> Trocar modelo
+                  </Button>
+                )}
               </div>
 
               {/* Encaminhamento destination */}
