@@ -668,6 +668,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         .eq("profissional_id", user.id)
         .order("data_atendimento", { ascending: true });
 
+      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
       if (pronts && pronts.length > 0) {
         setIndPeriodoInicio(pronts[0].data_atendimento);
         setIndPeriodoFim(pronts[pronts.length - 1].data_atendimento);
@@ -729,9 +730,40 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     }
   };
 
+  const userRoleNorm = String(user?.role || "").toLowerCase().trim();
+  const canManageOtherContribution = ["master", "gestao", "gestão", "coordenador"].includes(userRoleNorm);
+
+  const canEditContribution = (section: ProfSection) =>
+    !isReportLocked &&
+    section.status_contribuicao !== "assinada" &&
+    (section.profissional_id === user?.id || canManageOtherContribution);
+
   const updateProfSection = (profId: string, field: keyof ProfSection, value: any) => {
+    const section = profSections.find(s => s.profissional_id === profId);
+    if (!section || !canEditContribution(section)) {
+      toast.error("Você não tem permissão para alterar esta contribuição.");
+      return;
+    }
     setProfSections(prev =>
       prev.map(s => s.profissional_id === profId ? { ...s, [field]: value } : s)
+    );
+  };
+
+  const handleSignContribution = (profId: string) => {
+    const section = profSections.find(s => s.profissional_id === profId);
+    if (!section || section.profissional_id !== user?.id || isReportLocked) {
+      toast.error("Somente o profissional responsável pode assinar sua própria contribuição.");
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    setProfSections(prev =>
+      prev.map(s => s.profissional_id === profId ? {
+        ...s,
+        status_contribuicao: "assinada",
+        data_contribuicao: nowIso,
+        finalizado_em: nowIso,
+        finalizado_por: user?.nome || "",
+      } : s)
     );
   };
 
@@ -744,13 +776,19 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     if (!nivelIndep) errors.push("Selecione o nível de independência");
     if (modalidades.length === 0) errors.push("Selecione pelo menos uma modalidade");
     
-    const hasCompletedContribution = profSections.some(s => s.status_contribuicao === "concluida");
+    const hasCompletedContribution = profSections.some(
+      s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada"
+    );
     if (!hasCompletedContribution) {
-      errors.push("Pelo menos um profissional deve concluir sua contribuição");
+      errors.push("Pelo menos um profissional deve concluir ou assinar sua contribuição");
     }
 
     profSections.forEach(s => {
-      if (s.status_contribuicao === "concluida" && s.metas_status !== "totalmente" && !s.metas_justificativa) {
+      if (
+        (s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada") &&
+        s.metas_status !== "totalmente" &&
+        !s.metas_justificativa
+      ) {
         errors.push(`Justificativa de metas obrigatória para ${s.profissional_nome}`);
       }
     });
@@ -860,7 +898,9 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
       </div>
     `;
 
-    profSections.filter(s => s.status_contribuicao === "concluida").forEach(s => {
+    profSections
+      .filter(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada")
+      .forEach(s => {
       html += `
         <div class="section" style="page-break-inside: avoid;">
           <div class="section-title">Evolução: ${s.profissao || "Área"} — ${s.profissional_nome}</div>
@@ -1037,6 +1077,11 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any) => {
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
 
+    if (isReportLocked && customStatus !== "rascunho") {
+      toast.error("Este relatório está finalizado. Reabra o relatório antes de alterar ou salvar.");
+      return;
+    }
+
     if (!isDraft && !customStatus) {
       const errs = type === "multi" ? validateMulti() : validateInd();
       if (errs.length > 0) { toast.error(errs[0]); return; }
@@ -1106,11 +1151,48 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
         : `Relatório de Alta Individual — Versão ${newVersion}`,
     };
 
-    let result;
-    if (reportId) {
-      result = await supabase.from("prontuarios").update(record).eq("id", reportId);
+    let result: any;
+    let targetReportId = reportId;
+
+    // Proteção contra duplicidade e contra atualização cruzada de pacientes.
+    // Se o estado local perdeu o id por qualquer motivo, reaproveita o relatório
+    // mais recente do mesmo paciente/tipo (e do mesmo profissional no individual).
+    if (!targetReportId) {
+      let existingQuery = supabase
+        .from("prontuarios")
+        .select("id")
+        .eq("paciente_id", pacienteId)
+        .eq("tipo_registro", record.tipo_registro)
+        .order("atualizado_em", { ascending: false })
+        .limit(1);
+      if (type === "individual") existingQuery = existingQuery.eq("profissional_id", user.id);
+      const { data: existingBeforeSave, error: existingError } = await existingQuery.maybeSingle();
+      if (existingError) {
+        toast.error("Não foi possível verificar relatório existente: " + existingError.message);
+        return;
+      }
+      targetReportId = existingBeforeSave?.id || null;
+    }
+
+    if (targetReportId) {
+      let updateQuery = supabase
+        .from("prontuarios")
+        .update(record)
+        .eq("id", targetReportId)
+        .eq("paciente_id", pacienteId)
+        .eq("tipo_registro", record.tipo_registro);
+      if (type === "individual") updateQuery = updateQuery.eq("profissional_id", user.id);
+      result = await updateQuery.select("id").maybeSingle();
+
+      if (!result.error && !result.data) {
+        toast.error("O relatório não foi atualizado porque o vínculo com paciente/profissional não confere. Nenhum dado foi sobrescrito.");
+        return;
+      }
+      if (!result.error && result.data?.id) {
+        setReportId(result.data.id);
+      }
     } else {
-      result = await supabase.from("prontuarios").insert(record).select().single();
+      result = await supabase.from("prontuarios").insert(record).select("id").single();
       if (!result.error && result.data) {
         setReportId(result.data.id);
       }
@@ -1129,7 +1211,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
         acao: isDraft ? "salvar_rascunho_alta" : "finalizar_relatorio_alta",
         modulo: "prontuario",
         entidade: "prontuario",
-        entidadeId: reportId || (result.data as any)?.id,
+        entidadeId: (result.data as any)?.id || reportId || "",
         pacienteId: pacienteId,
         pacienteNome: paciente?.nome,
         profissionalId: user.id,
@@ -1371,16 +1453,16 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-xs">Objetivos Específicos</Label>
-                        <Textarea value={s.objetivos_especificos || ""} onChange={e => updateProfSection(s.profissional_id, "objetivos_especificos", e.target.value)} rows={2} disabled={s.status_contribuicao === "assinada"} />
+                        <Textarea value={s.objetivos_especificos || ""} onChange={e => updateProfSection(s.profissional_id, "objetivos_especificos", e.target.value)} rows={2} disabled={!canEditContribution(s)} />
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs">Evolução da Área</Label>
-                        <Textarea value={s.evolucao || ""} onChange={e => updateProfSection(s.profissional_id, "evolucao", e.target.value)} rows={2} disabled={s.status_contribuicao === "assinada"} />
+                        <Textarea value={s.evolucao || ""} onChange={e => updateProfSection(s.profissional_id, "evolucao", e.target.value)} rows={2} disabled={!canEditContribution(s)} />
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-4">
                       <div className="flex gap-4">
-                        <Select value={s.status_contribuicao} onValueChange={(v: any) => updateProfSection(s.profissional_id, "status_contribuicao", v)} disabled={s.status_contribuicao === "assinada"}>
+                        <Select value={s.status_contribuicao} onValueChange={(v: any) => updateProfSection(s.profissional_id, "status_contribuicao", v)} disabled={!canEditContribution(s)}>
                           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
@@ -1389,8 +1471,8 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                           </SelectContent>
                         </Select>
                       </div>
-                      {s.profissional_id === user?.id && s.status_contribuicao !== "assinada" && (
-                        <Button size="sm" onClick={() => updateProfSection(s.profissional_id, "status_contribuicao", "assinada")}>
+                      {s.profissional_id === user?.id && s.status_contribuicao !== "assinada" && !isReportLocked && (
+                        <Button size="sm" onClick={() => handleSignContribution(s.profissional_id)}>
                           <ShieldCheck className="w-4 h-4 mr-2" /> Assinar Contribuição
                         </Button>
                       )}
