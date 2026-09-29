@@ -69,7 +69,9 @@ describe("documento OCI", () => {
       .match(/class="oci-proc-row /g)?.length ?? 0;
 
     expect(countRows(renderOciDocument(data))).toBe(15);
-    expect(countRows(renderOciDocument(data, null, { oci: { linhas_secundarias: 20 } }))).toBe(20);
+    const expanded = renderOciDocument(data, null, { oci: { linhas_secundarias: 20 } });
+    expect(countRows(expanded)).toBe(20);
+    expect(expanded).toContain('class="oci-page oci-extended"');
 
     data.procedimentosSecundarios = Array.from({ length: 17 }, (_, i) => ({
       codigo: String(i), nome: `Procedimento ${i}`, quantidade: 1,

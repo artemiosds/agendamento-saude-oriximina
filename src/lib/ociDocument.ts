@@ -347,11 +347,11 @@ export const renderOciDocument = (
 }
 .oci-proc-row .oci-field-label{
   top:.12mm;
-  font-size:3.9pt;
+  font-size:4.6pt;
   left:1.2mm;
 }
 .oci-proc-row .oci-field-value{
-  font-size:5.75pt!important;
+  font-size:6.8pt!important;
   line-height:1;
   white-space:nowrap;
   overflow:hidden;
@@ -421,11 +421,17 @@ export const renderOciDocument = (
 .oci-center{text-align:center}
 @media print{
   .oci-page{width:100%;max-width:none;margin:0;font-size:7pt}
-  .oci-frame{break-inside:avoid}
-  .oci-proc-row{break-inside:avoid}
+  .oci-frame{min-height:281mm;display:flex;flex-direction:column;break-inside:avoid}
+  .oci-frame > :not(.oci-secondary-list){flex-shrink:0}
+  .oci-secondary-list{display:flex;flex-direction:column;flex:1 0 auto}
+  .oci-secondary-list .oci-proc-row{flex:1 0 auto;break-inside:avoid}
+  .oci-extended .oci-frame{min-height:0;display:block;break-inside:auto}
+  .oci-extended .oci-secondary-list{display:block}
+  .oci-extended .oci-proc-row{margin-top:.45mm}
+  .oci-extended .oci-final-block{break-inside:avoid}
 }
 </style>
-<div class="oci-page">
+<div class="oci-page${linhas > 15 ? " oci-extended" : ""}">
   <div class="oci-frame">
     <div class="oci-top">
       <div class="oci-logos">${logosHtml}</div>
@@ -491,6 +497,7 @@ export const renderOciDocument = (
     <div class="oci-section">PROCEDIMENTO(S) SECUNDÁRIO(S)</div>
     <div class="oci-secondary-list">${rowsSec}</div>
 
+    <div class="oci-final-block">
     <div class="oci-section">SOLICITAÇÃO</div>
     <div class="oci-request-grid">
       ${field("Nome do profissional solicitante", "", "oci-request-name")}
@@ -525,6 +532,7 @@ export const renderOciDocument = (
       ${field("Data da autorização", fmtDate(a.dataAutorizacao), "oci-auth-date", "text-align:center")}
       ${field("Assinatura e carimbo (Nº de registro do conselho)", a.assinaturaCarimbo, "oci-auth-sign", "text-align:center")}
       ${field("Período de validade da APAC", periodoValidade, "oci-auth-validity", "text-align:center")}
+    </div>
     </div>
   </div>
 </div>`;
