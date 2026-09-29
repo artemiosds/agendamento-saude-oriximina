@@ -1,3 +1,4 @@
+import logoCerIi from "@/assets/logo-cer-ii.webp";
 import type { DocumentConfig } from "@/lib/printLayout";
 
 export interface OciProcedureItem {
@@ -175,23 +176,11 @@ export const renderOciDocument = (
   const secundarios = [...data.procedimentosSecundarios].slice(0, linhas);
   while (secundarios.length < linhas) secundarios.push({ codigo: "", nome: "", quantidade: 0 });
 
-  const preferredLogos = [
-    config?.logosConfig?.esquerda?.ativo !== false ? config?.logoEsquerda : "",
-    config?.logosConfig?.direita?.ativo !== false ? config?.logoDireita : "",
-  ].filter((value): value is string => !!value);
-  const fallbackCentral =
-    config?.mostrarLogoCentral && config?.logosConfig?.central?.ativo !== false
-      ? config?.logoCentral
-      : "";
-
-  const logosAtivos = config?.mostrarLogos === false
-    ? []
-    : (preferredLogos.length >= 2
-        ? preferredLogos.slice(0, 2)
-        : [...preferredLogos, ...(fallbackCentral ? [fallbackCentral] : [])].slice(0, 2));
-  const logosHtml = logosAtivos.length
-    ? logosAtivos.map((url, index) => logo(url, `Logomarca institucional ${index + 1}`, 32)).join("")
-    : '<span class="oci-logo-placeholder">&nbsp;</span>';
+  const logosHtml = config?.mostrarLogos === false
+    ? '<span class="oci-logo-placeholder">&nbsp;</span>'
+    : `<div class="oci-official-logos" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
+         <img src="${logoCerIi}" alt="Secretaria Municipal de Saúde e Prefeitura de Oriximiná" />
+       </div>`;
 
   const p = data.paciente;
   const prof = data.profissional;
@@ -250,7 +239,21 @@ export const renderOciDocument = (
   padding:1.1mm 2mm;
   overflow:hidden;
 }
-.oci-logos img{display:block;max-width:46mm;max-height:8mm;width:auto;height:auto;object-fit:contain}
+.oci-official-logos{
+  position:relative;
+  width:100%;
+  height:8.2mm;
+  overflow:hidden;
+}
+.oci-official-logos img{
+  position:absolute;
+  width:160mm;
+  height:auto;
+  max-width:none;
+  max-height:none;
+  left:-34.5mm;
+  top:-73.2mm;
+}
 .oci-logo-placeholder{display:block;width:100%}
 .oci-title{
   border:1.2px solid #111;
@@ -379,15 +382,21 @@ export const renderOciDocument = (
   display:block!important;
   border:0!important;
   border-radius:0!important;
-  padding:.3mm!important;
-  margin:0 auto!important;
-  font-size:5pt!important;
-  line-height:1.03!important;
+  padding:0!important;
+  margin:-.4mm auto 0!important;
+  font-size:4.8pt!important;
+  line-height:1.02!important;
+  width:100%!important;
   max-width:100%!important;
-  max-height:9.6mm!important;
+  max-height:8.8mm!important;
   overflow:hidden!important;
 }
-.oci-sign-box img{display:block;max-height:8.8mm;max-width:43mm;width:auto;height:auto;object-fit:contain;margin:0 auto}
+.oci-sign-box .carimbo-digital *{
+  max-width:100%!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+.oci-sign-box img{display:block!important;max-height:6.6mm!important;max-width:34mm!important;width:auto!important;height:auto!important;object-fit:contain!important;margin:0 auto!important}
 .oci-auth-grid{
   display:grid;
   grid-template-columns:16% 48% 16% 20%;
