@@ -1,4 +1,5 @@
 import { loadBpaSigtapCatalog } from "./bpaSigtapCatalog";
+import { supabase } from "@/integrations/supabase/client";
 
 export type SigtapClinicalStatus = "compatível" | "incompatível" | "indeterminado";
 
@@ -87,6 +88,82 @@ export const resolveProfessionalCbo = (professional: any): string => {
   }
   return "";
 };
+
+const professionalCboCache = new Map<string, string>();
+
+/**
+ * Resolve o CBO de forma resiliente.
+ * Primeiro usa o objeto já carregado em memória. Se o contexto ainda estiver
+ * desatualizado/incompleto, relê somente o cadastro daquele profissional no banco.
+ * É apenas leitura; não altera cadastro, fluxo, RLS ou dados clínicos.
+ */
+export async function resolveProfessionalCboReliable(
+  professional: any,
+  fallbackProfessionalId?: string | null,
+): Promise<string> {
+  const local = resolveProfessionalCbo(professional);
+  if (local) return local;
+
+  const ids = Array.from(new Set(
+    [
+      professional?.id,
+      professional?.authUserId,
+      professional?.auth_user_id,
+      fallbackProfessionalId,
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean),
+  ));
+
+  for (const id of ids) {
+    const cached = professionalCboCache.get(id);
+    if (cached) return cached;
+  }
+
+  for (const id of ids) {
+    try {
+      const { data: byId, error: idError } = await (supabase as any)
+        .from("funcionarios")
+        .select("id,auth_user_id,custom_data")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (!idError && byId) {
+        const cbo = resolveProfessionalCbo(byId);
+        if (cbo) {
+          professionalCboCache.set(String(byId.id), cbo);
+          if (byId.auth_user_id) professionalCboCache.set(String(byId.auth_user_id), cbo);
+          ids.forEach((key) => professionalCboCache.set(key, cbo));
+          return cbo;
+        }
+      }
+    } catch {
+      // Tenta auth_user_id abaixo.
+    }
+
+    try {
+      const { data: byAuth, error: authError } = await (supabase as any)
+        .from("funcionarios")
+        .select("id,auth_user_id,custom_data")
+        .eq("auth_user_id", id)
+        .maybeSingle();
+
+      if (!authError && byAuth) {
+        const cbo = resolveProfessionalCbo(byAuth);
+        if (cbo) {
+          professionalCboCache.set(String(byAuth.id), cbo);
+          if (byAuth.auth_user_id) professionalCboCache.set(String(byAuth.auth_user_id), cbo);
+          ids.forEach((key) => professionalCboCache.set(key, cbo));
+          return cbo;
+        }
+      }
+    } catch {
+      // Mantém indeterminado quando o cadastro realmente não puder ser resolvido.
+    }
+  }
+
+  return "";
+}
 
 export async function validarCompatibilidadeClinicaSigtap(
   input: SigtapClinicalValidationInput,
