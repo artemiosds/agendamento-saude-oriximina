@@ -134,7 +134,7 @@ export async function validarCompatibilidadeClinicaSigtap(
     return {
       ...base,
       status: "incompatível",
-      motivos: [`Procedimento não vigente no SIGTAP da competência ${competencia}.`],
+      motivos: [`Procedimento não vigente na competência ${competencia}: o código ${procedimento} não foi encontrado como vigente no catálogo SIGTAP usado para esta validação. O registro clínico pode ser mantido, mas este código não deve ser enviado no BPA-I desta competência.`],
     };
   }
 
@@ -142,11 +142,13 @@ export async function validarCompatibilidadeClinicaSigtap(
   const bpaICompativel = proc.instrumentos.has("02");
 
   if (!proc.cbos.has(cbo)) {
-    motivos.push(`Procedimento não relacionado ao CBO ${cbo} na competência ${competencia}.`);
+    motivos.push(
+      `CBO não compatível para produção deste procedimento: o SIGTAP da competência ${competencia} não relaciona o CBO ${cbo} ao código ${procedimento}. Isso não apaga o registro clínico, mas impede que esta combinação seja enviada como produção válida no BPA-I.`,
+    );
   }
   if (!bpaICompativel) {
     motivos.push(
-      `Instrumento de registro incompatível com BPA-I na competência ${competencia} (instrumentos: ${instrumentos.join(", ") || "nenhum"}).`,
+      `Instrumento de registro não compatível com BPA-I: para o procedimento ${procedimento}, o SIGTAP da competência ${competencia} informa instrumento(s) ${instrumentos.join(", ") || "não informado"}, enquanto o BPA-I exige o instrumento 02. O procedimento pode existir no SIGTAP e ainda assim não ser faturável por BPA-I.`,
     );
   }
 
@@ -155,7 +157,7 @@ export async function validarCompatibilidadeClinicaSigtap(
     if (!sexo) {
       avisos.push("Sexo do paciente não está disponível para validar a restrição SIGTAP.");
     } else if (sexo !== proc.sexo) {
-      motivos.push(`Procedimento restrito ao sexo ${proc.sexo}; paciente informado como ${sexo}.`);
+      motivos.push(`Sexo incompatível com a regra SIGTAP deste procedimento: o código ${procedimento} está restrito ao sexo ${proc.sexo}, enquanto o paciente está informado como ${sexo}. Esta combinação não deve ser enviada no BPA-I.`);
     }
   }
 
