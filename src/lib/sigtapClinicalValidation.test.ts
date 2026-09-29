@@ -32,6 +32,19 @@ describe("validação clínica SIGTAP", () => {
             cids: new Set(["F840"]),
           },
         ],
+        [
+          "0101040121",
+          {
+            instrumentos: new Set(["10"]),
+            cbos: new Set(["223710"]),
+            sexo: "I",
+            quantidadeMaxima: null,
+            idadeMinimaMeses: 216,
+            idadeMaximaMeses: null,
+            servicosClassificacoes: new Set(),
+            cids: new Set(),
+          },
+        ],
       ]),
     );
   });
@@ -60,6 +73,36 @@ describe("validação clínica SIGTAP", () => {
     });
     expect(result.status).toBe("compatível");
     expect(result.bpaICompativel).toBe(true);
+  });
+
+  it("permite registro clínico da nutricionista com instrumento 10 e o exclui do BPA-I", async () => {
+    const result = await validarCompatibilidadeClinicaSigtap({
+      procedimento: "0101040121",
+      competencia: "202609",
+      cbo: "223710",
+      dataNascimento: "1980-01-01",
+      dataAtendimento: "2026-09-29",
+      sexo: "F",
+    });
+    expect(result.status).toBe("compatível");
+    expect(result.motivos).toEqual([]);
+    expect(result.bpaICompativel).toBe(false);
+    expect(result.avisos.join(" ")).toContain("fora do BPA-I");
+    expect(result.avisos.join(" ")).toContain("10 (e-SUS APS)");
+  });
+
+  it("mantém incompatibilidade real de CBO mesmo quando o instrumento também é fora do BPA-I", async () => {
+    const result = await validarCompatibilidadeClinicaSigtap({
+      procedimento: "0101040121",
+      competencia: "202609",
+      cbo: "322205",
+      dataNascimento: "1980-01-01",
+      dataAtendimento: "2026-09-29",
+      sexo: "F",
+    });
+    expect(result.status).toBe("incompatível");
+    expect(result.motivos.join(" ")).toContain("CBO 322205");
+    expect(result.bpaICompativel).toBe(false);
   });
 
   it("marca incompatível por CBO e idade quando as regras oficiais falham", async () => {

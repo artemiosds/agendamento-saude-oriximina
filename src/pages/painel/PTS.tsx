@@ -1745,12 +1745,19 @@ const PTS: React.FC = () => {
                         <div
                           className={cn(
                             "rounded-md border p-2 text-xs",
-                            sigtapValidationByCode[selectedProcCodigo].status === "compatível" && "border-emerald-300 bg-emerald-50 text-emerald-800",
+                            sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel === false && "border-amber-300 bg-amber-50 text-amber-800",
+                            sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel !== false && "border-emerald-300 bg-emerald-50 text-emerald-800",
                             sigtapValidationByCode[selectedProcCodigo].status === "incompatível" && "border-red-300 bg-red-50 text-red-800",
                             sigtapValidationByCode[selectedProcCodigo].status === "indeterminado" && "border-amber-300 bg-amber-50 text-amber-800",
                           )}
                         >
-                          {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && (
+                          {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel === false && (
+                            <div>
+                              <div className="font-medium">Registro clínico permitido; fora da exportação BPA-I.</div>
+                              <div className="mt-1">{sigtapValidationByCode[selectedProcCodigo].avisos.join(" ")}</div>
+                            </div>
+                          )}
+                          {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel !== false && (
                             <div className="font-medium">Procedimento compatível com SIGTAP.</div>
                           )}
                           {sigtapValidationByCode[selectedProcCodigo].status === "incompatível" && (
@@ -1796,7 +1803,10 @@ const PTS: React.FC = () => {
                                   <Badge variant="secondary" className="font-mono text-xs shrink-0">{s.procedimento_codigo}</Badge>
                                   <span className="flex-1 truncate">{s.procedimento_nome}</span>
                                   <span className="text-muted-foreground shrink-0">{getSpecLabelForSigtap(s.especialidade)}</span>
-                                  {status?.status === "compatível" && (
+                                  {status?.status === "compatível" && status.bpaICompativel === false && (
+                                    <Badge variant="outline" className="border-amber-400 text-amber-700 text-[10px]">Clínico · fora do BPA-I</Badge>
+                                  )}
+                                  {status?.status === "compatível" && status.bpaICompativel !== false && (
                                     <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">Compatível</Badge>
                                   )}
                                   {status?.status === "incompatível" && (

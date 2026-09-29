@@ -224,6 +224,9 @@ export async function validarCompatibilidadeClinicaSigtap(
 
   const instrumentos = [...proc.instrumentos];
   const bpaICompativel = proc.instrumentos.has("02");
+  const instrumentosDescritos = instrumentos.map((codigo) =>
+    codigo === "10" ? "10 (e-SUS APS)" : codigo,
+  ).join(", ");
 
   if (!proc.cbos.has(cbo)) {
     motivos.push(
@@ -231,8 +234,8 @@ export async function validarCompatibilidadeClinicaSigtap(
     );
   }
   if (!bpaICompativel) {
-    motivos.push(
-      `Instrumento de registro não compatível com BPA-I: para o procedimento ${procedimento}, o SIGTAP da competência ${competencia} informa instrumento(s) ${instrumentos.join(", ") || "não informado"}, enquanto o BPA-I exige o instrumento 02. O procedimento pode existir no SIGTAP e ainda assim não ser faturável por BPA-I.`,
+    avisos.push(
+      `Registro clínico permitido, mas fora do BPA-I: o procedimento ${procedimento} usa instrumento(s) ${instrumentosDescritos || "não informado"} na competência ${competencia}; o BPA-I exige o instrumento 02.`,
     );
   }
 

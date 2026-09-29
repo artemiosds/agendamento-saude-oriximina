@@ -39,6 +39,22 @@ describe("segurança da exportação BPA-I", () => {
     expect(result.rejeitados[2].rejeicoes.join(" ")).toContain("não vigente");
   });
 
+  it("não exporta no BPA-I procedimento clínico da nutricionista com instrumento 10", () => {
+    const catalogoNutri = parseBpaSigtapCatalog(comp, {
+      procedimentos: proc("0101040121"),
+      registros: `010104012110${comp}`,
+      ocupacoes: `0101040121223710${comp}`,
+    });
+    const result = validarListaProcedimentosBpaI(
+      [{ codigo: "0101040121" }],
+      { ...ctx, cbo: "223710", catalogoOficial: catalogoNutri },
+    );
+    expect(result.validos).toHaveLength(0);
+    expect(result.rejeitados).toHaveLength(1);
+    expect(result.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento incompatível com BPA-I");
+    expect(result.rejeitados[0].rejeicoes.join(" ")).not.toContain("CBO incompatível");
+  });
+
   it("mantém CBO ausente fora do TXT sem classificá-lo como incompatibilidade SIGTAP", () => {
     for (const cbo of ["", "000000"]) {
       const result = validarListaProcedimentosBpaI([{ codigo: "0301100039" }], { ...ctx, cbo });
