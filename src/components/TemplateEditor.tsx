@@ -288,7 +288,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   const [extraMeta, setExtraMeta] = useState<Record<string, any>>({});
   const [structuredType, setStructuredType] = useState<"DOCUMENTO" | "OCI">("DOCUMENTO");
   const [ociTitulo, setOciTitulo] = useState("LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)");
-  const [ociLinhasSecundarias, setOciLinhasSecundarias] = useState(14);
+  const [ociLinhasSecundarias, setOciLinhasSecundarias] = useState(20);
   const [ociPrincipal, setOciPrincipal] = useState<SigtapPickerValue | null>(null);
 
   const PAGE_DIMS = { A4: [210, 297], A5: [148, 210], Letter: [216, 279], Legal: [216, 356] } as const;
@@ -341,7 +341,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       setMostrarLogos(meta.mostrar_logos !== false);
       setStructuredType(meta.structured_type === 'OCI' ? 'OCI' : 'DOCUMENTO');
       setOciTitulo(meta?.oci?.titulo || 'LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)');
-      setOciLinhasSecundarias(Number(meta?.oci?.linhas_secundarias || 14));
+      setOciLinhasSecundarias(Number(meta?.oci?.linhas_secundarias || 20));
       setOciPrincipal(meta?.oci?.procedimento_principal?.codigo ? {
         codigo: meta.oci.procedimento_principal.codigo,
         nome: meta.oci.procedimento_principal.nome || '',
@@ -365,7 +365,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
     setMostrarLogos(meta.mostrar_logos !== false);
     setStructuredType(meta.structured_type === 'OCI' ? 'OCI' : 'DOCUMENTO');
     setOciTitulo(meta?.oci?.titulo || 'LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)');
-    setOciLinhasSecundarias(Number(meta?.oci?.linhas_secundarias || 14));
+    setOciLinhasSecundarias(Number(meta?.oci?.linhas_secundarias || 20));
     setOciPrincipal(meta?.oci?.procedimento_principal?.codigo ? {
       codigo: meta.oci.procedimento_principal.codigo,
       nome: meta.oci.procedimento_principal.nome || '',
@@ -479,7 +479,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
           oci: {
             ...(extraMeta.oci || {}),
             titulo: ociTitulo.trim() || 'LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)',
-            linhas_secundarias: Math.max(8, Math.min(18, Number(ociLinhasSecundarias || 14))),
+            linhas_secundarias: Math.max(8, Math.min(24, Number(ociLinhasSecundarias || 20))),
             procedimento_principal: {
               codigo: ociPrincipal?.codigo || '',
               nome: ociPrincipal?.nome || '',
@@ -659,9 +659,9 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
               <Input
                 type="number"
                 min={8}
-                max={18}
+                max={24}
                 value={ociLinhasSecundarias}
-                onChange={(e) => { setOciLinhasSecundarias(Number(e.target.value) || 14); setDirty(true); }}
+                onChange={(e) => { setOciLinhasSecundarias(Number(e.target.value) || 20); setDirty(true); }}
               />
             </div>
           )}
