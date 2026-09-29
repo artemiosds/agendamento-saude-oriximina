@@ -574,6 +574,12 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const ociPrincipalLocked = !!selectedMeta?.oci?.procedimento_principal?.codigo;
   const ociReady = !isOciStructured || !!ociData?.procedimentoPrincipal.codigo;
+  const documentFormPayload = () =>
+    isOciStructured
+      ? ({ ...campos, medicamentos, oci: ociData } as any)
+      : ({ ...campos, medicamentos } as any);
+  const originalDocumentContent = () =>
+    isOciStructured && ociData ? renderOciDocument(ociData, docConfig, selectedMeta) : conteudoFinal;
 
   const buildHtmlBody = (signatureHtml: string) => {
     if (isOciStructured && ociData) {
@@ -620,9 +626,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         profissional_id: profissional?.id || user?.id || '',
         profissional_nome: profissional?.nome || user?.nome || '',
         tipo_documento: selected.tipo,
-        conteudo_original: conteudoFinal,
+        conteudo_original: originalDocumentContent(),
         conteudo_html: body,
-        campos_formulario: { ...campos, medicamentos } as any,
+        campos_formulario: documentFormPayload(),
         modelo_id: selected.id,
         unidade_id: unidade || '',
         status: 'rascunho',
@@ -648,9 +654,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         profissional_id: profissional?.id || user?.id || '',
         profissional_nome: profissional?.nome || user?.nome || '',
         tipo_documento: selected.tipo,
-        conteudo_original: conteudoFinal,
+        conteudo_original: originalDocumentContent(),
         conteudo_html: body,
-        campos_formulario: { ...campos, medicamentos, _anexado_em: new Date().toISOString() } as any,
+        campos_formulario: { ...documentFormPayload(), _anexado_em: new Date().toISOString() } as any,
         modelo_id: selected.id,
         unidade_id: unidade || '',
         status: 'anexado',
@@ -670,7 +676,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     try {
       // Generate signature
       const sig = await generateSignature(
-        conteudoFinal,
+        originalDocumentContent(),
         profissional?.id || user?.id || '',
         profissional?.nome || user?.nome || '',
         profissional?.tipo_conselho || carimbo?.conselho || '',
@@ -719,9 +725,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         profissional_id: profissional?.id || user?.id || '',
         profissional_nome: profissional?.nome || user?.nome || '',
         tipo_documento: selected.tipo,
-        conteudo_original: conteudoFinal,
+        conteudo_original: originalDocumentContent(),
         conteudo_html: body,
-        campos_formulario: { ...campos, medicamentos } as any,
+        campos_formulario: documentFormPayload(),
         hash_assinatura: sig.hash,
         ip_assinatura: sig.ip,
         assinado_em: sig.timestamp,
@@ -735,11 +741,15 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       const printOverride = tplMeta && typeof tplMeta === 'object' && 'mostrar_logos' in tplMeta
         ? { mostrarLogos: tplMeta.mostrar_logos !== false }
         : undefined;
-      openPrintDocument(selected.tipo, body, {
-        'Paciente': paciente?.nome || '',
-        'CPF': paciente?.cpf || '',
-        'Data': hoje,
-      }, printOverride);
+      if (isOciStructured) {
+        printViaIframe(buildOciPrintShell(body));
+      } else {
+        openPrintDocument(selected.tipo, body, {
+          'Paciente': paciente?.nome || '',
+          'CPF': paciente?.cpf || '',
+          'Data': hoje,
+        }, printOverride);
+      }
 
       toast.success('✅ Documento assinado e finalizado!');
       onOpenChange(false);
@@ -755,7 +765,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     try {
       // Assina digitalmente para carimbar hash antes de imprimir o PDF
       const sig = await generateSignature(
-        conteudoFinal,
+        originalDocumentContent(),
         profissional?.id || user?.id || '',
         profissional?.nome || user?.nome || '',
         profissional?.tipo_conselho || carimbo?.conselho || '',
@@ -774,9 +784,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
           profissional_id: profissional?.id || user?.id || '',
           profissional_nome: profissional?.nome || user?.nome || '',
           tipo_documento: selected.tipo,
-          conteudo_original: conteudoFinal,
+          conteudo_original: originalDocumentContent(),
           conteudo_html: body,
-          campos_formulario: { ...campos, medicamentos } as any,
+          campos_formulario: documentFormPayload(),
           hash_assinatura: sig.hash,
           ip_assinatura: sig.ip,
           assinado_em: sig.timestamp,
@@ -790,11 +800,13 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
       // Gera PDF automaticamente com layout institucional (sem abrir diálogo de impressão).
       const config = await loadDocumentConfig();
-      const fullHtml = buildDocumentShell(selected.tipo, body, config, {
-        'Paciente': paciente?.nome || '',
-        'CPF': paciente?.cpf || '',
-        'Data': hoje,
-      });
+      const fullHtml = isOciStructured
+        ? buildOciPrintShell(body)
+        : buildDocumentShell(selected.tipo, body, config, {
+            'Paciente': paciente?.nome || '',
+            'CPF': paciente?.cpf || '',
+            'Data': hoje,
+          });
       const pdf = await htmlToPdfBase64(fullHtml, `${selected.tipo}_${paciente?.nome || 'paciente'}`);
 
       setPdfPreCarregado({ base64: pdf.base64, filename: pdf.filename, docId: (inserted as any)?.id });
@@ -1052,11 +1064,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                 </div>
               )}
 
-              {/* Type-specific fields */}
-              {renderTypeSpecificFields()}
+              {isOciStructured && ociData ? (
+                <StructuredOciForm
+                  value={ociData}
+                  onChange={setOciData}
+                  validation={ociValidation}
+                  principalLocked={ociPrincipalLocked}
+                />
+              ) : (
+                <>
+                  {/* Type-specific fields */}
+                  {renderTypeSpecificFields()}
 
-              {/* Campos manuais do template (checkbox, texto, data) */}
-              {(() => {
+                  {/* Campos manuais do template (checkbox, texto, data) */}
+                  {(() => {
                 const manuais: Array<{ key: string; label: string; type: string; options?: string[] }> =
                   (selected.blocos_clinicos as any)?.campos_manuais || [];
                 if (manuais.length === 0) return null;
@@ -1097,6 +1118,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                   </div>
                 );
               })()}
+                </>
+              )}
 
               <Separator />
 
@@ -1110,11 +1133,13 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                   {docConfig && (
                     <div
                       dangerouslySetInnerHTML={{
-                        __html: buildInstitutionalCSS(docConfig) + '<div class="doc-page">' + docHeader(selected.tipo, docConfig) +
-                          '<div class="doc-content content-block doc-abnt"><div class="abnt-text">' +
-                          normalizeForAbntPrint(stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento || pacienteExtra?.data_nascimento)) +
-                          '</div>' +
-                          '</div>' + docFooter(docConfig) + '</div>'
+                        __html: isOciStructured && ociData
+                          ? renderOciDocument(ociData, docConfig, selectedMeta)
+                          : buildInstitutionalCSS(docConfig) + '<div class="doc-page">' + docHeader(selected.tipo, docConfig) +
+                            '<div class="doc-content content-block doc-abnt"><div class="abnt-text">' +
+                            normalizeForAbntPrint(stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento || pacienteExtra?.data_nascimento)) +
+                            '</div>' +
+                            '</div>' + docFooter(docConfig) + '</div>'
                       }}
                     />
                   )}
@@ -1122,8 +1147,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                     <div className="p-5 text-center text-muted-foreground text-sm">Carregando preview...</div>
                   )}
 
-                  {/* Carimbo preview */}
-                  {carimbo && (
+                  {/* Carimbo preview para documentos livres. No OCI o carimbo já faz parte do formulário oficial. */}
+                  {!isOciStructured && carimbo && (
                     <div className="mt-6 text-right">
                       {carimbo.tipo === 'digital' ? (
                         <div className="inline-block border border-foreground rounded-md px-4 py-2 text-center text-xs">
@@ -1138,10 +1163,10 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                   )}
 
                   {/* Signature preview placeholder */}
-                  <div className="mt-4 border border-dashed border-muted-foreground/30 rounded p-3 text-center text-xs text-muted-foreground">
+                  {!isOciStructured && <div className="mt-4 border border-dashed border-muted-foreground/30 rounded p-3 text-center text-xs text-muted-foreground">
                     <ShieldCheck className="w-4 h-4 mx-auto mb-1" />
                     Bloco de assinatura eletrônica será inserido ao assinar
-                  </div>
+                  </div>}
                 </div>
               </div>
             </>
@@ -1164,7 +1189,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               </Button>
               <Button
                 onClick={handleSignAndFinalize}
-                disabled={salvando || (isEncaminhamento && !profDestinoId)}
+                disabled={salvando || (isEncaminhamento && !profDestinoId) || !ociReady}
                 className="gap-1.5"
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
