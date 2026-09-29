@@ -6,6 +6,7 @@ export interface ReadyTemplate {
   tipo: string;
   conteudo: string;
   descricao?: string;
+  blocos_clinicos?: any;
 }
 
 const ociOrtopedia = `
@@ -139,7 +140,17 @@ export const READY_TEMPLATES: ReadyTemplate[] = [
     id: 'oci-ortopedia',
     nome: 'OCI Avaliação Diagnóstica em Ortopedia (Radiologia + TC)',
     tipo: 'Laudo Clínico',
-    descricao: 'Formulário OCI completo com identificação do paciente, justificativa, procedimento principal fixo e até 16 procedimentos secundários.',
+    descricao: 'Formulário OCI estruturado com identificação automática do paciente, busca SIGTAP e impressão fiel ao formulário.',
     conteudo: ociOrtopedia,
+    blocos_clinicos: {
+      structured_type: 'OCI',
+      mostrar_logos: true,
+      campos_manuais: [],
+      oci: {
+        titulo: 'LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)',
+        linhas_secundarias: 14,
+        procedimento_principal: { codigo: '', nome: '', quantidade: 1 },
+      },
+    },
   },
 ];
