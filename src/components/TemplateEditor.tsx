@@ -16,6 +16,7 @@ import DOMPurify from 'dompurify';
 import { applyExampleValues, normalizeTemplateAliases, TEMPLATE_VARIABLE_GROUPS } from '@/lib/templateVariables';
 import { supabase } from '@/integrations/supabase/client';
 import { READY_TEMPLATES } from '@/lib/readyTemplates';
+import SigtapProcedurePicker, { type SigtapPickerValue } from '@/components/documents/SigtapProcedurePicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -261,7 +262,7 @@ const TableHeader = BaseTableHeader.extend({
 // -------- Editor Panel --------
 interface EditorPanelProps {
   templateId?: string | null;
-  seed?: { nome: string; tipo: string; conteudo: string } | null;
+  seed?: { nome: string; tipo: string; conteudo: string; blocos_clinicos?: any } | null;
   onDone: () => void;
 }
 
@@ -284,6 +285,11 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   const [showGrid, setShowGrid] = useState<boolean>(false);
   const [showRuler, setShowRuler] = useState<boolean>(true);
   const [mostrarLogos, setMostrarLogos] = useState<boolean>(true);
+  const [extraMeta, setExtraMeta] = useState<Record<string, any>>({});
+  const [structuredType, setStructuredType] = useState<"DOCUMENTO" | "OCI">("DOCUMENTO");
+  const [ociTitulo, setOciTitulo] = useState("LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)");
+  const [ociLinhasSecundarias, setOciLinhasSecundarias] = useState(14);
+  const [ociPrincipal, setOciPrincipal] = useState<SigtapPickerValue | null>(null);
 
   const PAGE_DIMS = { A4: [210, 297], A5: [148, 210], Letter: [216, 279], Legal: [216, 356] } as const;
   const [pageW, pageH] = orientation === 'portrait' ? PAGE_DIMS[pageSize] : [PAGE_DIMS[pageSize][1], PAGE_DIMS[pageSize][0]];
@@ -330,8 +336,16 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       setNome(data.nome || '');
       setCategoria((CATEGORIAS.includes(data.tipo as Categoria) ? data.tipo : 'Clínico') as Categoria);
       const meta = (data.blocos_clinicos as any) || {};
+      setExtraMeta(meta);
       setCamposManuais(meta.campos_manuais || []);
       setMostrarLogos(meta.mostrar_logos !== false);
+      setStructuredType(meta.structured_type === 'OCI' ? 'OCI' : 'DOCUMENTO');
+      setOciTitulo(meta?.oci?.titulo || 'LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)');
+      setOciLinhasSecundarias(Number(meta?.oci?.linhas_secundarias || 14));
+      setOciPrincipal(meta?.oci?.procedimento_principal?.codigo ? {
+        codigo: meta.oci.procedimento_principal.codigo,
+        nome: meta.oci.procedimento_principal.nome || '',
+      } : null);
       if (editor) {
         editor.commands.setContent(normalizeTemplateAliases(data.conteudo || '<p></p>'));
         setDirty(false);
@@ -345,6 +359,17 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
     if (templateId || !seed || !editor) return;
     setNome(seed.nome || '');
     setCategoria((CATEGORIAS.includes(seed.tipo as Categoria) ? seed.tipo : 'Clínico') as Categoria);
+    const meta = seed.blocos_clinicos || {};
+    setExtraMeta(meta);
+    setCamposManuais(meta.campos_manuais || []);
+    setMostrarLogos(meta.mostrar_logos !== false);
+    setStructuredType(meta.structured_type === 'OCI' ? 'OCI' : 'DOCUMENTO');
+    setOciTitulo(meta?.oci?.titulo || 'LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)');
+    setOciLinhasSecundarias(Number(meta?.oci?.linhas_secundarias || 14));
+    setOciPrincipal(meta?.oci?.procedimento_principal?.codigo ? {
+      codigo: meta.oci.procedimento_principal.codigo,
+      nome: meta.oci.procedimento_principal.nome || '',
+    } : null);
     editor.commands.setContent(normalizeTemplateAliases(seed.conteudo || '<p></p>'));
     setDirty(true);
   }, [seed, templateId, editor]);
@@ -445,7 +470,24 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       p_perfis_permitidos: templateId ? null : ['master', 'profissional', 'coordenador', 'gestao'],
       p_tipo_modelo: templateId ? null : 'UNIDADE',
       p_unidade_id: templateId ? null : (user?.unidadeId || ''),
-      p_blocos_clinicos: { campos_manuais: camposManuais, mostrar_logos: mostrarLogos },
+      p_blocos_clinicos: {
+        ...extraMeta,
+        structured_type: structuredType === 'OCI' ? 'OCI' : undefined,
+        campos_manuais: camposManuais,
+        mostrar_logos: mostrarLogos,
+        ...(structuredType === 'OCI' ? {
+          oci: {
+            ...(extraMeta.oci || {}),
+            titulo: ociTitulo.trim() || 'LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)',
+            linhas_secundarias: Math.max(8, Math.min(18, Number(ociLinhasSecundarias || 14))),
+            procedimento_principal: {
+              codigo: ociPrincipal?.codigo || '',
+              nome: ociPrincipal?.nome || '',
+              quantidade: 1,
+            },
+          },
+        } : {}),
+      },
       p_versoes: templateId ? null : [],
     });
     if (error) {
@@ -593,6 +635,61 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
         <Switch checked={mostrarLogos} onCheckedChange={(v) => { setMostrarLogos(!!v); setDirty(true); }} />
       </div>
 
+      <div className="border rounded-lg p-3 space-y-3 bg-card">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Tipo de preenchimento</Label>
+            <Select
+              value={structuredType}
+              onValueChange={(v) => {
+                setStructuredType(v as "DOCUMENTO" | "OCI");
+                setDirty(true);
+              }}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DOCUMENTO">Documento livre</SelectItem>
+                <SelectItem value="OCI">Formulário estruturado / OCI</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {structuredType === 'OCI' && (
+            <div className="space-y-1.5">
+              <Label>Linhas para procedimentos secundários</Label>
+              <Input
+                type="number"
+                min={8}
+                max={18}
+                value={ociLinhasSecundarias}
+                onChange={(e) => { setOciLinhasSecundarias(Number(e.target.value) || 14); setDirty(true); }}
+              />
+            </div>
+          )}
+        </div>
+
+        {structuredType === 'OCI' && (
+          <div className="space-y-3 rounded-md border p-3 bg-muted/20">
+            <div className="space-y-1.5">
+              <Label>Título oficial do formulário</Label>
+              <Input
+                value={ociTitulo}
+                onChange={(e) => { setOciTitulo(e.target.value); setDirty(true); }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Procedimento principal SIGTAP do modelo</Label>
+              <SigtapProcedurePicker
+                value={ociPrincipal}
+                onChange={(value) => { setOciPrincipal(value); setDirty(true); }}
+                placeholder="Buscar o procedimento principal oficial..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Quando definido, o profissional receberá o procedimento principal bloqueado no formulário e apenas escolherá os secundários.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
         {/* Left: editor */}
@@ -1069,7 +1166,7 @@ const TemplateEditor: React.FC = () => {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null | undefined>(undefined); // undefined=lista, null=novo, string=id
-  const [seed, setSeed] = useState<{ nome: string; tipo: string; conteudo: string } | null>(null);
+  const [seed, setSeed] = useState<{ nome: string; tipo: string; conteudo: string; blocos_clinicos?: any } | null>(null);
 
   const READY_HIDDEN_KEY = 'template_editor_hidden_ready';
   const [hiddenReady, setHiddenReady] = useState<string[]>(() => {
@@ -1199,7 +1296,7 @@ const TemplateEditor: React.FC = () => {
                         variant="outline"
                         className="gap-1"
                         onClick={() => {
-                          setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo });
+                          setSeed({ nome: rt.nome, tipo: rt.tipo, conteudo: rt.conteudo, blocos_clinicos: rt.blocos_clinicos });
                           setEditingId(null);
                         }}
                       >
