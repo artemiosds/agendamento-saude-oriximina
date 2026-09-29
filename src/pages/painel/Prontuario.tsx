@@ -48,7 +48,7 @@ import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
 import {
   competenciaFromDate,
-  resolveProfessionalCbo,
+  resolveProfessionalCboReliable,
   validarCompatibilidadeClinicaSigtap,
   type SigtapClinicalValidationResult,
 } from "@/lib/sigtapClinicalValidation";
@@ -672,7 +672,6 @@ const ProntuarioPage: React.FC = () => {
     const profissional =
       funcionarios.find((f: any) => f.id === profissionalId) ||
       (user?.id === profissionalId ? user : null);
-    const cbo = resolveProfessionalCbo(profissional);
     const competencia = competenciaFromDate(form.data_atendimento);
     const nascimento =
       paciente?.data_nascimento ||
@@ -682,7 +681,7 @@ const ProntuarioPage: React.FC = () => {
       "";
     const sexo = paciente?.sexo || paciente?.custom_data?.sexo || "";
 
-    void Promise.all(
+    void resolveProfessionalCboReliable(profissional, profissionalId).then((cbo) => Promise.all(
       selectedProcIds.map(async (codigo) => {
         if (!/^\d{10}$/.test(String(codigo))) {
           return [
@@ -710,7 +709,7 @@ const ProntuarioPage: React.FC = () => {
         });
         return [codigo, result] as const;
       }),
-    ).then((entries) => {
+    )).then((entries) => {
       if (!cancelled) setSigtapValidationByProc(Object.fromEntries(entries));
     });
 
@@ -1839,7 +1838,7 @@ const ProntuarioPage: React.FC = () => {
     const profValidacao =
       funcionarios.find((fx: any) => fx.id === profIdValidacao) ||
       (user?.id === profIdValidacao ? user : null);
-    const cboValidacao = resolveProfessionalCbo(profValidacao);
+    const cboValidacao = await resolveProfessionalCboReliable(profValidacao, profIdValidacao);
     const competenciaValidacao = competenciaFromDate(f.data_atendimento);
     const nascimentoValidacao =
       pacValidacao?.data_nascimento ||
@@ -2663,7 +2662,7 @@ const ProntuarioPage: React.FC = () => {
     const profValidacaoSessao =
       funcionarios.find((f: any) => f.id === profIdValidacaoSessao) ||
       (!editId && user?.id === profIdValidacaoSessao ? user : null);
-    const cboValidacaoSessao = resolveProfessionalCbo(profValidacaoSessao);
+    const cboValidacaoSessao = await resolveProfessionalCboReliable(profValidacaoSessao, profIdValidacaoSessao);
     const competenciaValidacaoSessao = competenciaFromDate(form.data_atendimento);
     const nascimentoValidacaoSessao =
       pacValidacaoSessao?.data_nascimento ||
