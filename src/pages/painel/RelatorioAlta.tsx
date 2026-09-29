@@ -1429,12 +1429,35 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
         {isReportLocked && (
           <Alert className="border-amber-300 bg-amber-50">
             <Lock className="h-4 w-4 text-amber-700" />
-            <AlertTitle className="text-amber-800">Relatório finalizado — modo somente leitura</AlertTitle>
+            <AlertTitle className="text-amber-800">Relatório finalizado — alterações bloqueadas</AlertTitle>
             <AlertDescription className="text-amber-700">
               Para fazer qualquer alteração, utilize “Reabrir relatório”. A reabertura cria nova versão e registra o motivo na auditoria.
             </AlertDescription>
           </Alert>
         )}
+
+        <Dialog open={isReopening} onOpenChange={setIsReopening}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reabertura de Relatório</DialogTitle>
+              <DialogDescription>
+                O documento finalizado será reaberto como nova versão. Os dados persistidos serão preservados e o motivo ficará registrado na auditoria.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <Label>Motivo da Reabertura *</Label>
+              <Textarea
+                value={reopenReason}
+                onChange={e => setReopenReason(e.target.value)}
+                placeholder="Descreva o motivo pelo qual este documento precisa ser alterado..."
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsReopening(false)}>Cancelar</Button>
+              <Button onClick={handleReopen} disabled={loading}>Confirmar Reabertura</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Tabs defaultValue="identificacao" className="w-full">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
@@ -1469,29 +1492,6 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
               </CardContent>
             </Card>
 
-            {/* Professionalization UI components */}
-            <Dialog open={isReopening} onOpenChange={setIsReopening}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Reabertura de Relatório</DialogTitle>
-                  <DialogDescription>
-                    Este documento já foi finalizado. A reabertura criará uma nova versão e será registrada na auditoria.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <Label>Motivo da Reabertura *</Label>
-                  <Textarea 
-                    value={reopenReason} 
-                    onChange={e => setReopenReason(e.target.value)} 
-                    placeholder="Descreva o motivo pelo qual este documento precisa ser alterado..."
-                  />
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsReopening(false)}>Cancelar</Button>
-                  <Button onClick={handleReopen}>Confirmar Reabertura</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </TabsContent>
 
 
@@ -1569,7 +1569,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
             {isReportLocked && (
         <Alert className="border-amber-300 bg-amber-50">
           <Lock className="h-4 w-4 text-amber-700" />
-          <AlertTitle className="text-amber-800">Relatório finalizado — modo somente leitura</AlertTitle>
+          <AlertTitle className="text-amber-800">Relatório finalizado — alterações bloqueadas</AlertTitle>
           <AlertDescription className="text-amber-700">
             Reabra o relatório para editar. O sistema criará uma nova versão e registrará o motivo na auditoria.
           </AlertDescription>
