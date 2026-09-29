@@ -140,6 +140,15 @@ const calcIdade = (dn: string) => {
   } catch { return ""; }
 };
 
+const parseAltaPayload = (raw?: string | null): any => {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("O conteúdo salvo do relatório de alta está inválido e não pôde ser carregado com segurança.");
+  }
+};
+
 
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
@@ -277,28 +286,134 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   const [indRiscoRegressao, setIndRiscoRegressao] = useState("");
   const [indPrazoReavaliacao, setIndPrazoReavaliacao] = useState("");
 
-  const [status, setStatus] = useState<"rascunho" | "concluido" | "validado" | "emitido">("rascunho");
+  const [status, setStatus] = useState<"rascunho" | "concluido" | "finalizado" | "validado" | "emitido">("rascunho");
 
   const [reportId, setReportId] = useState<string | null>(null);
   const [ptsMetas, setPtsMetas] = useState<MetaPTS[]>([]);
   const [loading, setLoading] = useState(false);
+  const activePatientRef = React.useRef("");
+  const reportLoadTokenRef = React.useRef(0);
+  const isReportLocked = status !== "rascunho";
 
-  /* ── auto-load professional data when patient selected ─── */
+  const resetReportTracking = () => {
+    setReportId(null);
+    setStatus("rascunho");
+    setVersion(1);
+    setHistory([]);
+    setLastUpdatedBy("");
+    setLastUpdatedAt("");
+    setReopenReason("");
+    setIsReopening(false);
+  };
+
+  const resetMultiForm = () => {
+    setModalidades([]);
+    setCid10("");
+    setMultiCid10Secundario("");
+    setMultiDiagClinico("");
+    setMultiDiagFuncional("");
+    setMultiContextoBiopsicossocial("");
+    setCifFuncoes("");
+    setCifAtividades("");
+    setCifFatores("");
+    setMultiBarreiras("");
+    setMultiPotencialidades("");
+    setMultiFatoresContextuais("");
+    setMultiObjetivosGerais("");
+    setMultiPlanoExecutado("");
+    setProfSections([]);
+    setMotivoAlta("");
+    setMultiTipoAlta("");
+    setMultiMotivoDetalhe("");
+    setCondicaoFuncional("");
+    setNivelIndep("");
+    setMultiComparacaoFuncional("");
+    setMultiGanhosPrincipais("");
+    setMultiLimitacoesPersistentes("");
+    setMultiRiscoRegressao("");
+    setMultiFatoresAlerta("");
+    setOrientacoesUsuario("");
+    setOrientacoesUbs("");
+    setMultiOrientacoesEscola("");
+    setMultiPontosAtencao("");
+    setEncaminhamentos([]);
+    setFreqAps("");
+    setMultiContinuarTerapia("");
+    setMultiPrazoRetorno("");
+    setMultiResponsavelTecnico("");
+    setMultiResumoConsolidado("");
+    setDataAlta(new Date().toISOString().split("T")[0]);
+    setTabProf("");
+  };
+
+  const resetIndividualForm = () => {
+    setIndDiagCid("");
+    setIndCif("");
+    setIndDiagClinico("");
+    setIndDiagFuncional("");
+    setIndNivelComprometimento("");
+    setIndObsDiagnosticas("");
+    setIndQueixaPrincipal("");
+    setIndMotivoEncaminhamento("");
+    setIndContextoFamiliar("");
+    setIndComorbidades("");
+    setIndMedicacao("");
+    setIndObjetivos("");
+    setIndIntervencoes("");
+    setIndEvolucao("");
+    setIndMetas("totalmente");
+    setIndMetasJust("");
+    setIndTA("");
+    setIndFrequenciaAtendimento("");
+    setIndAdesaoTratamento("");
+    setIndEvolucaoGlobal("");
+    setIndIntercorrencias("");
+    setIndIntercorrenciasObs("");
+    setIndRespostaTerapeutica("");
+    setIndComparacaoInicioAlta("");
+    setIndResumoConsolidado("");
+    setIndRiscoPosAlta("");
+    setIndComplexidade("");
+    setIndMotivo("");
+    setIndTipoAlta("");
+    setIndMotivoDet("");
+    setIndOrientacoes("");
+    setIndEncaminhamento("");
+    setIndModalidade("");
+    setIndDataAlta(new Date().toISOString().split("T")[0]);
+    setIndSessoes(0);
+    setIndFaltas(0);
+    setIndPeriodoInicio("");
+    setIndPeriodoFim("");
+    setIndContinuarTerapia("");
+    setIndRiscoRegressao("");
+    setIndPrazoReavaliacao("");
+    setPtsMetas([]);
+  };
+
+  const handlePacienteChange = (nextId: string) => {
+    if (nextId === pacienteId) return;
+    reportLoadTokenRef.current += 1;
+    activePatientRef.current = nextId;
+    resetReportTracking();
+    resetMultiForm();
+    resetIndividualForm();
+    setPacienteId(nextId);
+  };
+
+  /* ── carga protegida por paciente/modo ─── */
   useEffect(() => {
     if (!pacienteId || (modo !== "multiprofissional" && modo !== "individual")) return;
+    activePatientRef.current = pacienteId;
+    const token = ++reportLoadTokenRef.current;
     if (modo === "multiprofissional") {
-      loadProfessionalsForPatient(pacienteId);
-      loadMultiData(pacienteId);
+      void loadMultiData(pacienteId, token);
+    } else {
+      void loadIndividualData(pacienteId, token);
     }
-
   }, [pacienteId, modo]);
 
-  useEffect(() => {
-    if (!pacienteId || modo !== "individual") return;
-    loadIndividualData(pacienteId);
-  }, [pacienteId, modo]);
-
-  const loadProfessionalsForPatient = async (pid: string) => {
+  const loadProfessionalsForPatient = async (pid: string, token = reportLoadTokenRef.current) => {
     // Get all professionals who created prontuarios for this patient
     const { data: pronts } = await supabase
       .from("prontuarios")
@@ -306,6 +421,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
       .eq("paciente_id", pid)
       .order("data_atendimento", { ascending: true });
 
+    if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
     if (!pronts || pronts.length === 0) {
       setProfSections([]);
       return;
@@ -330,6 +446,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
       .eq("patient_id", pid)
       .eq("status", "realizada");
 
+    if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
     const sessionCounts = new Map<string, number>();
     sessions?.forEach(s => {
       sessionCounts.set(s.professional_id, (sessionCounts.get(s.professional_id) || 0) + 1);
@@ -381,6 +498,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
       .eq("status", "ativo")
       .maybeSingle();
 
+    if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
     if (activePts) {
       setMultiDiagFuncional(activePts.diagnostico_funcional || "");
       setMultiObjetivosGerais(activePts.objetivos_terapeuticos || "");
@@ -389,22 +507,26 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     }
   };
 
-  const loadMultiData = async (pid: string) => {
+  const loadMultiData = async (pid: string, token = reportLoadTokenRef.current) => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const { data: existingDraft } = await supabase
+      const { data: existingDraft, error: loadError } = await supabase
         .from("prontuarios")
         .select("*")
         .eq("paciente_id", pid)
-        .eq("status", "rascunho")
         .eq("tipo_registro", "alta_multiprofissional")
+        .order("atualizado_em", { ascending: false })
+        .limit(1)
         .maybeSingle();
+
+      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
+      if (loadError) throw loadError;
 
       if (existingDraft) {
         setReportId(existingDraft.id);
         setStatus(existingDraft.status as any || "rascunho");
-        const data = JSON.parse(existingDraft.observacoes);
+        const data = parseAltaPayload(existingDraft.observacoes);
         
         setModalidades(data.modalidades || []);
         setCid10(data.cid10 || "");
@@ -448,33 +570,44 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         setLastUpdatedBy(existingDraft.profissional_nome);
         setLastUpdatedAt(existingDraft.atualizado_em || existingDraft.criado_em);
         
-        toast.info("Relatório multiprofissional carregado.");
+        toast.info(existingDraft.status === "rascunho" ? "Rascunho multiprofissional carregado." : "Relatório multiprofissional existente carregado.");
+        return;
       }
-    } catch (err) {
+
+      // Somente monta uma nova estrutura quando não existe relatório salvo.
+      await loadProfessionalsForPatient(pid, token);
+    } catch (err: any) {
       console.error(err);
+      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
+        toast.error(err?.message || "Não foi possível carregar o relatório multiprofissional.");
+      }
     } finally {
-      setLoading(false);
+      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) setLoading(false);
     }
   };
 
-  const loadIndividualData = async (pid: string) => {
+  const loadIndividualData = async (pid: string, token = reportLoadTokenRef.current) => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      // 1. Check for existing draft
-      const { data: existingDraft } = await supabase
+      // 1. Carrega o relatório mais recente, independentemente do status.
+      const { data: existingDraft, error: loadError } = await supabase
         .from("prontuarios")
         .select("*")
         .eq("paciente_id", pid)
         .eq("profissional_id", user.id)
-        .eq("status", "rascunho")
         .eq("tipo_registro", "alta_individual")
+        .order("atualizado_em", { ascending: false })
+        .limit(1)
         .maybeSingle();
+
+      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
+      if (loadError) throw loadError;
 
       if (existingDraft) {
         setReportId(existingDraft.id);
         setStatus(existingDraft.status as any || "rascunho");
-        const data = JSON.parse(existingDraft.observacoes);
+        const data = parseAltaPayload(existingDraft.observacoes);
         // Load all data from draft
         setIndDiagCid(data.diagCid || "");
         setIndCif(data.cif || "");
@@ -523,12 +656,11 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         setLastUpdatedBy(existingDraft.profissional_nome);
         setLastUpdatedAt(existingDraft.atualizado_em || existingDraft.criado_em);
         
-        toast.info("Rascunho individual carregado.");
-        setLoading(false);
+        toast.info(existingDraft.status === "rascunho" ? "Rascunho individual carregado." : "Relatório individual existente carregado.");
         return;
       }
 
-      // 2. Load fresh data if no draft
+      // 2. Carrega dados clínicos de origem somente quando não existe relatório salvo
       const { data: pronts } = await supabase
         .from("prontuarios")
         .select("data_atendimento, hipotese, procedimentos_texto, queixa_principal, evolucao, conduta")
@@ -547,55 +679,6 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         setIndEvolucao(lastPront.evolucao || "");
         setIndOrientacoes(lastPront.conduta || "");
       }
-  const generateIndSummary = () => {
-    const summary = `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões. 
-Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : "parcialmente"} atingidos. 
-A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}. 
-Na alta, apresenta ${indDiagFuncional || "estabilidade funcional"}. 
-Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`;
-    setIndResumoConsolidado(summary);
-  };
-
-  const handleReopen = async () => {
-    if (!reopenReason) { toast.error("Informe o motivo da reabertura"); return; }
-    
-    const newVersion = version + 1;
-    const actionDate = new Date().toISOString();
-    const newHistoryEntry: VersionRecord = {
-      version: newVersion,
-      data: actionDate,
-      user_nome: user?.nome || "Sistema",
-      action: "Reabertura de Relatório",
-      reason: reopenReason
-    };
-
-    const updatedHistory = [...history, newHistoryEntry];
-    setStatus("rascunho");
-    setVersion(newVersion);
-    setHistory(updatedHistory);
-    setIsReopening(false);
-    
-    // Save state change
-    await handleSave(modo === "individual" ? "individual" : "multi", true, "rascunho");
-
-    await auditService.log({
-      acao: "reabrir_relatorio_alta",
-      modulo: "prontuario",
-      entidade: "prontuario",
-      entidadeId: reportId || "",
-      pacienteId: pacienteId,
-      pacienteNome: paciente?.nome,
-      profissionalId: user?.id,
-      profissionalNome: user?.nome,
-      detalhes: { motivo: reopenReason, version: newVersion }
-
-    });
-    
-    setReopenReason("");
-    toast.success("Relatório reaberto para edição");
-  };
-
-
       // Load sessions and absences
       const { data: sessions } = await supabase
         .from("treatment_sessions")
@@ -603,6 +686,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
         .eq("patient_id", pid)
         .eq("professional_id", user.id);
 
+      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
       const realizada = sessions?.filter(s => s.status === "realizada").length || 0;
       const faltas = sessions?.filter(s => s.status === "falta").length || 0;
       setIndSessoes(realizada);
@@ -616,6 +700,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
         .eq("status", "ativo")
         .maybeSingle();
 
+      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
       if (activePts) {
         setIndDiagFuncional(activePts.diagnostico_funcional || "");
         setIndObjetivos(activePts.objetivos_terapeuticos || "");
@@ -626,6 +711,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
           .select("id, titulo, status")
           .eq("pts_id", activePts.id);
         
+        if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
         if (metas) setPtsMetas(metas);
       }
 
@@ -633,10 +719,13 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
       if (pat?.cid && !indDiagCid) setIndDiagCid(pat.cid);
 
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading individual data:", error);
+      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
+        toast.error(error?.message || "Não foi possível carregar o relatório individual.");
+      }
     } finally {
-      setLoading(false);
+      if (token === reportLoadTokenRef.current && activePatientRef.current === pid) setLoading(false);
     }
   };
 
@@ -1206,7 +1295,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={setPacienteId} />
+                <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={handlePacienteChange} />
                 {paciente && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-xl text-sm">
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
@@ -1438,7 +1527,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={setPacienteId} />
+                  <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={handlePacienteChange} />
                   
                   {paciente && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-xl border border-border/50 text-sm">
