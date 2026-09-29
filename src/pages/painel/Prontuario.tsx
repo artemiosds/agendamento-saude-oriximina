@@ -52,6 +52,7 @@ import {
   validarCompatibilidadeClinicaSigtap,
   type SigtapClinicalValidationResult,
 } from "@/lib/sigtapClinicalValidation";
+import { resolveProntuarioProfessional } from "@/lib/prontuarioProfessional";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
@@ -411,6 +412,18 @@ const ProntuarioPage: React.FC = () => {
   useEffect(() => { editIdRef.current = editId; }, [editId]);
   useEffect(() => { formRef.current = form; }, [form]);
 
+  const syncCreatedProfessional = useCallback((saved: Pick<ProntuarioDB, "profissional_id" | "profissional_nome">, patientId: string) => {
+    if (formRef.current.paciente_id !== patientId) return;
+    const persistedProfessional = {
+      profissional_id: saved.profissional_id || "",
+      profissional_nome: saved.profissional_nome || "",
+    };
+    formRef.current = { ...formRef.current, ...persistedProfessional };
+    setForm(current => current.paciente_id === patientId
+      ? { ...current, ...persistedProfessional }
+      : current);
+  }, []);
+
 
   const [search, setSearch] = useState("");
   const [debouncedListSearch, setDebouncedListSearch] = useState("");
@@ -669,7 +682,7 @@ const ProntuarioPage: React.FC = () => {
     // Na criação, o salvamento atribui o prontuário ao usuário logado.
     // A validação deve usar esse mesmo responsável, mesmo que o formulário
     // contenha um profissional herdado do agendamento.
-    const profissionalId = editId ? (form.profissional_id || "") : (user?.id || "");
+    const profissionalId = resolveProntuarioProfessional(Boolean(editId), form, user).id;
     const profissional =
       funcionarios.find((f: any) => f.id === profissionalId) ||
       (user?.id === profissionalId ? user : null);
@@ -1835,7 +1848,7 @@ const ProntuarioPage: React.FC = () => {
     // Procedimento incompatível pode permanecer clinicamente, mas exige justificativa
     // e continuará sendo filtrado do BPA-I pela validação de exportação.
     const pacValidacao = pacientes.find((p: any) => p.id === f.paciente_id) as any;
-    const profIdValidacao = (editId || editIdRef.current) ? (f.profissional_id || "") : (user?.id || "");
+    const profIdValidacao = resolveProntuarioProfessional(Boolean(editId || editIdRef.current), f, user).id;
     const profValidacao =
       funcionarios.find((fx: any) => fx.id === profIdValidacao) ||
       (user?.id === profIdValidacao ? user : null);
@@ -1917,6 +1930,7 @@ const ProntuarioPage: React.FC = () => {
     // Usa editIdRef.current como fonte de verdade (autosave pode ter criado o registro)
     const effectiveEditId = editId || editIdRef.current;
     let insertedNewProntuario = false;
+    let createdProfessional: Pick<ProntuarioDB, "profissional_id" | "profissional_nome"> | null = null;
     let prontuarioId: string | null = effectiveEditId;
     try {
       const procTexto = spi
@@ -1934,10 +1948,12 @@ const ProntuarioPage: React.FC = () => {
       // trocar explicitamente via UI, alterando form.profissional_id/nome. NUNCA cair para
       // user.id/user.nome em edição, para não trocar o responsável pelo usuário logado.
       // Ao criar novo prontuário, usa o usuário logado.
-      const profIdToSave = effectiveEditId ? (f.profissional_id || "") : (user?.id || "");
-      const profNomeToSave = effectiveEditId
-        ? (f.profissional_nome || funcionarios.find(fx => fx.id === profIdToSave)?.nome || "")
-        : (user?.nome || "");
+      const responsible = resolveProntuarioProfessional(
+        Boolean(effectiveEditId), f, user,
+        funcionarios.find(fx => fx.id === f.profissional_id)?.nome || "",
+      );
+      const profIdToSave = responsible.id;
+      const profNomeToSave = responsible.nome;
       const dynamicFields = getDynamicFieldsPayload(f);
 
       const record: any = {
@@ -2108,6 +2124,7 @@ const ProntuarioPage: React.FC = () => {
         console.log("[handleSave] Prontuário inserido com sucesso:", inserted?.id);
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        createdProfessional = inserted;
         if (inserted) applySavedProntuarioToCache(inserted);
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
         if (prontuarioId) {
@@ -2268,6 +2285,7 @@ const ProntuarioPage: React.FC = () => {
         // Session registered: update editId to the saved prontuário so user can continue editing
         if (prontuarioId) {
           setEditId(prontuarioId);
+          if (createdProfessional) syncCreatedProfessional(createdProfessional, form.paciente_id);
           // Refresh procedures for the newly saved record
           loadProntuarioProcedimentos(prontuarioId, form.paciente_id, form.data_atendimento);
         }
@@ -2350,8 +2368,9 @@ const ProntuarioPage: React.FC = () => {
       // Preserva profissional ao editar (nunca cair para user.id/nome em edição);
       // usa logado apenas ao criar novo prontuário.
       const isEditing = Boolean(editIdRef.current);
-      const profIdAuto = isEditing ? (f.profissional_id || '') : (user?.id || '');
-      const profNomeAuto = isEditing ? (f.profissional_nome || '') : (user?.nome || '');
+      const responsible = resolveProntuarioProfessional(isEditing, f, user);
+      const profIdAuto = responsible.id;
+      const profNomeAuto = responsible.nome;
       const dynamicFields = getDynamicFieldsPayload(f);
       const record: any = {
         paciente_id: f.paciente_id,
@@ -2413,6 +2432,8 @@ const ProntuarioPage: React.FC = () => {
           console.log("[performAutosave] Novo draft criado:", prontId);
           setEditId(prontId);
           editIdRef.current = prontId;
+          // Switching to edit mode must also update the form used by SIGTAP.
+          syncCreatedProfessional(inserted, f.paciente_id);
           applySavedProntuarioToCache(inserted);
           // Reset status de faltas ao registrar novo atendimento
           try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: record.paciente_id }); } catch {}
@@ -2454,7 +2475,7 @@ const ProntuarioPage: React.FC = () => {
     } finally {
       autosaveInFlightRef.current = false;
     }
-  }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos]);
+  }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos, syncCreatedProfessional]);
 
   // Keep latest performAutosave in a ref so the debounce effect doesn't re-run
   // every time selectedProcIds/procDetails/selectedCidsByProc/procedimentos change.
@@ -2659,7 +2680,7 @@ const ProntuarioPage: React.FC = () => {
     setSoapErrors(false);
 
     const pacValidacaoSessao = pacientes.find((p: any) => p.id === form.paciente_id) as any;
-    const profIdValidacaoSessao = editId ? (form.profissional_id || "") : (user?.id || "");
+    const profIdValidacaoSessao = resolveProntuarioProfessional(Boolean(editId), form, user).id;
     const profValidacaoSessao =
       funcionarios.find((f: any) => f.id === profIdValidacaoSessao) ||
       (!editId && user?.id === profIdValidacaoSessao ? user : null);
@@ -2716,14 +2737,17 @@ const ProntuarioPage: React.FC = () => {
 
     setSaving(true);
     let insertedNewProntuario = false;
+    let createdProfessional: Pick<ProntuarioDB, "profissional_id" | "profissional_nome"> | null = null;
     let prontuarioId: string | null = editId;
     try {
       const procTexto = selectedProcIds.map(id => procedimentos.find(pr => pr.id === id)?.nome || "").filter(Boolean).join(", ");
       // Em edição, preserva o profissional original do prontuário (nunca usa user.id/nome).
-      const profIdSess = editId ? (form.profissional_id || "") : (user?.id || "");
-      const profNomeSess = editId
-        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || "")
-        : (user?.nome || "");
+      const responsible = resolveProntuarioProfessional(
+        Boolean(editId), form, user,
+        funcionarios.find(f => f.id === form.profissional_id)?.nome || "",
+      );
+      const profIdSess = responsible.id;
+      const profNomeSess = responsible.nome;
       const dynamicFields = getDynamicFieldsPayload(form);
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
@@ -2791,6 +2815,7 @@ const ProntuarioPage: React.FC = () => {
         if (error) throw error;
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        createdProfessional = inserted;
         if (inserted) applySavedProntuarioToCache(inserted);
       }
 
@@ -2860,7 +2885,13 @@ const ProntuarioPage: React.FC = () => {
       });
       toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
 
-      if (prontuarioId) setEditId(prontuarioId);
+      if (prontuarioId) {
+        setEditId(prontuarioId);
+        if (createdProfessional) {
+          editIdRef.current = prontuarioId;
+          syncCreatedProfessional(createdProfessional, form.paciente_id);
+        }
+      }
 
       await Promise.all([
         loadProntuarios(),
