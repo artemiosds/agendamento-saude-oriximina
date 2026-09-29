@@ -110,8 +110,8 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
       <Card>
         <CardContent className="p-4 space-y-3">
           <div>
-            <h4 className="font-semibold">Identificação automática</h4>
-            <p className="text-xs text-muted-foreground">Dados carregados do cadastro do paciente e da unidade.</p>
+            <h4 className="font-semibold">Identificação do paciente</h4>
+            <p className="text-xs text-muted-foreground">Dados do paciente carregados do cadastro. A identificação do estabelecimento e o CNES ficam em branco no OCI.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {patientRows.map(([label, val]) => (

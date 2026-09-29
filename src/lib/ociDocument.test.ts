@@ -31,6 +31,19 @@ const profissional = {
 };
 
 describe("documento OCI", () => {
+  it("mantém estabelecimento e CNES vazios mesmo quando existirem dados da unidade", () => {
+    const data = createEmptyOciData(paciente, profissional, "Unidade de teste", "1234567");
+    const html = renderOciDocument(data);
+    const estabelecimento = html.split('IDENTIFICAÇÃO DO ESTABELECIMENTO DE SAÚDE (SOLICITANTE)</div>')[1]
+      .split('IDENTIFICAÇÃO DO PACIENTE</div>')[0];
+
+    expect(estabelecimento).toContain("Nome do estabelecimento de saúde solicitante");
+    expect(estabelecimento).toContain("CNES");
+    expect(estabelecimento).not.toContain("Unidade de teste");
+    expect(estabelecimento).not.toContain("1234567");
+    expect(html).toContain("Paciente de teste");
+  });
+
   it("deixa Solicitação e assinatura vazias, mesmo com dados do profissional disponíveis", () => {
     const data = createEmptyOciData(paciente, profissional, "Unidade de teste", "1234567");
     data.dataSolicitacao = "2026-09-29";

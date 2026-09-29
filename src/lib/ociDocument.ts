@@ -181,15 +181,13 @@ export const renderOciDocument = (
   const logosHtml = config?.mostrarLogos === false
     ? '<span class="oci-logo-placeholder">&nbsp;</span>'
     : `<div class="oci-official-logos" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
-         <svg viewBox="183 369 215 35" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
-           <image href="${logoCerIi}" width="800" height="450" />
-         </svg>
+         <img src="${logoCerIi}" alt="Secretaria Municipal de Saúde e Prefeitura de Oriximiná" />
        </div>`;
 
   const p = data.paciente;
   const a = data.autorizacao;
 
-  const valueStyle = (value: unknown, normal = 7.1, compact = 6.1, threshold = 58) =>
+  const valueStyle = (value: unknown, normal = 7.5, compact = 6.3, threshold = 58) =>
     `font-size:${String(value ?? "").length > threshold ? compact : normal}pt`;
 
   const field = (label: string, value: unknown, className = "", style = "") =>
@@ -244,11 +242,22 @@ export const renderOciDocument = (
 }
 .oci-official-logos{
   grid-column:1/-1;
-  width:100%;
+  position:relative;
+  width:50.4mm;
+  max-width:100%;
   height:8.2mm;
   overflow:hidden;
 }
-.oci-official-logos svg{display:block;width:100%;height:100%}
+.oci-official-logos img{
+  position:absolute;
+  display:block;
+  width:187.4mm!important;
+  height:105.4mm!important;
+  max-width:none!important;
+  max-height:none!important;
+  left:-42.9mm;
+  top:-86.5mm;
+}
 .oci-logo-placeholder{display:block;width:100%}
 .oci-title{
   border:1.2px solid #111;
@@ -306,7 +315,7 @@ export const renderOciDocument = (
   text-overflow:ellipsis;
 }
 .oci-field-value{
-  font-weight:500;
+  font-weight:700;
   line-height:1.05;
   overflow-wrap:anywhere;
 }
@@ -425,8 +434,8 @@ export const renderOciDocument = (
 
     <div class="oci-section">IDENTIFICAÇÃO DO ESTABELECIMENTO DE SAÚDE (SOLICITANTE)</div>
     <div class="oci-grid" style="grid-template-columns:83% 17%">
-      ${field("Nome do estabelecimento de saúde solicitante", data.estabelecimentoNome)}
-      ${field("CNES", data.cnes, "", "text-align:center")}
+      ${field("Nome do estabelecimento de saúde solicitante", "")}
+      ${field("CNES", "", "", "text-align:center")}
     </div>
 
     <div class="oci-section">IDENTIFICAÇÃO DO PACIENTE</div>

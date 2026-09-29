@@ -151,7 +151,6 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [medicamentos, setMedicamentos] = useState<MedicamentoRow[]>([emptyMedicamento()]);
   const [exibirCid, setExibirCid] = useState(false);
   const [pacienteExtra, setPacienteExtra] = useState<Record<string, any> | null>(null);
-  const [unidadeExtra, setUnidadeExtra] = useState<Record<string, any> | null>(null);
   const [ociData, setOciData] = useState<OciStructuredData | null>(null);
   const [ociCbo, setOciCbo] = useState("");
 
@@ -161,7 +160,6 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       loadCarimbo();
       loadDocConfig();
       loadPacienteExtra();
-      loadUnidadeExtra();
       resetFields();
     }
   }, [open]);
@@ -177,16 +175,6 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     if (data) setPacienteExtra(data as any);
   };
 
-
-  const loadUnidadeExtra = async () => {
-    if (!user?.unidadeId) { setUnidadeExtra(null); return; }
-    const { data } = await (supabase as any)
-      .from('unidades')
-      .select('id,nome,nome_exibicao,endereco,telefone,custom_data')
-      .eq('id', user.unidadeId)
-      .maybeSingle();
-    setUnidadeExtra((data as any) || null);
-  };
 
   const loadDocConfig = async () => {
     const cfg = await loadDocumentConfig();
@@ -533,16 +521,6 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       if (!cancelled) setOciCbo(cbo);
     });
 
-    const unidadeCustom: any = unidadeExtra?.custom_data || {};
-    const estabelecimentoNome =
-      unidadeExtra?.nome_exibicao ||
-      unidadeExtra?.nome ||
-      unidade ||
-      docConfig?.linha2 ||
-      "CENTRO ESPECIALIZADO EM REABILITAÇÃO II";
-    const cnes =
-      String(unidadeCustom?.cnes || unidadeCustom?.codigo_cnes || unidadeCustom?.cnes_codigo || "").trim();
-
     const pacienteData = {
       nome: pick("nome") || paciente?.nome || "",
       sexo: pick("sexo"),
@@ -576,13 +554,13 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
     const principalMeta = selectedMeta?.oci?.procedimento_principal || {};
     setOciData((prev) => {
-      const base = prev || createEmptyOciData(pacienteData, profData, estabelecimentoNome, cnes, principalMeta);
+      const base = prev || createEmptyOciData(pacienteData, profData, "", "", principalMeta);
       return {
         ...base,
         paciente: pacienteData,
         profissional: profData,
-        estabelecimentoNome,
-        cnes,
+        estabelecimentoNome: "",
+        cnes: "",
         cidPrincipal: base.cidPrincipal || pick("cid"),
         procedimentoPrincipal: {
           codigo: principalMeta.codigo || base.procedimentoPrincipal.codigo || "",
@@ -601,7 +579,6 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     profissional,
     funcionarios,
     user,
-    unidadeExtra,
     unidade,
     docConfig,
     carimbo,
