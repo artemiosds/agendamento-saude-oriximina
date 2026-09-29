@@ -24,7 +24,7 @@ const ociReady = (
   nome: string,
   codigoPrincipal: string,
   nomePrincipal: string,
-  linhasSecundarias = 20,
+  linhasSecundarias = 15,
 ): ReadyTemplate => ({
   id,
   nome,

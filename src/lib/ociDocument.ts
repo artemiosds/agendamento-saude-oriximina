@@ -40,7 +40,7 @@ export interface OciAuthorizationData {
   nomeAutorizador: string;
   codigoOrgaoEmissor: string;
   numeroAutorizacao: string;
-  documentoTipo: "CNS" | "CPF";
+  documentoTipo: "CNS" | "CPF" | "";
   documentoNumero: string;
   dataAutorizacao: string;
   validadeInicio: string;
@@ -150,12 +150,12 @@ export const createEmptyOciData = (
   },
   procedimentosSecundarios: [],
   profissional,
-  dataSolicitacao: new Date().toISOString().slice(0, 10),
+  dataSolicitacao: "",
   autorizacao: {
     nomeAutorizador: "",
     codigoOrgaoEmissor: "",
     numeroAutorizacao: "",
-    documentoTipo: "CNS",
+    documentoTipo: "",
     documentoNumero: "",
     dataAutorizacao: "",
     validadeInicio: "",
@@ -169,21 +169,24 @@ export const renderOciDocument = (
   config?: DocumentConfig | null,
   meta?: OciTemplateMeta | null,
 ): string => {
-  // O formulário oficial usa aproximadamente 20 linhas de procedimentos
-  // secundários. Mantemos isso configurável para futuras versões sem alterar
-  // os modelos já criados.
-  const linhas = Math.max(8, Math.min(24, Number(meta?.oci?.linhas_secundarias || 20)));
+  // O modelo de referência tem 15 linhas secundárias. Modelos personalizados
+  // mantêm sua configuração e procedimentos já escolhidos nunca são truncados.
+  const linhas = Math.max(
+    data.procedimentosSecundarios.length,
+    Math.max(8, Math.min(24, Number(meta?.oci?.linhas_secundarias ?? 15))),
+  );
   const secundarios = [...data.procedimentosSecundarios].slice(0, linhas);
   while (secundarios.length < linhas) secundarios.push({ codigo: "", nome: "", quantidade: 0 });
 
   const logosHtml = config?.mostrarLogos === false
     ? '<span class="oci-logo-placeholder">&nbsp;</span>'
     : `<div class="oci-official-logos" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
-         <img src="${logoCerIi}" alt="Secretaria Municipal de Saúde e Prefeitura de Oriximiná" />
+         <svg viewBox="171 368 229 39" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Secretaria Municipal de Saúde e Prefeitura de Oriximiná">
+           <image href="${logoCerIi}" width="800" height="450" />
+         </svg>
        </div>`;
 
   const p = data.paciente;
-  const prof = data.profissional;
   const a = data.autorizacao;
 
   const valueStyle = (value: unknown, normal = 7.1, compact = 6.1, threshold = 58) =>
@@ -240,20 +243,12 @@ export const renderOciDocument = (
   overflow:hidden;
 }
 .oci-official-logos{
-  position:relative;
+  grid-column:1/-1;
   width:100%;
   height:8.2mm;
   overflow:hidden;
 }
-.oci-official-logos img{
-  position:absolute;
-  width:160mm;
-  height:auto;
-  max-width:none;
-  max-height:none;
-  left:-34.5mm;
-  top:-73.2mm;
-}
+.oci-official-logos svg{display:block;width:100%;height:100%}
 .oci-logo-placeholder{display:block;width:100%}
 .oci-title{
   border:1.2px solid #111;
@@ -360,7 +355,7 @@ export const renderOciDocument = (
 .oci-request-grid{
   display:grid;
   grid-template-columns:20% 44% 16% 20%;
-  grid-template-rows:6.2mm 5.2mm;
+  grid-template-rows:7.5mm 6.5mm;
   border-left:1px solid #111;
   border-top:1px solid #111;
 }
@@ -400,7 +395,7 @@ export const renderOciDocument = (
 .oci-auth-grid{
   display:grid;
   grid-template-columns:16% 48% 16% 20%;
-  grid-template-rows:6.0mm 5.2mm 6.2mm;
+  grid-template-rows:8mm 7mm 8mm;
   border-left:1px solid #111;
   border-top:1px solid #111;
 }
@@ -489,20 +484,20 @@ export const renderOciDocument = (
 
     <div class="oci-section">SOLICITAÇÃO</div>
     <div class="oci-request-grid">
-      ${field("Nome do profissional solicitante", prof.nome, "oci-request-name")}
-      ${field("Data da solicitação", fmtDate(data.dataSolicitacao), "oci-request-date", "text-align:center")}
+      ${field("Nome do profissional solicitante", "", "oci-request-name")}
+      ${field("Data da solicitação", "", "oci-request-date", "text-align:center")}
       <div class="oci-field oci-request-sign oci-sign-box">
         <span class="oci-field-label">Assinatura e carimbo / Nº de registro do conselho</span>
-        <div class="oci-field-value">${prof.carimboHtml || esc([prof.conselho, prof.numeroConselho, prof.ufConselho].filter(Boolean).join(" ")) || "&nbsp;"}</div>
+        <div class="oci-field-value">&nbsp;</div>
       </div>
       <div class="oci-field oci-request-doc-type">
         <span class="oci-field-label">Documento</span>
         <div class="oci-doc-options">
-          <span class="oci-checkbox">${prof.documentoTipo === "CNS" ? "X" : ""}</span><span>CNS</span>
-          <span class="oci-checkbox">${prof.documentoTipo === "CPF" ? "X" : ""}</span><span>CPF</span>
+          <span class="oci-checkbox"></span><span>CNS</span>
+          <span class="oci-checkbox"></span><span>CPF</span>
         </div>
       </div>
-      ${field("Nº documento (CNS/CPF) do profissional solicitante", prof.documentoNumero, "oci-request-doc-number", "text-align:center")}
+      ${field("Nº documento (CNS/CPF) do profissional solicitante", "", "oci-request-doc-number", "text-align:center")}
     </div>
 
     <div class="oci-section">AUTORIZAÇÃO</div>

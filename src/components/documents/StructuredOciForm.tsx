@@ -297,7 +297,7 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
             <div>
               <Label>Tipo do documento</Label>
               <Select value={value.autorizacao.documentoTipo} onValueChange={(v: any) => patchAuth({ documentoTipo: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="CNS">CNS</SelectItem>
                   <SelectItem value="CPF">CPF</SelectItem>
