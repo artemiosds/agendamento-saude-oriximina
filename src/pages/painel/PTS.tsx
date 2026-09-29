@@ -283,17 +283,22 @@ const PTS: React.FC = () => {
       .map((nome) => funcionarios.find((f: any) => normalize(f.nome || "") === nome))
       .filter(Boolean);
 
-    // Se houver mais de um responsável possível para a mesma especialidade,
-    // não escolhe arbitrariamente: a validação ficará indeterminada por falta
-    // de um único executor responsável.
-    if (profissionaisMeta.length === 1) return profissionaisMeta[0];
-    if (profissionaisMeta.length > 1) return null;
+    // Regra de segurança: quando há mais de um responsável possível para a
+    // mesma especialidade, NUNCA usar o criador do PTS/usuário logado como
+    // fallback. Isso poderia validar o procedimento com o CBO de outra pessoa.
+    if (profissionaisMeta.length === 1) {
+      return { profissional: profissionaisMeta[0], ambiguous: false, responsaveis: nomesResponsaveis };
+    }
+    if (profissionaisMeta.length > 1) {
+      return { profissional: null, ambiguous: true, responsaveis: nomesResponsaveis };
+    }
 
     const overallId = editingPts?.professional_id || user?.id || "";
-    return (
+    const profissionalGeral =
       funcionarios.find((f: any) => f.id === overallId) ||
-      (user?.id === overallId ? user : null)
-    );
+      (user?.id === overallId ? user : null);
+
+    return { profissional: profissionalGeral, ambiguous: false, responsaveis: [] as string[] };
   }, [editingPts?.professional_id, funcionarios, metas, normalize, user]);
 
   const validatePtsProcedure = useCallback(async (
@@ -301,14 +306,10 @@ const PTS: React.FC = () => {
     especialidade?: string,
   ): Promise<SigtapClinicalValidationResult> => {
     const paciente = pacientes.find((p: any) => p.id === form.patient_id) as any;
-    const profissional = resolvePtsProcedureProfessional(especialidade);
+    const resolved = resolvePtsProcedureProfessional(especialidade);
+    const profissional = resolved.profissional;
     const dataRef = todayLocalStr();
-    const fallbackProfessionalId =
-      profissional?.id ||
-      editingPts?.professional_id ||
-      user?.id ||
-      "";
-    const cbo = await resolveProfessionalCboReliable(profissional, fallbackProfessionalId);
+    const competencia = competenciaFromDate(dataRef);
     const nascimento =
       paciente?.data_nascimento ||
       paciente?.dataNascimento ||
@@ -316,15 +317,39 @@ const PTS: React.FC = () => {
       paciente?.custom_data?.dataNascimento ||
       "";
     const sexo = paciente?.sexo || paciente?.custom_data?.sexo || "";
+
+    if (resolved.ambiguous) {
+      return {
+        status: "indeterminado",
+        procedimento: String(codigo).replace(/\D/g, ""),
+        competencia,
+        cbo: "",
+        motivos: [],
+        avisos: [
+          `Não foi possível validar o CBO: há mais de um profissional responsável possível${especialidade ? ` para ${especialidade}` : ""}. Selecione/defina um único responsável pela meta ou procedimento antes da validação SIGTAP.`,
+        ],
+        idadeMeses: null,
+        instrumentos: [],
+        bpaICompativel: null,
+      };
+    }
+
+    const fallbackProfessionalId =
+      profissional?.id ||
+      editingPts?.professional_id ||
+      user?.id ||
+      "";
+    const cbo = await resolveProfessionalCboReliable(profissional, fallbackProfessionalId);
+
     return validarCompatibilidadeClinicaSigtap({
       procedimento: codigo,
-      competencia: competenciaFromDate(dataRef),
+      competencia,
       cbo,
       dataNascimento: nascimento,
       dataAtendimento: dataRef,
       sexo,
     });
-  }, [form.patient_id, pacientes, resolvePtsProcedureProfessional]);
+  }, [editingPts?.professional_id, form.patient_id, pacientes, resolvePtsProcedureProfessional, user?.id]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -1067,12 +1092,15 @@ const PTS: React.FC = () => {
             .filter(([, result]) => result.status === 'incompatível')
             .map(([codigo, result]) => {
               const proc = finalSigtap.find((item) => item.procedimento_codigo === codigo);
-              const profissional = resolvePtsProcedureProfessional(proc?.especialidade);
+              const resolved = resolvePtsProcedureProfessional(proc?.especialidade);
+              const profissional = resolved.profissional;
               return {
                 procedimento: codigo,
                 cbo: result.cbo,
-                profissional_responsavel_id: profissional?.id || editingPts?.professional_id || user?.id || '',
-                profissional_responsavel_nome: profissional?.nome || user?.nome || '',
+                profissional_responsavel_id: resolved.ambiguous ? '' : (profissional?.id || editingPts?.professional_id || user?.id || ''),
+                profissional_responsavel_nome: resolved.ambiguous ? '' : (profissional?.nome || user?.nome || ''),
+                responsavel_ambiguo: resolved.ambiguous,
+                responsaveis_possiveis: resolved.responsaveis,
                 idade_meses: result.idadeMeses,
                 sexo:
                   (pacientes.find((p: any) => p.id === form.patient_id) as any)?.sexo ||
