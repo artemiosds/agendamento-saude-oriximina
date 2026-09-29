@@ -453,6 +453,128 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
   const tipoLower = selected?.tipo.toLowerCase() || '';
 
+  useEffect(() => {
+    if (!selected || !isOciStructured) {
+      setOciData(null);
+      setOciCbo("");
+      return;
+    }
+
+    const raw: any = pacienteExtra || paciente || {};
+    const custom: any = raw?.custom_data || raw?.customData || {};
+    const pick = (...keys: string[]) => {
+      for (const key of keys) {
+        const camel = key.replace(/_([a-z])/g, (_m, c) => c.toUpperCase());
+        const candidates = [
+          raw?.[key], raw?.[camel],
+          custom?.[key], custom?.[camel],
+          (paciente as any)?.[key], (paciente as any)?.[camel],
+        ];
+        const found = candidates.find((v) => v !== undefined && v !== null && String(v).trim());
+        if (found !== undefined) return String(found).trim();
+      }
+      return "";
+    };
+
+    const profRecord: any =
+      funcionarios.find((f: any) => f.id === (profissional?.id || user?.id)) ||
+      funcionarios.find((f: any) => f.authUserId === (user as any)?.authUserId) ||
+      user ||
+      profissional ||
+      null;
+    const profCustom: any = profRecord?.customData || profRecord?.custom_data || {};
+    const professionalId = profRecord?.id || profissional?.id || user?.id || "";
+
+    let cancelled = false;
+    void resolveProfessionalCboReliable(profRecord, professionalId).then((cbo) => {
+      if (!cancelled) setOciCbo(cbo);
+    });
+
+    const unidadeCustom: any = unidadeExtra?.custom_data || {};
+    const estabelecimentoNome =
+      unidadeExtra?.nome_exibicao ||
+      unidadeExtra?.nome ||
+      unidade ||
+      docConfig?.linha2 ||
+      "CENTRO ESPECIALIZADO EM REABILITAÇÃO II";
+    const cnes =
+      String(unidadeCustom?.cnes || unidadeCustom?.codigo_cnes || unidadeCustom?.cnes_codigo || "").trim();
+
+    const pacienteData = {
+      nome: pick("nome") || paciente?.nome || "",
+      sexo: pick("sexo"),
+      prontuario: pick("numero_prontuario", "prontuario", "id") || paciente?.id || "",
+      cns: pick("cns"),
+      dataNascimento: pick("data_nascimento"),
+      racaCor: pick("raca_cor"),
+      etnia: pick("etnia"),
+      nomeMae: pick("nome_mae"),
+      nomeResponsavel: pick("nome_responsavel", "responsavel_nome"),
+      telefone: pick("telefone"),
+      telefoneResponsavel: pick("telefone_responsavel", "responsavel_telefone"),
+      enderecoCompleto: buildOciAddress(raw),
+      municipio: pick("municipio", "cidade"),
+      codigoIbge: pick("municipio_ibge", "codigo_ibge", "ibge"),
+      uf: pick("uf"),
+      cep: pick("cep"),
+    };
+
+    const cnsProf = String(profCustom?.cns || profRecord?.cns || "").replace(/\D/g, "");
+    const cpfProf = String(profRecord?.cpf || profissional?.['cpf' as any] || "").replace(/\D/g, "");
+    const profData = {
+      nome: profissional?.nome || profRecord?.nome || user?.nome || "",
+      documentoTipo: (cnsProf ? "CNS" : "CPF") as "CNS" | "CPF",
+      documentoNumero: cnsProf || cpfProf,
+      conselho: profissional?.tipo_conselho || profRecord?.tipoConselho || profRecord?.tipo_conselho || carimbo?.conselho || "",
+      numeroConselho: profissional?.numero_conselho || profRecord?.numeroConselho || profRecord?.numero_conselho || carimbo?.numero_registro || "",
+      ufConselho: profissional?.uf_conselho || profRecord?.ufConselho || profRecord?.uf_conselho || carimbo?.uf || "",
+      carimboHtml: carimboInlineHtml,
+    };
+
+    const principalMeta = selectedMeta?.oci?.procedimento_principal || {};
+    setOciData((prev) => {
+      const base = prev || createEmptyOciData(pacienteData, profData, estabelecimentoNome, cnes, principalMeta);
+      return {
+        ...base,
+        paciente: pacienteData,
+        profissional: profData,
+        estabelecimentoNome,
+        cnes,
+        cidPrincipal: base.cidPrincipal || pick("cid"),
+        procedimentoPrincipal: {
+          codigo: principalMeta.codigo || base.procedimentoPrincipal.codigo || "",
+          nome: principalMeta.nome || base.procedimentoPrincipal.nome || "",
+          quantidade: Number(principalMeta.quantidade || base.procedimentoPrincipal.quantidade || 1),
+        },
+      };
+    });
+
+    return () => { cancelled = true; };
+  }, [
+    selectedId,
+    isOciStructured,
+    pacienteExtra,
+    paciente,
+    profissional,
+    funcionarios,
+    user,
+    unidadeExtra,
+    unidade,
+    docConfig,
+    carimbo,
+  ]);
+
+  const ociValidation = {
+    competencia: competenciaFromDate(dataAtendimento || new Date().toISOString().slice(0, 10)),
+    cbo: ociCbo,
+    dataNascimento: ociData?.paciente.dataNascimento || paciente?.data_nascimento || "",
+    dataAtendimento: dataAtendimento || new Date().toISOString().slice(0, 10),
+    sexo: ociData?.paciente.sexo || "",
+  };
+
+  const ociPrincipalLocked = !!selectedMeta?.oci?.procedimento_principal?.codigo;
+  const ociReady = !isOciStructured || !!ociData?.procedimentoPrincipal.codigo;
+
   const buildHtmlBody = (signatureHtml: string) => {
     if (isOciStructured && ociData) {
       return renderOciDocument(ociData, docConfig, selectedMeta);
