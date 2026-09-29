@@ -100,6 +100,9 @@ const SigtapProcedurePicker: React.FC<Props> = ({
   const status = useMemo(() => {
     if (!validationResult) return null;
     if (validationResult.status === "compatível") {
+      if (validationResult.bpaICompativel === false) {
+        return <Badge variant="outline" className="text-amber-700 border-amber-300"><AlertTriangle className="w-3 h-3 mr-1" />Clínico · fora do BPA-I</Badge>;
+      }
       return <Badge className="bg-emerald-600 hover:bg-emerald-600"><CheckCircle2 className="w-3 h-3 mr-1" />SIGTAP compatível</Badge>;
     }
     if (validationResult.status === "incompatível") {
@@ -127,7 +130,7 @@ const SigtapProcedurePicker: React.FC<Props> = ({
               {validationResult.motivos.map((motivo, index) => <p key={index}>• {motivo}</p>)}
             </div>
           )}
-          {validationResult?.status === "indeterminado" && validationResult.avisos.length > 0 && (
+          {(validationResult?.status === "indeterminado" || validationResult?.bpaICompativel === false) && validationResult.avisos.length > 0 && (
             <div className="mt-2 text-xs text-amber-700 space-y-1">
               {validationResult.avisos.map((aviso, index) => <p key={index}>• {aviso}</p>)}
             </div>

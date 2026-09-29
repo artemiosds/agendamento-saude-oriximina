@@ -55,6 +55,8 @@ export interface BpaValidacaoContexto {
   codigosConhecidos?: Set<string>;
   /** Tabela oficial do mês, incluindo instrumento e ocupações vinculadas. */
   catalogoOficial?: BpaSigtapCatalog;
+  /** Exceção manual apenas para a relação CBO × procedimento no BPA-I. */
+  permitirCboIncompativel?: boolean;
   /** codigo SIGTAP → CIDs vinculados (sigtap_procedimento_cids). */
   cidsVinculados?: Map<string, Set<string>>;
   /** Restrições declaradas pelo Master (sexo/idade/CID/instrumento). */
@@ -275,7 +277,12 @@ export function validarProcedimentoBpaI(
   // CBO ausente/inválido já foi rejeitado acima. Não o classifique também como
   // incompatibilidade SIGTAP, que pressupõe um CBO válido para comparação.
   if (oficial && cbo.length === 6 && !/^0+$/.test(cbo) && !oficial.cbos.has(cbo)) {
-    rejeicoes.push(`CBO incompatível com o procedimento: ${codigo}, CBO ${cbo}, competência ${competencia}`);
+    const motivo = `CBO incompatível com o procedimento: ${codigo}, CBO ${cbo}, competência ${competencia}`;
+    if (ctx.permitirCboIncompativel) {
+      avisos.push(`${motivo}. Exportação autorizada por opção manual; sujeita à rejeição pelo SIA/SUS`);
+    } else {
+      rejeicoes.push(motivo);
+    }
   }
   if (bloqueadoExplicito) {
     rejeicoes.push(`Procedimento ${codigo} bloqueado para o CBO ${cbo} na configuração do Master`);

@@ -778,6 +778,7 @@ const BpaExportar: React.FC = () => {
     procedimento_padrao: "0301010072",
     municipio_padrao: "150530",
     exportar_com_pendencias: false,
+    exportar_cbo_incompativel: false,
     incluir_agenda_sem_prontuario: false,
     // Filtros avançados (opcionais). Vazio/"todos" = comportamento atual.
     data_especifica: "",
@@ -875,6 +876,7 @@ const BpaExportar: React.FC = () => {
       codigosIbge: string[];
       inconsistencias: string[];
       producaoMultipla: string[];
+      cboExcecoesExportadas: string[];
     } | null;
 
     error: string | null;
@@ -1107,6 +1109,7 @@ const BpaExportar: React.FC = () => {
       procedimento_padrao: "0301010072",
       municipio_padrao: "150530",
       exportar_com_pendencias: false,
+      exportar_cbo_incompativel: false,
       incluir_agenda_sem_prontuario: false,
       data_especifica: "",
       turno: "todos",
@@ -1199,6 +1202,7 @@ const BpaExportar: React.FC = () => {
       codigosIbge: [] as string[],
       inconsistencias: [] as string[],
       producaoMultipla: [] as string[],
+      cboExcecoesExportadas: [] as string[],
     };
     const municipiosSet = new Set<string>();
     const ibgeSet = new Set<string>();
@@ -1277,6 +1281,7 @@ const BpaExportar: React.FC = () => {
       const validacaoCtxBase = {
         competencia: formData.competencia,
         catalogoOficial,
+        permitirCboIncompativel: formData.exportar_cbo_incompativel,
         restricoes: (bpaConfigValue.sigtap_restricoes || {}) as Record<string, any>,
         permitidosPorCbo: (bpaConfigValue.sigtap_permitidos_por_cbo || {}) as Record<string, string[]>,
         bloqueadosPorCbo: (bpaConfigValue.sigtap_bloqueados_por_cbo || {}) as Record<string, string[]>,
@@ -2841,6 +2846,9 @@ const BpaExportar: React.FC = () => {
               };
 
               linhasProducao.push(l);
+              if (formData.exportar_cbo_incompativel && !catalogoOficial.get(proc)?.cbos.has(cbo)) {
+                resumoIntegridade.cboExcecoesExportadas.push(`${nome_pac || ident} (${data_atend}): ${proc} / CBO ${cbo}`);
+              }
               itensControle.push({ procedimento: proc, quantidade });
               exportedCount++;
               confRows.push(rowConf);
@@ -2957,7 +2965,11 @@ const BpaExportar: React.FC = () => {
         }
 
         if (!meta.instrumentos.has("02")) auditErrors.push(`${label}: instrumento incompatível com BPA-I`);
-        if (!meta.cbos.has(cboLinha)) auditErrors.push(`${label}: CBO incompatível com o procedimento`);
+        if (!/^\d{6}$/.test(cboLinha) || /^0+$/.test(cboLinha)) {
+          auditErrors.push(`${label}: CBO ausente ou inválido`);
+        } else if (!formData.exportar_cbo_incompativel && !meta.cbos.has(cboLinha)) {
+          auditErrors.push(`${label}: CBO incompatível com o procedimento`);
+        }
 
         const nasc = readRegistro03Field(line, "dataNascimento");
         const atend = readRegistro03Field(line, "dataAtendimento");
@@ -3370,6 +3382,7 @@ const BpaExportar: React.FC = () => {
         ["Data de geração", new Date().toLocaleString("pt-BR")],
         ["Total de linhas encontradas", results.totalFound],
         ["Válidas (exportadas)", results.exportedCount],
+        ["CBO exportado por exceção", results.resumo?.cboExcecoesExportadas.length || 0],
         ["Pendentes", results.pendRows.length],
         ["Fonte Prontuário", results.confRows.length],
         ["Fonte PTS", 0],
@@ -3754,6 +3767,25 @@ const BpaExportar: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-4 mt-8">
+            <div className="flex items-center space-x-2 border border-amber-300 p-3 rounded-md bg-amber-50/60">
+              <input
+                type="checkbox"
+                id="exportar_cbo_incompativel"
+                checked={formData.exportar_cbo_incompativel}
+                onChange={(e) => setFormData((prev) => ({ ...prev, exportar_cbo_incompativel: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label htmlFor="exportar_cbo_incompativel" className="text-sm font-medium leading-none">
+                  Exportar com CBO incompatível com o procedimento
+                </label>
+                <p className="text-xs text-amber-900">
+                  Exceção manual apenas para CBO válido que não consta na relação SIGTAP do procedimento.
+                  O relatório identifica essas linhas, que podem ser rejeitadas pelo SIA/SUS. Idade, instrumento BPA-I,
+                  CID e demais validações continuam obrigatórios.
+                </p>
+              </div>
+            </div>
             <div className="flex items-center space-x-2 border p-3 rounded-md bg-slate-50">
               <input
                 type="checkbox"
@@ -4447,6 +4479,9 @@ const BpaExportar: React.FC = () => {
                         CBO incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO incompatível")).length}</b>
                       </div>
                       <div>
+                        CBO exportado por exceção: <b className="text-amber-700">{results.resumo.cboExcecoesExportadas.length}</b>
+                      </div>
+                      <div>
                         CBO ausente/inválido: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO do profissional inválido ou ausente")).length}</b>
                       </div>
                       <div>
@@ -4462,6 +4497,19 @@ const BpaExportar: React.FC = () => {
                         CID incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CID incompatível")).length}</b>
                       </div>
                     </div>
+
+                    {results.resumo.cboExcecoesExportadas.length > 0 && (
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div className="font-semibold text-amber-700">
+                          Linhas exportadas com exceção de CBO (sujeitas à rejeição pelo SIA/SUS):
+                        </div>
+                        <div className="max-h-32 overflow-auto space-y-0.5">
+                          {results.resumo.cboExcecoesExportadas.map((item, index) => (
+                            <div key={index} className="text-muted-foreground">• {item}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {results.resumo.producaoMultipla.length > 0 && (
                       <div className="pt-2 border-t text-xs space-y-1">

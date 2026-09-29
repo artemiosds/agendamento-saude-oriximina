@@ -39,6 +39,21 @@ describe("segurança da exportação BPA-I", () => {
     expect(result.rejeitados[2].rejeicoes.join(" ")).toContain("não vigente");
   });
 
+  it("libera somente a relação CBO por opção manual, preservando os demais bloqueios", () => {
+    const contextoExcecao = { ...ctx, permitirCboIncompativel: true };
+    const cboIncompativel = validarListaProcedimentosBpaI([{ codigo: "0301010048" }], contextoExcecao);
+    expect(cboIncompativel.validos).toHaveLength(1);
+    expect(cboIncompativel.validos[0].avisos.join(" ")).toContain("Exportação autorizada por opção manual");
+
+    const instrumento = validarListaProcedimentosBpaI([{ codigo: "0301100268" }], contextoExcecao);
+    expect(instrumento.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento incompatível");
+
+    const cboAusente = validarListaProcedimentosBpaI(
+      [{ codigo: "0301010048" }], { ...contextoExcecao, cbo: "" },
+    );
+    expect(cboAusente.rejeitados[0].rejeicoes.join(" ")).toContain("CBO do profissional inválido ou ausente");
+  });
+
   it("não exporta no BPA-I procedimento clínico da nutricionista com instrumento 10", () => {
     const catalogoNutri = parseBpaSigtapCatalog(comp, {
       procedimentos: proc("0101040121"),
@@ -144,6 +159,11 @@ describe("segurança da exportação BPA-I", () => {
       { ...base, idadePacienteMeses: 11 },
     );
     expect(menor.rejeitados[0].rejeicoes.join(" ")).toContain("Idade incompatível");
+    const menorComExcecaoCbo = validarListaProcedimentosBpaI(
+      [{ codigo: "0301010048", cid: "F840" }],
+      { ...base, cbo: "322205", permitirCboIncompativel: true, idadePacienteMeses: 11 },
+    );
+    expect(menorComExcecaoCbo.rejeitados[0].rejeicoes.join(" ")).toContain("Idade incompatível");
 
     const excesso = validarListaProcedimentosBpaI(
       [{ codigo: "0301010048", cid: "F840" }],
