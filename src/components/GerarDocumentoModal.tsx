@@ -21,6 +21,7 @@ import { generateSignature, formatSignatureBlock, formatCarimboBlock, type Carim
 import { applyTemplateValues } from '@/lib/templateVariables';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
+import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import StructuredOciForm from '@/components/documents/StructuredOciForm';
 import {
   buildOciAddress,
@@ -209,7 +210,28 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         .order('nome');
       if (error) throw error;
       const all = (data || []) as unknown as DocumentTemplate[];
-      const filtered = all.filter(m => m.perfis_permitidos.includes(user?.role || ''));
+      const dbFiltered = all.filter(m => m.perfis_permitidos.includes(user?.role || ''));
+      const existingNames = new Set(dbFiltered.map(m => (m.nome || '').trim().toLowerCase()));
+      const readyAsTemplates: DocumentTemplate[] = READY_TEMPLATES
+        .filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()))
+        .map(rt => ({
+          id: `ready:${rt.id}`,
+          nome: rt.nome,
+          tipo: rt.tipo,
+          conteudo: rt.conteudo,
+          ativo: true,
+          perfis_permitidos: ['master', 'gestao', 'profissional', 'enfermagem', 'tecnico'],
+          tipo_modelo: 'GLOBAL',
+          unidade_id: '',
+          criado_por: 'sistema',
+          criado_por_nome: 'Sistema',
+          versoes: [],
+          blocos_clinicos: (rt.blocos_clinicos || {}) as any,
+          created_at: '',
+          updated_at: '',
+        }));
+      const filtered = [...dbFiltered, ...readyAsTemplates]
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
       setModelos(filtered);
       if (templateId && filtered.some(m => m.id === templateId)) {
         setTimeout(() => handleSelect(templateId), 0);
