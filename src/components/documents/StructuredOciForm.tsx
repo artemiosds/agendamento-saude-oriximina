@@ -278,25 +278,6 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
       <Card>
         <CardContent className="p-4 space-y-3">
           <div>
-            <h4 className="font-semibold">Solicitação</h4>
-            <p className="text-xs text-muted-foreground">Profissional solicitante preenchido automaticamente.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="md:col-span-2">
-              <Label>Profissional solicitante</Label>
-              <Input value={value.profissional.nome} disabled />
-            </div>
-            <div>
-              <Label>Data da solicitação</Label>
-              <Input type="date" value={value.dataSolicitacao} onChange={(e) => patch({ dataSolicitacao: e.target.value })} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div>
             <h4 className="font-semibold">Autorização</h4>
             <p className="text-xs text-muted-foreground">Pode ser preenchida agora ou posteriormente, conforme o fluxo da unidade.</p>
           </div>
