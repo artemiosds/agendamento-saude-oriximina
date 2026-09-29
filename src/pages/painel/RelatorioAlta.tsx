@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
-import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -154,7 +153,6 @@ const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
   const { pacientes } = usePacientes();
   const { funcionarios } = useOperacional();
-  const { can } = usePermissions();
   const [modo, setModo] = useState<ModoRelatorio>("selector");
   const [showIndividualChooser, setShowIndividualChooser] = useState(false);
 
@@ -216,8 +214,6 @@ const RelatorioAlta: React.FC = () => {
   const [multiPrazoRetorno, setMultiPrazoRetorno] = useState("");
   const [multiResponsavelTecnico, setMultiResponsavelTecnico] = useState("");
   const [multiResumoConsolidado, setMultiResumoConsolidado] = useState("");
-  const [multiStatus, setMultiStatus] = useState<"rascunho" | "em_preenchimento" | "aguardando" | "validado" | "emitido">("rascunho");
-  const [multiComplexidade, setMultiStatusComplexidade] = useState("");
 
   const [dataAlta, setDataAlta] = useState(new Date().toISOString().split("T")[0]);
   const [tabProf, setTabProf] = useState("");
@@ -230,15 +226,6 @@ O paciente apresentou evolução global ${nivelIndep.toLowerCase()} no período.
 As intervenções realizadas focaram em ${multiObjetivosGerais}. 
 Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para alta" : "necessita de seguimento na rede"}.`;
     setMultiResumoConsolidado(summary);
-  };
-
-  const [referralDetails, setReferralDetails] = useState<Record<string, { destino: string; motivo: string; prioridade: string }>>({});
-  
-  const updateReferralDetail = (type: string, field: string, value: string) => {
-    setReferralDetails(prev => ({
-      ...prev,
-      [type]: { ...(prev[type] || { destino: "", motivo: "", prioridade: "média" }), [field]: value }
-    }));
   };
 
   const [indDiagCid, setIndDiagCid] = useState("");
@@ -294,6 +281,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   const [loading, setLoading] = useState(false);
   const activePatientRef = React.useRef("");
   const reportLoadTokenRef = React.useRef(0);
+  const loadedModeRef = React.useRef<ModoRelatorio>("selector");
   const isReportLocked = status !== "rascunho";
 
   const resetReportTracking = () => {
@@ -405,7 +393,21 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
 
   /* ── carga protegida por paciente/modo ─── */
   useEffect(() => {
-    if (!pacienteId || (modo !== "multiprofissional" && modo !== "individual")) return;
+    if (!pacienteId || (modo !== "multiprofissional" && modo !== "individual")) {
+      loadedModeRef.current = modo;
+      return;
+    }
+
+    // Trocar Individual ↔ Multiprofissional para o mesmo paciente também precisa
+    // limpar o id/estado do relatório anterior antes de iniciar a nova carga.
+    if (loadedModeRef.current !== modo) {
+      reportLoadTokenRef.current += 1;
+      resetReportTracking();
+      if (modo === "multiprofissional") resetMultiForm();
+      else resetIndividualForm();
+      loadedModeRef.current = modo;
+    }
+
     activePatientRef.current = pacienteId;
     const token = ++reportLoadTokenRef.current;
     if (modo === "multiprofissional") {
