@@ -18,6 +18,8 @@ interface DebouncedInputProps extends Omit<InputProps, "onChange"> {
 const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInputProps>(
   ({ value, onChange, debounceMs = 400, onBlur, ...props }, ref) => {
     const [localValue, setLocalValue] = React.useState(value ?? "");
+    const localValueRef = React.useRef(localValue);
+    localValueRef.current = localValue;
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const onChangeRef = React.useRef(onChange);
     onChangeRef.current = onChange;
@@ -77,11 +79,12 @@ const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInput
     React.useEffect(() => {
       return () => {
         if (timerRef.current) {
-          emitChange(localValue ?? "", undefined);
           clearTimeout(timerRef.current);
+          timerRef.current = null;
+          emitChange(localValueRef.current, undefined);
         }
       };
-    }, [emitChange, localValue]);
+    }, [emitChange]);
 
     return <Input ref={ref} {...props} value={localValue} onChange={handleChange} onBlur={handleBlur} />;
   },

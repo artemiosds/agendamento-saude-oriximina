@@ -282,7 +282,7 @@ const HistoricoTriagem: React.FC = () => {
               <Label className="text-xs">Buscar paciente</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <DebouncedInput className="pl-9" placeholder="Nome do paciente..." value={search} onChange={(e) => setSearch(e.target.value)} debounceMs={300} />
+                <DebouncedInput className="pl-9" placeholder="Nome do paciente..." value={search} onChange={(e) => { setPage(0); setSearch(e.target.value); }} debounceMs={300} />
               </div>
             </div>
             <div>

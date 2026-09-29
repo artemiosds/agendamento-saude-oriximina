@@ -6,6 +6,7 @@ import HistoricoTriagem from "./HistoricoTriagem";
 type IndexResult = { data: { id: string }[]; count: number; error: Error | null };
 const mocks = vi.hoisted(() => ({
   indexRequests: [] as Array<() => Promise<IndexResult>>,
+  searchRequests: [] as Array<() => Promise<{ data: Record<string, unknown>[]; error: Error | null }>>,
   queryCount: 0,
 }));
 
@@ -22,9 +23,9 @@ vi.mock("@/integrations/supabase/client", () => ({
           ilike: () => builder,
           or: () => builder,
           range: () => {
-            if (table !== "triage_records" || columns !== "id") throw new Error("Consulta inesperada");
+            if (table !== "triage_records") throw new Error("Consulta inesperada");
             mocks.queryCount++;
-            const next = mocks.indexRequests.shift();
+            const next = columns === "id" ? mocks.indexRequests.shift() : mocks.searchRequests.shift();
             if (!next) throw new Error("Resposta de índice não preparada");
             return next();
           },
@@ -63,6 +64,7 @@ function changeDate(container: HTMLElement, date: string) {
 describe("Histórico de Triagem: carregamento, erro e vazio", () => {
   beforeEach(() => {
     mocks.indexRequests.length = 0;
+    mocks.searchRequests.length = 0;
     mocks.queryCount = 0;
   });
   afterEach(() => { cleanup(); });
@@ -121,5 +123,24 @@ describe("Histórico de Triagem: carregamento, erro e vazio", () => {
     await act(async () => { old.resolve(success(["ficha-antiga"])); });
     expect(screen.getByText("Nenhum registro encontrado.")).toBeInTheDocument();
     expect(screen.queryByText("Paciente de teste")).not.toBeInTheDocument();
+  });
+
+  it("busca um paciente no histórico completo depois da digitação", async () => {
+    mocks.indexRequests.push(async () => success());
+    mocks.searchRequests.push(async () => ({
+      data: [{
+        id: "ficha-1", agendamento_id: "ficha-1", tecnico_id: "",
+        classificacao_risco: "", criado_em: "2026-09-26T10:00:00Z",
+        confirmado_em: null, custom_data: {},
+      }],
+      error: null,
+    }));
+    render(<HistoricoTriagem />);
+    await screen.findByText("Nenhum registro encontrado.");
+
+    fireEvent.change(screen.getByPlaceholderText("Nome do paciente..."), { target: { value: "Paciente" } });
+    expect(await screen.findByText("Paciente de teste")).toBeInTheDocument();
+    expect(mocks.queryCount).toBe(2);
+    expect(screen.getByText("1 registro(s) encontrado(s)")).toBeInTheDocument();
   });
 });
