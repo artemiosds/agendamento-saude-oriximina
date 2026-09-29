@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Search, Plus, Pencil, Play, Printer, FileSignature, Loader2 } from 'lucide-react';
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
+import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 import { printOciOrtopedia } from '@/lib/printOciOrtopedia';
 
@@ -94,7 +95,6 @@ const DocumentCenter: React.FC<Props> = ({
       { id: 'b:ficha_completa', nome: 'Ficha Completa', categoria: 'Cadastro', builtin: 'ficha_completa', icon: <Printer className="w-4 h-4" /> },
       { id: 'b:ficha_dados', nome: 'Imprimir Só Dados', categoria: 'Cadastro', builtin: 'ficha_dados', icon: <Printer className="w-4 h-4" /> },
       { id: 'b:apac', nome: 'Laudo APAC', categoria: 'Regulação', builtin: 'apac', icon: <FileSignature className="w-4 h-4" /> },
-      { id: 'b:oci_ortopedia', nome: 'OCI Avaliação Diagnóstica em Ortopedia (Radiologia + TC)', categoria: 'Regulação', builtin: 'oci_ortopedia', icon: <FileSignature className="w-4 h-4" /> },
     ];
     const fromDb: DocumentItem[] = templates.map(t => ({
       id: t.id,
@@ -102,7 +102,16 @@ const DocumentCenter: React.FC<Props> = ({
       categoria: classifyTipo(t.tipo),
       icon: <FileText className="w-4 h-4" />,
     }));
-    return [...builtins, ...fromDb];
+    const existingNames = new Set(fromDb.map(t => t.nome.trim().toLowerCase()));
+    const readyItems: DocumentItem[] = READY_TEMPLATES
+      .filter(rt => !existingNames.has(rt.nome.trim().toLowerCase()))
+      .map(rt => ({
+        id: `ready:${rt.id}`,
+        nome: rt.nome,
+        categoria: 'Regulação',
+        icon: <FileText className="w-4 h-4" />,
+      }));
+    return [...builtins, ...fromDb, ...readyItems];
   }, [templates]);
 
   const filtered = items.filter(i => {
@@ -147,11 +156,6 @@ const DocumentCenter: React.FC<Props> = ({
     if (item.builtin === 'ficha_completa') { onOpenChange(false); onOpenFichaCompleta(); return; }
     if (item.builtin === 'ficha_dados')    { onOpenChange(false); onOpenFichaSoDados(); return; }
     if (item.builtin === 'apac')           { onOpenChange(false); onOpenApac(); return; }
-    if (item.builtin === 'oci_ortopedia')  {
-      onOpenChange(false);
-      if (paciente) printOciOrtopedia(paciente as any, undefined);
-      return;
-    }
     setGerarTemplateId(item.id);
   };
 
