@@ -12,7 +12,6 @@ import { FileText, Search, Plus, Pencil, Play, Printer, FileSignature, Loader2 }
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
 import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
-import { printOciOrtopedia } from '@/lib/printOciOrtopedia';
 
 type Categoria = 'Todos' | 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
 const CATEGORIAS: Categoria[] = ['Todos', 'Cadastro', 'Clínico', 'Regulação', 'CER'];
@@ -37,7 +36,7 @@ interface DocumentItem {
   id: string;
   nome: string;
   categoria: Categoria;
-  builtin?: 'ficha_completa' | 'ficha_dados' | 'apac' | 'oci_ortopedia';
+  builtin?: 'ficha_completa' | 'ficha_dados' | 'apac';
   icon: React.ReactNode;
 }
 
