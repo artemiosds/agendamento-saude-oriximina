@@ -666,9 +666,10 @@ const ProntuarioPage: React.FC = () => {
     }
     let cancelled = false;
     const paciente = pacientes.find((p: any) => p.id === form.paciente_id) as any;
-    const profissionalId = editId
-      ? (form.profissional_id || "")
-      : (form.profissional_id || user?.id || "");
+    // Na criação, o salvamento atribui o prontuário ao usuário logado.
+    // A validação deve usar esse mesmo responsável, mesmo que o formulário
+    // contenha um profissional herdado do agendamento.
+    const profissionalId = editId ? (form.profissional_id || "") : (user?.id || "");
     const profissional =
       funcionarios.find((f: any) => f.id === profissionalId) ||
       (user?.id === profissionalId ? user : null);
@@ -2658,7 +2659,7 @@ const ProntuarioPage: React.FC = () => {
     setSoapErrors(false);
 
     const pacValidacaoSessao = pacientes.find((p: any) => p.id === form.paciente_id) as any;
-    const profIdValidacaoSessao = editId ? (form.profissional_id || "") : (form.profissional_id || user?.id || "");
+    const profIdValidacaoSessao = editId ? (form.profissional_id || "") : (user?.id || "");
     const profValidacaoSessao =
       funcionarios.find((f: any) => f.id === profIdValidacaoSessao) ||
       (!editId && user?.id === profIdValidacaoSessao ? user : null);
@@ -4749,6 +4750,12 @@ const ProntuarioPage: React.FC = () => {
                                   <div className="font-medium flex items-center gap-1">
                                     <AlertTriangle className="h-3.5 w-3.5" /> Não foi possível validar este procedimento
                                   </div>
+                                  {!sigtapStatus.cbo && (
+                                    <div className="mt-1 text-[11px]">
+                                      Responsável validado: {editId ? (form.profissional_nome || "não identificado no prontuário") : (user?.nome || "não identificado")}.
+                                      {editId && !form.profissional_id ? " O vínculo do profissional está vazio neste prontuário." : " Confira o CBO no cadastro desse profissional."}
+                                    </div>
+                                  )}
                                   <div className="mt-1 text-[11px]">
                                     {(sigtapStatus.avisos || []).join(" ") || "Verifique CBO, nascimento, sexo e competência SIGTAP."}
                                   </div>

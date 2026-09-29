@@ -72,12 +72,19 @@ export const resolveProfessionalCbo = (professional: any): string => {
   // O cadastro bruto do banco usa custom_data, mas os contextos da aplicação
   // normalizam esse mesmo objeto para customData (camelCase). A validação deve
   // aceitar ambos para não "perder" o CBO já cadastrado ao passar pelo contexto.
-  const cd = professional.custom_data || professional.customData || {};
+  // Alguns objetos carregados pelo contexto mantêm as duas representações.
+  // Um custom_data vazio não pode ocultar o CBO válido em customData.
+  const cd = professional.custom_data || {};
+  const normalizedCd = professional.customData || {};
   const candidates = [
     cd.cbo_codigo,
     cd.cbo,
     cd.codigo_cbo,
     cd.cbo_sus,
+    normalizedCd.cbo_codigo,
+    normalizedCd.cbo,
+    normalizedCd.codigo_cbo,
+    normalizedCd.cbo_sus,
     professional.cbo,
     professional.cbo_codigo,
     professional.codigo_cbo,

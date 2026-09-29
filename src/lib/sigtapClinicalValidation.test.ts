@@ -45,6 +45,7 @@ describe("validação clínica SIGTAP", () => {
   it("resolve CBO por campos usuais do profissional", () => {
     expect(resolveProfessionalCbo({ custom_data: { cbo_codigo: "223810" } })).toBe("223810");
     expect(resolveProfessionalCbo({ customData: { cbo_codigo: "223605" } })).toBe("223605");
+    expect(resolveProfessionalCbo({ custom_data: {}, customData: { cbo_codigo: "223605" } })).toBe("223605");
     expect(resolveProfessionalCbo({ cbo: "2236-05" })).toBe("223605");
   });
 
@@ -72,7 +73,7 @@ describe("validação clínica SIGTAP", () => {
     });
     expect(result.status).toBe("incompatível");
     expect(result.motivos.join(" ")).toContain("CBO 322205");
-    expect(result.motivos.join(" ")).toContain("idade mínima");
+    expect(result.motivos.join(" ")).toContain("Idade mínima");
   });
 
   it("não chama indisponibilidade do catálogo de incompatibilidade", async () => {
