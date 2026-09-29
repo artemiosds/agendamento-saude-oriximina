@@ -175,13 +175,20 @@ export const renderOciDocument = (
   const secundarios = [...data.procedimentosSecundarios].slice(0, linhas);
   while (secundarios.length < linhas) secundarios.push({ codigo: "", nome: "", quantidade: 0 });
 
-  const logoCandidates = [
+  const preferredLogos = [
     config?.logosConfig?.esquerda?.ativo !== false ? config?.logoEsquerda : "",
-    config?.mostrarLogoCentral && config?.logosConfig?.central?.ativo !== false ? config?.logoCentral : "",
     config?.logosConfig?.direita?.ativo !== false ? config?.logoDireita : "",
   ].filter((value): value is string => !!value);
+  const fallbackCentral =
+    config?.mostrarLogoCentral && config?.logosConfig?.central?.ativo !== false
+      ? config?.logoCentral
+      : "";
 
-  const logosAtivos = config?.mostrarLogos === false ? [] : logoCandidates.slice(0, 2);
+  const logosAtivos = config?.mostrarLogos === false
+    ? []
+    : (preferredLogos.length >= 2
+        ? preferredLogos.slice(0, 2)
+        : [...preferredLogos, ...(fallbackCentral ? [fallbackCentral] : [])].slice(0, 2));
   const logosHtml = logosAtivos.length
     ? logosAtivos.map((url, index) => logo(url, `Logomarca institucional ${index + 1}`, 32)).join("")
     : '<span class="oci-logo-placeholder">&nbsp;</span>';
@@ -243,7 +250,7 @@ export const renderOciDocument = (
   padding:1.1mm 2mm;
   overflow:hidden;
 }
-.oci-logos img{max-width:100%;max-height:8mm;object-fit:contain}
+.oci-logos img{display:block;max-width:46mm;max-height:8mm;width:auto;height:auto;object-fit:contain}
 .oci-logo-placeholder{display:block;width:100%}
 .oci-title{
   border:1.2px solid #111;
@@ -283,6 +290,7 @@ export const renderOciDocument = (
   border-bottom:1px solid #111;
   padding:2.2mm 1.4mm .55mm;
   overflow:hidden;
+  min-width:0;
 }
 .oci-field-label{
   position:absolute;
@@ -359,8 +367,27 @@ export const renderOciDocument = (
 .oci-request-sign{grid-column:4;grid-row:1/3}
 .oci-request-doc-type{grid-column:1;grid-row:2}
 .oci-request-doc-number{grid-column:2/4;grid-row:2}
-.oci-sign-box .oci-field-value{font-size:5.6pt!important;text-align:center}
-.oci-sign-box img{max-height:8.5mm;max-width:45mm;object-fit:contain}
+.oci-sign-box{overflow:hidden}
+.oci-sign-box .oci-field-value{
+  font-size:5.1pt!important;
+  text-align:center;
+  line-height:1.02;
+  overflow:hidden;
+  max-height:10.2mm;
+}
+.oci-sign-box .carimbo-digital{
+  display:block!important;
+  border:0!important;
+  border-radius:0!important;
+  padding:.3mm!important;
+  margin:0 auto!important;
+  font-size:5pt!important;
+  line-height:1.03!important;
+  max-width:100%!important;
+  max-height:9.6mm!important;
+  overflow:hidden!important;
+}
+.oci-sign-box img{display:block;max-height:8.8mm;max-width:43mm;width:auto;height:auto;object-fit:contain;margin:0 auto}
 .oci-auth-grid{
   display:grid;
   grid-template-columns:16% 48% 16% 20%;
