@@ -168,165 +168,323 @@ export const renderOciDocument = (
   config?: DocumentConfig | null,
   meta?: OciTemplateMeta | null,
 ): string => {
-  const linhas = Math.max(8, Math.min(18, Number(meta?.oci?.linhas_secundarias || 14)));
+  // O formulário oficial usa aproximadamente 20 linhas de procedimentos
+  // secundários. Mantemos isso configurável para futuras versões sem alterar
+  // os modelos já criados.
+  const linhas = Math.max(8, Math.min(24, Number(meta?.oci?.linhas_secundarias || 20)));
   const secundarios = [...data.procedimentosSecundarios].slice(0, linhas);
   while (secundarios.length < linhas) secundarios.push({ codigo: "", nome: "", quantidade: 0 });
 
-  const esquerda = config?.mostrarLogos !== false && config?.logosConfig?.esquerda?.ativo !== false
-    ? logo(config?.logoEsquerda || "", "Logomarca institucional")
-    : "";
-  const centro = config?.mostrarLogos !== false && config?.mostrarLogoCentral && config?.logosConfig?.central?.ativo !== false
-    ? logo(config?.logoCentral || "", "Logomarca central")
-    : "";
-  const direita = config?.mostrarLogos !== false && config?.logosConfig?.direita?.ativo !== false
-    ? logo(config?.logoDireita || "", "Logomarca municipal")
-    : "";
+  const logoCandidates = [
+    config?.logosConfig?.esquerda?.ativo !== false ? config?.logoEsquerda : "",
+    config?.mostrarLogoCentral && config?.logosConfig?.central?.ativo !== false ? config?.logoCentral : "",
+    config?.logosConfig?.direita?.ativo !== false ? config?.logoDireita : "",
+  ].filter((value): value is string => !!value);
+
+  const logosAtivos = config?.mostrarLogos === false ? [] : logoCandidates.slice(0, 2);
+  const logosHtml = logosAtivos.length
+    ? logosAtivos.map((url, index) => logo(url, `Logomarca institucional ${index + 1}`, 32)).join("")
+    : '<span class="oci-logo-placeholder">&nbsp;</span>';
 
   const p = data.paciente;
   const prof = data.profissional;
   const a = data.autorizacao;
 
-  const rowsSec = secundarios.map((item) => `
-    <tr>
-      <td>${esc(item.codigo)}</td>
-      <td>${esc(item.nome)}</td>
-      <td class="oci-center">${item.quantidade ? esc(item.quantidade) : ""}</td>
-    </tr>`).join("");
+  const valueStyle = (value: unknown, normal = 7.1, compact = 6.1, threshold = 58) =>
+    `font-size:${String(value ?? "").length > threshold ? compact : normal}pt`;
+
+  const field = (label: string, value: unknown, className = "", style = "") =>
+    `<div class="oci-field ${className}" style="${style}">
+      <span class="oci-field-label">${esc(label)}</span>
+      <div class="oci-field-value" style="${valueStyle(value)}">${esc(value) || "&nbsp;"}</div>
+    </div>`;
+
+  const procedureRow = (item: OciProcedureItem, main = false) => `
+    <div class="oci-proc-row ${main ? "oci-proc-main" : ""}">
+      ${field(main ? "Código do procedimento principal" : "Código do procedimento secundário", item.codigo, "oci-proc-code")}
+      ${field(main ? "Nome do procedimento principal" : "Nome do procedimento secundário", item.nome, "oci-proc-name", "text-align:center")}
+      ${field("Qtde", item.quantidade ? item.quantidade : "", "oci-proc-qty", "text-align:center")}
+    </div>`;
+
+  const rowsSec = secundarios.map((item) => procedureRow(item)).join("");
 
   const titulo = meta?.oci?.titulo || "LAUDO PARA SOLICITAÇÃO/AUTORIZAÇÃO DE OFERTA DE CUIDADOS INTEGRADOS (OCI)";
+  const periodoValidade = [fmtDate(a.validadeInicio), fmtDate(a.validadeFim)].filter(Boolean).join(" a ");
 
   return `
 <style>
-.oci-page{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;width:100%;box-sizing:border-box;font-size:10px;line-height:1.15}
+.oci-page{
+  font-family:Arial,Helvetica,sans-serif;
+  color:#000;
+  background:#fff;
+  width:100%;
+  max-width:202mm;
+  margin:0 auto;
+  box-sizing:border-box;
+  font-size:7pt;
+  line-height:1.02;
+}
 .oci-page *{box-sizing:border-box}
-.oci-border{border:2px solid #111;padding:4px}
-.oci-top{display:grid;grid-template-columns:35% 65%;gap:4px;align-items:stretch}
-.oci-logos{border:1.5px solid #111;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;align-items:center;justify-items:center;padding:4px;min-height:58px}
-.oci-title{border:1.5px solid #111;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-style:italic;font-size:16px;padding:6px}
-.oci-section{background:#050505;color:#fff;text-align:center;font-weight:700;font-size:11px;padding:4px 6px;margin-top:5px;border:1px solid #050505}
-.oci-grid{display:grid;border-left:1px solid #111;border-top:1px solid #111}
-.oci-cell{position:relative;min-height:32px;border-right:1px solid #111;border-bottom:1px solid #111;padding:10px 6px 4px}
-.oci-label{position:absolute;top:1px;left:7px;font-size:7px;font-weight:700;background:#fff;padding:0 2px;text-transform:uppercase}
-.oci-value{font-size:10px;font-weight:500;white-space:normal;overflow-wrap:anywhere}
-.oci-value.strong{font-weight:700}
+.oci-frame{border:1.6px solid #111;padding:2.2mm}
+.oci-top{
+  display:grid;
+  grid-template-columns:36% 64%;
+  gap:2.5mm;
+  height:11mm;
+  margin-bottom:1.5mm;
+}
+.oci-logos{
+  border:1.2px solid #111;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:2mm;
+  align-items:center;
+  justify-items:center;
+  padding:1.1mm 2mm;
+  overflow:hidden;
+}
+.oci-logos img{max-width:100%;max-height:8mm;object-fit:contain}
+.oci-logo-placeholder{display:block;width:100%}
+.oci-title{
+  border:1.2px solid #111;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  font-weight:800;
+  font-style:italic;
+  font-size:10pt;
+  line-height:1.03;
+  padding:1mm 2mm;
+}
+.oci-section{
+  background:#050505;
+  color:#fff;
+  text-align:center;
+  font-weight:700;
+  font-size:7.5pt;
+  line-height:1;
+  height:5.3mm;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:1.5mm;
+  border:1px solid #050505;
+}
+.oci-grid{
+  display:grid;
+  border-left:1px solid #111;
+  border-top:1px solid #111;
+}
+.oci-field{
+  position:relative;
+  min-height:6.4mm;
+  border-right:1px solid #111;
+  border-bottom:1px solid #111;
+  padding:2.2mm 1.4mm .55mm;
+  overflow:hidden;
+}
+.oci-field-label{
+  position:absolute;
+  top:.25mm;
+  left:1.6mm;
+  max-width:calc(100% - 3mm);
+  font-size:4.8pt;
+  line-height:1;
+  font-weight:700;
+  background:#fff;
+  padding:0 .45mm;
+  text-transform:uppercase;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.oci-field-value{
+  font-weight:500;
+  line-height:1.05;
+  overflow-wrap:anywhere;
+}
+.oci-sex-value{display:flex;align-items:center;justify-content:center;gap:1.4mm;font-size:6.3pt;padding-top:.2mm}
+.oci-checkbox{
+  display:inline-flex;
+  width:3.4mm;
+  height:3.4mm;
+  border:1px solid #111;
+  align-items:center;
+  justify-content:center;
+  font-size:6pt;
+  line-height:1;
+}
+.oci-address .oci-field-value{font-size:6.3pt!important;text-align:center}
+.oci-observacoes{min-height:13.5mm}
+.oci-observacoes .oci-field-value{font-size:6.5pt!important}
+.oci-proc-row{
+  display:grid;
+  grid-template-columns:27% 64% 9%;
+  gap:2.1mm;
+  margin-top:1.05mm;
+}
+.oci-proc-row .oci-field{
+  border:1px solid #111;
+  min-height:4.65mm;
+  padding-top:1.6mm;
+  padding-bottom:.25mm;
+}
+.oci-proc-row .oci-field-label{
+  top:.12mm;
+  font-size:3.9pt;
+  left:1.2mm;
+}
+.oci-proc-row .oci-field-value{
+  font-size:5.75pt!important;
+  line-height:1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.oci-proc-main{margin-top:1.1mm}
+.oci-proc-main .oci-field{min-height:5.4mm;padding-top:1.85mm}
+.oci-proc-main .oci-field-value{font-size:6.8pt!important}
+.oci-proc-main .oci-proc-name .oci-field-value{font-size:6.55pt!important;font-weight:500}
+.oci-request-grid{
+  display:grid;
+  grid-template-columns:20% 44% 16% 20%;
+  grid-template-rows:6.2mm 5.2mm;
+  border-left:1px solid #111;
+  border-top:1px solid #111;
+}
+.oci-request-grid .oci-field{min-height:0;height:100%}
+.oci-request-name{grid-column:1/3}
+.oci-request-date{grid-column:3}
+.oci-request-sign{grid-column:4;grid-row:1/3}
+.oci-request-doc-type{grid-column:1;grid-row:2}
+.oci-request-doc-number{grid-column:2/4;grid-row:2}
+.oci-sign-box .oci-field-value{font-size:5.6pt!important;text-align:center}
+.oci-sign-box img{max-height:8.5mm;max-width:45mm;object-fit:contain}
+.oci-auth-grid{
+  display:grid;
+  grid-template-columns:16% 48% 16% 20%;
+  grid-template-rows:6.0mm 5.2mm 6.2mm;
+  border-left:1px solid #111;
+  border-top:1px solid #111;
+}
+.oci-auth-grid .oci-field{min-height:0;height:100%}
+.oci-auth-name{grid-column:1/3;grid-row:1}
+.oci-auth-orgao{grid-column:3;grid-row:1}
+.oci-auth-apac{grid-column:4;grid-row:1/3}
+.oci-auth-doc-type{grid-column:1;grid-row:2}
+.oci-auth-doc-number{grid-column:2/4;grid-row:2}
+.oci-auth-date{grid-column:1;grid-row:3}
+.oci-auth-sign{grid-column:2/4;grid-row:3}
+.oci-auth-validity{grid-column:4;grid-row:3}
+.oci-doc-options{display:flex;align-items:center;justify-content:center;gap:1mm;font-size:5.2pt;padding-top:.2mm}
 .oci-center{text-align:center}
-.oci-small{font-size:8px}
-.oci-table{width:100%;border-collapse:collapse;table-layout:fixed}
-.oci-table th,.oci-table td{border:1px solid #111;padding:3px 5px;height:23px;vertical-align:middle;font-size:8.5px;overflow-wrap:anywhere}
-.oci-table th{font-size:7px;text-transform:uppercase;font-weight:700}
-.oci-checkbox{display:inline-block;width:11px;height:11px;border:1px solid #111;text-align:center;line-height:9px;margin-right:2px;font-size:9px}
-.oci-sign{min-height:58px}
-.oci-carimbo{font-size:8px;text-align:center;line-height:1.2}
-.oci-carimbo img{max-height:52px;max-width:180px}
-.oci-muted{color:#333}
 @media print{
-  .oci-page{font-size:9px}
-  .oci-border{break-inside:avoid}
-  .oci-table tr{break-inside:avoid}
+  .oci-page{width:100%;max-width:none;margin:0;font-size:7pt}
+  .oci-frame{break-inside:avoid}
+  .oci-proc-row{break-inside:avoid}
 }
 </style>
 <div class="oci-page">
-  <div class="oci-border">
+  <div class="oci-frame">
     <div class="oci-top">
-      <div class="oci-logos">${esquerda}<div>${centro}</div>${direita}</div>
+      <div class="oci-logos">${logosHtml}</div>
       <div class="oci-title">${esc(titulo)}</div>
     </div>
 
     <div class="oci-section">IDENTIFICAÇÃO DO ESTABELECIMENTO DE SAÚDE (SOLICITANTE)</div>
-    <div class="oci-grid" style="grid-template-columns:1fr 165px">
-      ${cell("Nome do estabelecimento de saúde solicitante", data.estabelecimentoNome)}
-      ${cell("CNES", data.cnes)}
+    <div class="oci-grid" style="grid-template-columns:83% 17%">
+      ${field("Nome do estabelecimento de saúde solicitante", data.estabelecimentoNome)}
+      ${field("CNES", data.cnes, "", "text-align:center")}
     </div>
 
     <div class="oci-section">IDENTIFICAÇÃO DO PACIENTE</div>
-    <div class="oci-grid" style="grid-template-columns:2.2fr .65fr .85fr">
-      ${cell("Nome do paciente", p.nome)}
-      <div class="oci-cell"><span class="oci-label">Sexo</span><div class="oci-value">
-        <span class="oci-checkbox">${/^m/i.test(p.sexo) ? "X" : ""}</span> Mas.
-        &nbsp;<span class="oci-checkbox">${/^f/i.test(p.sexo) ? "X" : ""}</span> Fem.
-      </div></div>
-      ${cell("Nº do prontuário", p.prontuario)}
+    <div class="oci-grid" style="grid-template-columns:70% 14% 16%">
+      ${field("Nome do paciente", p.nome)}
+      <div class="oci-field">
+        <span class="oci-field-label">Sexo</span>
+        <div class="oci-sex-value">
+          <span>Mas.</span><span class="oci-checkbox">${/^m/i.test(p.sexo) ? "X" : ""}</span>
+          <span>Fem.</span><span class="oci-checkbox">${/^f/i.test(p.sexo) ? "X" : ""}</span>
+        </div>
+      </div>
+      ${field("Nº do prontuário", p.prontuario, "", "text-align:center")}
     </div>
-    <div class="oci-grid" style="grid-template-columns:1.65fr .55fr .45fr .45fr">
-      ${cell("Cartão Nacional de Saúde (CNS)", p.cns)}
-      ${cell("Data de nascimento", fmtDate(p.dataNascimento))}
-      ${cell("Raça/Cor", p.racaCor)}
-      ${cell("Etnia", p.etnia)}
+    <div class="oci-grid" style="grid-template-columns:61% 16% 14% 9%">
+      ${field("Cartão Nacional de Saúde (CNS)", p.cns)}
+      ${field("Data de nascimento", fmtDate(p.dataNascimento), "", "text-align:center")}
+      ${field("Raça/Cor", p.racaCor, "", "text-align:center")}
+      ${field("Etnia", p.etnia, "", "text-align:center")}
     </div>
-    <div class="oci-grid" style="grid-template-columns:2.1fr .9fr">
-      ${cell("Nome da mãe", p.nomeMae)}
-      ${cell("Telefone de contato", p.telefone)}
+    <div class="oci-grid" style="grid-template-columns:72% 28%">
+      ${field("Nome da mãe", p.nomeMae)}
+      ${field("Telefone de contato", p.telefone, "", "text-align:center")}
     </div>
-    <div class="oci-grid" style="grid-template-columns:2.1fr .9fr">
-      ${cell("Nome do responsável", p.nomeResponsavel)}
-      ${cell("Telefone de contato", p.telefoneResponsavel)}
+    <div class="oci-grid" style="grid-template-columns:72% 28%">
+      ${field("Nome do responsável", p.nomeResponsavel)}
+      ${field("Telefone de contato", p.telefoneResponsavel, "", "text-align:center")}
     </div>
     <div class="oci-grid" style="grid-template-columns:1fr">
-      ${cell("Endereço (Rua, Nº, Bairro)", p.enderecoCompleto)}
+      ${field("Endereço (Rua, Nº, Bairro)", p.enderecoCompleto, "oci-address")}
     </div>
-    <div class="oci-grid" style="grid-template-columns:1.25fr .4fr .35fr .55fr">
-      ${cell("Município de residência", p.municipio)}
-      ${cell("Cód. IBGE Município", p.codigoIbge)}
-      ${cell("UF", p.uf)}
-      ${cell("CEP", p.cep)}
+    <div class="oci-grid" style="grid-template-columns:48% 16% 13% 23%">
+      ${field("Município de residência", p.municipio, "", "text-align:center")}
+      ${field("Cód. IBGE Município", p.codigoIbge, "", "text-align:center")}
+      ${field("UF", p.uf, "", "text-align:center")}
+      ${field("CEP", p.cep, "", "text-align:center")}
     </div>
 
     <div class="oci-section">JUSTIFICATIVA DO(S) PROCEDIMENTO(S) SOLICITADO(S)</div>
-    <div class="oci-grid" style="grid-template-columns:1.8fr .38fr .38fr .45fr">
-      ${cell("Descrição do diagnóstico", data.descricaoDiagnostico)}
-      ${cell("CID10 principal", data.cidPrincipal)}
-      ${cell("CID10 secundário", data.cidSecundario)}
-      ${cell("CID10 causas associadas", data.cidCausasAssociadas)}
+    <div class="oci-grid" style="grid-template-columns:62% 14% 12% 12%">
+      ${field("Descrição do diagnóstico", data.descricaoDiagnostico)}
+      ${field("CID10 principal", data.cidPrincipal, "", "text-align:center")}
+      ${field("CID10 secundário", data.cidSecundario, "", "text-align:center")}
+      ${field("CID10 causas associadas", data.cidCausasAssociadas, "", "text-align:center")}
     </div>
     <div class="oci-grid" style="grid-template-columns:1fr">
-      ${cell("Observações", data.observacoes)}
+      ${field("Observações", data.observacoes, "oci-observacoes")}
     </div>
 
     <div class="oci-section">PROCEDIMENTO SOLICITADO</div>
-    <table class="oci-table">
-      <colgroup><col style="width:27%"><col><col style="width:9%"></colgroup>
-      <thead><tr><th>Código do procedimento principal</th><th>Nome do procedimento principal</th><th>Qtde</th></tr></thead>
-      <tbody><tr><td>${esc(data.procedimentoPrincipal.codigo)}</td><td>${esc(data.procedimentoPrincipal.nome)}</td><td class="oci-center">${esc(data.procedimentoPrincipal.quantidade || 1)}</td></tr></tbody>
-    </table>
+    ${procedureRow(data.procedimentoPrincipal, true)}
 
     <div class="oci-section">PROCEDIMENTO(S) SECUNDÁRIO(S)</div>
-    <table class="oci-table">
-      <colgroup><col style="width:27%"><col><col style="width:9%"></colgroup>
-      <thead><tr><th>Código do procedimento secundário</th><th>Nome do procedimento secundário</th><th>Qtde</th></tr></thead>
-      <tbody>${rowsSec}</tbody>
-    </table>
+    <div class="oci-secondary-list">${rowsSec}</div>
 
     <div class="oci-section">SOLICITAÇÃO</div>
-    <div class="oci-grid" style="grid-template-columns:1.7fr .45fr .55fr">
-      ${cell("Nome do profissional solicitante", prof.nome)}
-      ${cell("Data da solicitação", fmtDate(data.dataSolicitacao))}
-      <div class="oci-cell oci-sign"><span class="oci-label">Assinatura e carimbo / Nº de registro do conselho</span><div class="oci-carimbo">${prof.carimboHtml || esc([prof.conselho, prof.numeroConselho, prof.ufConselho].filter(Boolean).join(" "))}</div></div>
-    </div>
-    <div class="oci-grid" style="grid-template-columns:.48fr 1.52fr">
-      <div class="oci-cell"><span class="oci-label">Documento</span><div class="oci-value">
-        <span class="oci-checkbox">${prof.documentoTipo === "CNS" ? "X" : ""}</span> CNS
-        &nbsp;<span class="oci-checkbox">${prof.documentoTipo === "CPF" ? "X" : ""}</span> CPF
-      </div></div>
-      ${cell("Nº do documento (CNS/CPF) do profissional solicitante", prof.documentoNumero)}
+    <div class="oci-request-grid">
+      ${field("Nome do profissional solicitante", prof.nome, "oci-request-name")}
+      ${field("Data da solicitação", fmtDate(data.dataSolicitacao), "oci-request-date", "text-align:center")}
+      <div class="oci-field oci-request-sign oci-sign-box">
+        <span class="oci-field-label">Assinatura e carimbo / Nº de registro do conselho</span>
+        <div class="oci-field-value">${prof.carimboHtml || esc([prof.conselho, prof.numeroConselho, prof.ufConselho].filter(Boolean).join(" ")) || "&nbsp;"}</div>
+      </div>
+      <div class="oci-field oci-request-doc-type">
+        <span class="oci-field-label">Documento</span>
+        <div class="oci-doc-options">
+          <span class="oci-checkbox">${prof.documentoTipo === "CNS" ? "X" : ""}</span><span>CNS</span>
+          <span class="oci-checkbox">${prof.documentoTipo === "CPF" ? "X" : ""}</span><span>CPF</span>
+        </div>
+      </div>
+      ${field("Nº documento (CNS/CPF) do profissional solicitante", prof.documentoNumero, "oci-request-doc-number", "text-align:center")}
     </div>
 
     <div class="oci-section">AUTORIZAÇÃO</div>
-    <div class="oci-grid" style="grid-template-columns:1.3fr .45fr .65fr">
-      ${cell("Nome do profissional autorizador", a.nomeAutorizador)}
-      ${cell("Cód. órgão emissor", a.codigoOrgaoEmissor)}
-      ${cell("Nº da autorização/APAC", a.numeroAutorizacao)}
-    </div>
-    <div class="oci-grid" style="grid-template-columns:.48fr 1.52fr">
-      <div class="oci-cell"><span class="oci-label">Documento</span><div class="oci-value">
-        <span class="oci-checkbox">${a.documentoTipo === "CNS" ? "X" : ""}</span> CNS
-        &nbsp;<span class="oci-checkbox">${a.documentoTipo === "CPF" ? "X" : ""}</span> CPF
-      </div></div>
-      ${cell("Nº do documento (CNS/CPF) do profissional autorizador", a.documentoNumero)}
-    </div>
-    <div class="oci-grid" style="grid-template-columns:.5fr 1.45fr .65fr">
-      ${cell("Data da autorização", fmtDate(a.dataAutorizacao))}
-      ${cell("Assinatura e carimbo (Nº registro do conselho)", a.assinaturaCarimbo)}
-      ${cell("Período de validade da APAC", [fmtDate(a.validadeInicio), fmtDate(a.validadeFim)].filter(Boolean).join(" a "))}
+    <div class="oci-auth-grid">
+      ${field("Nome do profissional autorizador", a.nomeAutorizador, "oci-auth-name")}
+      ${field("Cód. órgão emissor", a.codigoOrgaoEmissor, "oci-auth-orgao", "text-align:center")}
+      ${field("Nº da autorização (APAC)", a.numeroAutorizacao, "oci-auth-apac", "text-align:center")}
+      <div class="oci-field oci-auth-doc-type">
+        <span class="oci-field-label">Documento</span>
+        <div class="oci-doc-options">
+          <span class="oci-checkbox">${a.documentoTipo === "CNS" ? "X" : ""}</span><span>CNS</span>
+          <span class="oci-checkbox">${a.documentoTipo === "CPF" ? "X" : ""}</span><span>CPF</span>
+        </div>
+      </div>
+      ${field("Nº documento (CNS/CPF) do profissional autorizador", a.documentoNumero, "oci-auth-doc-number", "text-align:center")}
+      ${field("Data da autorização", fmtDate(a.dataAutorizacao), "oci-auth-date", "text-align:center")}
+      ${field("Assinatura e carimbo (Nº de registro do conselho)", a.assinaturaCarimbo, "oci-auth-sign", "text-align:center")}
+      ${field("Período de validade da APAC", periodoValidade, "oci-auth-validity", "text-align:center")}
     </div>
   </div>
 </div>`;
