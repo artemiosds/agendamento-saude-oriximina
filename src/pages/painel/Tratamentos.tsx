@@ -1014,8 +1014,8 @@ const Tratamentos: React.FC = () => {
           appointmentId: nextSession.appointment_id,
         });
 
-        if (result.cycleStatus === "concluido") {
-          toast.info("🎉 Ciclo de tratamento concluído!");
+        if (result.sessionsDone >= selectedCycle.total_sessions && selectedCycle.total_sessions > 0) {
+          toast.info("Todas as sessões previstas foram registradas. Avalie se deve solicitar extensão ou dar alta.");
         }
       } else {
         await supabase
@@ -2261,6 +2261,16 @@ const Tratamentos: React.FC = () => {
             </div>
             {selectedCycle.clinical_notes && (
               <p className="text-sm text-muted-foreground border-t pt-2">{selectedCycle.clinical_notes}</p>
+            )}
+
+            {selectedCycle.total_sessions > 0 && selectedCycle.sessions_done >= selectedCycle.total_sessions && (
+              <div className="p-3 rounded-lg bg-info/10 border border-info/25 text-sm text-info flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <p>
+                  Todas as sessões previstas deste ciclo foram registradas. Avalie a evolução do paciente: utilize
+                  {' '}'Solicitar Extensão' se houver indicação de novas sessões ou clique em 'Dar Alta' para finalizar o tratamento.
+                </p>
+              </div>
             )}
 
             {faltaStats?.alerta && (

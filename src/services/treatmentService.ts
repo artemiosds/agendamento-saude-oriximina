@@ -168,6 +168,10 @@ export const treatmentService = {
   },
 
   async registerCompletedSession(input: RegisterCompletedSessionInput): Promise<RegisterCompletedSessionResult> {
+    if (!['em_andamento', 'ativo'].includes(input.cycle.status)) {
+      throw new Error('O ciclo não está ativo para registrar sessões.');
+    }
+
     const hasSoap = input.soap && (input.soap.subjetivo || input.soap.objetivo || input.soap.avaliacao || input.soap.plano);
     const soap = hasSoap ? normalizeSoapPayload(input.soap) : normalizeSoapPayload(null);
     // SOAP validation is now optional — only validate if SOAP was provided
@@ -233,11 +237,9 @@ export const treatmentService = {
 
       const completedSessions = await countCompletedSessions(input.cycle.id);
       const sessionsDone = Math.min(input.cycle.total_sessions, completedSessions);
-      const cycleStatus = sessionsDone >= input.cycle.total_sessions
-        ? 'concluido'
-        : input.cycle.status === 'ativo'
-          ? 'ativo'
-          : 'em_andamento';
+      // Completar a quantidade planejada não encerra o tratamento.
+      // O ciclo só é finalizado pelo fluxo explícito de Dar Alta.
+      const cycleStatus = input.cycle.status;
 
       const { error: cycleError } = await (supabase as any)
         .from('treatment_cycles')
