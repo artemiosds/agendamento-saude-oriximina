@@ -41,6 +41,7 @@ import ConfigSistema from '@/components/config/ConfigSistema';
 import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
 import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
 import ConfigSistemasIntegrados from '@/components/config/ConfigSistemasIntegrados';
+import ConfigRegrasCarencia from '@/components/config/ConfigRegrasCarencia';
 import { cn } from '@/lib/utils';
 import { whatsappService } from '@/services/whatsappService';
 
@@ -50,6 +51,7 @@ const TABS = [
   { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp, globalOnly: false },
   { id: 'especialidades', label: 'Especialidades', icon: ClipboardList, globalOnly: false },
   { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity, globalOnly: false },
+  { id: 'carencia', label: 'Carência Pós‑Alta', icon: ShieldAlert, globalOnly: false },
   { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon, globalOnly: false },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, globalOnly: false },
   { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
@@ -508,6 +510,9 @@ const Configuracoes: React.FC = () => {
 
       case 'especialidades':
         return <ConfigEspecialidades />;
+
+      case 'carencia':
+        return <ConfigRegrasCarencia />;
 
       case 'campos':
         return <ConfigPersonalizarCampos />;

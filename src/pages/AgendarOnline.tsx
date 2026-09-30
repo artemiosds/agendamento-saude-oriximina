@@ -400,7 +400,10 @@ const AgendarOnline: React.FC = () => {
         { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
           body: JSON.stringify({ id: agId, paciente_id: pacienteId, paciente_nome: dados.nome, unidade_id: form.unidadeId, sala_id: '', setor_id: prof?.setor || '', profissional_id: form.profissionalId, profissional_nome: prof?.nome || '', data: form.data, hora: form.hora, tipo: form.tipo, observacoes: form.obs }) }
       );
-      if (!agRes.ok) throw new Error('Failed to create appointment');
+      if (!agRes.ok) {
+        const result = await agRes.json().catch(() => ({}));
+        throw new Error(result.error || 'Falha ao criar agendamento. Tente novamente.');
+      }
 
       try {
         await supabase.functions.invoke('webhook-notify', {

@@ -40,6 +40,7 @@ import { validatePacienteFields } from "@/lib/validation";
 import { checkPatientDuplicity } from "@/lib/paciente-duplicity";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeSexo } from "@/lib/utils/sexo-normalization";
+import { PatientProfessionCarenessNotice } from "@/components/PatientProfessionCarenessNotice";
 
 import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import ProfissaoCboSelect from "@/components/fila/ProfissaoCboSelect";
@@ -1122,6 +1123,7 @@ const Pacientes: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="font-display">{editId ? "Editar" : "Cadastrar"} Paciente</DialogTitle>
           </DialogHeader>
+          {editId && <PatientProfessionCarenessNotice patientId={editId} />}
           <CadastroPacienteForm
             pacienteId={editId}
             form={form}

@@ -1265,6 +1265,30 @@ const Agenda: React.FC = () => {
     } catch {}
 
     if (!pac || !prof || !newAg.hora) return;
+    let carencyOverrideReason = "";
+    try {
+      const { data, error } = await (supabase as any).rpc("check_patient_profession_careness", {
+        p_patient_id: pac.id, p_professional_id: prof.id, p_unit_id: prof.unidadeId || "",
+      });
+      if (error) throw error;
+      if (data?.blocked) {
+        if (user?.role !== "master") {
+          toast.error(data.message || `Paciente em carência para ${data.profession} até ${data.release_date}.`);
+          return;
+        }
+        const message = data.message || `Paciente em carência para ${data.profession} até ${data.release_date}.`;
+        if (!window.confirm(`${message}\n\nComo Master, você pode autorizar uma exceção. Deseja continuar?`)) return;
+        carencyOverrideReason = window.prompt("Registre o motivo clínico/administrativo da exceção:")?.trim() || "";
+        if (carencyOverrideReason.length < 3) {
+          toast.error("A exceção Master exige um motivo para auditoria.");
+          return;
+        }
+      }
+    } catch (error) {
+      // The database trigger remains authoritative; this check only provides
+      // the early message before the user fills/commits the appointment.
+      console.warn("Não foi possível antecipar a consulta de carência:", error);
+    }
     if (selectedDate < todayLocalStr()) {
       if (!isMaster) {
         toast.error("Não é possível agendar em data passada.");
@@ -1351,9 +1375,9 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
-    if (masterOverrideReason) {
+    if (masterOverrideReason || carencyOverrideReason) {
       await addAgendamentoTransactionally(agData, async (normalized) => {
-        const { error } = await supabase.rpc("create_internal_appointment_with_override" as any, {
+        const { error } = await supabase.rpc("create_internal_appointment_with_policy_override" as any, {
           p_payload: {
             id: normalized.id, paciente_id: normalized.pacienteId, paciente_nome: normalized.pacienteNome,
             unidade_id: normalized.unidadeId, sala_id: normalized.salaId, setor_id: normalized.setorId,
@@ -1362,7 +1386,9 @@ const Agenda: React.FC = () => {
             observacoes: normalized.observacoes, origem: normalized.origem,
             criado_por: normalized.criadoPor || "current",
           },
-          p_motivo_alteracao: masterOverrideReason,
+          p_override_reason: [masterOverrideReason, carencyOverrideReason].filter(Boolean).join(" | "),
+          p_bypass_careness: Boolean(carencyOverrideReason),
+          p_capacity_override: Boolean(masterOverrideReason),
         } as any);
         if (error) throw error;
         return { appointment: normalized, created: true };

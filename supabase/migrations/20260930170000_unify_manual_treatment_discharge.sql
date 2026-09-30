@@ -7,7 +7,7 @@ BEGIN
     JOIN pg_namespace n ON n.oid = t.typnamespace
     WHERE n.nspname = 'public' AND t.typname = 'tipo_alta'
   ) THEN
-    CREATE TYPE public.tipo_alta AS ENUM ('conclusao', 'falta', 'outro');
+    CREATE TYPE public.tipo_alta AS ENUM ('conclusao', 'outro');
   END IF;
 END;
 $$;

@@ -28,6 +28,7 @@ import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { DashboardSkeleton, TableSkeleton } from '@/components/skeletons';
 import { ChartCard } from '@/components/ChartCard';
+import RelatorioCareniaProfissional from '@/components/reports/RelatorioCareniaProfissional';
 
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
@@ -3078,6 +3079,7 @@ ${dataRows}
             { value: 'multiprofissional', label: 'Multiprofissional' },
             { value: 'pts_report', label: 'PTS' },
             { value: 'tratamentos', label: 'Tratamentos' },
+            { value: 'carencias', label: 'Carências Pós‑Alta' },
             { value: 'detalhado', label: 'Detalhado' },
             { value: 'clinico', label: '🧬 Análise Clínica' },
             { value: 'mapa', label: '📍 Mapa Atendimento' },
@@ -4251,6 +4253,10 @@ th{background:#f1f5f9;font-weight:600;}
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="carencias" className="space-y-5 mt-4">
+          <RelatorioCareniaProfissional />
         </TabsContent>
 
         {/* === ENFERMAGEM === */}

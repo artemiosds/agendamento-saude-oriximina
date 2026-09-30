@@ -74,6 +74,12 @@ export function AltaTratamentoDialog({ open, onOpenChange, cycle, patientName, o
         reason,
         finalNotes,
       });
+      if (result.careness?.created && result.careness.release_date) {
+        const released = new Date(`${result.careness.release_date}T12:00:00`).toLocaleDateString("pt-BR");
+        toast.info(`Carência para ${result.careness.profession || "esta profissão"} registrada até ${released}.`);
+      } else if (result.careness?.reason === "other_active_treatment") {
+        toast.info("Não foi criada carência: o paciente já possui outro ciclo ativo nesta profissão.");
+      }
     } catch (error) {
       console.error("Erro ao registrar alta do tratamento:", error);
       toast.error(error instanceof Error ? error.message : "Não foi possível registrar a alta.");
@@ -116,7 +122,6 @@ export function AltaTratamentoDialog({ open, onOpenChange, cycle, patientName, o
               <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="conclusao">Conclusão do tratamento</SelectItem>
-                <SelectItem value="falta">Falta/abandono (decisão manual)</SelectItem>
                 <SelectItem value="outro">Outro motivo</SelectItem>
               </SelectContent>
             </Select>

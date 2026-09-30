@@ -4673,9 +4673,37 @@ export type Database = {
         }
         Returns: Json
       }
+      check_patient_profession_careness: {
+        Args: { p_patient_id: string; p_professional_id: string; p_unit_id?: string }
+        Returns: Json
+      }
+      confirm_profession_careness_mapping: {
+        Args: { p_signature: string }
+        Returns: Json
+      }
+      create_internal_appointment_with_policy_override: {
+        Args: { p_bypass_careness: boolean; p_capacity_override?: boolean; p_override_reason: string; p_payload: Json }
+        Returns: Json
+      }
+      list_active_profession_careness: { Args: never; Returns: Json }
+      list_patient_profession_careness: { Args: { p_patient_id: string }; Returns: Json }
+      list_profession_careness_setup: { Args: never; Returns: Json }
+      preview_profession_careness_retroactive: {
+        Args: { p_duration_unit: string; p_duration_value: number; p_profession_key: string }
+        Returns: Json
+      }
+      release_profession_careness_for_medical_referral: {
+        Args: { p_patient_id: string; p_source?: string; p_source_id?: string; p_specialty: string }
+        Returns: Json
+      }
+      save_profession_careness_rule: {
+        Args: { p_apply_retroactive?: boolean; p_duration_unit: string; p_duration_value: number; p_enabled: boolean;
+          p_profession_key: string; p_profession_name: string; p_scope: string }
+        Returns: Json
+      }
     }
     Enums: {
-      tipo_alta: "conclusao" | "falta" | "outro"
+      tipo_alta: "conclusao" | "outro"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4803,7 +4831,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      tipo_alta: ["conclusao", "falta", "outro"],
+      tipo_alta: ["conclusao", "outro"],
     },
   },
 } as const

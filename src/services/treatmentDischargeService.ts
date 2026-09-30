@@ -1,11 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type TreatmentDischargeType = "conclusao" | "falta" | "outro";
+export type TreatmentDischargeType = "conclusao" | "outro";
 
 export interface TreatmentDischargeResult {
   discharge_id: string;
   removed_sessions: number;
   removed_appointments: number;
+  careness?: { created: boolean; reason?: string; profession?: string; release_date?: string; scope?: string };
 }
 
 /** The database function is the single transactional path for manual discharge. */

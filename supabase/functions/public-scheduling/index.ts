@@ -230,6 +230,18 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Online scheduling only allows future dates" }), { status: 400, headers: corsHeaders });
       }
 
+      // Friendly early feedback. The agendamentos trigger below remains the
+      // authoritative guard, including for writes outside this Edge Function.
+      const { data: carencia, error: carenciaCheckError } = await (supabase as any).rpc("check_patient_profession_careness", {
+        p_patient_id: ag.paciente_id,
+        p_professional_id: ag.profissional_id,
+        p_unit_id: ag.unidade_id || "",
+      });
+      if (carenciaCheckError) console.warn("Early post-discharge check unavailable; DB trigger remains authoritative:", carenciaCheckError.message);
+      if (carencia?.blocked) {
+        return new Response(JSON.stringify({ error: carencia.message, code: "PROFESSION_CARENESS" }), { status: 409, headers: corsHeaders });
+      }
+
       const { error } = await supabase.from("agendamentos").insert({
         id: ag.id,
         paciente_id: ag.paciente_id,
@@ -248,7 +260,8 @@ serve(async (req) => {
         criado_por: "online",
       });
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        const blocked = error.message?.toLocaleLowerCase().includes("carência");
+        return new Response(JSON.stringify({ error: error.message, code: blocked ? "PROFESSION_CARENESS" : error.code }), { status: blocked ? 409 : 500, headers: corsHeaders });
       }
       return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
     }

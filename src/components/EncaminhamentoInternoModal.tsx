@@ -139,6 +139,20 @@ const EncaminhamentoInternoModal: React.FC<Props> = ({ open, onOpenChange, pacie
 
       if (!result.success) throw new Error(result.error || 'Falha ao salvar documento');
 
+      // The RPC validates the authenticated profession server-side. Non-medical
+      // authors receive a harmless zero count; physicians release only a
+      // matching patient/profession carence and the database records the audit.
+      const { data: releaseResult, error: releaseError } = await (supabase as any).rpc(
+        'release_profession_careness_for_medical_referral',
+        { p_patient_id: paciente.id, p_specialty: especialidade, p_source: 'encaminhamento_interno' },
+      );
+      if (releaseError) {
+        console.error('Encaminhamento salvo, mas não foi possível conferir/liberar carência:', releaseError);
+        toast.warning('Encaminhamento salvo. Não foi possível processar a liberação automática de carência; avise a administração.');
+      } else if (releaseResult?.released > 0) {
+        toast.info('A carência para esta profissão foi encerrada pela nova prescrição médica.');
+      }
+
       // 2) Create fila_espera entry to signal reception
       const filaId = `fi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const horaAgora = new Date().toTimeString().slice(0, 5);
