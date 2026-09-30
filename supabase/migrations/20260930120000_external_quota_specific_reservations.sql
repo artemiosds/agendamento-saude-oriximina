@@ -180,7 +180,7 @@ BEGIN
   INSERT INTO public.agendamentos (id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,
     profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,criado_por,prioridade_perfil)
   VALUES (p_payload->>'id',p_payload->>'paciente_id',p_payload->>'paciente_nome',p_payload->>'unidade_id',
-    nullif(p_payload->>'sala_id',''),nullif(p_payload->>'setor_id',''),p_payload->>'profissional_id',
+    coalesce(nullif(p_payload->>'sala_id',''),''),coalesce(nullif(p_payload->>'setor_id',''),''),p_payload->>'profissional_id',
     p_payload->>'profissional_nome',(p_payload->>'data')::date,p_payload->>'hora',
     coalesce(nullif(p_payload->>'status',''),'confirmado'),p_payload->>'tipo',coalesce(p_payload->>'observacoes',''),
     coalesce(nullif(p_payload->>'origem',''),'recepcao'),v_staff.id::text,'normal') RETURNING * INTO v_row;
@@ -189,6 +189,7 @@ BEGIN
   VALUES (v_staff.id::text,v_staff.nome,v_staff.role,v_row.unidade_id,'encaixe_master','agendamento',v_row.id,
     'agenda',v_row.id,v_row.paciente_id,v_row.profissional_id,to_jsonb(v_row),
     jsonb_build_object('motivo_alteracao',btrim(p_motivo_alteracao),'capacidade',v_check));
+  PERFORM set_config('app.master_capacity_override', 'off', true);
   RETURN jsonb_build_object('id',v_row.id,'created',true);
 END;
 $$;
@@ -316,6 +317,7 @@ BEGIN
     coalesce(p_quota_id,v_new.id)::text,'usuarios',CASE WHEN p_action='create' THEN NULL ELSE to_jsonb(v_old) END,
     CASE WHEN p_action='delete' AND v_old.vagas_usadas=0 THEN NULL ELSE to_jsonb(v_new) END,
     jsonb_build_object('motivo_alteracao',nullif(btrim(p_motivo_alteracao),'')));
+  PERFORM set_config('app.external_quota_admin_rpc','off',true);
   RETURN jsonb_build_object('id',coalesce(p_quota_id,v_new.id),'action',p_action);
 END;
 $$;
