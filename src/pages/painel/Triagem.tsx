@@ -29,6 +29,7 @@ import { MANCHESTER_LEVELS, type ManchesterLevel } from "@/lib/manchesterProtoco
 import { compareLegalPriority, legalPriorityKey } from "@/lib/queuePriority";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { hasConfirmedTriage } from "@/lib/triageCompletion";
 import { differenceInMinutes } from "date-fns";
 import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
 import { EmptyState } from "@/components/EmptyState";
@@ -319,6 +320,13 @@ const Triagem: React.FC = () => {
         return;
       }
 
+      if (await hasConfirmedTriage(item.id)) {
+        toast.error('A triagem deste agendamento já foi concluída. Não é possível removê-lo da triagem.');
+        setConfirmAction(null);
+        await Promise.all([refreshFila(), refreshAgendamentos()]);
+        return;
+      }
+
       const statusAnterior = filaAtual.status;
 
       // ✅ ÚNICA alteração permitida: status da fila → 'excluido_da_fila_triagem'
@@ -353,6 +361,12 @@ const Triagem: React.FC = () => {
   const handleLiberarSemTriagem = async (item: Agendamento) => {
     setActionLoading(true);
     try {
+      if (await hasConfirmedTriage(item.id)) {
+        toast.error('A triagem deste agendamento já foi concluída. Atualize a fila antes de continuar.');
+        setConfirmAction(null);
+        await Promise.all([refreshFila(), refreshAgendamentos()]);
+        return;
+      }
       // 🚀 Chamada otimizada: Apenas atualizamos o necessário no banco sem carregar dados extras
       const { error: updFilaErr } = await supabase
         .from('fila_espera')
@@ -510,6 +524,19 @@ const Triagem: React.FC = () => {
     async (ag: Agendamento) => {
       if (openingTriagemId) return;
       setOpeningTriagemId(ag.filaId);
+      try {
+        if (await hasConfirmedTriage(ag.id)) {
+          toast.error('A triagem deste agendamento já foi concluída. A fila será atualizada.');
+          await Promise.all([refreshFila(), refreshAgendamentos()]);
+          setOpeningTriagemId(null);
+          return;
+        }
+      } catch (error) {
+        console.error('Erro ao verificar conclusão da triagem:', error);
+        toast.error('Não foi possível verificar a triagem. Tente novamente.');
+        setOpeningTriagemId(null);
+        return;
+      }
       
       let itemSelecionado = ag;
 
@@ -561,7 +588,7 @@ const Triagem: React.FC = () => {
       
       setOpeningTriagemId(null);
     },
-    [pacientes, updateAgendamento, updateFila, openingTriagemId],
+    [pacientes, updateAgendamento, updateFila, openingTriagemId, refreshFila, refreshAgendamentos],
   );
 
   const addAlergia = () => {
@@ -582,6 +609,9 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
+      if (await hasConfirmedTriage(selectedItem.id)) {
+        throw new Error('Esta triagem já foi concluída. O rascunho não pode substituí-la.');
+      }
       const triagePayload: any = {
         agendamento_id: selectedItem.id,
         tecnico_id: user?.id || "",
@@ -624,6 +654,9 @@ const Triagem: React.FC = () => {
     let etapa = "gravar_ficha";
 
     try {
+      if (await hasConfirmedTriage(selectedItem.id)) {
+        throw new Error('Esta triagem já foi concluída. Atualize a fila antes de continuar.');
+      }
       const novoStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_atendimento";
 
       const triagePayload: any = {

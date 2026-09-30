@@ -37,6 +37,7 @@ import { AgendaNotificacaoIndividual } from "@/components/AgendaNotificacoes";
 import { formatCNS } from "@/lib/cnsUtils";
 import { getManchesterBadgeStyle } from "@/lib/manchesterProtocol";
 import { cn, todayLocalStr } from "@/lib/utils";
+import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 
 export interface AgendaItemCardProps {
   ag: any;
@@ -527,6 +528,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
             !ehPendenteOnline &&
             (isMaster || isProfissional || user?.role === "recepcao" || canAgendaEdit) &&
             statusActions.filter(sa => {
+              if (sa.key === "confirmado_chegada" && isArrivalAlreadyProcessed(ag.status)) return false;
               // Se for profissional, só mostra ação de "falta" para a própria agenda
               if (isProfissional) {
                 return sa.key === "falta" && ag.profissionalId === user?.id;

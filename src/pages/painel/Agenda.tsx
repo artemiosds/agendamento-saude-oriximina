@@ -84,6 +84,7 @@ import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
 import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteModal";
 import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
 import { openPrintDocument } from "@/lib/printLayout";
+import { hasConfirmedTriage, isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -1601,6 +1602,20 @@ const Agenda: React.FC = () => {
 
     try {
       if (newStatus === "confirmado_chegada") {
+        const { data: agAtual, error: agReadError } = await supabase
+          .from("agendamentos")
+          .select("status, paciente_id, unidade_id")
+          .eq("id", agId)
+          .single();
+        if (agReadError) throw agReadError;
+        if (agAtual.paciente_id !== ag.pacienteId || agAtual.unidade_id !== ag.unidadeId) {
+          throw new Error("Os dados do agendamento mudaram. Atualize a Agenda antes de confirmar a chegada.");
+        }
+        if (isArrivalAlreadyProcessed(agAtual.status) || await hasConfirmedTriage(agId)) {
+          await Promise.all([refreshAgendamentos(), refreshFila()]);
+          throw new Error("Este atendimento já avançou após a chegada ou teve a triagem concluída. Não confirme a chegada novamente.");
+        }
+
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         // Triage routing is OPT-IN. Default = direct to professional's queue.
         // Only routes to triage when explicitly enabled (per professional or globally).
