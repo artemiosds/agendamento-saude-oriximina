@@ -49,6 +49,8 @@ import {
 } from "@/lib/bpaAddressNormalization";
 import { resolveBpaHeaderDocument } from "@/lib/bpaHeaderSource";
 import { normalizeBpaPhone } from "@/lib/bpaPhoneNormalization";
+import { parseBpaDate as parseDataSegura } from "@/lib/bpaDate";
+import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCid } from "@/lib/bpaCid";
 
 
 // Comparador alfabético estável: nome → data
@@ -103,36 +105,6 @@ const rpad = (valor: any, tamanho: number): string => {
   const s = String(valor || "");
   if (s.length > tamanho) return s.slice(0, tamanho);
   return s.padEnd(tamanho, " ");
-};
-
-const parseDataSegura = (date: any): { ano: number; mes: number; dia: number } | null => {
-  if (!date) return null;
-  const raw = String(date).trim();
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-  const partes = iso
-    ? { ano: Number(iso[1]), mes: Number(iso[2]), dia: Number(iso[3]) }
-    : dmy
-      ? { ano: Number(dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3]), mes: Number(dmy[2]), dia: Number(dmy[1]) }
-      : null;
-  if (
-    !partes ||
-    partes.ano < 1900 ||
-    partes.ano > 2100 ||
-    partes.mes < 1 ||
-    partes.mes > 12 ||
-    partes.dia < 1 ||
-    partes.dia > 31
-  )
-    return null;
-  const validacao = new Date(Date.UTC(partes.ano, partes.mes - 1, partes.dia));
-  if (
-    validacao.getUTCFullYear() !== partes.ano ||
-    validacao.getUTCMonth() + 1 !== partes.mes ||
-    validacao.getUTCDate() !== partes.dia
-  )
-    return null;
-  return partes;
 };
 
 const formatarData = (date: any): string => {
@@ -447,27 +419,7 @@ const resolverCodigosSigtapPorProcedimentoId = async (procedimentoIds: any[]): P
 // Importante: códigos CID de categoria com 3 caracteres podem ser completos.
 // Não acrescentamos "0" automaticamente, pois isso pode criar outro
 // diagnóstico ou um código inexistente.
-const extrairCodigosCid = (v: any): string[] => {
-  const texto = String(v ?? "")
-    .trim()
-    .toUpperCase();
-  if (!texto) return [];
-
-  const encontrados: string[] = [];
-  const regex = /(?:^|[^A-Z0-9])([A-Z]\d{2}(?:\.[A-Z0-9]|[A-Z0-9])?)(?=$|[^A-Z0-9])/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(texto)) !== null) {
-    const codigo = match[1].replace(/\./g, "");
-    if (!encontrados.includes(codigo)) encontrados.push(codigo);
-  }
-
-  return encontrados;
-};
-
-const extrairCodigoCid = (v: any): string => {
-  return extrairCodigosCid(v)[0] || "";
-};
+const extrairCodigoCid = (v: any): string => extrairCodigosCid(v)[0] || "";
 
 // Normaliza um valor qualquer para o código SIGTAP de 10 dígitos.
 // Aceita number/string que contenha o código; ignora descrições textuais.
@@ -2681,7 +2633,7 @@ const BpaExportar: React.FC = () => {
                 : "";
               const cidBrutoLinha = ehTecnicoEnfermagem
                 ? ""
-                : procEntry.cid || cidProducaoLinha || pront.custom_data?.cid || pac?.cid || "";
+                : resolveBpaCid({ procedureCid: procEntry.cid, productionCid: cidProducaoLinha, prontuario: pront, paciente: pac });
               const { cid } = normalizarCidLinha(cidBrutoLinha);
 
               // Revalida a combinação FINAL procedimento × CID que realmente iria
