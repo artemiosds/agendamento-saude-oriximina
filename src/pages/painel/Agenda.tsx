@@ -1315,6 +1315,10 @@ const Agenda: React.FC = () => {
           toast.error(reasonMsg);
           return;
         }
+        if (reason !== "external_reservation") {
+          toast.error(reasonMsg);
+          return;
+        }
         masterOverrideReason = window.prompt(
           `⚠️ ${reasonMsg}\n\nInforme o motivo do encaixe como MASTER:`,
         )?.trim() || "";

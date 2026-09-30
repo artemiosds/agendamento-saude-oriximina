@@ -26,6 +26,16 @@ BEGIN
   IF public.is_date_blocked(p_data, p_profissional_id, p_unidade_id) THEN
     RETURN jsonb_build_object('available', false, 'reason', 'date_blocked');
   END IF;
+  IF EXISTS (SELECT 1 FROM public.bloqueios b
+    WHERE p_data BETWEEN b.data_inicio AND b.data_fim
+      AND ((coalesce(b.unidade_id, '') = '' AND coalesce(b.profissional_id, '') = '')
+        OR (b.unidade_id = p_unidade_id AND coalesce(b.profissional_id, '') = '')
+        OR b.profissional_id = p_profissional_id)
+      AND (b.dia_inteiro = true OR coalesce(b.hora_inicio, '') = ''
+        OR (v_hora >= b.hora_inicio::time AND
+            v_hora < coalesce(nullif(b.hora_fim, ''), '23:59')::time))) THEN
+    RETURN jsonb_build_object('available', false, 'reason', 'date_blocked');
+  END IF;
 
   SELECT count(*) INTO v_matching_count FROM public.disponibilidades d
   WHERE d.profissional_id = p_profissional_id AND d.unidade_id = p_unidade_id
@@ -162,6 +172,10 @@ BEGIN
     (p_payload->>'profissional_id') || '|' || (p_payload->>'unidade_id') || '|' || (p_payload->>'data'), 0));
   v_check := public.check_internal_slot_availability(p_payload->>'profissional_id', p_payload->>'unidade_id',
     (p_payload->>'data')::date, p_payload->>'hora');
+  IF v_check->>'reason' IS DISTINCT FROM 'external_reservation' THEN
+    RAISE EXCEPTION 'Encaixe Master só pode ultrapassar a divisão da reserva externa; motivo de bloqueio: %',
+      coalesce(v_check->>'reason', 'indisponivel');
+  END IF;
   PERFORM set_config('app.master_capacity_override', 'on', true);
   INSERT INTO public.agendamentos (id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,
     profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,criado_por,prioridade_perfil)
@@ -307,3 +321,23 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.manage_external_quota(text, uuid, jsonb, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.manage_external_quota(text, uuid, jsonb, text) TO authenticated;
+
+-- Preserve the original multi-select behavior: all quota rows are committed or
+-- rolled back together if any requested quota fails validation or authorization.
+CREATE OR REPLACE FUNCTION public.manage_external_quotas(
+  p_payloads jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_payload jsonb; v_results jsonb := '[]'::jsonb; v_result jsonb;
+BEGIN
+  IF jsonb_typeof(p_payloads) <> 'array' OR jsonb_array_length(p_payloads) = 0 THEN
+    RAISE EXCEPTION 'Informe ao menos uma cota';
+  END IF;
+  FOR v_payload IN SELECT payload FROM jsonb_array_elements(p_payloads) AS item(payload) LOOP
+    v_result := public.manage_external_quota('create', NULL, v_payload, NULL);
+    v_results := v_results || jsonb_build_array(v_result);
+  END LOOP;
+  RETURN v_results;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.manage_external_quotas(jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.manage_external_quotas(jsonb) TO authenticated;

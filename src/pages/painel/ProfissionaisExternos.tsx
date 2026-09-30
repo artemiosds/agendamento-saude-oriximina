@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable } from "@/lib/externalQuota";
+import { todayLocalStr } from "@/lib/utils";
 
 interface ExternalProf {
   id: string;
@@ -323,7 +324,7 @@ const ProfissionaisExternos: React.FC = () => {
     })) { toast.error("O horário inicial deve ser anterior ao final, exceto no turno integral."); return; }
     setSavingQuota(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalStr();
       const endOfYear = `${new Date().getFullYear()}-12-31`;
 
       const inserts = selectedProfIds.map(profId => ({
@@ -341,12 +342,10 @@ const ProfissionaisExternos: React.FC = () => {
         ativo: true
       }));
 
-      for (const payload of inserts) {
-        const { error } = await supabase.rpc("manage_external_quota" as any, {
-          p_action: "create", p_quota_id: null, p_payload: payload, p_motivo_alteracao: null,
-        } as any);
-        if (error) throw error;
-      }
+      const { error } = await supabase.rpc("manage_external_quotas" as any, {
+        p_payloads: inserts,
+      } as any);
+      if (error) throw error;
       toast.success(`${inserts.length} quota(s) adicionada(s)!`);
       setQuotaDialogOpen(false);
       await loadExternos();
@@ -546,7 +545,7 @@ const ProfissionaisExternos: React.FC = () => {
           {filteredExternos.map(ext => {
             const unidade = unidades.find((u: any) => u.id === ext.unidade_id);
             const extQuotas = quotas.filter(q => q.profissional_externo_id === ext.id);
-            const today = new Date().toISOString().slice(0, 10);
+            const today = todayLocalStr();
             const vigentes = extQuotas.filter(q =>
               isQuotaConfigurationUsable(q) && today >= q.periodo_inicio && today <= q.periodo_fim,
             );
@@ -867,7 +866,7 @@ const ProfissionaisExternos: React.FC = () => {
                   ) : (
                     quotas.filter(q => q.profissional_externo_id === selectedExternoId).map(q => {
                       const prof = funcionarios.find((f: any) => f.id === q.profissional_interno_id);
-                      const today = new Date().toISOString().slice(0, 10);
+                      const today = todayLocalStr();
                       const dayOfWeek = new Date(`${today}T12:00:00`).getDay();
                       const matchingAvailabilities = disponibilidades
                         .filter(d => d.profissionalId === q.profissional_interno_id && d.unidadeId === q.unidade_id
