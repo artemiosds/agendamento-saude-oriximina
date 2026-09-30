@@ -2728,11 +2728,19 @@ const BpaExportar: React.FC = () => {
                 nacionalidade, servico, classificacao, sequenciaEquipe, areaEquipe, cnpj,
                 cep, codigoLogradouro, logradouro: endereco, complemento, numero, bairro,
                 telefone, email, ineEquipe,
+                cpfPaciente: primeiroValorPreenchido(pac?.cpf, pacCd.cpf) || "",
+                situacaoRua: [true, "true", "S", "1"].includes(
+                  pacCd.situacaoRua ?? pacCd.situacao_rua ?? pac?.situacao_rua,
+                ) ? "S" : "N",
+                semCpf: pacCd.semCpf === true || pacCd.sem_cpf === true
+                  ? "S"
+                  : pacCd.semCpf === false || pacCd.sem_cpf === false
+                    ? "N"
+                    : "",
                 tipoLogradouro: enderecoBpa.tipoLogradouro,
                 pacienteId: pront.paciente_id,
                 profissionalNome: prof?.nome || "",
                 unidadeNome: unit?.nome || "",
-                cpfPaciente: primeiroValorPreenchido(pac?.cpf, pacCd.cpf) || "",
                 origemAtendimento: pront.origem || "Prontuário",
                 origemSigtap: procEntry.origem || (sigtapReq.exige ? "—" : "Padrão"),
                 categoriaProfissional: sigtapReq.categoria || "",

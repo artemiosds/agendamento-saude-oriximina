@@ -190,7 +190,7 @@ describe("segurança da exportação BPA-I", () => {
     expect(allowlistLocalNaoPodeNegarOficial.validos).toHaveLength(1);
   });
 
-  it("audita 338 posições, cabeçalho 130, competência, controle e sequência do TXT final", () => {
+  it("audita 351 posições, cabeçalho 130, competência, controle e sequência do TXT final", () => {
     const record = buildRegistro03({
       tipoRegistro: "03", cnes: "1234567", competencia: comp,
       cnsProfissional: ctx.cnsProfissional, cbo: ctx.cbo, dataAtendimento: "20260831",
@@ -205,9 +205,12 @@ describe("segurança da exportação BPA-I", () => {
       orgaoOrigem: "SMS", siglaOrigem: "SMS", documentoOrigem: "12345678000199",
       orgaoDestino: "SMS", indicadorDestino: "M", versaoSistema: "SMS",
     }).line;
-    expect(record).toHaveLength(338);
+    expect(record).toHaveLength(351);
     expect(header).toHaveLength(130);
     expect(auditBpaTxtFinal(`${header}\r\n${record}\r\n`, comp)).toEqual([]);
+    expect(auditBpaTxtFinal(`${header}\r\n${record.slice(0, 338)}\r\n`, comp)).toContain(
+      "Registro 03 1: tamanho ou tipo inválido",
+    );
     const nextMonth = `${record.slice(0, 36)}20260901${record.slice(44)}`;
     expect(auditBpaTxtFinal(`${header}\r\n${nextMonth}\r\n`, comp)).toContain("Registro 03 1: Atendimento fora da competência selecionada");
   });

@@ -51,10 +51,13 @@ const registroValido = () => ({
   telefone: "93999999999",
   email: "paciente@example.com",
   ineEquipe: "",
+  cpfPaciente: "12345678901",
+  situacaoRua: "N",
+  semCpf: "S",
 });
 
 describe("layout TXT BPA-I", () => {
-  it("gera Registro 03 de 338 posições com todos os offsets oficiais contíguos", () => {
+  it("gera Registro 03 de 351 posições com todos os offsets oficiais contíguos", () => {
     const defs = Object.values(BPA_I_FIELDS);
     defs.forEach((field, index) => {
       expect(field.length).toBe(field.end - field.start + 1);
@@ -62,7 +65,18 @@ describe("layout TXT BPA-I", () => {
     });
     expect(defs[0].start).toBe(1);
     expect(defs[defs.length - 1].end).toBe(BPA_I_RECORD_LENGTH);
-    expect(buildRegistro03(registroValido()).line).toHaveLength(338);
+    expect(buildRegistro03(registroValido()).line).toHaveLength(351);
+    const { line } = buildRegistro03(registroValido());
+    expect(readRegistro03Field(line, "cpfPaciente")).toBe("12345678901");
+    expect(readRegistro03Field(line, "situacaoRua")).toBe("N");
+    expect(readRegistro03Field(line, "semCpf")).toBe("S");
+  });
+
+  it("mantém sem CPF/registro civil em branco quando o cadastro não informa", () => {
+    const data = { ...registroValido(), semCpf: undefined };
+    const { line } = buildRegistro03(data);
+    expect(readRegistro03Field(line, "semCpf")).toBe(" ");
+    expect(auditRegistro03Serialization(data, line)).toEqual([]);
   });
 
   it("mantém logradouro, complemento, número e bairro em campos independentes", () => {
@@ -162,7 +176,7 @@ describe("layout TXT BPA-I", () => {
     );
     expect(linhas).toHaveLength(2);
     expect(new Set(linhas.map((line) => line.slice(49, 59))).size).toBe(2);
-    expect(linhas.every((line) => line.length === 338)).toBe(true);
+    expect(linhas.every((line) => line.length === 351)).toBe(true);
   });
 
   it("preserva município estruturado válido quando o CEP diverge", () => {

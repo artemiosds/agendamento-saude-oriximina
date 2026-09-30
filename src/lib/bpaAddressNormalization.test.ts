@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRegistro03 } from "./bpaTxtLayout";
+import { BPA_I_RECORD_LENGTH, buildRegistro03 } from "./bpaTxtLayout";
 import { normalizeBpaAddress, type DneLogradouroEntry } from "./bpaAddressNormalization";
 
 const catalog: DneLogradouroEntry[] = [
@@ -78,9 +78,9 @@ describe("normalização DNE exclusiva da exportação BPA-I", () => {
     expect(result.alerts.join(" ")).toContain("diverge");
   });
 
-  it("mantém o Registro 03 com 338 posições", () => {
+  it("mantém o Registro 03 no tamanho oficial vigente", () => {
     const address = normalize("Rua João Stumano 12", "12");
     const result = buildRegistro03({ codigoLogradouro: address.codigoLogradouro, logradouro: address.logradouro, numero: address.numero });
-    expect(result.line).toHaveLength(338);
+    expect(result.line).toHaveLength(BPA_I_RECORD_LENGTH);
   });
 });

@@ -451,6 +451,26 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   Pessoa em situação de rua?
                 </Label>
               </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="sem-cpf-registro">Pessoa sem CPF ou registro civil?</Label>
+                <Select
+                  value={cd.semCpf === true ? "S" : cd.semCpf === false ? "N" : "nao-informado"}
+                  onValueChange={(value) => setCustom("semCpf", value === "nao-informado" ? null : value === "S")}
+                >
+                  <SelectTrigger id="sem-cpf-registro">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nao-informado">Não informado</SelectItem>
+                    <SelectItem value="S">Sim</SelectItem>
+                    <SelectItem value="N">Não</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Esse dado é usado na exportação BPA-I. A ausência de CPF, sozinha, não é considerada confirmação.
+                </p>
+              </div>
             </div>
 
             {/* Menor de idade */}

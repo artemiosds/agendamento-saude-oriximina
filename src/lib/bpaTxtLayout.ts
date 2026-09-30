@@ -1,12 +1,12 @@
 /**
  * Construtor posicional do arquivo BPA-I (SIA/SUS).
- * Referência: Layout de Exportação BPA — Registro 01 (130) e Registro 03 (338).
+ * Referência: Layout de Exportação BPA — Registro 01 (130) e Registro 03 (351).
  * A normalização ocorre somente na exportação e nunca altera o cadastro.
  */
 
 export const BPA_LAYOUT_REFERENCE = "DATASUS/SIA — Layout de Exportação BPA (09/07/2026)";
 export const BPA_HEADER_LENGTH = 130;
-export const BPA_I_RECORD_LENGTH = 338;
+export const BPA_I_RECORD_LENGTH = 351;
 
 type FieldKind = "digits" | "text" | "raw";
 
@@ -58,6 +58,9 @@ export const BPA_I_FIELDS = {
   telefone: { start: 278, end: 288, length: 11, kind: "digits" },
   email: { start: 289, end: 328, length: 40, kind: "raw" },
   ineEquipe: { start: 329, end: 338, length: 10, kind: "digits" },
+  cpfPaciente: { start: 339, end: 349, length: 11, kind: "digits" },
+  situacaoRua: { start: 350, end: 350, length: 1, kind: "text" },
+  semCpf: { start: 351, end: 351, length: 1, kind: "text" },
 } as const satisfies Record<string, BpaFieldDefinition>;
 
 export type BpaRegistro03Data = { [K in keyof typeof BPA_I_FIELDS]?: unknown };
@@ -72,7 +75,6 @@ export type BpaRegistroFinal = BpaRegistro03Data & {
   pacienteId?: unknown;
   profissionalNome?: unknown;
   unidadeNome?: unknown;
-  cpfPaciente?: unknown;
   origemAtendimento?: unknown;
   origemSigtap?: unknown;
   categoriaProfissional?: unknown;
@@ -194,6 +196,9 @@ const AUDITED_REGISTRO_FIELDS: Array<keyof typeof BPA_I_FIELDS> = [
   "quantidade",
   "nomePaciente",
   "dataNascimento",
+  "cpfPaciente",
+  "situacaoRua",
+  "semCpf",
   "cep",
   "codigoLogradouro",
   "logradouro",
