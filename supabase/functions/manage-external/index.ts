@@ -93,6 +93,12 @@ serve(async (req) => {
     const profile = normalizeRole(actor.role);
     const isGlobalAdmin = actor.usuario === "admin.sms";
     const hasUsersPermission = async (field: "can_view" | "can_edit", unitId: string) => {
+      type PermissionRow = {
+        unidade_id: string;
+        perfil?: string;
+        can_view?: boolean | null;
+        can_edit?: boolean | null;
+      };
       if (isGlobalAdmin) return true;
       if (!unitId || actor.unidade_id !== unitId) return false;
       if (profile === "master") return true;
@@ -100,13 +106,13 @@ serve(async (req) => {
         .select(`unidade_id,${field}`).eq("user_id", actor.id).eq("modulo", "usuarios")
         .in("unidade_id", ["", unitId]).order("unidade_id", { ascending: false });
       if (userRows?.length) {
-        const exact = userRows.find((row: any) => row.unidade_id === unitId) || userRows[0];
+        const exact = (userRows as PermissionRow[]).find((row) => row.unidade_id === unitId) || userRows[0];
         return exact?.[field] === true;
       }
       const { data: roleRows } = await supabaseAdmin.from("permissoes")
         .select(`perfil,unidade_id,${field}`).in("perfil", [profile, String(actor.role || "").toLowerCase()])
         .eq("modulo", "usuarios").in("unidade_id", ["", unitId]);
-      const ordered = (roleRows || []).sort((a: any, b: any) =>
+      const ordered = ((roleRows || []) as PermissionRow[]).sort((a, b) =>
         Number(b.unidade_id === unitId) - Number(a.unidade_id === unitId)
         || Number(b.perfil === profile) - Number(a.perfil === profile));
       return ordered[0]?.[field] === true;
