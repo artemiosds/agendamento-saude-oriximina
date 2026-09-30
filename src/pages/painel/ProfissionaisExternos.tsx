@@ -15,6 +15,7 @@ import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket, Search, U
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
+import { classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable } from "@/lib/externalQuota";
 
 interface ExternalProf {
   id: string;
@@ -71,7 +72,7 @@ interface ExternalAppointment {
 const ProfissionaisExternos: React.FC = () => {
   const { user } = useAuth();
   const { unidades, funcionarios, disponibilidades } = useOperacional();
-  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
+  const { unidadesVisiveis, profissionaisVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
   const { can } = usePermissions();
   const canManage = can("usuarios", "can_edit");
 
@@ -123,6 +124,7 @@ const ProfissionaisExternos: React.FC = () => {
     horario_fim: string; 
   }>>({});
   const [savingQuota, setSavingQuota] = useState(false);
+  const [quotaChangeReason, setQuotaChangeReason] = useState("");
   const [quotaForm, setQuotaForm] = useState({
     unidade_id: "",
     vagas_total: 0,
@@ -139,17 +141,20 @@ const ProfissionaisExternos: React.FC = () => {
     try {
       const { data } = await supabase.functions.invoke("manage-external", { body: { action: "list" } });
       setExternos(data?.profissionais || []);
-      const { data: quotasData } = await supabase.from("quotas_externas").select("*").order('criado_em', { ascending: false });
+      let quotasQuery = supabase.from("quotas_externas").select("*").order('criado_em', { ascending: false });
+      if (!isGlobalAdmin && userUnidadeId) quotasQuery = quotasQuery.eq("unidade_id", userUnidadeId);
+      const { data: quotasData } = await quotasQuery;
       setQuotas(quotasData || []);
     } catch (err) {
       console.error(err);
     }
     setLoading(false);
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   useEffect(() => { loadExternos(); }, [loadExternos]);
 
   const openNew = () => {
+    if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
     setEditId(null);
     setForm({ 
       nome: "", 
@@ -176,6 +181,7 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const openEdit = (e: ExternalProf) => {
+    if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
     setEditId(e.id);
     setForm({ 
       nome: e.nome, 
@@ -202,6 +208,7 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
     if (!form.nome || !form.email) { toast.error("Nome e e-mail são obrigatórios."); return; }
     setSaving(true);
     try {
@@ -253,6 +260,7 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
     try {
       const { data, error } = await supabase.functions.invoke("manage-external", { body: { action: "delete", id } });
       if (error || data?.error) { toast.error("Erro ao excluir."); return; }
@@ -262,6 +270,7 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleToggleActive = async (ext: ExternalProf) => {
+    if (!canManage) { toast.error("Sem permissão para alterar profissionais externos."); return; }
     const { data, error } = await supabase.functions.invoke("manage-external", {
       body: { action: "update", id: ext.id, ativo: !ext.ativo },
     });
@@ -273,6 +282,7 @@ const ProfissionaisExternos: React.FC = () => {
 
   // Quota management – multi-select
   const openQuotaDialog = (externoId: string) => {
+    if (!canManage) { toast.error("Sem permissão para alterar cotas."); return; }
     setSelectedExternoId(externoId);
     setNewQuotaUnitId(externos.find(e => e.id === externoId)?.unidade_id || "");
     // Pre-select already configured professionals
@@ -297,6 +307,7 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleSaveQuotas = async () => {
+    if (!canManage) { toast.error("Sem permissão para alterar cotas."); return; }
     if (!newQuotaUnitId) { toast.error("Selecione a unidade da cota."); return; }
     if (selectedProfIds.length === 0) {
       toast.error("Selecione ao menos um profissional.");
@@ -330,8 +341,12 @@ const ProfissionaisExternos: React.FC = () => {
         ativo: true
       }));
 
-      const { error } = await supabase.from("quotas_externas").insert(inserts);
-      if (error) throw error;
+      for (const payload of inserts) {
+        const { error } = await supabase.rpc("manage_external_quota" as any, {
+          p_action: "create", p_quota_id: null, p_payload: payload, p_motivo_alteracao: null,
+        } as any);
+        if (error) throw error;
+      }
       toast.success(`${inserts.length} quota(s) adicionada(s)!`);
       setQuotaDialogOpen(false);
       await loadExternos();
@@ -342,6 +357,7 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleEditQuota = (quota: QuotaRow) => {
+    if (!canManage) { toast.error("Sem permissão para alterar cotas."); return; }
     setSelectedQuota(quota);
     setQuotaForm({
       unidade_id: quota.unidade_id,
@@ -354,10 +370,13 @@ const ProfissionaisExternos: React.FC = () => {
       ativo: quota.ativo
     });
     setQuotaEditDialogOpen(true);
+    setQuotaChangeReason("");
   };
 
   const handleUpdateQuota = async () => {
+    if (!canManage) { toast.error("Sem permissão para alterar cotas."); return; }
     if (!selectedQuota) return;
+    if (quotaChangeReason.trim().length < 3) { toast.error("Informe o motivo da alteração."); return; }
     if (!quotaForm.unidade_id) { toast.error("Selecione a unidade da cota."); return; }
     if (selectedQuota.vagas_usadas > 0 && quotaForm.unidade_id !== selectedQuota.unidade_id) {
       toast.error("A unidade de uma cota com agendamentos vinculados não pode ser alterada."); return;
@@ -373,9 +392,10 @@ const ProfissionaisExternos: React.FC = () => {
 
     setSavingQuota(true);
     try {
-      const { error } = await supabase
-        .from("quotas_externas")
-        .update({
+      const { error } = await supabase.rpc("manage_external_quota" as any, {
+        p_action: "update",
+        p_quota_id: selectedQuota.id,
+        p_payload: {
           unidade_id: quotaForm.unidade_id,
           vagas_total: quotaForm.vagas_total,
           turno: quotaForm.turno,
@@ -383,9 +403,10 @@ const ProfissionaisExternos: React.FC = () => {
           horario_fim: quotaForm.horario_fim,
           periodo_inicio: quotaForm.periodo_inicio,
           periodo_fim: quotaForm.periodo_fim,
-          ativo: quotaForm.ativo
-        })
-        .eq("id", selectedQuota.id);
+          ativo: quotaForm.ativo,
+        },
+        p_motivo_alteracao: quotaChangeReason.trim(),
+      } as any);
 
       if (error) throw error;
       toast.success("Cota atualizada com sucesso!");
@@ -400,23 +421,17 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleDeleteQuota = async (quota: QuotaRow) => {
+    if (!canManage) { toast.error("Sem permissão para alterar cotas."); return; }
+    const reason = window.prompt("Informe o motivo da exclusão ou desativação da cota:")?.trim() || "";
+    if (reason.length < 3) { toast.error("Informe o motivo da alteração."); return; }
     try {
+      const { error } = await supabase.rpc("manage_external_quota" as any, {
+        p_action: "delete", p_quota_id: quota.id, p_payload: {}, p_motivo_alteracao: reason,
+      } as any);
+      if (error) throw error;
       if (quota.vagas_usadas > 0) {
-        // Soft delete/deactivate if has history
-        const { error } = await supabase
-          .from("quotas_externas")
-          .update({ ativo: false })
-          .eq("id", quota.id);
-        
-        if (error) throw error;
         toast.info("Esta cota possui agendamentos. Ela foi desativada para preservar o histórico.");
       } else {
-        const { error } = await supabase
-          .from("quotas_externas")
-          .delete()
-          .eq("id", quota.id);
-        
-        if (error) throw error;
         toast.success("Cota removida definitivamente.");
       }
       await loadExternos();
@@ -427,11 +442,13 @@ const ProfissionaisExternos: React.FC = () => {
   };
 
   const handleToggleQuotaStatus = async (quota: QuotaRow) => {
+    if (!canManage) { toast.error("Sem permissão para alterar cotas."); return; }
+    const reason = window.prompt(`Informe o motivo para ${quota.ativo ? "desativar" : "ativar"} esta cota:`)?.trim() || "";
+    if (reason.length < 3) { toast.error("Informe o motivo da alteração."); return; }
     try {
-      const { error } = await supabase
-        .from("quotas_externas")
-        .update({ ativo: !quota.ativo })
-        .eq("id", quota.id);
+      const { error } = await supabase.rpc("manage_external_quota" as any, {
+        p_action: "toggle", p_quota_id: quota.id, p_payload: { ativo: !quota.ativo }, p_motivo_alteracao: reason,
+      } as any);
       
       if (error) throw error;
       toast.success(quota.ativo ? "Cota desativada" : "Cota ativada");
@@ -529,8 +546,11 @@ const ProfissionaisExternos: React.FC = () => {
           {filteredExternos.map(ext => {
             const unidade = unidades.find((u: any) => u.id === ext.unidade_id);
             const extQuotas = quotas.filter(q => q.profissional_externo_id === ext.id);
-            const totalVagas = extQuotas.reduce((acc, curr) => acc + curr.vagas_total, 0);
-            const usadasVagas = extQuotas.reduce((acc, curr) => acc + curr.vagas_usadas, 0);
+            const today = new Date().toISOString().slice(0, 10);
+            const vigentes = extQuotas.filter(q =>
+              isQuotaConfigurationUsable(q) && today >= q.periodo_inicio && today <= q.periodo_fim,
+            );
+            const saldoVigente = vigentes.reduce((acc, curr) => acc + Math.max(0, curr.vagas_total - curr.vagas_usadas), 0);
             
             return (
               <Card key={ext.id} className="overflow-hidden border-t-4 border-t-primary/20 hover:shadow-md transition-shadow">
@@ -555,12 +575,12 @@ const ProfissionaisExternos: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-2 py-2 border-y border-dashed">
                       <div className="text-center p-2 rounded bg-accent/30">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase">Cotas Ativas</p>
-                        <p className="text-lg font-bold text-primary">{extQuotas.length}</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase">Cotas vigentes</p>
+                        <p className="text-lg font-bold text-primary">{vigentes.length}</p>
                       </div>
                       <div className="text-center p-2 rounded bg-accent/30">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase">Vagas Livres</p>
-                        <p className="text-lg font-bold text-success">{totalVagas - usadasVagas}/{totalVagas}</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase">Saldo no período</p>
+                        <p className="text-lg font-bold text-success">{saldoVigente}</p>
                       </div>
                     </div>
 
@@ -583,21 +603,23 @@ const ProfissionaisExternos: React.FC = () => {
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setSelectedExternoId(ext.id); setQuotaListDialogOpen(true); }} title="Gerenciar Cotas">
                         <Ticket className="w-4 h-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openQuotaDialog(ext.id)} title="Adicionar Cotas">
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(ext)} title="Editar Profissional">
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleToggleActive(ext)} title={ext.ativo ? "Desativar" : "Ativar"}>
-                        {ext.ativo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </Button>
+                      {canManage && <>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openQuotaDialog(ext.id)} title="Adicionar Cotas">
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(ext)} title="Editar Profissional">
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleToggleActive(ext)} title={ext.ativo ? "Desativar" : "Ativar"}>
+                          {ext.ativo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </Button>
+                      </>}
                     </div>
                     <div className="flex gap-1">
                       <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => {/* TODO: Link agendamento online */}}>
                         <Search className="w-3 h-3" /> Agenda
                       </Button>
-                      <AlertDialog>
+                      {canManage && <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
                         </AlertDialogTrigger>
@@ -611,7 +633,7 @@ const ProfissionaisExternos: React.FC = () => {
                             <AlertDialogAction onClick={() => handleDelete(ext.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
-                      </AlertDialog>
+                      </AlertDialog>}
                     </div>
                   </div>
 
@@ -833,6 +855,7 @@ const ProfissionaisExternos: React.FC = () => {
                     <th className="px-3 py-2 text-left font-medium">Prof. Destino</th>
                     <th className="px-3 py-2 text-left font-medium">Especialidade</th>
                     <th className="px-3 py-2 text-left font-medium">Turno/Horário</th>
+                    <th className="px-3 py-2 text-left font-medium">Tipo</th>
                     <th className="px-3 py-2 text-center font-medium">Vagas</th>
                     <th className="px-3 py-2 text-center font-medium">Status</th>
                     <th className="px-3 py-2 text-right font-medium">Ações</th>
@@ -840,10 +863,18 @@ const ProfissionaisExternos: React.FC = () => {
                 </thead>
                 <tbody className="divide-y">
                   {quotas.filter(q => q.profissional_externo_id === selectedExternoId).length === 0 ? (
-                    <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">Nenhuma cota encontrada.</td></tr>
+                    <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">Nenhuma cota encontrada.</td></tr>
                   ) : (
                     quotas.filter(q => q.profissional_externo_id === selectedExternoId).map(q => {
                       const prof = funcionarios.find((f: any) => f.id === q.profissional_interno_id);
+                      const today = new Date().toISOString().slice(0, 10);
+                      const dayOfWeek = new Date(`${today}T12:00:00`).getDay();
+                      const matchingAvailabilities = disponibilidades
+                        .filter(d => d.profissionalId === q.profissional_interno_id && d.unidadeId === q.unidade_id
+                          && today >= d.dataInicio && today <= d.dataFim && d.diasSemana.includes(dayOfWeek))
+                        .map(d => ({ profissionalId: d.profissionalId, unidadeId: d.unidadeId, date: today,
+                          horaInicio: d.horaInicio, horaFim: d.horaFim }));
+                      const quotaType = classifyExternalQuotaForAvailabilities(q, today, matchingAvailabilities);
                       return (
                         <tr key={q.id} className="hover:bg-accent/5 transition-colors">
                           <td className="px-3 py-2 font-medium">
@@ -858,6 +889,10 @@ const ProfissionaisExternos: React.FC = () => {
                               <span className="capitalize">{q.turno}</span>
                               <span className="text-[10px] text-muted-foreground">{q.horario_inicio?.substring(0, 5)} - {q.horario_fim?.substring(0, 5)}</span>
                             </div>
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            {quotaType === "reserva_data_especifica" ? "Reserva em data específica" :
+                              quotaType === "limite_periodo" ? "Limite durante o período" : "Configuração inválida"}
                           </td>
                           <td className="px-3 py-2 text-center">
                             <div className="flex flex-col items-center">
@@ -875,13 +910,14 @@ const ProfissionaisExternos: React.FC = () => {
                               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleVerAgenda(q)} title="Ver Agenda">
                                 <List className="w-3.5 h-3.5" />
                               </Button>
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEditQuota(q)} title="Editar">
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleToggleQuotaStatus(q)} title={q.ativo ? "Desativar" : "Ativar"}>
-                                {q.ativo ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                              </Button>
-                              <AlertDialog>
+                              {canManage && <>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEditQuota(q)} title="Editar">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleToggleQuotaStatus(q)} title={q.ativo ? "Desativar" : "Ativar"}>
+                                  {q.ativo ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                </Button>
+                                <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></Button>
                                 </AlertDialogTrigger>
@@ -899,7 +935,8 @@ const ProfissionaisExternos: React.FC = () => {
                                     <AlertDialogAction onClick={() => handleDeleteQuota(q)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
-                              </AlertDialog>
+                                </AlertDialog>
+                              </>}
                             </div>
                           </td>
                         </tr>
@@ -976,7 +1013,12 @@ const ProfissionaisExternos: React.FC = () => {
               <Label htmlFor="quota-ativo">Cota Ativa</Label>
             </div>
 
-            <Button onClick={handleUpdateQuota} disabled={savingQuota} className="w-full gradient-primary text-primary-foreground">
+            <div className="space-y-2">
+              <Label>Motivo da alteração</Label>
+              <Input value={quotaChangeReason} onChange={e => setQuotaChangeReason(e.target.value)} placeholder="Informe o motivo para auditoria" />
+            </div>
+
+            <Button onClick={handleUpdateQuota} disabled={savingQuota || quotaChangeReason.trim().length < 3} className="w-full gradient-primary text-primary-foreground">
               {savingQuota && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Salvar Alterações
             </Button>

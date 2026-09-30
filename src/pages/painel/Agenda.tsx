@@ -258,6 +258,7 @@ const Agenda: React.FC = () => {
   const {
     agendamentos,
     addAgendamento,
+    addAgendamentoTransactionally,
     updateAgendamento,
     refreshAgendamentos,
     loadAgendaRange,
@@ -1291,14 +1292,15 @@ const Agenda: React.FC = () => {
     // Apenas MASTER pode forçar encaixe quando o limite de vagas está atingido/excedido.
     // RECEPÇÃO e GESTÃO ficam bloqueados conforme regra de negócio.
     const canOverride = user?.role === "master";
+    let masterOverrideReason = "";
     
     try {
-      const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
+      const { data: slotCheck } = await supabase.rpc("check_internal_slot_availability" as any, {
         p_profissional_id: newAg.profissionalId,
         p_unidade_id: prof.unidadeId,
         p_data: selectedDate,
         p_hora: newAg.hora,
-      });
+      } as any);
       if (slotCheck && typeof slotCheck === "object" && "available" in slotCheck && !slotCheck.available) {
         const reason = (slotCheck as any).reason;
         const reasonMsg =
@@ -1306,16 +1308,20 @@ const Agenda: React.FC = () => {
           reason === "day_full" ? "Limite de vagas atingido para este profissional neste dia/turno." :
           reason === "hour_full" ? "Limite de vagas atingido para este horário." :
           reason === "turno_full" ? "Limite de vagas atingido para este profissional neste dia/turno." :
+          reason === "external_reservation" ? "As vagas internas terminaram; as vagas restantes estão reservadas para agendamento externo." :
           reason === "no_availability" ? "Sem disponibilidade cadastrada." :
           "Sem disponibilidade.";
         if (!canOverride) {
           toast.error(reasonMsg);
           return;
         }
-        const confirmou = window.confirm(
-          `⚠️ Agenda lotada. ${reasonMsg}\n\nDeseja forçar o encaixe como MASTER?`,
-        );
-        if (!confirmou) return;
+        masterOverrideReason = window.prompt(
+          `⚠️ ${reasonMsg}\n\nInforme o motivo do encaixe como MASTER:`,
+        )?.trim() || "";
+        if (masterOverrideReason.length < 3) {
+          toast.error("O encaixe Master exige motivo para auditoria.");
+          return;
+        }
       }
     } catch (err) {
       console.error("Slot check error:", err);
@@ -1341,7 +1347,25 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
-    addAgendamento(agData);
+    if (masterOverrideReason) {
+      await addAgendamentoTransactionally(agData, async (normalized) => {
+        const { error } = await supabase.rpc("create_internal_appointment_with_override" as any, {
+          p_payload: {
+            id: normalized.id, paciente_id: normalized.pacienteId, paciente_nome: normalized.pacienteNome,
+            unidade_id: normalized.unidadeId, sala_id: normalized.salaId, setor_id: normalized.setorId,
+            profissional_id: normalized.profissionalId, profissional_nome: normalized.profissionalNome,
+            data: normalized.data, hora: normalized.hora, status: normalized.status, tipo: normalized.tipo,
+            observacoes: normalized.observacoes, origem: normalized.origem,
+            criado_por: normalized.criadoPor || "current",
+          },
+          p_motivo_alteracao: masterOverrideReason,
+        } as any);
+        if (error) throw error;
+        return { appointment: normalized, created: true };
+      });
+    } else {
+      await addAgendamento(agData);
+    }
     await logAction({
       acao: "novo_agendamento",
       entidade: "agendamento",
@@ -2730,6 +2754,11 @@ const Agenda: React.FC = () => {
                                 <div className="px-2 flex items-center justify-between text-[10px] text-muted-foreground">
                                   <span>Reserva externa: <strong>{t.vagasReservadasExterno} vagas</strong></span>
                                   <span>Ocupadas: <strong>{t.vagasOcupadasExterno}/{t.vagasReservadasExterno}</strong></span>
+                                </div>
+                              )}
+                              {t.conflitoReservaExterna && isMaster && (
+                                <div className="px-2 text-[10px] font-semibold text-destructive">
+                                  Conflito: reservas externas configuradas acima da capacidade do turno.
                                 </div>
                               )}
                             </div>

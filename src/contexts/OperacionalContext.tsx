@@ -17,6 +17,11 @@ import { addDaysToDateStr, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } fro
 import { auditService } from "@/services/auditService";
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import {
+  calculateExternalCapacity,
+  quotaMatchesAvailability,
+  type ExternalQuotaWindow,
+} from "@/lib/externalQuota";
+import {
   getAgendamentosSnapshot,
   isCompleteAgendaDate,
   subscribeAgendamentosSnapshot,
@@ -48,6 +53,7 @@ export interface TurnoInfoResult {
   vagasLivresTotal: number;
   lotado: boolean;
   excedido: boolean;
+  conflitoReservaExterna: boolean;
 }
 
 interface BloqueioAgenda {
@@ -238,6 +244,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
   const [setores] = useState<Setor[]>(inlineSetores);
   const [funcionarios, setFuncionarios] = useState<User[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>([]);
+  const [quotasExternas, setQuotasExternas] = useState<ExternalQuotaWindow[]>([]);
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
@@ -251,6 +258,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
+  const quotasExternasRef = useRef(quotasExternas);
+  quotasExternasRef.current = quotasExternas;
   const bloqueiosRef = useRef(bloqueios);
   bloqueiosRef.current = bloqueios;
   const funcionariosRef = useRef(funcionarios);
@@ -498,12 +507,27 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
     }
   }, []);
 
+  const loadQuotasExternas = useCallback(async () => {
+    try {
+      let query = supabase.from("quotas_externas").select(
+        "id,profissional_interno_id,unidade_id,periodo_inicio,periodo_fim,turno,horario_inicio,horario_fim,dia_semana,ativo,vagas_total,vagas_usadas",
+      ).eq("ativo", true);
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq("unidade_id", userUnidadeId);
+      const { data, error } = await query;
+      if (error) throw error;
+      setQuotasExternas((data || []) as ExternalQuotaWindow[]);
+    } catch (err) {
+      console.error("Error loading external quotas:", err);
+      setQuotasExternas([]);
+    }
+  }, [isGlobalAdmin, userUnidadeId]);
+
   const loadAll = useCallback(async () => {
     await Promise.all([loadConfiguracoes(), loadUnidades(), loadSalas(), loadFuncionarios()]);
-    void Promise.all([loadDisponibilidades(), loadBloqueios()]).catch((err) =>
+    void Promise.all([loadDisponibilidades(), loadBloqueios(), loadQuotasExternas()]).catch((err) =>
       console.error("Background data load failed:", err),
     );
-  }, [loadConfiguracoes, loadUnidades, loadSalas, loadFuncionarios, loadDisponibilidades, loadBloqueios]);
+  }, [loadConfiguracoes, loadUnidades, loadSalas, loadFuncionarios, loadDisponibilidades, loadBloqueios, loadQuotasExternas]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -524,7 +548,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
   }, [loadConfiguracoes]);
 
   // Realtime ownership — handlers interiorizados chamando loaders locais.
-  // Full-reload aceito nestas 4 tabelas: frequência baixa, edições Master
+  // Full-reload aceito nestas tabelas: frequência baixa, edições Master
   // pontuais, sem risco de regressão como em `agendamentos`.
   useRealtimeSync({
     enabled: !!authUser,
@@ -561,6 +585,16 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
       loadConfiguracoes();
     },
     poll: loadConfiguracoes,
+  });
+  useRealtimeSync({
+    enabled: !!authUser,
+    table: "quotas_externas",
+    debounceMs: 500,
+    pollIntervalMs: 60000,
+    onEvent: () => {
+      loadQuotasExternas();
+    },
+    poll: loadQuotasExternas,
   });
 
   const appointmentCountsByKey = useMemo(() => {
@@ -608,6 +642,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           d.vagasPorHora === 0,
       );
       if (turnoDisps.length === 0) return [];
+      const dayAvailabilityCount = disps.filter(
+        (d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId
+          && d.diasSemana.includes(dayOfWeek) && date >= d.dataInicio && date <= d.dataFim,
+      ).length;
 
       const key = `${profissionalId}|${unidadeId}|${date}`;
       const dayAppointments = agendaMode
@@ -628,8 +666,6 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           return isInRange;
         }).length;
 
-        // A cota limita o total do período; apenas agendamentos criados ocupam o dia.
-        const vagasReservadasExterno = 0;
         const vagasOcupadasExterno = dayAppointments.filter((a) => {
           if (a.origem !== "externo") return false;
           const aHora = a.hora;
@@ -644,8 +680,21 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
         const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
         const vagasTotal = td.vagasPorDia || 0;
-        const vagasLivresInternas = Math.max(0, vagasTotal - turnoAppCount);
-        const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
+        const reservasDoTurno = quotasExternasRef.current.filter((quota) =>
+          quotaMatchesAvailability(quota, {
+            profissionalId, unidadeId, date,
+            horaInicio: td.horaInicio, horaFim: td.horaFim,
+          }, dayAvailabilityCount),
+        );
+        const capacidade = calculateExternalCapacity({
+          capacidadeTotal: vagasTotal,
+          reservasConfiguradas: reservasDoTurno.map((quota) => quota.vagas_total),
+          ocupacaoExterna: vagasOcupadasExterno,
+          ocupacaoInterna: vagasOcupadasInterno,
+        });
+        const vagasReservadasExterno = capacidade.reservaExternaConfigurada;
+        const vagasLivresInternas = capacidade.vagasInternasLivres;
+        const vagasLivresTotal = capacidade.vagasTotaisLivres;
         const periodo = td.horaInicio < "12:00" ? "Manhã" : td.horaInicio < "18:00" ? "Tarde" : "Noite";
 
         const turnosGlobais: Array<{ id: string; nome: string }> = (window as any).__turnosGlobaisCached || [];
@@ -674,6 +723,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           vagasLivresTotal,
           lotado: turnoAppCount >= vagasTotal,
           excedido: turnoAppCount > vagasTotal,
+          conflitoReservaExterna: capacidade.conflitoReserva,
         };
       });
     },
@@ -1048,6 +1098,19 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           (a) => a.hora >= turnoStart && a.hora < turnoEnd,
         ).length;
         if (turnoAppCount >= td.vagasPorDia) continue;
+        const turnoAppointments = dayAppointments.filter((a) => a.hora >= turnoStart && a.hora < turnoEnd);
+        const externalCount = turnoAppointments.filter((a) => a.origem === "externo").length;
+        const internalCount = turnoAppointments.length - externalCount;
+        const reservations = quotasExternasRef.current.filter((quota) => quotaMatchesAvailability(quota, {
+          profissionalId, unidadeId, date, horaInicio: td.horaInicio, horaFim: td.horaFim,
+        }, allDisps.length));
+        const capacity = calculateExternalCapacity({
+          capacidadeTotal: td.vagasPorDia,
+          reservasConfiguradas: reservations.map((quota) => quota.vagas_total),
+          ocupacaoExterna: externalCount,
+          ocupacaoInterna: internalCount,
+        });
+        if (capacity.vagasInternasLivres <= 0) continue;
 
         const sh = parseInt(turnoStart.split(":")[0]);
         const sm = parseInt(turnoStart.split(":")[1] || "0");
@@ -1061,7 +1124,18 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
       if (horaDisps.length > 0) {
         const disp = horaDisps[0];
-        if (dayAppointments.length < disp.vagasPorDia) {
+        const externalCount = dayAppointments.filter((a) => a.origem === "externo").length;
+        const internalCount = dayAppointments.length - externalCount;
+        const reservations = quotasExternasRef.current.filter((quota) => quotaMatchesAvailability(quota, {
+          profissionalId, unidadeId, date, horaInicio: disp.horaInicio, horaFim: disp.horaFim,
+        }, allDisps.length));
+        const capacity = calculateExternalCapacity({
+          capacidadeTotal: disp.vagasPorDia,
+          reservasConfiguradas: reservations.map((quota) => quota.vagas_total),
+          ocupacaoExterna: externalCount,
+          ocupacaoInterna: internalCount,
+        });
+        if (dayAppointments.length < disp.vagasPorDia && capacity.vagasInternasLivres > 0) {
           const hourCounts = new Map<string, number>();
           const slotCounts = new Map<string, number>();
           for (const a of dayAppointments) {
