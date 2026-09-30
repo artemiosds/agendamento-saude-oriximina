@@ -4542,6 +4542,16 @@ export type Database = {
         }
         Returns: Json
       }
+      schedule_treatment_session_batch: {
+        Args: {
+          p_appointment: Json
+          p_check_patient_conflict: boolean
+          p_cycle_id: string
+          p_expected_session_date: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       search_patients: {
         Args: { p_limit?: number; p_search: string; p_unit_id?: string }
         Returns: {

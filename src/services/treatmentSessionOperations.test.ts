@@ -144,6 +144,23 @@ describe('treatmentSessionOperations: schedule', () => {
     expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session', expect.objectContaining({ p_check_patient_conflict: true }));
   });
 
+  it('usa validação transacional estrita para agendamentos em lote', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data }, appointment: appointmentRow }, error: null });
+    await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional', strictAvailability: true });
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_batch', expect.objectContaining({
+      p_session_id: 'session-1', p_cycle_id: 'cycle-1', p_check_patient_conflict: false,
+    }));
+  });
+
+  it('bloqueia o lote com instrução clara se a migration do servidor ainda não estiver aplicada', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'function not found' } });
+    await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional', strictAvailability: true }))
+      .rejects.toThrow(/Aplique a migration de agendamento de tratamentos/);
+    expect(ctx.scheduleCommits).toHaveLength(0);
+  });
+
   it.each([
     ['falha ao criar agendamento', { message: 'insert failed' }],
     ['falha ao atualizar sessão após inserir agendamento', { message: 'session update failed' }],

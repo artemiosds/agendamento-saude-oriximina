@@ -49,7 +49,7 @@ import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates } from "@/lib/treatmentSessionGenerator";
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
 import { autoFixInvalidTreatmentSessions } from "@/lib/treatmentSessionAutoFix";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -216,6 +216,7 @@ const Tratamentos: React.FC = () => {
 
   // Agendar ciclo completo
   const [agendandoCiclo, setAgendandoCiclo] = useState(false);
+  const [corrigindoDatasInvalidas, setCorrigindoDatasInvalidas] = useState(false);
   const agendarCicloInFlightRef = useRef(false);
   const [resumoCiclo, setResumoCiclo] = useState<ResumoSessaoItem[] | null>(null);
 
@@ -521,25 +522,26 @@ const Tratamentos: React.FC = () => {
     loadData(!wasFirst);
   }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm, currentPage, loadData]);
 
-  // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
-  // (sábado, domingo, feriado, bloqueio manual) e devolve para "pendente_agendamento".
-  // Roda uma vez após identificar o usuário; a função consulta bloqueios no banco.
-  const autoFixRanRef = React.useRef(false);
-  useEffect(() => {
-    if (autoFixRanRef.current) return;
-    if (!user) return;
-    autoFixRanRef.current = true;
-    autoFixInvalidTreatmentSessions().then((res) => {
-      if (res.fixed > 0) {
-        toast.info(`${res.fixed} sessão(ões) em datas inválidas foram devolvidas para "Aguardando agendamento".`);
-        loadData(true);
+  // Datas inválidas só são reparadas por uma ação explícita; abrir a página é leitura.
+  const handleCorrigirDatasInvalidas = async () => {
+    if (!window.confirm('Verificar sessões em fim de semana ou bloqueadas? As sessões afetadas voltarão para “Aguardando agendamento” e seus agendamentos serão cancelados.')) return;
+    setCorrigindoDatasInvalidas(true);
+    try {
+      const result = await autoFixInvalidTreatmentSessions();
+      if (result.fixed > 0) {
+        toast.success(`${result.fixed} sessão(ões) inválida(s) foram devolvidas para “Aguardando agendamento”.`);
+        await loadData(true);
+      } else {
+        toast.info('Nenhuma sessão agendada em fim de semana ou bloqueio foi encontrada.');
       }
-      if (res.errors > 0) toast.error(`Falha ao corrigir ${res.errors} sessão(ões).`);
-    }).catch((error) => {
-      if (error?.result?.fixed > 0) loadData(true);
+      if (result.errors > 0) toast.error(`Falha ao corrigir ${result.errors} sessão(ões).`);
+    } catch (error: any) {
+      if (error?.result?.fixed > 0) await loadData(true);
       toast.error(error?.message || 'Erro ao corrigir sessões em datas inválidas.');
-    });
-  }, [user, loadData]);
+    } finally {
+      setCorrigindoDatasInvalidas(false);
+    }
+  };
 
   // Lazy load sessions when a cycle is selected
   useEffect(() => {
@@ -1338,6 +1340,7 @@ const Tratamentos: React.FC = () => {
     };
     const estaLivreNoLote = (data: string, hora: string) =>
       !(horariosUsadosLote[data] && horariosUsadosLote[data].has(hora));
+    const bloqueiosDoCiclo = buildBlockedRanges(bloqueios, cycle.professional_id, cycle.unit_id);
 
     /**
      * Encontra o próximo slot válido para a sessão respeitando:
@@ -1353,6 +1356,12 @@ const Tratamentos: React.FC = () => {
     ): { data: string; hora: string } | null => {
       let dataAtual = dataSugerida;
       for (let tentativa = 0; tentativa < 30; tentativa++) {
+        if (isInvalidSessionDate(dataAtual, bloqueiosDoCiclo)) {
+          const d = new Date(`${dataAtual}T12:00:00`);
+          d.setDate(d.getDate() + 1);
+          dataAtual = d.toISOString().split("T")[0];
+          continue;
+        }
         const slots = getAvailableSlots(profId, unidadeId, dataAtual);
         const slotLivre = slots.find((s) => estaLivreNoLote(dataAtual, s));
         if (slotLivre) return { data: dataAtual, hora: slotLivre };
@@ -1391,7 +1400,8 @@ const Tratamentos: React.FC = () => {
         try {
           // 2) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
           // Isso garante que se o usuário agendou manualmente na agenda mas não vinculou aqui, a gente vincule em vez de duplicar.
-          const { data: existente, error: checkErr } = await supabase
+          const originalDateValida = !isInvalidSessionDate(sess.scheduled_date, bloqueiosDoCiclo);
+          const { data: existente, error: checkErr } = originalDateValida ? await supabase
             .from("agendamentos")
             .select("id, hora, status")
             .eq("paciente_id", sess.patient_id)
@@ -1401,48 +1411,52 @@ const Tratamentos: React.FC = () => {
             .not("status", "in", '("cancelado","falta","remarcado")')
             .order("criado_em", { ascending: false })
             .limit(1)
-            .maybeSingle();
+            .maybeSingle() : { data: null, error: null };
 
           if (checkErr) throw checkErr;
 
           if (existente) {
-            // O vínculo é validado e gravado no servidor, sob as mesmas travas de unidade/permissão.
-            const linked = await treatmentSessionOperations.linkExistingAppointment({
-              session: sess,
-              cycle,
-              appointmentId: existente.id,
-            });
-            const linkedAppointment = linked.appointment;
-            if (!linkedAppointment) throw new Error("O vínculo não retornou o agendamento existente.");
+            const slotExistenteAindaValido = getAvailableSlots(
+              sess.professional_id,
+              cycle.unit_id,
+              sess.scheduled_date,
+            ).includes(existente.hora) && estaLivreNoLote(sess.scheduled_date, existente.hora);
+            if (!slotExistenteAindaValido) {
+              // Um agendamento encontrado em horário fora da grade/bloqueado não pode ser vinculado.
+              // O lote procura outra vaga; a entrada existente permanece intocada para revisão.
+            } else {
+              // O vínculo é validado e gravado no servidor, sob as mesmas travas de unidade/permissão.
+              const linked = await treatmentSessionOperations.linkExistingAppointment({
+                session: sess,
+                cycle,
+                appointmentId: existente.id,
+              });
+              const linkedAppointment = linked.appointment;
+              if (!linkedAppointment) throw new Error("O vínculo não retornou o agendamento existente.");
 
-            // Atualização local imediata para o resumo
-            setSessions((prev) =>
-              prev.map((x) =>
-                x.id === sess.id ? {
-                  ...x,
-                  appointment_id: linked.session.appointment_id || linkedAppointment.id,
-                  status: linked.session.status || "agendada",
-                  scheduled_date: linked.session.scheduled_date || x.scheduled_date,
-                } : x
-              )
-            );
-
-            setAgendamentoMap((prev) => ({
-              ...prev,
-              [`${sess.patient_id}|${sess.professional_id}|${linkedAppointment.data}`]: {
-                id: linkedAppointment.id,
+              setSessions((prev) => prev.map((x) => x.id === sess.id ? {
+                ...x,
+                appointment_id: linked.session.appointment_id || linkedAppointment.id,
+                status: linked.session.status || "agendada",
+                scheduled_date: linked.session.scheduled_date || x.scheduled_date,
+              } : x));
+              setAgendamentoMap((prev) => ({
+                ...prev,
+                [`${sess.patient_id}|${sess.professional_id}|${linkedAppointment.data}`]: {
+                  id: linkedAppointment.id,
+                  hora: linkedAppointment.hora,
+                  status: linkedAppointment.status,
+                },
+              }));
+              usar(linkedAppointment.data, linkedAppointment.hora);
+              resumo.push({
+                numero: sess.session_number,
+                data: linkedAppointment.data,
                 hora: linkedAppointment.hora,
-                status: linkedAppointment.status,
-              },
-            }));
-            usar(linkedAppointment.data, linkedAppointment.hora);
-            resumo.push({
-              numero: sess.session_number,
-              data: linkedAppointment.data,
-              hora: linkedAppointment.hora,
-              status: "ja_agendada",
-            });
-            continue;
+                status: "ja_agendada",
+              });
+              continue;
+            }
           }
 
           // 3) Encontrar slot válido respeitando disponibilidade do profissional e ocupação da agenda
@@ -1488,6 +1502,7 @@ const Tratamentos: React.FC = () => {
             cycle,
             appointment: newAgData,
             duplicateScope: "patient_professional",
+            strictAvailability: true,
           });
           const scheduledAppointment = scheduled.appointment;
           if (!scheduledAppointment) throw new Error("A operação não retornou o agendamento confirmado.");
@@ -2151,12 +2166,24 @@ const Tratamentos: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
           </Button>
           <h1 className="text-xl font-bold font-display text-foreground">Detalhe do Ciclo</h1>
+          {can('tratamento', 'can_view') && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCorrigirDatasInvalidas}
+              disabled={corrigindoDatasInvalidas || agendandoCiclo}
+              className={!canAgendarSessao || selectedCycle.status !== "em_andamento" || pendingCount === 0 ? "ml-auto" : ""}
+            >
+              {corrigindoDatasInvalidas && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Verificar datas inválidas
+            </Button>
+          )}
           {canAgendarSessao && selectedCycle.status === "em_andamento" && pendingCount > 0 && (
             <Button
               size="sm"
               onClick={handleAgendarCicloCompleto}
               disabled={agendandoCiclo}
-              className="ml-auto bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90"
             >
               {agendandoCiclo ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />

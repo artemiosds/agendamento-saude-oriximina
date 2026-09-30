@@ -104,6 +104,8 @@ function requireOperationResult(data: Record<string, unknown> | null, accepted: 
     const messages: Record<string, string> = {
       duplicado: 'Já existe um agendamento ativo para este paciente, profissional e horário.',
       data_bloqueada: 'Data bloqueada.',
+      sem_disponibilidade: 'Não há disponibilidade válida para este horário. O lote não gravou a sessão.',
+      capacidade_esgotada: 'A capacidade da agenda foi atingida antes da confirmação. O lote não gravou a sessão.',
       fora_escopo: 'Você não tem permissão para realizar esta operação nesta unidade/profissional.',
       sessao_ja_vinculada: 'Esta sessão já está vinculada a outro agendamento. Recarregue o ciclo.',
       vinculo_inconsistente: 'O vínculo entre a sessão e o agendamento está inconsistente. Nenhum dado foi alterado.',
@@ -156,6 +158,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       appointment: Agendamento;
       duplicateScope: 'patient' | 'patient_professional';
       checkPatientAbsenceBlock?: boolean;
+      strictAvailability?: boolean;
     }): Promise<TreatmentSessionOperationResult> {
       const duplicate = await deps.findDuplicate({
         patientId: input.cycle.patient_id,
@@ -176,13 +179,18 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
 
       let rpcResult: TreatmentSessionOperationResult | undefined;
       await deps.agenda.addAgendamentoTransactionally(input.appointment, async (normalized) => {
-        const { data, error } = await deps.client.rpc('schedule_treatment_session', {
+        const { data, error } = await deps.client.rpc(input.strictAvailability
+          ? 'schedule_treatment_session_batch'
+          : 'schedule_treatment_session', {
           p_session_id: input.session.id,
           p_cycle_id: input.cycle.id,
           p_expected_session_date: input.session.scheduled_date,
           p_appointment: appointmentToRow(normalized),
           p_check_patient_conflict: input.duplicateScope === 'patient',
         });
+        if (input.strictAvailability && error?.code === 'PGRST202') {
+          throw new Error('A validação segura do lote ainda não foi ativada no banco. Aplique a migration de agendamento de tratamentos e tente novamente.');
+        }
         if (error) throwRpcError(error);
         rpcResult = requireOperationResult(data, ['agendado', 'ja_agendado']);
         if (!rpcResult.appointment) throw new Error('A operação não retornou o vínculo da sessão com a Agenda.');
