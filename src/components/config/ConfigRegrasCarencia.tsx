@@ -133,7 +133,11 @@ export default function ConfigRegrasCarencia() {
         {mappingConfirmed ? <ShieldCheck className="w-5 h-5 text-success mt-0.5" /> : <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />}
         <div className="flex-1">
           <p className="font-medium">De‑Para sugerido a partir de funcionarios.profissao</p>
-          <p className="text-sm text-muted-foreground">Confira as variantes agrupadas abaixo. Nenhuma regra pode ser ativada até confirmar este agrupamento.</p>
+          <p className="text-sm text-muted-foreground">
+            {mappingConfirmed
+              ? "Confira as variantes agrupadas abaixo. As regras continuam desligadas até você ativá-las."
+              : "O catálogo mudou ou ainda não foi confirmado. As regras existentes ficam temporariamente suspensas; revise as variantes e confirme o De‑Para para reativar a aplicação."}
+          </p>
         </div>
         {mappingConfirmed ? <Badge variant="secondary"><Check className="w-3 h-3 mr-1" /> Confirmado</Badge> :
           <Button size="sm" onClick={confirmMapping} disabled={saving === "mapping" || !signature}>
@@ -149,7 +153,7 @@ export default function ConfigRegrasCarencia() {
             <h3 className="font-semibold">{row.suggested_name}</h3>
             <p className="text-xs text-muted-foreground">{row.professional_count} profissional(is) · variantes atuais: {row.source_values.join(", ")}</p>
           </div>
-          <div className="flex items-center gap-2"><Label htmlFor={`rule-${row.profession_key}`}>Regra {row.enabled ? "ativa" : "desligada"}</Label>
+          <div className="flex items-center gap-2"><Label htmlFor={`rule-${row.profession_key}`}>Regra {row.enabled ? (mappingConfirmed ? "ativa" : "suspensa") : "desligada"}</Label>
             <Switch id={`rule-${row.profession_key}`} checked={row.enabled} disabled={!mappingConfirmed && !row.enabled}
               onCheckedChange={checked => edit(row.profession_key,{enabled:checked})} />
           </div>
