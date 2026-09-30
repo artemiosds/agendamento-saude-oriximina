@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
-import { cn } from "@/lib/utils";
+import { cn, todayLocalStr } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
 import { autoFixInvalidTreatmentSessions } from "@/lib/treatmentSessionAutoFix";
@@ -58,6 +58,7 @@ import { CalendarCheck } from "lucide-react";
 import { CardListSkeleton } from "@/components/skeletons/CardListSkeleton";
 import { createRequestGeneration, isRequestCurrent } from "@/lib/requestGeneration";
 import { useTreatmentPtsData, type TreatmentPtsRecord } from "@/hooks/useTreatmentPtsData";
+import { resolveTreatmentSessionIntegrity, type TreatmentAppointmentSnapshot } from "@/lib/treatmentSessionIntegrity";
 import type { Agendamento } from "@/types";
 
 interface TreatmentCycle {
@@ -99,6 +100,22 @@ interface TreatmentSession {
   clinical_notes: string;
   procedure_done: string;
   created_at: string;
+}
+
+function treatmentAppointmentKey(patientId: string, professionalId: string, unitId: string, date: string) {
+  return `${patientId}|${professionalId}|${unitId}|${date}`;
+}
+
+function appointmentSnapshot(appointment: Pick<Agendamento, "id" | "pacienteId" | "profissionalId" | "unidadeId" | "data" | "hora" | "status">): TreatmentAppointmentSnapshot {
+  return {
+    id: appointment.id,
+    paciente_id: appointment.pacienteId,
+    profissional_id: appointment.profissionalId,
+    unidade_id: appointment.unidadeId,
+    data: appointment.data,
+    hora: appointment.hora,
+    status: appointment.status,
+  };
 }
 
 interface TreatmentExtension {
@@ -176,7 +193,8 @@ const Tratamentos: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
   // Map: "patientId|profId|date" -> { id, hora, status }
-  const [agendamentoMap, setAgendamentoMap] = useState<Record<string, { id: string; hora: string; status: string }>>({}); 
+  const [agendamentoMap, setAgendamentoMap] = useState<Record<string, TreatmentAppointmentSnapshot[]>>({});
+  const [appointmentByIdMap, setAppointmentByIdMap] = useState<Record<string, TreatmentAppointmentSnapshot>>({});
   const [vincularPtsOpen, setVincularPtsOpen] = useState(false);
   const [selectedPtsId, setSelectedPtsId] = useState("");
   const [vinculandoPts, setVinculandoPts] = useState(false);
@@ -471,23 +489,49 @@ const Tratamentos: React.FC = () => {
       // Cross-reference agendamentos for this cycle's sessions only
       if (sessionsData.length > 0) {
         const patientIds = [...new Set(sessionsData.map((s) => s.patient_id))];
+        const linkedAppointmentIds = [...new Set(sessionsData.map((s) => s.appointment_id).filter((id): id is string => !!id))];
         let agQuery = supabase
           .from("agendamentos")
-          .select("id, data, hora, status, paciente_id, profissional_id")
+          .select("id, data, hora, status, paciente_id, profissional_id, unidade_id")
           .in("paciente_id", patientIds)
           .not("status", "in", '("cancelado","falta","remarcado")');
         if (user?.unidadeId && user?.usuario !== 'admin.sms') {
           agQuery = agQuery.eq("unidade_id", user.unidadeId);
         }
-        const { data: agData } = await agQuery;
-        if (agData && isCurrentRequest()) {
+        const linkedQuery = linkedAppointmentIds.length > 0
+          ? supabase.from("agendamentos").select("id, data, hora, status, paciente_id, profissional_id, unidade_id").in("id", linkedAppointmentIds)
+          : null;
+        const [activeResult, linkedResult] = await Promise.all([
+          agQuery,
+          linkedQuery || Promise.resolve({ data: [], error: null }),
+        ]);
+        if (activeResult.error) throw activeResult.error;
+        if (linkedResult.error) throw linkedResult.error;
+        const agData = (activeResult.data || []) as TreatmentAppointmentSnapshot[];
+        const linkedData = (linkedResult.data || []) as TreatmentAppointmentSnapshot[];
+        if (isCurrentRequest()) {
+          const groupedCandidates: Record<string, TreatmentAppointmentSnapshot[]> = {};
+          for (const appointment of agData) {
+            const key = treatmentAppointmentKey(appointment.paciente_id, appointment.profissional_id, appointment.unidade_id, appointment.data);
+            groupedCandidates[key] = [...(groupedCandidates[key] || []), appointment];
+          }
+          const scopedAppointmentIds = new Set(linkedAppointmentIds);
+          const byId = [...agData, ...linkedData].reduce<Record<string, TreatmentAppointmentSnapshot>>((result, appointment) => {
+            result[appointment.id] = appointment;
+            return result;
+          }, {});
           setAgendamentoMap((prev) => {
             const next = { ...prev };
-            for (const ag of agData) {
-              const key = `${ag.paciente_id}|${ag.profissional_id}|${ag.data}`;
-              next[key] = { id: ag.id, hora: ag.hora, status: ag.status };
+            const cycleScopes = new Set(sessionsData.map((session) => `${session.patient_id}|${session.professional_id}|${cycle.unit_id}|`));
+            for (const key of Object.keys(next)) {
+              if ([...cycleScopes].some((scope) => key.startsWith(scope))) delete next[key];
             }
-            return next;
+            return { ...next, ...groupedCandidates };
+          });
+          setAppointmentByIdMap((prev) => {
+            const next = { ...prev };
+            for (const id of scopedAppointmentIds) delete next[id];
+            return { ...next, ...byId };
           });
         }
       }
@@ -647,6 +691,20 @@ const Tratamentos: React.FC = () => {
     return sessions.filter((s) => s.cycle_id === selectedCycle.id).sort((a, b) => a.session_number - b.session_number);
   }, [selectedCycle, sessions]);
 
+  const getSessionIntegrity = useCallback((session: TreatmentSession, cycle: TreatmentCycle) =>
+    resolveTreatmentSessionIntegrity({
+      session: {
+        status: session.status,
+        appointment_id: session.appointment_id,
+        patient_id: session.patient_id,
+        professional_id: session.professional_id,
+        scheduled_date: session.scheduled_date,
+      },
+      unitId: cycle.unit_id,
+      appointmentById: session.appointment_id ? appointmentByIdMap[session.appointment_id] || null : null,
+      sameDayCandidates: agendamentoMap[treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date)] || [],
+    }), [agendamentoMap, appointmentByIdMap]);
+
   const cycleExtensions = useMemo(() => {
     if (!selectedCycle) return [];
     return extensions.filter((e) => e.cycle_id === selectedCycle.id);
@@ -658,11 +716,11 @@ const Tratamentos: React.FC = () => {
   }, [agendarSessaoTarget, selectedCycle, agendarSessaoData, getAvailableSlots]);
 
   const agendarSessaoDatesDisponiveis = useMemo(() => {
-    if (!agendarSessaoTarget || !selectedCycle) return [];
+    if ((!agendarSessaoTarget && !remarcarTarget) || !selectedCycle) return [];
     return getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id).filter(
-      (d) => d >= new Date().toISOString().split("T")[0],
+      (d) => d >= todayLocalStr(),
     );
-  }, [agendarSessaoTarget, selectedCycle, getAvailableDates]);
+  }, [agendarSessaoTarget, remarcarTarget, selectedCycle, getAvailableDates]);
 
   const salasDisponiveis = useMemo(() => {
     if (!selectedCycle || !salas) return [];
@@ -1128,6 +1186,9 @@ const Tratamentos: React.FC = () => {
     duplicateScope: 'patient' | 'patient_professional',
     checkPatientAbsenceBlock = false,
   ) => {
+    if (getSessionIntegrity(session, cycle).kind !== "pendente") {
+      throw new Error("Esta sessão não está pendente para agendamento. Recarregue o ciclo e revise o vínculo com a Agenda.");
+    }
     const prof = funcionarios.find((f) => f.id === cycle.professional_id);
     const pac = pacientes.find((p) => p.id === cycle.patient_id);
     if (!prof || !pac) throw new Error('Profissional ou paciente não encontrado.');
@@ -1159,6 +1220,14 @@ const Tratamentos: React.FC = () => {
       checkPatientAbsenceBlock,
     });
     const appointmentId = result.appointment?.id || null;
+    if (result.appointment) {
+      const snapshot = appointmentSnapshot(result.appointment);
+      setAppointmentByIdMap((previous) => ({ ...previous, [snapshot.id]: snapshot }));
+      setAgendamentoMap((previous) => {
+        const key = treatmentAppointmentKey(snapshot.paciente_id, snapshot.profissional_id, snapshot.unidade_id, snapshot.data);
+        return { ...previous, [key]: [snapshot, ...(previous[key] || []).filter((item) => item.id !== snapshot.id)] };
+      });
+    }
     setSessions((previous) => previous.map((item) => item.id === session.id
       ? {
           ...item,
@@ -1199,6 +1268,11 @@ const Tratamentos: React.FC = () => {
   const handleDesmarcarSessao = async (session: TreatmentSession) => {
     if (!selectedCycle) return;
 
+    if (!session.appointment_id || getSessionIntegrity(session, selectedCycle).kind !== "agendada") {
+      toast.error("A sessão ainda não tem vínculo confirmado com um agendamento da Agenda.");
+      return;
+    }
+
     // Validação: sessão concluída não pode ser desmarcada
     if (session.status === "realizada") {
       toast.error("Sessão já realizada não pode ser desmarcada.");
@@ -1228,10 +1302,16 @@ const Tratamentos: React.FC = () => {
 
       // A exclusão otimista e seu rollback são mantidos pelo AgendamentosContext.
       if (session.appointment_id) {
+        setAppointmentByIdMap((previous) => {
+          const next = { ...previous };
+          delete next[session.appointment_id!];
+          return next;
+        });
         setAgendamentoMap((prev) => {
           const next = { ...prev };
-          const key = `${session.patient_id}|${session.professional_id}|${session.scheduled_date}`;
-          delete next[key];
+          const key = treatmentAppointmentKey(session.patient_id, session.professional_id, selectedCycle.unit_id, session.scheduled_date);
+          next[key] = (next[key] || []).filter((appointment) => appointment.id !== session.appointment_id);
+          if (next[key].length === 0) delete next[key];
           return next;
         });
       }
@@ -1303,7 +1383,7 @@ const Tratamentos: React.FC = () => {
   /**
    * Agenda em lote todas as sessões pendentes do ciclo selecionado.
    * - Verifica duplicidade por (paciente_id, profissional_id, data) na tabela `agendamentos`
-   * - Se já existe: marca como "ja_agendada" no resumo (e vincula appointment_id na sessão se faltar)
+   * - Se já existe um possível agendamento sem vínculo: não vincula; informa que precisa de revisão
    * - Se não existe: insere agendamento e atualiza a sessão para "agendada"
    * - Mostra resumo no fim com opção de notificar paciente via WhatsApp
    */
@@ -1318,7 +1398,7 @@ const Tratamentos: React.FC = () => {
     }
 
     const pendentes = cycleSessions
-      .filter((s) => s.status === "pendente_agendamento" && !!s.scheduled_date)
+      .filter((s) => getSessionIntegrity(s, cycle).kind === "pendente" && !!s.scheduled_date)
       .sort((a, b) => a.session_number - b.session_number);
 
     if (pendentes.length === 0) {
@@ -1386,20 +1466,8 @@ const Tratamentos: React.FC = () => {
 
     try {
       for (const sess of pendentes) {
-        // Sessões pendentes sem agendamento devem ser processadas
-        // Se a sessão já tiver um appointment_id (mesmo se vindo do cycleSessions), pulamos do lote mas reportamos no resumo
-        if (sess.appointment_id) {
-          resumo.push({
-            numero: sess.session_number,
-            data: sess.scheduled_date,
-            status: "ja_agendada",
-          });
-          continue;
-        }
-
         try {
-          // 2) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
-          // Isso garante que se o usuário agendou manualmente na agenda mas não vinculou aqui, a gente vincule em vez de duplicar.
+          // Um registro semelhante precisa de revisão explícita; não vinculamos histórico automaticamente.
           const originalDateValida = !isInvalidSessionDate(sess.scheduled_date, bloqueiosDoCiclo);
           const { data: existente, error: checkErr } = originalDateValida ? await supabase
             .from("agendamentos")
@@ -1416,47 +1484,13 @@ const Tratamentos: React.FC = () => {
           if (checkErr) throw checkErr;
 
           if (existente) {
-            const slotExistenteAindaValido = getAvailableSlots(
-              sess.professional_id,
-              cycle.unit_id,
-              sess.scheduled_date,
-            ).includes(existente.hora) && estaLivreNoLote(sess.scheduled_date, existente.hora);
-            if (!slotExistenteAindaValido) {
-              // Um agendamento encontrado em horário fora da grade/bloqueado não pode ser vinculado.
-              // O lote procura outra vaga; a entrada existente permanece intocada para revisão.
-            } else {
-              // O vínculo é validado e gravado no servidor, sob as mesmas travas de unidade/permissão.
-              const linked = await treatmentSessionOperations.linkExistingAppointment({
-                session: sess,
-                cycle,
-                appointmentId: existente.id,
-              });
-              const linkedAppointment = linked.appointment;
-              if (!linkedAppointment) throw new Error("O vínculo não retornou o agendamento existente.");
-
-              setSessions((prev) => prev.map((x) => x.id === sess.id ? {
-                ...x,
-                appointment_id: linked.session.appointment_id || linkedAppointment.id,
-                status: linked.session.status || "agendada",
-                scheduled_date: linked.session.scheduled_date || x.scheduled_date,
-              } : x));
-              setAgendamentoMap((prev) => ({
-                ...prev,
-                [`${sess.patient_id}|${sess.professional_id}|${linkedAppointment.data}`]: {
-                  id: linkedAppointment.id,
-                  hora: linkedAppointment.hora,
-                  status: linkedAppointment.status,
-                },
-              }));
-              usar(linkedAppointment.data, linkedAppointment.hora);
-              resumo.push({
-                numero: sess.session_number,
-                data: linkedAppointment.data,
-                hora: linkedAppointment.hora,
-                status: "ja_agendada",
-              });
-              continue;
-            }
+            resumo.push({
+              numero: sess.session_number,
+              data: sess.scheduled_date,
+              status: "erro",
+              mensagem: "Possível agendamento já existente sem vínculo confirmado. Revisão necessária; nenhum vínculo foi criado.",
+            });
+            continue;
           }
 
           // 3) Encontrar slot válido respeitando disponibilidade do profissional e ocupação da agenda
@@ -1502,7 +1536,6 @@ const Tratamentos: React.FC = () => {
             cycle,
             appointment: newAgData,
             duplicateScope: "patient_professional",
-            strictAvailability: true,
           });
           const scheduledAppointment = scheduled.appointment;
           if (!scheduledAppointment) throw new Error("A operação não retornou o agendamento confirmado.");
@@ -1519,14 +1552,11 @@ const Tratamentos: React.FC = () => {
                 : x,
             ),
           );
-          setAgendamentoMap((prev) => ({
-            ...prev,
-            [`${sess.patient_id}|${sess.professional_id}|${scheduledAppointment.data}`]: {
-              id: scheduledAppointment.id,
-              hora: scheduledAppointment.hora,
-              status: scheduledAppointment.status,
-            },
-          }));
+          setAgendamentoMap((prev) => {
+            const key = treatmentAppointmentKey(sess.patient_id, sess.professional_id, cycle.unit_id, scheduledAppointment.data);
+            return { ...prev, [key]: [appointmentSnapshot(scheduledAppointment), ...(prev[key] || []).filter((item) => item.id !== scheduledAppointment.id)] };
+          });
+          setAppointmentByIdMap((prev) => ({ ...prev, [scheduledAppointment.id]: appointmentSnapshot(scheduledAppointment) }));
 
           usar(scheduledAppointment.data, scheduledAppointment.hora);
           resumo.push({
@@ -1582,25 +1612,6 @@ const Tratamentos: React.FC = () => {
   const isMaster = user?.role === 'master';
   const canControlSessions = isMaster || isProfissional;
 
-  const handleCheckRemarcarDate = async (newDate: string) => {
-    setRemarcarData(newDate);
-    setRemarcarBlockedMsg("");
-    if (!newDate || !selectedCycle) return;
-    if (canControlSessions) return; // Master and profissional bypass block checks
-    try {
-      const { data: result } = await supabase.rpc("is_date_blocked", {
-        p_date: newDate,
-        p_profissional_id: selectedCycle.professional_id,
-        p_unidade_id: selectedCycle.unit_id,
-      });
-      if (result === true) {
-        setRemarcarBlockedMsg("Esta data está bloqueada (feriado, férias ou indisponibilidade). Escolha outra data.");
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-
   const remarcationTreatmentSession = async (
     session: TreatmentSession,
     cycle: TreatmentCycle,
@@ -1608,6 +1619,12 @@ const Tratamentos: React.FC = () => {
     newTime?: string,
     checkPatientConflict = false,
   ) => {
+    if (getSessionIntegrity(session, cycle).kind !== "agendada") {
+      throw new Error("A remarcação exige um vínculo ativo e confirmado entre a sessão e a Agenda.");
+    }
+    if (newTime && !getAvailableSlots(cycle.professional_id, cycle.unit_id, newDate).includes(newTime)) {
+      throw new Error("O horário escolhido não está disponível na grade atual do profissional.");
+    }
     const oldDate = session.scheduled_date;
     const result = await treatmentSessionOperations.reschedule({
       session,
@@ -1615,11 +1632,25 @@ const Tratamentos: React.FC = () => {
       newDate,
       newTime,
       checkPatientConflict,
-      bypassBlockCheck: canControlSessions,
+      bypassBlockCheck: false,
     });
     setSessions((previous) => previous.map((item) => item.id === session.id
       ? { ...item, scheduled_date: result.session.scheduled_date || newDate }
       : item));
+    if (result.appointment) {
+      setAgendamentoMap((previous) => {
+        const next = { ...previous };
+        const snapshot = appointmentSnapshot(result.appointment!);
+        const oldKey = treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, oldDate);
+        next[oldKey] = (next[oldKey] || []).filter((item) => item.id !== snapshot.id);
+        if (next[oldKey].length === 0) delete next[oldKey];
+        const key = treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, result.appointment!.data);
+        next[key] = [snapshot, ...(next[key] || []).filter((item) => item.id !== snapshot.id)];
+        return next;
+      });
+      const snapshot = appointmentSnapshot(result.appointment);
+      setAppointmentByIdMap((previous) => ({ ...previous, [snapshot.id]: snapshot }));
+    }
     await logAction({
       acao: "remarcar_sessao",
       entidade: "treatment_session",
@@ -1643,19 +1674,6 @@ const Tratamentos: React.FC = () => {
     setRemarcarData("");
     loadData(true);
     return result;
-  };
-
-  const handleRemarcarSessao = async () => {
-    if (!remarcarTarget || !remarcarData || !selectedCycle || remarcarBlockedMsg) return;
-    setRemarcarSaving(true);
-    try {
-      await remarcationTreatmentSession(remarcarTarget, selectedCycle, remarcarData);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
-    } finally {
-      setRemarcarSaving(false);
-    }
   };
 
   const handleAddIntermediateSession = async () => {
@@ -2145,19 +2163,8 @@ const Tratamentos: React.FC = () => {
       selectedCycle.total_sessions > 0
         ? Math.round((selectedCycle.sessions_done / selectedCycle.total_sessions) * 100)
         : 0;
-    const pendingCount = cycleSessions.filter((s) => {
-      if (s.status !== "pendente_agendamento") return false;
-      const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
-      return !agendamentoMap[agKey]; // only truly pending if no matching agendamento
-    }).length;
-    const scheduledCount = cycleSessions.filter((s) => {
-      if (s.status === "agendada") return true;
-      if (s.status === "pendente_agendamento") {
-        const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
-        return !!agendamentoMap[agKey];
-      }
-      return false;
-    }).length;
+    const pendingCount = cycleSessions.filter((s) => getSessionIntegrity(s, selectedCycle).kind === "pendente").length;
+    const scheduledCount = cycleSessions.filter((s) => getSessionIntegrity(s, selectedCycle).kind === "agendada").length;
 
     return (
       <div className="space-y-4 animate-fade-in overflow-y-auto max-h-[calc(100vh-80px)] pr-1">
@@ -2497,17 +2504,13 @@ const Tratamentos: React.FC = () => {
             <div className="max-h-[500px] overflow-y-auto border rounded-lg">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
-                  const isPendente = s.status === "pendente_agendamento";
-                  const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
-                  const matchedAg = isPendente ? agendamentoMap[agKey] : null;
-                  const effectiveStatus = matchedAg ? "agendada" : s.status;
-                  const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
-                  const isAgendada = effectiveStatus === "agendada";
-
-                  // Master can reschedule ANY session (including realizada)
-                  const canRemarcarThis = canControlSessions
-                    ? true
-                    : canAgendarSessao && (isAgendada || effectiveIsPendente) && selectedCycle.status === "em_andamento";
+                  const integrity = getSessionIntegrity(s, selectedCycle);
+                  const isPendente = integrity.kind === "pendente";
+                  const isAgendada = integrity.kind === "agendada";
+                  const isInconsistent = integrity.kind === "possivel_sem_vinculo" || integrity.kind === "appointment_id_inexistente" || integrity.kind === "vinculo_divergente";
+                  const effectiveStatus = isAgendada ? "agendada" : isPendente ? "pendente_agendamento" : s.status;
+                  const effectiveIsPendente = isPendente;
+                  const canRemarcarThis = canAgendarSessao && isAgendada && selectedCycle.status === "em_andamento";
                   const isRealizada = s.status === "realizada";
 
                   return (
@@ -2530,19 +2533,24 @@ const Tratamentos: React.FC = () => {
                               ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
                               : "—"}
                             {effectiveIsPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
-                            {isAgendada && matchedAg && (
-                              <span className="ml-2 text-xs text-info font-medium">· Agendada às {matchedAg.hora}</span>
+                            {integrity.kind === "possivel_sem_vinculo" && (
+                              <span className="ml-2 text-xs text-warning font-medium">· Possível agendamento sem vínculo — regularização necessária</span>
                             )}
-                            {isAgendada && !matchedAg && s.appointment_id && (
+                            {integrity.kind === "appointment_id_inexistente" && (
+                              <span className="ml-2 text-xs text-destructive font-medium">· Agendamento vinculado não encontrado — revisão necessária</span>
+                            )}
+                            {integrity.kind === "vinculo_divergente" && (
+                              <span className="ml-2 text-xs text-destructive font-medium">· Vínculo inconsistente — revisão necessária</span>
+                            )}
+                            {isAgendada && (
                               <span className="ml-2 text-xs text-info font-medium">· Agendada</span>
                             )}
                           </p>
                           {s.procedure_done && <p className="text-xs text-muted-foreground">{s.procedure_done}</p>}
                         </div>
-                        <Badge className={cn("text-xs shrink-0", sessionStatusColors[effectiveStatus])}>
-                          {sessionStatusLabels[effectiveStatus] || effectiveStatus}
+                        <Badge className={cn("text-xs shrink-0", isInconsistent ? "bg-warning/15 text-warning border-warning/30" : sessionStatusColors[effectiveStatus])}>
+                          {isInconsistent ? "Revisão necessária" : sessionStatusLabels[effectiveStatus] || effectiveStatus}
                         </Badge>
-
                         {canAgendarSessao && effectiveIsPendente && selectedCycle.status === "em_andamento" && (
                           <div className="flex gap-1 shrink-0">
                             <Button
@@ -2592,7 +2600,7 @@ const Tratamentos: React.FC = () => {
                             <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
                           </Button>
                         )}
-                        {canAgendarSessao && isAgendada && selectedCycle.status === "em_andamento" && (
+                        {canAgendarSessao && isAgendada && s.appointment_id && selectedCycle.status === "em_andamento" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -2695,7 +2703,7 @@ const Tratamentos: React.FC = () => {
                         month: "2-digit",
                       })
                     : "Sem data";
-                  const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+                  const agKey = treatmentAppointmentKey(s.patient_id, s.professional_id, selectedCycle.unit_id, s.scheduled_date);
                   const ag = agendamentoMap[agKey];
                   return (
                     <button

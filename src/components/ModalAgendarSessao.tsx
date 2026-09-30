@@ -155,7 +155,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
 
   const getDayStatus = (dateStr: string) => {
     const isPast = dateStr < todayStr;
-    const allowPast = isMaster || mode === 'remarcar';
+    const allowPast = isMaster && mode !== 'remarcar';
     if (isPast && !allowPast) return 'past' as const;
     const isSuggested = dateStr === suggestedDate;
     const conflict = conflictMap[dateStr];
@@ -170,12 +170,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     if (hasSameProf) return 'conflict_same' as const;
     // Conflict with other professional (orange)
     if (hasOtherProf) return 'conflict_other' as const;
-    // Suggested date (blue)
-    if (isSuggested) return 'suggested' as const;
-    // Available
-    if (availableSet.has(dateStr)) return 'available' as const;
-    // In remarcar mode, allow all dates (including past) even without availability slots
-    if (mode === 'remarcar') return 'available' as const;
+    // A suggested date is clickable only if the professional has a valid slot that day.
+    if (availableSet.has(dateStr)) return isSuggested ? 'suggested' as const : 'available' as const;
     return 'unavailable' as const;
   };
 
@@ -219,7 +215,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const prevMonth = () => setViewMonth(p => p.month === 0 ? { year: p.year - 1, month: 11 } : { year: p.year, month: p.month - 1 });
   const nextMonth = () => setViewMonth(p => p.month === 11 ? { year: p.year + 1, month: 0 } : { year: p.year, month: p.month + 1 });
 
-  const canGoPrev = isMaster || mode === 'remarcar' || viewMonth.year > parseInt(todayStr.substring(0, 4)) || (viewMonth.year === parseInt(todayStr.substring(0, 4)) && viewMonth.month > parseInt(todayStr.substring(5, 7)) - 1);
+  const canGoPrev = (isMaster && mode !== 'remarcar') || viewMonth.year > parseInt(todayStr.substring(0, 4)) || (viewMonth.year === parseInt(todayStr.substring(0, 4)) && viewMonth.month > parseInt(todayStr.substring(5, 7)) - 1);
 
   const handleConfirm = async () => {
     if (!selectedDate || !selectedHora) {
@@ -292,7 +288,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 const { day, dateStr } = cell;
                 const status = getDayStatus(dateStr);
                 const isSelected = dateStr === selectedDate;
-                const canClick = status !== 'past' && (isMaster || status !== 'unavailable');
+                const canClick = status === 'available' || status === 'suggested';
 
                 return (
                   <div key={dateStr} className="flex items-center justify-center py-0.5">

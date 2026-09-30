@@ -158,7 +158,6 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       appointment: Agendamento;
       duplicateScope: 'patient' | 'patient_professional';
       checkPatientAbsenceBlock?: boolean;
-      strictAvailability?: boolean;
     }): Promise<TreatmentSessionOperationResult> {
       const duplicate = await deps.findDuplicate({
         patientId: input.cycle.patient_id,
@@ -179,16 +178,14 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
 
       let rpcResult: TreatmentSessionOperationResult | undefined;
       await deps.agenda.addAgendamentoTransactionally(input.appointment, async (normalized) => {
-        const { data, error } = await deps.client.rpc(input.strictAvailability
-          ? 'schedule_treatment_session_batch'
-          : 'schedule_treatment_session', {
+        const { data, error } = await deps.client.rpc('schedule_treatment_session_batch', {
           p_session_id: input.session.id,
           p_cycle_id: input.cycle.id,
           p_expected_session_date: input.session.scheduled_date,
           p_appointment: appointmentToRow(normalized),
           p_check_patient_conflict: input.duplicateScope === 'patient',
         });
-        if (input.strictAvailability && error?.code === 'PGRST202') {
+        if (error?.code === 'PGRST202') {
           throw new Error('A validação segura do lote ainda não foi ativada no banco. Aplique a migration de agendamento de tratamentos e tente novamente.');
         }
         if (error) throwRpcError(error);
@@ -208,6 +205,9 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       checkPatientConflict?: boolean;
       bypassBlockCheck?: boolean;
     }): Promise<TreatmentSessionOperationResult> {
+      if (!input.session.appointment_id) {
+        throw new Error('Esta sessão não tem um agendamento confirmado para remarcar. Vincule o agendamento existente ou agende a sessão primeiro.');
+      }
       if (input.checkPatientConflict && input.newTime) {
         const duplicate = await deps.findDuplicate({
           patientId: input.cycle.patient_id,

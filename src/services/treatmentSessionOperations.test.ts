@@ -131,7 +131,7 @@ describe('treatmentSessionOperations: schedule', () => {
     const result = await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' });
     expect(result.status).toBe('agendado');
     expect(result.appointment?.id).toBe(appointment.id);
-    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session', expect.objectContaining({
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_batch', expect.objectContaining({
       p_session_id: 'session-1', p_cycle_id: 'cycle-1', p_appointment: expect.objectContaining({ id: appointment.id, status: 'confirmado', sala_id: 'room-1' }),
       p_check_patient_conflict: false,
     }));
@@ -141,13 +141,13 @@ describe('treatmentSessionOperations: schedule', () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null });
     await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient' });
-    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session', expect.objectContaining({ p_check_patient_conflict: true }));
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_batch', expect.objectContaining({ p_check_patient_conflict: true }));
   });
 
-  it('usa validação transacional estrita para agendamentos em lote', async () => {
+  it('usa validação transacional estrita para qualquer agendamento de sessão', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data }, appointment: appointmentRow }, error: null });
-    await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional', strictAvailability: true });
+    await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' });
     expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_batch', expect.objectContaining({
       p_session_id: 'session-1', p_cycle_id: 'cycle-1', p_check_patient_conflict: false,
     }));
@@ -156,7 +156,7 @@ describe('treatmentSessionOperations: schedule', () => {
   it('bloqueia o lote com instrução clara se a migration do servidor ainda não estiver aplicada', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'function not found' } });
-    await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional', strictAvailability: true }))
+    await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' }))
       .rejects.toThrow(/Aplique a migration de agendamento de tratamentos/);
     expect(ctx.scheduleCommits).toHaveLength(0);
   });
@@ -249,9 +249,10 @@ describe('treatmentSessionOperations: reschedule', () => {
   it('interrompe quando a data está bloqueada ou a consulta da regra falha', async () => {
     const ctx = setup();
     ctx.isDateBlocked.mockResolvedValue(true);
-    await expect(ctx.service.reschedule({ session: session(), cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('Data bloqueada.');
+    const linkedSession = session({ status: 'agendada', appointment_id: appointment.id });
+    await expect(ctx.service.reschedule({ session: linkedSession, cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('Data bloqueada.');
     ctx.isDateBlocked.mockRejectedValue(new Error('check failed'));
-    await expect(ctx.service.reschedule({ session: session(), cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('check failed');
+    await expect(ctx.service.reschedule({ session: linkedSession, cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('check failed');
     expect(ctx.rpc).not.toHaveBeenCalled();
   });
 
