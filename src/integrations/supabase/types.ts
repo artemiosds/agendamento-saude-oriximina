@@ -4288,6 +4288,16 @@ export type Database = {
         Args: { p_agendamento_id: string; p_motivo: string }
         Returns: Json
       }
+      check_internal_slot_availability: {
+        Args: {
+          p_data: string
+          p_exclude_agendamento_id?: string
+          p_hora: string
+          p_profissional_id: string
+          p_unidade_id: string
+        }
+        Returns: Json
+      }
       check_slot_availability: {
         Args: {
           p_data: string
@@ -4317,6 +4327,10 @@ export type Database = {
           p_hora: string
           p_paciente_id: string
         }
+        Returns: Json
+      }
+      create_internal_appointment_with_override: {
+        Args: { p_motivo_alteracao: string; p_payload: Json }
         Returns: Json
       }
       current_user_cbo_codigo: { Args: never; Returns: string }
@@ -4436,6 +4450,16 @@ export type Database = {
         }
         Returns: Json
       }
+      manage_external_quota: {
+        Args: {
+          p_action: string
+          p_motivo_alteracao?: string
+          p_payload: Json
+          p_quota_id: string
+        }
+        Returns: Json
+      }
+      manage_external_quotas: { Args: { p_payloads: Json }; Returns: Json }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
       refresh_paciente_profissional_status: { Args: never; Returns: undefined }
       register_whatsapp_inbound: {
