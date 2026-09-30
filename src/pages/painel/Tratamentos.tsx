@@ -48,6 +48,7 @@ import {
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn, todayLocalStr } from "@/lib/utils";
+import { isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
 import { autoFixInvalidTreatmentSessions } from "@/lib/treatmentSessionAutoFix";
@@ -182,7 +183,7 @@ const sessionStatusLabels: Record<string, string> = {
 
 const Tratamentos: React.FC = () => {
   const { pacientes } = usePacientes();
-  const { funcionarios, unidades, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates } = useOperacional();
+  const { funcionarios, unidades, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
   const { fila, addToFila } = useFila();
   const {
     addAgendamentoTransactionally,
@@ -1629,8 +1630,20 @@ const Tratamentos: React.FC = () => {
     if (getSessionIntegrity(session, cycle).kind !== "agendada") {
       throw new Error("A remarcação exige um vínculo ativo e confirmado entre a sessão e a Agenda.");
     }
-    if (newTime && !getAvailableSlots(cycle.professional_id, cycle.unit_id, newDate).includes(newTime)) {
-      throw new Error("O horário escolhido não está disponível na grade atual do profissional.");
+    if (newTime) {
+      const availableSlots = getAvailableSlots(cycle.professional_id, cycle.unit_id, newDate);
+      const turnWindows = getTurnoInfo(cycle.professional_id, cycle.unit_id, newDate);
+      const existingAppointment = session.appointment_id ? appointmentByIdMap[session.appointment_id] : null;
+      const sameOccupiedTurn = !!existingAppointment && session.scheduled_date === newDate
+        && isTimeWithinTurnWindow(existingAppointment.hora, turnWindows)
+        && isTimeWithinTurnWindow(newTime, turnWindows);
+      const hasFreeTurnCapacity = turnWindows.some((turn) => turn.vagasLivresInternas > 0);
+      const isAvailable = availableSlots.includes(newTime)
+        || (hasFreeTurnCapacity && isTimeWithinTurnWindow(newTime, turnWindows))
+        || sameOccupiedTurn;
+      if (!isAvailable) {
+        throw new Error("O horário escolhido não está disponível na grade atual do profissional.");
+      }
     }
     const oldDate = session.scheduled_date;
     const result = await treatmentSessionOperations.reschedule({
@@ -2977,6 +2990,7 @@ const Tratamentos: React.FC = () => {
           salas={salasDisponiveis}
           availableDates={agendarSessaoDatesDisponiveis}
           getAvailableSlots={getAvailableSlots}
+          getTurnoInfo={getTurnoInfo}
           onConfirm={async (data, hora, salaId) => {
             if (!agendarSessaoTarget || !selectedCycle || agendandoSessao) return;
             setAgendarSessaoData(data);
@@ -3020,6 +3034,7 @@ const Tratamentos: React.FC = () => {
           salas={salasDisponiveis}
           availableDates={agendarSessaoDatesDisponiveis}
           getAvailableSlots={getAvailableSlots}
+          getTurnoInfo={getTurnoInfo}
           onConfirm={async (data, hora, _salaId) => {
             if (!remarcarTarget || !selectedCycle || remarcarSaving) return;
             setRemarcarSaving(true);

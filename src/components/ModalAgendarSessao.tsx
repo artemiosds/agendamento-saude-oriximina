@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar, CalendarClock, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Info, CheckCircle } from 'lucide-react';
-import { cn, todayLocalStr, dateStrToUtcDate } from '@/lib/utils';
+import { cn, nowMinutesInBrazil, todayLocalStr, dateStrToUtcDate } from '@/lib/utils';
+import { isAppointmentTimeSelectable, isTimeAfterSchedulingCutoff } from '@/lib/appointmentTimeSelection';
 import { toast } from 'sonner';
 
 interface SessionInfo {
@@ -35,6 +36,11 @@ interface ModalAgendarSessaoProps {
   salas: Array<{ id: string; nome: string }>;
   availableDates: string[];
   getAvailableSlots: (profId: string, unitId: string, date: string) => string[];
+  getTurnoInfo: (profId: string, unitId: string, date: string) => Array<{
+    horaInicio: string;
+    horaFim: string;
+    vagasLivresInternas: number;
+  }>;
   onConfirm: (data: string, hora: string, salaId: string) => Promise<void>;
   onRemarcar?: (newDate: string, newHora: string, salaId: string) => Promise<void>;
   mode?: 'agendar' | 'remarcar';
@@ -60,6 +66,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   salas,
   availableDates,
   getAvailableSlots,
+  getTurnoInfo,
   onConfirm,
   onRemarcar,
   mode = 'agendar',
@@ -180,6 +187,20 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     return getAvailableSlots(cycle.professional_id, cycle.unit_id, selectedDate);
   }, [selectedDate, cycle, getAvailableSlots]);
 
+  const turnWindows = useMemo(() => {
+    if (!selectedDate || !cycle) return [];
+    return getTurnoInfo(cycle.professional_id, cycle.unit_id, selectedDate);
+  }, [selectedDate, cycle, getTurnoInfo]);
+  const hasFreeTurnCapacity = turnWindows.some((turn) => turn.vagasLivresInternas > 0);
+  const canTypeTurnTime = turnWindows.length > 0 && hasFreeTurnCapacity;
+  const selectedTimeAfterCutoff = isTimeAfterSchedulingCutoff(
+    selectedHora, selectedDate, todayStr, nowMinutesInBrazil(),
+  );
+  const selectedTimeAllowed = selectedTimeAfterCutoff && isAppointmentTimeSelectable(
+    selectedHora, slots, canTypeTurnTime ? turnWindows : [],
+  );
+  const masterManualFallback = isMaster && slots.length === 0 && turnWindows.length === 0 && selectedTimeAfterCutoff;
+
   // Validation message for selected date
   const dateWarning = useMemo(() => {
     if (!selectedDate || !cycle) return null;
@@ -220,6 +241,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const handleConfirm = async () => {
     if (!selectedDate || !selectedHora) {
       toast.error('Selecione data e horário.');
+      return;
+    }
+    if (!selectedTimeAllowed && !masterManualFallback) {
+      toast.error('Escolha um horário livre na grade ou dentro do período disponível do profissional.');
       return;
     }
     setSaving(true);
@@ -377,7 +402,23 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
             <div>
               <Label className="mb-2 block">Horários disponíveis em {formatDateBR(selectedDate)}:</Label>
               {slots.length === 0 ? (
-                isMaster ? (
+                canTypeTurnTime ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Informe um horário entre {turnWindows.map((turn) => `${turn.horaInicio} e ${turn.horaFim}`).join(' / ')}.
+                    </p>
+                    <input
+                      type="time"
+                      step={60}
+                      value={selectedHora}
+                      onChange={(e) => setSelectedHora(e.target.value)}
+                      className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                    />
+                    {selectedHora && !selectedTimeAllowed && (
+                      <p className="text-xs text-destructive">O horário deve estar dentro de um turno com vagas disponíveis.</p>
+                    )}
+                  </div>
+                ) : isMaster ? (
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Como Master, digite o horário manualmente:</p>
                     <input
@@ -411,11 +452,14 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                       </Button>
                     );
                   })}
-                  {isMaster && (
+                  {(canTypeTurnTime || isMaster) && (
                     <div className="col-span-5 mt-2 flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Ou digite:</span>
+                      <span className="text-xs text-muted-foreground">
+                        {canTypeTurnTime ? 'Ou digite dentro do turno:' : 'Ou digite:'}
+                      </span>
                       <input
                         type="time"
+                        step={60}
                         value={slots.includes(selectedHora) ? "" : selectedHora}
                         onChange={(e) => setSelectedHora(e.target.value)}
                         className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
@@ -423,6 +467,9 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                     </div>
                   )}
                 </div>
+              )}
+              {selectedHora && !selectedTimeAllowed && !masterManualFallback && (
+                <p className="mt-2 text-xs text-destructive">Escolha um horário disponível dentro do período configurado.</p>
               )}
             </div>
           )}
@@ -454,7 +501,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
             <Button
               onClick={handleConfirm}
               className="w-full gradient-primary text-primary-foreground"
-              disabled={!selectedDate || !selectedHora || saving}
+              disabled={!selectedDate || !selectedHora || saving || (!selectedTimeAllowed && !masterManualFallback)}
             >
               {saving ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>

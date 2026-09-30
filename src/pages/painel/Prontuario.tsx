@@ -390,7 +390,7 @@ const ProntuarioPage: React.FC = () => {
   const { can } = usePermissions();
   const { pacientes } = usePacientes();
   const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamento } = useAgendamentos();
-  const { unidades, funcionarios, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates } = useOperacional();
+  const { unidades, funcionarios, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -5291,6 +5291,7 @@ const ProntuarioPage: React.FC = () => {
         salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
         availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
         getAvailableSlots={getAvailableSlots}
+        getTurnoInfo={getTurnoInfo}
         onConfirm={async (data, hora, salaId) => {
           if (!agendarSessaoTarget || !sessaoCycle) return;
           const pac = pacienteByIdMap.get(sessaoCycle.patient_id);
@@ -5347,6 +5348,7 @@ const ProntuarioPage: React.FC = () => {
         salas={(salas || []).filter((s: any) => s.unidadeId === sessaoCycle?.unit_id && s.ativo)}
         availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
         getAvailableSlots={getAvailableSlots}
+        getTurnoInfo={getTurnoInfo}
         onConfirm={async (data, hora, salaId) => {
           if (!remarcarTarget || !sessaoCycle) return;
           const oldDate = remarcarTarget.scheduled_date;
