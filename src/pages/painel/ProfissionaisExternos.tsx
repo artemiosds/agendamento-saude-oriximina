@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -136,6 +136,31 @@ const ProfissionaisExternos: React.FC = () => {
     periodo_fim: "",
     ativo: true
   });
+
+  // Reservas de data específica precisam reproduzir exatamente uma faixa de
+  // disponibilidade ativa do profissional naquela data e unidade.
+  const quotaSpecificDate = quotaForm.periodo_inicio && quotaForm.periodo_inicio === quotaForm.periodo_fim
+    ? quotaForm.periodo_inicio
+    : "";
+  const quotaDateAvailabilities = useMemo(() => {
+    if (!selectedQuota || !quotaSpecificDate) return [];
+    const dayOfWeek = new Date(`${quotaSpecificDate}T12:00:00`).getDay();
+    return disponibilidades.filter(d => d.profissionalId === selectedQuota.profissional_interno_id
+      && d.unidadeId === quotaForm.unidade_id
+      && quotaSpecificDate >= d.dataInicio && quotaSpecificDate <= d.dataFim
+      && d.diasSemana.includes(dayOfWeek));
+  }, [disponibilidades, quotaForm.unidade_id, quotaSpecificDate, selectedQuota]);
+  const selectedQuotaAvailability = quotaDateAvailabilities.find(d =>
+    d.horaInicio.slice(0, 5) === quotaForm.horario_inicio.slice(0, 5)
+    && d.horaFim.slice(0, 5) === quotaForm.horario_fim.slice(0, 5));
+
+  const turnoForHours = (start: string, end: string) => {
+    const startHour = Number(start.slice(0, 2));
+    const endHour = Number(end.slice(0, 2));
+    if (startHour >= 18 || endHour <= 6) return "noite";
+    if (startHour >= 12) return "tarde";
+    return "manha";
+  };
 
   const loadExternos = useCallback(async () => {
     setLoading(true);
@@ -377,6 +402,12 @@ const ProfissionaisExternos: React.FC = () => {
     if (!selectedQuota) return;
     if (quotaChangeReason.trim().length < 3) { toast.error("Informe o motivo da alteração."); return; }
     if (!quotaForm.unidade_id) { toast.error("Selecione a unidade da cota."); return; }
+    if (quotaSpecificDate && !selectedQuotaAvailability) {
+      toast.error(quotaDateAvailabilities.length
+        ? "Selecione uma faixa de horário cadastrada na disponibilidade do profissional para esta data."
+        : "Não há disponibilidade do profissional para esta unidade e data.");
+      return;
+    }
     if (selectedQuota.vagas_usadas > 0 && quotaForm.unidade_id !== selectedQuota.unidade_id) {
       toast.error("A unidade de uma cota com agendamentos vinculados não pode ser alterada."); return;
     }
@@ -413,7 +444,7 @@ const ProfissionaisExternos: React.FC = () => {
       await loadExternos();
     } catch (err: any) {
       console.error("[Funcionários Externos] Erro ao atualizar cota", err);
-      toast.error("Erro ao atualizar cota.");
+      toast.error(err?.message || "Erro ao atualizar cota.");
     } finally {
       setSavingQuota(false);
     }
@@ -977,25 +1008,59 @@ const ProfissionaisExternos: React.FC = () => {
                   onChange={e => setQuotaForm(p => ({ ...p, vagas_total: Number(e.target.value) }))} 
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Turno</Label>
-                <Select value={quotaForm.turno} onValueChange={v => setQuotaForm(p => ({ ...p, turno: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manha">Manhã</SelectItem>
-                    <SelectItem value="tarde">Tarde</SelectItem>
-                    <SelectItem value="noite">Noite</SelectItem>
-                    <SelectItem value="integral">Integral</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {quotaSpecificDate ? (
+                <div className="col-span-2 space-y-2">
+                  <Label>Disponibilidade nesta data</Label>
+                  <Select
+                    value={selectedQuotaAvailability?.id || ""}
+                    onValueChange={id => {
+                      const availability = quotaDateAvailabilities.find(d => d.id === id);
+                      if (!availability) return;
+                      setQuotaForm(p => ({
+                        ...p,
+                        horario_inicio: availability.horaInicio.slice(0, 5),
+                        horario_fim: availability.horaFim.slice(0, 5),
+                        turno: turnoForHours(availability.horaInicio, availability.horaFim),
+                      }));
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione uma disponibilidade válida" /></SelectTrigger>
+                    <SelectContent>
+                      {quotaDateAvailabilities.map(d => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {turnoForHours(d.horaInicio, d.horaFim) === "manha" ? "Manhã" : turnoForHours(d.horaInicio, d.horaFim) === "tarde" ? "Tarde" : "Noite"}
+                          {` • ${d.horaInicio.slice(0, 5)}–${d.horaFim.slice(0, 5)} • ${d.vagasPorDia} vagas/dia`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {quotaDateAvailabilities.length === 0 ? (
+                    <p className="text-xs text-destructive">Este profissional não tem disponibilidade cadastrada para esta unidade e data. Ajuste a data ou corrija a disponibilidade antes de salvar a cota.</p>
+                  ) : !selectedQuotaAvailability ? (
+                    <p className="text-xs text-amber-700">O horário atual não coincide com a disponibilidade. Selecione uma faixa válida para esta data.</p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Turno</Label>
+                  <Select value={quotaForm.turno} onValueChange={v => setQuotaForm(p => ({ ...p, turno: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manha">Manhã</SelectItem>
+                      <SelectItem value="tarde">Tarde</SelectItem>
+                      <SelectItem value="noite">Noite</SelectItem>
+                      <SelectItem value="integral">Integral</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Horário Início</Label>
-                <Input type="time" value={quotaForm.horario_inicio} onChange={e => setQuotaForm(p => ({ ...p, horario_inicio: e.target.value }))} />
+                <Input type="time" value={quotaForm.horario_inicio} disabled={!!quotaSpecificDate} onChange={e => setQuotaForm(p => ({ ...p, horario_inicio: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>Horário Fim</Label>
-                <Input type="time" value={quotaForm.horario_fim} onChange={e => setQuotaForm(p => ({ ...p, horario_fim: e.target.value }))} />
+                <Input type="time" value={quotaForm.horario_fim} disabled={!!quotaSpecificDate} onChange={e => setQuotaForm(p => ({ ...p, horario_fim: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>Início Período</Label>
@@ -1017,7 +1082,7 @@ const ProfissionaisExternos: React.FC = () => {
               <Input value={quotaChangeReason} onChange={e => setQuotaChangeReason(e.target.value)} placeholder="Informe o motivo para auditoria" />
             </div>
 
-            <Button onClick={handleUpdateQuota} disabled={savingQuota || quotaChangeReason.trim().length < 3} className="w-full gradient-primary text-primary-foreground">
+            <Button onClick={handleUpdateQuota} disabled={savingQuota || quotaChangeReason.trim().length < 3 || (!!quotaSpecificDate && !selectedQuotaAvailability)} className="w-full gradient-primary text-primary-foreground">
               {savingQuota && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Salvar Alterações
             </Button>
