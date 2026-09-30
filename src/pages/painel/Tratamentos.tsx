@@ -86,6 +86,14 @@ interface TreatmentCycle {
   paciente_nome?: string;
 }
 
+// Older app versions marked a cycle "concluido" as soon as its planned
+// sessions were recorded. A real clinical discharge is stored separately as
+// "finalizado_alta", so keep these legacy full cycles actionable until the
+// professional explicitly records the discharge or requests an extension.
+function isLegacyCycleAwaitingDischarge(cycle: Pick<TreatmentCycle, "status" | "sessions_done" | "total_sessions">) {
+  return cycle.status === "concluido" && cycle.total_sessions > 0 && cycle.sessions_done >= cycle.total_sessions;
+}
+
 interface TreatmentSession {
   id: string;
   cycle_id: string;
@@ -300,7 +308,7 @@ const Tratamentos: React.FC = () => {
     createOpen,
     createPatientId: createOpen ? newCycle.patient_id || null : null,
     cyclePatientId:
-      selectedCycle?.status === "em_andamento" && !selectedCycle.pts_id && (user?.role === "profissional" || can("tratamento", "can_delete"))
+      selectedCycle && (selectedCycle.status === "em_andamento" || isLegacyCycleAwaitingDischarge(selectedCycle)) && !selectedCycle.pts_id && (user?.role === "profissional" || can("tratamento", "can_delete"))
         ? selectedCycle.patient_id
         : null,
     linkedPtsId: selectedCycle?.pts_id || null,
@@ -2156,6 +2164,8 @@ const Tratamentos: React.FC = () => {
   }
 
   if (selectedCycle) {
+    const awaitingManualDischarge = isLegacyCycleAwaitingDischarge(selectedCycle);
+    const cycleIsClinicallyActive = selectedCycle.status === "em_andamento" || awaitingManualDischarge;
     const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
     const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
     const unidade = unidades.find((u) => u.id === selectedCycle.unit_id);
@@ -2179,13 +2189,13 @@ const Tratamentos: React.FC = () => {
               variant="outline"
               onClick={handleCorrigirDatasInvalidas}
               disabled={corrigindoDatasInvalidas || agendandoCiclo}
-              className={!canAgendarSessao || selectedCycle.status !== "em_andamento" || pendingCount === 0 ? "ml-auto" : ""}
+              className={!canAgendarSessao || !cycleIsClinicallyActive || pendingCount === 0 ? "ml-auto" : ""}
             >
               {corrigindoDatasInvalidas && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Verificar datas inválidas
             </Button>
           )}
-          {canAgendarSessao && selectedCycle.status === "em_andamento" && pendingCount > 0 && (
+          {canAgendarSessao && cycleIsClinicallyActive && pendingCount > 0 && (
             <Button
               size="sm"
               onClick={handleAgendarCicloCompleto}
@@ -2223,8 +2233,8 @@ const Tratamentos: React.FC = () => {
                 <h2 className="text-lg font-bold text-foreground">{selectedCycle.treatment_type}</h2>
                 <p className="text-sm text-muted-foreground">{selectedCycle.specialty}</p>
               </div>
-              <Badge className={cn("border", statusColors[selectedCycle.status])}>
-                {statusLabels[selectedCycle.status]}
+              <Badge className={cn("border", awaitingManualDischarge ? "bg-warning/15 text-warning border-warning/30" : statusColors[selectedCycle.status])}>
+                {awaitingManualDischarge ? "Alta pendente" : statusLabels[selectedCycle.status]}
               </Badge>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -2325,7 +2335,7 @@ const Tratamentos: React.FC = () => {
             </div>
 
             <div className="flex gap-2 flex-wrap pt-2">
-              {selectedCycle.status === "em_andamento" && (isProfissional || canManageFull) && (
+              {cycleIsClinicallyActive && (isProfissional || canManageFull) && (
                 <>
                   <Button
                     size="sm"
@@ -2462,7 +2472,7 @@ const Tratamentos: React.FC = () => {
               )}
             </CardContent>
           </Card>
-        ) : selectedCycle.status === "em_andamento" && (isProfissional || canManageFull) ? (
+        ) : cycleIsClinicallyActive && (isProfissional || canManageFull) ? (
           <Card className="shadow-card border-0 border-dashed border">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -2500,7 +2510,7 @@ const Tratamentos: React.FC = () => {
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-foreground">Sessões</h3>
-              {canControlSessions && selectedCycle.status === "em_andamento" && (
+              {canControlSessions && cycleIsClinicallyActive && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -2520,7 +2530,7 @@ const Tratamentos: React.FC = () => {
                   const isInconsistent = integrity.kind === "possivel_sem_vinculo" || integrity.kind === "appointment_id_inexistente" || integrity.kind === "vinculo_divergente";
                   const effectiveStatus = isAgendada ? "agendada" : isPendente ? "pendente_agendamento" : s.status;
                   const effectiveIsPendente = isPendente;
-                  const canRemarcarThis = canAgendarSessao && isAgendada && selectedCycle.status === "em_andamento";
+                  const canRemarcarThis = canAgendarSessao && isAgendada && cycleIsClinicallyActive;
                   const isRealizada = s.status === "realizada";
 
                   return (
@@ -2561,7 +2571,7 @@ const Tratamentos: React.FC = () => {
                         <Badge className={cn("text-xs shrink-0", isInconsistent ? "bg-warning/15 text-warning border-warning/30" : sessionStatusColors[effectiveStatus])}>
                           {isInconsistent ? "Revisão necessária" : sessionStatusLabels[effectiveStatus] || effectiveStatus}
                         </Badge>
-                        {canAgendarSessao && effectiveIsPendente && selectedCycle.status === "em_andamento" && (
+                        {canAgendarSessao && effectiveIsPendente && cycleIsClinicallyActive && (
                           <div className="flex gap-1 shrink-0">
                             <Button
                               size="sm"
@@ -2610,7 +2620,7 @@ const Tratamentos: React.FC = () => {
                             <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
                           </Button>
                         )}
-                        {canAgendarSessao && isAgendada && s.appointment_id && selectedCycle.status === "em_andamento" && (
+                        {canAgendarSessao && isAgendada && s.appointment_id && cycleIsClinicallyActive && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -3440,6 +3450,7 @@ const Tratamentos: React.FC = () => {
           </div>
           <div className="space-y-2">
             {paginatedCycles.map((cycle) => {
+              const awaitingManualDischarge = isLegacyCycleAwaitingDischarge(cycle);
               const pac = pacientesMap.get(cycle.patient_id);
               const prof = funcionariosMap.get(cycle.professional_id);
               const progressPct =
@@ -3491,8 +3502,8 @@ const Tratamentos: React.FC = () => {
                           })}
                         </p>
                       </div>
-                      <Badge className={cn("border text-xs", statusColors[cycle.status])}>
-                        {statusLabels[cycle.status]}
+                      <Badge className={cn("border text-xs", awaitingManualDischarge ? "bg-warning/15 text-warning border-warning/30" : statusColors[cycle.status])}>
+                        {awaitingManualDischarge ? "Alta pendente" : statusLabels[cycle.status]}
                       </Badge>
                       {(user?.role === "master" || user?.role === "profissional") && (
                         <Button
