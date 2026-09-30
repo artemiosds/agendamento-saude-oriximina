@@ -2364,7 +2364,10 @@ const Agenda: React.FC = () => {
   );
   const editTimeAllowed = !!editAg
     && isTimeAfterSchedulingCutoff(editAg.hora, editAg.data, todayLocalStr(), nowMinutesInBrazil())
-    && isAppointmentTimeSelectable(editAg.hora, editAvailableSlots, editTurnWindowsWithCapacity);
+    && (isAppointmentTimeSelectable(editAg.hora, editAvailableSlots, editTurnWindowsWithCapacity)
+      // Master/coordinator can use the manual override shown in this editor;
+      // the authoritative RPC below still checks capacity and requires confirmation.
+      || (user && ["master", "coordenador"].includes(user.role)));
   const editScheduleChanged = !!originalEditAppointment && !!editAg && (
     originalEditAppointment.data !== editAg.data
     || originalEditAppointment.hora !== editAg.hora
