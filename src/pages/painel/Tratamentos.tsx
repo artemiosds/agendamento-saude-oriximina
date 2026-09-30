@@ -52,6 +52,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
 import { autoFixInvalidTreatmentSessions } from "@/lib/treatmentSessionAutoFix";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
+import { AltaTratamentoDialog } from "@/components/tratamentos/AltaTratamentoDialog";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { ResumoAgendamentoCiclo, type ResumoSessaoItem } from "@/components/ResumoAgendamentoCiclo";
 import { CalendarCheck } from "lucide-react";
@@ -60,6 +61,7 @@ import { createRequestGeneration, isRequestCurrent } from "@/lib/requestGenerati
 import { useTreatmentPtsData, type TreatmentPtsRecord } from "@/hooks/useTreatmentPtsData";
 import { resolveTreatmentSessionIntegrity, type TreatmentAppointmentSnapshot } from "@/lib/treatmentSessionIntegrity";
 import type { Agendamento } from "@/types";
+import type { TreatmentDischargeResult } from "@/services/treatmentDischargeService";
 
 interface TreatmentCycle {
   id: string;
@@ -337,9 +339,6 @@ const Tratamentos: React.FC = () => {
   });
 
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
-  const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
-  const [dischargeFutureCount, setDischargeFutureCount] = useState(0);
-  const [dischargeLoading, setDischargeLoading] = useState(false);
 
   const canManageFull = can('tratamento', 'can_delete');
   const isProfissional = user?.role === "profissional";
@@ -1898,133 +1897,33 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  const loadDischargeFutureCount = async () => {
-    if (!selectedCycle || !user) return;
-    const today = new Date().toISOString().split("T")[0];
-    const { count } = await supabase
-      .from("agendamentos")
-      .select("id", { count: "exact", head: true })
-      .eq("paciente_id", selectedCycle.patient_id)
-      .eq("profissional_id", user.id)
-      .gt("data", today)
-      .not("status", "in", '("cancelado","falta","remarcado")');
-    setDischargeFutureCount(count || 0);
-  };
-
-  const handleDischarge = async () => {
-    if (!selectedCycle || !dischargeForm.reason) {
-      toast.error("Informe o motivo da alta.");
-      return;
-    }
-    setDischargeLoading(true);
-    try {
-      // 1. Register discharge
-      await supabase.from("patient_discharges").insert({
-        cycle_id: selectedCycle.id,
-        patient_id: selectedCycle.patient_id,
-        professional_id: user?.id || "",
-        discharge_date: new Date().toISOString().split("T")[0],
-        reason: dischargeForm.reason,
-        final_notes: dischargeForm.final_notes,
-      });
-
-      // 2. Update cycle status
-      await supabase.from("treatment_cycles").update({ status: "finalizado_alta" }).eq("id", selectedCycle.id);
-
-      // 3. REMOVER (não cancelar) sessões futuras não realizadas deste ciclo
-      // Alta clínica não é cancelamento — sessões futuras são excluídas para
-      // não inflarem o relatório de cancelamentos e liberarem vagas na agenda.
-      const today = new Date().toISOString().split("T")[0];
-
-      // 3a. Buscar sessões futuras pendentes/agendadas do ciclo (preserva realizadas/faltas)
-      const { data: futureSessions } = await supabase
-        .from("treatment_sessions")
-        .select("id, appointment_id, scheduled_date, status")
-        .eq("cycle_id", selectedCycle.id)
-        .in("status", ["pendente_agendamento", "agendada"]);
-
-      const sessionIds = (futureSessions || []).map((s: any) => s.id);
-      const linkedApptIds = (futureSessions || [])
-        .map((s: any) => s.appointment_id)
-        .filter((id: any) => !!id);
-
-      // 3b. Buscar agendamentos futuros (incluindo hoje) do paciente com este profissional ainda ativos
-      const { data: futureAppts } = await supabase
-        .from("agendamentos")
-        .select("id, data, hora")
-        .eq("paciente_id", selectedCycle.patient_id)
-        .eq("profissional_id", user?.id || "")
-        .gte("data", today)
-        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido","concluido")');
-
-      const apptIdsToDelete = Array.from(
-        new Set([...(linkedApptIds as string[]), ...((futureAppts || []).map((a: any) => a.id))])
-      );
-
-      // 3c. Excluir sessões futuras (não realizadas) do ciclo
-      if (sessionIds.length > 0) {
-        await supabase.from("treatment_sessions").delete().in("id", sessionIds);
-      }
-
-      // 3d. Excluir agendamentos futuros vinculados (libera vagas na agenda)
-      if (apptIdsToDelete.length > 0) {
-        await supabase.from("agendamentos").delete().in("id", apptIdsToDelete);
-      }
-
-      // 3e. Remoção defensiva de duplicatas remanescentes (mesmo paciente+profissional+data+hora)
-      const { data: remaining } = await supabase
-        .from("agendamentos")
-        .select("id, data, hora, status, criado_em")
-        .eq("paciente_id", selectedCycle.patient_id)
-        .eq("profissional_id", user?.id || "")
-        .gte("data", today)
-        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido","concluido")')
-        .order("criado_em", { ascending: true });
-
-      const dupIds: string[] = [];
-      const seen = new Set<string>();
-      (remaining || []).forEach((a: any) => {
-        const key = `${a.data}|${a.hora}`;
-        if (seen.has(key)) dupIds.push(a.id);
-        else seen.add(key);
-      });
-      if (dupIds.length > 0) {
-        await supabase.from("agendamentos").delete().in("id", dupIds);
-      }
-
-      const removedCount = apptIdsToDelete.length;
-      const removedSessions = sessionIds.length;
-
-      await logAction({
-        acao: "alta_paciente",
-        entidade: "treatment_cycle",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: {
-          paciente: selectedCycle.patient_id,
-          motivo: dischargeForm.reason,
-          sessoes_futuras_removidas: removedSessions,
-          agendamentos_futuros_removidos: removedCount,
-          observacao: "Removidas por alta clínica (não contam como cancelamento)",
-        },
-      });
-
-      toast.success(
-        removedCount > 0 || removedSessions > 0
-          ? `Alta realizada. ${removedSessions} sessão(ões) e ${removedCount} agendamento(s) futuro(s) removido(s) da agenda.`
-          : "Alta registrada com sucesso!"
-      );
-      setDischargeOpen(false);
-      setDischargeForm({ reason: "", final_notes: "" });
-      setDischargeFutureCount(0);
-      loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao registrar alta: " + err.message);
-    } finally {
-      setDischargeLoading(false);
-    }
+  const handleDischargeSuccess = async (
+    result: TreatmentDischargeResult,
+    details: { type: string; reason: string },
+  ) => {
+    if (!selectedCycle) return;
+    void logAction({
+      acao: "alta_paciente",
+      entidade: "treatment_cycle",
+      entidadeId: selectedCycle.id,
+      modulo: "tratamentos",
+      user,
+      detalhes: {
+        paciente: selectedCycle.patient_id,
+        tipo_alta: details.type,
+        motivo: details.reason,
+        sessoes_futuras_removidas: result.removed_sessions,
+        agendamentos_futuros_removidos: result.removed_appointments,
+        observacao: "Alta manual registrada de forma transacional.",
+      },
+    }).catch((error) => console.error("Falha ao registrar auditoria da alta:", error));
+    toast.success(
+      result.removed_sessions > 0 || result.removed_appointments > 0
+        ? `Alta realizada. ${result.removed_sessions} sessão(ões) e ${result.removed_appointments} agendamento(s) futuro(s) do ciclo removido(s).`
+        : "Alta registrada com sucesso!",
+    );
+    setSelectedCycle({ ...selectedCycle, status: "finalizado_alta" });
+    await loadData(true);
   };
 
   const handleSendToQueue = async (cycle: TreatmentCycle) => {
@@ -2165,7 +2064,8 @@ const Tratamentos: React.FC = () => {
 
   if (selectedCycle) {
     const awaitingManualDischarge = isLegacyCycleAwaitingDischarge(selectedCycle);
-    const cycleIsClinicallyActive = selectedCycle.status === "em_andamento" || awaitingManualDischarge;
+    const cycleIsClinicallyActive = ["em_andamento", "ativo"].includes(selectedCycle.status) || awaitingManualDischarge;
+    const canDischargeSelectedCycle = canManageFull || (isProfissional && selectedCycle.professional_id === user?.id);
     const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
     const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
     const unidade = unidades.find((u) => u.id === selectedCycle.unit_id);
@@ -2356,20 +2256,16 @@ const Tratamentos: React.FC = () => {
                   >
                     <RotateCcw className="w-3.5 h-3.5 mr-1" /> Solicitar Extensão
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-destructive text-destructive"
-                    onClick={() => {
-                      setDischargeForm({ reason: "", final_notes: "" });
-                      setDischargeFutureCount(0);
-                      setDischargeOpen(true);
-                      // load count async
-                      setTimeout(() => loadDischargeFutureCount(), 0);
-                    }}
-                  >
-                    <CheckCircle className="w-3.5 h-3.5 mr-1" /> Dar Alta
-                  </Button>
+                  {canDischargeSelectedCycle && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-destructive text-destructive"
+                      onClick={() => setDischargeOpen(true)}
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 mr-1" /> Dar Alta
+                    </Button>
+                  )}
                 </>
               )}
               {selectedCycle.status === "finalizado_alta" && canManageFull && (
@@ -3052,53 +2948,13 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={dischargeOpen} onOpenChange={setDischargeOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Dar Alta</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              {dischargeFutureCount > 0 && (
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30">
-                  <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
-                  <p className="text-sm text-warning">
-                    Este paciente possui <strong>{dischargeFutureCount}</strong> agendamento(s) futuro(s) com você.
-                    Ao confirmar a alta, essas sessões serão <strong>removidas da agenda</strong> e <strong>não serão contabilizadas como cancelamento</strong>.
-                    <br />
-                    <span className="text-xs opacity-80">Sessões já realizadas, faltas e agendamentos com outros profissionais não serão afetados.</span>
-                  </p>
-                </div>
-              )}
-              <div>
-                <Label>Motivo da alta *</Label>
-                <Input
-                  value={dischargeForm.reason}
-                  onChange={(e) => setDischargeForm((p) => ({ ...p, reason: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Observações finais</Label>
-                <Textarea
-                  value={dischargeForm.final_notes}
-                  onChange={(e) => setDischargeForm((p) => ({ ...p, final_notes: e.target.value }))}
-                  rows={3}
-                />
-              </div>
-              <Button
-                onClick={handleDischarge}
-                className="w-full"
-                variant="destructive"
-                disabled={!dischargeForm.reason || dischargeLoading}
-              >
-                {dischargeLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Confirmar Alta
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                Após a alta, você poderá encaminhar o paciente para a fila de espera.
-              </p>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <AltaTratamentoDialog
+          open={dischargeOpen}
+          onOpenChange={setDischargeOpen}
+          cycle={selectedCycle}
+          patientName={pacientes.find((p) => p.id === selectedCycle?.patient_id)?.nome || selectedCycle?.paciente_nome || "Paciente"}
+          onSuccess={handleDischargeSuccess}
+        />
 
         <ModalAgendarSessao
           open={!!agendarSessaoTarget}

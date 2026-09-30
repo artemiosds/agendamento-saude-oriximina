@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
+import { AltaTratamentoDialog } from "@/components/tratamentos/AltaTratamentoDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,6 +62,7 @@ import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
 import { Lock, FileDown } from "lucide-react";
+import type { TreatmentDischargeResult } from "@/services/treatmentDischargeService";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
@@ -748,6 +750,39 @@ const ProntuarioPage: React.FC = () => {
   interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
   interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
+  const [dischargeCycleOpen, setDischargeCycleOpen] = useState(false);
+  const canDischargeCycle = Boolean(sessaoCycle && (
+    can("tratamento", "can_delete") ||
+    (isProfissional && sessaoCycle.professional_id === user?.id)
+  ));
+
+  const handleDischargeCycleSuccess = async (
+    result: TreatmentDischargeResult,
+    details: { type: string; reason: string },
+  ) => {
+    if (!sessaoCycle) return;
+    void logAction({
+      acao: "alta_paciente",
+      entidade: "treatment_cycle",
+      entidadeId: sessaoCycle.id,
+      modulo: "tratamentos",
+      user,
+      detalhes: {
+        paciente: sessaoCycle.patient_id,
+        tipo_alta: details.type,
+        motivo: details.reason,
+        sessoes_futuras_removidas: result.removed_sessions,
+        agendamentos_futuros_removidos: result.removed_appointments,
+        origem: "prontuario",
+      },
+    }).catch((error) => console.error("Falha ao registrar auditoria da alta:", error));
+    setSessaoCycle({ ...sessaoCycle, status: "finalizado_alta" });
+    setSessaoCycleSessions((current) => current.filter((session) =>
+      session.scheduled_date < todayLocalStr() || !["pendente_agendamento", "agendada"].includes(session.status)
+    ));
+    void refreshAgendamentos();
+    toast.success("Alta registrada com sucesso.");
+  };
 
   const formProfessional = useMemo(
     () => funcionarios.find((f) => f.id === form.profissional_id),
@@ -2599,56 +2634,24 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
 
-    // Side-effects secundários em background (log e alta automática)
-    void (async () => {
-      try {
-        const tasks: Array<Promise<any> | any> = [
-          logAction({
-            acao: "atendimento_finalizado",
-            entidade: "atendimento",
-            entidadeId: agendamentoId,
-            modulo: "atendimento",
-            user,
-            detalhes: {
-              paciente_nome: form.paciente_nome,
-              paciente_cpf: pac?.cpf || "",
-              hora_inicio: activeAtendimento?.horaInicio || "",
-              hora_fim: horaFim,
-              duracao_minutos: Math.max(0, duracaoMinutos),
-              unidade: user?.unidadeId || "",
-              sala: user?.salaId || "",
-            },
-          }),
-        ];
-
-        // Auto-discharge: if cycle completed, register discharge
-        if (sessaoCycle && form.tipo_registro === 'sessao') {
-          const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
-          if (completedCount >= sessaoCycle.total_sessions) {
-            tasks.push(
-              (async () => {
-                await (supabase as any).from('treatment_cycles').update({
-                  status: 'finalizado_alta',
-                  updated_at: new Date().toISOString(),
-                }).eq('id', sessaoCycle.id);
-                await (supabase as any).from('patient_discharges').insert({
-                  cycle_id: sessaoCycle.id,
-                  patient_id: form.paciente_id,
-                  professional_id: user?.id || '',
-                  reason: 'Alta automática — ciclo concluído',
-                  final_notes: 'Tratamento finalizado com todas as sessões realizadas.',
-                });
-                toast.success("🎉 Paciente recebeu alta automática — tratamento concluído!");
-              })()
-            );
-          }
-        }
-
-        await Promise.allSettled(tasks);
-      } catch (err) {
-        console.error("[Prontuario] background finalizar tasks failed:", err);
-      }
-    })();
+    // Finalizar o atendimento encerra apenas este atendimento. A alta do ciclo
+    // é uma decisão clínica separada, confirmada explicitamente em "Dar Alta".
+    void logAction({
+      acao: "atendimento_finalizado",
+      entidade: "atendimento",
+      entidadeId: agendamentoId,
+      modulo: "atendimento",
+      user,
+      detalhes: {
+        paciente_nome: form.paciente_nome,
+        paciente_cpf: pac?.cpf || "",
+        hora_inicio: activeAtendimento?.horaInicio || "",
+        hora_fim: horaFim,
+        duracao_minutos: Math.max(0, duracaoMinutos),
+        unidade: user?.unidadeId || "",
+        sala: user?.salaId || "",
+      },
+    }).catch((err) => console.error("[Prontuario] Falha ao registrar auditoria do atendimento:", err));
 
     localStorage.removeItem(`timer_${agendamentoId}`);
     updateAgendamento(agendamentoId, { status: "concluido" });
@@ -4055,9 +4058,16 @@ const ProntuarioPage: React.FC = () => {
                           <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
                         </h4>
                         {sessaoCycle && (
-                          <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-[10px] h-5">
-                            {sessaoCycle.status === 'em_andamento' ? 'Em andamento' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={['em_andamento', 'ativo'].includes(sessaoCycle.status) ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-[10px] h-5">
+                              {['em_andamento', 'ativo'].includes(sessaoCycle.status) ? 'Em andamento' : sessaoCycle.status === 'concluido' ? 'Alta pendente' : sessaoCycle.status === 'finalizado_alta' ? 'Finalizado (Alta)' : sessaoCycle.status}
+                            </Badge>
+                            {canDischargeCycle && (['em_andamento', 'ativo'].includes(sessaoCycle.status) || (sessaoCycle.status === 'concluido' && sessaoCycle.total_sessions > 0 && sessaoCycle.sessions_done >= sessaoCycle.total_sessions)) && (
+                              <Button type="button" size="sm" variant="outline" className="h-7 text-xs border-destructive text-destructive" onClick={() => setDischargeCycleOpen(true)}>
+                                <CheckCircle className="w-3.5 h-3.5 mr-1" /> Dar Alta
+                              </Button>
+                            )}
+                          </div>
                         )}
                       </div>
                       
@@ -5133,7 +5143,7 @@ const ProntuarioPage: React.FC = () => {
                   <Progress value={progressPercent} className="h-2" />
                   <div className="flex items-center gap-2">
                     {remaining === 0 ? (
-                      <Badge className="bg-green-500/10 text-green-700 border-green-500/30">✅ Tratamento concluído</Badge>
+                      <Badge className="bg-info/10 text-info border-info/30">Sessões previstas registradas</Badge>
                     ) : remaining <= 2 ? (
                       <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
                         <AlertTriangle className="w-3 h-3 mr-1" />
@@ -5143,6 +5153,9 @@ const ProntuarioPage: React.FC = () => {
                       <Badge variant="secondary">Faltam {remaining} sessões</Badge>
                     )}
                   </div>
+                  {remaining === 0 && sessaoCycle.status !== 'finalizado_alta' && (
+                    <p className="text-xs text-muted-foreground">Avalie a evolução e confirme “Dar Alta” somente se o tratamento estiver encerrado.</p>
+                  )}
                 </div>
               );
             })()}
@@ -5542,6 +5555,14 @@ const ProntuarioPage: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AltaTratamentoDialog
+        open={dischargeCycleOpen}
+        onOpenChange={setDischargeCycleOpen}
+        cycle={sessaoCycle}
+        patientName={form.paciente_nome || "Paciente"}
+        onSuccess={handleDischargeCycleSuccess}
+      />
 
       {loading ? (
         <div className="space-y-3" aria-label="Carregando prontuários">

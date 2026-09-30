@@ -1655,6 +1655,7 @@ export type Database = {
           patient_id: string
           professional_id: string
           reason: string
+          tipo_alta: Database["public"]["Enums"]["tipo_alta"]
         }
         Insert: {
           created_at?: string
@@ -1666,6 +1667,7 @@ export type Database = {
           patient_id: string
           professional_id: string
           reason?: string
+          tipo_alta?: Database["public"]["Enums"]["tipo_alta"]
         }
         Update: {
           created_at?: string
@@ -1677,6 +1679,7 @@ export type Database = {
           patient_id?: string
           professional_id?: string
           reason?: string
+          tipo_alta?: Database["public"]["Enums"]["tipo_alta"]
         }
         Relationships: [
           {
@@ -4661,9 +4664,18 @@ export type Database = {
         }
         Returns: Json
       }
+      register_treatment_discharge: {
+        Args: {
+          p_cycle_id: string
+          p_final_notes?: string
+          p_reason: string
+          p_tipo_alta: Database["public"]["Enums"]["tipo_alta"]
+        }
+        Returns: Json
+      }
     }
     Enums: {
-      [_ in never]: never
+      tipo_alta: "conclusao" | "falta" | "outro"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4790,6 +4802,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      tipo_alta: ["conclusao", "falta", "outro"],
+    },
   },
 } as const
