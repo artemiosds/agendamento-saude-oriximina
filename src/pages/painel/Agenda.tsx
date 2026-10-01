@@ -66,7 +66,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Badge } from "@/components/ui/badge";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
-import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
+import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, nowTimeBrazilStr, todayLocalStr } from "@/lib/utils";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -2213,13 +2213,13 @@ const Agenda: React.FC = () => {
     }
 
     const now = new Date();
-    const horaInicio = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const horaInicio = nowTimeBrazilStr(now);
     const pac = pacientes.find((p) => p.id === ag.pacienteId);
     try {
       // Persist the attendance before opening the chart so its finalization
       // cannot race an attendance row that is still being inserted.
       await addAtendimento({
-        id: `at${Date.now()}`,
+        id: crypto.randomUUID(),
         agendamentoId: ag.id,
         pacienteId: ag.pacienteId,
         pacienteNome: ag.pacienteNome,
