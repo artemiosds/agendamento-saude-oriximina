@@ -1847,6 +1847,29 @@ const ProntuarioPage: React.FC = () => {
     });
   };
 
+  const buildProcedureLinks = async (
+    prontuarioId: string,
+    ids: string[],
+    cidsByProc: Record<string, string[]>,
+    detailsByProc: Record<string, { quantidade: number; observacao: string }>,
+  ): Promise<ProntuarioProcedureLink[]> => {
+    const missingCodes = ids.filter((id) =>
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) &&
+      !procedimentos.some((proc) => proc.id === id),
+    );
+    const hydrated = missingCodes.length > 0
+      ? await procedureService.getSpecific({ codes: missingCodes })
+      : [];
+    const catalog = [...procedimentos, ...hydrated];
+    return ids.map((id) => ({
+      prontuario_id: prontuarioId,
+      procedimento_id: catalog.find((proc) => proc.id === id)?.uuid || id,
+      cids_selecionados: Array.from(new Set(cidsByProc[id] || [])),
+      quantidade: detailsByProc[id]?.quantidade || 1,
+      observacao: detailsByProc[id]?.observacao || "",
+    }));
+  };
+
   const handleSave = async (formOverride?: any, keepOpenForFinalization = false): Promise<boolean> => {
     // Anti-duplo-clique: bloqueia chamadas concorrentes antes mesmo de setSaving refletir.
     if (savingRef.current) {
@@ -2179,16 +2202,7 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (prontuarioId) {
-        const linksToSave: ProntuarioProcedureLink[] = spi.map((pid) => {
-          const proc = procedimentos.find((p) => p.id === pid);
-          return {
-            prontuario_id: prontuarioId,
-            procedimento_id: proc?.uuid || pid,
-            cids_selecionados: Array.from(new Set(scbp[pid] || [])),
-            quantidade: pd[pid]?.quantidade || 1,
-            observacao: pd[pid]?.observacao || "",
-          };
-        });
+        const linksToSave = await buildProcedureLinks(prontuarioId, spi, scbp, pd);
         await syncProntuarioProcedimentos(prontuarioId, linksToSave);
       }
 
@@ -2434,16 +2448,7 @@ const ProntuarioPage: React.FC = () => {
 
       // Confirma também os vínculos clínicos antes de indicar que o rascunho foi salvo.
       if (prontId) {
-        const links: ProntuarioProcedureLink[] = spi.map((pid) => {
-          const proc = procedimentos.find((p) => p.id === pid);
-          return {
-            prontuario_id: prontId,
-            procedimento_id: proc?.uuid || pid,
-            cids_selecionados: Array.from(new Set(scbp[pid] || [])),
-            quantidade: pd[pid]?.quantidade || 1,
-            observacao: pd[pid]?.observacao || "",
-          };
-        });
+        const links = await buildProcedureLinks(prontId, spi, scbp, pd);
         await syncProntuarioProcedimentos(prontId, links);
       }
       setAutosaveStatus('saved');
