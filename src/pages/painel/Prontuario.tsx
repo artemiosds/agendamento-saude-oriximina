@@ -761,7 +761,7 @@ const ProntuarioPage: React.FC = () => {
     details: { type: string; reason: string },
   ) => {
     if (!sessaoCycle) return;
-    void logAction({
+    logAction({
       acao: "alta_paciente",
       entidade: "treatment_cycle",
       entidadeId: sessaoCycle.id,
@@ -775,7 +775,7 @@ const ProntuarioPage: React.FC = () => {
         agendamentos_futuros_removidos: result.removed_appointments,
         origem: "prontuario",
       },
-    }).catch((error) => console.error("Falha ao registrar auditoria da alta:", error));
+    });
     setSessaoCycle({ ...sessaoCycle, status: "finalizado_alta" });
     setSessaoCycleSessions((current) => current.filter((session) =>
       session.scheduled_date < todayLocalStr() || !["pendente_agendamento", "agendada"].includes(session.status)
@@ -2650,7 +2650,7 @@ const ProntuarioPage: React.FC = () => {
 
     // Finalizar o atendimento encerra apenas este atendimento. A alta do ciclo
     // é uma decisão clínica separada, confirmada explicitamente em "Dar Alta".
-    void logAction({
+    logAction({
       acao: "atendimento_finalizado",
       entidade: "atendimento",
       entidadeId: agendamentoId,
@@ -2665,7 +2665,7 @@ const ProntuarioPage: React.FC = () => {
         unidade: user?.unidadeId || "",
         sala: user?.salaId || "",
       },
-    }).catch((err) => console.error("[Prontuario] Falha ao registrar auditoria do atendimento:", err));
+    });
 
     localStorage.removeItem(`timer_${agendamentoId}`);
     setActiveAtendimento(null);

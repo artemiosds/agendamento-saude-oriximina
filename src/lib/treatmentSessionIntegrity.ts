@@ -12,6 +12,7 @@ export interface TreatmentAppointmentSnapshot {
   profissional_id: string;
   unidade_id: string;
   data: string;
+  hora?: string;
   status: string;
 }
 
