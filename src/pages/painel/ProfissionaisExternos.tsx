@@ -772,71 +772,71 @@ const ProfissionaisExternos: React.FC = () => {
                   const alreadyConfigured = quotaConfiguredProfIds.has(f.id);
                   return (
                     <div key={f.id} className={`rounded-lg border p-3 transition-colors ${isSelected ? "border-primary bg-primary/5" : "border-border"}`}>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <Checkbox
                           checked={isSelected}
                           disabled={alreadyConfigured}
                           onCheckedChange={() => !alreadyConfigured && toggleProfSelection(f.id)}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-foreground">{f.nome}</p>
-                          <p className="text-xs text-muted-foreground">{f.profissao || f.cargo || ""}</p>
+                          <p className="font-medium text-sm text-foreground break-words">{f.nome}</p>
+                          <p className="text-xs text-muted-foreground break-words">{f.profissao || f.cargo || ""}</p>
                         </div>
                         {alreadyConfigured && (
                           <Badge variant="secondary" className="text-[10px] shrink-0">Quota já cadastrada</Badge>
                         )}
-                        {isSelected && (
-                          <div className="flex flex-col gap-2 mt-2 pt-2 border-t w-full">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1">
-                                <Label className="text-xs">Vagas:</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={vagasPorProf[f.id]?.vagas || 5}
-                                  onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], vagas: Math.max(1, Number(e.target.value)) } }))}
-                                  className="h-8 text-center text-sm"
-                                />
-                              </div>
-                              <div className="flex-1">
-                                <Label className="text-xs">Turno:</Label>
-                                <Select 
-                                  value={vagasPorProf[f.id]?.turno || "manha"} 
-                                  onValueChange={v => setVagasPorProf(prev => ({ ...prev, [f.id]: { ...prev[f.id], turno: v } }))}
-                                >
-                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="manha">Manhã</SelectItem>
-                                    <SelectItem value="tarde">Tarde</SelectItem>
-                                    <SelectItem value="noite">Noite</SelectItem>
-                                    <SelectItem value="integral">Integral</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
+                      </div>
+                      {isSelected && (
+                        <div className="mt-3 border-t pt-3 space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="min-w-0">
+                              <Label className="text-xs">Vagas:</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={vagasPorProf[f.id]?.vagas || 5}
+                                onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], vagas: Math.max(1, Number(e.target.value)) } }))}
+                                className="h-8 text-center text-sm"
+                              />
                             </div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1">
-                                <Label className="text-xs">Início:</Label>
-                                <Input
-                                  type="time"
-                                  value={vagasPorProf[f.id]?.horario_inicio || "07:30"}
-                                  onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], horario_inicio: e.target.value } }))}
-                                  className="h-8 text-sm"
-                                />
-                              </div>
-                              <div className="flex-1">
-                                <Label className="text-xs">Fim:</Label>
-                                <Input
-                                  type="time"
-                                  value={vagasPorProf[f.id]?.horario_fim || "11:30"}
-                                  onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], horario_fim: e.target.value } }))}
-                                  className="h-8 text-sm"
-                                />
-                              </div>
+                            <div className="min-w-0">
+                              <Label className="text-xs">Turno:</Label>
+                              <Select
+                                value={vagasPorProf[f.id]?.turno || "manha"}
+                                onValueChange={v => setVagasPorProf(prev => ({ ...prev, [f.id]: { ...prev[f.id], turno: v } }))}
+                              >
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="manha">Manhã</SelectItem>
+                                  <SelectItem value="tarde">Tarde</SelectItem>
+                                  <SelectItem value="noite">Noite</SelectItem>
+                                  <SelectItem value="integral">Integral</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           </div>
-                        )}
-                      </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="min-w-0">
+                              <Label className="text-xs">Início:</Label>
+                              <Input
+                                type="time"
+                                value={vagasPorProf[f.id]?.horario_inicio || "07:30"}
+                                onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], horario_inicio: e.target.value } }))}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <Label className="text-xs">Fim:</Label>
+                              <Input
+                                type="time"
+                                value={vagasPorProf[f.id]?.horario_fim || "11:30"}
+                                onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], horario_fim: e.target.value } }))}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1078,11 +1078,12 @@ const ProfissionaisExternos: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label>Motivo da alteração</Label>
-              <Input value={quotaChangeReason} onChange={e => setQuotaChangeReason(e.target.value)} placeholder="Informe o motivo para auditoria" />
+              <Label htmlFor="quota-change-reason">Motivo da alteração *</Label>
+              <Input id="quota-change-reason" value={quotaChangeReason} onChange={e => setQuotaChangeReason(e.target.value)} placeholder="Informe o motivo para auditoria" />
+              <p className="text-xs text-muted-foreground">Obrigatório para auditoria (mínimo de 3 caracteres).</p>
             </div>
 
-            <Button onClick={handleUpdateQuota} disabled={savingQuota || quotaChangeReason.trim().length < 3 || (!!quotaSpecificDate && !selectedQuotaAvailability)} className="w-full gradient-primary text-primary-foreground">
+            <Button onClick={handleUpdateQuota} disabled={savingQuota} className="w-full gradient-primary text-primary-foreground">
               {savingQuota && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Salvar Alterações
             </Button>
