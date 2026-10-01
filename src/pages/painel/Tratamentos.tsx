@@ -2469,7 +2469,12 @@ const Tratamentos: React.FC = () => {
                               <span className="ml-2 text-xs text-destructive font-medium">· Agendamento vinculado não encontrado — revisão necessária</span>
                             )}
                             {integrity.kind === "vinculo_divergente" && (
-                              <span className="ml-2 text-xs text-destructive font-medium">· Vínculo inconsistente — revisão necessária</span>
+                              <span className="ml-2 text-xs text-destructive font-medium">
+                                · Vínculo inconsistente — revisão necessária
+                                {integrity.appointment?.data && integrity.appointment.data !== s.scheduled_date
+                                  ? ` (Agenda: ${new Date(integrity.appointment.data + "T12:00:00").toLocaleDateString("pt-BR")} às ${integrity.appointment.hora})`
+                                  : ""}
+                              </span>
                             )}
                             {isAgendada && (
                               <span className="ml-2 text-xs text-info font-medium">· Agendada</span>
@@ -3013,7 +3018,7 @@ const Tratamentos: React.FC = () => {
             }
           }}
           mode="agendar"
-          isMaster={canControlSessions}
+          isMaster={isMaster}
         />
 
         <ModalAgendarSessao
@@ -3024,6 +3029,9 @@ const Tratamentos: React.FC = () => {
             setRemarcarBlockedMsg("");
           }}
           session={remarcarTarget}
+          currentAppointment={remarcarTarget?.appointment_id
+            ? appointmentByIdMap[remarcarTarget.appointment_id] || null
+            : null}
           cycle={selectedCycle ? {
             id: selectedCycle.id,
             patient_id: selectedCycle.patient_id,
@@ -3047,7 +3055,7 @@ const Tratamentos: React.FC = () => {
             }
           }}
           mode="remarcar"
-          isMaster={canControlSessions}
+          isMaster={isMaster}
         />
 
         {/* Dialog: Adicionar Sessão Intermediária (Master) */}

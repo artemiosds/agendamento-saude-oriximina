@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar, CalendarClock, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import { Calendar, CalendarClock, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Info } from 'lucide-react';
 import { cn, nowMinutesInBrazil, todayLocalStr, dateStrToUtcDate } from '@/lib/utils';
-import { isAppointmentTimeSelectable, isTimeAfterSchedulingCutoff } from '@/lib/appointmentTimeSelection';
+import { isAppointmentTimeSelectable, isTimeAfterSchedulingCutoff, isTimeWithinTurnWindow } from '@/lib/appointmentTimeSelection';
 import { toast } from 'sonner';
 
 interface SessionInfo {
@@ -24,6 +24,7 @@ interface ModalAgendarSessaoProps {
   open: boolean;
   onClose: () => void;
   session: SessionInfo | null;
+  currentAppointment?: { id: string; data: string; hora: string } | null;
   cycle: {
     id: string;
     patient_id: string;
@@ -50,6 +51,7 @@ interface ModalAgendarSessaoProps {
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 interface ConflictInfo {
+  id: string;
   date: string;
   profissionalId: string;
   profissionalNome: string;
@@ -60,6 +62,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   open,
   onClose,
   session,
+  currentAppointment,
   cycle,
   pacienteNome,
   profissionalNome,
@@ -103,10 +106,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       try {
         const { data } = await supabase
           .from('agendamentos')
-          .select('data, profissional_id, profissional_nome, hora')
+          .select('id, data, profissional_id, profissional_nome, hora')
           .eq('paciente_id', cycle.patient_id)
           .not('status', 'in', '("cancelado","falta","remarcado")');
         setConflicts((data || []).map((r: any) => ({
+          id: r.id,
           date: r.data,
           profissionalId: r.profissional_id,
           profissionalNome: r.profissional_nome,
@@ -169,16 +173,14 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     const hasSameProf = conflict?.sameProf && conflict.sameProf.length > 0;
     const hasOtherProf = conflict?.otherProf && conflict.otherProf.length > 0;
 
-    // Already scheduled for this session (green)
-    if (hasSameProf && session?.appointment_id && session.status === 'agendada' && dateStr === session.scheduled_date) {
+    // The current booking can be moved within its own day, even when that turn is full.
+    if (mode === 'remarcar' && session?.appointment_id && dateStr === session.scheduled_date) {
       return 'already_scheduled' as const;
     }
-    // Conflict with same professional (red)
-    if (hasSameProf) return 'conflict_same' as const;
-    // Conflict with other professional (orange)
-    if (hasOtherProf) return 'conflict_other' as const;
-    // A suggested date is clickable only if the professional has a valid slot that day.
+    // Another appointment on the day does not occupy every time in the turn.
     if (availableSet.has(dateStr)) return isSuggested ? 'suggested' as const : 'available' as const;
+    if (hasSameProf) return 'conflict_same' as const;
+    if (hasOtherProf) return 'conflict_other' as const;
     return 'unavailable' as const;
   };
 
@@ -191,15 +193,29 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     if (!selectedDate || !cycle) return [];
     return getTurnoInfo(cycle.professional_id, cycle.unit_id, selectedDate);
   }, [selectedDate, cycle, getTurnoInfo]);
-  const hasFreeTurnCapacity = turnWindows.some((turn) => turn.vagasLivresInternas > 0);
-  const canTypeTurnTime = turnWindows.length > 0 && hasFreeTurnCapacity;
+  const ownAppointment = mode === 'remarcar' && selectedDate === session?.scheduled_date
+    ? currentAppointment?.id === session?.appointment_id && currentAppointment.data === selectedDate
+      ? currentAppointment
+      : conflicts.find((conflict) => conflict.id === session?.appointment_id && conflict.date === selectedDate)
+    : undefined;
+  const selectableTurnWindows = turnWindows.filter((turn) =>
+    turn.vagasLivresInternas > 0
+      || slots.some((slot) => isTimeWithinTurnWindow(slot, [turn]))
+      || !!(ownAppointment && isTimeWithinTurnWindow(ownAppointment.hora, [turn])),
+  );
+  const canTypeTurnTime = selectableTurnWindows.length > 0;
+  const exactPatientConflict = conflicts.some((conflict) =>
+    conflict.date === selectedDate && conflict.hora.slice(0, 5) === selectedHora.slice(0, 5)
+      && conflict.id !== session?.appointment_id,
+  );
   const selectedTimeAfterCutoff = isTimeAfterSchedulingCutoff(
     selectedHora, selectedDate, todayStr, nowMinutesInBrazil(),
   );
-  const selectedTimeAllowed = selectedTimeAfterCutoff && isAppointmentTimeSelectable(
-    selectedHora, slots, canTypeTurnTime ? turnWindows : [],
+  const selectedTimeAllowed = selectedTimeAfterCutoff && !exactPatientConflict && isAppointmentTimeSelectable(
+    selectedHora, slots, selectableTurnWindows,
   );
-  const masterManualFallback = isMaster && slots.length === 0 && turnWindows.length === 0 && selectedTimeAfterCutoff;
+  const masterManualFallback = isMaster && slots.length === 0 && turnWindows.length === 0
+    && selectedTimeAfterCutoff && !exactPatientConflict;
 
   // Validation message for selected date
   const dateWarning = useMemo(() => {
@@ -207,18 +223,18 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     const conflict = conflictMap[selectedDate];
     if (!conflict) return null;
 
-    if (session?.appointment_id && session.status === 'agendada' && selectedDate === session.scheduled_date && conflict.sameProf.length > 0) {
-      const hora = conflict.sameProf[0]?.hora || '';
+    if (mode === 'remarcar' && session?.appointment_id && selectedDate === session.scheduled_date) {
+      const hora = conflict.sameProf.find((item) => item.id === session.appointment_id)?.hora || '';
       return {
-        type: 'success' as const,
-        message: `✅ Sessão já agendada para ${formatDateBR(selectedDate)}${hora ? ` às ${hora}` : ''}.`,
+        type: 'info' as const,
+        message: `Agendamento atual: ${formatDateBR(selectedDate)}${hora ? ` às ${hora}` : ''}. Escolha o novo horário dentro do turno.`,
       };
     }
 
     if (conflict.sameProf.length > 0) {
       return {
-        type: 'error' as const,
-        message: `⚠️ Este paciente já possui agendamento com este profissional em ${formatDateBR(selectedDate)}. Confirmar gerará duplicidade.`,
+        type: 'warning' as const,
+        message: `Este paciente já possui agendamento com este profissional em ${formatDateBR(selectedDate)}. Escolha um horário diferente.`,
       };
     }
 
@@ -231,7 +247,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     }
 
     return null;
-  }, [selectedDate, conflictMap, session, cycle]);
+  }, [selectedDate, conflictMap, session, cycle, mode]);
 
   const prevMonth = () => setViewMonth(p => p.month === 0 ? { year: p.year - 1, month: 11 } : { year: p.year, month: p.month - 1 });
   const nextMonth = () => setViewMonth(p => p.month === 11 ? { year: p.year + 1, month: 0 } : { year: p.year, month: p.month + 1 });
@@ -262,8 +278,6 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       setSaving(false);
     }
   };
-
-  const isAlreadyScheduled = dateWarning?.type === 'success';
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -313,7 +327,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 const { day, dateStr } = cell;
                 const status = getDayStatus(dateStr);
                 const isSelected = dateStr === selectedDate;
-                const canClick = status === 'available' || status === 'suggested';
+                const canClick = status === 'available' || status === 'suggested' || (mode === 'remarcar' && status === 'already_scheduled');
 
                 return (
                   <div key={dateStr} className="flex items-center justify-center py-0.5">
@@ -387,18 +401,17 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
             <div className={cn(
               'p-3 rounded-lg text-sm flex items-start gap-2 border',
               dateWarning.type === 'error' && 'bg-destructive/10 border-destructive/30 text-destructive',
+              dateWarning.type === 'info' && 'bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300',
               dateWarning.type === 'warning' && 'bg-orange-500/10 border-orange-500/30 text-orange-700 dark:text-orange-300',
-              dateWarning.type === 'success' && 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300',
             )}>
               {dateWarning.type === 'error' && <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
-              {dateWarning.type === 'warning' && <Info className="w-4 h-4 mt-0.5 shrink-0" />}
-              {dateWarning.type === 'success' && <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+              {(dateWarning.type === 'warning' || dateWarning.type === 'info') && <Info className="w-4 h-4 mt-0.5 shrink-0" />}
               <span>{dateWarning.message}</span>
             </div>
           )}
 
           {/* Time slots */}
-          {selectedDate && !isAlreadyScheduled && (
+          {selectedDate && (
             <div>
               <Label className="mb-2 block">Horários disponíveis em {formatDateBR(selectedDate)}:</Label>
               {slots.length === 0 ? (
@@ -414,10 +427,9 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                       onChange={(e) => setSelectedHora(e.target.value)}
                       className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                     />
-                    {selectedHora && !selectedTimeAllowed && (
-                      <p className="text-xs text-destructive">O horário deve estar dentro de um turno com vagas disponíveis.</p>
-                    )}
                   </div>
+                ) : turnWindows.length > 0 ? (
+                  <p className="text-sm text-warning">Turno sem vagas livres nesta data. Escolha outra data.</p>
                 ) : isMaster ? (
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Como Master, digite o horário manualmente:</p>
@@ -434,7 +446,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
               ) : (
                 <div className="grid grid-cols-5 gap-2">
                   {slots.map(slot => {
-                    const occupied = conflicts.some(c => c.date === selectedDate && c.profissionalId === cycle?.professional_id && c.hora === slot);
+                    const occupied = conflicts.some(c => c.date === selectedDate && c.hora.slice(0, 5) === slot.slice(0, 5) && c.id !== session?.appointment_id);
                     return (
                       <Button
                         key={slot}
@@ -469,7 +481,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 </div>
               )}
               {selectedHora && !selectedTimeAllowed && !masterManualFallback && (
-                <p className="mt-2 text-xs text-destructive">Escolha um horário disponível dentro do período configurado.</p>
+                <p className="mt-2 text-xs text-destructive">{exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Escolha um horário disponível dentro do período configurado.'}</p>
               )}
             </div>
           )}
@@ -505,8 +517,6 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
             >
               {saving ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>
-              ) : isAlreadyScheduled && mode === 'agendar' ? (
-                <><CalendarClock className="w-4 h-4 mr-2" /> Remarcar</>
               ) : (
                 <><Calendar className="w-4 h-4 mr-2" /> {mode === 'remarcar' ? 'Confirmar Remarcação' : 'Confirmar Agendamento'}</>
               )}
