@@ -4672,6 +4672,18 @@ export type Database = {
         }
         Returns: Json
       }
+      reschedule_treatment_session_manual_capacity: {
+        Args: {
+          p_check_patient_conflict: boolean
+          p_cycle_id: string
+          p_expected_appointment_id: string
+          p_expected_session_date: string
+          p_new_date: string
+          p_new_time: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       resetar_faltas_paciente: {
         Args: { p_paciente_id: string }
         Returns: undefined
@@ -4743,6 +4755,16 @@ export type Database = {
         Returns: Json
       }
       schedule_treatment_session_batch: {
+        Args: {
+          p_appointment: Json
+          p_check_patient_conflict: boolean
+          p_cycle_id: string
+          p_expected_session_date: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      schedule_treatment_session_manual_capacity: {
         Args: {
           p_appointment: Json
           p_check_patient_conflict: boolean
@@ -4851,6 +4873,17 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      treatment_manual_capacity_override_matches: {
+        Args: {
+          p_appointment_id: string
+          p_origin: string
+          p_patient_id: string
+          p_professional_id: string
+          p_type: string
+          p_unit_id: string
+        }
+        Returns: boolean
+      }
       unaccent: { Args: { "": string }; Returns: string }
       unschedule_treatment_session: {
         Args: {
