@@ -206,7 +206,7 @@ interface OperacionalContextType {
   addBloqueio: (b: Omit<BloqueioAgenda, "id">) => Promise<void>;
   updateBloqueio: (id: string, data: Partial<BloqueioAgenda>) => Promise<void>;
   deleteBloqueio: (id: string) => Promise<void>;
-  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean, minimumLeadMinutes?: number) => string[];
+  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean, minimumLeadMinutes?: number | null) => string[];
   getTurnoInfo: (profissionalId: string, unidadeId: string, date: string) => TurnoInfoResult[];
   getAvailableDates: (profissionalId: string, unidadeId: string, isPublic?: boolean) => string[];
   getNextAvailableSlots: (
