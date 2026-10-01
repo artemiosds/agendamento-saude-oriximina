@@ -5,7 +5,7 @@ import { compareClinicalAndLegalPriority, hasTriageTea, legalPriorityKey } from 
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
-import { isAppointmentTimeSelectable, isTimeAfterSchedulingCutoff, isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
+import { isAppointmentTimeSelectable, isMasterCapacityOverrideReason, isTimeAfterSchedulingCutoff, isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { isSameDay } from "date-fns";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useAgendamentos } from "@/contexts/AgendamentosContext";
@@ -66,7 +66,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Badge } from "@/components/ui/badge";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
-import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
+import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, nowMinutesInBrazilPrecise, todayLocalStr } from "@/lib/utils";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -759,11 +759,11 @@ const Agenda: React.FC = () => {
   );
   const newAgHasFreeTurn = newAgAvailableTurnWindows.length > 0;
   const newAgTimeAfterCutoff = isTimeAfterSchedulingCutoff(
-    newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazil(),
+    newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazilPrecise(), 30, true,
   );
   const newAgTimeAllowed = newAgTimeAfterCutoff && (
     (isTurnoMode
-      ? isTimeWithinTurnWindow(newAg.hora, newAgAvailableTurnWindows)
+      ? isTimeWithinTurnWindow(newAg.hora, isMaster ? newAgTurnoInfo : newAgAvailableTurnWindows)
       : newAgSlots.includes(newAg.hora))
     || (isMaster && newAgSlots.length === 0 && newAgTurnoInfo.length === 0)
   );
@@ -1237,6 +1237,10 @@ const Agenda: React.FC = () => {
   };
 
   const executarCreate = async () => {
+    if (!isTimeAfterSchedulingCutoff(newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazilPrecise(), 30, true)) {
+      toast.error("Para hoje, escolha um horário com pelo menos 30 minutos de antecedência.");
+      return;
+    }
     try {
       await loadAgendaRange(selectedDate, selectedDate);
     } catch {
@@ -1336,18 +1340,23 @@ const Agenda: React.FC = () => {
     }
 
     // Server-side slot availability check
-    // Apenas MASTER pode forçar encaixe quando o limite de vagas está atingido/excedido.
-    // RECEPÇÃO e GESTÃO ficam bloqueados conforme regra de negócio.
+    // Apenas MASTER pode forçar capacidade; indisponibilidade, bloqueios e
+    // horários fora da grade continuam sendo restrições obrigatórias.
     const canOverride = user?.role === "master";
     let masterOverrideReason = "";
     
     try {
-      const { data: slotCheck } = await supabase.rpc("check_internal_slot_availability" as any, {
+      const { data: slotCheck, error: slotCheckError } = await supabase.rpc("check_internal_slot_availability" as any, {
         p_profissional_id: newAg.profissionalId,
         p_unidade_id: prof.unidadeId,
         p_data: selectedDate,
         p_hora: newAg.hora,
       } as any);
+      if (slotCheckError) {
+        console.error("Slot check error:", slotCheckError);
+        toast.error("Não foi possível confirmar a disponibilidade. Tente novamente.");
+        return;
+      }
       if (slotCheck && typeof slotCheck === "object" && "available" in slotCheck && !slotCheck.available) {
         const reason = (slotCheck as any).reason;
         const reasonMsg =
@@ -1362,7 +1371,7 @@ const Agenda: React.FC = () => {
           toast.error(reasonMsg);
           return;
         }
-        if (reason !== "external_reservation") {
+        if (!isMasterCapacityOverrideReason(reason)) {
           toast.error(reasonMsg);
           return;
         }
@@ -1376,6 +1385,8 @@ const Agenda: React.FC = () => {
       }
     } catch (err) {
       console.error("Slot check error:", err);
+      toast.error("Não foi possível confirmar a disponibilidade. Tente novamente.");
+      return;
     }
 
     const unidade = unidades.find((u) => u.id === prof.unidadeId);
@@ -2866,7 +2877,7 @@ const Agenda: React.FC = () => {
                             </div>
                           );
                         })}
-                        {newAg.hora && newAgTurnoInfo.find(t => t.horaInicio === newAg.hora)?.lotado && isMaster && (
+                        {newAg.hora && newAgTurnoInfo.some(t => newAg.hora >= t.horaInicio && newAg.hora < t.horaFim && t.vagasLivresInternas <= 0) && isMaster && (
                           <div className="mt-2 px-3 py-2 rounded-lg border border-warning/40 bg-warning/10 text-xs text-warning">
                             ⚠️ Atenção: Turno lotado. Você está agendando como MASTER (encaixe forçado).
                           </div>
@@ -2876,9 +2887,9 @@ const Agenda: React.FC = () => {
                             Todos os turnos estão lotados para esta data. Selecione outro dia.
                           </p>
                         )}
-                        {newAgHasFreeTurn && (
+                        {(newAgHasFreeTurn || isMaster) && (
                           <div className="mt-2 space-y-1">
-                            <Label htmlFor="novo-agendamento-horario-turno">Ou digite um horário dentro do período</Label>
+                            <Label htmlFor="novo-agendamento-horario-turno">{isMaster ? "Digite um horário dentro do turno (Master pode forçar vaga)" : "Ou digite um horário dentro do período"}</Label>
                             <Input
                               id="novo-agendamento-horario-turno"
                               type="time"
@@ -2888,7 +2899,7 @@ const Agenda: React.FC = () => {
                               className="w-36"
                             />
                             <p className="text-xs text-muted-foreground">
-                              {newAgTurnoInfo.filter((turn) => turn.vagasLivresInternas > 0).map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(" • ")}
+                              {(isMaster ? newAgTurnoInfo : newAgAvailableTurnWindows).map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(" • ")}
                             </p>
                             {newAg.hora && !newAgTimeAllowed && (
                               <p className="text-xs text-destructive">

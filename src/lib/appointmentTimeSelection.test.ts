@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAppointmentTimeSelectable, isTimeAfterSchedulingCutoff, isTimeWithinTurnWindow } from "./appointmentTimeSelection";
+import { isAppointmentTimeSelectable, isMasterCapacityOverrideReason, isTimeAfterSchedulingCutoff, isTimeWithinTurnWindow } from "./appointmentTimeSelection";
 
 const morning = [{ horaInicio: "07:30", horaFim: "09:30" }];
 
@@ -28,5 +28,20 @@ describe("seleção manual de horário em disponibilidade por turno", () => {
     expect(isTimeAfterSchedulingCutoff("08:31", "2026-10-01", "2026-10-01", 480)).toBe(true);
     expect(isTimeAfterSchedulingCutoff("08:30", "2026-10-01", "2026-10-01", 480)).toBe(false);
     expect(isTimeAfterSchedulingCutoff("07:30", "2026-10-02", "2026-10-01", 900)).toBe(true);
+  });
+
+  it("aceita exatamente 30 minutos de antecedência quando a regra pede mínimo inclusivo", () => {
+    expect(isTimeAfterSchedulingCutoff("08:30", "2026-10-01", "2026-10-01", 480, 30, true)).toBe(true);
+    expect(isTimeAfterSchedulingCutoff("08:29", "2026-10-01", "2026-10-01", 480, 30, true)).toBe(false);
+  });
+
+  it("limita o encaixe Master a motivos de capacidade, sem ignorar bloqueios ou falta de disponibilidade", () => {
+    expect(isMasterCapacityOverrideReason("day_full")).toBe(true);
+    expect(isMasterCapacityOverrideReason("hour_full")).toBe(true);
+    expect(isMasterCapacityOverrideReason("turno_full")).toBe(true);
+    expect(isMasterCapacityOverrideReason("external_reservation")).toBe(true);
+    expect(isMasterCapacityOverrideReason("date_blocked")).toBe(false);
+    expect(isMasterCapacityOverrideReason("no_availability")).toBe(false);
+    expect(isMasterCapacityOverrideReason(null)).toBe(false);
   });
 });

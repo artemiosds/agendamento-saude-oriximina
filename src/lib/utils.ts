@@ -55,6 +55,23 @@ export function nowMinutesInBrazil(): number {
   return hour * 60 + minute;
 }
 
+/** Current time in minutes, including seconds, for precise lead-time checks. */
+export function nowMinutesInBrazilPrecise(): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BRAZIL_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+  const second = Number(parts.find((part) => part.type === "second")?.value ?? 0);
+
+  return hour * 60 + minute + second / 60;
+}
+
 /** Current time HH:MM in America/Sao_Paulo, independent of browser TZ. */
 export function nowTimeBrazilStr(date: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-GB", {

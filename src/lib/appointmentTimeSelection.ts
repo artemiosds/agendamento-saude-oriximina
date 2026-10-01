@@ -3,6 +3,17 @@ export interface AppointmentTurnWindow {
   horaFim: string;
 }
 
+const MASTER_CAPACITY_OVERRIDE_REASONS = new Set([
+  "external_reservation",
+  "day_full",
+  "turno_full",
+  "hour_full",
+]);
+
+export function isMasterCapacityOverrideReason(reason: string | null | undefined): boolean {
+  return reason != null && MASTER_CAPACITY_OVERRIDE_REASONS.has(reason);
+}
+
 function toMinutes(value: string): number | null {
   const match = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(value);
   if (!match) return null;
@@ -30,10 +41,13 @@ export function isTimeAfterSchedulingCutoff(
   today: string,
   currentMinutes: number,
   leadMinutes = 30,
+  inclusive = false,
 ): boolean {
   if (date !== today) return toMinutes(value) !== null;
   const minutes = toMinutes(value);
-  return minutes !== null && minutes > currentMinutes + leadMinutes;
+  return minutes !== null && (inclusive
+    ? minutes >= currentMinutes + leadMinutes
+    : minutes > currentMinutes + leadMinutes);
 }
 
 export function isAppointmentTimeSelectable(
