@@ -158,6 +158,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       appointment: Agendamento;
       duplicateScope: 'patient' | 'patient_professional';
       checkPatientAbsenceBlock?: boolean;
+      manualCapacityOverride?: boolean;
     }): Promise<TreatmentSessionOperationResult> {
       const duplicate = await deps.findDuplicate({
         patientId: input.cycle.patient_id,
@@ -178,7 +179,9 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
 
       let rpcResult: TreatmentSessionOperationResult | undefined;
       await deps.agenda.addAgendamentoTransactionally(input.appointment, async (normalized) => {
-        const { data, error } = await deps.client.rpc('schedule_treatment_session_batch', {
+        const { data, error } = await deps.client.rpc(input.manualCapacityOverride
+          ? 'schedule_treatment_session_manual_capacity'
+          : 'schedule_treatment_session_batch', {
           p_session_id: input.session.id,
           p_cycle_id: input.cycle.id,
           p_expected_session_date: input.session.scheduled_date,
@@ -204,6 +207,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       newTime?: string;
       checkPatientConflict?: boolean;
       bypassBlockCheck?: boolean;
+      manualCapacityOverride?: boolean;
     }): Promise<TreatmentSessionOperationResult> {
       if (!input.session.appointment_id) {
         throw new Error('Esta sessão não tem um agendamento confirmado para remarcar. Vincule o agendamento existente ou agende a sessão primeiro.');
@@ -223,7 +227,9 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       if (!input.bypassBlockCheck && await deps.isDateBlocked(input.newDate, input.cycle.professional_id, input.cycle.unit_id)) {
         throw new Error('Data bloqueada.');
       }
-      const { data, error } = await deps.client.rpc('reschedule_treatment_session', {
+      const { data, error } = await deps.client.rpc(input.manualCapacityOverride
+        ? 'reschedule_treatment_session_manual_capacity'
+        : 'reschedule_treatment_session', {
         p_session_id: input.session.id,
         p_cycle_id: input.cycle.id,
         p_expected_session_date: input.session.scheduled_date,

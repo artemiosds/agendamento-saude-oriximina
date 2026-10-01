@@ -125,6 +125,13 @@ function setup() {
 }
 
 describe('treatmentSessionOperations: schedule', () => {
+  it('usa a RPC manual apenas quando a Gestão autoriza encaixe e mantém o vínculo com a Agenda', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data }, appointment: appointmentRow }, error: null });
+    await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient', manualCapacityOverride: true });
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_manual_capacity', expect.objectContaining({ p_session_id: 'session-1' }));
+    expect(ctx.scheduleCommits).toEqual([{ appointment: expect.objectContaining({ id: appointment.id }), created: true }]);
+  });
   it('cria o vínculo por RPC e só confirma depois do resultado completo', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data }, appointment: appointmentRow }, error: null });
@@ -222,6 +229,13 @@ describe('treatmentSessionOperations: schedule', () => {
 });
 
 describe('treatmentSessionOperations: reschedule', () => {
+  it('remarca por RPC manual e atualiza a Agenda só após confirmação', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01' } }, error: null });
+    await ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '10:30', manualCapacityOverride: true });
+    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_manual_capacity', expect.objectContaining({ p_expected_appointment_id: appointment.id }));
+    expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id, data: '2026-10-01' }));
+  });
   it('remarca sessão e sincroniza somente a data no fluxo que não altera hora', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01' } }, error: null });

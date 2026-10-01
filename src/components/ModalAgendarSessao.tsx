@@ -42,6 +42,13 @@ interface ModalAgendarSessaoProps {
     horaFim: string;
     vagasLivresInternas: number;
   }>;
+  getConfiguredWindows?: (profId: string, unitId: string, date: string) => Array<{
+    horaInicio: string;
+    horaFim: string;
+    vagasPorHora: number;
+    duracaoConsulta?: number;
+  }>;
+  allowCapacityOverride?: boolean;
   onConfirm: (data: string, hora: string, salaId: string) => Promise<void>;
   onRemarcar?: (newDate: string, newHora: string, salaId: string) => Promise<void>;
   mode?: 'agendar' | 'remarcar';
@@ -70,6 +77,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   availableDates,
   getAvailableSlots,
   getTurnoInfo,
+  getConfiguredWindows,
+  allowCapacityOverride = false,
   onConfirm,
   onRemarcar,
   mode = 'agendar',
@@ -193,17 +202,37 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     if (!selectedDate || !cycle) return [];
     return getTurnoInfo(cycle.professional_id, cycle.unit_id, selectedDate);
   }, [selectedDate, cycle, getTurnoInfo]);
+  const configuredWindows = useMemo(() => selectedDate && cycle && allowCapacityOverride
+    ? getConfiguredWindows?.(cycle.professional_id, cycle.unit_id, selectedDate) || [] : [],
+  [selectedDate, cycle, allowCapacityOverride, getConfiguredWindows]);
+  const configuredTurnWindows = configuredWindows.filter((window) => window.vagasPorHora === 0);
+  const configuredHourlySlots = useMemo(() => {
+    const times: string[] = [];
+    for (const window of configuredWindows) {
+      if (window.vagasPorHora <= 0) continue;
+      const [startHour, startMinute] = window.horaInicio.split(':').map(Number);
+      const [endHour, endMinute] = window.horaFim.split(':').map(Number);
+      const end = endHour * 60 + endMinute;
+      const duration = window.duracaoConsulta && window.duracaoConsulta > 0 ? window.duracaoConsulta : 30;
+      for (let minute = startHour * 60 + startMinute; minute + duration <= end; minute += duration) {
+        times.push(`${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`);
+      }
+    }
+    return times;
+  }, [configuredWindows]);
+  const displayedSlots = [...new Set([...slots, ...configuredHourlySlots])].sort();
   const ownAppointment = mode === 'remarcar' && selectedDate === session?.scheduled_date
     ? currentAppointment?.id === session?.appointment_id && currentAppointment.data === selectedDate
       ? currentAppointment
       : conflicts.find((conflict) => conflict.id === session?.appointment_id && conflict.date === selectedDate)
     : undefined;
   const selectableTurnWindows = turnWindows.filter((turn) =>
-    turn.vagasLivresInternas > 0
+    (allowCapacityOverride && configuredTurnWindows.some((window) => window.horaInicio === turn.horaInicio && window.horaFim === turn.horaFim))
+      || turn.vagasLivresInternas > 0
       || slots.some((slot) => isTimeWithinTurnWindow(slot, [turn]))
       || !!(ownAppointment && isTimeWithinTurnWindow(ownAppointment.hora, [turn])),
   );
-  const canTypeTurnTime = selectableTurnWindows.length > 0;
+  const canTypeTurnTime = selectableTurnWindows.length > 0 || configuredTurnWindows.length > 0;
   const exactPatientConflict = conflicts.some((conflict) =>
     conflict.date === selectedDate && conflict.hora.slice(0, 5) === selectedHora.slice(0, 5)
       && conflict.id !== session?.appointment_id,
@@ -212,9 +241,9 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     selectedHora, selectedDate, todayStr, nowMinutesInBrazil(),
   );
   const selectedTimeAllowed = selectedTimeAfterCutoff && !exactPatientConflict && isAppointmentTimeSelectable(
-    selectedHora, slots, selectableTurnWindows,
+    selectedHora, displayedSlots, [...selectableTurnWindows, ...configuredTurnWindows],
   );
-  const masterManualFallback = isMaster && slots.length === 0 && turnWindows.length === 0
+  const masterManualFallback = isMaster && !allowCapacityOverride && slots.length === 0 && turnWindows.length === 0
     && selectedTimeAfterCutoff && !exactPatientConflict;
 
   // Validation message for selected date
@@ -414,11 +443,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
           {selectedDate && (
             <div>
               <Label className="mb-2 block">Horários disponíveis em {formatDateBR(selectedDate)}:</Label>
-              {slots.length === 0 ? (
+              {displayedSlots.length === 0 ? (
                 canTypeTurnTime ? (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      Informe um horário entre {turnWindows.map((turn) => `${turn.horaInicio} e ${turn.horaFim}`).join(' / ')}.
+                      Informe um horário entre {[...selectableTurnWindows, ...configuredTurnWindows].map((turn) => `${turn.horaInicio} e ${turn.horaFim}`).join(' / ')}.
                     </p>
                     <input
                       type="time"
@@ -445,7 +474,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 )
               ) : (
                 <div className="grid grid-cols-5 gap-2">
-                  {slots.map(slot => {
+                  {displayedSlots.map(slot => {
                     const occupied = conflicts.some(c => c.date === selectedDate && c.hora.slice(0, 5) === slot.slice(0, 5) && c.id !== session?.appointment_id);
                     return (
                       <Button
@@ -472,7 +501,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                       <input
                         type="time"
                         step={60}
-                        value={slots.includes(selectedHora) ? "" : selectedHora}
+                        value={displayedSlots.includes(selectedHora) ? "" : selectedHora}
                         onChange={(e) => setSelectedHora(e.target.value)}
                         className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                       />
@@ -482,6 +511,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
               )}
               {selectedHora && !selectedTimeAllowed && !masterManualFallback && (
                 <p className="mt-2 text-xs text-destructive">{exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Escolha um horário disponível dentro do período configurado.'}</p>
+              )}
+              {allowCapacityOverride && selectedHora && selectedTimeAllowed && !slots.includes(selectedHora)
+                && !turnWindows.some((turn) => turn.vagasLivresInternas > 0 && isTimeWithinTurnWindow(selectedHora, [turn])) && (
+                <p className="mt-2 text-xs text-warning">Encaixe acima da capacidade: a sessão será registrada também na Agenda após confirmação.</p>
               )}
             </div>
           )}

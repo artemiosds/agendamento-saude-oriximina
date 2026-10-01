@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
-import { cn, todayLocalStr } from "@/lib/utils";
+import { addDaysToDateStr, cn, isoDayOfWeek, todayLocalStr } from "@/lib/utils";
 import { isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
@@ -183,7 +183,7 @@ const sessionStatusLabels: Record<string, string> = {
 
 const Tratamentos: React.FC = () => {
   const { pacientes } = usePacientes();
-  const { funcionarios, unidades, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
+  const { funcionarios, unidades, salas, disponibilidades, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
   const { fila, addToFila } = useFila();
   const {
     addAgendamentoTransactionally,
@@ -725,10 +725,36 @@ const Tratamentos: React.FC = () => {
 
   const agendarSessaoDatesDisponiveis = useMemo(() => {
     if ((!agendarSessaoTarget && !remarcarTarget) || !selectedCycle) return [];
-    return getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id).filter(
-      (d) => d >= todayLocalStr(),
-    );
-  }, [agendarSessaoTarget, remarcarTarget, selectedCycle, getAvailableDates]);
+    if (user?.role !== 'master' && user?.role !== 'profissional') {
+      return getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id).filter((d) => d >= todayLocalStr());
+    }
+    const dates = new Set<string>();
+    const today = todayLocalStr();
+    const horizon = addDaysToDateStr(today, 365);
+    for (const availability of disponibilidades) {
+      if (availability.profissionalId !== selectedCycle.professional_id || availability.unidadeId !== selectedCycle.unit_id) continue;
+      for (let date = availability.dataInicio > today ? availability.dataInicio : today;
+        date <= availability.dataFim && date <= horizon; date = addDaysToDateStr(date, 1)) {
+        if (isoDayOfWeek(date) === 0 || isoDayOfWeek(date) === 6) continue;
+        if (!availability.diasSemana.includes(isoDayOfWeek(date))) continue;
+        const blockedAllDay = bloqueios.some((block) => date >= block.dataInicio && date <= block.dataFim
+          && (block.diaInteiro || !block.horaInicio)
+          && ((!block.unidadeId && !block.profissionalId)
+            || (block.unidadeId === selectedCycle.unit_id && !block.profissionalId)
+            || block.profissionalId === selectedCycle.professional_id));
+        if (!blockedAllDay) dates.add(date);
+      }
+    }
+    return [...dates].sort();
+  }, [agendarSessaoTarget, remarcarTarget, selectedCycle, getAvailableDates, disponibilidades, bloqueios, user?.role]);
+
+  const getTreatmentConfiguredWindows = useCallback((professionalId: string, unitId: string, date: string) =>
+    disponibilidades.filter((availability) => availability.profissionalId === professionalId
+      && availability.unidadeId === unitId
+      && availability.dataInicio <= date && availability.dataFim >= date
+      && availability.diasSemana.includes(isoDayOfWeek(date)))
+      .map(({ horaInicio, horaFim, vagasPorHora, duracaoConsulta }) => ({ horaInicio, horaFim, vagasPorHora, duracaoConsulta })),
+  [disponibilidades]);
 
   const salasDisponiveis = useMemo(() => {
     if (!selectedCycle || !salas) return [];
@@ -1193,6 +1219,7 @@ const Tratamentos: React.FC = () => {
     salaId: string,
     duplicateScope: 'patient' | 'patient_professional',
     checkPatientAbsenceBlock = false,
+    manualCapacityOverride = false,
   ) => {
     if (getSessionIntegrity(session, cycle).kind !== "pendente") {
       throw new Error("Esta sessão não está pendente para agendamento. Recarregue o ciclo e revise o vínculo com a Agenda.");
@@ -1226,6 +1253,7 @@ const Tratamentos: React.FC = () => {
       appointment,
       duplicateScope,
       checkPatientAbsenceBlock,
+      manualCapacityOverride,
     });
     const appointmentId = result.appointment?.id || null;
     if (result.appointment) {
@@ -1640,8 +1668,10 @@ const Tratamentos: React.FC = () => {
       const hasFreeTurnCapacity = turnWindows.some((turn) => turn.vagasLivresInternas > 0);
       const isAvailable = availableSlots.includes(newTime)
         || (hasFreeTurnCapacity && isTimeWithinTurnWindow(newTime, turnWindows))
-        || sameOccupiedTurn;
-      if (!isAvailable) {
+        || sameOccupiedTurn
+        || (canControlSessions && getTreatmentConfiguredWindows(cycle.professional_id, cycle.unit_id, newDate)
+          .some((window) => window.vagasPorHora === 0 && isTimeWithinTurnWindow(newTime, [window])));
+      if (!isAvailable && !canControlSessions) {
         throw new Error("O horário escolhido não está disponível na grade atual do profissional.");
       }
     }
@@ -1653,6 +1683,7 @@ const Tratamentos: React.FC = () => {
       newTime,
       checkPatientConflict,
       bypassBlockCheck: false,
+      manualCapacityOverride: canControlSessions,
     });
     setSessions((previous) => previous.map((item) => item.id === session.id
       ? { ...item, scheduled_date: result.session.scheduled_date || newDate }
@@ -2998,6 +3029,8 @@ const Tratamentos: React.FC = () => {
           availableDates={agendarSessaoDatesDisponiveis}
           getAvailableSlots={getAvailableSlots}
           getTurnoInfo={getTurnoInfo}
+          getConfiguredWindows={getTreatmentConfiguredWindows}
+          allowCapacityOverride={canControlSessions}
           onConfirm={async (data, hora, salaId) => {
             if (!agendarSessaoTarget || !selectedCycle || agendandoSessao) return;
             setAgendarSessaoData(data);
@@ -3012,6 +3045,8 @@ const Tratamentos: React.FC = () => {
                 hora,
                 salaId,
                 "patient",
+                false,
+                canControlSessions,
               );
             } finally {
               setAgendandoSessao(false);
@@ -3045,6 +3080,8 @@ const Tratamentos: React.FC = () => {
           availableDates={agendarSessaoDatesDisponiveis}
           getAvailableSlots={getAvailableSlots}
           getTurnoInfo={getTurnoInfo}
+          getConfiguredWindows={getTreatmentConfiguredWindows}
+          allowCapacityOverride={canControlSessions}
           onConfirm={async (data, hora, _salaId) => {
             if (!remarcarTarget || !selectedCycle || remarcarSaving) return;
             setRemarcarSaving(true);

@@ -74,4 +74,19 @@ describe('ModalAgendarSessao', () => {
     expect(screen.getByRole('dialog').querySelector('input[type="time"]')).toBeNull();
     expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
   });
+
+  it('permite encaixe manual no turno cheio somente quando autorizado', async () => {
+    const onConfirm = vi.fn(async () => {});
+    render(<ModalAgendarSessao {...baseProps} onConfirm={onConfirm} allowCapacityOverride
+      availableDates={['2099-10-08']} getAvailableSlots={() => []}
+      getTurnoInfo={() => [{ horaInicio: '07:30', horaFim: '11:00', vagasLivresInternas: 0 }]}
+      getConfiguredWindows={() => [{ horaInicio: '07:30', horaFim: '11:00', vagasPorHora: 0 }]}
+      session={{ id: 'session-1', session_number: 8, total_sessions: 12, scheduled_date: '2099-10-08', status: 'pendente_agendamento', appointment_id: null }} />);
+
+    await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
+    fireEvent.change(screen.getByRole('dialog').querySelector('input[type="time"]')!, { target: { value: '08:00' } });
+    expect(screen.getByText(/Encaixe acima da capacidade/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Agendamento' }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-08', '08:00', ''));
+  });
 });
