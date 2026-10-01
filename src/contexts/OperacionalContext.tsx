@@ -1061,7 +1061,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
   );
 
   const getAvailableSlots = useCallback(
-    (profissionalId: string, unidadeId: string, date: string, isPublic = false, minimumLeadMinutes = 30): string[] => {
+    (profissionalId: string, unidadeId: string, date: string, isPublic = false, minimumLeadMinutes: number | null = 30): string[] => {
       const agendaMode = window.location.pathname === '/painel/agenda';
       if (agendaMode && !isCompleteAgendaDate(date)) return [];
       const todayStr = todayLocalStr();
@@ -1089,7 +1089,9 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
       const slots: string[] = [];
       const ehHoje = date === todayStr;
-      const limiteMinutos = ehHoje ? nowMinutesInBrazil() + Math.max(0, minimumLeadMinutes) : -1;
+      const limiteMinutos = ehHoje && minimumLeadMinutes !== null
+        ? nowMinutesInBrazil() + Math.max(0, minimumLeadMinutes)
+        : -1;
 
       for (const td of turnoDisps) {
         const turnoStart = td.horaInicio;
@@ -1114,7 +1116,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
         const sh = parseInt(turnoStart.split(":")[0]);
         const sm = parseInt(turnoStart.split(":")[1] || "0");
-        if (ehHoje && sh * 60 + sm <= limiteMinutos) continue;
+        if (limiteMinutos >= 0 && sh * 60 + sm <= limiteMinutos) continue;
 
         const blocked = isSlotBlocked(profissionalId, unidadeId, date, turnoStart);
         if (!blocked && !slots.includes(turnoStart)) {
@@ -1157,7 +1159,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           let m = startMin;
           while (h < endHour || (h === endHour && m < endMin)) {
             const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-            if (ehHoje && h * 60 + m <= limiteMinutos) {
+            if (limiteMinutos >= 0 && h * 60 + m <= limiteMinutos) {
               m += intervalMinutes;
               while (m >= 60) {
                 m -= 60;

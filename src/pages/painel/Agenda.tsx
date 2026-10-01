@@ -750,7 +750,7 @@ const Agenda: React.FC = () => {
     if (!completeAgendaDates.has(selectedDate)) return [];
     if (!newAg.profissionalId) return [];
     if (!selectedProfUnit) return [];
-    return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate, false, 0);
+    return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate, false, null);
   }, [newAg.profissionalId, selectedProfUnit, selectedDate, getAvailableSlots, completeAgendaDates]);
 
   const newAgAvailableTurnWindows = React.useMemo(
@@ -2376,7 +2376,7 @@ const Agenda: React.FC = () => {
     if (!editAg?.profissionalId) return [];
     const prof = profissionais.find((p) => p.id === editAg.profissionalId);
     if (!prof?.unidadeId) return [];
-    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data, false, 0);
+    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data, false, null);
   }, [editAg?.profissionalId, editAg?.data, profissionais, getAvailableSlots, completeAgendaDates]);
 
   const originalEditAppointment = editAg ? agendamentos.find((a) => a.id === editAg.id) : undefined;
