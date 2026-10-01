@@ -1915,7 +1915,7 @@ const Tratamentos: React.FC = () => {
     details: { type: string; reason: string },
   ) => {
     if (!selectedCycle) return;
-    void logAction({
+    logAction({
       acao: "alta_paciente",
       entidade: "treatment_cycle",
       entidadeId: selectedCycle.id,
@@ -1929,7 +1929,7 @@ const Tratamentos: React.FC = () => {
         agendamentos_futuros_removidos: result.removed_appointments,
         observacao: "Alta manual registrada de forma transacional.",
       },
-    }).catch((error) => console.error("Falha ao registrar auditoria da alta:", error));
+    });
     toast.success(
       result.removed_sessions > 0 || result.removed_appointments > 0
         ? `Alta realizada. ${result.removed_sessions} sessão(ões) e ${result.removed_appointments} agendamento(s) futuro(s) do ciclo removido(s).`
@@ -2633,7 +2633,9 @@ const Tratamentos: React.FC = () => {
                       })
                     : "Sem data";
                   const agKey = treatmentAppointmentKey(s.patient_id, s.professional_id, selectedCycle.unit_id, s.scheduled_date);
-                  const ag = agendamentoMap[agKey];
+                  const ag = s.appointment_id
+                    ? appointmentByIdMap[s.appointment_id]
+                    : agendamentoMap[agKey]?.[0];
                   return (
                     <button
                       key={s.id}

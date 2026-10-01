@@ -5,7 +5,7 @@ import { compareClinicalAndLegalPriority, hasTriageTea, legalPriorityKey } from 
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
-import { isAppointmentTimeSelectable, isMasterCapacityOverrideReason, isTimeAfterSchedulingCutoff, isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
+import { isAppointmentTimeSelectable, isMasterCapacityOverrideReason, isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { isSameDay } from "date-fns";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useAgendamentos } from "@/contexts/AgendamentosContext";
@@ -750,7 +750,7 @@ const Agenda: React.FC = () => {
     if (!completeAgendaDates.has(selectedDate)) return [];
     if (!newAg.profissionalId) return [];
     if (!selectedProfUnit) return [];
-    return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate, false, 0);
+    return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate, false, null);
   }, [newAg.profissionalId, selectedProfUnit, selectedDate, getAvailableSlots, completeAgendaDates]);
 
   const newAgAvailableTurnWindows = React.useMemo(
@@ -758,10 +758,9 @@ const Agenda: React.FC = () => {
     [newAgTurnoInfo],
   );
   const newAgHasFreeTurn = newAgAvailableTurnWindows.length > 0;
-  const newAgTimeInFuture = isTimeAfterSchedulingCutoff(
-    newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazil(), 0,
-  );
-  const newAgTimeAllowed = newAgTimeInFuture && (
+  // A Agenda interna segue exclusivamente a disponibilidade cadastrada.
+  // Não há antecedência mínima para Novo Agendamento nem para edição.
+  const newAgTimeAllowed = (
     (isTurnoMode
       ? isTimeWithinTurnWindow(newAg.hora, isMaster ? newAgTurnoInfo : newAgAvailableTurnWindows)
       : newAgSlots.includes(newAg.hora))
@@ -1237,10 +1236,6 @@ const Agenda: React.FC = () => {
   };
 
   const executarCreate = async () => {
-    if (!isTimeAfterSchedulingCutoff(newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazil(), 0)) {
-      toast.error("Para hoje, escolha um horário posterior ao horário atual.");
-      return;
-    }
     try {
       await loadAgendaRange(selectedDate, selectedDate);
     } catch {
@@ -2381,7 +2376,7 @@ const Agenda: React.FC = () => {
     if (!editAg?.profissionalId) return [];
     const prof = profissionais.find((p) => p.id === editAg.profissionalId);
     if (!prof?.unidadeId) return [];
-    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data, false, 0);
+    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data, false, null);
   }, [editAg?.profissionalId, editAg?.data, profissionais, getAvailableSlots, completeAgendaDates]);
 
   const originalEditAppointment = editAg ? agendamentos.find((a) => a.id === editAg.id) : undefined;
@@ -2394,7 +2389,6 @@ const Agenda: React.FC = () => {
       || (originalTimeRemainsInTurn && isTimeWithinTurnWindow(originalEditAppointment?.hora || "", [turn])),
   );
   const editTimeAllowed = !!editAg
-    && isTimeAfterSchedulingCutoff(editAg.hora, editAg.data, todayLocalStr(), nowMinutesInBrazil(), 0)
     && (isAppointmentTimeSelectable(editAg.hora, editAvailableSlots, editTurnWindowsWithCapacity)
       // Master/coordinator can use the manual override shown in this editor;
       // the authoritative RPC below still checks capacity and requires confirmation.
@@ -2903,9 +2897,7 @@ const Agenda: React.FC = () => {
                             </p>
                             {newAg.hora && !newAgTimeAllowed && (
                               <p className="text-xs text-destructive">
-                                {!newAgTimeInFuture && selectedDate === todayLocalStr()
-                                  ? "Para hoje, escolha um horário posterior ao horário atual."
-                                  : "Informe um horário dentro de um turno com vaga interna disponível."}
+                                Informe um horário dentro de um turno com vaga interna disponível.
                               </p>
                             )}
                           </div>
@@ -2944,18 +2936,17 @@ const Agenda: React.FC = () => {
                             {slot}
                           </Button>
                         ))}
-                        {isMaster && (
-                          <div className="col-span-4 mt-2 flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Ou digite:</span>
-                            <Input
-                              type="time"
-                              value={newAgSlots.includes(newAg.hora) ? "" : newAg.hora}
-                              onChange={(e) => setNewAg((p) => ({ ...p, hora: e.target.value }))}
-                              className="w-32"
-                              placeholder="HH:MM"
-                            />
-                          </div>
-                        )}
+                        <div className="col-span-4 mt-2 flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Ou digite:</span>
+                          <Input
+                            type="time"
+                            step={60}
+                            value={newAgSlots.includes(newAg.hora) ? "" : newAg.hora}
+                            onChange={(e) => setNewAg((p) => ({ ...p, hora: e.target.value }))}
+                            className="w-32"
+                            placeholder="HH:MM"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3752,20 +3743,18 @@ const Agenda: React.FC = () => {
                         {slot}
                       </Button>
                     ))}
-                    {(editTurnWindowsWithCapacity.length > 0 || isMaster) && (
-                      <div className="col-span-4 mt-2 flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {editTurnWindowsWithCapacity.length > 0 ? 'Ou digite dentro do turno:' : 'Ou digite:'}
-                        </span>
-                        <Input
-                          type="time"
-                          step={60}
-                          value={editAvailableSlots.includes(editAg.hora) ? "" : editAg.hora}
-                          onChange={(e) => setEditAg((p) => p ? { ...p, hora: e.target.value } : p)}
-                          className="w-32"
-                        />
-                      </div>
-                    )}
+                    <div className="col-span-4 mt-2 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {editTurnWindowsWithCapacity.length > 0 ? 'Ou digite dentro do turno:' : 'Ou digite:'}
+                      </span>
+                      <Input
+                        type="time"
+                        step={60}
+                        value={editAvailableSlots.includes(editAg.hora) ? "" : editAg.hora}
+                        onChange={(e) => setEditAg((p) => p ? { ...p, hora: e.target.value } : p)}
+                        className="w-32"
+                      />
+                    </div>
                   </div>
                 )}
                 {editScheduleChanged && editAg.hora && !editTimeAllowed && (

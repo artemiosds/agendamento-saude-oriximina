@@ -60,7 +60,7 @@ function parseEvent(body: any): {
   const uzMsgId = body?.message?.id || body?.messageId || body?.id;
   const uzStatus = body?.status || body?.ack;
 
-  const phone = normalizePhone(String((evoRemote || "").split("@")[0] || uzPhone || ""));
+  const phone = normalizePhone(String((evoRemote || "").split("@")[0] || uzPhone || "")) || undefined;
   const text = String(evoText || uzText || "");
   const fromMe = Boolean(evoFromMe ?? uzFromMe);
   const providerMessageId = String(evoMsgId || uzMsgId || "");
@@ -154,12 +154,12 @@ serve(async (req) => {
 
     if (parsed.kind === "inbound" && parsed.phone && parsed.text) {
       const r = await handleInbound(supabase, parsed.phone, parsed.text, parsed.providerMessageId || "", parsed.provider, body);
-      return new Response(JSON.stringify({ ok: true, kind: "inbound", ...r }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ kind: "inbound", ...r }), { headers: corsHeaders });
     }
 
     if (parsed.kind === "status" && parsed.providerMessageId) {
       const r = await handleStatus(supabase, parsed.providerMessageId, parsed.deliveryStatus || "");
-      return new Response(JSON.stringify({ ok: true, kind: "status", ...r }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ kind: "status", ...r }), { headers: corsHeaders });
     }
 
     return new Response(JSON.stringify({ ok: true, ignored: "unhandled", parsed }), { headers: corsHeaders });
