@@ -1862,6 +1862,72 @@ export type Database = {
           },
         ]
       }
+      patient_profession_careness: {
+        Row: {
+          annulled_at: string | null
+          created_at: string
+          discharge_date: string
+          discharge_id: string | null
+          id: string
+          patient_id: string
+          profession_key: string
+          profession_name: string
+          release_date: string
+          release_reason: string
+          released_at: string | null
+          scope: string
+          source_professional_id: string
+          source_unit_id: string
+        }
+        Insert: {
+          annulled_at?: string | null
+          created_at?: string
+          discharge_date: string
+          discharge_id?: string | null
+          id?: string
+          patient_id: string
+          profession_key: string
+          profession_name: string
+          release_date: string
+          release_reason?: string
+          released_at?: string | null
+          scope: string
+          source_professional_id?: string
+          source_unit_id?: string
+        }
+        Update: {
+          annulled_at?: string | null
+          created_at?: string
+          discharge_date?: string
+          discharge_id?: string | null
+          id?: string
+          patient_id?: string
+          profession_key?: string
+          profession_name?: string
+          release_date?: string
+          release_reason?: string
+          released_at?: string | null
+          scope?: string
+          source_professional_id?: string
+          source_unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_profession_careness_discharge_id_fkey"
+            columns: ["discharge_id"]
+            isOneToOne: true
+            referencedRelation: "patient_discharges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_profession_careness_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_referrals: {
         Row: {
           cid: string | null
@@ -2208,6 +2274,60 @@ export type Database = {
           paciente_id?: string
           procedimento_id?: string
           quantidade?: number | null
+        }
+        Relationships: []
+      }
+      profession_careness_mapping_state: {
+        Row: {
+          confirmed_at: string | null
+          confirmed_by: string
+          confirmed_signature: string
+          id: boolean
+        }
+        Insert: {
+          confirmed_at?: string | null
+          confirmed_by?: string
+          confirmed_signature?: string
+          id?: boolean
+        }
+        Update: {
+          confirmed_at?: string | null
+          confirmed_by?: string
+          confirmed_signature?: string
+          id?: boolean
+        }
+        Relationships: []
+      }
+      profession_careness_rules: {
+        Row: {
+          duration_unit: string
+          duration_value: number
+          enabled: boolean
+          profession_key: string
+          profession_name: string
+          scope: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          duration_unit?: string
+          duration_value?: number
+          enabled?: boolean
+          profession_key: string
+          profession_name: string
+          scope?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Update: {
+          duration_unit?: string
+          duration_value?: number
+          enabled?: boolean
+          profession_key?: string
+          profession_name?: string
+          scope?: string
+          updated_at?: string
+          updated_by?: string
         }
         Relationships: []
       }
@@ -4271,6 +4391,10 @@ export type Database = {
       }
     }
     Functions: {
+      apply_profession_careness_for_discharge: {
+        Args: { p_discharge_id: string; p_force?: boolean }
+        Returns: Json
+      }
       atualizar_status_falta:
         | { Args: { p_paciente_id: string }; Returns: Json }
         | {
@@ -4291,6 +4415,10 @@ export type Database = {
         Args: { p_agendamento_id: string; p_motivo: string }
         Returns: Json
       }
+      careness_release_date: {
+        Args: { p_date: string; p_unit: string; p_value: number }
+        Returns: string
+      }
       check_internal_slot_availability: {
         Args: {
           p_data: string
@@ -4298,6 +4426,14 @@ export type Database = {
           p_hora: string
           p_profissional_id: string
           p_unidade_id: string
+        }
+        Returns: Json
+      }
+      check_patient_profession_careness: {
+        Args: {
+          p_patient_id: string
+          p_professional_id: string
+          p_unit_id?: string
         }
         Returns: Json
       }
@@ -4323,6 +4459,10 @@ export type Database = {
         }
         Returns: Json
       }
+      confirm_profession_careness_mapping: {
+        Args: { p_signature: string }
+        Returns: Json
+      }
       create_external_appointment: {
         Args: {
           p_cota_id: string
@@ -4334,6 +4474,15 @@ export type Database = {
       }
       create_internal_appointment_with_override: {
         Args: { p_motivo_alteracao: string; p_payload: Json }
+        Returns: Json
+      }
+      create_internal_appointment_with_policy_override: {
+        Args: {
+          p_bypass_careness: boolean
+          p_capacity_override?: boolean
+          p_override_reason: string
+          p_payload: Json
+        }
         Returns: Json
       }
       current_user_cbo_codigo: { Args: never; Returns: string }
@@ -4413,6 +4562,7 @@ export type Database = {
         Returns: boolean
       }
       is_external_professional: { Args: never; Returns: boolean }
+      is_master_for_careness: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
       is_whatsapp_24h_window_open: {
         Args: { p_phone: string }
@@ -4453,6 +4603,12 @@ export type Database = {
         }
         Returns: Json
       }
+      list_active_profession_careness: { Args: never; Returns: Json }
+      list_patient_profession_careness: {
+        Args: { p_patient_id: string }
+        Returns: Json
+      }
+      list_profession_careness_setup: { Args: never; Returns: Json }
       manage_external_quota: {
         Args: {
           p_action: string
@@ -4463,8 +4619,28 @@ export type Database = {
         Returns: Json
       }
       manage_external_quotas: { Args: { p_payloads: Json }; Returns: Json }
+      normalize_profession: { Args: { p_value: string }; Returns: string }
+      preview_profession_careness_retroactive: {
+        Args: {
+          p_duration_unit: string
+          p_duration_value: number
+          p_profession_key: string
+        }
+        Returns: Json
+      }
+      profession_careness_catalog: { Args: never; Returns: Json }
+      profession_careness_mapping_is_current: { Args: never; Returns: boolean }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
       refresh_paciente_profissional_status: { Args: never; Returns: undefined }
+      register_treatment_discharge: {
+        Args: {
+          p_cycle_id: string
+          p_final_notes?: string
+          p_reason: string
+          p_tipo_alta: Database["public"]["Enums"]["tipo_alta"]
+        }
+        Returns: Json
+      }
       register_whatsapp_inbound: {
         Args: {
           p_body: string
@@ -4472,6 +4648,15 @@ export type Database = {
           p_provider?: string
           p_provider_message_id?: string
           p_raw?: Json
+        }
+        Returns: Json
+      }
+      release_profession_careness_for_medical_referral: {
+        Args: {
+          p_patient_id: string
+          p_source?: string
+          p_source_id?: string
+          p_specialty: string
         }
         Returns: Json
       }
@@ -4534,6 +4719,18 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      save_profession_careness_rule: {
+        Args: {
+          p_apply_retroactive?: boolean
+          p_duration_unit: string
+          p_duration_value: number
+          p_enabled: boolean
+          p_profession_key: string
+          p_profession_name: string
+          p_scope: string
+        }
+        Returns: Json
       }
       schedule_treatment_session: {
         Args: {
@@ -4662,43 +4859,6 @@ export type Database = {
           p_expected_session_date: string
           p_session_id: string
         }
-        Returns: Json
-      }
-      register_treatment_discharge: {
-        Args: {
-          p_cycle_id: string
-          p_final_notes?: string
-          p_reason: string
-          p_tipo_alta: Database["public"]["Enums"]["tipo_alta"]
-        }
-        Returns: Json
-      }
-      check_patient_profession_careness: {
-        Args: { p_patient_id: string; p_professional_id: string; p_unit_id?: string }
-        Returns: Json
-      }
-      confirm_profession_careness_mapping: {
-        Args: { p_signature: string }
-        Returns: Json
-      }
-      create_internal_appointment_with_policy_override: {
-        Args: { p_bypass_careness: boolean; p_capacity_override?: boolean; p_override_reason: string; p_payload: Json }
-        Returns: Json
-      }
-      list_active_profession_careness: { Args: never; Returns: Json }
-      list_patient_profession_careness: { Args: { p_patient_id: string }; Returns: Json }
-      list_profession_careness_setup: { Args: never; Returns: Json }
-      preview_profession_careness_retroactive: {
-        Args: { p_duration_unit: string; p_duration_value: number; p_profession_key: string }
-        Returns: Json
-      }
-      release_profession_careness_for_medical_referral: {
-        Args: { p_patient_id: string; p_source?: string; p_source_id?: string; p_specialty: string }
-        Returns: Json
-      }
-      save_profession_careness_rule: {
-        Args: { p_apply_retroactive?: boolean; p_duration_unit: string; p_duration_value: number; p_enabled: boolean;
-          p_profession_key: string; p_profession_name: string; p_scope: string }
         Returns: Json
       }
     }
