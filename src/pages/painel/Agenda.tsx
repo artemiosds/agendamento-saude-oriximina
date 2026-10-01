@@ -753,27 +753,34 @@ const Agenda: React.FC = () => {
     return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate);
   }, [newAg.profissionalId, selectedProfUnit, selectedDate, getAvailableSlots, completeAgendaDates]);
 
-  const newAgHasFreeTurn = newAgTurnoInfo.some((turn) => turn.vagasLivresInternas > 0);
+  const newAgAvailableTurnWindows = React.useMemo(
+    () => newAgTurnoInfo.filter((turn) => turn.vagasLivresInternas > 0),
+    [newAgTurnoInfo],
+  );
+  const newAgHasFreeTurn = newAgAvailableTurnWindows.length > 0;
   const newAgTimeAfterCutoff = isTimeAfterSchedulingCutoff(
     newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazil(),
   );
   const newAgTimeAllowed = newAgTimeAfterCutoff && (
-    newAgSlots.includes(newAg.hora)
-    || (newAgHasFreeTurn && isTimeWithinTurnWindow(newAg.hora, newAgTurnoInfo))
+    (isTurnoMode
+      ? isTimeWithinTurnWindow(newAg.hora, newAgAvailableTurnWindows)
+      : newAgSlots.includes(newAg.hora))
     || (isMaster && newAgSlots.length === 0 && newAgTurnoInfo.length === 0)
   );
 
   // Clear selected hora when it's no longer in available slots (skip for master — they can type any time)
   React.useEffect(() => {
-    if (isMaster) return;
-    if (newAgHasFreeTurn && isTimeWithinTurnWindow(newAg.hora, newAgTurnoInfo)) return;
+    // In shift mode, keep manual input visible even while invalid so the user
+    // can correct it and see why it cannot be booked; validation blocks save.
+    if (isMaster || isTurnoMode) return;
+    if (newAgHasFreeTurn && isTimeWithinTurnWindow(newAg.hora, newAgAvailableTurnWindows)) return;
     if (newAg.hora && newAgSlots.length > 0 && !newAgSlots.includes(newAg.hora)) {
       setNewAg((p) => ({ ...p, hora: "" }));
     }
     if (newAgSlots.length === 0 && newAg.hora) {
       setNewAg((p) => ({ ...p, hora: "" }));
     }
-  }, [newAgSlots, newAg.hora, isMaster, newAgHasFreeTurn, newAgTurnoInfo]);
+  }, [newAgSlots, newAg.hora, isMaster, isTurnoMode, newAgHasFreeTurn, newAgAvailableTurnWindows, newAgTurnoInfo]);
 
   const retornoAvailableDates = React.useMemo(() => {
     if (!user || !retornoDialogOpen) return [];
@@ -2863,7 +2870,7 @@ const Agenda: React.FC = () => {
                               id="novo-agendamento-horario-turno"
                               type="time"
                               step={60}
-                              value={newAg.hora && newAg.hora !== newAgTurnoInfo.find((turn) => newAg.hora >= turn.horaInicio && newAg.hora < turn.horaFim)?.horaInicio ? newAg.hora : ""}
+                              value={newAg.hora}
                               onChange={(e) => setNewAg((p) => ({ ...p, hora: e.target.value }))}
                               className="w-36"
                             />
@@ -2871,7 +2878,11 @@ const Agenda: React.FC = () => {
                               {newAgTurnoInfo.filter((turn) => turn.vagasLivresInternas > 0).map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(" • ")}
                             </p>
                             {newAg.hora && !newAgTimeAllowed && (
-                              <p className="text-xs text-destructive">Informe um horário dentro de um turno disponível.</p>
+                              <p className="text-xs text-destructive">
+                                {!newAgTimeAfterCutoff && selectedDate === todayLocalStr()
+                                  ? "Para hoje, escolha um horário com pelo menos 30 minutos de antecedência."
+                                  : "Informe um horário dentro de um turno com vaga interna disponível."}
+                              </p>
                             )}
                           </div>
                         )}

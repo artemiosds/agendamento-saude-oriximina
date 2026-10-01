@@ -18,6 +18,12 @@ describe("seleção manual de horário em disponibilidade por turno", () => {
     expect(isAppointmentTimeSelectable("08:30", ["07:30"], morning)).toBe(true);
   });
 
+  it("não aceita horário em turno sem vaga quando outro turno ainda tem capacidade", () => {
+    const turnosComVaga = [{ horaInicio: "13:00", horaFim: "17:00" }];
+    expect(isAppointmentTimeSelectable("08:00", [], turnosComVaga)).toBe(false);
+    expect(isAppointmentTimeSelectable("15:30", [], turnosComVaga)).toBe(true);
+  });
+
   it("mantém a antecedência mínima de 30 minutos para agendamentos no mesmo dia", () => {
     expect(isTimeAfterSchedulingCutoff("08:31", "2026-10-01", "2026-10-01", 480)).toBe(true);
     expect(isTimeAfterSchedulingCutoff("08:30", "2026-10-01", "2026-10-01", 480)).toBe(false);
