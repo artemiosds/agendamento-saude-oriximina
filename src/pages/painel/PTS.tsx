@@ -346,6 +346,7 @@ const PTS: React.FC = () => {
     return validarCompatibilidadeClinicaSigtap({
       procedimento: codigo,
       competencia,
+      usarReferenciaAnterior: true,
       cbo,
       dataNascimento: nascimento,
       dataAtendimento: dataRef,
@@ -1741,7 +1742,7 @@ const PTS: React.FC = () => {
                         </div>
                       )}
 
-                      {selectedProcCodigo && sigtapValidationByCode[selectedProcCodigo] && (
+                      {selectedProcCodigo && sigtapValidationByCode[selectedProcCodigo] && !sigtapValidationByCode[selectedProcCodigo].catalogoIndisponivel && !sigtapValidationByCode[selectedProcCodigo].semRegrasProcedimento && (
                         <div
                           className={cn(
                             "rounded-md border p-2 text-xs",
@@ -1758,7 +1759,7 @@ const PTS: React.FC = () => {
                             </div>
                           )}
                           {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel !== false && (
-                            <div className="font-medium">Procedimento compatível com SIGTAP.</div>
+                            <div className="font-medium">CBO, idade e sexo conferidos.</div>
                           )}
                           {sigtapValidationByCode[selectedProcCodigo].status === "incompatível" && (
                             <>
@@ -1773,7 +1774,13 @@ const PTS: React.FC = () => {
                               </div>
                             </>
                           )}
-                          {sigtapValidationByCode[selectedProcCodigo].status === "indeterminado" && (
+                          {sigtapValidationByCode[selectedProcCodigo].competenciaReferencia && (
+                            <div>
+                              <div className="font-medium">Referência SIGTAP {sigtapValidationByCode[selectedProcCodigo].competenciaReferencia} para CBO, idade e sexo.</div>
+                              {sigtapValidationByCode[selectedProcCodigo].motivos.map((motivo, idx) => <div key={idx}>• {motivo}</div>)}
+                            </div>
+                          )}
+                          {sigtapValidationByCode[selectedProcCodigo].status === "indeterminado" && !sigtapValidationByCode[selectedProcCodigo].competenciaReferencia && (
                             <>
                               <div className="font-medium">Não foi possível validar este procedimento.</div>
                               <div className="mt-1">
@@ -1807,12 +1814,15 @@ const PTS: React.FC = () => {
                                     <Badge variant="outline" className="border-amber-400 text-amber-700 text-[10px]">Clínico · fora do BPA-I</Badge>
                                   )}
                                   {status?.status === "compatível" && status.bpaICompativel !== false && (
-                                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">Compatível</Badge>
+                                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">CBO, idade e sexo</Badge>
                                   )}
                                   {status?.status === "incompatível" && (
                                     <Badge variant="destructive" className="text-[10px]">Incompatível</Badge>
                                   )}
-                                  {status?.status === "indeterminado" && (
+                                  {status?.competenciaReferencia && (
+                                    <Badge variant="outline" className="text-[10px]">Referência {status.competenciaReferencia}</Badge>
+                                  )}
+                                  {status?.status === "indeterminado" && !status.competenciaReferencia && !status.catalogoIndisponivel && !status.semRegrasProcedimento && (
                                     <Badge variant="outline" className="border-amber-400 text-amber-700 text-[10px]">Não validado</Badge>
                                   )}
                                   <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => removeSigtap(s.procedimento_codigo)}>
@@ -1846,7 +1856,12 @@ const PTS: React.FC = () => {
                                   </div>
                                 )}
 
-                                {status?.status === "indeterminado" && (
+                                {status?.competenciaReferencia && status.motivos.length > 0 && (
+                                  <div className="rounded border border-amber-200 bg-amber-50 p-2 text-amber-800">
+                                    {status.motivos.map((motivo, idx) => <div key={idx}>• {motivo}</div>)}
+                                  </div>
+                                )}
+                                {status?.status === "indeterminado" && !status.competenciaReferencia && !status.catalogoIndisponivel && !status.semRegrasProcedimento && (
                                   <div className="rounded border border-amber-200 bg-amber-50 p-2 text-amber-800">
                                     {(status.avisos || []).join(" ") || "Não foi possível validar CBO, faixa etária ou competência SIGTAP."}
                                   </div>

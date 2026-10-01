@@ -719,6 +719,7 @@ const ProntuarioPage: React.FC = () => {
         const result = await validarCompatibilidadeClinicaSigtap({
           procedimento: codigo,
           competencia,
+          usarReferenciaAnterior: true,
           cbo,
           dataNascimento: nascimento,
           dataAtendimento: form.data_atendimento,
@@ -1930,6 +1931,7 @@ const ProntuarioPage: React.FC = () => {
           ? await validarCompatibilidadeClinicaSigtap({
               procedimento: codigo,
               competencia: competenciaValidacao,
+              usarReferenciaAnterior: true,
               cbo: cboValidacao,
               dataNascimento: nascimentoValidacao,
               dataAtendimento: f.data_atendimento,
@@ -2670,6 +2672,7 @@ const ProntuarioPage: React.FC = () => {
           ? await validarCompatibilidadeClinicaSigtap({
               procedimento: codigo,
               competencia: competenciaValidacaoSessao,
+              usarReferenciaAnterior: true,
               cbo: cboValidacaoSessao,
               dataNascimento: nascimentoValidacaoSessao,
               dataAtendimento: form.data_atendimento,
@@ -4704,12 +4707,15 @@ const ProntuarioPage: React.FC = () => {
                               <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-amber-400 text-amber-700">Clínico · fora do BPA-I</Badge>
                             )}
                             {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel !== false && (
-                              <Badge className="h-5 text-[10px] shrink-0 bg-emerald-600 hover:bg-emerald-600">SIGTAP compatível</Badge>
+                              <Badge className="h-5 text-[10px] shrink-0 bg-emerald-600 hover:bg-emerald-600">CBO, idade e sexo conferidos</Badge>
                             )}
                             {checked && sigtapStatus?.status === "incompatível" && (
                               <Badge variant="destructive" className="h-5 text-[10px] shrink-0">SIGTAP incompatível</Badge>
                             )}
-                            {checked && sigtapStatus?.status === "indeterminado" && (
+                            {checked && sigtapStatus?.competenciaReferencia && (
+                              <Badge variant="outline" className="h-5 text-[10px] shrink-0">Referência {sigtapStatus.competenciaReferencia}</Badge>
+                            )}
+                            {checked && sigtapStatus?.status === "indeterminado" && !sigtapStatus.competenciaReferencia && !sigtapStatus.catalogoIndisponivel && !sigtapStatus.semRegrasProcedimento && (
                               <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-amber-400 text-amber-700">Validação pendente</Badge>
                             )}
                           </div>
@@ -4729,7 +4735,7 @@ const ProntuarioPage: React.FC = () => {
                               {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel !== false && (
                                 <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">
                                   <div className="font-medium flex items-center gap-1">
-                                    <CheckCircle className="h-3.5 w-3.5" /> Procedimento compatível com SIGTAP
+                                    <CheckCircle className="h-3.5 w-3.5" /> CBO, idade e sexo conferidos
                                   </div>
                                   <div className="mt-1 text-[11px]">
                                     Competência {sigtapStatus.competencia} · CBO {sigtapStatus.cbo}
@@ -4762,7 +4768,13 @@ const ProntuarioPage: React.FC = () => {
                                 </div>
                               )}
 
-                              {checked && sigtapStatus?.status === "indeterminado" && (
+                              {checked && sigtapStatus?.competenciaReferencia && sigtapStatus.motivos.length > 0 && (
+                                <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                                  {sigtapStatus.motivos.map((motivo, idx) => <div key={idx}>• {motivo}</div>)}
+                                </div>
+                              )}
+
+                              {checked && sigtapStatus?.status === "indeterminado" && !sigtapStatus.competenciaReferencia && !sigtapStatus.catalogoIndisponivel && !sigtapStatus.semRegrasProcedimento && (
                                 <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
                                   <div className="font-medium flex items-center gap-1">
                                     <AlertTriangle className="h-3.5 w-3.5" /> Não foi possível validar este procedimento

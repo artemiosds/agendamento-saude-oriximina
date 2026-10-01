@@ -132,4 +132,65 @@ describe("validação clínica SIGTAP", () => {
     expect(result.status).toBe("indeterminado");
     expect(result.avisos.join(" ")).toContain("indisponível");
   });
+
+  it("usa a competência anterior apenas como referência clínica quando a atual não existe", async () => {
+    loadMock.mockRejectedValueOnce(new Error("competência ainda não publicada"));
+    const result = await validarCompatibilidadeClinicaSigtap({
+      procedimento: "0301010048",
+      competencia: "202610",
+      usarReferenciaAnterior: true,
+      cbo: "322205",
+      dataNascimento: "2026-09-20",
+      dataAtendimento: "2026-10-01",
+      sexo: "F",
+    });
+    expect(loadMock).toHaveBeenNthCalledWith(2, "202609");
+    expect(result.status).toBe("indeterminado");
+    expect(result.competenciaReferencia).toBe("202609");
+    expect(result.motivos.join(" ")).toContain("CBO 322205");
+    expect(result.motivos.join(" ")).toContain("Idade abaixo");
+    expect(result.bpaICompativel).toBeNull();
+  });
+
+  it("na seleção clínica confere CBO, idade e sexo sem classificar o instrumento de BPA-I", async () => {
+    const result = await validarCompatibilidadeClinicaSigtap({
+      procedimento: "0101040121",
+      competencia: "202609",
+      usarReferenciaAnterior: true,
+      cbo: "223710",
+      dataNascimento: "1980-01-01",
+      dataAtendimento: "2026-09-29",
+      sexo: "F",
+    });
+    expect(result.status).toBe("compatível");
+    expect(result.validacaoClinicaLimitada).toBe(true);
+    expect(result.bpaICompativel).toBeNull();
+    expect(result.avisos).toEqual([]);
+  });
+
+  it("não impede o registro clínico de um código ausente no catálogo do mês", async () => {
+    const result = await validarCompatibilidadeClinicaSigtap({
+      procedimento: "0302050027",
+      competencia: "202609",
+      usarReferenciaAnterior: true,
+      cbo: "223810",
+    });
+    expect(result.status).toBe("indeterminado");
+    expect(result.semRegrasProcedimento).toBe(true);
+    expect(result.motivos).toEqual([]);
+  });
+
+  it("mantém o registro clínico sem parecer quando nenhuma referência está acessível", async () => {
+    loadMock.mockRejectedValue(new Error("offline"));
+    const result = await validarCompatibilidadeClinicaSigtap({
+      procedimento: "0301010048",
+      competencia: "202610",
+      usarReferenciaAnterior: true,
+      cbo: "223810",
+    });
+    expect(result.status).toBe("indeterminado");
+    expect(result.catalogoIndisponivel).toBe(true);
+    expect(result.competenciaReferencia).toBeUndefined();
+    expect(loadMock).toHaveBeenCalledTimes(4);
+  });
 });

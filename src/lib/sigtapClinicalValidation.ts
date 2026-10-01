@@ -6,6 +6,7 @@ export type SigtapClinicalStatus = "compatível" | "incompatível" | "indetermin
 export interface SigtapClinicalValidationInput {
   procedimento: string;
   competencia: string;
+  usarReferenciaAnterior?: boolean;
   cbo?: string | null;
   dataNascimento?: string | null;
   dataAtendimento?: string | null;
@@ -23,7 +24,18 @@ export interface SigtapClinicalValidationResult {
   faixaEtaria?: { minimaMeses: number | null; maximaMeses: number | null };
   instrumentos: string[];
   bpaICompativel: boolean | null;
+  competenciaReferencia?: string;
+  catalogoIndisponivel?: boolean;
+  semRegrasProcedimento?: boolean;
+  validacaoClinicaLimitada?: boolean;
 }
+
+const previousCompetencia = (competencia: string, monthsBack: number): string => {
+  const year = Number(competencia.slice(0, 4));
+  const month = Number(competencia.slice(4, 6));
+  const date = new Date(Date.UTC(year, month - 1 - monthsBack, 1));
+  return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+};
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -191,6 +203,7 @@ export async function validarCompatibilidadeClinicaSigtap(
     idadeMeses: calcularIdadeMesesSigtap(input.dataNascimento, input.dataAtendimento),
     instrumentos: [] as string[],
     bpaICompativel: null as boolean | null,
+    validacaoClinicaLimitada: Boolean(input.usarReferenciaAnterior),
   };
 
   if (procedimento.length !== 10) {
@@ -207,6 +220,52 @@ export async function validarCompatibilidadeClinicaSigtap(
   try {
     catalog = await loadBpaSigtapCatalog(competencia);
   } catch (error: any) {
+    if (input.usarReferenciaAnterior) {
+      for (let monthsBack = 1; monthsBack <= 3; monthsBack++) {
+        const referencia = previousCompetencia(competencia, monthsBack);
+        try {
+          const previousCatalog = await loadBpaSigtapCatalog(referencia);
+          const previousProc = previousCatalog.get(procedimento);
+          const indicacoes: string[] = [];
+          if (previousProc) {
+            if (!previousProc.cbos.has(cbo)) {
+              indicacoes.push(`O CBO ${cbo} não consta para este procedimento na referência ${referencia}.`);
+            }
+            const sexo = String(input.sexo || "").trim().toUpperCase().slice(0, 1);
+            if (["M", "F"].includes(previousProc.sexo)) {
+              if (!sexo) indicacoes.push("Sexo do paciente não informado para conferência.");
+              else if (sexo !== previousProc.sexo) {
+                indicacoes.push(`Sexo informado difere da restrição da referência ${referencia} (${previousProc.sexo}).`);
+              }
+            }
+            if (base.idadeMeses == null &&
+                (previousProc.idadeMinimaMeses != null || previousProc.idadeMaximaMeses != null)) {
+              indicacoes.push("Nascimento ou data do atendimento não disponível para conferir a idade.");
+            } else if (base.idadeMeses != null) {
+              if (previousProc.idadeMinimaMeses != null && base.idadeMeses < previousProc.idadeMinimaMeses) {
+                indicacoes.push(`Idade abaixo do mínimo da referência ${referencia}: ${formatarIdadeMesesHumana(previousProc.idadeMinimaMeses)}.`);
+              }
+              if (previousProc.idadeMaximaMeses != null && base.idadeMeses > previousProc.idadeMaximaMeses) {
+                indicacoes.push(`Idade acima do máximo da referência ${referencia}: ${formatarIdadeMesesHumana(previousProc.idadeMaximaMeses)}.`);
+              }
+            }
+          } else {
+            indicacoes.push(`Procedimento sem dados na referência ${referencia}.`);
+          }
+          return {
+            ...base,
+            competenciaReferencia: referencia,
+            motivos: indicacoes,
+            faixaEtaria: previousProc
+              ? { minimaMeses: previousProc.idadeMinimaMeses, maximaMeses: previousProc.idadeMaximaMeses }
+              : undefined,
+          };
+        } catch {
+          // Tenta a competência anterior seguinte, sem atribuir validade definitiva.
+        }
+      }
+      return { ...base, catalogoIndisponivel: true };
+    }
     return {
       ...base,
       avisos: [`Catálogo SIGTAP ${competencia} indisponível: ${error?.message || "falha de leitura"}`],
@@ -215,6 +274,7 @@ export async function validarCompatibilidadeClinicaSigtap(
 
   const proc = catalog.get(procedimento);
   if (!proc) {
+    if (input.usarReferenciaAnterior) return { ...base, semRegrasProcedimento: true };
     return {
       ...base,
       status: "incompatível",
@@ -222,8 +282,8 @@ export async function validarCompatibilidadeClinicaSigtap(
     };
   }
 
-  const instrumentos = [...proc.instrumentos];
-  const bpaICompativel = proc.instrumentos.has("02");
+  const instrumentos = input.usarReferenciaAnterior ? [] : [...proc.instrumentos];
+  const bpaICompativel = input.usarReferenciaAnterior ? null : proc.instrumentos.has("02");
   const instrumentosDescritos = instrumentos.map((codigo) =>
     codigo === "10" ? "10 (e-SUS APS)" : codigo,
   ).join(", ");
@@ -233,7 +293,7 @@ export async function validarCompatibilidadeClinicaSigtap(
       `CBO não compatível para produção deste procedimento: o SIGTAP da competência ${competencia} não relaciona o CBO ${cbo} ao código ${procedimento}. Isso não apaga o registro clínico, mas impede que esta combinação seja enviada como produção válida no BPA-I.`,
     );
   }
-  if (!bpaICompativel) {
+  if (bpaICompativel === false) {
     avisos.push(
       `Registro clínico permitido, mas fora do BPA-I: o procedimento ${procedimento} usa instrumento(s) ${instrumentosDescritos || "não informado"} na competência ${competencia}; o BPA-I exige o instrumento 02.`,
     );
