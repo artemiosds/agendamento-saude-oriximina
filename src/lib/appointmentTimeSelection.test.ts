@@ -35,6 +35,13 @@ describe("seleção manual de horário em disponibilidade por turno", () => {
     expect(isTimeAfterSchedulingCutoff("08:29", "2026-10-01", "2026-10-01", 480, 30, true)).toBe(false);
   });
 
+  it("para a Agenda, aceita qualquer horário futuro sem tolerância adicional e bloqueia o minuto atual", () => {
+    expect(isTimeAfterSchedulingCutoff("07:01", "2026-10-01", "2026-10-01", 420, 0)).toBe(true);
+    expect(isTimeAfterSchedulingCutoff("07:30", "2026-10-01", "2026-10-01", 449, 0)).toBe(true);
+    expect(isTimeAfterSchedulingCutoff("07:00", "2026-10-01", "2026-10-01", 420, 0)).toBe(false);
+    expect(isTimeAfterSchedulingCutoff("06:59", "2026-10-01", "2026-10-01", 420, 0)).toBe(false);
+  });
+
   it("limita o encaixe Master a motivos de capacidade, sem ignorar bloqueios ou falta de disponibilidade", () => {
     expect(isMasterCapacityOverrideReason("day_full")).toBe(true);
     expect(isMasterCapacityOverrideReason("hour_full")).toBe(true);

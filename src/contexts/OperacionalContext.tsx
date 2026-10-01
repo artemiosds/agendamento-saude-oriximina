@@ -206,7 +206,7 @@ interface OperacionalContextType {
   addBloqueio: (b: Omit<BloqueioAgenda, "id">) => Promise<void>;
   updateBloqueio: (id: string, data: Partial<BloqueioAgenda>) => Promise<void>;
   deleteBloqueio: (id: string) => Promise<void>;
-  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean) => string[];
+  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean, minimumLeadMinutes?: number) => string[];
   getTurnoInfo: (profissionalId: string, unidadeId: string, date: string) => TurnoInfoResult[];
   getAvailableDates: (profissionalId: string, unidadeId: string, isPublic?: boolean) => string[];
   getNextAvailableSlots: (
@@ -1061,7 +1061,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
   );
 
   const getAvailableSlots = useCallback(
-    (profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
+    (profissionalId: string, unidadeId: string, date: string, isPublic = false, minimumLeadMinutes = 30): string[] => {
       const agendaMode = window.location.pathname === '/painel/agenda';
       if (agendaMode && !isCompleteAgendaDate(date)) return [];
       const todayStr = todayLocalStr();
@@ -1089,7 +1089,7 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
       const slots: string[] = [];
       const ehHoje = date === todayStr;
-      const limiteMinutos = ehHoje ? nowMinutesInBrazil() + 30 : -1;
+      const limiteMinutos = ehHoje ? nowMinutesInBrazil() + Math.max(0, minimumLeadMinutes) : -1;
 
       for (const td of turnoDisps) {
         const turnoStart = td.horaInicio;

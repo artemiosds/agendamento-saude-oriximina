@@ -66,7 +66,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Badge } from "@/components/ui/badge";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
-import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, nowMinutesInBrazilPrecise, todayLocalStr } from "@/lib/utils";
+import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -750,7 +750,7 @@ const Agenda: React.FC = () => {
     if (!completeAgendaDates.has(selectedDate)) return [];
     if (!newAg.profissionalId) return [];
     if (!selectedProfUnit) return [];
-    return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate);
+    return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate, false, 0);
   }, [newAg.profissionalId, selectedProfUnit, selectedDate, getAvailableSlots, completeAgendaDates]);
 
   const newAgAvailableTurnWindows = React.useMemo(
@@ -758,10 +758,10 @@ const Agenda: React.FC = () => {
     [newAgTurnoInfo],
   );
   const newAgHasFreeTurn = newAgAvailableTurnWindows.length > 0;
-  const newAgTimeAfterCutoff = isTimeAfterSchedulingCutoff(
-    newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazilPrecise(), 30, true,
+  const newAgTimeInFuture = isTimeAfterSchedulingCutoff(
+    newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazil(), 0,
   );
-  const newAgTimeAllowed = newAgTimeAfterCutoff && (
+  const newAgTimeAllowed = newAgTimeInFuture && (
     (isTurnoMode
       ? isTimeWithinTurnWindow(newAg.hora, isMaster ? newAgTurnoInfo : newAgAvailableTurnWindows)
       : newAgSlots.includes(newAg.hora))
@@ -1237,8 +1237,8 @@ const Agenda: React.FC = () => {
   };
 
   const executarCreate = async () => {
-    if (!isTimeAfterSchedulingCutoff(newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazilPrecise(), 30, true)) {
-      toast.error("Para hoje, escolha um horário com pelo menos 30 minutos de antecedência.");
+    if (!isTimeAfterSchedulingCutoff(newAg.hora, selectedDate, todayLocalStr(), nowMinutesInBrazil(), 0)) {
+      toast.error("Para hoje, escolha um horário posterior ao horário atual.");
       return;
     }
     try {
@@ -2381,7 +2381,7 @@ const Agenda: React.FC = () => {
     if (!editAg?.profissionalId) return [];
     const prof = profissionais.find((p) => p.id === editAg.profissionalId);
     if (!prof?.unidadeId) return [];
-    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data);
+    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data, false, 0);
   }, [editAg?.profissionalId, editAg?.data, profissionais, getAvailableSlots, completeAgendaDates]);
 
   const originalEditAppointment = editAg ? agendamentos.find((a) => a.id === editAg.id) : undefined;
@@ -2394,7 +2394,7 @@ const Agenda: React.FC = () => {
       || (originalTimeRemainsInTurn && isTimeWithinTurnWindow(originalEditAppointment?.hora || "", [turn])),
   );
   const editTimeAllowed = !!editAg
-    && isTimeAfterSchedulingCutoff(editAg.hora, editAg.data, todayLocalStr(), nowMinutesInBrazil())
+    && isTimeAfterSchedulingCutoff(editAg.hora, editAg.data, todayLocalStr(), nowMinutesInBrazil(), 0)
     && (isAppointmentTimeSelectable(editAg.hora, editAvailableSlots, editTurnWindowsWithCapacity)
       // Master/coordinator can use the manual override shown in this editor;
       // the authoritative RPC below still checks capacity and requires confirmation.
@@ -2903,8 +2903,8 @@ const Agenda: React.FC = () => {
                             </p>
                             {newAg.hora && !newAgTimeAllowed && (
                               <p className="text-xs text-destructive">
-                                {!newAgTimeAfterCutoff && selectedDate === todayLocalStr()
-                                  ? "Para hoje, escolha um horário com pelo menos 30 minutos de antecedência."
+                                {!newAgTimeInFuture && selectedDate === todayLocalStr()
+                                  ? "Para hoje, escolha um horário posterior ao horário atual."
                                   : "Informe um horário dentro de um turno com vaga interna disponível."}
                               </p>
                             )}
