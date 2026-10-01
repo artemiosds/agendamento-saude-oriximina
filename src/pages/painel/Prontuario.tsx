@@ -54,6 +54,7 @@ import {
   type SigtapClinicalValidationResult,
 } from "@/lib/sigtapClinicalValidation";
 import { resolveProntuarioProfessional } from "@/lib/prontuarioProfessional";
+import { syncProntuarioProcedimentos, type ProntuarioProcedureLink } from "@/lib/prontuarioProcedurePersistence";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
@@ -1846,7 +1847,7 @@ const ProntuarioPage: React.FC = () => {
     });
   };
 
-  const handleSave = async (formOverride?: any): Promise<boolean> => {
+  const handleSave = async (formOverride?: any, keepOpenForFinalization = false): Promise<boolean> => {
     // Anti-duplo-clique: bloqueia chamadas concorrentes antes mesmo de setSaving refletir.
     if (savingRef.current) {
       console.warn("[handleSave] Salvamento já em curso — clique duplo ignorado.");
@@ -1864,12 +1865,14 @@ const ProntuarioPage: React.FC = () => {
 
     if (!f.paciente_nome || !f.data_atendimento) {
       toast.error("Paciente e data são obrigatórios.");
+      savingRef.current = false;
       return false;
     }
     // Prevent creating/editing prontuários for future dates
     const today = todayLocalStr();
     if (f.data_atendimento > today && !editId) {
       toast.error("Não é possível registrar prontuário para data futura. O atendimento precisa ocorrer primeiro.");
+      savingRef.current = false;
       return false;
     }
     // Motivo da alteração agora é opcional ao editar.
@@ -1961,6 +1964,12 @@ const ProntuarioPage: React.FC = () => {
     const autosaveStart = Date.now();
     while (autosaveInFlightRef.current && Date.now() - autosaveStart < 5000) {
       await new Promise(r => setTimeout(r, 100));
+    }
+    if (autosaveInFlightRef.current) {
+      toast.error("O salvamento automático ainda está em andamento. Aguarde e tente novamente.");
+      setSaving(false);
+      savingRef.current = false;
+      return false;
     }
     // Usa editIdRef.current como fonte de verdade (autosave pode ter criado o registro)
     const effectiveEditId = editId || editIdRef.current;
@@ -2170,65 +2179,17 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (prontuarioId) {
-        // First, fetch current procedures to avoid unnecessary deletion if no changes
-        const { data: existingProcs } = await (supabase as any)
-          .from("prontuario_procedimentos")
-          .select("procedimento_id, quantidade, observacao, cids_selecionados")
-          .eq("prontuario_id", prontuarioId);
-
-        // Prepare the new list of links to insert
-        const linksToInsert = selectedProcIds.map((pid) => {
-          const proc = procedimentos.find(p => p.id === pid);
+        const linksToSave: ProntuarioProcedureLink[] = spi.map((pid) => {
+          const proc = procedimentos.find((p) => p.id === pid);
           return {
             prontuario_id: prontuarioId,
-            procedimento_id: proc?.uuid || pid, // Use UUID if found
-            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-            quantidade: procDetails[pid]?.quantidade || 1,
-            observacao: procDetails[pid]?.observacao || "",
+            procedimento_id: proc?.uuid || pid,
+            cids_selecionados: Array.from(new Set(scbp[pid] || [])),
+            quantidade: pd[pid]?.quantidade || 1,
+            observacao: pd[pid]?.observacao || "",
           };
-        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
-
-        // Simple strategy: delete and re-insert if different
-        // We compare existing vs new to see if we need to do anything
-        const hasChanges = JSON.stringify(existingProcs || []) !== JSON.stringify(linksToInsert.map(l => ({
-          procedimento_id: l.procedimento_id,
-          quantidade: l.quantidade,
-          observacao: l.observacao,
-          cids_selecionados: l.cids_selecionados
-        })));
-
-        if (hasChanges || !existingProcs || existingProcs.length !== linksToInsert.length) {
-          // Verify each procedure UUID is valid before deleting/inserting
-          const validLinks = linksToInsert.filter(l => {
-            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id);
-            if (!isUuid) {
-              console.warn(`[Prontuario] Pulando procedimento com ID inválido (não é UUID): ${l.procedimento_id}`);
-            }
-            return isUuid;
-          });
-
-          const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
-          if (deleteError) {
-            console.error("[Prontuario] Erro real ao remover procedimentos antigos", {
-              error: deleteError,
-              prontuarioId,
-              action: "delete_procedures"
-            });
-            // We don't throw here to allow the main record to remain saved, but we warn the user
-            toast.error("Erro ao atualizar lista de procedimentos. O prontuário principal foi salvo.");
-          } else if (validLinks.length > 0) {
-            const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
-            if (insertError) {
-              console.error("[Prontuario] Erro real ao salvar procedimentos", {
-                error: insertError,
-                prontuarioId,
-                validLinks,
-                action: "insert_procedures"
-              });
-              toast.error("O prontuário foi salvo, mas houve um erro ao vincular os procedimentos.");
-            }
-          }
-        }
+        });
+        await syncProntuarioProcedimentos(prontuarioId, linksToSave);
       }
 
       const shouldRegisterSession = Boolean(isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
@@ -2263,7 +2224,7 @@ const ProntuarioPage: React.FC = () => {
           detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
         });
         toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
-      } else {
+      } else if (!keepOpenForFinalization) {
         toast.success(effectiveEditId ? "Prontuário atualizado!" : "Prontuário criado!");
       }
 
@@ -2313,11 +2274,11 @@ const ProntuarioPage: React.FC = () => {
       ]).catch(err => console.error('[Prontuario] background reload failed:', err));
 
       setSessionRegistrationRequested(false);
-      // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
-      if (!shouldRegisterSession) {
+      // Mantenha o formulário aberto até que a Agenda confirme a finalização.
+      if (!shouldRegisterSession && !keepOpenForFinalization) {
         setDialogOpen(false);
       } else {
-        // Session registered: update editId to the saved prontuário so user can continue editing
+        // O registro já foi salvo; mantém seu ID para uma eventual tentativa de conclusão.
         if (prontuarioId) {
           setEditId(prontuarioId);
           if (createdProfessional) syncCreatedProfessional(createdProfessional, form.paciente_id);
@@ -2329,14 +2290,6 @@ const ProntuarioPage: React.FC = () => {
       setPreviousForm(null);
       return true;
     } catch (err: any) {
-      if (insertedNewProntuario && prontuarioId) {
-        try {
-          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
-          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
-        } catch (rollbackError) {
-          console.error("Erro ao reverter prontuário após falha na sessão:", rollbackError);
-        }
-      }
       console.error("Erro ao salvar prontuário/sessão:", {
         error: err,
         message: err?.message,
@@ -2346,7 +2299,9 @@ const ProntuarioPage: React.FC = () => {
         cycle_id: sessaoCycle?.id || null,
         session_id: currentSessionForRegistration?.id || null,
       });
-      if (form.tipo_registro === 'sessao' && !editId) {
+      if (insertedNewProntuario) {
+        toast.error("O prontuário principal foi gravado, mas a conclusão falhou. Confira os procedimentos e tente novamente.");
+      } else if (form.tipo_registro === 'sessao' && !editId) {
         toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
       } else {
         toast.error("Erro ao salvar: " + (err?.message || "erro desconhecido"));
@@ -2453,6 +2408,7 @@ const ProntuarioPage: React.FC = () => {
         if (!record.profissional_id) { delete record.profissional_id; delete record.profissional_nome; }
         const { data: updated, error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId).select('*').maybeSingle();
         if (error) throw error;
+        if (!updated?.id) throw new Error('Nenhum prontuário foi atualizado no salvamento automático.');
         if (updated) applySavedProntuarioToCache(updated);
         console.log("[performAutosave] Draft atualizado:", prontId);
       } else {
@@ -2462,6 +2418,7 @@ const ProntuarioPage: React.FC = () => {
           .select('*')
           .single();
         if (error) throw error;
+        if (!inserted?.id) throw new Error('O banco não confirmou a criação do prontuário.');
         if (inserted?.id) {
           prontId = inserted.id;
           console.log("[performAutosave] Novo draft criado:", prontId);
@@ -2475,10 +2432,10 @@ const ProntuarioPage: React.FC = () => {
         }
       }
 
-      // Autosave procedures to junction table
+      // Confirma também os vínculos clínicos antes de indicar que o rascunho foi salvo.
       if (prontId) {
-        const links = spi.map((pid) => {
-          const proc = procedimentos.find(p => p.id === pid);
+        const links: ProntuarioProcedureLink[] = spi.map((pid) => {
+          const proc = procedimentos.find((p) => p.id === pid);
           return {
             prontuario_id: prontId,
             procedimento_id: proc?.uuid || pid,
@@ -2486,27 +2443,15 @@ const ProntuarioPage: React.FC = () => {
             quantidade: pd[pid]?.quantidade || 1,
             observacao: pd[pid]?.observacao || "",
           };
-        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
-
-        
-        // Use a single transaction (delete + insert)
-        const validLinks = links.filter(l => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id));
-        
-        const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
-        if (!deleteError && validLinks.length > 0) {
-          const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
-          if (insertError) {
-            console.error('[autosave] Erro ao inserir procedimentos:', insertError);
-          }
-        } else if (deleteError) {
-          console.error('[autosave] Erro ao remover procedimentos:', deleteError);
-        }
+        });
+        await syncProntuarioProcedimentos(prontId, links);
       }
       setAutosaveStatus('saved');
       setAutosaveAt(new Date());
     } catch (err) {
       console.error('[autosave] erro:', err);
       setAutosaveStatus('error');
+      lastAutosaveHashRef.current = '';
     } finally {
       autosaveInFlightRef.current = false;
     }
@@ -2602,7 +2547,7 @@ const ProntuarioPage: React.FC = () => {
     }
     finalizingRef.current = true;
     try {
-      const saved = await handleSave();
+      const saved = await handleSave(undefined, true);
       if (!saved) return;
 
     // Resolve the agendamento ID — from activeAtendimento or form
@@ -2671,6 +2616,9 @@ const ProntuarioPage: React.FC = () => {
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
     navigate("/painel/agenda", { replace: true });
+    } catch (error) {
+      console.error("[Prontuario] Falha inesperada ao finalizar atendimento:", error);
+      toast.error("Não foi possível concluir todas as gravações. O prontuário permanece disponível para conferir e tentar novamente.");
     } finally {
       finalizingRef.current = false;
     }

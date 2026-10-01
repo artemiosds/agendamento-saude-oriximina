@@ -735,11 +735,13 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         }
       }
 
-      const { error } = await supabase
+      const { data: persisted, error } = await supabase
         .from("agendamentos" as any)
         .update(dbData)
-        .eq("id", id);
-      if (!error) {
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+      if (!error && persisted) {
         setAgendamentos((prev) =>
           prev.map((a) => (a.id === id ? { ...a, ...data } : a)),
         );
@@ -751,9 +753,9 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         });
         invalidateCache(queryKeys.agendamentos.all);
       } else {
-        console.error("Error updating agendamento:", error);
+        console.error("Error updating agendamento:", error || "Nenhum registro foi atualizado");
         toast.error("Erro ao atualizar agendamento");
-        throw error;
+        throw error || new Error("Nenhum agendamento foi atualizado no banco.");
       }
     },
     [logAction, invalidateCache, authUser?.role, getTurnoInfo, loadAgendaRange],
@@ -853,7 +855,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
   const addAtendimento = useCallback(
     async (a: Atendimento) => {
       try {
-        const { error } = await supabase.from("atendimentos" as any).insert({
+        const { data: persisted, error } = await supabase.from("atendimentos" as any).insert({
           id: a.id,
           agendamento_id: a.agendamentoId,
           paciente_id: a.pacienteId,
@@ -869,10 +871,10 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
           hora_inicio: a.horaInicio,
           hora_fim: a.horaFim || "",
           status: a.status,
-        } as any);
-        if (error) {
-          console.error("Error persisting atendimento:", error);
-          throw error;
+        } as any).select("id").single();
+        if (error || !persisted) {
+          console.error("Error persisting atendimento:", error || "Nenhum registro foi retornado");
+          throw error || new Error("O banco não confirmou o início do atendimento.");
         }
       } catch (err) {
         console.error("Error adding atendimento:", err);
