@@ -870,9 +870,13 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
           hora_fim: a.horaFim || "",
           status: a.status,
         } as any);
-        if (error) console.error("Error persisting atendimento:", error);
+        if (error) {
+          console.error("Error persisting atendimento:", error);
+          throw error;
+        }
       } catch (err) {
         console.error("Error adding atendimento:", err);
+        throw err;
       }
       setAtendimentos((prev) => [...prev, a]);
       invalidateCache(queryKeys.atendimentos.all);

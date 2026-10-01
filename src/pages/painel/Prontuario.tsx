@@ -2623,16 +2623,30 @@ const ProntuarioPage: React.FC = () => {
     const pac = pacientes.find((px) => px.id === form.paciente_id);
 
     // Confirma no banco a finalização do atendimento antes de navegar
-    const { error: finalizeError } = await (supabase as any)
+    const { data: finalizedAttendance, error: finalizeError } = await (supabase as any)
       .from("atendimentos")
       .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
-      .eq("agendamento_id", agendamentoId);
+      .eq("agendamento_id", agendamentoId)
+      .select("id");
 
-    if (finalizeError) {
+    if (finalizeError || !finalizedAttendance?.length) {
       console.error("[Prontuario] Falha ao finalizar atendimento no banco:", finalizeError);
-      toast.error("❌ Não foi possível finalizar o atendimento. Tente novamente.");
+      toast.error("Não foi possível confirmar o atendimento iniciado. Atualize a tela ou tente novamente.");
       return;
     }
+
+    // The appointment status is what the professional sees in their Agenda.
+    // Wait for persistence before reporting success or returning to that screen.
+    try {
+      await updateAgendamento(agendamentoId, { status: "concluido" });
+    } catch (error) {
+      console.error("[Prontuario] Falha ao concluir agendamento na Agenda:", error);
+      toast.error("O atendimento foi registrado, mas não foi possível atualizar a Agenda. Tente novamente.");
+      return;
+    }
+    void refreshAgendamentos().catch((error) =>
+      console.error("[Prontuario] Falha ao atualizar a lista da Agenda:", error),
+    );
 
     // Finalizar o atendimento encerra apenas este atendimento. A alta do ciclo
     // é uma decisão clínica separada, confirmada explicitamente em "Dar Alta".
@@ -2654,10 +2668,9 @@ const ProntuarioPage: React.FC = () => {
     }).catch((err) => console.error("[Prontuario] Falha ao registrar auditoria do atendimento:", err));
 
     localStorage.removeItem(`timer_${agendamentoId}`);
-    updateAgendamento(agendamentoId, { status: "concluido" });
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
-    navigate("/painel/agenda");
+    navigate("/painel/agenda", { replace: true });
     } finally {
       finalizingRef.current = false;
     }

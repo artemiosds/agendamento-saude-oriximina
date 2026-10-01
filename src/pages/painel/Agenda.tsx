@@ -2208,6 +2208,38 @@ const Agenda: React.FC = () => {
 
     const now = new Date();
     const horaInicio = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const pac = pacientes.find((p) => p.id === ag.pacienteId);
+    try {
+      // Persist the attendance before opening the chart so its finalization
+      // cannot race an attendance row that is still being inserted.
+      await addAtendimento({
+        id: `at${Date.now()}`,
+        agendamentoId: ag.id,
+        pacienteId: ag.pacienteId,
+        pacienteNome: ag.pacienteNome,
+        profissionalId: ag.profissionalId,
+        profissionalNome: ag.profissionalNome,
+        unidadeId: ag.unidadeId,
+        salaId: ag.salaId || "",
+        setor: user?.setor || "",
+        procedimento: ag.tipo,
+        observacoes: "",
+        data: ag.data,
+        horaInicio,
+        horaFim: "",
+        status: "em_atendimento",
+      });
+    } catch (error) {
+      console.error("[Agenda] Não foi possível persistir o início do atendimento:", error);
+      try {
+        await updateAgendamento(ag.id, { status: ag.status as any });
+      } catch (rollbackError) {
+        console.error("[Agenda] Falha ao restaurar o status do agendamento:", rollbackError);
+      }
+      toast.error("Não foi possível iniciar o atendimento. Tente novamente.");
+      return;
+    }
+
     localStorage.setItem(
       `timer_${ag.id}`,
       JSON.stringify({
@@ -2218,7 +2250,6 @@ const Agenda: React.FC = () => {
       }),
     );
 
-    // Navigate immediately for instant feedback; side-effects fire in background.
     toast.success("Atendimento iniciado!");
     const params = new URLSearchParams({
       pacienteId: ag.pacienteId,
@@ -2231,27 +2262,9 @@ const Agenda: React.FC = () => {
     navigate(`/painel/prontuario?${params.toString()}`);
 
     void (async () => {
-      const pac = pacientes.find((p) => p.id === ag.pacienteId);
       await Promise.allSettled([
         refreshAgendamentos(),
         refreshFila(),
-        addAtendimento({
-          id: `at${Date.now()}`,
-          agendamentoId: ag.id,
-          pacienteId: ag.pacienteId,
-          pacienteNome: ag.pacienteNome,
-          profissionalId: ag.profissionalId,
-          profissionalNome: ag.profissionalNome,
-          unidadeId: ag.unidadeId,
-          salaId: ag.salaId,
-          setor: user?.setor || "",
-          procedimento: ag.tipo,
-          observacoes: "",
-          data: ag.data,
-          horaInicio,
-          horaFim: "",
-          status: "em_atendimento",
-        }),
         logAction({
           acao: "atendimento_iniciado",
           entidade: "atendimento",
