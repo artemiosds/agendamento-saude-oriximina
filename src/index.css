@@ -577,3 +577,9 @@ select:focus-visible,
   font-size: 12px;
   color: #1e40af;
 }
+
+#lovable-badge {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
