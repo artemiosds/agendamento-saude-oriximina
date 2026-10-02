@@ -653,6 +653,8 @@ const ProntuarioPage: React.FC = () => {
   const soapCustom = useSoapCustomOptions(user?.id);
 
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [painelDocOpen, setPainelDocOpen] = useState(false);
+  const [painelDocRefresh, setPainelDocRefresh] = useState(0);
   const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
   const [viewerProntuario, setViewerProntuario] = useState<any | null>(null);
@@ -5150,6 +5152,8 @@ const ProntuarioPage: React.FC = () => {
             isGlobalAdmin={isGlobalAdmin}
             enabled={dialogOpen}
             onView={handleViewProntuarioFromHistory}
+            onGerarDocumento={form.paciente_id ? () => setPainelDocOpen(true) : undefined}
+            documentosRefreshKey={painelDocRefresh}
           />
           </div>{/* end grid split */}
 
@@ -5795,6 +5799,24 @@ const ProntuarioPage: React.FC = () => {
           onOpenChange={setDocModalOpen}
           paciente={(() => {
             const p = pacientes.find(x => x.id === queryPacienteId);
+            return p ? { id: p.id, nome: p.nome, cpf: p.cpf, cns: p.cns, data_nascimento: p.dataNascimento, cid: p.cid, especialidade_destino: '' } : undefined;
+          })()}
+          profissional={user ? { id: user.id, nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
+          unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
+          dataAtendimento={new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+        />
+      )}
+
+      {/* Modal Gerar Documento — aberto pelo painel lateral do prontuário em edição */}
+      {painelDocOpen && form.paciente_id && (
+        <GerarDocumentoModal
+          open={painelDocOpen}
+          onOpenChange={(o) => {
+            setPainelDocOpen(o);
+            if (!o) setPainelDocRefresh((k) => k + 1);
+          }}
+          paciente={(() => {
+            const p = pacientes.find(x => x.id === form.paciente_id);
             return p ? { id: p.id, nome: p.nome, cpf: p.cpf, cns: p.cns, data_nascimento: p.dataNascimento, cid: p.cid, especialidade_destino: '' } : undefined;
           })()}
           profissional={user ? { id: user.id, nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
