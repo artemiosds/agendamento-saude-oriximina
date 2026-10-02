@@ -1,4 +1,4 @@
-import { loadBpaSigtapCatalog } from "./bpaSigtapCatalog";
+import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo } from "./bpaSigtapCatalog";
 import { supabase } from "@/integrations/supabase/client";
 
 export type SigtapClinicalStatus = "compatível" | "incompatível" | "indeterminado";
@@ -272,6 +272,8 @@ export async function validarCompatibilidadeClinicaSigtap(
     };
   }
 
+  const refUsada = getCompetenciaReferenciaCatalogo(catalog);
+  if (refUsada && refUsada !== competencia) (base as any).competenciaReferencia = refUsada;
   const proc = catalog.get(procedimento);
   if (!proc) {
     if (input.usarReferenciaAnterior) return { ...base, semRegrasProcedimento: true };

@@ -144,6 +144,11 @@ export function parseBpaSigtapCatalog(
   return catalog;
 }
 
+/** Competência efetivamente usada por catálogo carregado (pode ser anterior à pedida). */
+const competenciaUsadaPorCatalogo = new WeakMap<BpaSigtapCatalog, string>();
+export const getCompetenciaReferenciaCatalogo = (catalog?: BpaSigtapCatalog | null): string =>
+  (catalog && competenciaUsadaPorCatalogo.get(catalog)) || "";
+
 export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCatalog> {
   if (!/^\d{6}$/.test(competencia)) throw new Error("Competência SIGTAP inválida");
   const cached = cache.get(competencia);
@@ -153,14 +158,18 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
     const listingResponse = await fetch(GITHUB_TABLES);
     if (!listingResponse.ok) throw new Error(`Tabela SIGTAP indisponível (HTTP ${listingResponse.status})`);
     const listing: Array<{ name: string; download_url: string }> = await listingResponse.json();
-    const matches = listing.filter((file) =>
-      new RegExp(`^TabelaUnificada_${competencia}_.*\\.zip$`, "i").test(file.name),
-    );
-    const selected = matches.sort((a, b) => b.name.localeCompare(a.name))[0];
-    if (!selected?.download_url) throw new Error(`Tabela SIGTAP da competência ${competencia} não disponível`);
+    // Usa a competência pedida; se ainda não publicada pelo DATASUS, usa a
+    // mais recente disponível anterior a ela (nunca rejeita por competência).
+    const candidatos = listing
+      .map((file) => ({ file, comp: file.name.match(/^TabelaUnificada_(\d{6})_.*\.zip$/i)?.[1] || "" }))
+      .filter((c) => c.comp && c.comp <= competencia && c.file.download_url)
+      .sort((a, b) => b.comp.localeCompare(a.comp) || b.file.name.localeCompare(a.file.name));
+    const selected = candidatos[0]?.file;
+    const competenciaUsada = candidatos[0]?.comp || "";
+    if (!selected?.download_url) throw new Error(`Nenhuma tabela SIGTAP disponível até ${competencia}`);
 
     const zipResponse = await fetch(selected.download_url);
-    if (!zipResponse.ok) throw new Error(`Falha ao baixar SIGTAP ${competencia} (HTTP ${zipResponse.status})`);
+    if (!zipResponse.ok) throw new Error(`Falha ao baixar SIGTAP ${competenciaUsada} (HTTP ${zipResponse.status})`);
     const zip = await JSZip.loadAsync(await zipResponse.arrayBuffer());
 
     const find = (name: string) => Object.entries(zip.files).find(([filePath]) =>
@@ -178,7 +187,7 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
     const entries = required.map(find);
     if (entries.some((entry) => !entry)) {
       throw new Error(
-        `SIGTAP ${competencia} sem arquivos obrigatórios de procedimento, layout, instrumento, CBO, serviço/classificação ou CID`,
+        `SIGTAP ${competenciaUsada} sem arquivos obrigatórios de procedimento, layout, instrumento, CBO, serviço/classificação ou CID`,
       );
     }
 
@@ -189,7 +198,7 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
     );
 
     const [procedimentos, procedimentosLayout, registros, ocupacoes, servicos, cids] = decoded;
-    return parseBpaSigtapCatalog(competencia, {
+    const catalog = parseBpaSigtapCatalog(competenciaUsada, {
       procedimentos,
       procedimentosLayout,
       registros,
@@ -197,6 +206,8 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
       servicos,
       cids,
     });
+    competenciaUsadaPorCatalogo.set(catalog, competenciaUsada);
+    return catalog;
   })();
 
   cache.set(competencia, pending);

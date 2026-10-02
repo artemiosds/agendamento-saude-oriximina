@@ -25,7 +25,7 @@ import {
   type CepInfo,
 } from "@/lib/bpaNormalization";
 import { validarListaProcedimentosBpaI } from "@/lib/bpaFinalValidation";
-import { loadBpaSigtapCatalog } from "@/lib/bpaSigtapCatalog";
+import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo } from "@/lib/bpaSigtapCatalog";
 import { isBpaAttendanceInCompetence } from "@/lib/bpaCompetencia";
 import {
   BPA_HEADER_LENGTH,
@@ -1169,7 +1169,14 @@ const BpaExportar: React.FC = () => {
         formData.data_especifica ||
         new Date(parseInt(ano), parseInt(mes), 0).toISOString().split("T")[0];
       // Sem metadados oficiais desta competência, não há como atestar BPA-I/CBO.
+      // Se a competência ainda não foi publicada, usa a mais recente disponível.
       const catalogoOficial = await loadBpaSigtapCatalog(competencia);
+      const competenciaRefSigtap = getCompetenciaReferenciaCatalogo(catalogoOficial);
+      if (competenciaRefSigtap && competenciaRefSigtap !== competencia) {
+        toast.info(
+          `Tabela SIGTAP ${competencia} ainda não publicada pelo DATASUS. Conferência feita com a referência oficial mais recente (${competenciaRefSigtap}).`,
+        );
+      }
 
       const prontuariosOriginais: any[] = [];
       const PAGE = 1000;
