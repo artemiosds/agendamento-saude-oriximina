@@ -4635,6 +4635,7 @@ export type Database = {
       register_treatment_discharge: {
         Args: {
           p_cycle_id: string
+          p_escopo?: string
           p_final_notes?: string
           p_reason: string
           p_tipo_alta: Database["public"]["Enums"]["tipo_alta"]
