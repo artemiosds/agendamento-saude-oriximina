@@ -660,6 +660,8 @@ const Configuracoes: React.FC = () => {
               </CardContent>
             </Card>
 
+            <PortalQrCodeCard />
+
             <Separator />
 
             <Card className="shadow-card border border-border/50">
