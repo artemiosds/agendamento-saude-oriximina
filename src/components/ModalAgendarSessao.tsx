@@ -186,10 +186,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     if (mode === 'remarcar' && session?.appointment_id && dateStr === session.scheduled_date) {
       return 'already_scheduled' as const;
     }
-    // Another appointment on the day does not occupy every time in the turn.
-    if (availableSet.has(dateStr)) return isSuggested ? 'suggested' as const : 'available' as const;
+    // Mostra as cores dos dias já agendados (o dia continua clicável).
     if (hasSameProf) return 'conflict_same' as const;
     if (hasOtherProf) return 'conflict_other' as const;
+    if (availableSet.has(dateStr)) return isSuggested ? 'suggested' as const : 'available' as const;
     return 'unavailable' as const;
   };
 
