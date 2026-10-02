@@ -1,3 +1,4 @@
+import PortalQrCodeCard from '@/components/PortalQrCodeCard';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
