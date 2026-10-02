@@ -113,17 +113,6 @@ const mapPacienteRow = (p: any) => ({
 
 const normalizeUnitId = (value?: string | null) => (value || "").trim();
 
-const fetchAllRows = async (buildQuery: (from: number, to: number) => any, pageSize = 1000) => {
-  const rows: any[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await buildQuery(from, from + pageSize - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    rows.push(...data);
-    if (data.length < pageSize) break;
-  }
-  return rows;
-};
 
 const fetchPacientesByIds = async (ids: string[]) => {
   const pacientes: any[] = [];
@@ -331,79 +320,15 @@ const Pacientes: React.FC = () => {
     staleTime: 0,
   });
 
-  const shouldLoadUnitDiagnostics = !!user && !isGlobalAdminUser && !isProfissional && !!unidadeIdFuncionario;
-
-  useQuery({
-    queryKey: queryKeys.pacientes.diagnostics({ unidadeId: unidadeIdFuncionario || "", role: user?.role || "" }),
-    enabled: shouldLoadUnitDiagnostics && funcionarios.length > 0,
-    staleTime: 0,
-    queryFn: async () => {
-      const unitId = normalizeUnitId(unidadeIdFuncionario);
-      const [allPacientes, agendaLinks, filaLinks, prontuarioLinks, nursingLinks, ptsLinks, treatmentLinks] = await Promise.all([
-        fetchAllRows((from, to) =>
-          supabase.from("pacientes").select("id,unidade_id,custom_data").range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("agendamentos").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("fila_espera").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("prontuarios").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("nursing_evaluations").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("pts").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("treatment_cycles").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
-        ),
-      ]);
-      const staffIds = new Set(
-        funcionarios.filter((f) => normalizeUnitId(f.unidadeId) === unitId).map((f) => f.id),
-      );
-      const linkedIds = new Set(
-        [
-          ...agendaLinks.map((row) => row.paciente_id),
-          ...filaLinks.map((row) => row.paciente_id),
-          ...prontuarioLinks.map((row) => row.paciente_id),
-          ...nursingLinks.map((row) => row.patient_id),
-          ...ptsLinks.map((row) => row.patient_id),
-          ...treatmentLinks.map((row) => row.patient_id),
-        ].filter(Boolean),
-      );
-      const semUnidade = allPacientes.filter((p) => !normalizeUnitId(p.unidade_id));
-      const diagnostico = {
-        masterTotal: allPacientes.length,
-        pacientesComVinculoNaUnidadeRecepcao: linkedIds.size,
-        unidadeIdIgualRecepcao: allPacientes.filter((p) => normalizeUnitId(p.unidade_id) === unitId).length,
-        unidadeIdVazioOuNull: semUnidade.length,
-        unidadeIdDiferente: allPacientes.filter((p) => {
-          const pacienteUnitId = normalizeUnitId(p.unidade_id);
-          return pacienteUnitId && pacienteUnitId !== unitId;
-        }).length,
-        criadosPorUsuariosDaUnidadeSemUnidade: semUnidade.filter((p) => {
-          const customData = p.custom_data || {};
-          return staffIds.has(customData.criado_por) || staffIds.has(customData.atualizado_por) || customData.unidade_origem_id === unitId;
-        }).length,
-        vinculadosFilaAgendaSemUnidadeCadastro: semUnidade.filter((p) => linkedIds.has(p.id)).length,
-      };
-      console.info("[Pacientes][Diagnóstico Recepção]", diagnostico);
-      return diagnostico;
-    },
-  });
-
   useEffect(() => {
-    // Revalidação periódica ou quando parâmetros de busca mudam
+    // Recarrega a lista apenas quando o escopo do usuário/unidade muda.
+    // A busca filtra localmente a lista já carregada (sem nova leitura do banco).
     const invalidate = async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
       refreshPacientes();
     };
     invalidate();
-  }, [queryClient, refreshPacientes, unidadeIdFuncionario, user?.role, user?.usuario, debouncedSearch]);
+  }, [queryClient, refreshPacientes, unidadeIdFuncionario, user?.role, user?.usuario]);
 
   // Profissionais veem pacientes vinculados aos seus agendamentos.
   // Recepção/Gestão/Master de unidade usam exclusivamente unidade_id real do funcionário.
