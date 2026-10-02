@@ -240,9 +240,9 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const selectedTimeAfterCutoff = isTimeAfterSchedulingCutoff(
     selectedHora, selectedDate, todayStr, nowMinutesInBrazil(),
   );
-  const selectedTimeAllowed = selectedTimeAfterCutoff && !exactPatientConflict && isAppointmentTimeSelectable(
-    selectedHora, displayedSlots, [...selectableTurnWindows, ...configuredTurnWindows],
-  );
+  // Horário livre: qualquer horário válido (sem antecedência mínima nem limite de turno).
+  // Feriados/bloqueios e capacidade continuam conferidos no servidor.
+  const selectedTimeAllowed = !exactPatientConflict && /^([01]\d|2[0-3]):[0-5]\d$/.test(selectedHora.slice(0, 5));
   const masterManualFallback = isMaster && !allowCapacityOverride && slots.length === 0 && turnWindows.length === 0
     && selectedTimeAfterCutoff && !exactPatientConflict;
 
@@ -289,7 +289,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       return;
     }
     if (!selectedTimeAllowed && !masterManualFallback) {
-      toast.error('Escolha um horário livre na grade ou dentro do período disponível do profissional.');
+      toast.error(exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).');
       return;
     }
     setSaving(true);
@@ -429,11 +429,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
           {dateWarning && (
             <div className={cn(
               'p-3 rounded-lg text-sm flex items-start gap-2 border',
-              dateWarning.type === 'error' && 'bg-destructive/10 border-destructive/30 text-destructive',
+              (dateWarning.type as string) === 'error' && 'bg-destructive/10 border-destructive/30 text-destructive',
               dateWarning.type === 'info' && 'bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300',
               dateWarning.type === 'warning' && 'bg-orange-500/10 border-orange-500/30 text-orange-700 dark:text-orange-300',
             )}>
-              {dateWarning.type === 'error' && <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
+              {(dateWarning.type as string) === 'error' && <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
               {(dateWarning.type === 'warning' || dateWarning.type === 'info') && <Info className="w-4 h-4 mt-0.5 shrink-0" />}
               <span>{dateWarning.message}</span>
             </div>
@@ -444,10 +444,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
             <div>
               <Label className="mb-2 block">Horários disponíveis em {formatDateBR(selectedDate)}:</Label>
               {displayedSlots.length === 0 ? (
-                canTypeTurnTime ? (
+                true ? (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      Informe um horário entre {[...selectableTurnWindows, ...configuredTurnWindows].map((turn) => `${turn.horaInicio} e ${turn.horaFim}`).join(' / ')}.
+                      Digite o horário desejado{turnWindows.length > 0 ? ` (turnos: ${turnWindows.map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(' / ')})` : ''}.
                     </p>
                     <input
                       type="time"
@@ -493,10 +493,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                       </Button>
                     );
                   })}
-                  {(canTypeTurnTime || isMaster) && (
+                  {(
                     <div className="col-span-5 mt-2 flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">
-                        {canTypeTurnTime ? 'Ou digite dentro do turno:' : 'Ou digite:'}
+                        Ou digite:
                       </span>
                       <input
                         type="time"
@@ -510,7 +510,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 </div>
               )}
               {selectedHora && !selectedTimeAllowed && !masterManualFallback && (
-                <p className="mt-2 text-xs text-destructive">{exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Escolha um horário disponível dentro do período configurado.'}</p>
+                <p className="mt-2 text-xs text-destructive">{exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).'}</p>
               )}
               {allowCapacityOverride && selectedHora && selectedTimeAllowed && !slots.includes(selectedHora)
                 && !turnWindows.some((turn) => turn.vagasLivresInternas > 0 && isTimeWithinTurnWindow(selectedHora, [turn])) && (

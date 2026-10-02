@@ -3065,7 +3065,7 @@ const Tratamentos: React.FC = () => {
           }}
           session={remarcarTarget}
           currentAppointment={remarcarTarget?.appointment_id
-            ? appointmentByIdMap[remarcarTarget.appointment_id] || null
+            ? (() => { const ap = appointmentByIdMap[remarcarTarget.appointment_id]; return ap ? { id: ap.id, data: ap.data, hora: ap.hora || "" } : null; })()
             : null}
           cycle={selectedCycle ? {
             id: selectedCycle.id,
