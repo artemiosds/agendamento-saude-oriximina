@@ -113,17 +113,6 @@ const mapPacienteRow = (p: any) => ({
 
 const normalizeUnitId = (value?: string | null) => (value || "").trim();
 
-const fetchAllRows = async (buildQuery: (from: number, to: number) => any, pageSize = 1000) => {
-  const rows: any[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await buildQuery(from, from + pageSize - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    rows.push(...data);
-    if (data.length < pageSize) break;
-  }
-  return rows;
-};
 
 const fetchPacientesByIds = async (ids: string[]) => {
   const pacientes: any[] = [];
