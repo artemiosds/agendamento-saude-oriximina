@@ -429,11 +429,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
           {dateWarning && (
             <div className={cn(
               'p-3 rounded-lg text-sm flex items-start gap-2 border',
-              dateWarning.type === 'error' && 'bg-destructive/10 border-destructive/30 text-destructive',
+              (dateWarning.type as string) === 'error' && 'bg-destructive/10 border-destructive/30 text-destructive',
               dateWarning.type === 'info' && 'bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300',
               dateWarning.type === 'warning' && 'bg-orange-500/10 border-orange-500/30 text-orange-700 dark:text-orange-300',
             )}>
-              {dateWarning.type === 'error' && <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
+              {(dateWarning.type as string) === 'error' && <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
               {(dateWarning.type === 'warning' || dateWarning.type === 'info') && <Info className="w-4 h-4 mt-0.5 shrink-0" />}
               <span>{dateWarning.message}</span>
             </div>
