@@ -1378,6 +1378,12 @@ const Agenda: React.FC = () => {
           return;
         }
       }
+      if (slotCheck && typeof slotCheck === "object" && (slotCheck as any).available && (slotCheck as any).capacity_exceeded) {
+        const okEncaixe = window.confirm(
+          `⚠️ Capacidade esgotada para este profissional nesta data/horário.\n\nDeseja encaixar mesmo assim?`,
+        );
+        if (!okEncaixe) return;
+      }
     } catch (err) {
       console.error("Slot check error:", err);
       toast.error("Não foi possível confirmar a disponibilidade. Tente novamente.");
@@ -2455,6 +2461,12 @@ const Agenda: React.FC = () => {
           }
           const confirmou = window.confirm(`${reasonMsg} Deseja forçar como ${user?.role}?`);
           if (!confirmou) return;
+        }
+        if (slotCheck && typeof slotCheck === "object" && (slotCheck as any).available && (slotCheck as any).capacity_exceeded) {
+          const okEncaixe = window.confirm(
+            `⚠️ Capacidade esgotada para este profissional nesta data/horário.\n\nDeseja encaixar mesmo assim?`,
+          );
+          if (!okEncaixe) return;
         }
       }
 
