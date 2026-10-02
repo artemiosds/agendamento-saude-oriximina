@@ -240,9 +240,13 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const selectedTimeAfterCutoff = isTimeAfterSchedulingCutoff(
     selectedHora, selectedDate, todayStr, nowMinutesInBrazil(),
   );
-  const selectedTimeAllowed = selectedTimeAfterCutoff && !exactPatientConflict && isAppointmentTimeSelectable(
-    selectedHora, displayedSlots, [...selectableTurnWindows, ...configuredTurnWindows],
-  );
+  // Horário livre: qualquer horário válido (sem antecedência mínima nem limite de turno).
+  // Feriados/bloqueios e capacidade continuam conferidos no servidor.
+  void selectedTimeAfterCutoff; void isAppointmentTimeSelectable;
+  const selectedTimeAllowed = !exactPatientConflict && /^([01]\d|2[0-3]):[0-5]\d$/.test(selectedHora.slice(0, 5));
+  const professionalTimeConflict = !!selectedDate && !!selectedHora && conflicts.some((conflict) =>
+    conflict.date === selectedDate && conflict.hora.slice(0, 5) === selectedHora.slice(0, 5)
+      && conflict.id !== session?.appointment_id);
   const masterManualFallback = isMaster && !allowCapacityOverride && slots.length === 0 && turnWindows.length === 0
     && selectedTimeAfterCutoff && !exactPatientConflict;
 
@@ -289,9 +293,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       return;
     }
     if (!selectedTimeAllowed && !masterManualFallback) {
-      toast.error('Escolha um horário livre na grade ou dentro do período disponível do profissional.');
+      toast.error(exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).');
       return;
     }
+    void professionalTimeConflict;
     setSaving(true);
     try {
       if (mode === 'remarcar' && onRemarcar) {
@@ -444,10 +449,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
             <div>
               <Label className="mb-2 block">Horários disponíveis em {formatDateBR(selectedDate)}:</Label>
               {displayedSlots.length === 0 ? (
-                canTypeTurnTime ? (
+                true ? (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      Informe um horário entre {[...selectableTurnWindows, ...configuredTurnWindows].map((turn) => `${turn.horaInicio} e ${turn.horaFim}`).join(' / ')}.
+                      Digite o horário desejado{turnWindows.length > 0 ? ` (turnos: ${turnWindows.map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(' / ')})` : ''}.
                     </p>
                     <input
                       type="time"
@@ -493,10 +498,10 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                       </Button>
                     );
                   })}
-                  {(canTypeTurnTime || isMaster) && (
+                  {(
                     <div className="col-span-5 mt-2 flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">
-                        {canTypeTurnTime ? 'Ou digite dentro do turno:' : 'Ou digite:'}
+                        Ou digite:
                       </span>
                       <input
                         type="time"
@@ -510,7 +515,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 </div>
               )}
               {selectedHora && !selectedTimeAllowed && !masterManualFallback && (
-                <p className="mt-2 text-xs text-destructive">{exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Escolha um horário disponível dentro do período configurado.'}</p>
+                <p className="mt-2 text-xs text-destructive">{exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).'}</p>
               )}
               {allowCapacityOverride && selectedHora && selectedTimeAllowed && !slots.includes(selectedHora)
                 && !turnWindows.some((turn) => turn.vagasLivresInternas > 0 && isTimeWithinTurnWindow(selectedHora, [turn])) && (
