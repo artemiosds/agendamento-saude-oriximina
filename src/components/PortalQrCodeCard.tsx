@@ -12,7 +12,9 @@ import { openPrintDocument } from '@/lib/printLayout';
 
 const STORAGE_KEY = 'portal_qr_cartaz_v1';
 
-const PUBLISHED_ORIGIN = 'https://agendamento-saude-oriximina.lovable.app';
+// Domínio oficial publicado (prioridade) e fallback no domínio Lovable.
+const PUBLISHED_ORIGIN = 'https://agendamento-saude-sms-oriximina.site';
+const LOVABLE_ORIGIN = 'https://agendamento-saude-oriximina.lovable.app';
 
 const defaultLink = () => {
   const origin = typeof window !== 'undefined' && !window.location.hostname.includes('id-preview')
@@ -39,7 +41,12 @@ const PortalQrCodeCard: React.FC = () => {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-      if (saved) { setForm({ ...DEFAULTS, ...saved.form }); if (saved.link) setLink(saved.link); }
+      if (saved) {
+        setForm({ ...DEFAULTS, ...saved.form });
+        // Migra link antigo (domínio Lovable) para o domínio oficial.
+        const oldLink = `${LOVABLE_ORIGIN}/portal`;
+        if (saved.link && saved.link !== oldLink) setLink(saved.link);
+      }
     } catch { /* ignore */ }
   }, []);
 
