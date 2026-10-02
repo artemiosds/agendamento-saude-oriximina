@@ -242,11 +242,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   );
   // Horário livre: qualquer horário válido (sem antecedência mínima nem limite de turno).
   // Feriados/bloqueios e capacidade continuam conferidos no servidor.
-  void selectedTimeAfterCutoff; void isAppointmentTimeSelectable;
   const selectedTimeAllowed = !exactPatientConflict && /^([01]\d|2[0-3]):[0-5]\d$/.test(selectedHora.slice(0, 5));
-  const professionalTimeConflict = !!selectedDate && !!selectedHora && conflicts.some((conflict) =>
-    conflict.date === selectedDate && conflict.hora.slice(0, 5) === selectedHora.slice(0, 5)
-      && conflict.id !== session?.appointment_id);
   const masterManualFallback = isMaster && !allowCapacityOverride && slots.length === 0 && turnWindows.length === 0
     && selectedTimeAfterCutoff && !exactPatientConflict;
 
@@ -296,7 +292,6 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       toast.error(exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).');
       return;
     }
-    void professionalTimeConflict;
     setSaving(true);
     try {
       if (mode === 'remarcar' && onRemarcar) {
