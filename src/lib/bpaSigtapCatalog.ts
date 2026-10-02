@@ -206,6 +206,8 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
       servicos,
       cids,
     });
+    competenciaUsadaPorCatalogo.set(catalog, competenciaUsada);
+    return catalog;
   })();
 
   cache.set(competencia, pending);
