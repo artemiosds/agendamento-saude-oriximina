@@ -67,12 +67,10 @@ describe('ModalAgendarSessao', () => {
     expect(screen.getByRole('button', { name: 'Confirmar Remarcação' })).toBeEnabled();
   });
 
-  it('não libera novo agendamento em turno cheio', async () => {
+  it('permite digitar horário livre mesmo com turno cheio (capacidade conferida no servidor)', async () => {
     render(<ModalAgendarSessao {...baseProps} availableDates={[]} getAvailableSlots={() => []} getTurnoInfo={() => [{ horaInicio: '07:30', horaFim: '11:00', vagasLivresInternas: 0 }]} session={{ id: 'session-1', session_number: 8, total_sessions: 12, scheduled_date: '2099-10-08', status: 'pendente_agendamento', appointment_id: null }} />);
 
-    await waitFor(() => expect(screen.getByText(/Turno sem vagas livres nesta data/i)).toBeInTheDocument());
-    expect(screen.getByRole('dialog').querySelector('input[type="time"]')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
   });
 
   it('permite encaixe manual no turno cheio somente quando autorizado', async () => {
