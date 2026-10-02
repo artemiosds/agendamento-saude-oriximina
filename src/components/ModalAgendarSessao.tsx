@@ -356,7 +356,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 const { day, dateStr } = cell;
                 const status = getDayStatus(dateStr);
                 const isSelected = dateStr === selectedDate;
-                const canClick = status === 'available' || status === 'suggested' || (mode === 'remarcar' && status === 'already_scheduled');
+                // Liberdade de data: qualquer dia não passado pode ser escolhido; feriados/bloqueios são barrados no servidor.
+                const canClick = status !== 'past';
 
                 return (
                   <div key={dateStr} className="flex items-center justify-center py-0.5">
