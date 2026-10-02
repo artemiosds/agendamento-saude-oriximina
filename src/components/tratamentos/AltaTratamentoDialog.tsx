@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { todayLocalStr } from "@/lib/utils";
 import {
   registerTreatmentDischarge,
   type TreatmentDischargeResult,
+  type TreatmentDischargeScope,
   type TreatmentDischargeType,
 } from "@/services/treatmentDischargeService";
 
@@ -33,6 +35,7 @@ interface AltaTratamentoDialogProps {
 
 export function AltaTratamentoDialog({ open, onOpenChange, cycle, patientName, onSuccess }: AltaTratamentoDialogProps) {
   const [type, setType] = useState<TreatmentDischargeType | "">("");
+  const [scope, setScope] = useState<TreatmentDischargeScope>("ciclo");
   const [reason, setReason] = useState("");
   const [finalNotes, setFinalNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -42,6 +45,7 @@ export function AltaTratamentoDialog({ open, onOpenChange, cycle, patientName, o
     if (!open || !cycle) return;
     let cancelled = false;
     setType("");
+    setScope("ciclo");
     setReason("");
     setFinalNotes("");
     setSaving(false);
@@ -68,12 +72,20 @@ export function AltaTratamentoDialog({ open, onOpenChange, cycle, patientName, o
     setSaving(true);
     let result: TreatmentDischargeResult;
     try {
+      if (scope === "geral" && !window.confirm("Confirmar desligamento geral? Todos os agendamentos futuros do paciente nesta unidade serão cancelados.")) {
+        setSaving(false);
+        return;
+      }
       result = await registerTreatmentDischarge({
         cycleId: cycle.id,
         type,
         reason,
         finalNotes,
+        scope,
       });
+      if (result.cancelled_other_appointments) {
+        toast.info(`${result.cancelled_other_appointments} agendamento(s) futuro(s) do paciente na unidade foram cancelados.`);
+      }
       if (result.careness?.created && result.careness.release_date) {
         const released = new Date(`${result.careness.release_date}T12:00:00`).toLocaleDateString("pt-BR");
         toast.info(`Carência para ${result.careness.profession || "esta profissão"} registrada até ${released}.`);
@@ -116,6 +128,33 @@ export function AltaTratamentoDialog({ open, onOpenChange, cycle, patientName, o
               </p>
             </div>
           )}
+          <div className="space-y-2">
+            <Label>Abrangência da alta *</Label>
+            <RadioGroup value={scope} onValueChange={(v) => setScope(v as TreatmentDischargeScope)} className="space-y-2">
+              <label className="flex items-start gap-2 p-3 rounded-lg border cursor-pointer">
+                <RadioGroupItem value="ciclo" className="mt-0.5" />
+                <span className="text-sm">
+                  <strong>Alta desta especialidade / profissional</strong> (recomendado)
+                  <br /><span className="text-muted-foreground">Remove só as sessões deste tratamento. Atendimentos com outros profissionais continuam na Agenda.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 p-3 rounded-lg border cursor-pointer">
+                <RadioGroupItem value="geral" className="mt-0.5" />
+                <span className="text-sm">
+                  <strong>Desligamento geral do CER</strong>
+                  <br /><span className="text-muted-foreground">Cancela todos os agendamentos futuros do paciente nesta unidade.</span>
+                </span>
+              </label>
+            </RadioGroup>
+            {scope === "geral" && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/30">
+                <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                <p className="text-sm text-destructive">
+                  Atenção: isso cancelará TODOS os agendamentos futuros deste paciente na unidade, inclusive de outras especialidades.
+                </p>
+              </div>
+            )}
+          </div>
           <div className="space-y-2">
             <Label>Tipo de alta *</Label>
             <Select value={type} onValueChange={(value) => setType(value as TreatmentDischargeType)}>
