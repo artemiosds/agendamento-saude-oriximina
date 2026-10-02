@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, X, Loader2 } from "lucide-react";
+import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, X, Loader2, FileText, FilePlus2 } from "lucide-react";
+import DocumentosHistorico from "@/components/DocumentosHistorico";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -79,6 +80,10 @@ export interface HistoricoPacientePanelProps {
   isGlobalAdmin?: boolean;
   enabled?: boolean;
   onView?: (entry: ProntuarioHistEntry) => void;
+  /** Abre o gerador de documentos para o paciente do prontuário aberto. */
+  onGerarDocumento?: () => void;
+  /** Incrementado após gerar documento para recarregar a lista. */
+  documentosRefreshKey?: number;
 }
 
 interface HistoryPage {
@@ -205,7 +210,10 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
   isGlobalAdmin = false,
   enabled = true,
   onView,
+  onGerarDocumento,
+  documentosRefreshKey = 0,
 }) => {
+  const [activeTab, setActiveTab] = useState<"historico" | "documentos">("historico");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
@@ -340,6 +348,30 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
         </dl>
       </div>
 
+      {/* Abas laterais */}
+      <div className="px-3 pt-2 border-b border-border/60 shrink-0 flex gap-1" role="tablist">
+        {([
+          { id: "historico", label: "Histórico", icon: History },
+          { id: "documentos", label: "Documentos", icon: FileText },
+        ] as const).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === t.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <t.icon className="w-3.5 h-3.5" /> {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "historico" && (<>
       {/* History Header */}
       <div className="px-4 py-3 flex items-center gap-2 border-b border-border/60 shrink-0">
         <History className="w-4 h-4 text-muted-foreground" />
@@ -571,6 +603,32 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
           )}
         </div>
       </ScrollArea>
+      </>)}
+
+      {activeTab === "documentos" && (
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-3 space-y-3">
+            {!pacienteId ? (
+              <p className="text-xs text-muted-foreground italic text-center py-6">
+                Selecione um paciente para ver os documentos.
+              </p>
+            ) : (
+              <>
+                {onGerarDocumento && (
+                  <Button type="button" size="sm" className="w-full gap-1.5" onClick={onGerarDocumento}>
+                    <FilePlus2 className="w-4 h-4" /> Gerar documento
+                  </Button>
+                )}
+                <DocumentosHistorico
+                  key={`${pacienteId}-${documentosRefreshKey}`}
+                  pacienteId={pacienteId}
+                  pacienteNome={paciente?.nome || "Paciente"}
+                />
+              </>
+            )}
+          </div>
+        </ScrollArea>
+      )}
     </aside>
   );
 };
