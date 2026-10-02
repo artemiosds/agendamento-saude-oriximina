@@ -760,25 +760,15 @@ const Agenda: React.FC = () => {
   const newAgHasFreeTurn = newAgAvailableTurnWindows.length > 0;
   // A Agenda interna segue exclusivamente a disponibilidade cadastrada.
   // Não há antecedência mínima para Novo Agendamento nem para edição.
-  const newAgTimeAllowed = (
-    (isTurnoMode
-      ? isTimeWithinTurnWindow(newAg.hora, isMaster ? newAgTurnoInfo : newAgAvailableTurnWindows)
-      : newAgSlots.includes(newAg.hora))
-    || (isMaster && newAgSlots.length === 0 && newAgTurnoInfo.length === 0)
-  );
+  // Horário livre: a equipe pode escolher ou digitar qualquer horário válido.
+  // Bloqueios institucionais e capacidade são conferidos ao salvar.
+  const newAgTimeAllowed = /^([01]\d|2[0-3]):[0-5]\d$/.test((newAg.hora || "").slice(0, 5));
 
   // Clear selected hora when it's no longer in available slots (skip for master — they can type any time)
   React.useEffect(() => {
     // In shift mode, keep manual input visible even while invalid so the user
     // can correct it and see why it cannot be booked; validation blocks save.
-    if (isMaster || isTurnoMode) return;
-    if (newAgHasFreeTurn && isTimeWithinTurnWindow(newAg.hora, newAgAvailableTurnWindows)) return;
-    if (newAg.hora && newAgSlots.length > 0 && !newAgSlots.includes(newAg.hora)) {
-      setNewAg((p) => ({ ...p, hora: "" }));
-    }
-    if (newAgSlots.length === 0 && newAg.hora) {
-      setNewAg((p) => ({ ...p, hora: "" }));
-    }
+    // Horário livre: não limpar o horário digitado/selecionado.
   }, [newAgSlots, newAg.hora, isMaster, isTurnoMode, newAgHasFreeTurn, newAgAvailableTurnWindows, newAgTurnoInfo]);
 
   const retornoAvailableDates = React.useMemo(() => {
@@ -1200,7 +1190,7 @@ const Agenda: React.FC = () => {
       return;
     }
     if (!newAgTimeAllowed) {
-      toast.error("Escolha um horário livre dentro da disponibilidade configurada para o profissional.");
+      toast.error("Informe um horário válido (HH:MM).");
       return;
     }
     // Conferência obrigatória do paciente antes do agendamento
@@ -1332,6 +1322,16 @@ const Agenda: React.FC = () => {
         );
         if (!confirmou) return;
       }
+    }
+
+    // Conflito de horário com o mesmo profissional: alerta e permite com confirmação.
+    const conflitoHorario = agendamentos.find((a) =>
+      a.profissionalId === newAg.profissionalId && a.data === selectedDate
+      && (a.hora || "").slice(0, 5) === newAg.hora.slice(0, 5)
+      && !["cancelado", "falta", "remarcado"].includes(a.status as string));
+    if (conflitoHorario) {
+      const ok = window.confirm(`⚠️ ${prof.nome} já tem ${conflitoHorario.pacienteNome || "um paciente"} às ${newAg.hora} nesta data.\n\nDeseja agendar mesmo assim (encaixe)?`);
+      if (!ok) return;
     }
 
     // Server-side slot availability check
@@ -2388,11 +2388,8 @@ const Agenda: React.FC = () => {
     (turn) => turn.vagasLivresInternas > 0
       || (originalTimeRemainsInTurn && isTimeWithinTurnWindow(originalEditAppointment?.hora || "", [turn])),
   );
-  const editTimeAllowed = !!editAg
-    && (isAppointmentTimeSelectable(editAg.hora, editAvailableSlots, editTurnWindowsWithCapacity)
-      // Master/coordinator can use the manual override shown in this editor;
-      // the authoritative RPC below still checks capacity and requires confirmation.
-      || (user && ["master", "coordenador"].includes(user.role)));
+  // Horário livre no lápis: qualquer horário válido; bloqueios e capacidade conferidos ao salvar.
+  const editTimeAllowed = !!editAg && /^([01]\d|2[0-3]):[0-5]\d$/.test((editAg.hora || "").slice(0, 5));
   const editScheduleChanged = !!originalEditAppointment && !!editAg && (
     originalEditAppointment.data !== editAg.data
     || originalEditAppointment.hora !== editAg.hora
@@ -2422,8 +2419,15 @@ const Agenda: React.FC = () => {
         originalAg && (originalAg.data !== editAg.data || originalAg.hora !== editAg.hora || originalAg.profissionalId !== editAg.profissionalId);
 
       if (dateOrHourChanged && !editTimeAllowed) {
-        toast.error("Escolha um horário livre dentro da disponibilidade configurada para o profissional.");
+        toast.error("Informe um horário válido (HH:MM).");
         return;
+      }
+      if (dateOrHourChanged) {
+        const conflito = agendamentos.find((a) => a.id !== editAg.id
+          && a.profissionalId === editAg.profissionalId && a.data === editAg.data
+          && (a.hora || "").slice(0, 5) === editAg.hora.slice(0, 5)
+          && !["cancelado", "falta", "remarcado"].includes(a.status as string));
+        if (conflito && !window.confirm(`⚠️ Já existe ${conflito.pacienteNome || "um paciente"} às ${editAg.hora} com este profissional nesta data.\n\nDeseja salvar mesmo assim (encaixe)?`)) return;
       }
 
       if (dateOrHourChanged && prof?.unidadeId) {
@@ -2881,9 +2885,9 @@ const Agenda: React.FC = () => {
                             Todos os turnos estão lotados para esta data. Selecione outro dia.
                           </p>
                         )}
-                        {(newAgHasFreeTurn || isMaster) && (
+                        {(
                           <div className="mt-2 space-y-1">
-                            <Label htmlFor="novo-agendamento-horario-turno">{isMaster ? "Digite um horário dentro do turno (Master pode forçar vaga)" : "Ou digite um horário dentro do período"}</Label>
+                            <Label htmlFor="novo-agendamento-horario-turno">Digite o horário desejado</Label>
                             <Input
                               id="novo-agendamento-horario-turno"
                               type="time"
@@ -2895,18 +2899,14 @@ const Agenda: React.FC = () => {
                             <p className="text-xs text-muted-foreground">
                               {(isMaster ? newAgTurnoInfo : newAgAvailableTurnWindows).map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(" • ")}
                             </p>
-                            {newAg.hora && !newAgTimeAllowed && (
-                              <p className="text-xs text-destructive">
-                                Informe um horário dentro de um turno com vaga interna disponível.
-                              </p>
-                            )}
+
                           </div>
                         )}
                       </div>
                     ) : newAgSlots.length === 0 ? (
-                      isMaster ? (
+                      newAg.profissionalId ? (
                         <div className="mt-2 space-y-1">
-                          <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Como Master, digite o horário manualmente:</p>
+                          <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Digite o horário desejado:</p>
                           <Input
                             type="time"
                             value={newAg.hora}
@@ -3707,7 +3707,7 @@ const Agenda: React.FC = () => {
                   editTurnWindowsWithCapacity.length > 0 ? (
                     <div className="mt-2 space-y-1">
                       <p className="text-xs text-muted-foreground">
-                        Digite um horário dentro de {editTurnWindowsWithCapacity.map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(" / ")}.
+                        Digite o horário desejado (turnos: {editTurnWindowsWithCapacity.map((turn) => `${turn.horaInicio}–${turn.horaFim}`).join(" / ")}).
                       </p>
                       <Input
                         type="time"
@@ -3717,9 +3717,9 @@ const Agenda: React.FC = () => {
                         className="w-36"
                       />
                     </div>
-                  ) : isMaster ? (
+                  ) : true ? (
                     <div className="mt-2 space-y-1">
-                      <p className="text-xs text-muted-foreground">Master: digite o horário manualmente.</p>
+                      <p className="text-xs text-muted-foreground">Digite o horário desejado.</p>
                       <Input
                         type="time"
                         value={editAg.hora}
@@ -3745,7 +3745,7 @@ const Agenda: React.FC = () => {
                     ))}
                     <div className="col-span-4 mt-2 flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">
-                        {editTurnWindowsWithCapacity.length > 0 ? 'Ou digite dentro do turno:' : 'Ou digite:'}
+                        Ou digite:
                       </span>
                       <Input
                         type="time"
@@ -3757,9 +3757,7 @@ const Agenda: React.FC = () => {
                     </div>
                   </div>
                 )}
-                {editScheduleChanged && editAg.hora && !editTimeAllowed && (
-                  <p className="mt-2 text-xs text-destructive">O horário precisa estar livre dentro da disponibilidade do profissional.</p>
-                )}
+
               </div>
               <div>
                 <Label>Observações</Label>
