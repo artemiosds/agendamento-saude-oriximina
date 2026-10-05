@@ -168,6 +168,11 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
         <div className="flex items-start gap-3">
           <span className="text-lg font-mono font-bold text-primary w-14 shrink-0">{ag.hora}</span>
           <div className="flex-1 min-w-0">
+            {(ag.origem as string) === 'externo' && (
+              <span className="inline-block mb-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                🔗 Agendado por externo
+              </span>
+            )}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>

@@ -493,28 +493,32 @@ const ProfissionaisExternos: React.FC = () => {
     setLoadingAgenda(true);
     setAgendaDialogOpen(true);
     try {
-      // Assuming a table external_appointments or similar linked to quota
-      // Let's try to find appointments linked to this quota
+      // Fonte oficial: vínculos da cota em agendamentos_externos (por cota_id).
       const client: any = supabase;
-      const response = await client
-        .from("agendamentos")
-        .select("id, data_agendamento, horario, status, pacientes(nome), funcionarios(nome)")
-        .eq("profissional_externo_id", quota.profissional_externo_id)
-        .eq("profissional_id", quota.profissional_interno_id)
-        .eq("data_agendamento", quota.periodo_inicio);
-      
-      const { data, error } = response;
-
+      const { data: links, error } = await client
+        .from("agendamentos_externos")
+        .select("id, paciente_id, data, horario, status")
+        .eq("cota_id", quota.id)
+        .order("data", { ascending: true })
+        .order("horario", { ascending: true });
       if (error) throw error;
-      
-      setQuotaAppointments(data?.map((a: any) => ({
+
+      const pacienteIds = Array.from(new Set((links || []).map((l: any) => l.paciente_id).filter(Boolean)));
+      const nomes: Record<string, string> = {};
+      if (pacienteIds.length) {
+        const { data: pacs } = await client.from("pacientes").select("id, nome").in("id", pacienteIds);
+        (pacs || []).forEach((p: any) => { nomes[p.id] = p.nome; });
+      }
+      const profNome = funcionarios.find(f => f.id === quota.profissional_interno_id)?.nome || "Profissional não identificado";
+
+      setQuotaAppointments((links || []).map((a: any) => ({
         id: a.id,
-        data_agendamento: a.data_agendamento,
-        horario: a.horario,
-        paciente_nome: a.pacientes?.nome || "Paciente não identificado",
+        data_agendamento: a.data,
+        horario: String(a.horario || "").slice(0, 5),
+        paciente_nome: nomes[a.paciente_id] || "Paciente não identificado",
         status: a.status,
-        profissional_interno_nome: a.funcionarios?.nome || "Profissional não identificado"
-      })) || []);
+        profissional_interno_nome: profNome,
+      })));
     } catch (err) {
       console.error("Erro ao carregar agenda da cota", err);
       setQuotaAppointments([]);
@@ -1071,6 +1075,13 @@ const ProfissionaisExternos: React.FC = () => {
                 <Input type="date" value={quotaForm.periodo_fim} onChange={e => setQuotaForm(p => ({ ...p, periodo_fim: e.target.value }))} />
               </div>
             </div>
+            {quotaForm.periodo_inicio && quotaForm.periodo_fim && (
+              <p className="text-xs rounded-md border bg-muted/40 p-2 text-muted-foreground">
+                {quotaForm.periodo_inicio === quotaForm.periodo_fim
+                  ? "Data específica: as vagas ficam reservadas na agenda deste dia para o profissional externo."
+                  : "Período: as vagas são um limite total para todo o período (não é reserva diária) e usam a capacidade normal da agenda."}
+              </p>
+            )}
 
             <div className="flex items-center gap-2 py-2">
               <Checkbox id="quota-ativo" checked={quotaForm.ativo} onCheckedChange={c => setQuotaForm(p => ({ ...p, ativo: !!c }))} />
@@ -1116,7 +1127,7 @@ const ProfissionaisExternos: React.FC = () => {
                   <tbody className="divide-y">
                     {quotaAppointments.map(app => (
                       <tr key={app.id}>
-                        <td className="px-3 py-2">{new Date(app.data_agendamento).toLocaleDateString()} {app.horario}</td>
+                        <td className="px-3 py-2">{app.data_agendamento ? new Date(`${app.data_agendamento}T12:00:00`).toLocaleDateString("pt-BR") : "—"} {app.horario}</td>
                         <td className="px-3 py-2 font-medium">{app.paciente_nome}</td>
                         <td className="px-3 py-2">{app.profissional_interno_nome}</td>
                         <td className="px-3 py-2 text-center">
