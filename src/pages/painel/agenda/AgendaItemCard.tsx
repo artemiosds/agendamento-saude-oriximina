@@ -175,6 +175,11 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
                     {tipoInfo.icon} {pacienteNomeResolved}
                     {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                   </p>
+                  {(ag.origem as string) === 'externo' && (
+                    <span className="inline-block mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                      🔗 Agendado por externo
+                    </span>
+                  )}
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
                   <p className="text-xs">
