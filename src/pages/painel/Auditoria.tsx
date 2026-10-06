@@ -48,6 +48,8 @@ interface LogEntry {
   ip: string;
   navegador?: string;
   dispositivo?: string;
+  sistema_operacional?: string;
+  user_agent?: string;
   rota?: string;
   detalhes: Record<string, any>;
   before?: any;
@@ -56,6 +58,19 @@ interface LogEntry {
   campos_alterados?: string[];
   created_at: string;
 }
+
+function formatDispositivo(log: Partial<LogEntry>): string {
+  const legacy = log.detalhes?.dispositivo;
+  const legacyObj = legacy && typeof legacy === 'object' ? legacy : null;
+  const browser = log.navegador || legacyObj?.browser || '';
+  const os = log.sistema_operacional || legacyObj?.os || '';
+  const device = log.dispositivo || legacyObj?.device || (typeof legacy === 'string' ? legacy : '');
+  const parts = [browser, os].filter(Boolean).join(' / ');
+  const text = [parts, device].filter(Boolean).join(' · ');
+  return text || '-';
+}
+
+
 
 
 
