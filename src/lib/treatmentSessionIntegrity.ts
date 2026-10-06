@@ -25,6 +25,8 @@ export type TreatmentSessionIntegrityState =
   | { kind: 'estado_protegido' };
 
 const INACTIVE_APPOINTMENT_STATUSES = new Set(['cancelado', 'falta', 'remarcado']);
+// Sessões encerradas (atendidas ou com falta registrada) são histórico clínico e não exigem vínculo ativo.
+const PROTECTED_SESSION_STATUSES = new Set(['realizada', 'falta', 'paciente_faltou']);
 
 export function isActiveTreatmentAppointmentStatus(status: string): boolean {
   return !INACTIVE_APPOINTMENT_STATUSES.has(status.trim().toLocaleLowerCase());
@@ -38,7 +40,9 @@ export function resolveTreatmentSessionIntegrity(input: {
 }): TreatmentSessionIntegrityState {
   const { session, unitId, appointmentById, sameDayCandidates } = input;
 
-  if (session.status === 'realizada') return { kind: 'estado_protegido' };
+  if (PROTECTED_SESSION_STATUSES.has(String(session.status || '').trim().toLocaleLowerCase())) {
+    return { kind: 'estado_protegido' };
+  }
 
   if (session.appointment_id) {
     if (!appointmentById) {
