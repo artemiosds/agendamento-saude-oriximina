@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { isSessionFalta } from "@/lib/sessionFalta";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
 import { useFila } from "@/contexts/FilaContext";
@@ -170,6 +171,7 @@ const sessionStatusColors: Record<string, string> = {
   agendada: "bg-info/10 text-info",
   realizada: "bg-success/10 text-success",
   paciente_faltou: "bg-destructive/10 text-destructive",
+  falta: "bg-destructive/10 text-destructive",
   cancelada: "bg-muted text-muted-foreground",
   remarcada: "bg-warning/10 text-warning",
 };
@@ -179,6 +181,7 @@ const sessionStatusLabels: Record<string, string> = {
   agendada: "Agendada",
   realizada: "Realizada",
   paciente_faltou: "Faltou",
+  falta: "Faltou",
   cancelada: "Cancelada",
   remarcada: "Remarcada",
 };
@@ -685,13 +688,13 @@ const Tratamentos: React.FC = () => {
     const cycleSess = sessions
       .filter((s) => s.cycle_id === selectedCycle.id)
       .sort((a, b) => a.session_number - b.session_number);
-    const faltas = cycleSess.filter((s) => s.status === "paciente_faltou");
+    const faltas = cycleSess.filter((s) => isSessionFalta(s.status));
     const faltasTotal = faltas.length;
 
     let maxConsecutivas = 0;
     let currentStreak = 0;
     for (const s of cycleSess) {
-      if (s.status === "paciente_faltou") {
+      if (isSessionFalta(s.status)) {
         currentStreak++;
         maxConsecutivas = Math.max(maxConsecutivas, currentStreak);
       } else if (s.status === "realizada") {
