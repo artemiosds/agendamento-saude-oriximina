@@ -1405,9 +1405,12 @@ const BpaExportar: React.FC = () => {
                 bpa_manual: manual,
               },
               _hasManual: !!sigtapManual,
+              _isFalta: ["falta", "paciente_faltou"].includes(String(a.status || "")),
             };
           })
-          .filter((s) => s._hasManual || incluirSemBpa);
+          // Faltas entram sempre na produção, com procedimento resolvido pela
+          // cascata (sessão/PTS → CBO do profissional → padrão do formulário).
+          .filter((s) => s._hasManual || incluirSemBpa || s._isFalta);
 
         if (sinteticos.length > 0) {
           prontuarios.push(...sinteticos);
@@ -1656,7 +1659,7 @@ const BpaExportar: React.FC = () => {
               .in("patient_id", batch)
               .gte("scheduled_date", startDate)
               .lte("scheduled_date", endDate)
-              .eq("status", "realizada")
+              .in("status", ["realizada", "falta", "paciente_faltou"])
               .order("id", { ascending: true });
             if (formData.profissional_id !== "all") {
               q = q.eq("professional_id", formData.profissional_id);
