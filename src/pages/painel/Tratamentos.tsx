@@ -93,6 +93,8 @@ interface TreatmentCycle {
 // sessions were recorded. A real clinical discharge is stored separately as
 // "finalizado_alta", so keep these legacy full cycles actionable until the
 // professional explicitly records the discharge or requests an extension.
+const ACTIVE_DUPLICATE_STATUSES: string[] = ["em_andamento", "aguardando_vaga", "em_fila"];
+
 function isLegacyCycleAwaitingDischarge(cycle: Pick<TreatmentCycle, "status" | "sessions_done" | "total_sessions">) {
   return cycle.status === "concluido" && cycle.total_sessions > 0 && cycle.sessions_done >= cycle.total_sessions;
 }
