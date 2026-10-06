@@ -3810,8 +3810,76 @@ const Agenda: React.FC = () => {
               outro: "Documento",
             };
             const anexoUrl = (detalheAg as any).attachment_url || detalheAg.attachmentUrl;
+            const hojeStr = todayLocalStr();
+            const isFutureAg = detalheAg.data > hojeStr;
+            const podeIniciar =
+              isProfissional &&
+              ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"].includes(detalheAg.status) &&
+              !isFutureAg;
+            const dispStatus = getDisplayStatus(detalheAg, hojeStr);
+            const fechar = (fn: () => void) => {
+              setDetalheOpen(false);
+              setTimeout(fn, 150);
+            };
             return (
               <>
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground break-words">
+                        {resolvePaciente(detalheAg.pacienteId, pac?.nome || detalheAg.pacienteNome)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatarData(detalheAg.data)} às {detalheAg.hora}
+                        {prof?.nome || detalheAg.profissionalNome ? ` · ${prof?.nome || detalheAg.profissionalNome}` : ""}
+                      </p>
+                    </div>
+                    <ContactActionButton
+                      phone={pac?.telefone}
+                      patientName={detalheAg.pacienteNome}
+                      unitName={unidade?.nome}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <StatusBadge
+                      label={statusLabels[dispStatus] || statusLabels[detalheAg.status] || detalheAg.status}
+                      className={statusBadgeClass[dispStatus] || statusBadgeClass[detalheAg.status]}
+                    />
+                    <StatusBadge label={tipoInfo.label} className={tipoInfo.class} />
+                    {triageMap[detalheAg.id]?.risco && (
+                      <StatusBadge label={`Risco ${triageMap[detalheAg.id]?.risco}`} />
+                    )}
+                  </div>
+                </div>
+
+                <Secao titulo="Ações rápidas">
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => fechar(() => stableImprimirFicha(detalheAg))}>
+                      <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir ficha
+                    </Button>
+                    {canEdit && !["cancelado", "concluido"].includes(detalheAg.status) && (
+                      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => fechar(() => stableOpenEdit(detalheAg))}>
+                        <Pencil className="w-3.5 h-3.5 mr-1" /> Editar / Remarcar
+                      </Button>
+                    )}
+                    {podeIniciar && (
+                      <Button size="sm" className="h-8 text-xs bg-success text-success-foreground hover:bg-success/90" onClick={() => fechar(() => stableIniciarAtendimento(detalheAg))}>
+                        <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
+                      </Button>
+                    )}
+                    {isProfissional && detalheAg.status === "em_atendimento" && (
+                      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => fechar(() => stableContinuar(detalheAg))}>
+                        <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
+                      </Button>
+                    )}
+                    {isProfissional && detalheAg.status === "concluido" && (
+                      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => fechar(() => stableVerProntuario(detalheAg))}>
+                        <Eye className="w-3.5 h-3.5 mr-1" /> Ver prontuário
+                      </Button>
+                    )}
+                  </div>
+                </Secao>
+
                 <Secao titulo="Paciente">
                   <Campo label="Nome" valor={pac?.nome || detalheAg.pacienteNome} />
                   <Campo label="CPF" valor={pac?.cpf} />
