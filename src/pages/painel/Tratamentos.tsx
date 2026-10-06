@@ -231,6 +231,7 @@ const Tratamentos: React.FC = () => {
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [dischargeOpen, setDischargeOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TreatmentCycle | null>(null);
+  const [duplicateConfirm, setDuplicateConfirm] = useState<TreatmentCycle[]>([]);
 
   const [agendarSessaoTarget, setAgendarSessaoTarget] = useState<TreatmentSession | null>(null);
   const [agendarSessaoData, setAgendarSessaoData] = useState("");
@@ -830,7 +831,7 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  const handleCreateCycle = async () => {
+  const handleCreateCycle = async (force = false) => {
     if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
       toast.error("Preencha paciente, profissional e tipo de tratamento.");
       return;
@@ -842,22 +843,19 @@ const Tratamentos: React.FC = () => {
 
     if (loading) return; // Guard
     
-    // Check for duplicates before creating
-    const { data: existingCycles, error: checkError } = await supabase
-      .from("treatment_cycles")
-      .select("id, treatment_type, status")
-      .eq("patient_id", newCycle.patient_id)
-      .eq("professional_id", newCycle.professional_id)
-      .eq("specialty", newCycle.specialty || "")
-      .eq("unit_id", newCycle.unit_id || "")
-      .in("status", ["em_andamento", "aguardando_vaga", "em_fila"]);
+    // Aviso de duplicidade: mesmo paciente + mesmo profissional com ciclo não concluído
+    if (!force) {
+      const { data: existingCycles, error: checkError } = await supabase
+        .from("treatment_cycles")
+        .select("*")
+        .eq("patient_id", newCycle.patient_id)
+        .eq("professional_id", newCycle.professional_id)
+        .in("status", ACTIVE_DUPLICATE_STATUSES);
 
-    if (checkError) {
-      console.error("Erro ao verificar duplicidade:", checkError);
-    } else if (existingCycles && existingCycles.length > 0) {
-      const sameType = existingCycles.find(c => c.treatment_type === newCycle.treatment_type);
-      if (sameType) {
-        toast.error("Já existe um ciclo de tratamento ativo para este paciente com este profissional/especialidade.");
+      if (checkError) {
+        console.error("Erro ao verificar duplicidade:", checkError);
+      } else if (existingCycles && existingCycles.length > 0) {
+        setDuplicateConfirm(existingCycles as TreatmentCycle[]);
         return;
       }
     }
@@ -3484,6 +3482,25 @@ const Tratamentos: React.FC = () => {
                   onChange={(id, nome) => setNewCycle((p) => ({ ...p, patient_id: id }))}
                 />
               </div>
+              {activeDuplicates.length > 0 && (
+                <div className="p-3 rounded-lg border border-warning/40 bg-warning/10 text-xs space-y-1">
+                  <div className="font-semibold text-foreground">⚠️ Já existe tratamento não concluído com este profissional</div>
+                  {activeDuplicates.map((c) => (
+                    <div key={c.id} className="text-muted-foreground">
+                      • {c.treatment_type || "—"} — início {c.start_date ? new Date(c.start_date + "T12:00:00").toLocaleDateString("pt-BR") : "—"} ({c.sessions_done ?? 0}/{c.total_sessions ?? 0} sessões)
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-1"
+                    onClick={() => { setCreateOpen(false); setSelectedCycle(activeDuplicates[0]); }}
+                  >
+                    Abrir tratamento existente
+                  </Button>
+                </div>
+              )}
               {!isProfissional && (
                 <div>
                   <Label>Profissional *</Label>
@@ -3673,11 +3690,54 @@ const Tratamentos: React.FC = () => {
                   rows={3}
                 />
               </div>
-              <Button onClick={handleCreateCycle} className="w-full gradient-primary text-primary-foreground">
+              <Button onClick={() => handleCreateCycle()} className="w-full gradient-primary text-primary-foreground">
                 Criar Ciclo
               </Button>
             </div>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={duplicateConfirm.length > 0} onOpenChange={(open) => { if (!open) setDuplicateConfirm([]); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tratamento já em andamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Este paciente já possui {duplicateConfirm.length === 1 ? "um tratamento não concluído" : `${duplicateConfirm.length} tratamentos não concluídos`} com este profissional:
+            </p>
+            {duplicateConfirm.map((c) => (
+              <div key={c.id} className="p-3 rounded-lg border border-warning/40 bg-warning/10">
+                <div className="font-medium text-foreground">{c.treatment_type || "—"}</div>
+                <div className="text-xs text-muted-foreground">
+                  Início: {c.start_date ? new Date(c.start_date + "T12:00:00").toLocaleDateString("pt-BR") : "—"} • Sessões: {c.sessions_done ?? 0}/{c.total_sessions ?? 0}
+                </div>
+              </div>
+            ))}
+            <p className="text-muted-foreground">Deseja usar o tratamento existente ou prosseguir criando um novo?</p>
+            <div className="flex flex-col gap-2">
+              <Button
+                onClick={() => {
+                  const target = duplicateConfirm[0];
+                  setDuplicateConfirm([]);
+                  setCreateOpen(false);
+                  if (target) setSelectedCycle(target);
+                }}
+              >
+                Usar tratamento existente
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDuplicateConfirm([]);
+                  handleCreateCycle(true);
+                }}
+              >
+                Prosseguir e criar mesmo assim
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
