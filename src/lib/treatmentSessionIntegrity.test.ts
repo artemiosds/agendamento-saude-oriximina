@@ -66,3 +66,17 @@ describe('resolveTreatmentSessionIntegrity', () => {
     })).toEqual({ kind: 'estado_protegido' });
   });
 });
+
+describe('sessões com falta registrada', () => {
+  for (const status of ['falta', 'paciente_faltou']) {
+    it(`${status} com agendamento em falta é protegida`, () => {
+      const r = resolveTreatmentSessionIntegrity({
+        session: { id: 's', patient_id: 'p', professional_id: 'f', appointment_id: 'a', scheduled_date: '2026-10-06', status } as any,
+        unitId: 'u',
+        appointmentById: { id: 'a', paciente_id: 'p', profissional_id: 'f', unidade_id: 'u', data: '2026-10-06', status: 'falta' } as any,
+        sameDayCandidates: [],
+      });
+      expect(r.kind).toBe('estado_protegido');
+    });
+  }
+});
