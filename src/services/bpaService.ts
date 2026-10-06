@@ -592,7 +592,7 @@ export const bpaService = {
     console.log('[BPA] prontuarios encontrados', prontuarios.length);
 
     const sessoesTratamento = await loadAll('treatment_sessions', 'id,cycle_id,patient_id,professional_id,scheduled_date,status,procedure_done', (q) => {
-      let query = q.gte('scheduled_date', dataInicio).lte('scheduled_date', dataFim).not('status', 'in', '(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)');
+      let query = q.gte('scheduled_date', dataInicio).lte('scheduled_date', dataFim).not('status', 'in', '(agendada,cancelada,cancelado,ausente,remarcada,remarcado)');
       if (profissionalId && profissionalId !== 'all') query = query.eq('professional_id', profissionalId);
       return query;
     }).catch(() => []);
