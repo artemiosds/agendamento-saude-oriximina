@@ -1840,13 +1840,26 @@ const ProntuarioPage: React.FC = () => {
     } catch { setEspecialidadeFields({}); }
     setDialogOpen(true);
     const pac = pacientes.find((px) => px.id === p.paciente_id);
-    logAction({
+    // Registra visualização no máximo 1x a cada 5 min por usuário+prontuário
+    let shouldLogView = true;
+    try {
+      const viewKey = `audit_view_${user?.id || "anon"}_${p.id}`;
+      const last = Number(sessionStorage.getItem(viewKey) || 0);
+      if (Date.now() - last < 5 * 60 * 1000) shouldLogView = false;
+      else sessionStorage.setItem(viewKey, String(Date.now()));
+    } catch { /* sem sessionStorage: registra sempre */ }
+    if (shouldLogView) logAction({
       acao: "prontuario_visualizado",
       entidade: "prontuario",
       entidadeId: p.id,
       modulo: "prontuario",
       user,
-      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || "" },
+      detalhes: {
+        paciente_id: p.paciente_id,
+        paciente_nome: p.paciente_nome,
+        paciente_cpf: pac?.cpf || "",
+        data_atendimento: (p as any).data_atendimento || "",
+      },
     });
   };
 
