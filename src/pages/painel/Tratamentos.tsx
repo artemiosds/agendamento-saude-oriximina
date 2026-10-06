@@ -2083,6 +2083,25 @@ const Tratamentos: React.FC = () => {
     if (!notes) return null;
     try {
       const parsed = JSON.parse(notes);
+      if (parsed && parsed.tipo === "falta") {
+        const tipo = parsed.tipo_falta === "justificada" ? "Falta justificada" : "Falta injustificada";
+        let quando = "";
+        if (parsed.registrado_em) {
+          const d = new Date(parsed.registrado_em);
+          if (!isNaN(d.getTime())) quando = ` em ${d.toLocaleDateString("pt-BR")} às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+        }
+        return (
+          <div className="text-xs mt-1 space-y-0.5">
+            <p className="text-destructive font-medium">
+              {tipo}
+              {parsed.registrado_por ? ` · Registrada por ${parsed.registrado_por}` : ""}
+              {quando}
+            </p>
+            {parsed.documento && <p className="text-muted-foreground">Documento: {parsed.documento}</p>}
+            {parsed.descricao && <p className="text-muted-foreground">{parsed.descricao}</p>}
+          </div>
+        );
+      }
       if (parsed.tipo === "soap") {
         return (
           <div className="text-xs space-y-0.5 mt-1">
