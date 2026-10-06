@@ -282,6 +282,16 @@ const Tratamentos: React.FC = () => {
     duration_months: 3,
   });
 
+  const activeDuplicates = useMemo(() => {
+    if (!newCycle.patient_id || !newCycle.professional_id) return [] as TreatmentCycle[];
+    return cycles.filter(
+      (c) =>
+        c.patient_id === newCycle.patient_id &&
+        c.professional_id === newCycle.professional_id &&
+        ACTIVE_DUPLICATE_STATUSES.includes(c.status as string),
+    );
+  }, [cycles, newCycle.patient_id, newCycle.professional_id]);
+
   const handlePtsLoadError = useCallback((error: unknown) => {
     console.error("Error loading treatment PTS:", error);
     toast.error("Erro ao carregar PTS do paciente.");
