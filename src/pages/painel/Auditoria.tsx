@@ -21,6 +21,12 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { openPrintDocument } from '@/lib/printLayout';
+import { auditService } from '@/services/auditService';
+
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 import { normalizeSexo } from '@/lib/utils/sexo-normalization';
 
 
@@ -333,6 +339,30 @@ const Auditoria: React.FC = () => {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [exportRequest, setExportRequest] = useState<'csv' | 'pdf' | null>(null);
+  const [exportMotivo, setExportMotivo] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+
+  const registrarExportacao = async (formato: 'csv' | 'pdf', motivo: string, hash: string, protocolo: string) => {
+    await auditService.log({
+      acao: 'exportar',
+      acaoLegivel: `Exportação de auditoria (${formato.toUpperCase()})`,
+      tipoEvento: 'download',
+      modulo: 'auditoria',
+      entidade: 'action_logs',
+      entidadeId: protocolo,
+      user,
+      detalhes: {
+        motivo_exportacao: motivo,
+        formato,
+        protocolo,
+        sha256: hash,
+        quantidade_registros: logs.length,
+        total_filtrado: totalCount,
+        filtros: { de: filterDateFrom, ate: filterDateTo },
+      },
+    });
+  };
   const [selectedLog, setSelectedLog] = useState<EnrichedLog | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -719,7 +749,7 @@ const Auditoria: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const exportCSV = () => {
+  const exportCSV = async (motivo: string) => {
     if (!logs.length) return;
     const headers = ['Data/Hora', 'Usuário', 'CPF', 'Perfil', 'Ação', 'Resumo', 'Módulo', 'Registro Afetado', 'Entidade', 'ID Registro', 'Unidade', 'Status', 'IP', 'Navegador', 'Erro'];
     const rows = logs.map(l => [
@@ -734,33 +764,47 @@ const Auditoria: React.FC = () => {
       l.status, l.ip, l.navegador || '',
       l.error_message || '',
     ]);
-    const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(';'))].join('\n');
+    const content = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(';'))].join('\n');
+    const geradoEm = new Date();
+    const hash = await sha256Hex(content);
+    const protocolo = `AUD-${format(geradoEm, 'yyyyMMddHHmmss')}-${hash.slice(0, 8).toUpperCase()}`;
+    await registrarExportacao('csv', motivo, hash, protocolo);
+    const rodape = [
+      '',
+      `"PROTOCOLO";"${protocolo}"`,
+      `"EMITIDO POR";"${(user?.nome || '').replace(/"/g, '""')} - CPF ${user?.cpf || ''}"`,
+      `"DATA/HORA";"${format(geradoEm, 'dd/MM/yyyy HH:mm:ss')}"`,
+      `"MOTIVO";"${motivo.replace(/"/g, '""')}"`,
+      `"SHA-256 (conteúdo acima do rodapé)";"${hash}"`,
+    ].join('\n');
+    const csv = content + '\n' + rodape;
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `auditoria_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+    a.download = `auditoria_${format(geradoEm, 'yyyyMMdd_HHmmss')}_${protocolo}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('CSV exportado com sucesso!');
+    toast.success(`CSV exportado — protocolo ${protocolo}`);
   };
 
 
-  const exportPDF = () => {
+  const exportPDF = async (motivo: string) => {
     if (!logs.length) return;
+    const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
     const tableRows = logs.map(l => `
       <tr>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${format(new Date(l.created_at), 'dd/MM/yy HH:mm')}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${l.user_nome}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${getCpfDisplay(l)}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${l.role}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${acaoLabels[l.acao] || l.acao}</td>
-        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${l.status}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${format(new Date(l.created_at), 'dd/MM/yy HH:mm:ss')}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(l.user_nome)}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(getCpfDisplay(l))}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(l.role)}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(acaoLabels[l.acao] || l.acao)}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(l.ip)}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(l.status)}</td>
       </tr>
     `).join('');
 
-    const body = `
-      <p style="font-size:12px;margin:12px 0">Total de registros: <strong>${totalCount}</strong> (exibindo ${logs.length})</p>
+    const tableHtml = `
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:#f0f0f0">
           <th style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:left">Data/Hora</th>
@@ -768,10 +812,29 @@ const Auditoria: React.FC = () => {
           <th style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:left">CPF</th>
           <th style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:left">Perfil</th>
           <th style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:left">Ação</th>
+          <th style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:left">IP</th>
           <th style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:left">Status</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
       </table>`;
+    const geradoEm = new Date();
+    const hash = await sha256Hex(tableHtml);
+    const protocolo = `AUD-${format(geradoEm, 'yyyyMMddHHmmss')}-${hash.slice(0, 8).toUpperCase()}`;
+    await registrarExportacao('pdf', motivo, hash, protocolo);
+
+    const body = `
+      <div style="font-size:11px;margin:10px 0;padding:8px;border:1px solid #999">
+        <div><strong>Protocolo:</strong> ${protocolo}</div>
+        <div><strong>Emitido por:</strong> ${esc(user?.nome)} — CPF ${esc(user?.cpf)} — perfil ${esc(user?.role)}</div>
+        <div><strong>Data/hora da emissão:</strong> ${format(geradoEm, 'dd/MM/yyyy HH:mm:ss')}</div>
+        <div><strong>Motivo:</strong> ${esc(motivo)}</div>
+        <div><strong>Registros:</strong> ${logs.length} de ${totalCount} encontrados</div>
+      </div>
+      ${tableHtml}
+      <div style="font-size:10px;margin-top:12px;padding:8px;border-top:1px solid #999;word-break:break-all">
+        <strong>Selo de integridade (SHA-256 da tabela):</strong> ${hash}<br/>
+        Esta exportação foi registrada de forma imutável na auditoria do sistema sob o protocolo acima.
+      </div>`;
 
     openPrintDocument('Relatório de Auditoria', body, {});
   };
@@ -802,14 +865,49 @@ const Auditoria: React.FC = () => {
           <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading}>
             <BarChart3 className="w-4 h-4 mr-1" /> {reportLoading ? 'Gerando...' : 'Relatório por Profissional'}
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCSV}>
+          <Button variant="outline" size="sm" onClick={() => logs.length && setExportRequest('csv')}>
             <Download className="w-4 h-4 mr-1" /> CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={exportPDF}>
+          <Button variant="outline" size="sm" onClick={() => logs.length && setExportRequest('pdf')}>
             <FileText className="w-4 h-4 mr-1" /> PDF
           </Button>
         </div>
       </div>
+
+      <Dialog open={!!exportRequest} onOpenChange={(o) => { if (!o) { setExportRequest(null); setExportMotivo(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exportação probatória ({exportRequest?.toUpperCase()})</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Informe o motivo da exportação (ex.: "Atendimento ao Ofício Judicial nº 045/2026"). O motivo, o emissor e o selo de integridade SHA-256 ficarão registrados na própria auditoria.
+            </p>
+            <textarea
+              className="w-full min-h-[90px] rounded-md border border-input bg-background p-2 text-sm"
+              value={exportMotivo}
+              onChange={(e) => setExportMotivo(e.target.value)}
+              placeholder="Motivo da exportação (mínimo 10 caracteres)"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setExportRequest(null); setExportMotivo(''); }}>Cancelar</Button>
+              <Button
+                disabled={exportMotivo.trim().length < 10 || exportBusy}
+                onClick={async () => {
+                  setExportBusy(true);
+                  try {
+                    if (exportRequest === 'csv') await exportCSV(exportMotivo.trim());
+                    else await exportPDF(exportMotivo.trim());
+                    setExportRequest(null); setExportMotivo('');
+                  } finally { setExportBusy(false); }
+                }}
+              >
+                {exportBusy ? 'Gerando...' : 'Gerar exportação'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Search */}
       <div className="relative">
