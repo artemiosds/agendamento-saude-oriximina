@@ -59,7 +59,7 @@ interface LogEntry {
   created_at: string;
 }
 
-function formatDispositivo(log: Partial<AuditLog>): string {
+function formatDispositivo(log: Partial<LogEntry>): string {
   const legacy = log.detalhes?.dispositivo;
   const legacyObj = legacy && typeof legacy === 'object' ? legacy : null;
   const browser = log.navegador || legacyObj?.browser || '';
