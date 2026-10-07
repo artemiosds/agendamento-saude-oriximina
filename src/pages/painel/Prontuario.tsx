@@ -1447,25 +1447,11 @@ const ProntuarioPage: React.FC = () => {
         .eq("prontuario_id", prontuarioId);
       prontuarioProcs = data || [];
     }
-    
-    // 2. Load global procedures for this patient on this specific date
-    let globalProcs: any[] = [];
-    if (patientId && date) {
-      const { data } = await (supabase as any)
-        .from("procedimentos_realizados")
-        .select("procedimento_id, cids_selecionados, quantidade, observacao")
-        .eq("paciente_id", patientId)
-        .eq("data_atendimento", date);
-      globalProcs = data || [];
-    }
-
-    // Merge both, with current prontuario procedures taking precedence
+    // Somente os procedimentos deste próprio prontuário são carregados como selecionados.
+    // Procedimentos de outros atendimentos do paciente aparecem apenas como sugestão
+    // no bloco "Histórico do paciente" e nunca são marcados automaticamente.
+    void patientId; void date;
     const combinedData = [...prontuarioProcs];
-    globalProcs.forEach(p => {
-      if (!combinedData.some(cp => cp.procedimento_id === p.procedimento_id)) {
-        combinedData.push(p);
-      }
-    });
     
     if (combinedData.length > 0) {
       const hydrated = await procedureService.getSpecific({
