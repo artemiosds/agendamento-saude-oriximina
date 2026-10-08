@@ -1714,6 +1714,8 @@ const Agenda: React.FC = () => {
           .from('triage_settings')
           .select('enabled')
           .eq('profissional_id', ag.profissionalId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
         if (profError) throw profError;
         if (profSetting) {
@@ -1723,6 +1725,8 @@ const Agenda: React.FC = () => {
             .from('triage_settings')
             .select('enabled')
             .is('profissional_id', null)
+            .order('updated_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
           if (globalError) throw globalError;
           if (globalSetting) triagemHabilitada = !!globalSetting.enabled;
