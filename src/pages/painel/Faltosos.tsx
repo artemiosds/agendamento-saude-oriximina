@@ -124,15 +124,17 @@ const Faltosos: React.FC = () => {
     return linhas.filter((r) => {
       // 1. Filtro de Exceção (TFD/OJ)
       const temExcecao = r.is_tfd || r.possui_ordem_judicial;
-      if (!mostrarExcecao && temExcecao) return false;
-
-      // 2. Filtro de Status
-      if (status !== "TODOS") {
-        if (r.status_falta !== status) return false;
+      if (mostrarExcecao) {
+        // Modo exceções: mostra somente isentos, independentemente do status
+        if (!temExcecao) return false;
       } else {
-        // No "TODOS", por padrão mostramos apenas quem tem algo (FALTOSO ou BLOQUEADO)
-        // a menos que o usuário queira ver as exceções (que podem ser REGULAR)
-        if (!["FALTOSO", "BLOQUEADO"].includes(r.status_falta) && !temExcecao) return false;
+        if (temExcecao) return false;
+        // 2. Filtro de Status
+        if (status !== "TODOS") {
+          if (r.status_falta !== status) return false;
+        } else if (!["FALTOSO", "BLOQUEADO"].includes(r.status_falta)) {
+          return false;
+        }
       }
 
       // 3. Filtro de Profissional
@@ -274,7 +276,9 @@ const Faltosos: React.FC = () => {
             </div>
           ) : filtradas.length === 0 ? (
             <div className="py-10 text-center text-muted-foreground text-sm">
-              Nenhum registro encontrado para os filtros aplicados.
+              {mostrarExcecao
+                ? "Nenhum paciente com TFD ou Ordem Judicial possui faltas registradas. Marque a exceção no cadastro do paciente (aba Complementares)."
+                : "Nenhum registro encontrado para os filtros aplicados."}
             </div>
           ) : (
             <Table>
