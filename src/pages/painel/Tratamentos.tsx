@@ -1551,7 +1551,7 @@ const Tratamentos: React.FC = () => {
               numero: sess.session_number,
               data: sess.scheduled_date,
               status: "erro",
-              mensagem: "Agenda lotada ou sem disponibilidade cadastrada (próximos 30 dias)",
+              mensagem: "Data planejada com feriado/bloqueio ou sem turno cadastrado para o profissional. A data não foi alterada; agende manualmente.",
             });
             continue;
           }
@@ -1570,7 +1570,7 @@ const Tratamentos: React.FC = () => {
             hora: slot.hora,
             status: "confirmado" as const,
             tipo: "Sessão de Tratamento" as const,
-            observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${cycle.treatment_type} (lote)`,
+            observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${cycle.treatment_type} (lote)${slot.encaixe ? " — ENCAIXE (turno lotado)" : ""}`,
             origem: "recepcao" as const,
             criadoEm: new Date().toISOString(),
             criadoPor: user?.id || "",
