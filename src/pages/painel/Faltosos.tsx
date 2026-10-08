@@ -276,7 +276,9 @@ const Faltosos: React.FC = () => {
             </div>
           ) : filtradas.length === 0 ? (
             <div className="py-10 text-center text-muted-foreground text-sm">
-              Nenhum registro encontrado para os filtros aplicados.
+              {mostrarExcecao
+                ? "Nenhum paciente com TFD ou Ordem Judicial possui faltas registradas. Marque a exceção no cadastro do paciente (aba Complementares)."
+                : "Nenhum registro encontrado para os filtros aplicados."}
             </div>
           ) : (
             <Table>
