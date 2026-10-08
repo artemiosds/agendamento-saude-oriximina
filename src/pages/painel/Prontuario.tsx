@@ -5281,7 +5281,7 @@ const ProntuarioPage: React.FC = () => {
           if (!isPacienteIsentoBloqueio(pac)) {
             const bloqueado = await isPacienteBloqueadoParaProfissional(sessaoCycle.patient_id, sessaoCycle.professional_id);
             if (bloqueado) {
-              toast.error("Paciente bloqueado por faltas injustificadas para este profissional.");
+              toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Regularize na página de Pacientes Faltosos com o responsável da unidade.");
               return;
             }
           }

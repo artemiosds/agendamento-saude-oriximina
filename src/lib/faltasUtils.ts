@@ -116,3 +116,7 @@ export async function getFaltasPorProfissional(
   
   return data || { total_faltas: 0, status_falta: 'REGULAR', ultima_falta: null };
 }
+
+/** Mensagem padrão de bloqueio por faltas, com orientação de regularização. */
+export const MSG_BLOQUEIO_FALTAS =
+  'Paciente bloqueado por faltas injustificadas para este profissional. Regularize na página de Pacientes Faltosos com o responsável da unidade.';

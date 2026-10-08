@@ -383,15 +383,21 @@ const Tratamentos: React.FC = () => {
       return data ? { professionalName: data.profissional_nome || undefined } : null;
     },
     ensurePatientCanBeScheduled: async (patientId, professionalId) => {
-      const patient = pacientes.find((item) => item.id === patientId);
-      if (!patient) throw new Error('Paciente não encontrado.');
-      const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+      const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional, MSG_BLOQUEIO_FALTAS } = await import('@/lib/faltasUtils');
+      let patient: any = pacientes.find((item) => item.id === patientId);
+      const { data: flags } = await supabase
+        .from('pacientes')
+        .select('is_tfd, possui_ordem_judicial')
+        .eq('id', patientId)
+        .maybeSingle();
+      if (!patient && !flags) throw new Error('Paciente não encontrado.');
+      patient = { ...(patient || {}), ...(flags || {}) };
       if (isPacienteIsentoBloqueio(patient)) {
         toast.info('Paciente possui exceção administrativa (TFD/Ordem Judicial). Agendamento permitido.');
         return;
       }
       if (await isPacienteBloqueadoParaProfissional(patientId, professionalId)) {
-        throw new Error('Paciente bloqueado por faltas injustificadas para este profissional.');
+        throw new Error(MSG_BLOQUEIO_FALTAS);
       }
     },
     isDateBlocked: async (date, professionalId, unitId) => {
@@ -1506,7 +1512,7 @@ const Tratamentos: React.FC = () => {
       const { isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
       const bloqueado = await isPacienteBloqueadoParaProfissional(cycle.patient_id, cycle.professional_id);
       if (bloqueado) {
-        toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Agendamento em lote cancelado.");
+        toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Agendamento em lote cancelado. Regularize na página de Pacientes Faltosos com o responsável da unidade.");
         agendarCicloInFlightRef.current = false;
         setAgendandoCiclo(false);
         return;
@@ -3077,7 +3083,7 @@ const Tratamentos: React.FC = () => {
                 hora,
                 salaId,
                 "patient",
-                false,
+                true,
                 canControlSessions,
               );
             } finally {
