@@ -1270,7 +1270,7 @@ const Agenda: React.FC = () => {
       } else {
         const bloqueado = await isPacienteBloqueadoParaProfissional(newAg.pacienteId, newAg.profissionalId);
         if (bloqueado) {
-          toast.error("Paciente bloqueado por faltas injustificadas para este profissional.");
+          toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Regularize na página de Pacientes Faltosos com o responsável da unidade.");
           return;
         }
       }

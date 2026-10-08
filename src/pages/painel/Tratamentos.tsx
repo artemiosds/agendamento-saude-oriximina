@@ -1506,7 +1506,7 @@ const Tratamentos: React.FC = () => {
       const { isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
       const bloqueado = await isPacienteBloqueadoParaProfissional(cycle.patient_id, cycle.professional_id);
       if (bloqueado) {
-        toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Agendamento em lote cancelado.");
+        toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Agendamento em lote cancelado. Regularize na página de Pacientes Faltosos com o responsável da unidade.");
         agendarCicloInFlightRef.current = false;
         setAgendandoCiclo(false);
         return;
