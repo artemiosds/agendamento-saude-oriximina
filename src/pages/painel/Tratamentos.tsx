@@ -1478,32 +1478,23 @@ const Tratamentos: React.FC = () => {
     const bloqueiosDoCiclo = buildBlockedRanges(bloqueios, cycle.professional_id, cycle.unit_id);
 
     /**
-     * Encontra o próximo slot válido para a sessão respeitando:
-     * - Disponibilidade configurada do profissional (getAvailableSlots)
-     * - Conflitos com agendamentos existentes (já filtrado por getAvailableSlots)
-     * - Conflitos com horários alocados anteriormente neste mesmo lote
-     * - Avança até 30 dias se a data sugerida estiver totalmente cheia
+     * Mantém ESTRITAMENTE a data planejada da sessão (dias da semana do ciclo).
+     * - Data com feriado/bloqueio/fim de semana: não agenda e não desvia para outro dia.
+     * - Horário livre na grade: usa o primeiro livre (sem colidir com o próprio lote).
+     * - Turno lotado: encaixe no mesmo dia, no início do turno do profissional.
      */
     const encontrarSlotValido = (
       dataSugerida: string,
       profId: string,
       unidadeId: string,
-    ): { data: string; hora: string } | null => {
-      let dataAtual = dataSugerida;
-      for (let tentativa = 0; tentativa < 30; tentativa++) {
-        if (isInvalidSessionDate(dataAtual, bloqueiosDoCiclo)) {
-          const d = new Date(`${dataAtual}T12:00:00`);
-          d.setDate(d.getDate() + 1);
-          dataAtual = d.toISOString().split("T")[0];
-          continue;
-        }
-        const slots = getAvailableSlots(profId, unidadeId, dataAtual);
-        const slotLivre = slots.find((s) => estaLivreNoLote(dataAtual, s));
-        if (slotLivre) return { data: dataAtual, hora: slotLivre };
-        const d = new Date(dataAtual + "T12:00:00");
-        d.setDate(d.getDate() + 1);
-        dataAtual = d.toISOString().split("T")[0];
-      }
+    ): { data: string; hora: string; encaixe: boolean } | null => {
+      if (isInvalidSessionDate(dataSugerida, bloqueiosDoCiclo)) return null;
+      const slots = getAvailableSlots(profId, unidadeId, dataSugerida);
+      const slotLivre = slots.find((s) => estaLivreNoLote(dataSugerida, s));
+      if (slotLivre) return { data: dataSugerida, hora: slotLivre, encaixe: false };
+      const turnos = getTurnoInfo(profId, unidadeId, dataSugerida) || [];
+      const horaTurno = turnos.find((t: any) => t?.horaInicio)?.horaInicio;
+      if (horaTurno) return { data: dataSugerida, hora: String(horaTurno).slice(0, 5), encaixe: true };
       return null;
     };
 
@@ -1560,7 +1551,7 @@ const Tratamentos: React.FC = () => {
               numero: sess.session_number,
               data: sess.scheduled_date,
               status: "erro",
-              mensagem: "Agenda lotada ou sem disponibilidade cadastrada (próximos 30 dias)",
+              mensagem: "Data planejada com feriado/bloqueio ou sem turno cadastrado para o profissional. A data não foi alterada; agende manualmente.",
             });
             continue;
           }
@@ -1579,7 +1570,7 @@ const Tratamentos: React.FC = () => {
             hora: slot.hora,
             status: "confirmado" as const,
             tipo: "Sessão de Tratamento" as const,
-            observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${cycle.treatment_type} (lote)`,
+            observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${cycle.treatment_type} (lote)${slot.encaixe ? " — ENCAIXE (turno lotado)" : ""}`,
             origem: "recepcao" as const,
             criadoEm: new Date().toISOString(),
             criadoPor: user?.id || "",
