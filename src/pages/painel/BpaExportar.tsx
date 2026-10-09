@@ -758,6 +758,20 @@ const BpaExportar: React.FC = () => {
   useEffect(() => {
     try { localStorage.setItem(LS_KEY_PADRAO, JSON.stringify(procedimentosPadraoList)); } catch {}
   }, [procedimentosPadraoList]);
+  // CID curinga por procedimento padrão — usado SOMENTE quando a linha não
+  // tem nenhum CID real (procedimento, produção, prontuário ou paciente).
+  const LS_KEY_PADRAO_CID = "bpa_procedimentos_padrao_cid_v1";
+  const [cidPadraoMap, setCidPadraoMap] = useState<Record<string, string>>(() => {
+    try {
+      const obj = JSON.parse(localStorage.getItem(LS_KEY_PADRAO_CID) || "{}");
+      return obj && typeof obj === "object" && !Array.isArray(obj) ? obj : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY_PADRAO_CID, JSON.stringify(cidPadraoMap)); } catch {}
+  }, [cidPadraoMap]);
   useEffect(() => {
     try { localStorage.setItem(LS_KEY_TEC_ENF, JSON.stringify(procedimentosTecnicoEnfList)); } catch {}
   }, [procedimentosTecnicoEnfList]);
@@ -2488,7 +2502,16 @@ const BpaExportar: React.FC = () => {
               const cidBrutoLinha = ehTecnicoEnfermagem
                 ? ""
                 : resolveBpaCid({ procedureCid: procEntry.cid, productionCid: cidProducaoLinha, prontuario: pront, paciente: pac });
-              const { cid } = normalizarCidLinha(cidBrutoLinha);
+              let cidBrutoFinal = cidBrutoLinha;
+              if (
+                !ehTecnicoEnfermagem &&
+                !String(cidBrutoLinha || "").trim() &&
+                String(procEntry.origem || "").startsWith("Padrão (form)")
+              ) {
+                const cidCuringa = cidPadraoMap[somenteNumeros(procEntry.codigo)] || "";
+                if (cidCuringa) cidBrutoFinal = cidCuringa;
+              }
+              const { cid } = normalizarCidLinha(cidBrutoFinal);
 
               // Revalida a combinação FINAL procedimento × CID que realmente iria
               // para o Registro 03. A validação anterior acontece antes dos
@@ -3493,7 +3516,7 @@ const BpaExportar: React.FC = () => {
             <div className="space-y-2 md:col-span-2 lg:col-span-3">
               <Label>Procedimentos Padrão</Label>
               <p className="text-xs text-muted-foreground">
-                Lista de SIGTAPs usada quando a profissão NÃO exige SIGTAP e o prontuário não traz código. Cada código gera 1 linha BPA-I.
+                Lista de SIGTAPs usada quando a profissão NÃO exige SIGTAP e o prontuário não traz código. Cada código gera 1 linha BPA-I. O CID ao lado só é usado quando o atendimento não tem nenhum CID registrado (prontuário/paciente).
               </p>
               <div className="space-y-2">
                 {procedimentosPadraoList.map((cod, idx) => (
@@ -3507,6 +3530,18 @@ const BpaExportar: React.FC = () => {
                       }}
                       placeholder="0000000000"
                       className="font-mono max-w-[200px]"
+                    />
+                    <Input
+                      value={cidPadraoMap[cod] || ""}
+                      maxLength={5}
+                      disabled={!cod}
+                      onChange={(e) => {
+                        const v = e.target.value.toUpperCase().replace(/[^A-Z0-9.]/g, "").slice(0, 5);
+                        setCidPadraoMap((prev) => ({ ...prev, [cod]: v }));
+                      }}
+                      placeholder="CID (ex.: Z000)"
+                      aria-label="CID padrão"
+                      className="font-mono max-w-[150px]"
                     />
                     <Button
                       type="button"
