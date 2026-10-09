@@ -2399,14 +2399,16 @@ const BpaExportar: React.FC = () => {
           const temEndereco = !!String(enderecoOriginal).trim();
 
           if (!codigoLogradouro && temEndereco) {
-            pendenciaPaciente = true;
-            motivosPendencia.push("Código de logradouro");
+            // Campo 200–202 é opcional no layout: sem correspondência segura no
+            // catálogo DNE o código fica em branco (nunca inventado), o texto é
+            // preservado e o atendimento NÃO é retido — apenas auditado.
             stats.missingLogradouro++;
             const motivoDne = enderecoBpa.alerts.join(" ") || "Sem correspondência segura no catálogo DNE.";
-            warnings.push(`${ident}: ${motivoDne}`);
+            warnings.push(`${ident}: ${motivoDne} Código DNE enviado em branco; atendimento mantido.`);
+            resumoIntegridade.inconsistencias.push(`${ident}: ${motivoDne}`);
             details.missingLogradouro.push({
               ...itemDetail,
-              pendencia: "Código de Logradouro Indeterminado",
+              pendencia: "Código de Logradouro em branco (informativo)",
               valor_atual: String(enderecoOriginal),
               motivo: motivoDne,
             });

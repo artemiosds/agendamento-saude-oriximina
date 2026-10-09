@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./bpaSigtapCatalog", () => ({
+vi.mock("./bpaSigtapCatalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./bpaSigtapCatalog")>()),
   loadBpaSigtapCatalog: vi.fn(),
 }));
 

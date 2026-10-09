@@ -84,3 +84,33 @@ describe("normalização DNE exclusiva da exportação BPA-I", () => {
     expect(result.line).toHaveLength(BPA_I_RECORD_LENGTH);
   });
 });
+
+describe("expansão inteligente de abreviações e número embutido", () => {
+  const cat: DneLogradouroEntry[] = [
+    ...catalog,
+    { codigo: "039", descricao: "BECO" },
+    { codigo: "200", descricao: "RUA PROJETADA" },
+  ];
+  const n = (street: string, number = "") => normalizeBpaAddress({ catalog: cat, street, number });
+
+  it("R. Magalhães Barata, 120 sem número estruturado", () => {
+    const r = n("R. Magalhães Barata, 120", "S/N");
+    expect(r.codigoLogradouro).toBe("081");
+    expect(r.logradouro).toBe("MAGALHAES BARATA");
+    expect(r.numero).toBe("120");
+  });
+
+  it("não extrai número sem vírgula/Nº", () => {
+    expect(n("Rua 15 de Novembro", "").numero).toBe("");
+  });
+
+  it("prefere descrição composta do catálogo", () => {
+    const r = n("Rua Projetada 3");
+    expect(r.codigoLogradouro).toBe("200");
+    expect(r.logradouro).toBe("3");
+  });
+
+  it.each([["BC. Sao Jose", "039"], ["PAS Dois", "074"], ["AV. Nove", "008"]])("%s", (s, c) => {
+    expect(n(s).codigoLogradouro).toBe(c);
+  });
+});

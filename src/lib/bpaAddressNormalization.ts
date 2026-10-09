@@ -52,7 +52,28 @@ const SAFE_TYPE_ALIASES: Record<string, string> = {
   VIELA: "VIELA",
   PSG: "PASSAGEM",
   PASSAGEM: "PASSAGEM",
+  PAS: "PASSAGEM",
+  PASS: "PASSAGEM",
+  AVN: "AVENIDA",
+  TRV: "TRAVESSA",
+  ESTR: "ESTRADA",
+  PC: "PRACA",
+  PCA: "PRACA",
+  PRACA: "PRACA",
+  LG: "LARGO",
+  LGO: "LARGO",
+  LARGO: "LARGO",
+  RAM: "RAMAL",
+  RAMAL: "RAMAL",
+  CJ: "CONJUNTO",
+  CONJ: "CONJUNTO",
+  CONJUNTO: "CONJUNTO",
+  VILA: "VILA",
+  QD: "QUADRA",
+  QUADRA: "QUADRA",
 };
+
+const MAX_COMPOUND_WORDS = 4;
 
 function normalizedCatalog(catalog: DneLogradouroEntry[]) {
   return catalog
@@ -67,6 +88,13 @@ function resolveTypeCandidate(value: unknown, descriptions: Set<string>): string
   const normalized = sanitizeBpaText(value);
   if (!normalized) return "";
   if (descriptions.has(normalized)) return normalized;
+  // Prefere a descrição composta mais longa existente no catálogo real
+  // (ex.: "RUA PROJETADA"), sempre em palavras inteiras.
+  const words = normalized.split(" ");
+  for (let n = Math.min(MAX_COMPOUND_WORDS, words.length - 1); n >= 2; n--) {
+    const prefix = words.slice(0, n).join(" ");
+    if (descriptions.has(prefix)) return prefix;
+  }
   const first = normalized.split(" ")[0];
   const alias = SAFE_TYPE_ALIASES[first] || first;
   return descriptions.has(alias) ? alias : "";
@@ -74,6 +102,9 @@ function resolveTypeCandidate(value: unknown, descriptions: Set<string>): string
 
 function stripRepeatedType(street: string, type: string): string {
   let result = street;
+  while (type.includes(" ") && (result === type || result.startsWith(`${type} `))) {
+    result = result.slice(type.length).trim();
+  }
   while (result) {
     const first = result.split(" ")[0];
     const firstType = SAFE_TYPE_ALIASES[first] || first;
@@ -101,14 +132,25 @@ export function normalizeBpaAddress(input: BpaAddressNormalizationInput): BpaAdd
   }
   const descriptions = new Set(byDescription.keys());
   const streetOriginal = sanitizeBpaText(input.street);
-  const number = sanitizeBpaText(input.number);
+  let number = sanitizeBpaText(input.number);
+  const extracted: string[] = [];
+  // Número digitado junto do logradouro ("R. Magalhães Barata, 120") só é
+  // extraído quando o campo estruturado está vazio/S/N e há vírgula ou "Nº".
+  if (!number || number === "SN") {
+    const raw = String(input.street ?? "");
+    const match = raw.match(/(?:,\s*|\s+N[º°o.]?\s*)(\d{1,5}[A-Za-z]?)\s*$/i);
+    if (match) {
+      number = sanitizeBpaText(match[1]);
+      extracted.push(`Número ${number} extraído do campo logradouro.`);
+    }
+  }
   const typeFromStructured = resolveTypeCandidate(input.structuredType, descriptions);
   const typeFromStreet = resolveTypeCandidate(streetOriginal, descriptions);
   const detectedType = typeFromStructured || typeFromStreet;
   const savedCodeDigits = digits(input.savedCode);
   const savedCode = savedCodeDigits ? savedCodeDigits.slice(-3).padStart(3, "0") : "";
   const savedEntry = savedCode ? byCode.get(savedCode) : undefined;
-  const adjustments: string[] = [];
+  const adjustments: string[] = [...extracted];
   const alerts: string[] = [];
 
   let resolved: DneLogradouroEntry | undefined;
@@ -140,6 +182,11 @@ export function normalizeBpaAddress(input: BpaAddressNormalizationInput): BpaAdd
   const withoutDuplicatedNumber = stripDuplicatedNumber(street, number);
   if (withoutDuplicatedNumber !== street) adjustments.push("Número final duplicado removido do campo logradouro.");
   street = withoutDuplicatedNumber;
+  if (extracted.length) {
+    const parts = street.split(" ");
+    const last = parts.at(-1);
+    if (last === "N" || last === "NO") street = parts.slice(0, -1).join(" ");
+  }
 
   return {
     codigoLogradouro: resolved?.codigo || "",
