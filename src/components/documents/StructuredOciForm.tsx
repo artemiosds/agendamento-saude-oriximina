@@ -73,7 +73,6 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
 
   const addSecondary = (proc: SigtapPickerValue | null) => {
     if (!proc) return;
-    if (secondaryRows.some((item) => item.codigo === proc.codigo)) return;
     patch({
       procedimentosSecundarios: [
         ...secondaryRows,
@@ -84,6 +83,14 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
 
   const removeSecondary = (index: number) => {
     patch({ procedimentosSecundarios: secondaryRows.filter((_, i) => i !== index) });
+  };
+
+  const moveSecondary = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= secondaryRows.length) return;
+    const next = [...secondaryRows];
+    [next[index], next[target]] = [next[target], next[index]];
+    patch({ procedimentosSecundarios: next });
   };
 
   const updateSecondaryQty = (index: number, quantidade: number) => {
