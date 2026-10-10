@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Search } from "lucide-react";
+import { Plus, Trash2, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -73,7 +73,6 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
 
   const addSecondary = (proc: SigtapPickerValue | null) => {
     if (!proc) return;
-    if (secondaryRows.some((item) => item.codigo === proc.codigo)) return;
     patch({
       procedimentosSecundarios: [
         ...secondaryRows,
@@ -84,6 +83,14 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
 
   const removeSecondary = (index: number) => {
     patch({ procedimentosSecundarios: secondaryRows.filter((_, i) => i !== index) });
+  };
+
+  const moveSecondary = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= secondaryRows.length) return;
+    const next = [...secondaryRows];
+    [next[index], next[target]] = [next[target], next[index]];
+    patch({ procedimentosSecundarios: next });
   };
 
   const updateSecondaryQty = (index: number, quantidade: number) => {
@@ -254,7 +261,7 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
           ) : (
             <div className="space-y-2">
               {secondaryRows.map((item, index) => (
-                <div key={item.codigo} className="grid grid-cols-[1fr_100px_40px] gap-2 items-center rounded-md border p-2">
+                <div key={`${item.codigo}-${index}`} className="grid grid-cols-[1fr_100px_72px_40px] gap-2 items-center rounded-md border p-2">
                   <div className="min-w-0">
                     <div className="font-mono text-xs text-muted-foreground">{item.codigo}</div>
                     <div className="text-sm truncate">{item.nome}</div>
@@ -265,6 +272,28 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
                     value={item.quantidade}
                     onChange={(e) => updateSecondaryQty(index, Number(e.target.value))}
                   />
+                  <div className="flex">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={index === 0}
+                      onClick={() => moveSecondary(index, -1)}
+                      title="Mover para cima"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={index === secondaryRows.length - 1}
+                      onClick={() => moveSecondary(index, 1)}
+                      title="Mover para baixo"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </Button>
+                  </div>
                   <Button type="button" variant="ghost" size="icon" onClick={() => removeSecondary(index)}>
                     <Trash2 className="w-4 h-4 text-destructive" />
                   </Button>
