@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { openPrintDocument } from '@/lib/printLayout';
+import { PORTAL_PERMISSOES_PADRAO, type PortalPermissoes } from '@/types';
 import DadosPacienteBlocos, { deserializeDadosPaciente, serializeDadosPaciente, emptyDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 
 interface PacienteData {
@@ -68,6 +69,7 @@ const PortalPaciente: React.FC = () => {
   const [unidades, setUnidades] = useState<any[]>([]);
   const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
   const [savingDados, setSavingDados] = useState(false);
+  const [perms, setPerms] = useState<PortalPermissoes>(PORTAL_PERMISSOES_PADRAO);
 
   // Recovery state
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>('none');
@@ -103,6 +105,7 @@ const PortalPaciente: React.FC = () => {
       // Load global config
       const { data: configData } = await (supabase as any).from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
       const portalConfig = configData?.configuracoes?.portalPaciente;
+      setPerms({ ...PORTAL_PERMISSOES_PADRAO, ...(portalConfig?.permissoes || {}) });
 
       // Check global portal toggle
       if (portalConfig && portalConfig.permitirPortal === false) {
@@ -158,6 +161,7 @@ const PortalPaciente: React.FC = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setPaciente(null); setAgendamentos([]); setFila([]); setIsLoggedIn(false); };
 
   const handleSalvarDados = async () => {
+    if (!perms.editarDados) { toast.error('Edição de dados desativada pela unidade.'); return; }
     if (!dados.nome || !dados.telefone) { toast.error('Nome e telefone são obrigatórios.'); return; }
     setSavingDados(true);
     try {
@@ -183,6 +187,7 @@ const PortalPaciente: React.FC = () => {
   };
 
   const handleCancelar = async (agId: string) => {
+    if (!perms.cancelar) { toast.error('Cancelamento pelo portal desativado. Procure a unidade.'); return; }
     try {
       await (supabase as any).from('agendamentos').update({ status: 'cancelado' }).eq('id', agId);
       setAgendamentos(prev => prev.map(a => a.id === agId ? { ...a, status: 'cancelado' } : a));
@@ -389,17 +394,17 @@ const PortalPaciente: React.FC = () => {
       </div>
 
       <div className="container mx-auto px-4 py-6 max-w-3xl">
-        <Tabs defaultValue="proximos" className="space-y-4">
-          <TabsList className="grid grid-cols-4 w-full">
-            <TabsTrigger value="proximos" className="text-xs sm:text-sm">
+        <Tabs defaultValue={perms.verProximas ? "proximos" : perms.verHistorico ? "historico" : perms.verFila ? "fila" : "dados"} className="space-y-4">
+          <TabsList className="flex w-full [&>*]:flex-1">
+            {perms.verProximas && <TabsTrigger value="proximos" className="text-xs sm:text-sm">
               <Calendar className="w-4 h-4 mr-1 hidden sm:inline" /> Próximas ({futureAgendamentos.length})
-            </TabsTrigger>
-            <TabsTrigger value="historico" className="text-xs sm:text-sm">
+            </TabsTrigger>}
+            {perms.verHistorico && <TabsTrigger value="historico" className="text-xs sm:text-sm">
               <FileText className="w-4 h-4 mr-1 hidden sm:inline" /> Histórico
-            </TabsTrigger>
-            <TabsTrigger value="fila" className="text-xs sm:text-sm">
+            </TabsTrigger>}
+            {perms.verFila && <TabsTrigger value="fila" className="text-xs sm:text-sm">
               <List className="w-4 h-4 mr-1 hidden sm:inline" /> Fila ({fila.length})
-            </TabsTrigger>
+            </TabsTrigger>}
             <TabsTrigger value="dados" className="text-xs sm:text-sm">
               <UserCog className="w-4 h-4 mr-1 hidden sm:inline" /> Meus Dados
             </TabsTrigger>
@@ -411,17 +416,18 @@ const PortalPaciente: React.FC = () => {
                 <p className="text-xs text-muted-foreground">
                   Atualize seus dados abaixo. As alterações refletem imediatamente no seu prontuário na unidade de saúde.
                 </p>
-                <DadosPacienteBlocos value={dados} onChange={(patch) => setDados(prev => ({ ...prev, ...patch }))} emailDisabled />
-                <Button onClick={handleSalvarDados} disabled={savingDados} className="w-full gradient-primary text-primary-foreground">
+                {!perms.editarDados && <p className="text-xs text-warning">Seus dados estão em modo somente leitura. Para alterar, procure a unidade.</p>}
+                <fieldset disabled={!perms.editarDados} className="contents"><DadosPacienteBlocos value={dados} onChange={(patch) => setDados(prev => ({ ...prev, ...patch }))} emailDisabled /></fieldset>
+                {perms.editarDados && <Button onClick={handleSalvarDados} disabled={savingDados} className="w-full gradient-primary text-primary-foreground">
                   {savingDados ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   {savingDados ? 'Salvando...' : 'Salvar alterações'}
-                </Button>
+                </Button>}
               </CardContent>
             </Card>
           </TabsContent>
 
 
-          <TabsContent value="proximos" className="space-y-3">
+          {perms.verProximas && <TabsContent value="proximos" className="space-y-3">
             {futureAgendamentos.length === 0 ? (
               <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
                 <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -430,7 +436,7 @@ const PortalPaciente: React.FC = () => {
               </CardContent></Card>
             ) : futureAgendamentos.map(ag => {
               const st = statusLabels[ag.status] || { label: ag.status, class: 'bg-muted text-muted-foreground' };
-              const canCancel = ['pendente', 'confirmado'].includes(ag.status);
+              const canCancel = perms.cancelar && ['pendente', 'confirmado'].includes(ag.status);
               return (
                 <Card key={ag.id} className="shadow-card border-0">
                   <CardContent className="p-4">
@@ -448,7 +454,7 @@ const PortalPaciente: React.FC = () => {
                         {ag.unidade_id && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{getUnidadeNome(ag.unidade_id)}</p>}
                       </div>
                       <div className="flex flex-col gap-1">
-                        <Button size="sm" variant="outline" className="text-xs" onClick={() => handlePrintComprovante(ag)}>
+                        <Button size="sm" variant="outline" className="text-xs" onClick={() => handlePrintComprovante(ag)} style={perms.imprimirComprovante ? undefined : { display: 'none' }}>
                           <FileText className="w-3.5 h-3.5 mr-1" />Comprovante
                         </Button>
                         {canCancel && (
@@ -475,7 +481,7 @@ const PortalPaciente: React.FC = () => {
             <div className="text-center pt-2"><Link to="/agendar"><Button variant="outline">Agendar Nova Consulta</Button></Link></div>
           </TabsContent>
 
-          <TabsContent value="historico" className="space-y-3">
+          {perms.verHistorico && <TabsContent value="historico" className="space-y-3">
             {pastAgendamentos.length === 0 ? (
               <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">Nenhum histórico.</CardContent></Card>
             ) : pastAgendamentos.map(ag => {
@@ -488,14 +494,14 @@ const PortalPaciente: React.FC = () => {
                       <p className="text-sm text-muted-foreground">{ag.profissional_nome} • {ag.tipo}</p>
                     </div>
                     <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", st.class)}>{st.label}</span>
-                    <Button size="sm" variant="ghost" className="text-xs" onClick={() => handlePrintComprovante(ag)}><FileText className="w-3.5 h-3.5" /></Button>
+                    <Button size="sm" variant="ghost" className="text-xs" onClick={() => handlePrintComprovante(ag)} style={perms.imprimirComprovante ? undefined : { display: 'none' }}><FileText className="w-3.5 h-3.5" /></Button>
                   </CardContent>
                 </Card>
               );
             })}
           </TabsContent>
 
-          <TabsContent value="fila" className="space-y-3">
+          {perms.verFila && <TabsContent value="fila" className="space-y-3">
             {fila.length === 0 ? (
               <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
                 <List className="w-10 h-10 mx-auto mb-3 opacity-30" />
