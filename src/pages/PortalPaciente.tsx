@@ -479,7 +479,7 @@ const PortalPaciente: React.FC = () => {
               );
             })}
             <div className="text-center pt-2"><Link to="/agendar"><Button variant="outline">Agendar Nova Consulta</Button></Link></div>
-          </TabsContent>
+          </TabsContent>}
 
           {perms.verHistorico && <TabsContent value="historico" className="space-y-3">
             {pastAgendamentos.length === 0 ? (
@@ -499,7 +499,7 @@ const PortalPaciente: React.FC = () => {
                 </Card>
               );
             })}
-          </TabsContent>
+          </TabsContent>}
 
           {perms.verFila && <TabsContent value="fila" className="space-y-3">
             {fila.length === 0 ? (
@@ -524,7 +524,7 @@ const PortalPaciente: React.FC = () => {
                 </CardContent>
               </Card>
             ))}
-          </TabsContent>
+          </TabsContent>}
         </Tabs>
       </div>
     </div>
