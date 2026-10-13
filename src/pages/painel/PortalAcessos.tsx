@@ -189,7 +189,7 @@ const PortalAcessos: React.FC = () => {
                 <Switch checked={portal?.permitirPortal ?? true} onCheckedChange={v => salvarPortal({ permitirPortal: v })} />
               </div>
               {PERM_LABELS.map(({ key, label, desc }) => (
-                <div key={key} className="flex items-center justify-between border-t border-border pt-4">
+                <div key={String(key)} className="flex items-center justify-between border-t border-border pt-4">
                   <div>
                     <span className="text-sm font-medium text-foreground">{label}</span>
                     <p className="text-xs text-muted-foreground">{desc}</p>

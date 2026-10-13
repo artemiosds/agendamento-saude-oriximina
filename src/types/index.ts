@@ -356,3 +356,20 @@ export interface EpisodioClinico {
   criadoEm: string;
   atualizadoEm: string;
 }
+export interface PortalPermissoes {
+  verProximas: boolean;
+  cancelar: boolean;
+  verHistorico: boolean;
+  verFila: boolean;
+  editarDados: boolean;
+  imprimirComprovante: boolean;
+}
+
+export const PORTAL_PERMISSOES_PADRAO: PortalPermissoes = {
+  verProximas: true,
+  cancelar: true,
+  verHistorico: true,
+  verFila: true,
+  editarDados: true,
+  imprimirComprovante: true,
+};
