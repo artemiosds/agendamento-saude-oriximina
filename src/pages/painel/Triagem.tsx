@@ -35,6 +35,7 @@ import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
 import { EmptyState } from "@/components/EmptyState";
 import { ClipboardList } from "lucide-react";
 import { useCustomFields } from "@/hooks/useCustomFields";
+import ChamarPacienteButton from "@/components/ChamarPacienteButton";
 
 interface Agendamento {
   id: string;
@@ -229,6 +230,13 @@ const TriagemItem = React.memo(({
           <Badge variant="outline" className="text-xs">
             <Clock className="mr-1 h-3 w-3" /> {waitLabel}
           </Badge>
+          {item.unidadeId && (
+            <ChamarPacienteButton
+              unidadeId={item.unidadeId}
+              pacienteNome={resolvePaciente(item.pacienteId, item.pacienteNome)}
+              defaultLocal="Sala de Triagem"
+            />
+          )}
           <Button 
             size="sm" 
             className="gradient-primary text-primary-foreground" 
