@@ -71,7 +71,7 @@ export default function PainelChamadasConfig() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Painel de Chamadas (TV)" description="Gere o link da TV da recepção e configure o vídeo de espera." />
+      <PageHeader title="Painel de Chamadas (TV)" subtitle="Gere o link da TV da recepção e configure o vídeo de espera." />
       <Card>
         <CardContent className="space-y-5 p-6">
           <div className="space-y-2">
