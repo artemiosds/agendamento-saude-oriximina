@@ -4257,17 +4257,32 @@ ${auditHtml}`;
                         <div className="font-bold text-lg text-green-700">{results.exportedCount}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-muted-foreground">Bloqueados</div>
-                        <div className="font-bold text-lg text-red-700">{results.criticalCount}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formData.exportar_com_pendencias ? "Com pendência (exportados)" : "Bloqueados"}
+                        </div>
+                        <div className={`font-bold text-lg ${formData.exportar_com_pendencias ? "text-amber-700" : "text-red-700"}`}>
+                          {results.criticalCount}
+                        </div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">Folhas no cabeçalho</div>
                         <div className="font-bold text-lg">{results.headerDetails?.totalFolhas}</div>
                       </div>
                     </div>
+                    {(results.resumo?.totalEliminacoesFinais ?? 0) > 0 && (
+                      <div className="pt-2 border-t text-xs text-muted-foreground">
+                        Linhas repetidas consolidadas (mesmo paciente, data, procedimento e CID):{" "}
+                        <b>{results.resumo?.totalEliminacoesFinais}</b> — por isso o total exportado pode ser menor que o
+                        total de prontuários.
+                      </div>
+                    )}
                     {results.criticalCount > 0 && (
                       <div className="pt-2 border-t text-xs space-y-1">
-                        <div className="font-semibold text-red-700">Motivos dos bloqueios:</div>
+                        <div className={`font-semibold ${formData.exportar_com_pendencias ? "text-amber-700" : "text-red-700"}`}>
+                          {formData.exportar_com_pendencias
+                            ? "Pendências autorizadas — estes atendimentos ESTÃO no TXT e na conferência:"
+                            : "Motivos dos bloqueios:"}
+                        </div>
                         {results.stats.missingNacionalidade > 0 && (
                           <div>
                             • Nacionalidade inválida/ausente: <b>{results.stats.missingNacionalidade}</b>
@@ -4323,8 +4338,10 @@ ${auditHtml}`;
                     )}
                     <div className="pt-2 border-t text-xs text-muted-foreground">
                       ✓ Cabeçalho declara <b>{results.headerDetails?.registros}</b> registros — confere com{" "}
-                      {results.exportedCount} linhas no arquivo. Registros bloqueados <b>não</b> entram no TXT nem na
-                      contagem.
+                      {results.exportedCount} linhas no arquivo.
+                      {formData.exportar_com_pendencias
+                        ? " Atendimentos com pendência autorizada estão incluídos nessas linhas."
+                        : " Registros bloqueados não entram no TXT nem na contagem."}
                     </div>
                   </CardContent>
                 </Card>
