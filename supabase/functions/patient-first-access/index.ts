@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     // Portal globalmente desativado?
     const { data: cfg } = await admin.from("system_config").select("configuracoes").eq("id", "default").maybeSingle();
     const portalCfg = (cfg as any)?.configuracoes?.portalPaciente;
-    if (portalCfg && portalCfg.ativo === false) return json({ error: "O portal do paciente está desativado no momento." });
+    if (portalCfg && portalCfg.permitirPortal === false) return json({ error: "O portal do paciente está desativado no momento." });
 
     const { data: lista } = await admin.from("pacientes")
       .select("id,nome,email,auth_user_id,data_nascimento,custom_data")
@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     if (!pac) {
       return json({ notFound: true, error: "Não encontramos cadastro com esse CPF e data de nascimento. Procure a unidade de saúde ou faça um agendamento online." });
     }
-    if ((pac as any).custom_data?.portal_bloqueado === true) {
+    if ((portalCfg?.pacientesBloqueados || []).includes(pac.id)) {
       return json({ error: "Seu acesso ao portal está bloqueado. Procure a unidade de saúde." });
     }
     if (pac.auth_user_id) {
