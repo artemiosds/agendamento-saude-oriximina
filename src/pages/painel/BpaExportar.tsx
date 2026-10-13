@@ -3684,9 +3684,14 @@ const BpaExportar: React.FC = () => {
                 </label>
                 <p className="text-xs text-muted-foreground">
                   Marque esta opção para permitir o download mesmo que existam dados obrigatórios faltando (CNS, Sexo,
-                  Nascimento, Município). As pendências continuarão identificadas no relatório; erros de tamanho ou
-                  deslocamento do TXT permanecem bloqueados.
+                  Nascimento, Município) ou divergências SIGTAP na auditoria final. As pendências exportadas ficam
+                  registradas no relatório para auditoria; erros de tamanho ou deslocamento do TXT permanecem bloqueados.
                 </p>
+                {results && (
+                  <p className="text-xs font-medium text-amber-700">
+                    Após marcar ou desmarcar, clique novamente em "Gerar Arquivo BPA-I" para aplicar.
+                  </p>
+                )}
             </div>
 
             <div className="flex items-center space-x-2 border p-3 rounded-md bg-amber-50/40">
@@ -4441,6 +4446,15 @@ const BpaExportar: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
+              )}
+
+              {!results.blobUrl && results.confRows?.length > 0 && (
+                <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
+                  <Button type="button" variant="outline" className="h-11 px-6" onClick={handleImprimirConferencia}>
+                    <Printer className="mr-2 h-5 w-5" />
+                    Imprimir Conferência (para revisar pendências)
+                  </Button>
+                </div>
               )}
 
               {results.blobUrl && (
