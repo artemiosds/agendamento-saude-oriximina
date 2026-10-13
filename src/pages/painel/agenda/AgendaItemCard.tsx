@@ -33,6 +33,7 @@ import {
   Printer,
 } from "lucide-react";
 import ContactActionButton from "@/components/ContactActionButton";
+import ChamarPacienteButton from "@/components/ChamarPacienteButton";
 import { AgendaNotificacaoIndividual } from "@/components/AgendaNotificacoes";
 import { formatCNS } from "@/lib/cnsUtils";
 import { getManchesterBadgeStyle } from "@/lib/manchesterProtocol";
@@ -340,6 +341,13 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
           >
             <Eye className="w-3.5 h-3.5" />
           </Button>
+          {ag.data === todayLocalStr() && !["cancelado", "concluido", "falta", "paciente_faltou"].includes(ag.status) && (
+            <ChamarPacienteButton
+              unidadeId={ag.unidadeId}
+              pacienteNome={pacienteNomeResolved || ag.pacienteNome}
+              profissionalNome={ag.profissionalNome}
+            />
+          )}
           {onImprimirFicha && (
             <TooltipProvider>
             <Tooltip>
