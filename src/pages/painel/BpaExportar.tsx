@@ -2745,7 +2745,7 @@ const BpaExportar: React.FC = () => {
           totalFound: prontuarios.length, exportedCount: 0, warnings, criticalCount, stats, details,
           resumo: { ...resumoIntegridade, totalRegistros03: 0 },
           error: "O TXT foi bloqueado pela validação estrutural. Revise os campos indicados nas pendências.",
-          fileName: "", blobUrl: null, confRows: [], pendRows: [], headerPreview: null, headerDetails: null,
+          fileName: "", blobUrl: null, confRows, pendRows: [], headerPreview: null, headerDetails: null,
         });
         setLoading(false);
         return;
@@ -2793,6 +2793,7 @@ const BpaExportar: React.FC = () => {
 
       const serialized = new TextDecoder("iso-8859-1").decode(total);
       const auditErrors = auditBpaTxtFinal(serialized, competencia);
+      const totalEstruturaisFinais = auditErrors.length;
       linhasProducao.forEach((line, index) => {
         const codigo = readRegistro03Field(line, "procedimento");
         const cboLinha = readRegistro03Field(line, "cbo");
@@ -2854,7 +2855,36 @@ const BpaExportar: React.FC = () => {
           auditErrors.push(`${label}: CID incompatível com o procedimento`);
         }
       });
-      if (auditErrors.length) throw new Error(`TXT bloqueado pela auditoria final: ${auditErrors.slice(0, 5).join(" | ")}`);
+      // Estrutura do TXT (tamanho, cabeçalho, competência, folha/sequência, controle)
+      // sempre bloqueia. Divergências SIGTAP por linha são pendências autorizáveis
+      // pela opção "Exportar mesmo com pendências críticas" e ficam registradas.
+      const estruturaisFinais = auditErrors.slice(0, totalEstruturaisFinais);
+      const pendenciasSigtapFinais = auditErrors.slice(totalEstruturaisFinais);
+      const bloqueiosFinais = formData.exportar_com_pendencias ? estruturaisFinais : auditErrors;
+      if (formData.exportar_com_pendencias) {
+        for (const pend of pendenciasSigtapFinais) {
+          warnings.push(`Pendência autorizada (exportada): ${pend}`);
+          details.critical.push({
+            paciente_nome: pend.split(":")[0],
+            data_atendimento: "",
+            pendencia: "Pendência autorizada na auditoria final",
+            valor_atual: "Exportado por opção manual",
+            motivo: pend,
+          });
+        }
+        criticalCount += pendenciasSigtapFinais.length;
+      }
+      if (bloqueiosFinais.length) {
+        setResults({
+          totalFound: prontuarios.length, exportedCount: 0, warnings, criticalCount, stats, details,
+          error: `TXT bloqueado pela auditoria final: ${bloqueiosFinais.slice(0, 5).join(" | ")}${
+            formData.exportar_com_pendencias ? "" : " — marque 'Exportar mesmo com pendências críticas' e gere novamente para exportar pendências não estruturais."
+          }`,
+          fileName: "", blobUrl: null, confRows, pendRows: [], headerPreview: null, headerDetails: null,
+        });
+        setLoading(false);
+        return;
+      }
 
       const blob = new Blob([total], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
