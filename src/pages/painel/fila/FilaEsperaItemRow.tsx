@@ -29,6 +29,7 @@ import {
   CalendarClock,
   TriangleAlert,
 } from "lucide-react";
+import CondicaoBadges from "@/components/CondicaoBadges";
 import ContactActionButton from "@/components/ContactActionButton";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ export interface FilaEsperaItemRowProps {
   numero: number;
   pacienteNomeResolved: string;
   pacienteTelefone?: string;
+  pacienteCondicao?: { tipoCondicao?: string; mobilidade?: string; isAutista?: boolean };
   profLabel: string; // "Nome — Profissão" ou "Qualquer profissional"
   unidadeNome: string;
   isChamado: boolean;
@@ -70,6 +72,7 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
   numero,
   pacienteNomeResolved,
   pacienteTelefone,
+  pacienteCondicao,
   profLabel,
   unidadeNome,
   isChamado,
@@ -150,6 +153,7 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
                   <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
                 </Badge>
               )}
+              {pacienteCondicao && <CondicaoBadges {...pacienteCondicao} />}
               {manchesterRisco && (
                 <Badge
                   className={`text-white text-[10px] px-1.5 py-0 ${manchesterRisco.pulse ? "animate-[pulse-manchester_1.5s_infinite]" : ""}`}

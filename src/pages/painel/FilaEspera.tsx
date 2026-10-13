@@ -2207,6 +2207,7 @@ const FilaEspera: React.FC = () => {
                 numero={pageStart + i + 1}
                 pacienteNomeResolved={resolvePaciente(f.pacienteId, f.pacienteNome)}
                 pacienteTelefone={pacienteMap.get(f.pacienteId)?.telefone}
+                pacienteCondicao={(() => { const pc: any = pacienteMap.get(f.pacienteId); return pc ? { tipoCondicao: pc.tipo_condicao, mobilidade: pc.mobilidade, isAutista: pc.isAutista } : undefined; })()}
                 profLabel={profLabel}
                 unidadeNome={unidade?.nome || ""}
                 isChamado={isChamado}

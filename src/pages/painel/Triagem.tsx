@@ -36,6 +36,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ClipboardList } from "lucide-react";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import ChamarPacienteButton from "@/components/ChamarPacienteButton";
+import CondicaoBadges from "@/components/CondicaoBadges";
 
 interface Agendamento {
   id: string;
@@ -50,6 +51,8 @@ interface Agendamento {
   pacienteIsGestante?: boolean;
   pacienteIsPne?: boolean;
   pacienteIsAutista?: boolean;
+  pacienteTipoCondicao?: string;
+  pacienteMobilidade?: string;
   prioridadeLegal?: ReturnType<typeof legalPriorityKey>;
   unidadeId: string;
   profissionalId: string;
@@ -209,6 +212,7 @@ const TriagemItem = React.memo(({
             {item.pacienteIsAutista && (
               <Badge className="bg-purple-500 hover:bg-purple-500 text-white text-[10px] px-1.5 py-0">PRIORIDADE TEA</Badge>
             )}
+            <CondicaoBadges tipoCondicao={item.pacienteTipoCondicao} mobilidade={item.pacienteMobilidade} isAutista={item.pacienteIsAutista} />
           </div>
           <div className="mt-0.5 flex flex-wrap gap-1">
             {espBadge && (
@@ -486,6 +490,8 @@ const Triagem: React.FC = () => {
           pacienteIsGestante: !!pac?.isGestante,
           pacienteIsPne: !!pac?.isPne,
           pacienteIsAutista: !!pac?.isAutista,
+          pacienteTipoCondicao: (pac as any)?.tipo_condicao || "",
+          pacienteMobilidade: (pac as any)?.mobilidade || "",
           prioridadeLegal: legalPriorityKey(pac),
           unidadeId: item.unidadeId,
           profissionalId,
