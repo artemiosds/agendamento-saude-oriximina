@@ -86,6 +86,17 @@ const UnidadesSalas: React.FC = () => {
 
   const [videoUnit, setVideoUnit] = useState<{ id: string; nome: string } | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [videoList, setVideoList] = useState<string[]>([]);
+  const addUrl = () => {
+    const v = videoUrl.trim();
+    if (!v) return;
+    if (!/^https:\/\//i.test(v)) { toast.error('Informe um endereço https://'); return; }
+    setVideoList(l => [...l, v]); setVideoUrl('');
+  };
+  const moverVideo = (i: number, d: number) => setVideoList(l => {
+    const j = i + d; if (j < 0 || j >= l.length) return l;
+    const n = [...l]; [n[i], n[j]] = [n[j], n[i]]; return n;
+  });
   const [enviando, setEnviando] = useState(false);
 
   const linkTV = (id: string) => {
@@ -98,9 +109,11 @@ const UnidadesSalas: React.FC = () => {
     catch { toast.error('Copie manualmente: ' + linkTV(id)); }
   };
   const abrirVideo = async (id: string, nome: string) => {
-    setVideoUnit({ id, nome }); setVideoUrl('');
+    setVideoUnit({ id, nome }); setVideoUrl(''); setVideoList([]);
     const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', id).maybeSingle();
-    setVideoUrl(String(((data as any)?.custom_data || {}).video_url || ''));
+    const cd = ((data as any)?.custom_data || {});
+    const lista: string[] = Array.isArray(cd.video_urls) ? cd.video_urls.filter((x: any) => typeof x === 'string' && x) : (cd.video_url ? [String(cd.video_url)] : []);
+    setVideoList(lista);
   };
   const enviarVideo = async (file: File) => {
     if (!videoUnit) return;
@@ -113,19 +126,20 @@ const UnidadesSalas: React.FC = () => {
       if (error) throw error;
       const { data, error: e2 } = await supabase.storage.from('painel-videos').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
       if (e2 || !data) throw e2;
-      setVideoUrl(data.signedUrl);
-      toast.success('Vídeo enviado. Clique em Salvar Configuração.');
+      setVideoList(l => [...l, data.signedUrl]);
+      toast.success('Vídeo adicionado à lista. Clique em Salvar Configuração.');
     } catch (e: any) {
       toast.error('Falha no envio: ' + (e?.message || 'erro'));
     } finally { setEnviando(false); }
   };
   const salvarVideo = async () => {
     if (!videoUnit) return;
-    const v = videoUrl.trim();
-    if (v && !/^https:\/\//i.test(v)) { toast.error('Informe um endereço https://'); return; }
+    const pend = videoUrl.trim();
+    if (pend && !/^https:\/\//i.test(pend)) { toast.error('Informe um endereço https://'); return; }
+    const lista = pend ? [...videoList, pend] : videoList;
     const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', videoUnit.id).maybeSingle();
     const cd = { ...(((data as any)?.custom_data) || {}) };
-    if (v) cd.video_url = v; else delete cd.video_url;
+    if (lista.length) { cd.video_urls = lista; cd.video_url = lista[0]; } else { delete cd.video_urls; delete cd.video_url; }
     const { error } = await supabase.from('unidades' as any).update({ custom_data: cd }).eq('id', videoUnit.id);
     if (error) { toast.error('Não foi possível salvar.'); return; }
     toast.success('Vídeo salvo! Recarregue a TV.');
@@ -272,12 +286,27 @@ const UnidadesSalas: React.FC = () => {
           <DialogHeader><DialogTitle className="font-display">Vídeo do Painel — {videoUnit?.nome}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>URL do Vídeo (MP4)</Label>
+              <Label>Lista de vídeos ({videoList.length})</Label>
+              <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
+                {videoList.length === 0 && <p className="text-xs text-muted-foreground">Nenhum vídeo na lista.</p>}
+                {videoList.map((u, i) => (
+                  <div key={i + u} className="flex items-center gap-1 border rounded px-2 py-1 text-xs">
+                    <span className="font-semibold w-5">{i + 1}.</span>
+                    <span className="flex-1 truncate" title={u}>{decodeURIComponent(u.split('?')[0].split('/').pop() || u)}</span>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" disabled={i === 0} onClick={() => moverVideo(i, -1)}>↑</Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" disabled={i === videoList.length - 1} onClick={() => moverVideo(i, 1)}>↓</Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => setVideoList(l => l.filter((_, k) => k !== i))}><X className="w-3 h-3" /></Button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">Os vídeos tocam em sequência e recomeçam do primeiro. Recomendado: MP4 H.264, 1080p, até 100 MB cada.</p>
+            </div>
+            <div>
+              <Label>Adicionar por URL (MP4)</Label>
               <div className="flex gap-2 items-center mt-1">
                 <Input value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="https://.../video.mp4" />
-                <Button size="icon" variant="ghost" onClick={() => setVideoUrl('')}><X className="w-4 h-4" /></Button>
+                <Button size="sm" variant="outline" onClick={addUrl}><Plus className="w-4 h-4" /></Button>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1">Recomendado: MP4 H.264, 1080p, mudo, até 100 MB.</p>
             </div>
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground"><div className="flex-1 border-t" />OU FAÇA UPLOAD<div className="flex-1 border-t" /></div>
             <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-6 cursor-pointer hover:bg-muted/50 text-sm">
