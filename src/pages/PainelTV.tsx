@@ -162,7 +162,7 @@ export default function PainelTV() {
     let retry: ReturnType<typeof setTimeout> | null = null;
     const conectar = () => {
       if (!ativo) return;
-      channel = supabase
+      const ch = supabase
         .channel(canalPainel(unidade))
         .on("broadcast", { event: "chamada" }, ({ payload }) => {
           const c = payload as ChamadaPaciente;
@@ -176,14 +176,17 @@ export default function PainelTV() {
         })
         .subscribe((s) => {
           setStatus(s); log(`canal: ${s}`);
+          if (channel !== ch) return;
           if ((s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") && ativo) {
+            channel = null;
             if (retry) clearTimeout(retry);
             retry = setTimeout(() => {
-              if (channel) supabase.removeChannel(channel);
+              supabase.removeChannel(ch);
               conectar();
             }, 3000);
           }
         });
+      channel = ch;
     };
     conectar();
     return () => {
