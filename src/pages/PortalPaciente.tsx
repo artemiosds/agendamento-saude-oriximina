@@ -55,6 +55,7 @@ const statusLabels: Record<string, { label: string; class: string }> = {
 };
 
 type RecoveryStep = 'none' | 'verify' | 'newpass' | 'done';
+type FirstStep = 'none' | 'id' | 'senha';
 
 const PortalPaciente: React.FC = () => {
   const navigate = useNavigate();
@@ -81,6 +82,17 @@ const PortalPaciente: React.FC = () => {
   const [showConfirmar, setShowConfirmar] = useState(false);
   const [recLoading, setRecLoading] = useState(false);
   const [recErro, setRecErro] = useState('');
+  const [faStep, setFaStep] = useState<FirstStep>('none');
+  const [faCpf, setFaCpf] = useState('');
+  const [faNasc, setFaNasc] = useState('');
+  const [faNome, setFaNome] = useState('');
+  const [faTemEmail, setFaTemEmail] = useState(false);
+  const [faEmailMask, setFaEmailMask] = useState('');
+  const [faEmail, setFaEmail] = useState('');
+  const [faSenha, setFaSenha] = useState('');
+  const [faConf, setFaConf] = useState('');
+  const [faErro, setFaErro] = useState('');
+  const [faLoading, setFaLoading] = useState(false);
 
   useEffect(() => { checkSession(); }, []);
 
@@ -241,12 +253,101 @@ const PortalPaciente: React.FC = () => {
     setRecLoading(false);
   };
 
+  const resetFirst = () => { setFaStep('none'); setFaCpf(''); setFaNasc(''); setFaNome(''); setFaEmail(''); setFaSenha(''); setFaConf(''); setFaErro(''); };
+
+  const callFirst = async (payload: any) => {
+    const { data, error } = await supabase.functions.invoke('patient-first-access', { body: payload });
+    if (error && !data) throw error;
+    return data;
+  };
+
+  const handleFirstVerify = async () => {
+    setFaErro('');
+    if (faCpf.replace(/\D/g, '').length !== 11) { setFaErro('Informe um CPF válido.'); return; }
+    if (!faNasc) { setFaErro('Informe sua data de nascimento.'); return; }
+    setFaLoading(true);
+    try {
+      const d = await callFirst({ action: 'verify', cpf: faCpf, dataNascimento: faNasc });
+      if (d?.error) { setFaErro(d.error); return; }
+      setFaNome(d.nome); setFaTemEmail(!!d.temEmail); setFaEmailMask(d.emailMascarado || ''); setFaStep('senha');
+    } catch { setFaErro('Erro ao conectar ao servidor.'); }
+    finally { setFaLoading(false); }
+  };
+
+  const handleFirstActivate = async () => {
+    setFaErro('');
+    if (!faTemEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(faEmail.trim())) { setFaErro('Informe um e-mail válido.'); return; }
+    if (faSenha.length < 6) { setFaErro('A senha deve ter no mínimo 6 caracteres.'); return; }
+    if (faSenha !== faConf) { setFaErro('As senhas não conferem.'); return; }
+    setFaLoading(true);
+    try {
+      const d = await callFirst({ action: 'activate', cpf: faCpf, dataNascimento: faNasc, email: faTemEmail ? undefined : faEmail.trim(), senha: faSenha });
+      if (d?.error || !d?.success) { setFaErro(d?.error || 'Erro ao ativar acesso.'); return; }
+      toast.success('Acesso ativado! Entrando...');
+      const { data: s, error } = await supabase.auth.signInWithPassword({ email: d.email, password: faSenha });
+      resetFirst();
+      if (error || !s.session) { setLoginForm({ email: d.email, senha: '' }); toast.info('Faça login com seu e-mail e a nova senha.'); return; }
+      const acc = await checkPortalAccess(s.session.user.id);
+      if (!acc.allowed) { await supabase.auth.signOut(); toast.error(acc.message); return; }
+      await loadPacienteData(s.session.user.id);
+    } catch { setFaErro('Erro ao conectar ao servidor.'); }
+    finally { setFaLoading(false); }
+  };
+
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
   // Login screen
   if (!isLoggedIn) {
+    if (faStep !== 'none') {
+      return (
+        <div className="min-h-screen bg-background">
+          <div className="gradient-hero text-primary-foreground py-8">
+            <div className="container mx-auto px-4">
+              <button onClick={resetFirst} className="inline-flex items-center text-sm opacity-70 hover:opacity-100 mb-4">
+                <ArrowLeft className="w-4 h-4 mr-1" />Voltar ao login
+              </button>
+              <h1 className="text-2xl md:text-3xl font-bold font-display">Primeiro Acesso</h1>
+              <p className="opacity-80 mt-1">Ative seu acesso ao Portal do Paciente</p>
+            </div>
+          </div>
+          <div className="container mx-auto px-4 py-8 max-w-md">
+            <Card className="shadow-elevated border-0">
+              <CardContent className="p-6 space-y-4">
+                {faStep === 'id' ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">Já foi atendido ou agendado na unidade? Informe seus dados para confirmar sua identidade.</p>
+                    <div><Label>CPF</Label><Input value={faCpf} onChange={e => setFaCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" /></div>
+                    <div><Label>Data de nascimento</Label><Input type="date" value={faNasc} onChange={e => setFaNasc(e.target.value)} /></div>
+                    {faErro && <p className="text-sm text-destructive text-center">{faErro}</p>}
+                    <Button onClick={handleFirstVerify} className="w-full gradient-primary text-primary-foreground" disabled={faLoading}>
+                      {faLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Continuar
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-lg bg-primary/5 p-3 text-sm">Cadastro encontrado: <strong className="text-foreground">{faNome}</strong></div>
+                    {faTemEmail ? (
+                      <p className="text-sm text-muted-foreground">Seu login será o e-mail cadastrado na unidade: <strong>{faEmailMask}</strong></p>
+                    ) : (
+                      <div><Label>Seu e-mail (será seu login)</Label><Input type="email" value={faEmail} onChange={e => setFaEmail(e.target.value)} placeholder="seu@email.com" /></div>
+                    )}
+                    <div><Label>Crie sua senha</Label><Input type="password" value={faSenha} onChange={e => setFaSenha(e.target.value)} placeholder="Mínimo 6 caracteres" /></div>
+                    <div><Label>Confirme a senha</Label><Input type="password" value={faConf} onChange={e => setFaConf(e.target.value)} placeholder="Repita a senha" /></div>
+                    {faErro && <p className="text-sm text-destructive text-center">{faErro}</p>}
+                    <Button onClick={handleFirstActivate} className="w-full gradient-primary text-primary-foreground" disabled={faLoading}>
+                      {faLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Ativar meu acesso
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+
     // Recovery flow
     if (recoveryStep !== 'none') {
       return (
@@ -358,8 +459,11 @@ const PortalPaciente: React.FC = () => {
                 <button type="button" onClick={() => { setRecoveryStep('verify'); setRecErro(''); }} className="w-full text-sm text-primary hover:underline">
                   Esqueci minha senha
                 </button>
+                <Button type="button" variant="outline" className="w-full" onClick={() => { setFaStep('id'); setFaErro(''); }}>
+                  Primeiro acesso? Ative sua conta
+                </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Ainda não tem conta? <Link to="/agendar" className="text-primary underline">Agende uma consulta</Link> para criar seu acesso.
+                  Ainda não tem cadastro? <Link to="/agendar" className="text-primary underline">Agende uma consulta</Link> para criar seu acesso.
                 </p>
               </CardContent>
             </Card>
