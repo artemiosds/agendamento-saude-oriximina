@@ -799,7 +799,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               <RadioGroup
                 value={form.tipoCondicao}
-                onValueChange={(v) => set("tipoCondicao", v)}
+                onValueChange={(v) => onChange({ ...form, tipoCondicao: v, ...(v === "tea" ? { isAutista: true } : {}) })}
                 className="flex flex-wrap gap-4"
               >
                 <div className="flex items-center gap-1.5">

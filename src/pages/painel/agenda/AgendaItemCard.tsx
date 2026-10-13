@@ -1,3 +1,4 @@
+import CondicaoBadges from "@/components/CondicaoBadges";
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -280,6 +281,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
                 {paciente?.isAutista && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-purple-500 text-white">PRIORIDADE TEA</span>
                 )}
+                <CondicaoBadges tipoCondicao={(paciente as any)?.tipo_condicao} mobilidade={(paciente as any)?.mobilidade} isAutista={paciente?.isAutista} />
               </>
             );
           })()}
