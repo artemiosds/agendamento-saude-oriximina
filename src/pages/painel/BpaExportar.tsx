@@ -2527,7 +2527,27 @@ const BpaExportar: React.FC = () => {
                 [{ codigo: procEntry.codigo, origem: procEntry.origem, cid: cid.trim() }],
                 validacaoCtxLinha,
               );
-              if (validacaoLinhaFinal.rejeitados.length > 0) {
+              const codigoAutorizavel = /^\d{10}$/.test(somenteNumeros(procEntry.codigo || ""));
+              if (
+                validacaoLinhaFinal.rejeitados.length > 0 &&
+                formData.exportar_com_pendencias &&
+                codigoAutorizavel
+              ) {
+                // Pendência clínica/SIGTAP autorizada manualmente: a linha É exportada
+                // e fica registrada para auditoria (não é descartada).
+                const motivoAut = validacaoLinhaFinal.rejeitados[0].rejeicoes.join(" | ");
+                warnings.push(
+                  `${ident}: Pendência autorizada (exportada): procedimento ${procEntry.codigo} / CID ${cid.trim() || "vazio"} — ${motivoAut}`,
+                );
+                details.critical.push({
+                  ...itemDetail,
+                  pendencia: "Pendência autorizada — linha exportada",
+                  valor_atual: `${procEntry.codigo}${cid.trim() ? ` / CID ${cid.trim()}` : ""} → ${motivoAut}`,
+                  codigo_sigtap: procEntry.codigo,
+                  cbo,
+                  motivo: motivoAut,
+                });
+              } else if (validacaoLinhaFinal.rejeitados.length > 0) {
                 const rejFinal = validacaoLinhaFinal.rejeitados[0];
                 const motivoFinal = rejFinal.rejeicoes.join(" | ");
                 stats.rejectedProc++;
@@ -3325,6 +3345,16 @@ const BpaExportar: React.FC = () => {
         )
         .join("");
 
+      const pendAud = [...(results.pendRows || [])].sort(cmpAlfa);
+      const auditHtml = pendAud.length
+        ? `<h3 style="margin:14px 0 6px;font-size:11pt;color:#92400e;page-break-before:auto">Auditoria: Registros com Pendências (${pendAud.length})</h3>
+<table class="bpa-table"><thead><tr><th>Paciente</th><th>Atendimento</th><th>SIGTAP</th><th>Pendências</th><th>Detalhe</th></tr></thead><tbody>${pendAud
+            .map(
+              (r: any) => `<tr><td class="nome">${esc(String(r.paciente_nome || "").toUpperCase())}</td><td class="c">${esc(r.data_atendimento)}</td><td class="c">${esc(r.codigo_sigtap || "—")}</td><td>${esc((r.pendencias || []).join("; "))}</td><td>${esc(r.valor_atual || r.motivo || "")}</td></tr>`,
+            )
+            .join("")}</tbody></table>`
+        : "";
+
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
       // Não é position:fixed, portanto não sobrepõe o conteúdo.
       const respo = esc(user?.nome || user?.usuario || "—");
@@ -3385,7 +3415,8 @@ const BpaExportar: React.FC = () => {
     <th>Atendimento</th><th>SIGTAP</th><th>Origem SIGTAP</th><th>CID</th>
   </tr></thead>
   <tbody>${rowsHtml}</tbody>
-</table>`;
+</table>
+${auditHtml}`;
 
       const config = await loadDocumentConfig();
       const title = `Conferência BPA-I — Competência ${ctx.competencia}`;
