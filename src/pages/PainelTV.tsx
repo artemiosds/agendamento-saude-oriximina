@@ -115,7 +115,8 @@ export default function PainelTV() {
     try {
       if (ctxRef.current.state === "suspended") await ctxRef.current.resume().catch(() => {});
       await tocarSino(ctxRef.current);
-      const txt = `Atenção: ${c.pacienteNome.toLowerCase()}, dirigir-se ao ${c.local}.`;
+      const prof = c.profissionalNome ? `, com ${c.profissionalNome.toLowerCase()}` : "";
+      const txt = `Atenção: ${c.pacienteNome.toLowerCase()}, dirigir-se ao ${c.local}${prof}.`;
       await falar(txt);
       if (repetir) { await espera(700); await falar(txt); }
     } catch { /* silencioso */ }
