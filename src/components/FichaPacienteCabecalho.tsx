@@ -15,8 +15,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import ChamarPacienteButton from "@/components/ChamarPacienteButton";
-import { useAuth } from "@/contexts/AuthContext";
 
 interface TriagemVitals {
   pressao_arterial?: string;
@@ -94,8 +92,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
   triagem, funcionarios, onPacienteUpdated,
 }) => {
   const [paciente, setPaciente] = useState<any>(null);
-  const { user } = useAuth();
-  const unidadeIdChamada = user?.unidadeId || paciente?.unidade_id || "";
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -296,13 +292,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          {!editing && unidadeIdChamada && paciente?.nome && (
-            <ChamarPacienteButton
-              unidadeId={unidadeIdChamada}
-              pacienteNome={paciente.nome}
-              profissionalNome={profissionalNome}
-            />
-          )}
           {!editing && (
             <Button
               variant="ghost"
