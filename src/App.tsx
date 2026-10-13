@@ -58,6 +58,7 @@ import OAuthConsent from "./pages/OAuthConsent";
 // Lazy loaded with retry
 const AgendarOnline               = lazyRetry(() => import("./pages/AgendarOnline"));
 const PortalPaciente              = lazyRetry(() => import("./pages/PortalPaciente"));
+const PainelTV                    = lazyRetry(() => import("./pages/PainelTV"));
 const PainelLayout                = lazyRetry(() => import("./components/PainelLayout"));
 const Dashboard                   = lazyRetry(() => import("./pages/painel/Dashboard"));
 const Agenda                      = lazyRetry(() => import("./pages/painel/Agenda"));
@@ -197,6 +198,7 @@ const App = () => (
                   <Route path="/login" element={<LoginRedirect />} />
                   <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                   <Route path="/agendar" element={<Suspense fallback={<PageLoader />}><AgendarOnline /></Suspense>} />
+                  <Route path="/painel-tv" element={<Suspense fallback={<PageLoader />}><PainelTV /></Suspense>} />
                   <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalPaciente /></Suspense>} />
                   <Route path="/externo" element={<Suspense fallback={<PageLoader />}><LoginExterno /></Suspense>} />
                   <Route path="/externo/agendar" element={<Suspense fallback={<PageLoader />}><AgendamentoExterno /></Suspense>} />
