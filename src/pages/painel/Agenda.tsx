@@ -1217,12 +1217,16 @@ const Agenda: React.FC = () => {
             next.add(newAg.pacienteId);
             return next;
           });
-          void executarCreate();
+          void executarCreate().catch((e) => toast.error(e?.message || "Erro ao criar agendamento."));
         },
       });
       return;
     }
-    void executarCreate();
+    try {
+      await executarCreate();
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao criar agendamento.");
+    }
   };
 
   const executarCreate = async () => {
@@ -1431,7 +1435,18 @@ const Agenda: React.FC = () => {
     } else {
       await addAgendamento(agData);
     }
-    await logAction({
+    // Fecha o modal assim que o agendamento foi gravado; auditoria segue em segundo plano
+    setDialogOpen(false);
+    setNewAg({
+      pacienteId: "",
+      profissionalId: filterProf !== "all" ? filterProf : "",
+      salaId: "",
+      hora: "",
+      tipo: "Consulta",
+      obs: "",
+    });
+    toast.success("Agendamento criado!");
+    Promise.resolve(logAction({
       acao: "novo_agendamento",
       entidade: "agendamento",
       entidadeId: agId,
@@ -1443,20 +1458,13 @@ const Agenda: React.FC = () => {
       profissionalNome: prof.nome,
       agendamentoId: agId,
       after: agData,
-      detalhes: { paciente: pac.nome, data: selectedDate, hora: newAg.hora },
-    });
-
-    // Close dialog immediately (optimistic)
-    setDialogOpen(false);
-    setNewAg({
-      pacienteId: "",
-      profissionalId: filterProf !== "all" ? filterProf : "",
-      salaId: "",
-      hora: "",
-      tipo: "Consulta",
-      obs: "",
-    });
-    toast.success("Agendamento criado!");
+      detalhes: {
+        paciente: pac.nome, data: selectedDate, hora: newAg.hora,
+        ...(masterOverrideReason || carencyOverrideReason
+          ? { motivo_alteracao: [masterOverrideReason, carencyOverrideReason].filter(Boolean).join(" | ") }
+          : {}),
+      },
+    })).catch((e) => console.error("Falha ao registrar auditoria do agendamento:", e));
 
     // Background tasks (portal, gcal, notification)
     ensurePortalAccess({
