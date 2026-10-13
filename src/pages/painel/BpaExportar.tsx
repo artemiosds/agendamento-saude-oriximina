@@ -2745,7 +2745,7 @@ const BpaExportar: React.FC = () => {
           totalFound: prontuarios.length, exportedCount: 0, warnings, criticalCount, stats, details,
           resumo: { ...resumoIntegridade, totalRegistros03: 0 },
           error: "O TXT foi bloqueado pela validação estrutural. Revise os campos indicados nas pendências.",
-          fileName: "", blobUrl: null, confRows: [], pendRows: [], headerPreview: null, headerDetails: null,
+          fileName: "", blobUrl: null, confRows, pendRows: [], headerPreview: null, headerDetails: null,
         });
         setLoading(false);
         return;
@@ -2793,6 +2793,7 @@ const BpaExportar: React.FC = () => {
 
       const serialized = new TextDecoder("iso-8859-1").decode(total);
       const auditErrors = auditBpaTxtFinal(serialized, competencia);
+      const totalEstruturaisFinais = auditErrors.length;
       linhasProducao.forEach((line, index) => {
         const codigo = readRegistro03Field(line, "procedimento");
         const cboLinha = readRegistro03Field(line, "cbo");
@@ -2854,7 +2855,36 @@ const BpaExportar: React.FC = () => {
           auditErrors.push(`${label}: CID incompatível com o procedimento`);
         }
       });
-      if (auditErrors.length) throw new Error(`TXT bloqueado pela auditoria final: ${auditErrors.slice(0, 5).join(" | ")}`);
+      // Estrutura do TXT (tamanho, cabeçalho, competência, folha/sequência, controle)
+      // sempre bloqueia. Divergências SIGTAP por linha são pendências autorizáveis
+      // pela opção "Exportar mesmo com pendências críticas" e ficam registradas.
+      const estruturaisFinais = auditErrors.slice(0, totalEstruturaisFinais);
+      const pendenciasSigtapFinais = auditErrors.slice(totalEstruturaisFinais);
+      const bloqueiosFinais = formData.exportar_com_pendencias ? estruturaisFinais : auditErrors;
+      if (formData.exportar_com_pendencias) {
+        for (const pend of pendenciasSigtapFinais) {
+          warnings.push(`Pendência autorizada (exportada): ${pend}`);
+          details.critical.push({
+            paciente_nome: pend.split(":")[0],
+            data_atendimento: "",
+            pendencia: "Pendência autorizada na auditoria final",
+            valor_atual: "Exportado por opção manual",
+            motivo: pend,
+          });
+        }
+        criticalCount += pendenciasSigtapFinais.length;
+      }
+      if (bloqueiosFinais.length) {
+        setResults({
+          totalFound: prontuarios.length, exportedCount: 0, warnings, criticalCount, stats, details,
+          error: `TXT bloqueado pela auditoria final: ${bloqueiosFinais.slice(0, 5).join(" | ")}${
+            formData.exportar_com_pendencias ? "" : " — marque 'Exportar mesmo com pendências críticas' e gere novamente para exportar pendências não estruturais."
+          }`,
+          fileName: "", blobUrl: null, confRows, pendRows: [], headerPreview: null, headerDetails: null,
+        });
+        setLoading(false);
+        return;
+      }
 
       const blob = new Blob([total], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
@@ -3654,9 +3684,14 @@ const BpaExportar: React.FC = () => {
                 </label>
                 <p className="text-xs text-muted-foreground">
                   Marque esta opção para permitir o download mesmo que existam dados obrigatórios faltando (CNS, Sexo,
-                  Nascimento, Município). As pendências continuarão identificadas no relatório; erros de tamanho ou
-                  deslocamento do TXT permanecem bloqueados.
+                  Nascimento, Município) ou divergências SIGTAP na auditoria final. As pendências exportadas ficam
+                  registradas no relatório para auditoria; erros de tamanho ou deslocamento do TXT permanecem bloqueados.
                 </p>
+                {results && (
+                  <p className="text-xs font-medium text-amber-700">
+                    Após marcar ou desmarcar, clique novamente em "Gerar Arquivo BPA-I" para aplicar.
+                  </p>
+                )}
             </div>
 
             <div className="flex items-center space-x-2 border p-3 rounded-md bg-amber-50/40">
@@ -4411,6 +4446,15 @@ const BpaExportar: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
+              )}
+
+              {!results.blobUrl && results.confRows?.length > 0 && (
+                <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
+                  <Button type="button" variant="outline" className="h-11 px-6" onClick={handleImprimirConferencia}>
+                    <Printer className="mr-2 h-5 w-5" />
+                    Imprimir Conferência (para revisar pendências)
+                  </Button>
+                </div>
               )}
 
               {results.blobUrl && (
