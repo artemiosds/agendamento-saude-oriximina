@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { chamarPaciente, getLocalSalvo, setLocalSalvo } from "@/lib/painelChamadas";
 
 interface Props {
@@ -17,6 +19,19 @@ export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissi
   const [open, setOpen] = useState(false);
   const [local, setLocal] = useState(() => getLocalSalvo() || defaultLocal || "");
   const [enviando, setEnviando] = useState(false);
+  const [salas, setSalas] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!open || !unidadeId) return;
+    supabase
+      .from("salas")
+      .select("nome")
+      .eq("unidade_id", unidadeId)
+      .order("nome")
+      .then(({ data }) => {
+        setSalas(((data as any[]) || []).map((s) => String(s.nome || "").trim()).filter(Boolean));
+      });
+  }, [open, unidadeId]);
 
   const enviar = async () => {
     const l = local.trim();
@@ -38,13 +53,26 @@ export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissi
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-2" align="end">
         <p className="text-sm font-medium">Chamar {pacienteNome.split(" ")[0]}</p>
-        <Input
-          value={local}
-          onChange={(e) => setLocal(e.target.value)}
-          placeholder="Ex.: Consultório 3"
-          onKeyDown={(e) => e.key === "Enter" && enviar()}
-          autoFocus
-        />
+        {salas.length > 0 ? (
+          <Select value={salas.includes(local) ? local : ""} onValueChange={(v) => setLocal(v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione a sala" />
+            </SelectTrigger>
+            <SelectContent>
+              {salas.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            placeholder="Ex.: Consultório 3"
+            onKeyDown={(e) => e.key === "Enter" && enviar()}
+            autoFocus
+          />
+        )}
         <Button className="w-full" size="sm" onClick={enviar} disabled={enviando}>
           {enviando ? "Chamando..." : "Chamar no painel"}
         </Button>
