@@ -4338,8 +4338,10 @@ ${auditHtml}`;
                     )}
                     <div className="pt-2 border-t text-xs text-muted-foreground">
                       ✓ Cabeçalho declara <b>{results.headerDetails?.registros}</b> registros — confere com{" "}
-                      {results.exportedCount} linhas no arquivo. Registros bloqueados <b>não</b> entram no TXT nem na
-                      contagem.
+                      {results.exportedCount} linhas no arquivo.
+                      {formData.exportar_com_pendencias
+                        ? " Atendimentos com pendência autorizada estão incluídos nessas linhas."
+                        : " Registros bloqueados não entram no TXT nem na contagem."}
                     </div>
                   </CardContent>
                 </Card>
