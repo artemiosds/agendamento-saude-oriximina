@@ -40,17 +40,21 @@ function escolherVoz(): SpeechSynthesisVoice | undefined {
 function falar(texto: string) {
   return new Promise<void>((resolve) => {
     if (!("speechSynthesis" in window)) return resolve();
+    const synth = window.speechSynthesis;
+    try { synth.cancel(); } catch { /* */ }
     const u = new SpeechSynthesisUtterance(texto);
     const v = escolherVoz();
     if (v) u.voice = v;
     u.lang = "pt-BR";
     u.rate = 0.9;
     let feito = false;
-    const fim = () => { if (!feito) { feito = true; resolve(); } };
+    // Chrome/Smart TV: síntese longa pode "congelar"; resume periódico evita travamento.
+    const keep = setInterval(() => { try { synth.resume(); } catch { /* */ } }, 5000);
+    const limite = setTimeout(() => { try { synth.cancel(); } catch { /* */ } fim(); }, Math.min(15000, 3000 + texto.length * 120));
+    function fim() { if (!feito) { feito = true; clearInterval(keep); clearTimeout(limite); resolve(); } }
     u.onend = fim;
     u.onerror = fim;
-    setTimeout(fim, 15000);
-    window.speechSynthesis.speak(u);
+    try { synth.speak(u); } catch { fim(); }
   });
 }
 
@@ -99,40 +103,51 @@ export default function PainelTV() {
     try { localStorage.setItem(HIST_KEY(unidade), JSON.stringify([c, ...h].slice(0, 5))); } catch { /* */ }
   };
 
-  const anunciar = async (c: ChamadaPaciente) => {
+  const anunciar = async (c: ChamadaPaciente, repetir: boolean) => {
     if (!audioRef.current || !ctxRef.current) return;
     try {
+      if (ctxRef.current.state === "suspended") await ctxRef.current.resume().catch(() => {});
       await tocarSino(ctxRef.current);
       const txt = `Atenção: ${c.pacienteNome.toLowerCase()}, dirigir-se ao ${c.local}.`;
       await falar(txt);
-      await espera(700);
-      await falar(txt);
+      if (repetir) { await espera(700); await falar(txt); }
     } catch { /* silencioso */ }
   };
+
+  const vistos = useRef<Set<string>>(new Set());
 
   const processar = async () => {
     if (tocando.current) return;
     tocando.current = true;
-    while (fila.current.length) {
-      const c = fila.current.shift()!;
-      log(`exibindo ${c.pacienteNome} → ${c.local}`);
-      setAtual((prev) => {
-        setHist((h) => {
-          const n = prev ? [prev, ...h.filter((x) => x.id !== prev.id)].slice(0, 4) : h;
-          salvarHist(c, n);
-          return n;
+    try {
+      while (fila.current.length) {
+        const c = fila.current.shift()!;
+        // Tempo adaptativo: com fila acumulada, exibe menos e fala uma vez só.
+        const pendentes = fila.current.length;
+        const tempo = pendentes >= 3 ? 5000 : pendentes >= 1 ? 8000 : TEMPO_EXIBICAO_MS;
+        log(`exibindo ${c.pacienteNome} → ${c.local} (fila ${pendentes})`);
+        setAtual((prev) => {
+          setHist((h) => {
+            const n = prev ? [prev, ...h.filter((x) => x.id !== prev.id)].slice(0, 4) : h;
+            salvarHist(c, n);
+            return n;
+          });
+          return c;
         });
-        return c;
-      });
-      setDestaque(true);
-      const inicio = Date.now();
-      await anunciar(c);
-      const resto = TEMPO_EXIBICAO_MS - (Date.now() - inicio);
-      if (resto > 0) await espera(resto);
-      setDestaque(false);
-      await espera(INTERVALO_MS);
+        setDestaque(true);
+        const inicio = Date.now();
+        await anunciar(c, pendentes === 0);
+        const resto = tempo - (Date.now() - inicio);
+        if (resto > 0) await espera(resto);
+        setDestaque(false);
+        await espera(fila.current.length ? 800 : INTERVALO_MS);
+      }
+    } catch (e) {
+      log(`erro na fila: ${String(e)}`);
+    } finally {
+      tocando.current = false;
+      if (fila.current.length) processar();
     }
-    tocando.current = false;
   };
 
   useEffect(() => {
@@ -142,15 +157,40 @@ export default function PainelTV() {
       setAtual(salvo[0] || null);
       setHist(salvo.slice(1, 5));
     } catch { /* */ }
-    const channel = supabase
-      .channel(canalPainel(unidade))
-      .on("broadcast", { event: "chamada" }, ({ payload }) => {
-        log(`recebida chamada ${(payload as ChamadaPaciente)?.pacienteNome}`);
-        fila.current.push(payload as ChamadaPaciente);
-        processar();
-      })
-      .subscribe((s) => { setStatus(s); log(`canal: ${s}`); });
-    return () => { supabase.removeChannel(channel); };
+    let ativo = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    const conectar = () => {
+      if (!ativo) return;
+      channel = supabase
+        .channel(canalPainel(unidade))
+        .on("broadcast", { event: "chamada" }, ({ payload }) => {
+          const c = payload as ChamadaPaciente;
+          if (!c?.id || vistos.current.has(c.id)) return;
+          vistos.current.add(c.id);
+          if (vistos.current.size > 500) vistos.current = new Set(Array.from(vistos.current).slice(-200));
+          log(`recebida chamada ${c.pacienteNome}`);
+          if (fila.current.length >= 50) fila.current.shift();
+          fila.current.push(c);
+          processar();
+        })
+        .subscribe((s) => {
+          setStatus(s); log(`canal: ${s}`);
+          if ((s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") && ativo) {
+            if (retry) clearTimeout(retry);
+            retry = setTimeout(() => {
+              if (channel) supabase.removeChannel(channel);
+              conectar();
+            }, 3000);
+          }
+        });
+    };
+    conectar();
+    return () => {
+      ativo = false;
+      if (retry) clearTimeout(retry);
+      if (channel) supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unidade]);
 
