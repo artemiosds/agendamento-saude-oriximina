@@ -200,6 +200,7 @@ const App = () => (
                   <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                   <Route path="/agendar" element={<Suspense fallback={<PageLoader />}><AgendarOnline /></Suspense>} />
                   <Route path="/painel-tv" element={<Suspense fallback={<PageLoader />}><PainelTV /></Suspense>} />
+                  <Route path="/painel/chamadas" element={<Suspense fallback={<PageLoader />}><PainelTV /></Suspense>} />
                   <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalPaciente /></Suspense>} />
                   <Route path="/externo" element={<Suspense fallback={<PageLoader />}><LoginExterno /></Suspense>} />
                   <Route path="/externo/agendar" element={<Suspense fallback={<PageLoader />}><AgendamentoExterno /></Suspense>} />

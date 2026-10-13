@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Building2, DoorOpen, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Building2, DoorOpen, Pencil, Trash2, Tv, Copy, Video, X, Upload, Loader2 } from 'lucide-react';
+const DOMINIO_OFICIAL = 'https://agendamento-saude-sms-oriximina.site';
 import { toast } from 'sonner';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
@@ -83,6 +84,54 @@ const UnidadesSalas: React.FC = () => {
     setRoomDialog(false);
   };
 
+  const [videoUnit, setVideoUnit] = useState<{ id: string; nome: string } | null>(null);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const linkTV = (id: string) => {
+    const h = window.location.hostname;
+    const base = h.includes('lovable') || h === 'localhost' ? window.location.origin : DOMINIO_OFICIAL;
+    return `${base}/painel/chamadas?unit_id=${encodeURIComponent(id)}`;
+  };
+  const copiarLink = async (id: string) => {
+    try { await navigator.clipboard.writeText(linkTV(id)); toast.success('Link da TV copiado!'); }
+    catch { toast.error('Copie manualmente: ' + linkTV(id)); }
+  };
+  const abrirVideo = async (id: string, nome: string) => {
+    setVideoUnit({ id, nome }); setVideoUrl('');
+    const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', id).maybeSingle();
+    setVideoUrl(String(((data as any)?.custom_data || {}).video_url || ''));
+  };
+  const enviarVideo = async (file: File) => {
+    if (!videoUnit) return;
+    if (file.type !== 'video/mp4') { toast.error('Selecione um arquivo MP4.'); return; }
+    if (file.size > 100 * 1024 * 1024) { toast.error('O vídeo deve ter até 100 MB.'); return; }
+    setEnviando(true);
+    try {
+      const path = `${videoUnit.id}/${Date.now()}.mp4`;
+      const { error } = await supabase.storage.from('painel-videos').upload(path, file, { contentType: 'video/mp4', upsert: true });
+      if (error) throw error;
+      const { data, error: e2 } = await supabase.storage.from('painel-videos').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+      if (e2 || !data) throw e2;
+      setVideoUrl(data.signedUrl);
+      toast.success('Vídeo enviado. Clique em Salvar Configuração.');
+    } catch (e: any) {
+      toast.error('Falha no envio: ' + (e?.message || 'erro'));
+    } finally { setEnviando(false); }
+  };
+  const salvarVideo = async () => {
+    if (!videoUnit) return;
+    const v = videoUrl.trim();
+    if (v && !/^https:\/\//i.test(v)) { toast.error('Informe um endereço https://'); return; }
+    const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', videoUnit.id).maybeSingle();
+    const cd = { ...(((data as any)?.custom_data) || {}) };
+    if (v) cd.video_url = v; else delete cd.video_url;
+    const { error } = await supabase.from('unidades' as any).update({ custom_data: cd }).eq('id', videoUnit.id);
+    if (error) { toast.error('Não foi possível salvar.'); return; }
+    toast.success('Vídeo salvo! Recarregue a TV.');
+    setVideoUnit(null);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -107,6 +156,11 @@ const UnidadesSalas: React.FC = () => {
                     <p className="text-sm text-muted-foreground mt-1">{u.endereco}</p>
                     <p className="text-sm text-muted-foreground">{u.telefone} • {u.whatsapp}</p>
                     <span className="text-xs text-muted-foreground">{salas.filter(s => s.unidadeId === u.id).length} sala(s)</span>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <Button size="sm" variant="outline" onClick={() => window.open(linkTV(u.id), '_blank')}><Tv className="w-4 h-4 mr-1" />Painel</Button>
+                      <Button size="sm" variant="outline" onClick={() => copiarLink(u.id)}><Copy className="w-4 h-4 mr-1" />Link TV</Button>
+                      <Button size="sm" variant="outline" onClick={() => abrirVideo(u.id, u.nome)}><Video className="w-4 h-4 mr-1" />Vídeo</Button>
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     <Button size="icon" variant="ghost" onClick={() => openEditUnit(u)}><Pencil className="w-4 h-4" /></Button>
@@ -209,6 +263,29 @@ const UnidadesSalas: React.FC = () => {
               </Select>
             </div>
             <Button onClick={handleSaveRoom} className="w-full gradient-primary text-primary-foreground">{editRoomId ? 'Salvar' : 'Criar'}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!videoUnit} onOpenChange={(o) => !o && setVideoUnit(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle className="font-display">Vídeo do Painel — {videoUnit?.nome}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>URL do Vídeo (MP4)</Label>
+              <div className="flex gap-2 items-center mt-1">
+                <Input value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="https://.../video.mp4" />
+                <Button size="icon" variant="ghost" onClick={() => setVideoUrl('')}><X className="w-4 h-4" /></Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">Recomendado: MP4 H.264, 1080p, mudo, até 100 MB.</p>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground"><div className="flex-1 border-t" />OU FAÇA UPLOAD<div className="flex-1 border-t" /></div>
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-6 cursor-pointer hover:bg-muted/50 text-sm">
+              {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+              {enviando ? 'Enviando vídeo...' : 'Clique para selecionar MP4'}
+              <input type="file" accept="video/mp4" className="hidden" disabled={enviando} onChange={e => { const f = e.target.files?.[0]; if (f) enviarVideo(f); e.target.value = ''; }} />
+            </label>
+            <Button onClick={salvarVideo} disabled={enviando} className="w-full gradient-primary text-primary-foreground">Salvar Configuração</Button>
           </div>
         </DialogContent>
       </Dialog>

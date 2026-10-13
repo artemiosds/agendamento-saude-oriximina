@@ -1,0 +1,3 @@
+CREATE POLICY "painel_videos_public_read" ON storage.objects FOR SELECT USING (bucket_id = 'painel-videos');
+CREATE POLICY "painel_videos_staff_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'painel-videos' AND public.is_staff_member());
+CREATE POLICY "painel_videos_staff_update" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'painel-videos' AND public.is_staff_member());
