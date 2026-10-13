@@ -60,7 +60,14 @@ export default function PainelTV() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth();
   const unidade = params.get("unidade") || params.get("unit_id") || user?.unidadeId || "";
-  const video = params.get("video") || "";
+  const [videoCad, setVideoCad] = useState("");
+  const video = params.get("video") || videoCad;
+  useEffect(() => {
+    if (!unidade || params.get("video")) return;
+    supabase.from("unidades").select("custom_data").eq("id", unidade).maybeSingle()
+      .then(({ data }) => setVideoCad(String(((data as any)?.custom_data || {}).video_url || "")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unidade]);
   const debug = params.get("debug") === "true";
 
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
