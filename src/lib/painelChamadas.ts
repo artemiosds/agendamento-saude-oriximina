@@ -25,12 +25,9 @@ export const setLocalSalvo = (v: string) => {
   try { localStorage.setItem(SALA_KEY, v); } catch { /* ignore */ }
 };
 
-/** Sigilo: exibe apenas primeiro e último nome. */
-export const nomeParaPainel = (nome: string) => {
-  const p = (nome || "").trim().split(/\s+/).filter(Boolean);
-  if (p.length <= 2) return p.join(" ").toUpperCase();
-  return `${p[0]} ${p[p.length - 1]}`.toUpperCase();
-};
+/** Nome completo do paciente (falado e exibido), apenas com espaços normalizados. */
+export const nomeParaPainel = (nome: string) =>
+  (nome || "").trim().split(/\s+/).filter(Boolean).join(" ").toUpperCase();
 
 const canais = new Map<string, Promise<RealtimeChannel>>();
 
