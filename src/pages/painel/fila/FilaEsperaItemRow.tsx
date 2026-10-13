@@ -103,6 +103,8 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
       style={{
         borderLeft: manchesterRisco
           ? `6px solid ${manchesterRisco.color}`
+          : isActive && (f.status !== "aguardando" || reservaTime)
+            ? "6px solid hsl(var(--primary))"
           : isActive && waitMin > 60
             ? "6px solid hsl(var(--destructive))"
             : isActive && waitMin >= 30

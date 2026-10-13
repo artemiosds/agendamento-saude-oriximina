@@ -167,10 +167,17 @@ const getWaitColor = (minutes: number, prioridade: string): { bg: string; text: 
 };
 
 const formatWaitTime = (minutes: number): string => {
-  if (minutes < 60) return `${minutes}min`;
-  const h = Math.floor(minutes / 60);
+  if (minutes < 60) return `${Math.max(0, minutes)}min`;
+  const totalH = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return m > 0 ? `${h}h${m}min` : `${h}h`;
+  if (totalH < 24) return m > 0 ? `${totalH}h ${m}min` : `${totalH}h`;
+  const totalD = Math.floor(totalH / 24);
+  const h = totalH % 24;
+  if (totalD < 30) return h > 0 ? `${totalD} ${totalD === 1 ? "dia" : "dias"} ${h}h` : `${totalD} ${totalD === 1 ? "dia" : "dias"}`;
+  const meses = Math.floor(totalD / 30);
+  const d = totalD % 30;
+  const mesTxt = `${meses} ${meses === 1 ? "mês" : "meses"}`;
+  return d > 0 ? `${mesTxt} ${d} ${d === 1 ? "dia" : "dias"}` : mesTxt;
 };
 
 const FilaEspera: React.FC = () => {
@@ -2182,7 +2189,10 @@ const FilaEspera: React.FC = () => {
             const isChamado = f.status === "chamado";
             const isActive = ["aguardando", "chamado", "em_atendimento"].includes(f.status);
             const waitMin = getWaitMinutes(f, now);
-            const waitColor = getWaitColor(waitMin, f.prioridade);
+            const jaEncaminhado = f.status !== "aguardando" || !!reservaTime;
+            const waitColor = jaEncaminhado
+              ? { bg: "bg-primary", text: "text-primary-foreground", label: "" }
+              : getWaitColor(waitMin, f.prioridade);
             const manchesterRisco = getManchesterConfig(triageByFilaId[f.id]?.risco);
             const profLabel = prof
               ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}`
