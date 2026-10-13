@@ -94,6 +94,8 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
   triagem, funcionarios, onPacienteUpdated,
 }) => {
   const [paciente, setPaciente] = useState<any>(null);
+  const { user } = useAuth();
+  const unidadeIdChamada = user?.unidadeId || paciente?.unidade_id || "";
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
