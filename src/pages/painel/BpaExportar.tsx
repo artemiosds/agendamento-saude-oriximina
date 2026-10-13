@@ -3877,7 +3877,12 @@ ${auditHtml}`;
 
             {[
               { id: "all", label: "Todos os Registros", count: results.stats.all, color: "slate" },
-              { id: "critical", label: "Pendên. Críticas", count: results.criticalCount, color: "red" },
+              {
+                id: "critical",
+                label: formData.exportar_com_pendencias ? "Pendên. Autorizadas" : "Pendên. Críticas",
+                count: results.criticalCount,
+                color: formData.exportar_com_pendencias ? "amber" : "red",
+              },
               { id: "missingCns", label: "Sem CNS Pac.", count: results.stats.missingCns, color: "amber" },
 
               { id: "missingSexo", label: "Sexo Indef.", count: results.stats.missingSexo, color: "amber" },
@@ -3942,7 +3947,9 @@ ${auditHtml}`;
                       ? "Todos os Registros da Competência"
                       : selectedCategory === "critical"
 
-                      ? "Pendências Críticas (Bloqueantes)"
+                      ? formData.exportar_com_pendencias
+                        ? "Pendências Autorizadas (Exportadas no TXT e na Conferência)"
+                        : "Pendências Críticas (Bloqueantes)"
                       : selectedCategory === "missingCns"
                         ? "Sem CNS Paciente"
                         : selectedCategory === "missingSexo"
