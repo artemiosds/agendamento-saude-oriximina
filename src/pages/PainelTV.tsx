@@ -64,12 +64,19 @@ export default function PainelTV() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth();
   const unidade = params.get("unidade") || params.get("unit_id") || user?.unidadeId || "";
-  const [videoCad, setVideoCad] = useState("");
-  const video = params.get("video") || videoCad;
+  const [videoCad, setVideoCad] = useState<string[]>([]);
+  const playlist = params.get("video") ? [params.get("video") as string] : videoCad;
+  const [videoIdx, setVideoIdx] = useState(0);
+  const video = playlist.length ? playlist[videoIdx % playlist.length] : "";
+  const proximoVideo = () => setVideoIdx((i) => (playlist.length ? (i + 1) % playlist.length : 0));
   useEffect(() => {
     if (!unidade || params.get("video")) return;
     supabase.from("unidades").select("custom_data").eq("id", unidade).maybeSingle()
-      .then(({ data }) => setVideoCad(String(((data as any)?.custom_data || {}).video_url || "")));
+      .then(({ data }) => {
+        const cd = ((data as any)?.custom_data || {});
+        const lista: string[] = Array.isArray(cd.video_urls) ? cd.video_urls.filter((x: any) => typeof x === "string" && x) : (cd.video_url ? [String(cd.video_url)] : []);
+        setVideoCad(lista); setVideoIdx(0);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unidade]);
   const debug = params.get("debug") === "true";
@@ -259,7 +266,7 @@ export default function PainelTV() {
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[7fr_3fr]">
         <section className={`relative flex flex-col items-center justify-center p-10 text-center transition-colors duration-500 ${destaque ? "bg-primary-foreground/15" : ""}`}>
           {mostrarVideo ? (
-            <video src={video} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-contain bg-foreground" />
+            <video key={video + videoIdx} src={video} autoPlay muted loop={playlist.length <= 1} playsInline onEnded={proximoVideo} onError={() => playlist.length > 1 && setTimeout(proximoVideo, 2000)} className="absolute inset-0 w-full h-full object-contain bg-foreground" />
           ) : atual ? (
             <>
               <p className="text-3xl uppercase opacity-80 mb-6">Paciente</p>
