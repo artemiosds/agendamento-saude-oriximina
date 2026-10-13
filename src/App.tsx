@@ -67,6 +67,7 @@ const Pacientes                   = lazyRetry(() => import("./pages/painel/Pacie
 const Atendimentos                = lazyRetry(() => import("./pages/painel/Atendimentos"));
 const Relatorios                  = lazyRetry(() => import("./pages/painel/Relatorios"));
 const Funcionarios                = lazyRetry(() => import("./pages/painel/Funcionarios"));
+const PortalAcessos               = lazyRetry(() => import("./pages/painel/PortalAcessos"));
 const UnidadesSalas               = lazyRetry(() => import("./pages/painel/UnidadesSalas"));
 const Disponibilidade             = lazyRetry(() => import("./pages/painel/Disponibilidade"));
 const Configuracoes               = lazyRetry(() => import("./pages/painel/Configuracoes"));
@@ -223,6 +224,7 @@ const App = () => (
                     <Route path="relatorios" element={<ModuleRoute modulo="relatorios"><Relatorios /></ModuleRoute>} />
                     <Route path="funcionarios" element={<ModuleRoute modulo="usuarios"><Funcionarios /></ModuleRoute>} />
                     
+                    <Route path="portal-acessos" element={<ModuleRoute modulo="usuarios" masterOnly><PortalAcessos /></ModuleRoute>} />
                     <Route path="unidades" element={<ModuleRoute modulo="usuarios"><UnidadesSalas /></ModuleRoute>} />
                     <Route path="disponibilidade" element={<ModuleRoute modulo="usuarios"><Disponibilidade /></ModuleRoute>} />
                     <Route path="prontuario" element={<ModuleRoute modulo="prontuario"><Prontuario /></ModuleRoute>} />

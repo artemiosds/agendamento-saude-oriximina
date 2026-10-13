@@ -313,6 +313,8 @@ export interface Configuracoes {
     enviarSenhaAutomaticamente: boolean;
     enviarLinkAcesso: boolean;
     pacientesBloqueados: string[];
+    /** O que o paciente pode ver/fazer no portal (ausente = permitido) */
+    permissoes?: PortalPermissoes;
   };
 }
 

@@ -86,6 +86,7 @@ const menuGroups: MenuGroup[] = [
     title: 'Gestão da Unidade',
     items: [
       { to: '/painel/funcionarios',    label: 'Funcionários',       icon: UserCog,       modulo: 'usuarios' },
+      { to: '/painel/portal-acessos',  label: 'Acessos ao Portal',  icon: UserCog,       modulo: 'usuarios' },
       { to: '/painel/unidades',        label: 'Unidades/Salas',     icon: Building2,     modulo: 'usuarios' },
       { to: '/painel/disponibilidade', label: 'Disponibilidade',    icon: CalendarClock, modulo: 'usuarios' },
       { to: '/painel/bloqueios',       label: 'Feriados/Bloqueios', icon: CalendarClock, modulo: 'agenda' },
