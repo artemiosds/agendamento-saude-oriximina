@@ -1535,14 +1535,14 @@ const BpaExportar: React.FC = () => {
 
         let semHora = 0;
         const filtrados = prontuarios.filter((p: any) => {
-          const per = periodoDe(horaDeReferencia(p));
-          if (!per) {
+          const ok = casaTurno(horaDeReferencia(p), formData.turno);
+          if (ok === null) {
             // Sem horário conhecido: mantém na exportação para não perder
             // produção válida, apenas informa no resumo.
             semHora++;
             return true;
           }
-          return per === formData.turno;
+          return ok;
         });
         const foraDoTurno = prontuarios.length - filtrados.length;
         if (foraDoTurno > 0) {
