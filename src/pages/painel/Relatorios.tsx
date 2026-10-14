@@ -62,6 +62,21 @@ const formatDateBR = (d: string | null | undefined): string => {
   }
 };
 
+const getPacienteExcecao = (paciente: any) => {
+  const customData = paciente?.custom_data && typeof paciente.custom_data === 'object' ? paciente.custom_data : {};
+  const tfd = paciente?.is_tfd === true || customData.is_tfd === true;
+  const ordemJudicial = paciente?.possui_ordem_judicial === true || customData.possui_ordem_judicial === true;
+  const motivo = String(paciente?.motivo_excecao_bloqueio || paciente?.observacao_tfd_ordem_judicial || customData.motivo_excecao_bloqueio || customData.observacao_tfd_ordem_judicial || '').trim();
+  return { tfd, ordemJudicial, motivo };
+};
+
+const escapeHtml = (value: unknown): string => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
 /**
  * Base única para as taxas de presença/ausência: AGENDAMENTOS EFETIVOS
  * (total - cancelados). Um agendamento cancelado nunca gerou expectativa de
@@ -123,6 +138,7 @@ const Relatorios: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
+  const [filterPacienteExcecao, setFilterPacienteExcecao] = useState<'all' | 'tfd' | 'judicial'>('all');
   // Padrão: últimos 30 dias para evitar varrer todo o histórico em cada carga
   // dateFromInput/dateToInput = valor imediato do input (UI responsiva)
   // dateFrom/dateTo = valor com debounce de 400ms, usado por fetch e cálculos
@@ -761,9 +777,19 @@ const Relatorios: React.FC = () => {
         faltas,
         retornos,
         ultimaConsulta: ags.sort((a, b) => b.data.localeCompare(a.data))[0]?.data || '',
+        ...getPacienteExcecao(pac),
       };
     }).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos);
   }, [consolidatedData, pacientes]);
+
+  const pacientesReportFiltrados = useMemo(() => {
+    if (filterPacienteExcecao === 'tfd') return pacientesReport.filter(p => p.tfd);
+    if (filterPacienteExcecao === 'judicial') return pacientesReport.filter(p => p.ordemJudicial);
+    return pacientesReport;
+  }, [pacientesReport, filterPacienteExcecao]);
+  const pacientesComTfd = pacientesReport.filter(p => p.tfd).length;
+  const pacientesComOrdemJudicial = pacientesReport.filter(p => p.ordemJudicial).length;
+  const pacientesComExcecao = pacientesReport.filter(p => p.tfd || p.ordemJudicial).length;
 
   // === CLINICAL ANALYSIS REPORT ===
   const clinicalReport = useMemo(() => {
@@ -1602,8 +1628,8 @@ const Relatorios: React.FC = () => {
       headers = ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total Faltas', 'Datas'];
       rows = faltasReport.map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total.toString(), f.datas.join(', ')]);
     } else if (type === 'pacientes') {
-      headers = ['Paciente', 'E-mail', 'Telefone', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'];
-      rows = pacientesReport.map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.retornos.toString(), p.ultimaConsulta]);
+      headers = ['Paciente', 'E-mail', 'Telefone', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta', 'TFD', 'Ordem Judicial', 'Motivo da Exceção'];
+      rows = pacientesReportFiltrados.map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.retornos.toString(), p.ultimaConsulta, p.tfd ? 'Sim' : 'Não', p.ordemJudicial ? 'Sim' : 'Não', p.tfd || p.ordemJudicial ? p.motivo : '']);
     } else if (type === 'fila') {
       headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada', 'Hora Chamada'];
       rows = filaReport.items.map(f => {
@@ -1640,13 +1666,13 @@ const Relatorios: React.FC = () => {
       [`Gerado em`, new Date().toLocaleString('pt-BR')],
       [''],
     ];
-    const csv = [...escopoLines, headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const csv = [...escopoLines, headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, buildEscopo, municipioReport, clinicalReport]);
+  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, filaReport, unidades, buildEscopo, municipioReport, clinicalReport]);
 
   // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
@@ -1682,8 +1708,8 @@ const Relatorios: React.FC = () => {
       headers = ['Paciente', 'Telefone', 'Profissional', 'Total Faltas', 'Datas'];
       rows = faltasReport.map(f => [f.nome, f.telefone, f.profissional, f.total.toString(), f.datas.join(', ')]);
     } else if (type === 'pacientes') {
-      headers = ['Paciente', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Última Consulta'];
-      rows = pacientesReport.map(p => [p.nome, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.ultimaConsulta]);
+      headers = ['Paciente', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Última Consulta', 'TFD', 'Ordem Judicial', 'Motivo da Exceção'];
+      rows = pacientesReportFiltrados.map(p => [p.nome, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.ultimaConsulta, p.tfd ? 'Sim' : 'Não', p.ordemJudicial ? 'Sim' : 'Não', p.tfd || p.ordemJudicial ? p.motivo : '']);
     } else if (type === 'fila') {
       headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada'];
       rows = filaReport.items.map(f => {
@@ -1746,7 +1772,7 @@ ${dataRows}
     a.download = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [consolidatedData, porProfissional, faltasReport, pacientesReport, filaReport, unidades, municipioReport, clinicalReport]);
+  }, [consolidatedData, porProfissional, faltasReport, pacientesReportFiltrados, filaReport, unidades, municipioReport, clinicalReport]);
 
   // === DOWNLOAD PDF REAL ===
   const downloadPDF = useCallback(async (type: string) => {
@@ -1755,7 +1781,7 @@ ${dataRows}
       type === 'produtividade' ? porProfissional.length === 0 :
       type === 'municipios' ? municipioReport.length === 0 :
       type === 'faltas' ? faltasReport.length === 0 :
-      type === 'pacientes' ? pacientesReport.length === 0 :
+      type === 'pacientes' ? pacientesReportFiltrados.length === 0 :
       type === 'clinico' ? clinicalReport.byCategory.length === 0 :
       type === 'fila' ? filaReport.items.length === 0 : false;
 
@@ -1832,7 +1858,8 @@ ${dataRows}
       } else if (type === 'faltas') {
         addTable('Relatório de Faltas', ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total', 'Datas'], cap(faltasReport).map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total, f.datas.join(', ')]));
       } else if (type === 'pacientes') {
-        addTable('Relatório de Pacientes', ['Paciente', 'E-mail', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'], cap(pacientesReport).map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos, p.concluidos, p.faltas, p.retornos, p.ultimaConsulta]));
+        addTable('Indicadores de Exceção (pacientes distintos no período)', ['Indicador', 'Quantidade'], [['TFD', pacientesComTfd], ['Ordem Judicial', pacientesComOrdemJudicial], ['Com TFD ou Ordem Judicial (sem duplicidade)', pacientesComExcecao]]);
+        addTable('Relatório de Pacientes', ['Paciente', 'E-mail', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta', 'TFD', 'Ordem Judicial', 'Motivo da Exceção'], cap(pacientesReportFiltrados).map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos, p.concluidos, p.faltas, p.retornos, p.ultimaConsulta, p.tfd ? 'Sim' : 'Não', p.ordemJudicial ? 'Sim' : 'Não', p.tfd || p.ordemJudicial ? p.motivo : '']));
       } else if (type === 'fila') {
         addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidadesMap.get(f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
       } else if (type === 'clinico') {
@@ -1869,7 +1896,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
   // === EXPORT PDF ===
   const exportPDF = useCallback(async (type: string) => {
@@ -1880,7 +1907,7 @@ ${dataRows}
         type === 'produtividade' ? porProfissional.length === 0 :
         type === 'municipios' ? municipioReport.length === 0 :
         type === 'faltas' ? faltasReport.length === 0 :
-        type === 'pacientes' ? pacientesReport.length === 0 :
+        type === 'pacientes' ? pacientesReportFiltrados.length === 0 :
         type === 'fila' ? filaReport.items.length === 0 : false;
       if (isEmpty) {
         toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
@@ -1953,12 +1980,14 @@ ${dataRows}
         <h2>Relatório de Faltas</h2>
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Profissional</th><th>Unidade</th><th>Total</th><th>Datas</th></tr></thead><tbody>${rows}</tbody></table>`;
     } else if (type === 'pacientes') {
-      const rows = cap(pacientesReport).map(p =>
-        `<tr><td>${p.nome}</td><td>${p.email}</td><td>${p.telefone}</td><td>${p.totalAgendamentos}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.retornos}</td><td>${p.ultimaConsulta}</td></tr>`
+      const rows = cap(pacientesReportFiltrados).map(p =>
+        `<tr><td>${escapeHtml(p.nome)}</td><td>${escapeHtml(p.email)}</td><td>${escapeHtml(p.telefone)}</td><td>${p.totalAgendamentos}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.retornos}</td><td>${escapeHtml(p.ultimaConsulta)}</td><td>${p.tfd ? 'Sim' : 'Não'}</td><td>${p.ordemJudicial ? 'Sim' : 'Não'}</td><td>${escapeHtml(p.tfd || p.ordemJudicial ? p.motivo : '')}</td></tr>`
       ).join('');
       body = `${summaryBlock}
+        <h2>Indicadores de Exceção no Período</h2>
+        <p>TFD: ${pacientesComTfd} · Ordem Judicial: ${pacientesComOrdemJudicial} · Com TFD ou Ordem Judicial (sem duplicidade): ${pacientesComExcecao}</p>
         <h2>Relatório de Pacientes</h2>
-        <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
+        <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th><th>TFD</th><th>Ordem Judicial</th><th>Motivo da Exceção</th></tr></thead><tbody>${rows}</tbody></table>`;
     } else if (type === 'fila') {
       const filaRows = cap(filaReport.items).map(f => {
         const unName = unidadesMap.get(f.unidade_id)?.nome || '';
@@ -1993,7 +2022,7 @@ ${dataRows}
       console.error('[exportPDF] erro:', err);
       toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
     }
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
@@ -3714,8 +3743,11 @@ th{background:#f1f5f9;font-weight:600;}
 
         {/* === PACIENTES === */}
         <TabsContent value="pacientes" className="space-y-5 mt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
             <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length}</p><p className="text-xs text-muted-foreground">Pacientes no Período</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-sky-700">{pacientesComTfd}</p><p className="text-xs text-muted-foreground">TFD atendidos</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-violet-700">{pacientesComOrdemJudicial}</p><p className="text-xs text-muted-foreground">Ordem Judicial</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-primary">{pacientesComExcecao}</p><p className="text-xs text-muted-foreground">Com exceção (sem duplicidade)</p></CardContent></Card>
             <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-info">{stats.primeiraConsulta}</p><p className="text-xs text-muted-foreground">Primeira Consulta</p></CardContent></Card>
             <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-secondary">{stats.retornos}</p><p className="text-xs text-muted-foreground">Retornos</p></CardContent></Card>
             <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length > 0 ? (filtered.length / pacientesReport.length).toFixed(1) : 0}</p><p className="text-xs text-muted-foreground">Agend./Paciente</p></CardContent></Card>
@@ -3724,7 +3756,18 @@ th{background:#f1f5f9;font-weight:600;}
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pacientes</h3>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="paciente-excecao-filter" className="text-xs text-muted-foreground whitespace-nowrap">Exceção</Label>
+                    <Select value={filterPacienteExcecao} onValueChange={(value) => setFilterPacienteExcecao(value as 'all' | 'tfd' | 'judicial')}>
+                      <SelectTrigger id="paciente-excecao-filter" className="h-8 w-[170px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os pacientes</SelectItem>
+                        <SelectItem value="tfd">Apenas TFD</SelectItem>
+                        <SelectItem value="judicial">Apenas Ordem Judicial</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('pacientes')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => downloadPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
@@ -3744,9 +3787,15 @@ th{background:#f1f5f9;font-weight:600;}
                     </tr>
                   </thead>
                   <tbody>
-                    {pacientesReport.slice(0, 100).map(p => (
+                    {pacientesReportFiltrados.slice(0, 100).map(p => (
                       <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2.5 px-3 text-foreground font-medium">{p.nome}</td>
+                        <td className="py-2.5 px-3 text-foreground font-medium">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span>{p.nome}</span>
+                            {p.tfd && <Badge variant="outline" title={p.motivo || 'Paciente cadastrado como TFD'} className="border-sky-200 bg-sky-50 text-[10px] text-sky-700">TFD</Badge>}
+                            {p.ordemJudicial && <Badge variant="outline" title={p.motivo || 'Paciente com Ordem Judicial cadastrada'} className="border-violet-200 bg-violet-50 text-[10px] text-violet-700">JUDICIAL</Badge>}
+                          </div>
+                        </td>
                         <td className="py-2.5 px-2 text-muted-foreground text-xs">{p.email || '-'}</td>
                         <td className="py-2.5 px-2 text-muted-foreground text-xs">{p.telefone || '-'}</td>
                         <td className="py-2.5 px-2 text-center font-semibold">{p.totalAgendamentos}</td>
@@ -3756,10 +3805,10 @@ th{background:#f1f5f9;font-weight:600;}
                         <td className="py-2.5 px-2 text-muted-foreground">{p.ultimaConsulta}</td>
                       </tr>
                     ))}
-                    {pacientesReport.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum paciente encontrado</td></tr>}
+                    {pacientesReportFiltrados.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum paciente encontrado para este filtro</td></tr>}
                   </tbody>
                 </table>
-                {pacientesReport.length > 100 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 100 de {pacientesReport.length} — exporte para ver todos</p>}
+                {pacientesReportFiltrados.length > 100 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 100 de {pacientesReportFiltrados.length} — exporte para ver todos</p>}
               </div>
             </CardContent>
           </Card>
