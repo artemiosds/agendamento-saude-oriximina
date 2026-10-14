@@ -2993,15 +2993,26 @@ ${dataRows}
             <Download className="w-4 h-4 mr-2" />Word gerencial
           </Button>
           {canExportRestrictedReport && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-amber-500 text-amber-800 hover:bg-amber-50"
-              title="Inclui listagens nominais de faltas, fila e mapa de atendimentos. Compartilhe somente com pessoas autorizadas."
-              onClick={() => exportCompleteReport('pdf', true)}
-            >
-              <BookOpen className="w-4 h-4 mr-2" />PDF + anexo restrito
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-500 text-amber-800 hover:bg-amber-50"
+                title="Inclui listagens nominais de faltas, fila e mapa de atendimentos. Compartilhe somente com pessoas autorizadas."
+                onClick={() => exportCompleteReport('pdf', true)}
+              >
+                <BookOpen className="w-4 h-4 mr-2" />PDF + anexo restrito
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-500 text-amber-800 hover:bg-amber-50"
+                title="Inclui as mesmas listagens nominais do anexo restrito no documento Word. Compartilhe somente com pessoas autorizadas."
+                onClick={() => exportCompleteReport('docx', true)}
+              >
+                <Download className="w-4 h-4 mr-2" />Word + anexo restrito
+              </Button>
+            </>
           )}
 
           <div className="h-8 w-px bg-border mx-1 hidden sm:block" />
