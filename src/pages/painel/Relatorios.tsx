@@ -3858,14 +3858,6 @@ th{background:#f1f5f9;font-weight:600;}
               <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-secondary">{stats.retornos}</p><p className="text-xs text-muted-foreground">Retornos · média de {pacientesReport.length > 0 ? (filtered.length / pacientesReport.length).toFixed(1) : 0} agendamentos/paciente</p></CardContent></Card>
             </div>
           </div>
-          <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length}</p><p className="text-xs text-muted-foreground">Pacientes no Período</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-sky-700">{pacientesComTfd}</p><p className="text-xs text-muted-foreground">TFD atendidos</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-violet-700">{pacientesComOrdemJudicial}</p><p className="text-xs text-muted-foreground">Ordem Judicial</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-primary">{pacientesComExcecao}</p><p className="text-xs text-muted-foreground">Com exceção (sem duplicidade)</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-info">{stats.primeiraConsulta}</p><p className="text-xs text-muted-foreground">Primeira Consulta</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-secondary">{stats.retornos}</p><p className="text-xs text-muted-foreground">Retornos</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length > 0 ? (filtered.length / pacientesReport.length).toFixed(1) : 0}</p><p className="text-xs text-muted-foreground">Agend./Paciente</p></CardContent></Card>
-          </div>
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
