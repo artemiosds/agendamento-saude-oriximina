@@ -1,4 +1,4 @@
-import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo } from "./bpaSigtapCatalog";
+import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo, avaliarCboSigtap, mensagemCboSigtap } from "./bpaSigtapCatalog";
 import { supabase } from "@/integrations/supabase/client";
 
 export type SigtapClinicalStatus = "compatível" | "incompatível" | "indeterminado";
@@ -228,8 +228,11 @@ export async function validarCompatibilidadeClinicaSigtap(
           const previousProc = previousCatalog.get(procedimento);
           const indicacoes: string[] = [];
           if (previousProc) {
-            if (!previousProc.cbos.has(cbo)) {
+            const cboStatusRef = avaliarCboSigtap(previousProc, cbo);
+            if (cboStatusRef === "incompativel") {
               indicacoes.push(`O CBO ${cbo} não consta para este procedimento na referência ${referencia}.`);
+            } else if (cboStatusRef === "nao_confirmavel") {
+              avisos.push(mensagemCboSigtap(cboStatusRef, procedimento, cbo, referencia));
             }
             const sexo = String(input.sexo || "").trim().toUpperCase().slice(0, 1);
             if (["M", "F"].includes(previousProc.sexo)) {
@@ -290,9 +293,14 @@ export async function validarCompatibilidadeClinicaSigtap(
     codigo === "10" ? "10 (e-SUS APS)" : codigo,
   ).join(", ");
 
-  if (!proc.cbos.has(cbo)) {
+  const compRef = refUsada || competencia;
+  const cboStatus = avaliarCboSigtap(proc, cbo);
+  if (cboStatus === "nao_confirmavel") {
+    avisos.push(mensagemCboSigtap(cboStatus, procedimento, cbo, compRef));
+  }
+  if (cboStatus === "incompativel") {
     motivos.push(
-      `CBO não compatível para produção deste procedimento: o SIGTAP da competência ${competencia} não relaciona o CBO ${cbo} ao código ${procedimento}. Isso não apaga o registro clínico, mas impede que esta combinação seja enviada como produção válida no BPA-I.`,
+      `CBO não compatível para produção deste procedimento: o SIGTAP da competência ${compRef} não relaciona o CBO ${cbo} ao código ${procedimento}. Isso não apaga o registro clínico, mas impede que esta combinação seja enviada como produção válida no BPA-I.`,
     );
   }
   if (bpaICompativel === false) {
@@ -331,7 +339,8 @@ export async function validarCompatibilidadeClinicaSigtap(
 
   const incompleteRequiredValidation =
     avisos.some((a) => a.includes("faixa etária")) ||
-    avisos.some((a) => a.includes("Sexo do paciente"));
+    avisos.some((a) => a.includes("Sexo do paciente")) ||
+    cboStatus === "nao_confirmavel";
 
   return {
     ...base,
