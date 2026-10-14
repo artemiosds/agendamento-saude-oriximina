@@ -138,7 +138,8 @@ const Relatorios: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
-  const [filterPacienteExcecao, setFilterPacienteExcecao] = useState<'all' | 'tfd' | 'judicial'>('all');
+  const [filterPacienteExcecao, setFilterPacienteExcecao] = useState<'all' | 'tfd' | 'judicial' | 'exceptions'>('all');
+  const [exceptionTimelineGroup, setExceptionTimelineGroup] = useState<'dia' | 'semana' | 'mes'>('dia');
   // Padrão: últimos 30 dias para evitar varrer todo o histórico em cada carga
   // dateFromInput/dateToInput = valor imediato do input (UI responsiva)
   // dateFrom/dateTo = valor com debounce de 400ms, usado por fetch e cálculos
@@ -785,12 +786,50 @@ const Relatorios: React.FC = () => {
   const pacientesReportFiltrados = useMemo(() => {
     if (filterPacienteExcecao === 'tfd') return pacientesReport.filter(p => p.tfd);
     if (filterPacienteExcecao === 'judicial') return pacientesReport.filter(p => p.ordemJudicial);
+    if (filterPacienteExcecao === 'exceptions') return pacientesReport.filter(p => p.tfd || p.ordemJudicial);
     return pacientesReport;
   }, [pacientesReport, filterPacienteExcecao]);
   const pacientesComTfd = pacientesReport.filter(p => p.tfd).length;
   const pacientesComOrdemJudicial = pacientesReport.filter(p => p.ordemJudicial).length;
   const pacientesComExcecao = pacientesReport.filter(p => p.tfd || p.ordemJudicial).length;
 
+
+  // Série temporal de pacientes distintos com exceção que tiveram atendimento
+  // no intervalo selecionado. Um paciente é contado uma vez por faixa e tipo.
+  const excecaoTimeline = useMemo(() => {
+    const buckets = new Map<string, { label: string; tfd: Set<string>; judicial: Set<string> }>();
+
+    consolidatedData.forEach(item => {
+      if (!item.pacienteId || !item.data) return;
+      const excecao = getPacienteExcecao(pacientesMap.get(item.pacienteId));
+      if (!excecao.tfd && !excecao.ordemJudicial) return;
+
+      const date = new Date(`${item.data}T12:00:00`);
+      if (Number.isNaN(date.getTime())) return;
+      let key = item.data;
+      let label = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+      if (exceptionTimelineGroup === 'semana') {
+        const weekStart = new Date(date);
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        key = weekStart.toISOString().slice(0, 10);
+        label = `Sem ${weekStart.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`;
+      } else if (exceptionTimelineGroup === 'mes') {
+        key = item.data.slice(0, 7);
+        label = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+      }
+
+      if (!buckets.has(key)) buckets.set(key, { label, tfd: new Set(), judicial: new Set() });
+      const bucket = buckets.get(key)!;
+      if (excecao.tfd) bucket.tfd.add(item.pacienteId);
+      if (excecao.ordemJudicial) bucket.judicial.add(item.pacienteId);
+    });
+
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-30)
+      .map(([, bucket]) => ({ label: bucket.label, tfd: bucket.tfd.size, judicial: bucket.judicial.size }));
+  }, [consolidatedData, pacientesMap, exceptionTimelineGroup]);
   // === CLINICAL ANALYSIS REPORT ===
   const clinicalReport = useMemo(() => {
     const pacMap = new Map(pacientes.map(p => [p.id, p]));
@@ -3743,8 +3782,83 @@ th{background:#f1f5f9;font-weight:600;}
 
         {/* === PACIENTES === */}
         <TabsContent value="pacientes" className="space-y-5 mt-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length}</p><p className="text-xs text-muted-foreground">Pacientes no Período</p></CardContent></Card>
+          <Card className="shadow-card border-0 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="flex flex-col gap-1 border-b bg-gradient-to-r from-sky-50 via-background to-violet-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><HeartPulse className="h-5 w-5" /></div>
+                  <div>
+                    <h3 className="font-semibold font-display text-foreground">Acompanhamento de exceções</h3>
+                    <p className="text-xs text-muted-foreground">Pacientes com TFD ou Ordem Judicial atendidos no período</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="w-fit bg-background/80 text-xs font-normal">{formatDateBR(dateFrom)} a {formatDateBR(dateTo)}</Badge>
+              </div>
+              <div className="grid gap-4 p-4 lg:grid-cols-[minmax(310px,0.9fr)_minmax(0,1.4fr)] lg:p-5">
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                  <Button type="button" variant="outline" aria-pressed={filterPacienteExcecao === 'tfd'} onClick={() => setFilterPacienteExcecao(filterPacienteExcecao === 'tfd' ? 'all' : 'tfd')} className={`h-auto min-h-[82px] justify-between rounded-xl px-4 py-3 text-left ${filterPacienteExcecao === 'tfd' ? 'border-sky-400 bg-sky-50 ring-1 ring-sky-300' : 'hover:border-sky-300 hover:bg-sky-50/50'}`}>
+                    <span><span className="block text-xs font-medium text-sky-800">TFD atendidos</span><span className="mt-1 block text-2xl font-bold text-sky-700">{pacientesComTfd}</span><span className="text-[11px] text-muted-foreground">pacientes distintos · clique para filtrar</span></span>
+                    <Badge variant="outline" className="border-sky-200 bg-white text-sky-700">TFD</Badge>
+                  </Button>
+                  <Button type="button" variant="outline" aria-pressed={filterPacienteExcecao === 'judicial'} onClick={() => setFilterPacienteExcecao(filterPacienteExcecao === 'judicial' ? 'all' : 'judicial')} className={`h-auto min-h-[82px] justify-between rounded-xl px-4 py-3 text-left ${filterPacienteExcecao === 'judicial' ? 'border-violet-400 bg-violet-50 ring-1 ring-violet-300' : 'hover:border-violet-300 hover:bg-violet-50/50'}`}>
+                    <span><span className="block text-xs font-medium text-violet-800">Ordem Judicial</span><span className="mt-1 block text-2xl font-bold text-violet-700">{pacientesComOrdemJudicial}</span><span className="text-[11px] text-muted-foreground">pacientes distintos · clique para filtrar</span></span>
+                    <Badge variant="outline" className="border-violet-200 bg-white text-violet-700">JUDICIAL</Badge>
+                  </Button>
+                  <Button type="button" variant="outline" aria-pressed={filterPacienteExcecao === 'exceptions'} onClick={() => setFilterPacienteExcecao(filterPacienteExcecao === 'exceptions' ? 'all' : 'exceptions')} className={`h-auto min-h-[82px] justify-between rounded-xl px-4 py-3 text-left ${filterPacienteExcecao === 'exceptions' ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/30' : 'hover:border-primary/40 hover:bg-primary/5'}`}>
+                    <span><span className="block text-xs font-medium text-foreground">Com alguma exceção</span><span className="mt-1 block text-2xl font-bold text-primary">{pacientesComExcecao}</span><span className="text-[11px] text-muted-foreground">sem contar duas vezes quem tem ambas</span></span>
+                    <Users className="h-5 w-5 text-primary" />
+                  </Button>
+                </div>
+                <div className="min-w-0 rounded-xl border bg-card p-3 sm:p-4">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Evolução dos atendimentos</p>
+                      <p className="text-[11px] text-muted-foreground">Pessoas distintas por faixa, conforme o filtro de período</p>
+                    </div>
+                    <div className="flex gap-1" aria-label="Agrupar evolução por período">
+                      {(['dia', 'semana', 'mes'] as const).map(group => (
+                        <Button key={group} type="button" size="sm" variant={exceptionTimelineGroup === group ? 'default' : 'outline'} className="h-7 px-2 text-xs" aria-pressed={exceptionTimelineGroup === group} onClick={() => setExceptionTimelineGroup(group)}>
+                          {group === 'dia' ? 'Dia' : group === 'semana' ? 'Semana' : 'Mês'}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  {excecaoTimeline.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <AreaChart data={excecaoTimeline} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="tfdAreaFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0284c7" stopOpacity={0.22} /><stop offset="95%" stopColor="#0284c7" stopOpacity={0.02} /></linearGradient>
+                          <linearGradient id="judicialAreaFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#7c3aed" stopOpacity={0.2} /><stop offset="95%" stopColor="#7c3aed" stopOpacity={0.02} /></linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} minTickGap={18} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={30} />
+                        <Tooltip formatter={(value: number, name: string) => [value, name === 'tfd' ? 'TFD' : 'Ordem Judicial']} />
+                        <Legend formatter={value => value === 'tfd' ? 'TFD' : 'Ordem Judicial'} />
+                        <Area type="monotone" dataKey="tfd" name="tfd" stroke="#0284c7" strokeWidth={2} fill="url(#tfdAreaFill)" activeDot={{ r: 4 }} />
+                        <Area type="monotone" dataKey="judicial" name="judicial" stroke="#7c3aed" strokeWidth={2} fill="url(#judicialAreaFill)" activeDot={{ r: 4 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-[220px] flex-col items-center justify-center rounded-lg bg-muted/20 px-4 text-center">
+                      <TrendingUp className="mb-2 h-6 w-6 text-muted-foreground/60" />
+                      <p className="text-sm font-medium text-muted-foreground">Sem atendimentos de pacientes com exceção neste intervalo</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Ajuste as datas para consultar outro período.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-foreground">Visão geral dos pacientes</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length}</p><p className="text-xs text-muted-foreground">Pacientes no período</p></CardContent></Card>
+              <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-info">{stats.primeiraConsulta}</p><p className="text-xs text-muted-foreground">Primeira consulta</p></CardContent></Card>
+              <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-secondary">{stats.retornos}</p><p className="text-xs text-muted-foreground">Retornos · média de {pacientesReport.length > 0 ? (filtered.length / pacientesReport.length).toFixed(1) : 0} agendamentos/paciente</p></CardContent></Card>
+            </div>
+          </div>
+          <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length}</p><p className="text-xs text-muted-foreground">Pacientes no Período</p></CardContent></Card>
             <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-sky-700">{pacientesComTfd}</p><p className="text-xs text-muted-foreground">TFD atendidos</p></CardContent></Card>
             <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-violet-700">{pacientesComOrdemJudicial}</p><p className="text-xs text-muted-foreground">Ordem Judicial</p></CardContent></Card>
             <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-primary">{pacientesComExcecao}</p><p className="text-xs text-muted-foreground">Com exceção (sem duplicidade)</p></CardContent></Card>
@@ -3755,14 +3869,15 @@ th{background:#f1f5f9;font-weight:600;}
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pacientes</h3>
+                <div><h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Lista de acompanhamento</h3><p className="mt-0.5 text-xs text-muted-foreground">{pacientesReportFiltrados.length} pacientes nesta visualização</p></div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="paciente-excecao-filter" className="text-xs text-muted-foreground whitespace-nowrap">Exceção</Label>
-                    <Select value={filterPacienteExcecao} onValueChange={(value) => setFilterPacienteExcecao(value as 'all' | 'tfd' | 'judicial')}>
+                    <Select value={filterPacienteExcecao} onValueChange={(value) => setFilterPacienteExcecao(value as 'all' | 'tfd' | 'judicial' | 'exceptions')}>
                       <SelectTrigger id="paciente-excecao-filter" className="h-8 w-[170px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos os pacientes</SelectItem>
+                        <SelectItem value="exceptions">Com alguma exceção</SelectItem>
                         <SelectItem value="tfd">Apenas TFD</SelectItem>
                         <SelectItem value="judicial">Apenas Ordem Judicial</SelectItem>
                       </SelectContent>
