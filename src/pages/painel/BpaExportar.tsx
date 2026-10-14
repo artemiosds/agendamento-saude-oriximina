@@ -3362,7 +3362,23 @@ const BpaExportar: React.FC = () => {
       const ctx = obterContextoCabecalho();
       const esc = (s: any) =>
         String(s ?? "").replace(/[&<>]/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }) as any)[c]);
-      const confSorted = [...results.confRows].sort(cmpAlfa);
+      // Procedimentos rejeitados por CID × procedimento entram na mesma tabela,
+      // no mesmo formato, sem título ou motivo técnico. Não altera o TXT.
+      const linhasRejeitadas = rejeitadosCidRef.current.map((r) => ({
+        paciente_nome: String(r.paciente || "").toUpperCase(),
+        paciente_cns: r.cns || "",
+        data_nascimento: formatarDataBR(String(r.nasc || "")),
+        sexo: r.sexo || "",
+        tipo_logradouro: r.tipoLog || "",
+        logradouro: r.logradouro || "",
+        numero: r.numero || "",
+        bairro: String(r.bairro || "").toUpperCase(),
+        data_atendimento: r.dataBpa ? formatarDataBR(r.dataBpa) : (/^\d{4}-\d{2}-\d{2}$/.test(r.data) ? r.data.split("-").reverse().join("/") : r.data),
+        codigo_sigtap: sigtapCodigoExibicao(r.codigo) || r.codigo || "",
+        cid_usado: cidExibicao(r.cid) || r.cid || "",
+        _ctx: { origem_sigtap: r.origem || "" },
+      }));
+      const confSorted = [...results.confRows, ...linhasRejeitadas].sort(cmpAlfa);
       const rowsHtml = confSorted
         .map(
           (r: any) => `
@@ -3411,28 +3427,6 @@ const BpaExportar: React.FC = () => {
             )
             .join("")}</tbody></table>`
         : "";
-
-      const rejCid = [...rejeitadosCidRef.current].sort((x, y) =>
-        x.paciente.localeCompare(y.paciente, "pt-BR") || x.data.localeCompare(y.data));
-      let rejeitadosHtml = "";
-      if (rejCid.length) {
-        const nomes = new Map<string, string>();
-        try {
-          const codigos = [...new Set(rejCid.map((r) => sigtapCodigoExibicao(r.codigo) || r.codigo))];
-          const { data } = await supabase.from("sigtap_procedimentos").select("codigo, nome").in("codigo", codigos);
-          for (const d of data || []) nomes.set(String(d.codigo).replace(/\D/g, ""), d.nome);
-        } catch { /* nome é opcional */ }
-        const fmtData = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split("-").reverse().join("/") : d;
-        rejeitadosHtml = `<h3 style="margin:14px 0 4px;font-size:11pt;color:#7f1d1d">Procedimentos rejeitados (${rejCid.length})</h3>
-<p style="margin:0 0 6px;font-size:9pt">Os procedimentos abaixo estão registrados no prontuário, mas <b>não foram incluídos no arquivo TXT</b>. Não constam como exportados nem faturados.</p>
-<table class="bpa-table"><thead><tr><th>Paciente</th><th>Data do atendimento</th><th>Procedimento</th><th>CID registrado</th></tr></thead><tbody>${rejCid
-          .map((r) => {
-            const cod = sigtapCodigoExibicao(r.codigo) || r.codigo || "—";
-            const nome = nomes.get(String(r.codigo).replace(/\D/g, "")) || "";
-            return `<tr><td class="nome">${esc(r.paciente.toUpperCase())}</td><td class="c">${esc(fmtData(r.data))}</td><td>${esc(cod)}${nome ? ` — ${esc(nome)}` : ""}</td><td class="c">${esc(cidExibicao(r.cid) || r.cid || "—")}</td></tr>`;
-          })
-          .join("")}</tbody></table>`;
-      }
 
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
       // Não é position:fixed, portanto não sobrepõe o conteúdo.
@@ -3495,7 +3489,6 @@ const BpaExportar: React.FC = () => {
   </tr></thead>
   <tbody>${rowsHtml}</tbody>
 </table>
-${rejeitadosHtml}
 ${auditHtml}`;
 
       const config = await loadDocumentConfig();
