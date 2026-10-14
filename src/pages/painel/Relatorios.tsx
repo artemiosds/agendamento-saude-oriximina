@@ -4362,7 +4362,7 @@ th{background:#f1f5f9;font-weight:600;}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2">
             {[
-              { label: 'Total com CID', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
+              { label: 'Total (CID + Cadastro)', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
               { label: 'TEA/Autismo', value: clinicalReport.kpis.tea, icon: Brain, color: 'text-indigo-600' },
               { label: 'Def. Auditiva', value: clinicalReport.kpis.auditiva, icon: Ear, color: 'text-blue-600' },
               { label: 'Def. Visual', value: clinicalReport.kpis.visual, icon: Activity, color: 'text-amber-600' },
