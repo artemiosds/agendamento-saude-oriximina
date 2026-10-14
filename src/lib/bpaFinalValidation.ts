@@ -276,7 +276,10 @@ export function validarProcedimentoBpaI(
 
   // CBO ausente/inválido já foi rejeitado acima. Não o classifique também como
   // incompatibilidade SIGTAP, que pressupõe um CBO válido para comparação.
-  if (oficial && cbo.length === 6 && !/^0+$/.test(cbo) && !oficial.cbos.has(cbo)) {
+  if (oficial && cbo.length === 6 && !/^0+$/.test(cbo) && avaliarCboSigtap(oficial, cbo) === "nao_confirmavel") {
+    avisos.push(mensagemCboSigtap("nao_confirmavel", codigo, cbo, competencia));
+  }
+  if (oficial && cbo.length === 6 && !/^0+$/.test(cbo) && avaliarCboSigtap(oficial, cbo) === "incompativel") {
     const motivo = `CBO incompatível com o procedimento: ${codigo}, CBO ${cbo}, competência ${competencia}`;
     if (ctx.permitirCboIncompativel) {
       avisos.push(`${motivo}. Exportação autorizada por opção manual; sujeita à rejeição pelo SIA/SUS`);

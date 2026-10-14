@@ -2705,7 +2705,7 @@ const BpaExportar: React.FC = () => {
               };
 
               linhasProducao.push(l);
-              if (formData.exportar_cbo_incompativel && !catalogoOficial.get(proc)?.cbos.has(cbo)) {
+              if (formData.exportar_cbo_incompativel && catalogoOficial.get(proc) && avaliarCboSigtap(catalogoOficial.get(proc)!, cbo) === "incompativel") {
                 resumoIntegridade.cboExcecoesExportadas.push(`${nome_pac || ident} (${data_atend}): ${proc} / CBO ${cbo}`);
               }
               itensControle.push({ procedimento: proc, quantidade });
@@ -2827,7 +2827,7 @@ const BpaExportar: React.FC = () => {
         if (!meta.instrumentos.has("02")) auditErrors.push(`${label}: instrumento incompatível com BPA-I`);
         if (!/^\d{6}$/.test(cboLinha) || /^0+$/.test(cboLinha)) {
           auditErrors.push(`${label}: CBO ausente ou inválido`);
-        } else if (!formData.exportar_cbo_incompativel && !meta.cbos.has(cboLinha)) {
+        } else if (!formData.exportar_cbo_incompativel && avaliarCboSigtap(meta, cboLinha) === "incompativel") {
           auditErrors.push(`${label}: CBO incompatível com o procedimento`);
         }
 

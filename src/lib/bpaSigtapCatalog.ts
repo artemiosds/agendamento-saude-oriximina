@@ -9,6 +9,8 @@ export interface BpaSigtapProcedure {
   idadeMaximaMeses: number | null;
   servicosClassificacoes: Set<string>;
   cids: Set<string>;
+  /** Atributos complementares (rl_procedimento_detalhe). Ausente = arquivo não carregado. */
+  detalhes?: Set<string>;
 }
 
 export type BpaSigtapCatalog = Map<string, BpaSigtapProcedure>;
@@ -20,6 +22,7 @@ interface BpaSigtapFiles {
   procedimentosLayout?: string;
   servicos?: string;
   cids?: string;
+  detalhes?: string;
 }
 
 interface LayoutField {
@@ -140,6 +143,15 @@ export function parseBpaSigtapCatalog(
     if (proc && /^[A-Z0-9]{3,4}$/.test(cid)) proc.cids.add(cid);
   }
 
+  // Atributos complementares: procedimento 1-10, detalhe 11-13, competência 14-19.
+  if (files.detalhes != null) {
+    for (const proc of catalog.values()) proc.detalhes = new Set();
+    for (const line of files.detalhes.split(/\r?\n/)) {
+      if (line.length < 19 || line.slice(13, 19) !== competencia) continue;
+      catalog.get(line.slice(0, 10))?.detalhes?.add(line.slice(10, 13));
+    }
+  }
+
   if (catalog.size === 0) throw new Error(`Tabela SIGTAP ${competencia} vazia ou incompatível`);
   return catalog;
 }
@@ -191,6 +203,11 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
       );
     }
 
+    const detalheEntry = find("rl_procedimento_detalhe.txt");
+    const detalhes = detalheEntry
+      ? new TextDecoder("iso-8859-1").decode(await detalheEntry.async("uint8array"))
+      : undefined;
+
     const decoded = await Promise.all(
       entries.map(async (entry) =>
         new TextDecoder("iso-8859-1").decode(await entry!.async("uint8array")),
@@ -205,6 +222,7 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
       ocupacoes,
       servicos,
       cids,
+      detalhes,
     });
     competenciaUsadaPorCatalogo.set(catalog, competenciaUsada);
     return catalog;
@@ -213,4 +231,37 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
   cache.set(competencia, pending);
   pending.catch(() => cache.delete(competencia));
   return pending;
+}
+
+export const SIGTAP_DETALHE_NAO_EXIGE_CBO = "021";
+
+export type SigtapCboStatus = "permitido" | "incompativel" | "nao_exige_cbo" | "nao_confirmavel";
+
+/**
+ * Regra única de CBO × SIGTAP para tela, validação final e TXT.
+ * Lista de CBOs vazia NÃO significa incompatível: com atributo 021 o
+ * procedimento não exige CBO; sem ele a compatibilidade não é confirmável.
+ */
+export function avaliarCboSigtap(
+  proc: Pick<BpaSigtapProcedure, "cbos" | "detalhes">,
+  cbo: string,
+): SigtapCboStatus {
+  if (proc.cbos.size > 0) return proc.cbos.has(cbo) ? "permitido" : "incompativel";
+  if (proc.detalhes?.has(SIGTAP_DETALHE_NAO_EXIGE_CBO)) return "nao_exige_cbo";
+  return "nao_confirmavel";
+}
+
+export function mensagemCboSigtap(
+  status: SigtapCboStatus,
+  procedimento: string,
+  cbo: string,
+  competencia: string,
+): string {
+  if (status === "nao_exige_cbo") {
+    return `O procedimento ${procedimento} tem o atributo 021 (Não exige CBO) no SIGTAP ${competencia}; CBO ${cbo} aceito.`;
+  }
+  if (status === "nao_confirmavel") {
+    return `Compatibilidade de CBO não confirmada pelo SIGTAP ${competencia}: o procedimento ${procedimento} não relaciona nenhum CBO nem possui o atributo 021 (Não exige CBO). Não é erro no cadastro do profissional (CBO ${cbo}); confira a regra no SIA antes do envio.`;
+  }
+  return "";
 }
