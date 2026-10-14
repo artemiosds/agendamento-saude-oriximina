@@ -3359,7 +3359,7 @@ const BpaExportar: React.FC = () => {
       // As rejeições CID × procedimento já aparecem na seção própria; não repetir
       // o motivo técnico na tabela geral de auditoria. Outras pendências do registro permanecem.
       const chaveRejeicaoCid = (paciente: any, data: any, codigo: any) =>
-        `${String(paciente || "").trim().toLocaleUpperCase("pt-BR")}|${String(data || "").slice(0, 10)}|${String(codigo || "").replace(/\\D/g, "")}`;
+        `${String(paciente || "").trim().toLocaleUpperCase("pt-BR")}|${String(data || "").slice(0, 10)}|${String(codigo || "").replace(/\D/g, "")}`;
       const chavesRejeicaoCid = new Set(
         rejeitadosCidRef.current.map((r) => chaveRejeicaoCid(r.paciente, r.data, r.codigo)),
       );
