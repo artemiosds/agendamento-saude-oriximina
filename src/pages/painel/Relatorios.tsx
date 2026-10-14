@@ -20,7 +20,7 @@ import { ActionButton } from '@/components/ui/action-button';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import { saveAs } from 'file-saver';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, ImageRun } from 'docx';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, Footer, PageNumber, TableOfContents } from 'docx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.webp';
@@ -125,6 +125,7 @@ const Relatorios: React.FC = () => {
   const { fila } = useFila();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
+  const canExportRestrictedReport = user?.usuario === 'admin.sms' || user?.role === 'master';
   // Valores primitivos estáveis (o objeto `user` é recriado pelo AuthContext na montagem).
   const userUnidadeId = user?.unidadeId;
   const userUsuario = user?.usuario;
@@ -2409,592 +2410,560 @@ ${dataRows}
   const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
 
 
-  const exportCompleteReport = useCallback(async (format: 'pdf' | 'docx') => {
-    const loadingId = toast.loading(`Gerando relatório completo (${format.toUpperCase()})...`, { description: 'Preparando análise e formatação ABNT.' });
+  const exportCompleteReport = useCallback(async (format: 'pdf' | 'docx', includeRestrictedAnnex = false) => {
+    const restrictedAnnex = includeRestrictedAnnex && canExportRestrictedReport;
+    if (includeRestrictedAnnex && !restrictedAnnex) {
+      toast.error('Anexo restrito disponível somente para Master ou administrador global.');
+      return;
+    }
+
+    const loadingId = toast.loading('Gerando relatório institucional (' + format.toUpperCase() + ')...', { description: 'Consolidando os dados e aplicando o escopo selecionado.' });
     try {
       const config = await loadDocumentConfig();
       const carimbo = user?.id ? await loadCarimbo(user.id) : null;
       const esc = buildEscopo();
-      const un = esc.un;
-      const profFilter = esc.prof;
-      const periodo = esc.periodo;
-      const tituloDinamico = esc.titulo;
-
-      const intro = `Este documento apresenta o ${tituloDinamico}, referente ao período de ${periodo}. ` +
-        `Os dados consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, ` +
-        `restritos ao escopo definido pelos filtros aplicados (unidade: ${esc.un}; profissional: ${esc.prof}; especialidade: ${esc.especialidade}; município: ${esc.municipio}; status: ${esc.status}), ` +
-        `servindo como base para análise de desempenho e tomada de decisão institucional.`;
-
-      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando exatamente os filtros listados na seção “Escopo do Relatório”. ` +
-        `A análise utiliza indicadores de produtividade, taxa de absenteísmo, fluxo de pacientes por município e análises clínicas baseadas em CID-10 e categorias de reabilitação.`;
-
-      const analiseExecutiva = `No período de ${periodo}, foram realizados ${stats.concluidos} atendimentos ${esc.conclusaoSujeito}, ` +
-        `a partir de ${stats.total} agendamentos registrados, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. ` +
-        `As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total). ` +
-        `Foram identificados ${clinicalReport.kpis.totalPacientesComCID} pacientes com diagnósticos clínicos ativos, sendo ${clinicalReport.kpis.tea} casos de TEA.`;
-
-      const escopoHtmlRows = Object.entries(esc.escopo).map(([k, v]) =>
-        `<tr><td style="padding:4px 10px; border:1px solid #cbd5e1; font-weight:bold; width:35%;">${k}</td><td style="padding:4px 10px; border:1px solid #cbd5e1;">${v}</td></tr>`
-      ).join('');
-      const escopoHtml = `
-        <section class="section" style="page-break-after: always;">
-          <h2>Escopo do Relatório</h2>
-          <p>Os indicadores, tabelas e análises a seguir refletem exatamente os filtros abaixo aplicados no momento da geração deste documento.</p>
-          <table style="width:100%; border-collapse:collapse; font-size:11pt; margin-top:8px;">
-            <tbody>${escopoHtmlRows}</tbody>
-          </table>
-        </section>`;
-
-      const renderSection = (title: string, content: string, hasData: boolean = true) => `
-        <section class="section">
-          <h2>${title}</h2>
-          ${hasData ? content : '<p style="color: #64748b; font-style: italic;">Sem dados disponíveis para o período filtrado.</p>'}
-        </section>
-      `;
-
-      // ABNT cover + folha de rosto + sumário (apenas para PDF)
-      const anoMes = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+      const emitida = new Date();
+      const emitidaLabel = emitida.toLocaleString('pt-BR');
       const responsavelNome = user?.nome || 'Responsável Técnico';
       const responsavelCargo = user?.cargo || user?.profissao || '';
-      const capaHtml = `
-        <section style="height: 247mm; display: flex; flex-direction: column; justify-content: space-between; text-align: center; page-break-after: always; font-family: 'Times New Roman', Times, serif;">
-          <div>
-            <p style="font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">Prefeitura Municipal de Oriximiná – PA</p>
-            <p style="font-size: 13pt; font-weight: bold; text-transform: uppercase;">Secretaria Municipal de Saúde</p>
-            <p style="font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-top: 4px;">Centro Especializado em Reabilitação – CER II</p>
-          </div>
-          <div>
-            <h1 style="font-size: 18pt; font-weight: bold; text-transform: uppercase; margin-bottom: 24px;">${tituloDinamico}</h1>
-            <p style="font-size: 13pt;">Unidade: <strong>${un}</strong></p>
-            <p style="font-size: 13pt;">Período de referência: <strong>${periodo}</strong></p>
-            <p style="font-size: 12pt; margin-top: 8px;">Profissional/Filtro: ${profFilter}</p>
-          </div>
-          <div>
-            <p style="font-size: 12pt; font-weight: bold;">Oriximiná – Pará</p>
-            <p style="font-size: 12pt; font-weight: bold;">${anoMes}</p>
-          </div>
-        </section>
-        <section style="height: 247mm; display: flex; flex-direction: column; text-align: center; page-break-after: always; font-family: 'Times New Roman', Times, serif;">
-          <div style="margin-top: 30mm;">
-            <p style="font-size: 12pt; font-weight: bold; text-transform: uppercase;">${responsavelNome}</p>
-          </div>
-          <div style="margin: auto 0;">
-            <h2 style="font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-bottom: 14px;">Relatório Gerencial de Atendimentos</h2>
-            <p style="font-size: 12pt; max-width: 130mm; margin: 0 auto; text-align: justify; text-indent: 1.25cm;">
-              Documento institucional emitido pelo Centro Especializado em Reabilitação – CER II
-              da Secretaria Municipal de Saúde de Oriximiná/PA, contendo a consolidação dos
-              atendimentos, indicadores de produtividade, fluxo de pacientes e análise clínica
-              referentes ao período de ${periodo}.
-            </p>
-          </div>
-          <div style="margin-bottom: 10mm;">
-            <p style="font-size: 12pt;">Responsável Técnico: ${responsavelNome}${responsavelCargo ? ' – ' + responsavelCargo : ''}</p>
-            <p style="font-size: 12pt; font-weight: bold; margin-top: 18mm;">Oriximiná – Pará</p>
-            <p style="font-size: 12pt; font-weight: bold;">${anoMes}</p>
-          </div>
-        </section>
-        <section style="page-break-after: always; font-family: 'Times New Roman', Times, serif;">
-          <h2 style="text-align: center; font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 18px;">Sumário</h2>
-          <ol style="list-style: none; padding: 0; font-size: 12pt; line-height: 1.8;">
-            ${['Introdução','Metodologia','Resumo Executivo','Indicadores Gerais por Categoria','Atendimentos por Período','Horários de Pico','Novos vs Retorno','Produtividade por Profissional','Faltas e Absenteísmo','Pacientes Atendidos','Fila de Espera','Triagem','Enfermagem','Avaliação Multiprofissional','Projeto Terapêutico Singular','Tratamentos','Análise Clínica','Análise Geográfica','Mapa de Atendimento','Relatório Detalhado','Considerações Finais'].map((t,i) => `
-              <li style="display:flex; justify-content: space-between; border-bottom: 1px dotted #94a3b8; padding: 2px 0;">
-                <span>${i+1}. ${t}</span><span>${i+4}</span>
-              </li>
-            `).join('')}
-          </ol>
-        </section>
-      `;
+      const reportId = 'REL-' + emitida.getFullYear() + String(emitida.getMonth() + 1).padStart(2, '0') + String(emitida.getDate()).padStart(2, '0') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase();
 
-      const bodyHtml = `
-        ${capaHtml}
-        ${escopoHtml}
-        <div style="text-align: justify; font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5;">
+      const reportPatientIds = new Set(pacientesReport.map(p => p.id).filter(Boolean));
+      const reportPatients = Array.from(reportPatientIds).map(id => pacientesMap.get(id)).filter(Boolean) as any[];
+      const validCidPatientIds = new Set<string>();
+      const addPatientCids = (patientId: string | null | undefined, value: unknown) => {
+        if (patientId && extractCids(typeof value === 'string' ? value : '').length > 0) validCidPatientIds.add(patientId);
+      };
+      pacientes.forEach((p: any) => {
+        addPatientCids(p.id, p.cid);
+        addPatientCids(p.id, p.custom_data?.cid);
+        addPatientCids(p.id, p.custom_data?.cid10);
+      });
+      prontuariosFull.forEach((p: any) => {
+        addPatientCids(p.paciente_id, p.custom_data?.cid);
+        addPatientCids(p.paciente_id, p.custom_data?.cid10);
+      });
+      procedimentosDB.forEach((p: any) => addPatientCids(p.patient_id, p.cid));
+      const ptsPatientById = new Map<string, string>();
+      ptsData.forEach((p: any) => ptsPatientById.set(p.id, p.patient_id));
+      ptsCidData.forEach((p: any) => addPatientCids(ptsPatientById.get(p.pts_id), p.cid_codigo));
 
-          ${renderSection("1. Introdução", `<p>${intro}</p>`)}
-          ${renderSection("2. Metodologia", `<p>${metodologia}</p>`)}
-          
-          ${renderSection("3. Resumo Executivo", `
-            <p>${analiseExecutiva}</p>
-            <div class="summary">
-              <div class="stat"><strong>${stats.total}</strong><small>Agendamentos</small></div>
-              <div class="stat"><strong>${stats.concluidos}</strong><small>Atendimentos</small></div>
-              <div class="stat"><strong>${stats.faltas}</strong><small>Faltas</small></div>
-              <div class="stat"><strong>${stats.taxaComparecimento}%</strong><small>Comparecimento</small></div>
-              <div class="stat"><strong>${clinicalReport.kpis.totalPacientesComCID}</strong><small>Pacientes Clínicos</small></div>
-            </div>
-          `)}
+      const patientsMissingBirth = reportPatients.filter((p: any) => !(p.dataNascimento || p.data_nascimento)).length;
+      const patientsMissingPhone = reportPatients.filter((p: any) => !(p.telefone || p.celular)).length;
+      const patientsMissingAddress = reportPatients.filter((p: any) => !(p.logradouro || p.endereco || p.bairro || p.cep)).length;
+      const patientsMissingCid = Array.from(reportPatientIds).filter(id => !validCidPatientIds.has(id)).length;
 
-          ${renderSection("4. Indicadores Gerais por Categoria", `
-            <table>
-              <thead>
-                <tr><th>Categoria</th><th>Total Agendados</th><th>Concluídos</th><th>Taxa</th></tr>
-              </thead>
-              <tbody>
-                ${categoriaCards.map(c => `
-                  <tr>
-                    <td>${c.label}</td>
-                    <td>${c.total}</td>
-                    <td>${c.concluidos}</td>
-                    <td>${c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0}%</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, categoriaCards.some(c => c.total > 0))}
+      const procedureEvidence = new Set<string>();
+      procedimentosDB.forEach((p: any) => {
+        if (p.patient_id && p.data) procedureEvidence.add(p.patient_id + '|' + String(p.data).slice(0, 10));
+      });
+      const completedWithoutProcedure = consolidatedData.filter((d: any) => {
+        const completed = d.status === 'concluido' || d.hasProntuario;
+        const procedureInAppointment = Boolean(d.procedimento || d.procedimento_nome);
+        return completed && !procedureInAppointment && !procedureEvidence.has(String(d.pacienteId || '') + '|' + String(d.data || '').slice(0, 10));
+      }).length;
 
-          ${renderSection("5. Atendimentos por Período", `
-            <p>Distribuição temporal dos atendimentos realizados no período.</p>
-            <table>
-              <thead>
-                <tr><th>Data</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th></tr>
-              </thead>
-              <tbody>
-                ${timelineData.map(t => `
-                  <tr>
-                    <td>${formatDateBR(t.data)}</td>
-                    <td>${t.agendamentos}</td>
-                    <td>${t.concluidos}</td>
-                    <td>${t.faltas}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, timelineData.length > 0)}
+      const clinicalScoped = clinicalReport.patients.filter((p: any) => reportPatientIds.has(p.id));
+      const categoryNames = ['TEA / Autismo', 'Deficiência Física', 'Deficiência Intelectual', 'Deficiência Auditiva', 'Deficiência Visual', 'Pessoa Surda'];
+      const clinicalCategoryRows = categoryNames.map(name => [
+        name,
+        clinicalScoped.filter((p: any) => p.categories.has(name)).length,
+      ]);
+      const teaByCid = clinicalScoped.filter((p: any) => Array.from(p.cids).some((cid: string) =>
+        getCategoryByCID(cid, cid10Descriptions[cid] || '').some((category: any) => category.name === 'TEA / Autismo')
+      )).length;
+      const teaCadastroSemCid = clinicalScoped.filter((p: any) =>
+        Array.isArray(p.sinalizadoSemCid) && p.sinalizadoSemCid.includes('TEA / Autismo')
+      ).length;
+      const multiCidCount = clinicalScoped.filter((p: any) => p.cids.size >= 2).length;
+      const mobilityReduced = reportPatients.filter((p: any) => {
+        const mobility = String(p.mobilidade || p.custom_data?.mobilidade || '').toLowerCase();
+        return /cadeira_rodas|cadeirante|acamado|muleta_andador|andador|muleta/.test(mobility);
+      }).length;
 
-          ${renderSection("6. Horários de Pico", `
-            <p>Análise de fluxo por faixa horária (07:00 às 18:00).</p>
-            <table>
-              <thead>
-                <tr><th>Horário</th><th>Volume de Atendimentos</th></tr>
-              </thead>
-              <tbody>
-                ${peakHoursData.map(h => `
-                  <tr><td>${h.hora}</td><td>${h.total}</td></tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, peakHoursData.some(h => h.total > 0))}
+      const exceptionPatients = pacientesReport.filter(p => p.tfd || p.ordemJudicial).length;
+      const tfdCount = pacientesReport.filter(p => p.tfd).length;
+      const judicialCount = pacientesReport.filter(p => p.ordemJudicial).length;
+      const bothExceptionCount = pacientesReport.filter(p => p.tfd && p.ordemJudicial).length;
+      const percentOfBase = (value: number) => reportPatientIds.size > 0 ? (value / reportPatientIds.size * 100).toFixed(1) + '%' : '0,0%';
+      const clinicalSearchNote = clinicalSearch.trim()
+        ? 'Busca clínica aplicada na tela: “' + clinicalSearch.trim() + '”.'
+        : 'Sem busca clínica adicional; considera-se toda a base clínica carregada no escopo.';
 
-          ${renderSection("7. Novos vs Retorno", `
-            <div class="summary">
-              ${novosVsRetorno.map(d => `
-                <div class="stat"><strong>${d.value}</strong><small>${d.name}</small></div>
-              `).join('')}
-            </div>
-          `, novosVsRetorno.length > 0)}
+      const specialtyMap: Record<string, { total: number; faltas: number }> = {};
+      consolidatedData.forEach((d: any) => {
+        const professional: any = profissionaisMap.get(d.profissionalId);
+        const specialty = professional?.especialidade || professional?.cargo || professional?.profissao || d.setor || 'Não informado';
+        if (!specialtyMap[specialty]) specialtyMap[specialty] = { total: 0, faltas: 0 };
+        specialtyMap[specialty].total++;
+        if (d.status === 'falta') specialtyMap[specialty].faltas++;
+      });
+      const specialtyRows = Object.entries(specialtyMap)
+        .map(([name, values]) => [name, values.total, values.faltas])
+        .sort((a, b) => Number(b[1]) - Number(a[1]));
+      const busiestSpecialty = specialtyRows[0];
+      const highestAbsenceSpecialty = [...specialtyRows].sort((a, b) => Number(b[2]) - Number(a[2]))[0];
+      const peakHour = [...peakHoursData].sort((a, b) => b.total - a.total).find(h => h.total > 0);
+      const highestDemandMunicipality = municipioReport.find(m => m.atendimentos > 0);
+      const queueByUnit: Record<string, { aguardando: number; chamados: number; desistencias: number }> = {};
+      filaReport.items.forEach((item: any) => {
+        const unit = unidadesMap.get(item.unidade_id);
+        const name = unit?.nome || 'Não informado';
+        if (!queueByUnit[name]) queueByUnit[name] = { aguardando: 0, chamados: 0, desistencias: 0 };
+        if (item.status === 'aguardando') queueByUnit[name].aguardando++;
+        else if (item.status === 'chamado' || item.status === 'atendido') queueByUnit[name].chamados++;
+        else if (item.status === 'desistiu' || item.status === 'cancelado') queueByUnit[name].desistencias++;
+      });
+      const queueUnitRows = Object.entries(queueByUnit)
+        .map(([unit, values]) => [unit, values.aguardando, values.chamados, values.desistencias])
+        .sort((a, b) => Number(b[1]) - Number(a[1]));
 
-          ${renderSection("8. Produtividade por Profissional", `
-            <table>
-              <thead>
-                <tr>
-                  <th>Profissional</th>
-                  <th>Pacientes</th>
-                  <th>Total</th>
-                  <th>Concluídos</th>
-                  <th>Faltas</th>
-                  <th>Taxa</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${porProfissional.slice(0, 40).map(p => `
-                  <tr>
-                    <td>${p.nome}</td>
-                    <td>${p.pacientesAtendidos}</td>
-                    <td>${p.total}</td>
-                    <td>${p.concluidos}</td>
-                    <td>${p.faltas}</td>
-                    <td>${p.taxaConclusao}%</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, porProfissional.length > 0)}
+      const periodComparison: { available: boolean; label: string; rows: (string | number)[][] } = {
+        available: false,
+        label: '',
+        rows: [],
+      };
+      if (dateFrom && dateTo) {
+        try {
+          const periodStart = new Date(dateFrom + 'T12:00:00');
+          const periodEnd = new Date(dateTo + 'T12:00:00');
+          const days = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1);
+          const previousEnd = new Date(periodStart);
+          previousEnd.setDate(previousEnd.getDate() - 1);
+          const previousStart = new Date(previousEnd);
+          previousStart.setDate(previousStart.getDate() - days + 1);
+          const previousStartStr = previousStart.toISOString().slice(0, 10);
+          const previousEndStr = previousEnd.toISOString().slice(0, 10);
 
-          ${renderSection("9. Procedimentos Realizados", `
-            <table>
-              <thead>
-                <tr><th>Procedimento</th><th>Quantidade</th></tr>
-              </thead>
-              <tbody>
-                ${procedimentoStats.byProcedure.slice(0, 20).map(p => `
-                  <tr><td>${p.nome}</td><td>${p.total}</td></tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, procedimentoStats.total > 0)}
+          const fetchPriorRows = async (table: 'agendamentos' | 'prontuarios') => {
+            const dateField = table === 'agendamentos' ? 'data' : 'data_atendimento';
+            const columns = table === 'agendamentos'
+              ? 'id,data,status,tipo,unidade_id,profissional_id'
+              : 'id,agendamento_id,paciente_id,data_atendimento,unidade_id,profissional_id';
+            let rows: any[] = [];
+            let offset = 0;
+            const pageSize = 1000;
+            while (true) {
+              let query: any = (supabase.from(table as any) as any)
+                .select(columns)
+                .gte(dateField, previousStartStr)
+                .lte(dateField, previousEndStr)
+                .order(dateField, { ascending: true })
+                .order('id', { ascending: true })
+                .range(offset, offset + pageSize - 1);
+              if (user?.unidadeId && user?.usuario !== 'admin.sms') query = query.eq('unidade_id', user.unidadeId);
+              if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+              if (table === 'agendamentos') {
+                if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+                if (filterStatus !== 'all') query = query.eq('status', filterStatus);
+                if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
+                if (filterSetor !== 'all') query = query.eq('tipo', filterSetor);
+              } else if (filterProf !== 'all') {
+                query = query.eq('profissional_id', filterProf);
+              }
+              const { data, error } = await query;
+              if (error) throw error;
+              if (!data?.length) break;
+              rows = rows.concat(data);
+              if (data.length < pageSize) break;
+              offset += pageSize;
+            }
+            return rows;
+          };
 
-          ${renderSection("10. Análise de Absenteísmo (Faltas)", `
-            <p>Pacientes com maior recorrência de faltas no período.</p>
-            <table>
-              <thead>
-                <tr><th>Paciente</th><th>Telefone</th><th>Profissional</th><th>Total Faltas</th></tr>
-              </thead>
-              <tbody>
-                ${faltasReport.slice(0, 15).map(f => `
-                  <tr><td>${f.nome}</td><td>${f.telefone}</td><td>${f.profissional}</td><td>${f.total}</td></tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, faltasReport.length > 0)}
+          const [previousAppointments, previousRecords] = await Promise.all([
+            fetchPriorRows('agendamentos'),
+            fetchPriorRows('prontuarios'),
+          ]);
+          const previousAppointmentIds = new Set(previousAppointments.map((a: any) => a.id));
+          const appointmentIdsWithRecord = new Set(previousRecords.map((p: any) => p.agendamento_id).filter(Boolean));
+          const orphanRecords = previousRecords.filter((p: any) => !p.agendamento_id || !previousAppointmentIds.has(p.agendamento_id));
+          const previousStats = {
+            total: previousAppointments.length + orphanRecords.length,
+            completed: previousAppointments.filter((a: any) => normalizeStatus(a.status) === 'concluido' || appointmentIdsWithRecord.has(a.id)).length + orphanRecords.length,
+            absences: previousAppointments.filter((a: any) => normalizeStatus(a.status) === 'falta').length,
+          };
+          const deltaText = (current: number, previous: number) => {
+            const difference = current - previous;
+            const variation = previous > 0 ? ' (' + (difference > 0 ? '+' : '') + ((difference / previous) * 100).toFixed(1) + '%)' : ' (sem base anterior)';
+            return (difference > 0 ? '+' : '') + difference + variation;
+          };
+          periodComparison.available = true;
+          periodComparison.label = formatDateBR(previousStartStr) + ' a ' + formatDateBR(previousEndStr);
+          periodComparison.rows = [
+            ['Indicador', 'Período atual', 'Período anterior', 'Variação absoluta e percentual'],
+            ['Agendamentos/atendimentos', stats.total, previousStats.total, deltaText(stats.total, previousStats.total)],
+            ['Atendimentos concluídos', stats.concluidos, previousStats.completed, deltaText(stats.concluidos, previousStats.completed)],
+            ['Faltas', stats.faltas, previousStats.absences, deltaText(stats.faltas, previousStats.absences)],
+          ];
+        } catch (comparisonError) {
+          console.warn('[Relatório ABNT] Comparação anterior indisponível:', comparisonError);
+          periodComparison.label = 'Não foi possível consultar a base do período anterior com os filtros atuais.';
+        }
+      } else {
+        periodComparison.label = 'Informe data inicial e final para comparar períodos de igual duração.';
+      }
 
-          ${renderSection("11. Fila de Espera", `
-            <div class="summary">
-              <div class="stat"><strong>${filaReport.aguardando}</strong><small>Aguardando</small></div>
-              <div class="stat"><strong>${filaReport.chamados}</strong><small>Chamados/Atendidos</small></div>
-              <div class="stat"><strong>${filaReport.desistencias}</strong><small>Desistências</small></div>
-            </div>
-          `, filaReport.total > 0)}
+      const topObservations: string[] = [];
+      if (busiestSpecialty) topObservations.push('Maior volume no escopo: ' + busiestSpecialty[0] + ' (' + busiestSpecialty[1] + ' registros).');
+      if (highestAbsenceSpecialty && Number(highestAbsenceSpecialty[2]) > 0) topObservations.push('Maior número de faltas: ' + highestAbsenceSpecialty[0] + ' (' + highestAbsenceSpecialty[2] + ').');
+      if (peakHour) topObservations.push('Horário de maior concentração: ' + peakHour.hora + ' (' + peakHour.total + ' registros).');
+      if (highestDemandMunicipality) topObservations.push('Município com maior demanda registrada: ' + highestDemandMunicipality.municipio + ' (' + highestDemandMunicipality.atendimentos + ' atendimentos).');
+      if (filaReport.aguardando > 0) topObservations.push('Fila no snapshot consultado: ' + filaReport.aguardando + ' aguardando, de ' + filaReport.total + ' registros.');
+      if (periodComparison.available && periodComparison.rows.length > 0) {
+        const absenceRow = periodComparison.rows[3];
+        if (absenceRow) topObservations.push('Variação de faltas frente ao período anterior: ' + String(absenceRow[3]) + '.');
+      }
+      if (topObservations.length === 0) topObservations.push('Não há volume suficiente neste escopo para destacar concentração ou fila.');
 
-          ${renderSection("12. Triagem e Acolhimento", `
-            <p>Produtividade da equipe de triagem.</p>
-            <table>
-              <thead>
-                <tr><th>Técnico</th><th>Total</th><th>Confirmadas</th><th>Pendentes</th></tr>
-              </thead>
-              <tbody>
-                ${triagemReport.porTecnico.map(t => `
-                  <tr><td>${t.nome}</td><td>${t.total}</td><td>${t.confirmadas}</td><td>${t.pendentes}</td></tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, triagemReport.total > 0)}
+      const reportTables: { title: string; headers: string[]; rows: (string | number)[][]; limit?: number; note?: string }[] = [];
+      const reportSections: { title: string; paragraphs: string[]; tables?: typeof reportTables }[] = [];
+      const addSection = (title: string, paragraphs: string[] = [], tables: typeof reportTables = []) => {
+        reportSections.push({ title, paragraphs, tables });
+      };
+      const addTable = (title: string, headers: string[], rows: (string | number)[][], limit = 60, note = '') => ({
+        title, headers, rows, limit, note,
+      });
 
-          ${renderSection("13. Avaliações de Enfermagem", `
-            <div class="summary">
-              <div class="stat"><strong>${nursingReport.total}</strong><small>Total</small></div>
-              <div class="stat"><strong>${nursingReport.aptos}</strong><small>Aptos</small></div>
-              <div class="stat"><strong>${nursingReport.inaptos}</strong><small>Inaptos</small></div>
-            </div>
-          `, nursingReport.total > 0)}
+      addSection('Identificação e escopo', [
+        'Este relatório institucional apresenta dados agregados do período de ' + esc.periodo + '. O escopo foi calculado com os filtros aplicados no momento da emissão.',
+        'Unidade: ' + esc.un + '; profissional: ' + esc.prof + '; especialidade: ' + esc.especialidade + '; município: ' + esc.municipio + '; status: ' + esc.status + '; setor: ' + esc.setor + '; tipo: ' + esc.tipo + '.',
+        clinicalSearchNote,
+        'Identificador: ' + reportId + '. Emitido em ' + emitidaLabel + ' por ' + responsavelNome + (responsavelCargo ? ' — ' + responsavelCargo : '') + '.',
+      ], [addTable('Filtros aplicados', ['Campo', 'Valor'], Object.entries(esc.escopo).map(([k, v]) => [k, v]))]);
 
-          ${renderSection("14. Avaliações Multiprofissionais", `
-            <table>
-              <thead>
-                <tr><th>Especialidade</th><th>Quantidade</th></tr>
-              </thead>
-              <tbody>
-                ${multiReport.bySpecialty.map(s => `<tr><td>${s.nome}</td><td>${s.total}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          `, multiReport.total > 0)}
+      addSection('Metodologia e critérios', [
+        'Fontes: agendamentos e prontuários do período; procedimentos vinculados; cadastro de pacientes; fila, triagem, avaliações de enfermagem e multiprofissionais; PTS; ciclos e sessões de tratamento. O relatório respeita o escopo e as permissões da unidade do usuário.',
+        'Um registro é considerado concluído quando o status está concluído ou existe prontuário vinculado. A taxa de comparecimento é concluídos ÷ (agendamentos − cancelados) × 100. A taxa de faltas é faltas ÷ (agendamentos − cancelados) × 100. Cancelamentos ficam fora do denominador. Quando a base efetiva é zero, a taxa é 0%.',
+        'A análise de CID usa códigos válidos encontrados nos registros clínicos, procedimentos, PTS e cadastro disponível. TEA e categorias de deficiência podem ser identificados por CID e/ou sinalização cadastral; isso descreve os dados encontrados e não substitui avaliação clínica.',
+        'TFD, Ordem Judicial e mobilidade reduzida são contados a partir das sinalizações cadastrais disponíveis. Indicadores de fila representam o snapshot carregado, não uma série histórica.',
+        'A distribuição geográfica usa município de naturalidade disponível no cadastro. A comparação temporal é apresentada apenas quando existem datas inicial e final e a consulta do período anterior é concluída.',
+      ]);
 
-          ${renderSection("15. Projetos Terapêuticos Singulares (PTS)", `
-            <div class="summary">
-              <div class="stat"><strong>${ptsReport.total}</strong><small>Total PTS</small></div>
-              <div class="stat"><strong>${ptsReport.ativos}</strong><small>Ativos</small></div>
-              <div class="stat"><strong>${ptsReport.concluidos}</strong><small>Concluídos/Inativos</small></div>
-            </div>
-          `, ptsReport.total > 0)}
+      addSection('Resumo executivo e achados do período', [
+        'No período foram registrados ' + stats.total + ' agendamentos/atendimentos, com ' + stats.concluidos + ' concluídos e ' + stats.faltas + ' faltas. A taxa de comparecimento foi ' + stats.taxaComparecimento + '% e a taxa de faltas ' + stats.taxaFalta + '%, calculadas sobre a base efetiva sem cancelamentos.',
+        ...topObservations,
+      ], [addTable('Indicadores principais', ['Indicador', 'Resultado'], [
+        ['Agendamentos/atendimentos', stats.total],
+        ['Concluídos', stats.concluidos],
+        ['Faltas', stats.faltas],
+        ['Cancelados (fora da base efetiva)', stats.cancelados],
+        ['Taxa de comparecimento', stats.taxaComparecimento + '%'],
+        ['Taxa de faltas', stats.taxaFalta + '%'],
+      ])]);
 
-          ${renderSection("16. Gestão de Tratamentos", `
-            <p>Monitoramento de ciclos de reabilitação e sintonização de sessões.</p>
-            <div class="summary">
-              <div class="stat"><strong>${treatmentStats.ativos}</strong><small>Ciclos Ativos</small></div>
-              <div class="stat"><strong>${treatmentStats.sessRealizadas}</strong><small>Sessões Realizadas</small></div>
-              <div class="stat"><strong>${treatmentStats.taxaAbandono}%</strong><small>Taxa de Abandono</small></div>
-            </div>
-          `, treatmentStats.total > 0)}
+      addSection('Comparação com o período anterior', [
+        periodComparison.available
+          ? 'Período comparado: ' + periodComparison.label + '. A comparação usa a mesma duração e os filtros de unidade, profissional, status, setor e tipo que puderam ser reaplicados à consulta anterior.'
+          : periodComparison.label,
+        'Fila, indicadores cadastrais e tratamentos são fotografias do conjunto carregado; não são comparados com períodos anteriores sem histórico temporal equivalente.',
+      ], [addTable(
+        'Variação operacional',
+        ['Indicador', 'Período atual', 'Período anterior', 'Variação'],
+        periodComparison.available ? periodComparison.rows.slice(1) : [['Comparação', '—', '—', periodComparison.label]],
+      )]);
 
-          ${renderSection("17. Análise Clínica e Diagnóstica", `
-            <p>Distribuição dos 10 principais diagnósticos (CID-10) identificados.</p>
-            <table>
-              <thead>
-                <tr><th>CID-10</th><th>Descrição</th><th>Frequência</th></tr>
-              </thead>
-              <tbody>
-                ${clinicalReport.topCids.map(c => `
-                  <tr><td>${c.cid}</td><td>${c.descricao}</td><td>${c.count}</td></tr>
-                `).join('')}
-              </tbody>
-            </table>
-            <p>Distribuição por Categorias Clínicas:</p>
-            <table>
-              <thead>
-                <tr><th>Categoria</th><th>Pacientes</th><th>Atendimentos</th></tr>
-              </thead>
-              <tbody>
-                ${clinicalReport.byCategory.filter(c => c.pacientes > 0).slice(0, 10).map(c => `
-                  <tr><td>${c.name}</td><td>${c.pacientes}</td><td>${c.atendimentos}</td></tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, clinicalReport.patients.length > 0)}
+      addSection('Indicadores assistenciais e produtividade', [
+        'A visão detalhada por profissional está no Anexo A. Os números abaixo representam o recorte atual e não incluem identificação de pacientes.',
+      ], [
+        addTable('Atendimentos por período', ['Data', 'Registros', 'Concluídos', 'Faltas'], timelineData.map(t => [formatDateBR(t.data), t.agendamentos, t.concluidos, t.faltas]), 30, 'Exibindo até 30 datas do período; os indicadores gerais consideram os registros carregados no escopo.'),
+        addTable('Novos e retornos', ['Categoria', 'Quantidade'], novosVsRetorno.map(d => [d.name, d.value])),
+      ]);
 
-          ${renderSection("18. Análise Geográfica (Naturalidade)", `
-            <p>Distribuição de pacientes e atendimentos por município de origem.</p>
-            <table>
-              <thead>
-                <tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Comparecimento</th></tr>
-              </thead>
-              <tbody>
-                ${municipioReport.slice(0, 20).map(m => `
-                  <tr>
-                    <td>${m.municipio}</td>
-                    <td>${m.pacientesCount}</td>
-                    <td>${m.atendimentos}</td>
-                    <td>${m.taxaComparecimento}%</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, municipioReport.length > 0)}
+      addSection('Especialidades e horários de maior pressão', [
+        busiestSpecialty ? 'A especialidade com maior volume foi ' + busiestSpecialty[0] + ' (' + busiestSpecialty[1] + ' registros).' : 'Não houve registro suficiente para ranquear especialidades.',
+        highestAbsenceSpecialty && Number(highestAbsenceSpecialty[2]) > 0 ? 'O maior número absoluto de faltas ocorreu em ' + highestAbsenceSpecialty[0] + ' (' + highestAbsenceSpecialty[2] + ').' : 'Não foram registradas faltas para ranquear por especialidade.',
+        peakHour ? 'O horário com maior volume foi ' + peakHour.hora + ', com ' + peakHour.total + ' registros.' : 'Não há horário informado suficiente para identificar concentração.',
+      ], [addTable('Volume e faltas por especialidade', ['Especialidade/área', 'Registros', 'Faltas'], specialtyRows, 30, 'Exibindo as 30 áreas de maior volume.')]);
 
-          ${renderSection("19. Mapa de Atendimento", `
-            <p>Resumo do mapa de atendimentos concluídos para o período.</p>
-            <div class="summary">
-              <div class="stat"><strong>${mapaData.length}</strong><small>Atendimentos Mapeados</small></div>
-            </div>
-            ${mapaData.length > 0 ? `
-              <table>
-                <thead>
-                  <tr><th>Nº</th><th>Paciente</th><th>Profissional</th><th>Procedimento</th></tr>
-                </thead>
-                <tbody>
-                  ${mapaData.slice(0, 15).map(m => `
-                    <tr><td>${m.num}</td><td>${m.paciente_nome}</td><td>${m.profissional_nome}</td><td>${m.procedimento_sigtap}</td></tr>
-                  `).join('')}
-                </tbody>
-              </table>
-              <p><small>* Exibindo os 15 primeiros registros. Para o mapa completo, utilize a exportação específica na aba Mapa.</small></p>
-            ` : ''}
-          `, mapaData.length > 0)}
+      addSection('TFD e Ordem Judicial — dados agregados', [
+        'Os totais abaixo contam pacientes distintos atendidos no período. A categoria “ambas” está contida nos totais de TFD e Ordem Judicial; o total consolidado não duplica essas pessoas.',
+        'A versão gerencial não inclui nomes, telefones, motivos ou identificadores de pacientes.',
+      ], [addTable('Indicadores de exceção', ['Indicador', 'Pacientes', 'Percentual da base de pacientes'], [
+        ['TFD', tfdCount, percentOfBase(tfdCount)],
+        ['Ordem Judicial', judicialCount, percentOfBase(judicialCount)],
+        ['Ambas as condições', bothExceptionCount, percentOfBase(bothExceptionCount)],
+        ['TFD ou Ordem Judicial (sem duplicidade)', exceptionPatients, percentOfBase(exceptionPatients)],
+      ])]);
 
-          ${renderSection("20. Relatório Detalhado de Agendamentos", `
-            <p>Relação dos agendamentos registrados no período (exibindo os 30 mais recentes).</p>
-            <table>
-              <thead>
-                <tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                ${filtered.slice(0, 30).map(a => `
-                  <tr>
-                    <td>${formatDateBR(a.data)}</td>
-                    <td>${a.hora}</td>
-                    <td>${a.pacienteNome}</td>
-                    <td>${statusLabels[a.status] || a.status}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `, filtered.length > 0)}
+      addSection('Análise clínica agregada', [
+        'A análise foi restrita aos pacientes distintos da base atendida no escopo e utiliza CID e/ou sinalizações cadastrais disponíveis. As contagens representam pessoas identificadas nas fontes consultadas, não diagnósticos confirmados no período.',
+        'TEA identificado por CID: ' + teaByCid + '; sinalizado no cadastro sem CID válido encontrado: ' + teaCadastroSemCid + '. Deficiência múltipla considera pacientes com dois ou mais códigos CID distintos na análise disponível. Mobilidade reduzida usa marcações de cadeirante, acamado, muleta ou andador.',
+        'Para preservar a confidencialidade, esta análise apresenta apenas totais agregados e não exibe pacientes, CIDs associados a nomes ou observações clínicas individuais.',
+      ], [
+        addTable('Categorias clínicas', ['Categoria', 'Pacientes distintos'], clinicalCategoryRows),
+        addTable('Outros indicadores clínicos', ['Indicador', 'Quantidade'], [
+          ['Mobilidade reduzida sinalizada no cadastro', mobilityReduced],
+          ['Pacientes com dois ou mais CIDs válidos', multiCidCount],
+        ]),
+        addTable('CIDs mais frequentes (agregado)', ['CID', 'Descrição', 'Pacientes'], clinicalReport.topCids20.map(c => [c.cid, c.descricao, c.count]), 20, 'Exibindo até 20 códigos agregados; nenhum CID é associado a nome de paciente.'),
+      ]);
 
-          ${renderSection("21. Considerações Finais", `
-            <p>${analiseExecutiva}</p>
-            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período, dentro do escopo de filtros aplicado. Observa-se um volume operacional ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
-          `)}
+      addSection('Demanda geográfica', [
+        highestDemandMunicipality
+          ? 'Maior demanda por naturalidade no escopo: ' + highestDemandMunicipality.municipio + ', com ' + highestDemandMunicipality.atendimentos + ' atendimentos.'
+          : 'Não há atendimentos com município de naturalidade informado neste recorte.',
+      ], [addTable('Municípios por atendimento', ['Município de naturalidade', 'Atendimentos', 'Concluídos', 'Faltas', 'Comparecimento'], municipioReport.filter(m => m.atendimentos > 0).map(m => [m.municipio, m.atendimentos, m.concluidos, m.faltas, m.taxaComparecimento + '%']), 20, 'Exibindo até 20 municípios por volume; os quantitativos de atendimento referem-se ao período e filtros do relatório.')]);
 
-          <div style="margin-top: 60px;">
-            ${docCarimbo(carimbo, { nome: user?.nome || '', especialidade: user?.cargo || user?.profissao || '' })}
-          </div>
-        </div>
-      `;
+      addSection('Absenteísmo e fila', [
+        'Faltas por área e unidade são agregadas. A listagem nominal de faltas e fila só aparece em anexo operacional separado, quando solicitado por usuário Master ou administrador global.',
+        'Fila atual: ' + filaReport.aguardando + ' aguardando, ' + filaReport.chamados + ' chamados/atendidos e ' + filaReport.desistencias + ' desistências/cancelamentos, de ' + filaReport.total + ' registros carregados.',
+      ], [
+        addTable('Faltas por profissional', ['Profissional', 'Faltas'], porProfissional.filter(p => p.faltas > 0).sort((a, b) => b.faltas - a.faltas).map(p => [p.nome, p.faltas]), 30, 'Exibindo até 30 profissionais com maior número de faltas.'),
+        addTable('Fila agregada por unidade', ['Unidade', 'Aguardando', 'Chamados/atendidos', 'Desistências'], queueUnitRows, 30),
+      ]);
+
+      addSection('Triagem e avaliações', [
+        'Indicadores consolidados das triagens, avaliações de enfermagem e avaliações multiprofissionais registradas no período.',
+      ], [
+        addTable('Triagem', ['Indicador', 'Quantidade'], [
+          ['Total', triagemReport.total],
+          ['Confirmadas', triagemReport.confirmadas],
+          ['Pendentes', triagemReport.pendentes],
+        ]),
+        addTable('Enfermagem', ['Indicador', 'Quantidade'], [
+          ['Total', nursingReport.total],
+          ['Aptos', nursingReport.aptos],
+          ['Inaptos', nursingReport.inaptos],
+          ['Encaminhados para avaliação multiprofissional', nursingReport.multiprof],
+        ]),
+        addTable('Avaliações multiprofissionais por especialidade', ['Especialidade', 'Quantidade'], multiReport.bySpecialty.map(s => [s.nome, s.total]), 30),
+      ]);
+
+      addSection('PTS e tratamentos', [
+        'Os indicadores de PTS e tratamento são consolidados conforme os registros carregados e os filtros aplicáveis. Não são vinculados nominalmente a pacientes neste relatório.',
+      ], [
+        addTable('Projeto Terapêutico Singular', ['Indicador', 'Quantidade'], [
+          ['PTS registrados', ptsReport.total],
+          ['Ativos', ptsReport.ativos],
+          ['Concluídos/inativos', ptsReport.concluidos],
+        ]),
+        addTable('Ciclos e sessões de tratamento', ['Indicador', 'Quantidade'], [
+          ['Ciclos totais', treatmentStats.total],
+          ['Ciclos ativos', treatmentStats.ativos],
+          ['Ciclos finalizados', treatmentStats.finalizados],
+          ['Ciclos suspensos', treatmentStats.suspensos],
+          ['Sessões realizadas', treatmentStats.sessRealizadas],
+          ['Sessões com falta', treatmentStats.sessFaltas],
+          ['Taxa de abandono registrada', treatmentStats.taxaAbandono + '%'],
+        ]),
+        addTable('Ciclos por tipo de tratamento', ['Tipo', 'Quantidade'], treatmentStats.byType.map(t => [t.nome, t.total]), 30),
+      ]);
+
+      addSection('Qualidade da informação e limites', [
+        'Os números abaixo apontam campos ausentes ou fontes que não puderam ser lidas no snapshot desta emissão. Registros incompletos não foram preenchidos por inferência.',
+        partialTables.length
+          ? 'Atenção: carga parcial; fontes indisponíveis: ' + partialTables.join(', ') + '. Os indicadores que dependem delas podem estar subestimados.'
+          : 'Todas as fontes previstas para esta carga foram consultadas sem falha reportada.',
+        'As tabelas detalhadas aplicam limites de exibição descritos em cada anexo. Os indicadores agregados usam a base completa carregada dentro do escopo.',
+      ], [addTable('Campos ausentes no cadastro/registro', ['Verificação', 'Registros'], [
+        ['Pacientes sem data de nascimento', patientsMissingBirth],
+        ['Pacientes sem telefone', patientsMissingPhone],
+        ['Pacientes sem endereço básico informado', patientsMissingAddress],
+        ['Pacientes sem CID válido encontrado nas fontes consultadas', patientsMissingCid],
+        ['Atendimentos concluídos sem procedimento informado no agendamento ou vínculo de procedimento por data', completedWithoutProcedure],
+        ['Fontes/tabelas com carga parcial', partialTables.length],
+      ])]);
+
+      addSection('Considerações finais', topObservations.length
+        ? topObservations.map(text => 'Achado deste período: ' + text)
+        : ['Não há achados suficientes para orientar decisão neste escopo.']);
+
+      addSection('Anexo A — Produtividade por profissional', [
+        'Detalhamento agregado por profissional. A listagem nominal identifica profissionais e não pacientes.',
+      ], [addTable('Produtividade', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Tempo médio', 'Taxa de conclusão'], porProfissional.map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.tempoMedio + ' min', p.taxaConclusao + '%']), 60, 'Exibindo até 60 profissionais; para bases maiores, use o relatório específico de produtividade.')]);
+
+      addSection('Anexo B — Municípios', [
+        'Detalhamento agregado da demanda por município de naturalidade.',
+      ], [addTable('Atendimentos por município', ['Município', 'Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Comparecimento'], municipioReport.filter(m => m.atendimentos > 0).map(m => [m.municipio, m.atendimentos, m.concluidos, m.pendentes, m.faltas, m.cancelados, m.taxaComparecimento + '%']), 60, 'Exibindo até 60 municípios por volume; os quantitativos referem-se ao período e filtros do relatório.')]);
+
+      addSection('Anexo C — Análise clínica agregada', [
+        'Categorias e CIDs apresentados somente como totais agregados, sem nomes, telefones ou associação a prontuários individuais.',
+      ], [
+        addTable('Categorias clínicas', ['Categoria', 'Pacientes distintos'], clinicalCategoryRows),
+        addTable('CIDs mais frequentes', ['CID', 'Descrição', 'Pacientes'], clinicalReport.topCids20.map(c => [c.cid, c.descricao, c.count]), 20, 'Exibindo até 20 CIDs agregados.'),
+      ]);
+
+      addSection('Anexo D — Filas e tratamentos (agregado)', [
+        'Anexo técnico com filas por unidade e resultados de triagem, avaliações, PTS e tratamentos, sem identificação de pacientes.',
+      ], [
+        addTable('Fila por unidade', ['Unidade', 'Aguardando', 'Chamados/atendidos', 'Desistências'], queueUnitRows, 60),
+        addTable('Tipos de tratamento', ['Tipo', 'Ciclos'], treatmentStats.byType.map(t => [t.nome, t.total]), 60),
+      ]);
+
+      if (restrictedAnnex) {
+        addSection('Anexo E — Operacional restrito / dados pessoais', [
+          'CONFIDENCIAL — acesso restrito a Master ou administrador global. Contém dados pessoais para acompanhamento operacional e deve ser compartilhado somente com profissionais autorizados.',
+          'Listagens limitadas a 60 linhas por tabela. Consulte as abas operacionais para a base integral do período.',
+        ], [
+          addTable('Pacientes com faltas', ['Paciente', 'Telefone', 'Unidade', 'Total de faltas', 'Datas'], faltasReport.map(f => [f.nome, f.telefone || 'Não informado', f.unidade || 'Não informado', f.total, f.datas.map(formatDateBR).join(', ')]), 60, 'Exibindo até 60 pacientes.'),
+          addTable('Fila nominal', ['Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada'], filaReport.items.map((f: any) => [f.paciente_nome, unidadesMap.get(f.unidade_id)?.nome || 'Não informado', f.setor, f.prioridade, f.status, f.hora_chegada]), 60, 'Exibindo até 60 registros da fila.'),
+          addTable('Mapa operacional', ['Data', 'Paciente', 'Profissional', 'Procedimento'], mapaData.map(m => [formatDateBR(m.data_atendimento), m.paciente_nome, m.profissional_nome, m.procedimento_sigtap || m.procedimentos_realizados || 'Não informado']), 60, 'Exibindo até 60 registros do mapa.'),
+        ]);
+      }
+
+      addSection('Assinatura do responsável', [
+        'Responsável: ' + responsavelNome + (responsavelCargo ? ' — ' + responsavelCargo : ''),
+        'Emissão: ' + emitidaLabel + ' · Identificador do relatório: ' + reportId + '.',
+      ]);
+
+      const renderHtmlTable = (table: { title: string; headers: string[]; rows: (string | number)[][]; limit?: number; note?: string }) => {
+        const limit = table.limit ?? 60;
+        const shownRows = table.rows.slice(0, limit);
+        const header = table.headers.map(cell => '<th>' + escapeHtml(cell) + '</th>').join('');
+        const rows = shownRows.map(row => '<tr>' + row.map(cell => '<td>' + escapeHtml(cell) + '</td>').join('') + '</tr>').join('');
+        const note = table.rows.length > limit
+          ? '<p class="report-note">Exibidos ' + limit + ' de ' + table.rows.length + ' registros. ' + escapeHtml(table.note || 'Use a exportação específica para consultar a listagem integral.') + '</p>'
+          : (table.note ? '<p class="report-note">' + escapeHtml(table.note) + '</p>' : '');
+        return '<h3 class="report-table-title">' + escapeHtml(table.title) + '</h3><table class="report-table"><thead><tr>' + header + '</tr></thead><tbody>' + rows + '</tbody></table>' + note;
+      };
+      const tocHtml = reportSections.map((section, index) =>
+        '<li><a href="#report-section-' + (index + 1) + '">' + (index + 1) + '. ' + escapeHtml(section.title) + '</a></li>'
+      ).join('');
+      const bodyHtml =
+        '<section class="report-cover"><div><p class="institution">Prefeitura Municipal de Oriximiná — PA</p><p class="institution">Secretaria Municipal de Saúde</p><p class="institution">Centro Especializado em Reabilitação — CER II</p></div>' +
+          '<div><h1>' + escapeHtml(esc.titulo) + '</h1><p>Unidade: <strong>' + escapeHtml(esc.un) + '</strong></p><p>Período: <strong>' + escapeHtml(esc.periodo) + '</strong></p><p>Classificação: ' + (restrictedAnnex ? 'Gerencial + Anexo Operacional Restrito' : 'Gerencial — dados agregados') + '</p></div>' +
+          '<div><p>Oriximiná — Pará</p><p>' + escapeHtml(emitida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })) + '</p><p>ID: ' + escapeHtml(reportId) + '</p></div></section>' +
+        '<section class="report-title-page"><p class="institution">' + escapeHtml(responsavelNome) + '</p><div><h2>' + escapeHtml(esc.titulo) + '</h2><p>Relatório Gerencial Institucional referente a ' + escapeHtml(esc.periodo) + ', com filtros e limites descritos no próprio documento.</p></div><p>Responsável pela emissão: ' + escapeHtml(responsavelNome + (responsavelCargo ? ' — ' + responsavelCargo : '')) + '</p><p>Emitido em ' + escapeHtml(emitidaLabel) + ' · ' + escapeHtml(reportId) + '</p></section>' +
+        '<section class="report-toc"><h2>Sumário</h2><ol>' + tocHtml + '</ol><p class="report-note">Sumário navegável com seções geradas a partir do conteúdo incluído. A paginação do documento aparece no rodapé; números fixos de página não são estimados.</p></section>' +
+        '<div class="report-body">' + reportSections.map((section, index) =>
+          '<section class="report-section" id="report-section-' + (index + 1) + '"><h2>' + (index + 1) + '. ' + escapeHtml(section.title) + '</h2>' +
+          section.paragraphs.map(text => '<p>' + escapeHtml(text) + '</p>').join('') +
+          (section.tables || []).map(renderHtmlTable).join('') +
+          '</section>'
+        ).join('') +
+        '<div class="report-signature">' + docCarimbo(carimbo, { nome: responsavelNome, especialidade: responsavelCargo }) + '</div></div>';
 
       if (format === 'pdf') {
-        const fullHtml = buildDocumentShell(tituloDinamico, bodyHtml, config, {
+        const fullHtml = buildDocumentShell(esc.titulo, bodyHtml, config, {
           ...esc.escopo,
-          "Tipo": "Relatório ABNT"
+          'Tipo': restrictedAnnex ? 'Relatório gerencial + anexo restrito' : 'Relatório gerencial agregado',
+          'Emitido em': emitidaLabel,
+          'Responsável': responsavelNome,
+          'Identificador': reportId,
         });
         printViaIframe(fullHtml);
-        toast.success("Relatório gerado", { description: "O documento foi preparado para impressão/PDF." });
+        toast.success('Relatório PDF preparado', { description: 'O sumário lista somente as seções incluídas e a paginação é gerada no rodapé.' });
       } else {
-        // DOCX institucional completo (espelha as seções do PDF)
-        const H1 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 120 } });
-        const P = (t: string) => new Paragraph({ children: [new TextRun(t || '-')], alignment: AlignmentType.JUSTIFIED, spacing: { after: 120 } });
+        const H1 = (text: string) => new Paragraph({ text, heading: HeadingLevel.HEADING_1, spacing: { before: 360, after: 180, line: 360 }, keepNext: true });
+        const P = (text: string) => new Paragraph({ children: [new TextRun({ text: text || '—', size: 24, font: 'Times New Roman' })], alignment: AlignmentType.JUSTIFIED, spacing: { line: 360, after: 120 } });
         const cellBorder = { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF' };
         const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
-        const mkCell = (text: string, opts: { bold?: boolean; bg?: string } = {}) =>
-          new TableCell({
-            borders: cellBorders,
-            shading: opts.bg ? { fill: opts.bg, type: 'clear' as any, color: 'auto' } : undefined,
-            margins: { top: 60, bottom: 60, left: 80, right: 80 },
-            children: [new Paragraph({ children: [new TextRun({ text: String(text ?? '-'), bold: !!opts.bold, size: 18 })] })],
-          });
-        const mkTable = (headers: string[], rows: (string | number)[][]) => {
-          const colCount = headers.length;
-          const colW = Math.floor(9000 / colCount);
+        const mkCell = (text: unknown, bold = false, bg?: string) => new TableCell({
+          borders: cellBorders,
+          shading: bg ? { fill: bg, type: 'clear' as any, color: 'auto' } : undefined,
+          margins: { top: 70, bottom: 70, left: 90, right: 90 },
+          children: [new Paragraph({ children: [new TextRun({ text: String(text ?? '—'), bold, size: 20, font: 'Times New Roman' })] })],
+        });
+        const mkTable = (table: { headers: string[]; rows: (string | number)[][]; limit?: number }) => {
+          const limit = table.limit ?? 60;
+          const rows = table.rows.slice(0, limit);
+          const colWidth = Math.floor(9000 / table.headers.length);
           return new Table({
             width: { size: 9000, type: WidthType.DXA },
-            columnWidths: Array(colCount).fill(colW),
+            columnWidths: Array(table.headers.length).fill(colWidth),
             rows: [
-              new TableRow({ children: headers.map(h => mkCell(h, { bold: true, bg: 'E8EEF4' })) }),
-              ...rows.slice(0, 60).map(r => new TableRow({ children: r.map(c => mkCell(String(c ?? '-'))) })),
+              new TableRow({ tableHeader: true, children: table.headers.map(header => mkCell(header, true, 'E8EEF4')) }),
+              ...rows.map(row => new TableRow({ cantSplit: true, children: row.map(cell => mkCell(cell)) })),
             ],
           });
         };
-
-        const indicadoresRows: (string | number)[][] = [
-          ['Total de Agendamentos', (stats as any).total ?? (stats as any).totalAgendamentos ?? 0],
-          ['Concluídos', stats.concluidos],
-          ['Faltas', stats.faltas],
-          ['Cancelados', stats.cancelados],
-          ['Remarcados', stats.remarcados],
-          ['Retornos', stats.retornos],
-          ['Taxa de Comparecimento', `${stats.taxaComparecimento}%`],
-          ['Taxa de Falta', `${stats.taxaFalta}%`],
-          ['Tempo Médio', `${tempoStats.tempoMedio} min`],
-          ['Tempo Mínimo', `${tempoStats.tempoMinimo} min`],
-          ['Tempo Máximo', `${tempoStats.tempoMaximo} min`],
-          ['Total de Minutos', `${tempoStats.totalMinutos} min`],
-        ];
-
-        const PageBreakP = () => new Paragraph({ children: [new TextRun({ text: '', break: 1 })], pageBreakBefore: true });
-        const Center = (text: string, opts: { bold?: boolean; size?: number; upper?: boolean; spacing?: number } = {}) =>
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: opts.spacing ?? 120, line: 360 },
-            children: [new TextRun({ text: opts.upper ? text.toUpperCase() : text, bold: opts.bold, size: opts.size ?? 24, font: 'Arial' })],
-          });
-        const Spacer = (n: number = 1) => Array.from({ length: n }, () => new Paragraph({ children: [new TextRun('')], spacing: { line: 360 } }));
-
-        const sections: any[] = [
-          // ===== CAPA ABNT =====
-          ...Spacer(1),
-          Center('PREFEITURA MUNICIPAL DE ORIXIMINÁ – PA', { bold: true, size: 28, upper: true }),
-          Center('SECRETARIA MUNICIPAL DE SAÚDE', { bold: true, size: 26, upper: true }),
-          Center('CENTRO ESPECIALIZADO EM REABILITAÇÃO – CER II', { bold: true, size: 24, upper: true, spacing: 400 }),
-          ...Spacer(6),
-          Center(tituloDinamico, { bold: true, size: 36, upper: true, spacing: 400 }),
-          ...Spacer(2),
-          Center(`Unidade: ${un}`, { size: 26 }),
-          Center(`Período de referência: ${periodo}`, { size: 26 }),
-          Center(`Filtro de profissional: ${profFilter}`, { size: 24, spacing: 400 }),
-          ...Spacer(8),
-          Center('Oriximiná – Pará', { bold: true, size: 24 }),
-          Center(anoMes, { bold: true, size: 24 }),
+        const Center = (text: string, size = 24, bold = false) => new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 120, line: 360 },
+          children: [new TextRun({ text, size, bold, font: 'Times New Roman' })],
+        });
+        const PageBreakP = () => new Paragraph({ pageBreakBefore: true, children: [new TextRun('')] });
+        const coverContent = [
+          Center('PREFEITURA MUNICIPAL DE ORIXIMINÁ — PA', 28, true),
+          Center('SECRETARIA MUNICIPAL DE SAÚDE', 26, true),
+          Center('CENTRO ESPECIALIZADO EM REABILITAÇÃO — CER II', 24, true),
+          ...Array.from({ length: 6 }, () => new Paragraph({ children: [new TextRun('')] })),
+          Center(esc.titulo.toUpperCase(), 34, true),
+          Center('Unidade: ' + esc.un, 24),
+          Center('Período: ' + esc.periodo, 24),
+          Center(restrictedAnnex ? 'Gerencial + Anexo Operacional Restrito' : 'Gerencial — dados agregados', 22),
+          ...Array.from({ length: 7 }, () => new Paragraph({ children: [new TextRun('')] })),
+          Center('Oriximiná — Pará', 24, true),
+          Center(emitida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase(), 24, true),
+          Center('ID: ' + reportId, 18),
           PageBreakP(),
-
-          // ===== FOLHA DE ROSTO =====
-          Center(responsavelNome, { bold: true, size: 24, upper: true, spacing: 400 }),
-          ...Spacer(10),
-          Center(tituloDinamico, { bold: true, size: 30, upper: true, spacing: 300 }),
-          ...Spacer(2),
+          Center(responsavelNome.toUpperCase(), 24, true),
+          ...Array.from({ length: 6 }, () => new Paragraph({ children: [new TextRun('')] })),
+          Center(esc.titulo.toUpperCase(), 30, true),
+          ...Array.from({ length: 2 }, () => new Paragraph({ children: [new TextRun('')] })),
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
             indent: { left: 4500 },
-            spacing: { line: 360, after: 200 },
-            children: [new TextRun({
-              text: `Documento institucional emitido pelo Centro Especializado em Reabilitação – CER II da Secretaria Municipal de Saúde de Oriximiná/PA, contendo a consolidação dos atendimentos, indicadores de produtividade, fluxo de pacientes e análise clínica referentes ao período de ${periodo}.`,
-              size: 22, font: 'Arial',
-            })],
+            spacing: { line: 360, after: 180 },
+            children: [new TextRun({ text: 'Relatório Gerencial Institucional referente a ' + esc.periodo + ', com filtros e limites descritos no próprio documento.', size: 24, font: 'Times New Roman' })],
           }),
-          ...Spacer(8),
-          Center(`Responsável Técnico: ${responsavelNome}${responsavelCargo ? ' – ' + responsavelCargo : ''}`, { size: 22 }),
-          ...Spacer(4),
-          Center('Oriximiná – Pará', { bold: true, size: 24 }),
-          Center(anoMes, { bold: true, size: 24 }),
+          ...Array.from({ length: 5 }, () => new Paragraph({ children: [new TextRun('')] })),
+          Center('Responsável pela emissão: ' + responsavelNome + (responsavelCargo ? ' — ' + responsavelCargo : ''), 22),
+          Center('Emitido em ' + emitidaLabel + ' · ' + reportId, 20),
+          Center('Oriximiná — Pará', 24, true),
           PageBreakP(),
-
-          // ===== SUMÁRIO =====
-          Center('SUMÁRIO', { bold: true, size: 28, upper: true, spacing: 300 }),
-          ...['1. Introdução','2. Metodologia','3. Indicadores Gerais','4. Produtividade por Profissional','5. Relatório por Município','6. Fila de Espera','7. Triagem','8. Análise Clínica','9. Tratamentos','10. Conclusão','11. Recomendações'].map(t =>
-            new Paragraph({
-              spacing: { line: 360, after: 80 },
-              tabStops: [{ type: 'right' as any, position: 9000, leader: 'dot' as any }],
-              children: [
-                new TextRun({ text: t, size: 22, font: 'Arial' }),
-                new TextRun({ text: '\t', size: 22, font: 'Arial' }),
-              ],
-            })
-          ),
+          Center('SUMÁRIO', 28, true),
+          new TableOfContents('Sumário', { hyperlink: true, headingStyleRange: '1-1', pageNumbersEntryLevelsRange: '1-1' }),
+          P('O Word atualiza os números de página do sumário ao abrir ou atualizar os campos do documento.'),
           PageBreakP(),
-
-          // ===== CONTEÚDO =====
-          H1('Escopo do Relatório'),
-          P('Os indicadores e tabelas a seguir refletem exatamente os filtros abaixo aplicados no momento da geração deste documento.'),
-          mkTable(['Campo', 'Valor Aplicado'], Object.entries(esc.escopo).map(([k, v]) => [String(k), String(v)])),
-
-          H1('1. Introdução'), P(intro),
-          H1('2. Metodologia'), P(metodologia),
-
-          H1('3. Indicadores Gerais'),
-          mkTable(['Indicador', 'Valor'], indicadoresRows),
-
-          H1('4. Produtividade por Profissional'),
-          mkTable(
-            ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Tempo Médio', 'Taxa'],
-            porProfissional.map((p: any) => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`])
-          ),
-
-          H1('5. Relatório por Município'),
-          mkTable(
-            ['Município', 'Pacientes', 'Atendimentos', 'Concluídos', 'Faltas', 'Comparecim.'],
-            municipioReport.map((m: any) => [m.municipio, m.pacientesCount, m.atendimentos, m.concluidos, m.faltas, `${m.taxaComparecimento}%`])
-          ),
-
-          H1('6. Fila de Espera'),
-          mkTable(
-            ['Posição', 'Paciente', 'Setor', 'Prioridade', 'Status', 'Chegada'],
-            (filaReport?.items || []).map((f: any) => [f.posicao, f.paciente_nome, f.setor, f.prioridade, f.status, f.hora_chegada])
-          ),
-
-          H1('7. Triagem'),
-          mkTable(
-            ['Indicador', 'Valor'],
-            [
-              ['Total de Triagens', (triagemReport as any)?.total ?? 0],
-              ['Aguardando', (triagemReport as any)?.aguardando ?? 0],
-              ['Concluídas', (triagemReport as any)?.concluidas ?? 0],
-            ]
-          ),
-
-          H1('8. Análise Clínica'),
-          mkTable(
-            ['CID', 'Descrição', 'Quantidade'],
-            ((clinicalReport as any)?.topCids20 || []).slice(0, 20).map((c: any) => [c.cid || '-', c.descricao || '-', c.count ?? 0])
-          ),
-
-          H1('9. Tratamentos'),
-          mkTable(
-            ['Indicador', 'Valor'],
-            [
-              ['Ciclos Ativos', (treatmentStats as any)?.ciclosAtivos ?? (treatmentStats as any)?.ativos ?? 0],
-              ['Sessões Totais', (treatmentStats as any)?.sessoesTotais ?? (treatmentStats as any)?.total ?? 0],
-              ['Sessões Concluídas', (treatmentStats as any)?.sessoesConcluidas ?? (treatmentStats as any)?.concluidas ?? 0],
-            ]
-          ),
-
-          H1('10. Conclusão'), P(analiseExecutiva),
-
-          H1('11. Recomendações'),
-          P('• Reforçar confirmação por WhatsApp para reduzir faltas.'),
-          P('• Revisar filas críticas e ampliar equipe nas especialidades com maior demanda.'),
-          P('• Monitorar continuamente os indicadores de absenteísmo e tempo médio de atendimento.'),
-
-          new Paragraph({ text: '', spacing: { after: 600 } }),
-          new Paragraph({ text: '_______________________________________', alignment: AlignmentType.CENTER }),
-          new Paragraph({ text: responsavelNome, alignment: AlignmentType.CENTER }),
-          responsavelCargo ? new Paragraph({ text: responsavelCargo, alignment: AlignmentType.CENTER }) : new Paragraph({ text: '' }),
         ];
-
+        const docSections = [...coverContent];
+        reportSections.forEach((section, index) => {
+          docSections.push(H1((index + 1) + '. ' + section.title));
+          section.paragraphs.forEach(paragraph => docSections.push(P(paragraph)));
+          (section.tables || []).forEach(table => {
+            docSections.push(new Paragraph({ children: [new TextRun({ text: table.title, bold: true, size: 22, font: 'Times New Roman' })], spacing: { before: 160, after: 80 }, keepNext: true }));
+            docSections.push(mkTable(table));
+            const limit = table.limit ?? 60;
+            if (table.rows.length > limit) {
+              docSections.push(P('Exibidos ' + limit + ' de ' + table.rows.length + ' registros. ' + (table.note || 'Use a exportação específica para consultar a listagem integral.')));
+            } else if (table.note) {
+              docSections.push(P(table.note));
+            }
+          });
+        });
+        const footer = new Footer({
+          children: [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            borderTop: { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF', space: 4 },
+            children: [
+              new TextRun({ text: 'Relatório ' + reportId + ' · Emitido em ' + emitidaLabel + ' · Pág. ', size: 16, font: 'Times New Roman' }),
+              PageNumber.CURRENT,
+              new TextRun({ text: ' / ', size: 16, font: 'Times New Roman' }),
+              PageNumber.TOTAL_PAGES,
+            ],
+          })],
+        });
         const doc = new Document({
+          settings: { updateFields: true },
           styles: {
             default: {
-              document: { run: { font: 'Arial', size: 24 }, paragraph: { spacing: { line: 360 } } },
+              document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { line: 360 } } },
             },
-            paragraphStyles: [
-              { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-                run: { size: 28, bold: true, font: 'Arial' },
-                paragraph: { spacing: { before: 240, after: 120, line: 360 }, outlineLevel: 0 } },
-            ],
+            paragraphStyles: [{
+              id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+              run: { size: 28, bold: true, font: 'Times New Roman' },
+              paragraph: { spacing: { before: 360, after: 180, line: 360 }, outlineLevel: 0 },
+            }],
           },
           sections: [{
             properties: { page: { margin: { top: 1701, right: 1134, bottom: 1134, left: 1701 } } },
-            children: sections,
+            footers: { default: footer },
+            children: docSections,
           }],
         });
-
-
         const buffer = await Packer.toBlob(doc);
-        saveAs(buffer, `Relatorio_Completo_${new Date().toISOString().split('T')[0]}.docx`);
-        toast.success('Documento Word gerado', { description: 'O download foi iniciado.' });
+        saveAs(buffer, 'Relatorio_Institucional_' + emitida.toISOString().slice(0, 10) + '.docx');
+        toast.success('Documento Word gerado', { description: 'O conteúdo corresponde ao relatório gerencial e o sumário é atualizável no Word.' });
       }
     } catch (err) {
-      console.error("[exportCompleteReport] erro:", err);
-      toast.error("Erro ao gerar relatório", { description: "Não foi possível consolidar os dados." });
+      console.error('[exportCompleteReport] erro:', err);
+      toast.error('Erro ao gerar relatório', { description: 'Não foi possível consolidar os dados.' });
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais, buildEscopo, filtered, tempoStats]);
+  }, [stats, clinicalReport, clinicalSearch, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, pacientesReport, pacientes, pacientesMap, procedimentosDB, ptsData, ptsCidData, cid10Descriptions, partialTables, profissionaisMap, user, filterUnit, filterProf, filterStatus, filterSetor, filterTipo, dateFrom, dateTo, unidadesMap, buildEscopo, filtered, tempoStats, canExportRestrictedReport, normalizeStatus]);
 
 
   return (
@@ -3018,8 +2987,22 @@ ${dataRows}
             loadingText="Gerando..."
           >
             <BookOpen className="w-4 h-4 mr-2" />
-            Relatório Completo ABNT
+            Relatório ABNT · PDF gerencial
           </ActionButton>
+          <Button variant="outline" size="sm" onClick={() => exportCompleteReport('docx')}>
+            <Download className="w-4 h-4 mr-2" />Word gerencial
+          </Button>
+          {canExportRestrictedReport && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-amber-500 text-amber-800 hover:bg-amber-50"
+              title="Inclui listagens nominais de faltas, fila e mapa de atendimentos. Compartilhe somente com pessoas autorizadas."
+              onClick={() => exportCompleteReport('pdf', true)}
+            >
+              <BookOpen className="w-4 h-4 mr-2" />PDF + anexo restrito
+            </Button>
+          )}
 
           <div className="h-8 w-px bg-border mx-1 hidden sm:block" />
 
