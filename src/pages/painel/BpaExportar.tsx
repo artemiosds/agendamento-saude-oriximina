@@ -3356,7 +3356,26 @@ const BpaExportar: React.FC = () => {
         )
         .join("");
 
-      const pendAud = [...(results.pendRows || [])].sort(cmpAlfa);
+      // As rejeições CID × procedimento já aparecem na seção própria; não repetir
+      // o motivo técnico na tabela geral de auditoria. Outras pendências do registro permanecem.
+      const chaveRejeicaoCid = (paciente: any, data: any, codigo: any) =>
+        `${String(paciente || "").trim().toLocaleUpperCase("pt-BR")}|${String(data || "").slice(0, 10)}|${String(codigo || "").replace(/\\D/g, "")}`;
+      const chavesRejeicaoCid = new Set(
+        rejeitadosCidRef.current.map((r) => chaveRejeicaoCid(r.paciente, r.data, r.codigo)),
+      );
+      const pendAud = (results.pendRows || [])
+        .map((r: any) => {
+          const cidRejeitado =
+            chavesRejeicaoCid.has(chaveRejeicaoCid(r.paciente_nome, r.data_atendimento, r.codigo_sigtap)) ||
+            /CID incompat[ií]vel com o procedimento/i.test(String(r.valor_atual || r.motivo || ""));
+          if (!cidRejeitado) return r;
+          const pendencias = (r.pendencias || []).filter(
+            (p: string) => p !== "Procedimento incompatível (não exportado)",
+          );
+          return { ...r, pendencias, valor_atual: "", motivo: "" };
+        })
+        .filter((r: any) => r.pendencias?.length || r.valor_atual || r.motivo)
+        .sort(cmpAlfa);
       const auditHtml = pendAud.length
         ? `<h3 style="margin:14px 0 6px;font-size:11pt;color:#92400e;page-break-before:auto">Auditoria: Registros com Pendências (${pendAud.length})</h3>
 <table class="bpa-table"><thead><tr><th>Paciente</th><th>Atendimento</th><th>SIGTAP</th><th>Pendências</th><th>Detalhe</th></tr></thead><tbody>${pendAud
