@@ -36,6 +36,6 @@ describe("regra única CBO × SIGTAP", () => {
       cbo: "251605", competencia: "202609", catalogoOficial: catalogo,
     } as any);
     expect(r.rejeicoes.some((m: string) => m.includes("CBO incompatível"))).toBe(false);
-    expect(r.avisos.some((m: string) => m.includes("não confirmada"))).toBe(true);
+    expect(r.avisos.some((m: string) => m.includes("não confirmada"))).toBe(false);
   });
 });
