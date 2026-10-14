@@ -1614,7 +1614,7 @@ const Relatorios: React.FC = () => {
       headers = ['Bloco', 'Item', 'Quantidade', 'Percentual'];
       const tot = clinicalReport.kpis.totalPacientesComCID || 1;
       const blocks: string[][] = [];
-      blocks.push(['KPI', 'Total com CID', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
+      blocks.push(['KPI', 'Total (CID + Cadastro)', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
       blocks.push(['KPI', 'TEA/Autismo', String(clinicalReport.kpis.tea), `${((clinicalReport.kpis.tea/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Física', String(clinicalReport.kpis.fisica), `${((clinicalReport.kpis.fisica/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Intelectual', String(clinicalReport.kpis.intelectual), `${((clinicalReport.kpis.intelectual/tot)*100).toFixed(1)}%`]);
@@ -1694,7 +1694,7 @@ const Relatorios: React.FC = () => {
       headers = ['Bloco', 'Item', 'Quantidade', 'Percentual'];
       const tot = clinicalReport.kpis.totalPacientesComCID || 1;
       const blocks: string[][] = [];
-      blocks.push(['KPI', 'Total com CID', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
+      blocks.push(['KPI', 'Total (CID + Cadastro)', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
       blocks.push(['KPI', 'TEA/Autismo', String(clinicalReport.kpis.tea), `${((clinicalReport.kpis.tea/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Física', String(clinicalReport.kpis.fisica), `${((clinicalReport.kpis.fisica/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Intelectual', String(clinicalReport.kpis.intelectual), `${((clinicalReport.kpis.intelectual/tot)*100).toFixed(1)}%`]);
@@ -1839,7 +1839,7 @@ ${dataRows}
         const k = clinicalReport.kpis;
         const tot = k.totalPacientesComCID || 1;
         addTable('Indicadores CER II', ['Indicador', 'Quantidade', '% sobre total'], [
-          ['Total com CID', k.totalPacientesComCID, '100%'],
+          ['Total (CID + Cadastro)', k.totalPacientesComCID, '100%'],
           ['TEA / Autismo', k.tea, `${((k.tea/tot)*100).toFixed(1)}%`],
           ['Deficiência Física', k.fisica, `${((k.fisica/tot)*100).toFixed(1)}%`],
           ['Deficiência Intelectual', k.intelectual, `${((k.intelectual/tot)*100).toFixed(1)}%`],
