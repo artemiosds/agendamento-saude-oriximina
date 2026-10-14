@@ -11,8 +11,8 @@ describe("regra única CBO × SIGTAP", () => {
   it("CBO listado e permitido", () => expect(avaliarCboSigtap(proc(["223810"]), "223810")).toBe("permitido"));
   it("CBO listado e não permitido", () => expect(avaliarCboSigtap(proc(["223810"]), "251605")).toBe("incompativel"));
   it("lista vazia com atributo 021", () => expect(avaliarCboSigtap(proc([], ["021"]), "251605")).toBe("nao_exige_cbo"));
-  it("lista vazia sem 021 não é incompatível", () => expect(avaliarCboSigtap(proc([], ["009"]), "251605")).toBe("nao_confirmavel"));
-  it("lista vazia com arquivo de atributos ausente", () => expect(avaliarCboSigtap(proc([]), "251605")).toBe("nao_confirmavel"));
+  it("lista vazia sem 021 é compatível", () => expect(avaliarCboSigtap(proc([], ["009"]), "251605")).toBe("permitido"));
+  it("lista vazia com arquivo de atributos ausente é compatível", () => expect(avaliarCboSigtap(proc([]), "251605")).toBe("permitido"));
 
   it("lê o atributo 021 de rl_procedimento_detalhe na competência", () => {
     const linhaProc = "0301040079".padEnd(330, " ") + "202609";

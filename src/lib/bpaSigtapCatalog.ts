@@ -248,7 +248,9 @@ export function avaliarCboSigtap(
 ): SigtapCboStatus {
   if (proc.cbos.size > 0) return proc.cbos.has(cbo) ? "permitido" : "incompativel";
   if (proc.detalhes?.has(SIGTAP_DETALHE_NAO_EXIGE_CBO)) return "nao_exige_cbo";
-  return "nao_confirmavel";
+  // Sem CBO relacionado no SIGTAP: o procedimento não restringe ocupação.
+  // Tratado como compatível (verde) para não gerar perda de produção.
+  return "permitido";
 }
 
 export function mensagemCboSigtap(
