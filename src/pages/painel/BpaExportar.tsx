@@ -2240,7 +2240,7 @@ const BpaExportar: React.FC = () => {
 
           for (const rej of validacaoProcs.rejeitados) {
             stats.rejectedProc++;
-            registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10));
+            registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
             const motivo = rej.rejeicoes.join(" | ");
             resumoIntegridade.rejeitados.push({
               paciente: nome_pac || ident,
@@ -2426,6 +2426,13 @@ const BpaExportar: React.FC = () => {
           const endereco = enderecoBpa.logradouro;
           const numero = enderecoBpa.numero || "S/N";
           const temEndereco = !!String(enderecoOriginal).trim();
+          for (const rj of rejeitadosCidRef.current) {
+            if (rj.prontId && rj.prontId === pront.id) {
+              rj.tipoLog = enderecoBpa.tipoLogradouro || rj.tipoLog;
+              rj.logradouro = endereco || rj.logradouro;
+              rj.numero = numero || rj.numero;
+            }
+          }
 
           if (!codigoLogradouro && temEndereco) {
             // Campo 200–202 é opcional no layout: sem correspondência segura no
@@ -2496,7 +2503,7 @@ const BpaExportar: React.FC = () => {
               resumoIntegridade.totalProcedimentosValidos += listaParaEmitir.length;
               for (const rej of valFallback.rejeitados) {
                 stats.rejectedProc++;
-                registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10));
+                registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
                 const motivo = rej.rejeicoes.join(" | ");
                 resumoIntegridade.rejeitados.push({
                   paciente: nome_pac || ident,
@@ -2579,7 +2586,7 @@ const BpaExportar: React.FC = () => {
                 });
               } else if (validacaoLinhaFinal.rejeitados.length > 0) {
                 const rejFinal = validacaoLinhaFinal.rejeitados[0];
-                registrarRejeicaoCid(rejFinal, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10));
+                registrarRejeicaoCid(rejFinal, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
                 const motivoFinal = rejFinal.rejeicoes.join(" | ");
                 stats.rejectedProc++;
                 resumoIntegridade.rejeitados.push({
