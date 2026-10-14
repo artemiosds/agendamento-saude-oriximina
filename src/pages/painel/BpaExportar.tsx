@@ -883,8 +883,10 @@ const BpaExportar: React.FC = () => {
     data: string,
     extra: RejCidExtra = {},
   ) => {
-    // Captura toda rejeição de procedimento (CID, idade, instrumento etc.) apenas para a
-    // Conferência impressa. Não interfere no TXT, contadores ou validação.
+    // Captura apenas rejeições exclusivamente por CID × procedimento (idade, faixa,
+    // instrumento etc. ficam fora) para a Conferência impressa. Não interfere no TXT.
+    const motivos = (rej.rejeicoes || []).filter((m) => String(m || "").trim());
+    if (!motivos.length || !motivos.every((m) => /\bCID\b/i.test(String(m)))) return;
     rejeitadosCidRef.current.push({ paciente, data, codigo: String(rej.codigo || ""), cid: String(rej.cid || ""), origem: rej.origem, ...extra });
   };
   const extraRejeicao = (pront: any, pac: any, cns: string, nasc: string, sexo: string, dataBpa: string): RejCidExtra => {
@@ -3428,7 +3430,8 @@ const BpaExportar: React.FC = () => {
           cid_usado: "",
           _ctx: { origem_sigtap: r.origem_sigtap || "" },
         }));
-      const confSorted = [...results.confRows, ...linhasRejeitadas, ...linhasPendentes].sort(cmpAlfa);
+      void linhasPendentes; // pendências cadastrais não entram na Conferência
+      const confSorted = [...results.confRows, ...linhasRejeitadas].sort(cmpAlfa);
       const rowsHtml = confSorted
         .map(
           (r: any) => `
