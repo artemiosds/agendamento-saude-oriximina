@@ -870,6 +870,13 @@ const BpaExportar: React.FC = () => {
     item: null,
   });
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  // Apenas para a Conferência impressa: procedimentos do prontuário que não
+  // entraram no TXT por CID × procedimento. Não interfere no TXT nem contadores.
+  const rejeitadosCidRef = useRef<Array<{ paciente: string; data: string; codigo: string; cid: string }>>([]);
+  const registrarRejeicaoCid = (rej: { codigo?: string; cid?: string; rejeicoes?: string[] }, paciente: string, data: string) => {
+    if (!(rej.rejeicoes || []).some((m) => /^CID incompat[ií]vel com o procedimento/i.test(m))) return;
+    rejeitadosCidRef.current.push({ paciente, data, codigo: String(rej.codigo || ""), cid: String(rej.cid || "") });
+  };
 
   useEffect(() => {
     if (!loading) {
@@ -1767,6 +1774,7 @@ const BpaExportar: React.FC = () => {
       const itensControle: Array<{ procedimento: string; quantidade: string }> = [];
       const confRows: any[] = [];
       const pendRows: any[] = [];
+      rejeitadosCidRef.current = [];
       const chavesAtendimentos = new Set<string>();
       const chavesLinhasBpa = new Set<string>();
       const errosEstruturais: Array<BpaLayoutIssue & {
@@ -2212,6 +2220,7 @@ const BpaExportar: React.FC = () => {
 
           for (const rej of validacaoProcs.rejeitados) {
             stats.rejectedProc++;
+            registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10));
             const motivo = rej.rejeicoes.join(" | ");
             resumoIntegridade.rejeitados.push({
               paciente: nome_pac || ident,
@@ -2467,6 +2476,7 @@ const BpaExportar: React.FC = () => {
               resumoIntegridade.totalProcedimentosValidos += listaParaEmitir.length;
               for (const rej of valFallback.rejeitados) {
                 stats.rejectedProc++;
+                registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10));
                 const motivo = rej.rejeicoes.join(" | ");
                 resumoIntegridade.rejeitados.push({
                   paciente: nome_pac || ident,
@@ -2549,6 +2559,7 @@ const BpaExportar: React.FC = () => {
                 });
               } else if (validacaoLinhaFinal.rejeitados.length > 0) {
                 const rejFinal = validacaoLinhaFinal.rejeitados[0];
+                registrarRejeicaoCid(rejFinal, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10));
                 const motivoFinal = rejFinal.rejeicoes.join(" | ");
                 stats.rejectedProc++;
                 resumoIntegridade.rejeitados.push({
@@ -3355,6 +3366,28 @@ const BpaExportar: React.FC = () => {
             .join("")}</tbody></table>`
         : "";
 
+      const rejCid = [...rejeitadosCidRef.current].sort((x, y) =>
+        x.paciente.localeCompare(y.paciente, "pt-BR") || x.data.localeCompare(y.data));
+      let rejeitadosHtml = "";
+      if (rejCid.length) {
+        const nomes = new Map<string, string>();
+        try {
+          const codigos = [...new Set(rejCid.map((r) => sigtapCodigoExibicao(r.codigo) || r.codigo))];
+          const { data } = await supabase.from("sigtap_procedimentos").select("codigo, nome").in("codigo", codigos);
+          for (const d of data || []) nomes.set(String(d.codigo).replace(/\D/g, ""), d.nome);
+        } catch { /* nome é opcional */ }
+        const fmtData = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split("-").reverse().join("/") : d;
+        rejeitadosHtml = `<h3 style="margin:14px 0 4px;font-size:11pt;color:#7f1d1d">Procedimentos rejeitados (${rejCid.length})</h3>
+<p style="margin:0 0 6px;font-size:9pt">Os procedimentos abaixo estão registrados no prontuário, mas <b>não foram incluídos no arquivo TXT</b>. Não constam como exportados nem faturados.</p>
+<table class="bpa-table"><thead><tr><th>Paciente</th><th>Data do atendimento</th><th>Procedimento</th><th>CID registrado</th></tr></thead><tbody>${rejCid
+          .map((r) => {
+            const cod = sigtapCodigoExibicao(r.codigo) || r.codigo || "—";
+            const nome = nomes.get(String(r.codigo).replace(/\D/g, "")) || "";
+            return `<tr><td class="nome">${esc(r.paciente.toUpperCase())}</td><td class="c">${esc(fmtData(r.data))}</td><td>${esc(cod)}${nome ? ` — ${esc(nome)}` : ""}</td><td class="c">${esc(cidExibicao(r.cid) || r.cid || "—")}</td></tr>`;
+          })
+          .join("")}</tbody></table>`;
+      }
+
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
       // Não é position:fixed, portanto não sobrepõe o conteúdo.
       const respo = esc(user?.nome || user?.usuario || "—");
@@ -3416,6 +3449,7 @@ const BpaExportar: React.FC = () => {
   </tr></thead>
   <tbody>${rowsHtml}</tbody>
 </table>
+${rejeitadosHtml}
 ${auditHtml}`;
 
       const config = await loadDocumentConfig();
