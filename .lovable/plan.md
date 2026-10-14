@@ -1,23 +1,35 @@
-# Diagnóstico (somente leitura) — CBO 251605 x SIGTAP 0301040079
+# Correção geral da regra de CBO no BPA (I e C)
 
-Nenhum código, banco, configuração ou dado foi alterado. Nenhum registro pessoal foi consultado.
+## Achados confirmados (SIGTAP 202609, leitura)
+- `tb_detalhe.txt`: atributo **021 = "Não Exige CBO"** existe (layout `rl_procedimento_detalhe`: procedimento 1-10, detalhe 11-13, competência 14-19).
+- 56 procedimentos têm o 021 e **nenhum** deles tem linhas em `rl_procedimento_ocupacao`.
+- **0301040079**: nenhum CBO listado e **não tem o 021**, só o 009 (Exige CPF/CNS). Instrumentos 01 e 02. Pelas regras que você definiu, ele cai no caso "lista vazia sem confirmação": a compatibilidade não pode ser confirmada. Isso gera um aviso, sem erro de cadastro e sem descartar a produção.
+- Hoje a regra `!cbos.has(cbo)` aparece em 5 pontos, e todos recusam quando a lista está vazia:
+  - `sigtapClinicalValidation.ts:231` (referência anterior) e `:293` (tela e seletor)
+  - `bpaFinalValidation.ts:279` (validação final)
+  - `BpaExportar.tsx:2708` (contagem de exceções) e `:2830` (auditoria do TXT)
+- `generate-bpa` (função remota) só confere se o CBO existe. Fica fora da mudança, como você pediu.
 
-## Evidências
-- Competência carregada: `loadBpaSigtapCatalog` (src/lib/bpaSigtapCatalog.ts) usa a competência pedida ou a mais recente anterior. A mais recente publicada é `TabelaUnificada_202609_v2610050950.zip`; atendimentos de 10/2026 usam 202609 como referência.
-- `tb_procedimento.txt` 202609: 0301040079 "ESCUTA INICIAL / ORIENTAÇÃO (ACOLHIMENTO A DEMANDA ESPONTÂNEA)" está vigente.
-- `rl_procedimento_registro.txt` 202609: instrumentos 01 (BPA-C) e 02 (BPA-I).
-- `rl_procedimento_ocupacao.txt`: **zero linhas** para 0301040079 em 202607, 202608 e 202609 (nem 251605, nem outro CBO). Outros códigos aparecem normalmente (ex.: 0301010072 tem 69 linhas).
-- Leitura das posições está correta: linhas com 22 caracteres + CRLF, procedimento 1-10, CBO 11-16, competência 17-22 (`line.slice(0,10)`, `slice(10,16)`, `slice(16,22)`).
-- Regra que gera a crítica: `validarCompatibilidadeClinicaSigtap` em src/lib/sigtapClinicalValidation.ts, linha ~293: `if (!proc.cbos.has(cbo))`. Com a lista de CBOs vazia, qualquer CBO é recusado.
+## Regra única (nova função `avaliarCboSigtap` em `bpaSigtapCatalog.ts`)
+Resultado possível: `permitido` | `incompativel` | `nao_exige_cbo` | `nao_confirmavel`.
+1. Lista com CBOs: o CBO precisa estar nela (`permitido` ou `incompativel`).
+2. Lista vazia e atributo 021: `nao_exige_cbo`. Válido, com uma observação.
+3. Lista vazia sem 021: `nao_confirmavel`. Aparece um aviso "compatibilidade de CBO não confirmada pelo SIGTAP X". Não conta como incompatível, não aponta erro no profissional e não exclui a linha.
+- CID, idade, sexo, instrumento, competência e as listas do Master continuam iguais.
 
-## Respostas
-1. O SIGTAP 202609 não lista 251605 para 0301040079, mas também não lista nenhum CBO. Para esse código, a tabela não traz restrição de ocupação.
-2. O carregamento e a leitura de `rl_procedimento_ocupacao.txt` estão corretos (posições, competência e normalização).
-3. Causa provável: outro caminho de validação. O app entende "sem CBO relacionado" como "nenhum CBO permitido" e acusa incompatível. Não é falha de leitura do arquivo. O CBO do cadastro não é o motivo: mesmo com 251605, a crítica apareceria.
-4. Arquivos e funções: `parseBpaSigtapCatalog` / `loadBpaSigtapCatalog` (bpaSigtapCatalog.ts) e `validarCompatibilidadeClinicaSigtap` (sigtapClinicalValidation.ts:293-297).
+## Mudanças
+- `bpaSigtapCatalog.ts`: incluir `rl_procedimento_detalhe.txt` como arquivo opcional. Se faltar, o 021 fica como "desconhecido" e o caso vira `nao_confirmavel`. Novo campo `detalhes: Set<string>`. A competência de referência efetiva continua exposta.
+- `sigtapClinicalValidation.ts`, `bpaFinalValidation.ts` e `BpaExportar.tsx` passam a usar `avaliarCboSigtap`. Assim a tela, a validação final e o TXT seguem a mesma regra.
+- As mensagens mostram a competência de referência usada quando for diferente da selecionada.
 
-## Conclusão
-**Falha confirmada na regra de validação.** O arquivo SIGTAP e a leitura estão certos. O erro está em tratar uma lista de CBOs vazia como proibição. Falta confirmar, na norma do DATASUS ou no SIA, se esse código sem ocupação relacionada é aceito no BPA-I sem crítica de CBO. Isso precisa ser confirmado antes de qualquer correção.
+## Testes (vitest)
+- CBO listado e permitido
+- CBO listado e não permitido
+- Lista vazia com 021
+- Lista vazia sem 021
+- Competência indisponível
+- 0301040079 com CBO 251605, que deve resultar em `nao_confirmavel`, sem rejeição
+- Atualizar os testes atuais de `sigtapClinicalValidation` e `bpaExportSafety` se forem afetados.
 
-## Próximo passo sugerido (só com sua autorização)
-Quando a lista de CBOs do procedimento estiver vazia, mostrar um aviso em vez de bloquear. A recusa continua valendo para quem tem CBO listado. Será criado um teste para 0301040079 com CBO 251605.
+## Fora do escopo
+Banco, migrations, funções remotas, cadastros, publicação e arquivos de documentação.
