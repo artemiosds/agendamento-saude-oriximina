@@ -1467,16 +1467,21 @@ const BpaExportar: React.FC = () => {
       // IMPORTANTE: o horário de referência é o do ATENDIMENTO AGENDADO, não o
       // horário em que o prontuário foi digitado (que costuma ser horas depois).
       if (formData.turno && formData.turno !== "todos") {
-        const periodoDe = (hora: string): "manha" | "tarde" | "noite" | "" => {
+        // Mesma regra da Agenda: Manhã < 12:00; Tarde ≥ 12:00 (a Agenda não
+        // separa noite). "Noite" só seleciona horários agendados ≥ 18:00.
+        const casaTurno = (hora: string, turno: string): boolean | null => {
           const h = String(hora || "").slice(0, 5);
-          if (!/^\d{2}:\d{2}$/.test(h)) return "";
-          if (h < "12:00") return "manha";
-          if (h < "18:00") return "tarde";
-          return "noite";
+          if (!/^\d{2}:\d{2}$/.test(h)) return null;
+          if (turno === "manha") return h < "12:00";
+          if (turno === "tarde") return h >= "12:00";
+          if (turno === "noite") return h >= "18:00";
+          return true;
         };
 
-        // Resolve a hora da agenda em lote para os prontuários vinculados.
+        // Resolve a hora da agenda em lote: por agendamento_id e, como
+        // reserva, por paciente + profissional + data.
         const horaPorAgendamento = new Map<string, string>();
+        const horaPorChave = new Map<string, string>();
         try {
           const agIdsTurno = [
             ...new Set(
@@ -1496,24 +1501,48 @@ const BpaExportar: React.FC = () => {
               if (a?.id && a?.hora) horaPorAgendamento.set(String(a.id), String(a.hora).slice(0, 5));
             });
           }
+          const semVinculo = prontuarios.some(
+            (p: any) => !horaPorAgendamento.has(String(p?.agendamento_id || "")),
+          );
+          if (semVinculo) {
+            const agsDia = await fetchAllRowsBpa<any>(() => {
+              let q = (supabase as any)
+                .from("agendamentos")
+                .select("id, paciente_id, profissional_id, data, hora")
+                .gte("data", startDate)
+                .lte("data", endDate)
+                .order("id", { ascending: true });
+              if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+              if (formData.profissional_id !== "all") q = q.eq("profissional_id", formData.profissional_id);
+              return q;
+            });
+            ((agsDia as any[]) || []).forEach((a: any) => {
+              const k = `${a.paciente_id}|${a.profissional_id}|${String(a.data).slice(0, 10)}`;
+              const h = String(a?.hora || "").slice(0, 5);
+              if (!h) return;
+              const atual = horaPorChave.get(k);
+              if (!atual || h < atual) horaPorChave.set(k, h);
+            });
+          }
         } catch (e) {
           console.warn("[BPA-Exportar] falha ao resolver hora da agenda para turno:", e);
         }
 
         const horaDeReferencia = (p: any): string =>
           horaPorAgendamento.get(String(p?.agendamento_id || "")) ||
+          horaPorChave.get(`${p?.paciente_id}|${p?.profissional_id}|${String(p?.data_atendimento || "").slice(0, 10)}`) ||
           String(p?.hora_atendimento || "").slice(0, 5);
 
         let semHora = 0;
         const filtrados = prontuarios.filter((p: any) => {
-          const per = periodoDe(horaDeReferencia(p));
-          if (!per) {
+          const ok = casaTurno(horaDeReferencia(p), formData.turno);
+          if (ok === null) {
             // Sem horário conhecido: mantém na exportação para não perder
             // produção válida, apenas informa no resumo.
             semHora++;
             return true;
           }
-          return per === formData.turno;
+          return ok;
         });
         const foraDoTurno = prontuarios.length - filtrados.length;
         if (foraDoTurno > 0) {
