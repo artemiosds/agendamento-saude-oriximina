@@ -854,9 +854,18 @@ const Relatorios: React.FC = () => {
     });
 
     // 4ª prioridade / fallback: inclui pacientes cujo único CID está no cadastro base.
+    // Também registra sinalizações cadastrais (TEA, tipo de condição, mobilidade).
+    const sinalizacoes: Record<string, Set<string>> = {};
     pacientes.forEach((pac: any) => {
       const ps = getOrCreatePatient(pac.id, pac.nome);
       addCids(ps, pac.cid, 'cadastro');
+      const tipo = String(pac.tipo_condicao ?? pac.tipoCondicao ?? '').toLowerCase();
+      const mob = String(pac.mobilidade ?? '').toLowerCase();
+      const flags = new Set<string>();
+      if (pac.isAutista || pac.is_autista || tipo === 'tea') flags.add('TEA / Autismo');
+      if (tipo === 'intelectual') flags.add('Deficiência Intelectual');
+      if (tipo === 'fisica' || /cadeira_rodas|acamado|muleta_andador/.test(mob)) flags.add('Deficiência Física');
+      if (flags.size > 0) sinalizacoes[pac.id] = flags;
     });
 
     // Categorização a partir dos CIDs válidos (canônicos).
@@ -873,9 +882,22 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    // Somente pacientes com pelo menos 1 CID válido entram na Análise Clínica.
+    // Reconhecimento híbrido: condição cadastral entra na categoria mesmo sem CID.
+    Object.entries(sinalizacoes).forEach(([id, flags]) => {
+      const ps = patientStats[id];
+      if (!ps) return;
+      flags.forEach(f => {
+        if (!ps.categories.has(f)) {
+          ps.categories.add(f);
+          ps.origens.add('cadastro');
+          (ps as any).sinalizadoSemCid = ((ps as any).sinalizadoSemCid || []).concat(f);
+        }
+      });
+    });
+
+    // Entram na Análise Clínica pacientes com CID válido OU condição cadastral sinalizada.
     Object.keys(patientStats).forEach(id => {
-      if (patientStats[id].cids.size === 0) delete patientStats[id];
+      if (patientStats[id].cids.size === 0 && patientStats[id].categories.size === 0) delete patientStats[id];
     });
 
     let patientsList = Object.values(patientStats);
