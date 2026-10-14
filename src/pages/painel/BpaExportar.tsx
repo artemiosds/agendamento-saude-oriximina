@@ -872,10 +872,30 @@ const BpaExportar: React.FC = () => {
   const resultsRef = useRef<HTMLDivElement | null>(null);
   // Apenas para a Conferência impressa: procedimentos do prontuário que não
   // entraram no TXT por CID × procedimento. Não interfere no TXT nem contadores.
-  const rejeitadosCidRef = useRef<Array<{ paciente: string; data: string; codigo: string; cid: string }>>([]);
-  const registrarRejeicaoCid = (rej: { codigo?: string; cid?: string; rejeicoes?: string[] }, paciente: string, data: string) => {
+  type RejCidExtra = {
+    prontId?: string; cns?: string; nasc?: string; sexo?: string; dataBpa?: string;
+    tipoLog?: string; logradouro?: string; numero?: string; bairro?: string;
+  };
+  const rejeitadosCidRef = useRef<Array<{ paciente: string; data: string; codigo: string; cid: string; origem?: string } & RejCidExtra>>([]);
+  const registrarRejeicaoCid = (
+    rej: { codigo?: string; cid?: string; origem?: string; rejeicoes?: string[] },
+    paciente: string,
+    data: string,
+    extra: RejCidExtra = {},
+  ) => {
     if (!(rej.rejeicoes || []).some((m) => /^CID incompat[ií]vel com o procedimento/i.test(m))) return;
-    rejeitadosCidRef.current.push({ paciente, data, codigo: String(rej.codigo || ""), cid: String(rej.cid || "") });
+    rejeitadosCidRef.current.push({ paciente, data, codigo: String(rej.codigo || ""), cid: String(rej.cid || ""), origem: rej.origem, ...extra });
+  };
+  const extraRejeicao = (pront: any, pac: any, cns: string, nasc: string, sexo: string, dataBpa: string): RejCidExtra => {
+    const cd = (pac?.custom_data as any) || {};
+    const pick = (...v: any[]) => String(v.find((x) => x !== undefined && x !== null && String(x).trim() !== "") ?? "");
+    return {
+      prontId: pront?.id, cns, nasc, sexo, dataBpa,
+      tipoLog: pick(cd.codigo_logradouro, cd.tipo_logradouro_codigo, pac?.tipo_logradouro, cd.tipo_logradouro),
+      logradouro: pick(pac?.logradouro, cd.logradouro, pac?.endereco, cd.endereco),
+      numero: pick(pac?.numero, cd.numero) || "S/N",
+      bairro: pick(pac?.bairro, cd.bairro),
+    };
   };
 
   useEffect(() => {
