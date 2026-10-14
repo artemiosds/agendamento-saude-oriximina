@@ -16,6 +16,7 @@
 
 import { isValidCnsAlgo } from "./bpaNormalization";
 import type { BpaSigtapCatalog } from "./bpaSigtapCatalog";
+import { avaliarCboSigtap, mensagemCboSigtap } from "./bpaSigtapCatalog";
 
 const digits = (v: any) => String(v ?? "").replace(/\D/g, "");
 

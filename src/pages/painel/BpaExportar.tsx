@@ -25,7 +25,7 @@ import {
   type CepInfo,
 } from "@/lib/bpaNormalization";
 import { validarListaProcedimentosBpaI } from "@/lib/bpaFinalValidation";
-import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo } from "@/lib/bpaSigtapCatalog";
+import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo, avaliarCboSigtap } from "@/lib/bpaSigtapCatalog";
 import { isBpaAttendanceInCompetence } from "@/lib/bpaCompetencia";
 import {
   BPA_HEADER_LENGTH,

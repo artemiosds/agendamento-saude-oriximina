@@ -339,7 +339,8 @@ export async function validarCompatibilidadeClinicaSigtap(
 
   const incompleteRequiredValidation =
     avisos.some((a) => a.includes("faixa etária")) ||
-    avisos.some((a) => a.includes("Sexo do paciente"));
+    avisos.some((a) => a.includes("Sexo do paciente")) ||
+    cboStatus === "nao_confirmavel";
 
   return {
     ...base,
