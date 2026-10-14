@@ -2926,7 +2926,7 @@ ${dataRows}
         const footer = new Footer({
           children: [new Paragraph({
             alignment: AlignmentType.CENTER,
-            borderTop: { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF', space: 4 },
+            border: { top: { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF', space: 4 } },
             children: [
               new TextRun({ text: 'Relatório ' + reportId + ' · Emitido em ' + emitidaLabel + ' · Pág. ', size: 16, font: 'Times New Roman' }),
               new TextRun({ children: [PageNumber.CURRENT], size: 16, font: 'Times New Roman' }),
