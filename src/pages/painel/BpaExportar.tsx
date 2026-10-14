@@ -883,7 +883,8 @@ const BpaExportar: React.FC = () => {
     data: string,
     extra: RejCidExtra = {},
   ) => {
-    if (!(rej.rejeicoes || []).some((m) => /^CID incompat[ií]vel com o procedimento/i.test(m))) return;
+    // Captura toda rejeição de procedimento (CID, idade, instrumento etc.) apenas para a
+    // Conferência impressa. Não interfere no TXT, contadores ou validação.
     rejeitadosCidRef.current.push({ paciente, data, codigo: String(rej.codigo || ""), cid: String(rej.cid || ""), origem: rej.origem, ...extra });
   };
   const extraRejeicao = (pront: any, pac: any, cns: string, nasc: string, sexo: string, dataBpa: string): RejCidExtra => {
@@ -2766,6 +2767,7 @@ const BpaExportar: React.FC = () => {
                   usou_padrao: !procEntry.codigo || procEntry.origem === "Padrão (form)",
                   origem: String(registroFinal.origemAtendimento || ""),
                   origem_sigtap: String(registroFinal.origemSigtap || ""),
+                  pront_id: String(pront?.id || ""),
                   origem_sigtap_real: procEntry.origem,
                   profissao_categoria: String(registroFinal.categoriaProfissional || ""),
                 },
@@ -3407,7 +3409,26 @@ const BpaExportar: React.FC = () => {
         cid_usado: cidExibicao(r.cid) || r.cid || "",
         _ctx: { origem_sigtap: r.origem || "" },
       }));
-      const confSorted = [...results.confRows, ...linhasRejeitadas].sort(cmpAlfa);
+      // Registros totalmente fora do TXT (pendência cadastral/erro crítico, sem nenhuma
+      // linha exportada nem rejeição já listada) também entram na mesma tabela.
+      const idsListados = new Set<string>([
+        ...results.confRows.map((r: any) => String(r?._ctx?.pront_id || "")),
+        ...rejeitadosCidRef.current.map((r) => String(r.prontId || "")),
+      ].filter(Boolean));
+      const linhasPendentes = (results.pendRows || [])
+        .filter((r: any) => r?.id && !idsListados.has(String(r.id)))
+        .map((r: any) => ({
+          paciente_nome: String(r.paciente_nome || "").toUpperCase(),
+          paciente_cns: String(r.cns_paciente || ""),
+          data_nascimento: formatarDataBR(String(r.paciente_nascimento || "").slice(0, 10)),
+          sexo: String(r.sexo || "").charAt(0).toUpperCase(),
+          tipo_logradouro: "", logradouro: "", numero: "", bairro: "",
+          data_atendimento: formatarDataBR(String(r.data_atendimento || "").slice(0, 10)),
+          codigo_sigtap: sigtapCodigoExibicao(r.codigo_sigtap || r.procedimento) || String(r.codigo_sigtap || r.procedimento || ""),
+          cid_usado: "",
+          _ctx: { origem_sigtap: r.origem_sigtap || "" },
+        }));
+      const confSorted = [...results.confRows, ...linhasRejeitadas, ...linhasPendentes].sort(cmpAlfa);
       const rowsHtml = confSorted
         .map(
           (r: any) => `
@@ -3428,34 +3449,8 @@ const BpaExportar: React.FC = () => {
         )
         .join("");
 
-      // As rejeições CID × procedimento já aparecem na seção própria; não repetir
-      // o motivo técnico na tabela geral de auditoria. Outras pendências do registro permanecem.
-      const chaveRejeicaoCid = (paciente: unknown, data: unknown, codigo: unknown) =>
-        `${String(paciente || "").trim().toLocaleUpperCase("pt-BR")}|${String(data || "").slice(0, 10)}|${String(codigo || "").replace(/\D/g, "")}`;
-      const chavesRejeicaoCid = new Set(
-        rejeitadosCidRef.current.map((r) => chaveRejeicaoCid(r.paciente, r.data, r.codigo)),
-      );
-      const pendAud = (results.pendRows || [])
-        .map((r) => {
-          const cidRejeitado =
-            chavesRejeicaoCid.has(chaveRejeicaoCid(r.paciente_nome, r.data_atendimento, r.codigo_sigtap)) ||
-            /CID incompat[ií]vel com o procedimento/i.test(String(r.valor_atual || r.motivo || ""));
-          if (!cidRejeitado) return r;
-          const pendencias = (r.pendencias || []).filter(
-            (p: string) => p !== "Procedimento incompatível (não exportado)",
-          );
-          return { ...r, pendencias, valor_atual: "", motivo: "" };
-        })
-        .filter((r) => r.pendencias?.length || r.valor_atual || r.motivo)
-        .sort(cmpAlfa);
-      const auditHtml = pendAud.length
-        ? `<h3 style="margin:14px 0 6px;font-size:11pt;color:#92400e;page-break-before:auto">Auditoria: Registros com Pendências (${pendAud.length})</h3>
-<table class="bpa-table"><thead><tr><th>Paciente</th><th>Atendimento</th><th>SIGTAP</th><th>Pendências</th><th>Detalhe</th></tr></thead><tbody>${pendAud
-            .map(
-              (r: any) => `<tr><td class="nome">${esc(String(r.paciente_nome || "").toUpperCase())}</td><td class="c">${esc(r.data_atendimento)}</td><td class="c">${esc(r.codigo_sigtap || "—")}</td><td>${esc((r.pendencias || []).join("; "))}</td><td>${esc(r.valor_atual || r.motivo || "")}</td></tr>`,
-            )
-            .join("")}</tbody></table>`
-        : "";
+      // Tabela de auditoria com motivos técnicos não é impressa na Conferência.
+      const auditHtml = "";
 
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
       // Não é position:fixed, portanto não sobrepõe o conteúdo.
