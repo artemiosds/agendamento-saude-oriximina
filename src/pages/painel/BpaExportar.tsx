@@ -883,7 +883,8 @@ const BpaExportar: React.FC = () => {
     data: string,
     extra: RejCidExtra = {},
   ) => {
-    if (!(rej.rejeicoes || []).some((m) => /^CID incompat[ií]vel com o procedimento/i.test(m))) return;
+    // Captura toda rejeição de procedimento (CID, idade, instrumento etc.) apenas para a
+    // Conferência impressa. Não interfere no TXT, contadores ou validação.
     rejeitadosCidRef.current.push({ paciente, data, codigo: String(rej.codigo || ""), cid: String(rej.cid || ""), origem: rej.origem, ...extra });
   };
   const extraRejeicao = (pront: any, pac: any, cns: string, nasc: string, sexo: string, dataBpa: string): RejCidExtra => {
@@ -2766,6 +2767,7 @@ const BpaExportar: React.FC = () => {
                   usou_padrao: !procEntry.codigo || procEntry.origem === "Padrão (form)",
                   origem: String(registroFinal.origemAtendimento || ""),
                   origem_sigtap: String(registroFinal.origemSigtap || ""),
+                  pront_id: String(pront?.id || ""),
                   origem_sigtap_real: procEntry.origem,
                   profissao_categoria: String(registroFinal.categoriaProfissional || ""),
                 },
