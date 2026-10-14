@@ -1667,6 +1667,72 @@ const ProntuarioPage: React.FC = () => {
     })();
   }, [form.paciente_id, mergeProcedimentos]);
 
+  // Último atendimento do mesmo profissional com este paciente (para "Repetir procedimentos")
+  const [ultimoAtendProcs, setUltimoAtendProcs] = useState<{ data: string; itens: { id: string; nome: string; cids: string[]; quantidade: number }[] } | null>(null);
+  useEffect(() => {
+    setUltimoAtendProcs(null);
+    if (!form.paciente_id || !form.profissional_id) return;
+    let cancel = false;
+    (async () => {
+      try {
+        let q = (supabase as any)
+          .from("prontuarios")
+          .select("id, data_atendimento")
+          .eq("paciente_id", form.paciente_id)
+          .eq("profissional_id", form.profissional_id)
+          .order("data_atendimento", { ascending: false })
+          .order("criado_em", { ascending: false })
+          .limit(5);
+        if (editId) q = q.neq("id", editId);
+        const { data: prs } = await q;
+        for (const pr of prs || []) {
+          const { data: rows } = await (supabase as any)
+            .from("prontuario_procedimentos")
+            .select("procedimento_id, cids_selecionados, quantidade")
+            .eq("prontuario_id", pr.id);
+          if (!rows || rows.length === 0) continue;
+          const hydrated = await procedureService.getSpecific({ uuids: rows.map((r: any) => r.procedimento_id).filter(Boolean) });
+          if (cancel) return;
+          mergeProcedimentos(hydrated);
+          const byUuid = new Map(hydrated.map((h) => [h.uuid, h]));
+          const itens = rows
+            .map((r: any) => {
+              const p = byUuid.get(r.procedimento_id);
+              return p ? { id: p.id, nome: p.nome, cids: Array.isArray(r.cids_selecionados) ? r.cids_selecionados : [], quantidade: r.quantidade || 1 } : null;
+            })
+            .filter(Boolean) as { id: string; nome: string; cids: string[]; quantidade: number }[];
+          if (itens.length === 0) continue;
+          const dt = pr.data_atendimento ? new Date(pr.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR") : "";
+          setUltimoAtendProcs({ data: dt, itens });
+          return;
+        }
+      } catch (e) {
+        console.warn("[Prontuario] ultimo atendimento procs:", e);
+      }
+    })();
+    return () => { cancel = true; };
+  }, [form.paciente_id, form.profissional_id, editId, mergeProcedimentos]);
+
+  const repetirProcedimentosAnteriores = () => {
+    if (!ultimoAtendProcs) return;
+    const novos = ultimoAtendProcs.itens.filter((i) => !selectedProcIds.includes(i.id));
+    if (novos.length === 0) { toast.info("Os procedimentos do último atendimento já estão marcados."); return; }
+    setSelectedProcIds((prev) => [...prev, ...novos.map((i) => i.id)]);
+    setSelectedCidsByProc((m) => {
+      const n = { ...m };
+      novos.forEach((i) => { n[i.id] = i.cids; });
+      return n;
+    });
+    setProcDetails((prev) => {
+      const n = { ...prev };
+      novos.forEach((i) => { n[i.id] = prev[i.id] || { quantidade: i.quantidade, observacao: "" }; });
+      return n;
+    });
+    novos.forEach((i) => loadCidsForProc(i.id));
+    toast.success(`${novos.length} procedimento(s) do atendimento de ${ultimoAtendProcs.data} adicionados. Revise antes de salvar.`);
+  };
+
+
   const openNew = (pacienteId?: string, pacienteNome?: string) => {
     triagemRequestRef.current += 1;
     setTriagem(null);
@@ -4538,6 +4604,19 @@ const ProntuarioPage: React.FC = () => {
                 <div><Label>Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} /></div>
                 <div><Label>Evolução</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} /></div>
                 <div><Label>Observações Gerais</Label><DebouncedTextarea rows={2} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} /></div>
+              </div>
+            )}
+
+            {/* Repetir procedimentos do último atendimento (mesmo profissional) */}
+            {isProfBlocoVisible('procedimentos') && ultimoAtendProcs && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs">
+                  <div className="font-semibold text-primary flex items-center gap-1"><History className="h-3.5 w-3.5" /> Último atendimento ({ultimoAtendProcs.data})</div>
+                  <div className="text-muted-foreground">{ultimoAtendProcs.itens.length} procedimento(s): {ultimoAtendProcs.itens.map((i) => i.id).join(", ")}</div>
+                </div>
+                <Button type="button" size="sm" onClick={repetirProcedimentosAnteriores}>
+                  <Plus className="h-3 w-3 mr-1" /> Repetir procedimentos
+                </Button>
               </div>
             )}
 
