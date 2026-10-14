@@ -20,7 +20,7 @@ import { ActionButton } from '@/components/ui/action-button';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import { saveAs } from 'file-saver';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, Footer, PageNumber, TableOfContents } from 'docx';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, Footer, PageNumber, TableOfContents, type FileChild } from 'docx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.webp';
@@ -2908,7 +2908,7 @@ ${dataRows}
           P('O Word atualiza os números de página do sumário ao abrir ou atualizar os campos do documento.'),
           PageBreakP(),
         ];
-        const docSections: any[] = [...coverContent];
+        const docSections: FileChild[] = [...coverContent];
         reportSections.forEach((section, index) => {
           docSections.push(H1((index + 1) + '. ' + section.title));
           section.paragraphs.forEach(paragraph => docSections.push(P(paragraph)));
