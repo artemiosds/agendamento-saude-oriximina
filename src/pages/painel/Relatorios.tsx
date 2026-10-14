@@ -2908,7 +2908,7 @@ ${dataRows}
           P('O Word atualiza os números de página do sumário ao abrir ou atualizar os campos do documento.'),
           PageBreakP(),
         ];
-        const docSections = [...coverContent];
+        const docSections: any[] = [...coverContent];
         reportSections.forEach((section, index) => {
           docSections.push(H1((index + 1) + '. ' + section.title));
           section.paragraphs.forEach(paragraph => docSections.push(P(paragraph)));
@@ -2926,17 +2926,17 @@ ${dataRows}
         const footer = new Footer({
           children: [new Paragraph({
             alignment: AlignmentType.CENTER,
-            borderTop: { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF', space: 4 },
+            border: { top: { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF', space: 4 } },
             children: [
               new TextRun({ text: 'Relatório ' + reportId + ' · Emitido em ' + emitidaLabel + ' · Pág. ', size: 16, font: 'Times New Roman' }),
-              PageNumber.CURRENT,
+              new TextRun({ children: [PageNumber.CURRENT], size: 16, font: 'Times New Roman' }),
               new TextRun({ text: ' / ', size: 16, font: 'Times New Roman' }),
-              PageNumber.TOTAL_PAGES,
+              new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 16, font: 'Times New Roman' }),
             ],
           })],
         });
         const doc = new Document({
-          settings: { updateFields: true },
+          features: { updateFields: true },
           styles: {
             default: {
               document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { line: 360 } } },
