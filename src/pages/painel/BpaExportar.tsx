@@ -710,6 +710,7 @@ const nacionalidadeBpa = (pac: any): { codigo: string | null; motivo?: string } 
 
 const BpaExportar: React.FC = () => {
   const { user } = useAuth();
+  const podeVerTodosProfissionais = user?.role === "master" || user?.role === "gestao";
   const correcaoAbertaRef = useRef<{
     aberta: boolean;
     categoria: string | null;
@@ -995,10 +996,25 @@ const BpaExportar: React.FC = () => {
         if (funcionariosError) throw funcionariosError;
 
         if (!cancelado) {
-          const lista = [...(funcionarios || [])].sort((a: any, b: any) =>
+          const listaCompleta = [...(funcionarios || [])].sort((a: any, b: any) =>
             String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"),
           );
+          // Restrição por login: só Master e Gestão veem todos.
+          const lista = podeVerTodosProfissionais
+            ? listaCompleta
+            : listaCompleta.filter((p: any) => p.id === user?.id);
           setProfissionais(lista);
+
+          if (!podeVerTodosProfissionais) {
+            const proprio = lista[0];
+            setFormData((prev) => ({
+              ...prev,
+              profissional_id: proprio ? proprio.id : "all",
+              cns_profissional: proprio ? ((proprio as any).cns || (proprio.custom_data as any)?.cns || "") : "",
+              cbo: proprio ? obterCboValido(proprio) : "",
+            }));
+            return;
+          }
 
           // Se o profissional anteriormente selecionado não possui atendimento
           // no novo filtro, volta para "Todos os profissionais com atendimento".
@@ -1028,7 +1044,7 @@ const BpaExportar: React.FC = () => {
     return () => {
       cancelado = true;
     };
-  }, [formData.competencia, formData.unidade_id]);
+  }, [formData.competencia, formData.unidade_id, podeVerTodosProfissionais, user?.id]);
 
   const fetchInitialData = async () => {
     try {
@@ -3595,7 +3611,7 @@ ${auditHtml}`;
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos com atendimento</SelectItem>
+                  {podeVerTodosProfissionais && <SelectItem value="all">Todos com atendimento</SelectItem>}
                   {profissionais.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.nome}
