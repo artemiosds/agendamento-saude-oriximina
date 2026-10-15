@@ -1010,7 +1010,7 @@ const BpaExportar: React.FC = () => {
             setFormData((prev) => ({
               ...prev,
               profissional_id: proprio ? proprio.id : "all",
-              cns_profissional: proprio ? (proprio.cns || (proprio.custom_data as any)?.cns || "") : "",
+              cns_profissional: proprio ? ((proprio as any).cns || (proprio.custom_data as any)?.cns || "") : "",
               cbo: proprio ? obterCboValido(proprio) : "",
             }));
             return;
