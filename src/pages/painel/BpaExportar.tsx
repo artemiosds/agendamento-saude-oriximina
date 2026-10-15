@@ -1044,7 +1044,7 @@ const BpaExportar: React.FC = () => {
     return () => {
       cancelado = true;
     };
-  }, [formData.competencia, formData.unidade_id]);
+  }, [formData.competencia, formData.unidade_id, podeVerTodosProfissionais, user?.id]);
 
   const fetchInitialData = async () => {
     try {
@@ -3611,7 +3611,7 @@ ${auditHtml}`;
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos com atendimento</SelectItem>
+                  {podeVerTodosProfissionais && <SelectItem value="all">Todos com atendimento</SelectItem>}
                   {profissionais.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.nome}
