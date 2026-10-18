@@ -459,13 +459,13 @@ const Triagem: React.FC = () => {
 
   // Índices para busca direta (mesmo resultado do .find: mantém sempre a PRIMEIRA ocorrência).
   const agendamentoPorId = useMemo(() => {
-    const m = new Map<string, Agendamento>();
+    const m = new Map<string, (typeof agendamentos)[number]>();
     for (const ag of agendamentos) if (!m.has(ag.id)) m.set(ag.id, ag);
     return m;
   }, [agendamentos]);
 
   const agendamentoTriagemPorPacienteUnidade = useMemo(() => {
-    const m = new Map<string, Agendamento>();
+    const m = new Map<string, (typeof agendamentos)[number]>();
     for (const ag of agendamentos) {
       if (!STATUS_AGENDAMENTO_TRIAGEM.includes(ag.status)) continue;
       const k = `${ag.pacienteId}|${ag.unidadeId}`;
@@ -475,7 +475,7 @@ const Triagem: React.FC = () => {
   }, [agendamentos]);
 
   const pacientePorId = useMemo(() => {
-    const m = new Map<string, Paciente>();
+    const m = new Map<string, (typeof pacientes)[number]>();
     for (const p of pacientes) if (!m.has(p.id)) m.set(p.id, p);
     return m;
   }, [pacientes]);
