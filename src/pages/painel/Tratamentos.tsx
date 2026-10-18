@@ -417,6 +417,7 @@ const Tratamentos: React.FC = () => {
   const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
   const loadDataRequestsRef = useRef(createRequestGeneration());
   const loadSessionsRequestsRef = useRef(createRequestGeneration());
+  const autoLinkAttemptsRef = useRef<Set<string>>(new Set());
   const pageMountedRef = useRef(false);
   const selectedCycleIdRef = useRef<string | null>(selectedCycle?.id || null);
   const loadDataScopeRef = useRef("");
@@ -563,6 +564,63 @@ const Tratamentos: React.FC = () => {
             for (const id of scopedAppointmentIds) delete next[id];
             return { ...next, ...byId };
           });
+
+          // Sincronização Agenda → Gestão: sessão pendente com exatamente um
+          // agendamento ativo do mesmo paciente/profissional/unidade/data (qualquer
+          // horário) e ainda não vinculado a outra sessão é vinculada pelo RPC
+          // validado no banco. Mais de um candidato continua exigindo revisão humana.
+          if (cycle.status === "em_andamento") {
+            const usedIds = new Set(linkedAppointmentIds);
+            const toLink: { session: TreatmentSession; appointmentId: string }[] = [];
+            for (const session of sessionsData) {
+              if (session.status !== "pendente_agendamento" || session.appointment_id) continue;
+              const key = treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date);
+              const candidates = (groupedCandidates[key] || []).filter((a) => !usedIds.has(a.id));
+              if (candidates.length !== 1) continue;
+              const attemptKey = `${session.id}|${candidates[0].id}`;
+              if (autoLinkAttemptsRef.current.has(attemptKey)) continue;
+              autoLinkAttemptsRef.current.add(attemptKey);
+              usedIds.add(candidates[0].id);
+              toLink.push({ session, appointmentId: candidates[0].id });
+            }
+            if (toLink.length > 0) {
+              let linked = 0;
+              for (const item of toLink) {
+                try {
+                  await treatmentSessionOperations.linkExistingAppointment({ session: item.session, cycle, appointmentId: item.appointmentId });
+                  linked++;
+                  void logAction({
+                    acao: "vincular_agenda_automatico",
+                    entidade: "treatment_session",
+                    entidadeId: item.session.id,
+                    modulo: "tratamentos",
+                    user,
+                    detalhes: {
+                      ciclo_id: cycle.id,
+                      sessao: item.session.session_number,
+                      data: item.session.scheduled_date,
+                      agendamento_id: item.appointmentId,
+                      motivo_alteracao: "Sincronização automática: agendamento existente na Agenda (mesmo paciente, profissional, unidade e data).",
+                    },
+                  });
+                } catch (linkErr) {
+                  console.warn("Vínculo automático não aplicado:", linkErr);
+                }
+              }
+              if (linked > 0 && isCurrentRequest()) {
+                const refreshed = (await treatmentService.getSessions(cycle.id)) as TreatmentSession[];
+                if (isCurrentRequest() && refreshed) {
+                  setSessions((prev) => [...prev.filter((s) => s.cycle_id !== cycle.id), ...refreshed]);
+                  const byIdLinked: Record<string, TreatmentAppointmentSnapshot> = {};
+                  for (const item of toLink) {
+                    const appt = agData.find((a) => a.id === item.appointmentId);
+                    if (appt) byIdLinked[appt.id] = appt;
+                  }
+                  setAppointmentByIdMap((prev) => ({ ...prev, ...byIdLinked }));
+                }
+              }
+            }
+          }
         }
       }
     } catch (err) {
@@ -570,7 +628,7 @@ const Tratamentos: React.FC = () => {
       console.error("Error loading cycle sessions:", err);
       if (!silent) toast.error("Erro ao carregar sessões do ciclo.");
     }
-  }, [user]);
+  }, [user, treatmentSessionOperations, logAction]);
 
   // Primeiro load: com spinner. Re-loads (filtros/busca/paginação): silencioso, sem spinner.
   const firstLoadRef = React.useRef(true);
