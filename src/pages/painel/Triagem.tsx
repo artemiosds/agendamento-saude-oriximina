@@ -116,6 +116,56 @@ interface TriagemForm {
 
 const VERSAO_FLUXO_TRIAGEM = "triagem-diagnostico-20260925-v1";
 
+/**
+ * Textarea leve: o texto aparece na hora (estado local) e só é repassado ao
+ * formulário após pausa curta ou ao sair do campo — evita re-renderizar o modal
+ * inteiro a cada tecla. Mesmo campo, mesmo valor salvo.
+ */
+const LightTextarea = React.memo(function LightTextarea({
+  value,
+  onCommit,
+  ...rest
+}: Omit<React.ComponentProps<typeof Textarea>, "value" | "onChange"> & { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = React.useState(value);
+  const timer = React.useRef<number | undefined>(undefined);
+  const commitRef = React.useRef(onCommit);
+  commitRef.current = onCommit;
+  const localRef = React.useRef(local);
+  localRef.current = local;
+
+  React.useEffect(() => {
+    if (value !== localRef.current) setLocal(value);
+  }, [value]);
+
+  const flush = React.useCallback(() => {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = undefined;
+    commitRef.current(localRef.current);
+  }, []);
+
+  React.useEffect(() => () => {
+    if (timer.current) {
+      window.clearTimeout(timer.current);
+      commitRef.current(localRef.current);
+    }
+  }, []);
+
+  return (
+    <Textarea
+      {...rest}
+      value={local}
+      onChange={(e) => {
+        const v = e.target.value;
+        setLocal(v);
+        localRef.current = v;
+        if (timer.current) window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(flush, 250);
+      }}
+      onBlur={flush}
+    />
+  );
+});
+
 const COMORBIDADES_COMUNS = [
   "Hipertensão",
   "Diabetes",
@@ -970,14 +1020,14 @@ const Triagem: React.FC = () => {
             </div>
             <div>
               <Label>Queixa Principal</Label>
-              <Textarea rows={2} value={form.queixaPrincipal} onChange={(e) => setForm((p) => ({ ...p, queixaPrincipal: e.target.value }))} placeholder="Queixa principal do paciente..." />
+              <LightTextarea rows={2} value={form.queixaPrincipal} onCommit={(v) => setForm((p) => ({ ...p, queixaPrincipal: v }))} placeholder="Queixa principal do paciente..." />
             </div>
             <div>
               <Label>Histórico da Doença Atual (HDA)</Label>
-              <Textarea
+              <LightTextarea
                 rows={4}
                 value={form.historicoQueixa}
-                onChange={(e) => setForm((p) => ({ ...p, historicoQueixa: e.target.value }))}
+                onCommit={(v) => setForm((p) => ({ ...p, historicoQueixa: v }))}
                 placeholder="Detalhe a evolução dos sintomas: início, duração, fatores de melhora/piora, tratamentos prévios..."
               />
             </div>
@@ -1092,7 +1142,7 @@ const Triagem: React.FC = () => {
             </div>
             <div>
               <Label>Observações</Label>
-              <Textarea rows={3} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} placeholder="Observações relevantes da triagem..." />
+              <LightTextarea rows={3} value={form.observacoes} onCommit={(v) => setForm((p) => ({ ...p, observacoes: v }))} placeholder="Observações relevantes da triagem..." />
             </div>
             {customConfig.fields.length > 0 && (
               <CustomFieldsRenderer
