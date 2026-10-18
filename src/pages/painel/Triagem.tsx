@@ -517,7 +517,7 @@ const Triagem: React.FC = () => {
           data: agendamentoRelacionado?.data || "",
           hora: agendamentoRelacionado?.hora || item.horaChegada || "",
           status: agendamentoRelacionado?.status || item.status,
-          tipo: agendamentoRelacionado?.tipo || "Triagem",
+  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca]);
           cid: item.cid,
           descricaoClinica: item.descricaoClinica,
           observacoes: agendamentoRelacionado?.observacoes || item.observacoes || "",
@@ -535,7 +535,7 @@ const Triagem: React.FC = () => {
         if (a.filaCriadoEm && b.filaCriadoEm) return a.filaCriadoEm.localeCompare(b.filaCriadoEm);
         return (a.hora || '').localeCompare(b.hora || '');
       });
-  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca]);
+  }, [agendamentoPorId, agendamentoTriagemPorPacienteUnidade, pacientePorId, fila, isGlobalAdmin, user?.unidadeId, busca]);
 
   const imc = useMemo(() => {
     const value = calcularImcTriagem(form.peso, form.altura);
