@@ -1086,31 +1086,43 @@ const Triagem: React.FC = () => {
                 placeholder="Detalhe a evolução dos sintomas: início, duração, fatores de melhora/piora, tratamentos prévios..."
               />
             </div>
-            <div>
-              
-              <ChecklistGrid
-                options={SINTOMAS_ACOLHIMENTO}
-                selected={form.sintomas30Dias}
-                onToggle={toggleSintoma}
-                textClass="text-[11px]"
-                spanClass="leading-tight capitalize"
-              />
-            </div>
-            <div>
-              <Label>Comorbidades</Label>
-              <ChecklistGrid
-                options={COMORBIDADES_COMUNS}
-                selected={form.comorbidades}
-                onToggle={toggleComorbidade}
-                textClass="text-xs"
-                spanClass="leading-tight"
-              />
-              {form.comorbidades.length > 0 && (
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  Selecionadas: <strong>{form.comorbidades.join(", ")}</strong>
-                </p>
-              )}
-            </div>
+            <details className="group rounded-md border border-border p-2" open>
+              <summary className="cursor-pointer select-none text-sm font-medium flex items-center justify-between">
+                <span>Sintomas nos últimos 30 dias{form.sintomas30Dias.length > 0 ? ` (${form.sintomas30Dias.length} selecionado${form.sintomas30Dias.length > 1 ? "s" : ""})` : ""}</span>
+                <span className="text-xs text-muted-foreground group-open:hidden">Mostrar</span>
+                <span className="text-xs text-muted-foreground hidden group-open:inline">Recolher</span>
+              </summary>
+              <div className="mt-2">
+                <ChecklistGrid
+                  options={SINTOMAS_ACOLHIMENTO}
+                  selected={form.sintomas30Dias}
+                  onToggle={toggleSintoma}
+                  textClass="text-[11px]"
+                  spanClass="leading-tight capitalize"
+                />
+              </div>
+            </details>
+            <details className="group rounded-md border border-border p-2" open>
+              <summary className="cursor-pointer select-none text-sm font-medium flex items-center justify-between">
+                <span>Comorbidades{form.comorbidades.length > 0 ? ` (${form.comorbidades.length} selecionada${form.comorbidades.length > 1 ? "s" : ""})` : ""}</span>
+                <span className="text-xs text-muted-foreground group-open:hidden">Mostrar</span>
+                <span className="text-xs text-muted-foreground hidden group-open:inline">Recolher</span>
+              </summary>
+              <div className="mt-2">
+                <ChecklistGrid
+                  options={COMORBIDADES_COMUNS}
+                  selected={form.comorbidades}
+                  onToggle={toggleComorbidade}
+                  textClass="text-xs"
+                  spanClass="leading-tight"
+                />
+              </div>
+            </details>
+            {form.comorbidades.length > 0 && (
+              <p className="text-[11px] text-muted-foreground -mt-2">
+                Comorbidades selecionadas: <strong>{form.comorbidades.join(", ")}</strong>
+              </p>
+            )}
             <div>
               <Label>Alergias</Label>
               <div className="mt-1 flex gap-2">
