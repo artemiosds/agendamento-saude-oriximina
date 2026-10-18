@@ -517,7 +517,7 @@ const Triagem: React.FC = () => {
           data: agendamentoRelacionado?.data || "",
           hora: agendamentoRelacionado?.hora || item.horaChegada || "",
           status: agendamentoRelacionado?.status || item.status,
-  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca]);
+          tipo: agendamentoRelacionado?.tipo || "Triagem",
           cid: item.cid,
           descricaoClinica: item.descricaoClinica,
           observacoes: agendamentoRelacionado?.observacoes || item.observacoes || "",
