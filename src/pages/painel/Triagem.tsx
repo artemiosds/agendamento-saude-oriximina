@@ -187,6 +187,44 @@ const COMORBIDADES_COMUNS = [
   "IAM prévio",
 ];
 
+const ChecklistGrid = React.memo(function ChecklistGrid({
+  options,
+  selected,
+  onToggle,
+  textClass,
+  spanClass,
+}: {
+  options: readonly string[];
+  selected: string[];
+  onToggle: (v: string) => void;
+  textClass: string;
+  spanClass: string;
+}) {
+  return (
+    <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {options.map((s) => {
+        const checked = selected.includes(s);
+        return (
+          <label
+            key={s}
+            className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${textClass} cursor-pointer transition-colors ${
+              checked ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted/50"
+            }`}
+          >
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-primary"
+              checked={checked}
+              onChange={() => onToggle(s)}
+            />
+            <span className={spanClass}>{s}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+});
+
 const SINTOMAS_ACOLHIMENTO = [
   "alucinação", "delírios", "labilidade emocional", "embotamento afetivo", 
   "pensamento e fala alterada", "aparência alterada", "tristeza", "medo", 
@@ -486,6 +524,23 @@ const Triagem: React.FC = () => {
   });
   const [newAlergia, setNewAlergia] = useState("");
   const [newMedicamento, setNewMedicamento] = useState("");
+
+  const toggleSintoma = useCallback((s: string) => {
+    setForm((p) => ({
+      ...p,
+      sintomas30Dias: p.sintomas30Dias.includes(s)
+        ? p.sintomas30Dias.filter((x) => x !== s)
+        : [...p.sintomas30Dias, s],
+    }));
+  }, []);
+  const toggleComorbidade = useCallback((c: string) => {
+    setForm((p) => ({
+      ...p,
+      comorbidades: p.comorbidades.includes(c)
+        ? p.comorbidades.filter((x) => x !== c)
+        : [...p.comorbidades, c],
+    }));
+  }, []);
 
   const normalizarAlturaCm = useCallback((value: string): number | null => {
     if (!value) return null;
