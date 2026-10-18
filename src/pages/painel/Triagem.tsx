@@ -457,6 +457,29 @@ const Triagem: React.FC = () => {
 
   const now = useMemo(() => new Date(), []);
 
+  // Índices para busca direta (mesmo resultado do .find: mantém sempre a PRIMEIRA ocorrência).
+  const agendamentoPorId = useMemo(() => {
+    const m = new Map<string, (typeof agendamentos)[number]>();
+    for (const ag of agendamentos) if (!m.has(ag.id)) m.set(ag.id, ag);
+    return m;
+  }, [agendamentos]);
+
+  const agendamentoTriagemPorPacienteUnidade = useMemo(() => {
+    const m = new Map<string, (typeof agendamentos)[number]>();
+    for (const ag of agendamentos) {
+      if (!STATUS_AGENDAMENTO_TRIAGEM.includes(ag.status)) continue;
+      const k = `${ag.pacienteId}|${ag.unidadeId}`;
+      if (!m.has(k)) m.set(k, ag);
+    }
+    return m;
+  }, [agendamentos]);
+
+  const pacientePorId = useMemo(() => {
+    const m = new Map<string, (typeof pacientes)[number]>();
+    for (const p of pacientes) if (!m.has(p.id)) m.set(p.id, p);
+    return m;
+  }, [pacientes]);
+
   const filaFiltrada = useMemo(() => {
     const termo = busca.trim().toLowerCase();
 
@@ -464,17 +487,12 @@ const Triagem: React.FC = () => {
       .filter((item) => (isGlobalAdmin || !user?.unidadeId || item.unidadeId === user?.unidadeId) && STATUS_TRIAGEM_FILA.includes(item.status))
       .map((item) => {
         const agendamentoRelacionado =
-          agendamentos.find((ag) => ag.id === item.id)
-          ?? agendamentos.find(
-            (ag) =>
-              ag.pacienteId === item.pacienteId &&
-              ag.unidadeId === item.unidadeId &&
-              STATUS_AGENDAMENTO_TRIAGEM.includes(ag.status),
-          );
+          agendamentoPorId.get(item.id)
+          ?? agendamentoTriagemPorPacienteUnidade.get(`${item.pacienteId}|${item.unidadeId}`);
 
         const profissionalId = agendamentoRelacionado?.profissionalId || item.profissionalId || "";
 
-        const pac = pacientes.find((p) => p.id === item.pacienteId);
+        const pac = pacientePorId.get(item.pacienteId);
         const { age, formatted } = parseDob(pac?.dataNascimento);
 
         return {
@@ -517,7 +535,7 @@ const Triagem: React.FC = () => {
         if (a.filaCriadoEm && b.filaCriadoEm) return a.filaCriadoEm.localeCompare(b.filaCriadoEm);
         return (a.hora || '').localeCompare(b.hora || '');
       });
-  }, [agendamentos, fila, pacientes, isGlobalAdmin, user?.unidadeId, busca]);
+  }, [agendamentoPorId, agendamentoTriagemPorPacienteUnidade, pacientePorId, fila, isGlobalAdmin, user?.unidadeId, busca]);
 
   const imc = useMemo(() => {
     const value = calcularImcTriagem(form.peso, form.altura);
