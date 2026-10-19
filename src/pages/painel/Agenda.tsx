@@ -410,6 +410,7 @@ const Agenda: React.FC = () => {
 
   // FALTA com justificativa
   const [faltaTarget, setFaltaTarget] = useState<(typeof agendamentos)[0] | null>(null);
+  const [confirmStatusTarget, setConfirmStatusTarget] = useState<{ ag: (typeof agendamentos)[0]; status: string } | null>(null);
 
   // Concluir Atendimento (Master)
   const [concluirTarget, setConcluirTarget] = useState<ConcluirAtendimentoAg | null>(null);
@@ -1662,6 +1663,12 @@ const Agenda: React.FC = () => {
         },
         onConfirm: () => executarStatusChange(agId, newStatus),
       });
+      return;
+    }
+
+    // Confirmação prévia para evitar cliques acidentais
+    if (newStatus === "atraso" || newStatus === "remarcado") {
+      setConfirmStatusTarget({ ag, status: newStatus });
       return;
     }
 
@@ -4032,6 +4039,41 @@ const Agenda: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={!!confirmStatusTarget} onOpenChange={(o) => { if (!o) setConfirmStatusTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmStatusTarget?.status === "atraso" ? "Confirmar atraso do paciente?" : "Confirmar remarcação?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-1 text-sm">
+                <p><span className="font-medium text-foreground">Paciente:</span> {confirmStatusTarget?.ag.pacienteNome}</p>
+                <p><span className="font-medium text-foreground">Horário previsto:</span> {confirmStatusTarget?.ag.hora} — {confirmStatusTarget?.ag.data?.split("-").reverse().join("/")}</p>
+                {confirmStatusTarget?.ag.profissionalNome && (
+                  <p><span className="font-medium text-foreground">Profissional:</span> {confirmStatusTarget.ag.profissionalNome}</p>
+                )}
+                <p className="pt-2">
+                  {confirmStatusTarget?.status === "atraso"
+                    ? "Deseja registrar que o paciente está atrasado?"
+                    : "Deseja marcar este agendamento como remarcado?"}
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const t = confirmStatusTarget;
+                setConfirmStatusTarget(null);
+                if (t) executarStatusChange(t.ag.id, t.status);
+              }}
+            >
+              {confirmStatusTarget?.status === "atraso" ? "Confirmar Atraso" : "Confirmar Remarcação"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <RegistrarFaltaModal
         open={!!faltaTarget}
         onOpenChange={(o) => { if (!o) setFaltaTarget(null); }}
