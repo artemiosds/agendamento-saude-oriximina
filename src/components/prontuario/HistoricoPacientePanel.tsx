@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy, X, Loader2, FileText, FilePlus2 } from "lucide-react";
+import { ChevronDown, Activity, History, User, Calendar, Stethoscope, Eye, Printer, Copy, X, Loader2, FileText, FilePlus2 } from "lucide-react";
+import TriagensPacienteTab from "@/components/prontuario/TriagensPacienteTab";
 import DocumentosHistorico from "@/components/DocumentosHistorico";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -213,7 +214,12 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
   onGerarDocumento,
   documentosRefreshKey = 0,
 }) => {
-  const [activeTab, setActiveTab] = useState<"historico" | "documentos">("historico");
+  const [activeTab, setActiveTab] = useState<"historico" | "documentos" | "triagens">("historico");
+  useEffect(() => {
+    const h = () => setActiveTab("triagens");
+    window.addEventListener("prontuario:abrir-triagens", h);
+    return () => window.removeEventListener("prontuario:abrir-triagens", h);
+  }, []);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
@@ -339,6 +345,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
         {([
           { id: "historico", label: "Histórico", icon: History },
           { id: "documentos", label: "Documentos", icon: FileText },
+          { id: "triagens", label: "Triagens", icon: Activity },
         ] as const).map((t) => (
           <button
             key={t.id}
@@ -590,6 +597,10 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
         </div>
       </ScrollArea>
       </>)}
+
+      {activeTab === "triagens" && (
+        <TriagensPacienteTab pacienteId={pacienteId} unidadeId={unidadeId} isGlobalAdmin={isGlobalAdmin} />
+      )}
 
       {activeTab === "documentos" && (
         <ScrollArea className="flex-1 min-h-0">

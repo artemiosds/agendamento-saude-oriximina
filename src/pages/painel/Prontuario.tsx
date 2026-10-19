@@ -3735,11 +3735,16 @@ const ProntuarioPage: React.FC = () => {
                       </span>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2 pointer-events-auto">
+                  <button type="button" onClick={() => window.dispatchEvent(new Event("prontuario:abrir-triagens"))} className="text-[11px] font-medium text-primary hover:underline">
+                    Ver triagens anteriores
+                  </button>
                   {risco && RISCO_LABEL[risco] && (
                     <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${RISCO_BG[risco] || "bg-muted text-muted-foreground border-border"}`}>
                       {RISCO_LABEL[risco]}
                     </span>
                   )}
+                  </div>
                 </div>
 
                 {/* Body */}
