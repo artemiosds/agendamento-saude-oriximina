@@ -38,6 +38,7 @@ import { useCustomFields } from "@/hooks/useCustomFields";
 import ChamarPacienteButton from "@/components/ChamarPacienteButton";
 import CondicaoBadges from "@/components/CondicaoBadges";
 import MedicamentoBusca from "@/components/triagem/MedicamentoBusca";
+import AlergiaBusca from "@/components/triagem/AlergiaBusca";
 
 interface Agendamento {
   id: string;
@@ -523,8 +524,6 @@ const Triagem: React.FC = () => {
     sintomas30Dias: [],
     observacoes: "",
   });
-  const [newAlergia, setNewAlergia] = useState("");
-  const [newMedicamento, setNewMedicamento] = useState("");
 
   const toggleSintoma = useCallback((s: string) => {
     setForm((p) => ({
@@ -704,8 +703,6 @@ const Triagem: React.FC = () => {
         observacoes: "",
       });
       setCustomData({});
-      setNewAlergia("");
-      setNewMedicamento("");
 
       // Se for chegada confirmada, atualiza o status no background
       if (ag.filaStatus === "chegada_confirmada") {
@@ -729,19 +726,6 @@ const Triagem: React.FC = () => {
     [pacientes, updateAgendamento, updateFila, openingTriagemId, refreshFila, refreshAgendamentos],
   );
 
-  const addAlergia = () => {
-    if (newAlergia.trim() && !form.alergias.includes(newAlergia.trim())) {
-      setForm((p) => ({ ...p, alergias: [...p.alergias, newAlergia.trim()] }));
-      setNewAlergia("");
-    }
-  };
-
-  const addMedicamento = () => {
-    if (newMedicamento.trim() && !form.medicamentos.includes(newMedicamento.trim())) {
-      setForm((p) => ({ ...p, medicamentos: [...p.medicamentos, newMedicamento.trim()] }));
-      setNewMedicamento("");
-    }
-  };
 
   const salvarRascunho = async () => {
     if (!selectedItem) return;
@@ -1127,14 +1111,11 @@ const Triagem: React.FC = () => {
                 Comorbidades selecionadas: <strong>{form.comorbidades.join(", ")}</strong>
               </p>
             )}
-            <div>
+             <div>
               <Label>Alergias</Label>
-              <div className="mt-1 flex gap-2">
-                <Input value={newAlergia} onChange={(e) => setNewAlergia(e.target.value)} placeholder="Digitar alergia" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAlergia())} />
-                <Button type="button" variant="outline" size="icon" onClick={addAlergia}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              <AlergiaBusca
+                onAdd={(v) => setForm((p) => (p.alergias.includes(v) ? p : { ...p, alergias: [...p.alergias, v] }))}
+              />
               {form.alergias.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {form.alergias.map((a, i) => (
