@@ -318,7 +318,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
     <aside className="hidden lg:flex flex-col h-full max-h-screen w-full border-l border-border bg-muted/20 overflow-hidden">
       {/* Patient Card */}
       <div className="p-4 border-b border-border bg-card/50 shrink-0">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
             <User className="w-4 h-4 text-primary" />
           </div>
@@ -332,20 +332,6 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
             </p>
           </div>
         </div>
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
-          <div>
-            <dt className="text-muted-foreground uppercase tracking-wide text-[10px]">CPF</dt>
-            <dd className="text-foreground font-mono truncate">{paciente?.cpf || "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground uppercase tracking-wide text-[10px]">CNS</dt>
-            <dd className="text-foreground font-mono truncate">{paciente?.cns || "—"}</dd>
-          </div>
-          <div className="col-span-2">
-            <dt className="text-muted-foreground uppercase tracking-wide text-[10px]">Sexo</dt>
-            <dd className="text-foreground capitalize">{paciente?.sexo || "—"}</dd>
-          </div>
-        </dl>
       </div>
 
       {/* Abas laterais */}
