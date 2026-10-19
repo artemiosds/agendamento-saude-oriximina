@@ -1086,7 +1086,7 @@ const Triagem: React.FC = () => {
                 placeholder="Detalhe a evolução dos sintomas: início, duração, fatores de melhora/piora, tratamentos prévios..."
               />
             </div>
-            <details className="group rounded-md border border-border p-2" open>
+            <details className="group rounded-md border border-border p-2">
               <summary className="cursor-pointer select-none text-sm font-medium flex items-center justify-between">
                 <span>Sintomas nos últimos 30 dias{form.sintomas30Dias.length > 0 ? ` (${form.sintomas30Dias.length} selecionado${form.sintomas30Dias.length > 1 ? "s" : ""})` : ""}</span>
                 <span className="text-xs text-muted-foreground group-open:hidden">Mostrar</span>
