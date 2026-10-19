@@ -1180,11 +1180,8 @@ const Triagem: React.FC = () => {
               <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4" /> Salvar Rascunho
               </Button>
-              <div className="flex gap-2">
-                <Button className="flex-1 bg-success text-success-foreground hover:bg-success/90" onClick={() => confirmarTriagem(true)} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Encaminhar Enfermagem
-                </Button>
-                <Button className="flex-1" variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving}>
+              <div className="flex justify-center gap-2">
+                <Button className="w-full sm:w-2/3" variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Seguir sem Enfermagem
                 </Button>
               </div>
