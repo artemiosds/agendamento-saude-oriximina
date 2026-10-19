@@ -345,20 +345,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                     <span className="text-xs text-red-700">{paciente.total_faltas || 0} falta(s) registrada(s)</span>
                   </div>
                 )}
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  {paciente.data_nascimento ? (
-                    <>
-                      <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/15 px-2.5 py-0.5 h-auto text-[11px] font-semibold">
-                        <Users className="w-3 h-3 mr-1" /> {idade}
-                      </Badge>
-                      <Badge variant="outline" className="text-muted-foreground border-border/60 bg-muted/30 px-2.5 py-0.5 h-auto text-[11px] font-medium">
-                        <Calendar className="w-3 h-3 mr-1" /> Nasc: {new Date(paciente.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR")}
-                      </Badge>
-                    </>
-                  ) : (
-                    <span className="text-[11px] text-muted-foreground italic">Data de nascimento não informada</span>
-                  )}
-                </div>
               </div>
             </div>
 
