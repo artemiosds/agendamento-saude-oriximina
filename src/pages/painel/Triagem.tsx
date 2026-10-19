@@ -1186,7 +1186,6 @@ const Triagem: React.FC = () => {
               </Button>
             </div>
           </div>
-          </div>
         </DialogContent>
       </Dialog>
 
