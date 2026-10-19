@@ -1127,14 +1127,11 @@ const Triagem: React.FC = () => {
                 Comorbidades selecionadas: <strong>{form.comorbidades.join(", ")}</strong>
               </p>
             )}
-            <div>
+             <div>
               <Label>Alergias</Label>
-              <div className="mt-1 flex gap-2">
-                <Input value={newAlergia} onChange={(e) => setNewAlergia(e.target.value)} placeholder="Digitar alergia" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAlergia())} />
-                <Button type="button" variant="outline" size="icon" onClick={addAlergia}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              <AlergiaBusca
+                onAdd={(v) => setForm((p) => (p.alergias.includes(v) ? p : { ...p, alergias: [...p.alergias, v] }))}
+              />
               {form.alergias.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {form.alergias.map((a, i) => (
