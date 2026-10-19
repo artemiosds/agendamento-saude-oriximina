@@ -3393,6 +3393,9 @@ const ProntuarioPage: React.FC = () => {
 
   const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
   const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
+  const openPainelDoc = useCallback(() => setPainelDocOpen(true), []);
+  const [trocarPacienteAberto, setTrocarPacienteAberto] = useState(false);
+  useEffect(() => { if (!dialogOpen) setTrocarPacienteAberto(false); }, [dialogOpen]);
   const unidadeAtualNome = useMemo(() => unidades.find(u => u.id === user?.unidadeId)?.nome, [unidades, user?.unidadeId]);
   const soapValues = useMemo(() => ({
     soap_subjetivo: form.soap_subjetivo,
@@ -3837,14 +3840,24 @@ const ProntuarioPage: React.FC = () => {
 
           {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label>Paciente *</Label>
-                <BuscaPaciente
-                  pacientes={pacientes}
-                  value={form.paciente_id}
-                  onChange={handlePacienteChange}
-                />
-              </div>
+              {(!form.paciente_id || trocarPacienteAberto) ? (
+                <div>
+                  <Label>Paciente *</Label>
+                  <BuscaPaciente
+                    pacientes={pacientes}
+                    value={form.paciente_id}
+                    onChange={(...args: Parameters<typeof handlePacienteChange>) => { setTrocarPacienteAberto(false); return handlePacienteChange(...args); }}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-end">
+                  {!editId && !form.agendamento_id && (
+                    <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setTrocarPacienteAberto(true)}>
+                      Trocar paciente
+                    </Button>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Data *</Label>
@@ -5230,51 +5243,53 @@ const ProntuarioPage: React.FC = () => {
             isGlobalAdmin={isGlobalAdmin}
             enabled={dialogOpen}
             onView={handleViewProntuarioFromHistory}
-            onGerarDocumento={form.paciente_id ? () => setPainelDocOpen(true) : undefined}
+            onGerarDocumento={form.paciente_id ? openPainelDoc : undefined}
             documentosRefreshKey={painelDocRefresh}
           />
           </div>{/* end grid split */}
 
-            <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
-              {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
-              {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
-                <Button
-                  type="button"
-                  onClick={handleRegistrarSessaoOnly}
-                  disabled={saving}
-                  variant="outline"
-                  className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
-                >
-                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  <Activity className="w-4 h-4 mr-2" />
-                  Registrar Sessão {currentSessionForRegistration.session_number}
-                </Button>
-              )}
-
-              {canFinalize ? (
-                <>
-                  <Button onClick={() => { void handleSave(); }} disabled={saving} variant="outline" className="flex-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap shrink-0 border-t border-border py-3 px-6 bg-background">
+              <div className="flex items-center gap-2">
+                {canFinalize && (
+                  <Button onClick={() => { void handleSave(); }} disabled={saving} variant="ghost" size="sm" className="text-muted-foreground">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
                   </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
+                  <Button
+                    type="button"
+                    onClick={handleRegistrarSessaoOnly}
+                    disabled={saving}
+                    variant="outline"
+                    className="border-primary/50 text-primary hover:bg-primary/10"
+                  >
+                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    <Activity className="w-4 h-4 mr-2" />
+                    Registrar Sessão {currentSessionForRegistration.session_number}
+                  </Button>
+                )}
+                {canFinalize ? (
                   <Button
                     onClick={handleFinalizarAtendimento}
                     disabled={saving}
-                    className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
+                    className="bg-success hover:bg-success/90 text-success-foreground min-w-[200px]"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Finalizar Prontuário
                   </Button>
-                </>
-              ) : (
-                <Button
-                  onClick={() => { void handleSave(); }}
-                  disabled={saving}
-                  className="flex-1 gradient-primary text-primary-foreground"
-                >
-                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  {editId ? "Salvar Alterações" : "Registrar Prontuário"}
-                </Button>
-              )}
+                ) : (
+                  <Button
+                    onClick={() => { void handleSave(); }}
+                    disabled={saving}
+                    className="gradient-primary text-primary-foreground min-w-[200px]"
+                  >
+                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    {editId ? "Salvar Alterações" : "Registrar Prontuário"}
+                  </Button>
+                )}
+              </div>
             </div>
         </DialogContent>
       </Dialog>
