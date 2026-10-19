@@ -1006,43 +1006,56 @@ const Disponibilidade: React.FC = () => {
                         });
                       });
 
+                      const fmt = (s: string) => s ? s.split('-').reverse().join('/') : '';
+                      const periodo = first.dataInicio === first.dataFim ? fmt(first.dataInicio) : `${fmt(first.dataInicio)} a ${fmt(first.dataFim)}`;
+                      const sorted = turnoBlocks.sort((a, b) => a.dayNum - b.dayNum || a.bloco.horaInicio.localeCompare(b.bloco.horaInicio));
                       return (
-                        <Card key={key} className="border border-border">
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Badge variant="secondary" className="text-[10px] gap-1"><ClipboardList className="w-3 h-3" />Por Turno</Badge>
-                                  {unidade && <span className="text-xs text-muted-foreground">{unidade.nome}</span>}
-                                </div>
-                                <p className="text-xs text-muted-foreground"><Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}</p>
-                              </div>
-                              <div className="flex gap-1">
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditGroup(key)}><Pencil className="w-3.5 h-3.5" /></Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os registros serão removidos.</AlertDialogDescription></AlertDialogHeader>
-                                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const r of records) { await deleteDisponibilidade(r.id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
+                        <div key={key} className="rounded-xl border border-border overflow-hidden bg-card">
+                          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-muted/30 border-b border-border">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Badge className="gap-1.5 rounded-full px-3 py-1 text-xs"><Calendar className="w-3.5 h-3.5" />Por turno</Badge>
+                              {unidade && <><span className="h-5 w-px bg-border" /><span className="text-sm text-muted-foreground truncate">{unidade.nome}</span></>}
                             </div>
-                            <div className="space-y-1">
-                              {turnoBlocks.sort((a, b) => a.dayNum - b.dayNum || a.bloco.horaInicio.localeCompare(b.bloco.horaInicio)).map((tb, idx) => (
-                                <div key={idx} className="flex items-center gap-2 text-xs">
-                                  <Badge variant="outline" className="text-[10px] min-w-[32px] justify-center">{diasSemanaLabels[tb.dayNum]}</Badge>
-                                  <span className="font-medium">{tb.bloco.nome}</span>
-                                  <span className="text-muted-foreground">{tb.bloco.horaInicio}–{tb.bloco.horaFim}</span>
-                                  <span className="font-medium">{tb.bloco.vagas} vagas</span>
-                                </div>
-                              ))}
+                            <div className="flex gap-1 shrink-0">
+                              <Button size="icon" variant="ghost" className="h-8 w-8" title="Editar" onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" title="Excluir"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os registros serão removidos.</AlertDialogDescription></AlertDialogHeader>
+                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const r of records) { await deleteDisponibilidade(r.id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </div>
-                            {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
-                              <div className="mt-2"><SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} /></div>
-                            )}
-                          </CardContent>
-                        </Card>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/50 text-muted-foreground">
+                                <tr>
+                                  <th className="text-left font-medium px-4 py-2.5"><span className="inline-flex items-center gap-1.5"><Calendar className="w-4 h-4" />Data</span></th>
+                                  <th className="text-left font-medium px-4 py-2.5"><span className="inline-flex items-center gap-1.5"><Calendar className="w-4 h-4" />Dia da semana</span></th>
+                                  <th className="text-left font-medium px-4 py-2.5"><span className="inline-flex items-center gap-1.5"><Clock className="w-4 h-4" />Turno</span></th>
+                                  <th className="text-left font-medium px-4 py-2.5"><span className="inline-flex items-center gap-1.5"><User className="w-4 h-4" />Vagas</span></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {sorted.map((tb, idx) => (
+                                  <tr key={idx} className="border-t border-border">
+                                    <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{periodo}</td>
+                                    <td className="px-4 py-3 text-foreground">{diasSemanaFull[tb.dayNum]}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <span className="inline-flex items-center rounded-md bg-primary/10 text-primary font-semibold px-2.5 py-1 text-xs mr-3">{tb.bloco.nome}</span>
+                                      <span className="text-muted-foreground">{tb.bloco.horaInicio}–{tb.bloco.horaFim}</span>
+                                    </td>
+                                    <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{tb.bloco.vagas} vagas</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
+                            <div className="px-4 py-2 border-t border-border"><SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} /></div>
+                          )}
+                        </div>
                       );
                     }
 
