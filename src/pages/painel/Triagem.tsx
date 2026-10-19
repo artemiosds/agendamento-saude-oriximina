@@ -37,6 +37,7 @@ import { ClipboardList } from "lucide-react";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import ChamarPacienteButton from "@/components/ChamarPacienteButton";
 import CondicaoBadges from "@/components/CondicaoBadges";
+import MedicamentoBusca from "@/components/triagem/MedicamentoBusca";
 
 interface Agendamento {
   id: string;
@@ -987,6 +988,7 @@ const Triagem: React.FC = () => {
             </div>
           )}
           <div className="space-y-4">
+            <h3 className="border-b pb-1 text-sm font-semibold text-primary">1. Sinais Vitais e Biometria</h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
                 <Label>Peso (kg)</Label>
@@ -1030,6 +1032,7 @@ const Triagem: React.FC = () => {
                 <Input type="number" step="0.01" value={form.glicemia} onChange={(e) => setForm((p) => ({ ...p, glicemia: e.target.value }))} placeholder="Opcional" />
               </div>
             </div>
+            <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">2. Avaliação Clínica e Risco</h3>
             <div>
               <Label className="text-base font-semibold">Escala de Dor (010): {form.dor}</Label>
               <Slider value={[form.dor]} onValueChange={(v) => setForm((p) => ({ ...p, dor: v[0] }))} max={10} min={0} step={1} className="mt-2" />
@@ -1086,6 +1089,7 @@ const Triagem: React.FC = () => {
                 placeholder="Detalhe a evolução dos sintomas: início, duração, fatores de melhora/piora, tratamentos prévios..."
               />
             </div>
+            <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">3. Histórico, Alergias e Medicamentos</h3>
             <details className="group rounded-md border border-border p-2">
               <summary className="cursor-pointer select-none text-sm font-medium flex items-center justify-between">
                 <span>Sintomas nos últimos 30 dias{form.sintomas30Dias.length > 0 ? ` (${form.sintomas30Dias.length} selecionado${form.sintomas30Dias.length > 1 ? "s" : ""})` : ""}</span>
@@ -1146,12 +1150,9 @@ const Triagem: React.FC = () => {
             </div>
             <div>
               <Label>Medicamentos em uso</Label>
-              <div className="mt-1 flex gap-2">
-                <Input value={newMedicamento} onChange={(e) => setNewMedicamento(e.target.value)} placeholder="Digitar medicamento" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addMedicamento())} />
-                <Button type="button" variant="outline" size="icon" onClick={addMedicamento}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              <MedicamentoBusca
+                onAdd={(v) => setForm((p) => (p.medicamentos.includes(v) ? p : { ...p, medicamentos: [...p.medicamentos, v] }))}
+              />
               {form.medicamentos.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {form.medicamentos.map((m, i) => (
@@ -1176,15 +1177,13 @@ const Triagem: React.FC = () => {
                 onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
               />
             )}
-            <div className="flex flex-col gap-2">
-              <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
+            <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex items-center justify-between gap-2 border-t bg-background px-6 py-3">
+              <Button variant="outline" onClick={salvarRascunho} disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4" /> Salvar Rascunho
               </Button>
-              <div className="flex justify-center gap-2">
-                <Button className="w-full sm:w-2/3" variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Seguir sem Enfermagem
-                </Button>
-              </div>
+              <Button variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Seguir sem Enfermagem
+              </Button>
             </div>
           </div>
         </DialogContent>
