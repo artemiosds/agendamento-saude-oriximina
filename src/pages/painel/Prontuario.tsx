@@ -3393,6 +3393,9 @@ const ProntuarioPage: React.FC = () => {
 
   const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
   const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
+  const openPainelDoc = useCallback(() => setPainelDocOpen(true), []);
+  const [trocarPacienteAberto, setTrocarPacienteAberto] = useState(false);
+  useEffect(() => { if (!dialogOpen) setTrocarPacienteAberto(false); }, [dialogOpen]);
   const unidadeAtualNome = useMemo(() => unidades.find(u => u.id === user?.unidadeId)?.nome, [unidades, user?.unidadeId]);
   const soapValues = useMemo(() => ({
     soap_subjetivo: form.soap_subjetivo,
@@ -3837,14 +3840,24 @@ const ProntuarioPage: React.FC = () => {
 
           {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label>Paciente *</Label>
-                <BuscaPaciente
-                  pacientes={pacientes}
-                  value={form.paciente_id}
-                  onChange={handlePacienteChange}
-                />
-              </div>
+              {(!form.paciente_id || trocarPacienteAberto) ? (
+                <div>
+                  <Label>Paciente *</Label>
+                  <BuscaPaciente
+                    pacientes={pacientes}
+                    value={form.paciente_id}
+                    onChange={(...args: Parameters<typeof handlePacienteChange>) => { setTrocarPacienteAberto(false); return handlePacienteChange(...args); }}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-end">
+                  {!editId && !form.agendamento_id && (
+                    <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setTrocarPacienteAberto(true)}>
+                      Trocar paciente
+                    </Button>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Data *</Label>
