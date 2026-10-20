@@ -45,7 +45,7 @@ const Home: React.FC = () => {
       <header className="border-b bg-background">
         <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 px-4 py-4">
           <Link to="/" className="flex min-w-0 items-center gap-3" aria-label="SMS Oriximiná — página inicial">
-            <img src={logoSms} alt="Logo oficial SMS Oriximiná" width={64} height={64} className="h-14 w-14 shrink-0 object-contain sm:h-16 sm:w-16" />
+            <img src={logoSms} alt="Logo oficial SMS Oriximiná" width={96} height={96} className="h-20 w-20 shrink-0 rounded-2xl object-contain sm:h-24 sm:w-24" />
             <span className="text-sm font-semibold leading-snug text-foreground sm:text-base">Prefeitura de Oriximiná<span className="block text-xs font-normal text-muted-foreground sm:text-sm">Secretaria Municipal de Saúde</span></span>
           </Link>
           <nav aria-label="Navegação principal" className="flex w-full items-center justify-between gap-3 text-sm sm:w-auto sm:gap-6">
