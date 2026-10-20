@@ -19,9 +19,12 @@ import {
   HeartHandshake,
   HandMetal,
   UserCheck,
+  ChevronDown,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import logoSms from "@/assets/logo-sms.jpeg";
+import heroAtendimento from "@/assets/hero-atendimento.webp";
 
 const services = [
   { icon: Stethoscope, title: "Clínica Geral", desc: "Consultas médicas gerais" },
@@ -39,21 +42,44 @@ const services = [
 const Home: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
+      <header className="border-b bg-background">
+        <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 px-4 py-4">
+          <Link to="/" className="flex min-w-0 items-center gap-3" aria-label="SMS Oriximiná — página inicial">
+            <img src={logoSms} alt="Logo oficial SMS Oriximiná" width={64} height={64} className="h-14 w-14 shrink-0 object-contain sm:h-16 sm:w-16" />
+            <span className="text-sm font-semibold leading-snug text-foreground sm:text-base">Prefeitura de Oriximiná<span className="block text-xs font-normal text-muted-foreground sm:text-sm">Secretaria Municipal de Saúde</span></span>
+          </Link>
+          <nav aria-label="Navegação principal" className="flex w-full items-center justify-between gap-3 text-sm sm:w-auto sm:gap-6">
+            <a href="#servicos" className="text-muted-foreground hover:text-foreground">Serviços</a>
+            <a href="#contato" className="text-muted-foreground hover:text-foreground">Contato</a>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2"><Shield className="h-4 w-4" aria-hidden="true" />Área Restrita<ChevronDown className="h-4 w-4" aria-hidden="true" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem asChild><Link to="/login" className="gap-2"><Shield className="h-4 w-4" />Painel do Servidor</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link to="/externo" className="gap-2"><UserCheck className="h-4 w-4" />Acesso Regulador / Externo</Link></DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </nav>
+        </div>
+      </header>
       {/* Hero */}
-      <section className="gradient-hero text-primary-foreground">
-        <div className="container mx-auto px-4 py-16 md:py-24">
+      <section className="relative isolate overflow-hidden bg-sky-50 text-slate-900">
+        <img src={heroAtendimento} alt="Profissional de saúde acolhendo uma paciente" width={1600} height={800} loading="eager" className="block aspect-[2/1] w-full object-cover lg:absolute lg:inset-y-0 lg:right-0 lg:h-full lg:w-[58%]" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-sky-50 via-sky-50/95 to-transparent lg:block" />
+        <div className="container relative mx-auto px-4 py-10 sm:py-14 lg:py-24">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="max-w-2xl"
+            className="max-w-xl"
           >
-            <img src={logoSms} alt="SMS Oriximiná" className="w-20 h-20 rounded-2xl object-cover shadow-lg mb-4" />
+            <p className="mb-3 text-sm font-semibold text-sky-800">Saúde pública de Oriximiná</p>
             <h1 className="text-3xl md:text-5xl font-bold font-display leading-tight mb-4">
-              Secretaria Municipal de Saúde de Oriximiná
+              Sua saúde, mais perto de você.
             </h1>
             <p className="text-lg opacity-90 mb-8">
-              Sistema de agendamento online. Agende sua consulta de forma rápida e prática.
+              Agendamento online e serviços de saúde para você e sua família.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link to="/agendar">
@@ -69,30 +95,10 @@ const Home: React.FC = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="bg-white/[0.08] border-white/35 text-white font-medium shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:bg-white/15 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
+                  className="border-sky-700 bg-white text-sky-800 hover:bg-sky-100 hover:text-sky-900 w-full sm:w-auto"
                 >
                   <User className="w-5 h-5 mr-2" />
-                  Portal do Paciente
-                </Button>
-              </Link>
-              <Link to="/login">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="bg-white/[0.05] border-white/25 text-white/90 font-medium hover:bg-white/10 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
-                >
-                  <Shield className="w-5 h-5 mr-2" />
-                  Painel Interno
-                </Button>
-              </Link>
-              <Link to="/externo">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="bg-white/[0.05] border-white/25 text-white/90 font-medium hover:bg-white/10 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
-                >
-                  <UserCheck className="w-5 h-5 mr-2" />
-                  Acesso Externo
+                  Consultar Agendamento
                 </Button>
               </Link>
             </div>
@@ -101,7 +107,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* Services */}
-      <section className="container mx-auto px-4 py-16">
+      <section id="servicos" className="container mx-auto scroll-mt-6 px-4 py-12 md:py-16">
         <h2 className="text-2xl font-bold font-display text-foreground text-center mb-8">Nossos Serviços</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {services.map((s, i) => (
@@ -126,7 +132,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* Info */}
-      <section className="bg-muted/50">
+      <section id="contato" className="scroll-mt-6 bg-muted/50">
         <div className="container mx-auto px-4 py-16">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-start gap-3">
@@ -161,6 +167,11 @@ const Home: React.FC = () => {
       {/* Footer */}
       <footer className="bg-sidebar text-sidebar-foreground/60 text-center py-6 text-sm">
         SMS Oriximiná © {new Date().getFullYear()} — Secretaria Municipal de Saúde
+        <nav aria-label="Acessos institucionais" className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-2 px-4">
+          <a href="#contato" className="hover:text-sidebar-foreground">Informações ao Cidadão</a>
+          <Link to="/login" className="hover:text-sidebar-foreground">Acesso do Servidor</Link>
+          <Link to="/externo" className="hover:text-sidebar-foreground">Acesso Regulador / Externo</Link>
+        </nav>
       </footer>
     </div>
   );
