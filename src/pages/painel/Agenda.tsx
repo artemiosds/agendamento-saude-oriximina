@@ -85,6 +85,7 @@ import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
 import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteModal";
 import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
 import { openPrintDocument } from "@/lib/printLayout";
+import { printComprovanteAgendamento } from "@/lib/printComprovanteAgendamento";
 import { hasConfirmedTriage, isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 
 const statusActions = [
@@ -2634,6 +2635,18 @@ const Agenda: React.FC = () => {
     (ag: any) => handleImprimirFichaRef.current(ag),
     [],
   );
+  const handleComprovanteRef = React.useRef<(ag: any) => void>(() => {});
+  handleComprovanteRef.current = (ag: any) => {
+    const p: any = (pacienteById as any)?.get ? (pacienteById as any).get(ag.pacienteId) : (pacienteById as any)?.[ag.pacienteId];
+    const u: any = unidades.find((x: any) => x.id === ag.unidadeId);
+    printComprovanteAgendamento({
+      id: ag.id, data: ag.data, hora: ag.hora, tipo: ag.tipo, status: ag.status,
+      profissionalNome: ag.profissionalNome,
+      pacienteNome: p?.nome || ag.pacienteNome, pacienteCpf: p?.cpf, pacienteCns: p?.cns,
+      unidadeNome: u?.nome, unidadeEndereco: u?.endereco, unidadeTelefone: u?.telefone,
+    });
+  };
+  const stableComprovante = React.useCallback((ag: any) => handleComprovanteRef.current(ag), []);
 
   const canAgendaEdit = can("agenda", "can_edit");
   const canAgendaDelete = can("agenda", "can_delete");
@@ -3486,6 +3499,7 @@ const Agenda: React.FC = () => {
                     onConcluir={stableConcluir}
                     onDelete={stableDelete}
                     onImprimirFicha={stableImprimirFicha}
+                    onImprimirComprovante={stableComprovante}
                   />
                 );
               })
