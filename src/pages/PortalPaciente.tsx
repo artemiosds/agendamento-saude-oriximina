@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { openPrintDocument } from '@/lib/printLayout';
+import { printComprovanteAgendamento } from '@/lib/printComprovanteAgendamento';
 import { PORTAL_PERMISSOES_PADRAO, type PortalPermissoes } from '@/types';
 import DadosPacienteBlocos, { deserializeDadosPaciente, serializeDadosPaciente, emptyDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 
@@ -210,22 +211,13 @@ const PortalPaciente: React.FC = () => {
   const getUnidadeNome = (id: string) => unidades.find(u => u.id === id)?.nome || '';
 
   const handlePrintComprovante = (ag: AgendamentoData) => {
-    const unidade = unidades.find(u => u.id === ag.unidade_id);
-    const body = `
-      <div class="content-block">
-        <div class="field"><div class="field-label">Paciente</div><div class="field-value">${paciente?.nome || ''}</div></div>
-        <div class="field"><div class="field-label">CPF</div><div class="field-value">${paciente?.cpf || '-'}</div></div>
-        <div class="field"><div class="field-label">Data</div><div class="field-value">${new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
-        <div class="field"><div class="field-label">Horário</div><div class="field-value">${ag.hora}</div></div>
-        <div class="field"><div class="field-label">Profissional</div><div class="field-value">${ag.profissional_nome}</div></div>
-        <div class="field"><div class="field-label">Tipo</div><div class="field-value">${ag.tipo}</div></div>
-        <div class="field"><div class="field-label">Unidade</div><div class="field-value">${unidade?.nome || ''}</div></div>
-        <div class="field"><div class="field-label">Endereço</div><div class="field-value">${unidade?.endereco || ''}</div></div>
-        <div class="field"><div class="field-label">Status</div><div class="field-value">${ag.status}</div></div>
-        <div class="qr-area"><p>Apresente este comprovante na recepção</p><p class="code">Código: ${ag.id}</p></div>
-        <p style="text-align:center;margin-top:16px;font-size:11px;color:#64748b;">Chegue com 15 minutos de antecedência.</p>
-      </div>`;
-    openPrintDocument('Comprovante de Agendamento', body, { 'Unidade': unidade?.nome || '' });
+    const unidade: any = unidades.find(u => u.id === ag.unidade_id);
+    printComprovanteAgendamento({
+      id: ag.id, data: ag.data, hora: ag.hora, tipo: ag.tipo, status: ag.status,
+      profissionalNome: ag.profissional_nome,
+      pacienteNome: paciente?.nome, pacienteCpf: paciente?.cpf, pacienteCns: (paciente as any)?.cns,
+      unidadeNome: unidade?.nome, unidadeEndereco: unidade?.endereco, unidadeTelefone: unidade?.telefone,
+    });
   };
 
   const handleVerifyRecovery = async () => {

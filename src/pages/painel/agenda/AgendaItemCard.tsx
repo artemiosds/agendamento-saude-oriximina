@@ -32,6 +32,7 @@ import {
   X,
   Trash2,
   Printer,
+  Ticket,
 } from "lucide-react";
 import ContactActionButton from "@/components/ContactActionButton";
 import ChamarPacienteButton from "@/components/ChamarPacienteButton";
@@ -86,6 +87,7 @@ export interface AgendaItemCardProps {
   }) => void;
   onDelete: (id: string) => void;
   onImprimirFicha?: (ag: any) => void;
+  onImprimirComprovante?: (ag: any) => void;
 }
 
 const isSameDay = (a: Date, b: Date) =>
@@ -129,6 +131,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   onConcluir,
   onDelete,
   onImprimirFicha,
+  onImprimirComprovante,
 }) => {
   const today = todayLocalStr();
   const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
@@ -367,6 +370,18 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
               <TooltipContent>Imprimir Ficha de Atendimento</TooltipContent>
             </Tooltip>
             </TooltipProvider>
+          )}
+          {onImprimirComprovante && ag.status !== "cancelado" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2 text-xs"
+              onClick={() => onImprimirComprovante(ag)}
+              title="Imprimir Comprovante de Agendamento"
+              aria-label="Imprimir Comprovante de Agendamento"
+            >
+              <Ticket className="w-3.5 h-3.5" />
+            </Button>
           )}
           {/* Botão individual de aviso — MASTER e RECEPCAO */}
           {(user?.role === "master" || user?.role === "recepcao") && (
