@@ -578,6 +578,7 @@ const Agenda: React.FC = () => {
   // BUSCA na agenda
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [turnoFilter, setTurnoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   React.useEffect(() => {
@@ -942,6 +943,15 @@ const Agenda: React.FC = () => {
       result = result.filter((a) => (a.tipo || "") === tipoFilter);
     }
 
+    if (turnoFilter !== "all") {
+      result = result.filter((a) => {
+        const h = parseInt(String(a.hora || "").slice(0, 2), 10);
+        if (isNaN(h)) return false;
+        const t = h < 12 ? "manha" : h < 18 ? "tarde" : "noite";
+        return t === turnoFilter;
+      });
+    }
+
     // Regra centralizada: Se não estiver buscando por nome/CPF/CNS nem filtrando por status específico,
     // a lista principal deve omitir agendamentos que não ocupam vaga (cancelados/faltas)
     // APENAS para datas futuras ou hoje. Para datas passadas, mostramos tudo o que aconteceu.
@@ -952,7 +962,7 @@ const Agenda: React.FC = () => {
     return result;
 
 
-  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, pacienteById, triageMap, arrivalMap, nowMinutes, resolvePaciente]);
+  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, turnoFilter, pacienteById, triageMap, arrivalMap, nowMinutes, resolvePaciente]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
@@ -3138,7 +3148,7 @@ const Agenda: React.FC = () => {
 
               <div className="p-4 bg-card">
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-col md:flex-row md:items-end gap-3">
+                  <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-3">
                     {!isProfissional && showUnitSelector && (
                       <div className="w-full md:w-48 space-y-1.5">
                         <Label className="text-xs font-semibold text-muted-foreground ml-1">Unidade</Label>
@@ -3255,7 +3265,7 @@ const Agenda: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="flex-1 space-y-1.5">
+                    <div className="w-full md:flex-1 md:min-w-[320px] space-y-1.5">
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Paciente</Label>
                       <div className="relative">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -3283,6 +3293,21 @@ const Agenda: React.FC = () => {
                       </Select>
                     </div>
 
+                    <div className="w-full md:w-36 space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground ml-1">Turno</Label>
+                      <Select value={turnoFilter} onValueChange={setTurnoFilter}>
+                        <SelectTrigger className="h-11 text-sm font-medium">
+                          <SelectValue placeholder="Turno" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os turnos</SelectItem>
+                          <SelectItem value="manha">Manhã</SelectItem>
+                          <SelectItem value="tarde">Tarde</SelectItem>
+                          <SelectItem value="noite">Noite</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     <div className="w-full md:w-48 space-y-1.5">
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Tipo</Label>
                       <Select value={tipoFilter} onValueChange={setTipoFilter}>
@@ -3302,13 +3327,14 @@ const Agenda: React.FC = () => {
                       </Select>
                     </div>
 
-                    {(statusFilter !== "all" || tipoFilter !== "all" || searchTerm || (filterProf !== "all" && !isProfissional)) && (
+                    {(statusFilter !== "all" || tipoFilter !== "all" || turnoFilter !== "all" || searchTerm || (filterProf !== "all" && !isProfissional)) && (
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => { 
                           setStatusFilter("all"); 
                           setTipoFilter("all"); 
+                          setTurnoFilter("all");
                           setSearchTerm("");
                           if (!isProfissional) setFilterProf("all");
                         }}
