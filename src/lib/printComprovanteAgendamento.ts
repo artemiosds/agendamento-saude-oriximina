@@ -48,21 +48,36 @@ export function printComprovanteAgendamento(ag: ComprovanteAgendamentoInput) {
         <div style="font-size:20px;font-weight:700;margin-top:4px;text-transform:capitalize;">${esc(dataExt)}</div>
         <div style="font-size:26px;font-weight:800;color:#2A6F97;margin-top:2px;">${esc(ag.hora)}${turnoDe(ag.hora) ? ` <span style="font-size:13px;font-weight:600;color:#475569;">(${turnoDe(ag.hora)})</span>` : ""}</div>
       </div>
-      ${f("Paciente", ag.pacienteNome)}
-      ${f("CPF", ag.pacienteCpf)}
-      ${f("Cartão SUS (CNS)", ag.pacienteCns)}
-      ${f("Profissional", ag.profissionalNome)}
-      ${f("Tipo de atendimento", ag.tipo)}
-      ${f("Situação", ag.status ? STATUS_LABEL[ag.status] || ag.status : "")}
+      <div style="border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#64748b;font-weight:700;">Paciente</div>
+        <div style="font-size:20px;font-weight:800;margin-top:2px;">${esc(ag.pacienteNome || "—")}</div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <div style="flex:1;background:#f1f5f9;border-radius:6px;padding:6px 10px;"><div style="font-size:10px;color:#64748b;font-weight:700;">CPF</div><div style="font-size:14px;font-weight:700;font-family:monospace;">${esc(ag.pacienteCpf || "Não informado")}</div></div>
+          <div style="flex:1;background:#f1f5f9;border-radius:6px;padding:6px 10px;"><div style="font-size:10px;color:#64748b;font-weight:700;">CARTÃO SUS (CNS)</div><div style="font-size:14px;font-weight:700;font-family:monospace;">${esc(ag.pacienteCns || "Não informado")}</div></div>
+        </div>
+      </div>
+      <div style="border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#64748b;font-weight:700;">Consulta</div>
+        <div style="font-size:16px;font-weight:700;margin-top:2px;">${esc(ag.tipo || "Atendimento")}</div>
+        <div style="font-size:14px;margin-top:4px;"><strong>Profissional:</strong> ${esc(ag.profissionalNome || "—")}</div>
+        ${ag.status ? `<div style="font-size:13px;margin-top:2px;"><strong>Situação:</strong> ${esc(STATUS_LABEL[ag.status] || ag.status)}</div>` : ""}
+      </div>
       ${f("Unidade", ag.unidadeNome)}
       ${f("Endereço", ag.unidadeEndereco)}
       ${f("Telefone da unidade", ag.unidadeTelefone)}
       <div style="margin-top:14px;padding:10px 12px;background:#f1f5f9;border-radius:8px;font-size:12px;line-height:1.5;">
-        <strong>Orientações:</strong>
+        <strong>Documentos obrigatórios para o atendimento:</strong>
+        <ul style="margin:6px 0 0 18px;padding:0;">
+          <li>Documento oficial de identificação com foto (RG, CNH ou outro).</li>
+          <li>CPF.</li>
+          <li>Cartão SUS (CNS).</li>
+          <li>Este comprovante de agendamento.</li>
+          <li>Encaminhamento/guia de referência, quando houver.</li>
+          <li>Exames, receitas e relatórios médicos anteriores, se houver.</li>
+        </ul>
+        <strong style="display:block;margin-top:8px;">Orientações:</strong>
         <ul style="margin:6px 0 0 18px;padding:0;">
           <li>Chegue com 15 minutos de antecedência.</li>
-          <li>Traga documento com foto, Cartão SUS e este comprovante.</li>
-          <li>Traga exames e receitas anteriores, se houver.</li>
           <li>Se não puder comparecer, avise a unidade com antecedência.</li>
         </ul>
       </div>
