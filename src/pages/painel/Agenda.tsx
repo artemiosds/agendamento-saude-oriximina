@@ -2637,7 +2637,7 @@ const Agenda: React.FC = () => {
   );
   const handleComprovanteRef = React.useRef<(ag: any) => void>(() => {});
   handleComprovanteRef.current = (ag: any) => {
-    const p: any = resolvePaciente ? resolvePaciente(ag) : pacienteById?.get?.(ag.pacienteId);
+    const p: any = (pacienteById as any)?.get ? (pacienteById as any).get(ag.pacienteId) : (pacienteById as any)?.[ag.pacienteId];
     const u: any = unidades.find((x: any) => x.id === ag.unidadeId);
     printComprovanteAgendamento({
       id: ag.id, data: ag.data, hora: ag.hora, tipo: ag.tipo, status: ag.status,
