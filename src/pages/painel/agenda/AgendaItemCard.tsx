@@ -21,6 +21,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  MoreHorizontal,
   Clock,
   Paperclip,
   Eye,
@@ -557,26 +564,66 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
             ag.status !== "concluido" &&
             !ehPendenteOnline &&
             (isMaster || isProfissional || user?.role === "recepcao" || canAgendaEdit) &&
-            statusActions.filter(sa => {
-              if (sa.key === "confirmado_chegada" && isArrivalAlreadyProcessed(ag.status)) return false;
-              // Se for profissional, só mostra ação de "falta" para a própria agenda
-              if (isProfissional) {
-                return sa.key === "falta" && ag.profissionalId === user?.id;
-              }
-              return true;
-            }).map((sa) => (
-              <Button
-                key={sa.key}
-                size="sm"
-                variant="outline"
-                className={cn("h-8 px-2 text-xs", ag.status === sa.key && sa.color)}
-                onClick={() => onStatusChange(ag.id, sa.key)}
-                disabled={ag.status === sa.key}
-                title={sa.label}
-              >
-                <sa.icon className="w-3.5 h-3.5" />
-              </Button>
-            ))}
+            (() => {
+              const visiveis = statusActions.filter(sa => {
+                if (sa.key === "confirmado_chegada" && isArrivalAlreadyProcessed(ag.status)) return false;
+                if (isProfissional) {
+                  return sa.key === "falta" && ag.profissionalId === user?.id;
+                }
+                return true;
+              });
+              const chegada = visiveis.find(sa => sa.key === "confirmado_chegada");
+              const falta = visiveis.find(sa => sa.key === "falta");
+              const outras = visiveis.filter(sa => sa.key !== "confirmado_chegada" && sa.key !== "falta");
+              return (
+                <>
+                  {chegada && (
+                    <Button
+                      size="sm"
+                      className="h-9 px-3 gap-1.5 text-sm font-semibold bg-success text-success-foreground hover:bg-success/90"
+                      onClick={() => onStatusChange(ag.id, chegada.key)}
+                      disabled={ag.status === chegada.key}
+                      title={chegada.label}
+                    >
+                      <chegada.icon className="w-4 h-4" /> Confirmar chegada
+                    </Button>
+                  )}
+                  {falta && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={cn("h-8 px-2 gap-1 text-xs border-destructive/40 text-destructive", ag.status === falta.key && falta.color)}
+                      onClick={() => onStatusChange(ag.id, falta.key)}
+                      disabled={ag.status === falta.key}
+                      title={falta.label}
+                    >
+                      <falta.icon className="w-3.5 h-3.5" /> Faltou
+                    </Button>
+                  )}
+                  {outras.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-8 px-2 gap-1 text-xs" title="Mais ações">
+                          <MoreHorizontal className="w-3.5 h-3.5" /> Mais ações
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {outras.map(sa => (
+                          <DropdownMenuItem
+                            key={sa.key}
+                            disabled={ag.status === sa.key}
+                            onSelect={() => onStatusChange(ag.id, sa.key)}
+                            className="gap-2"
+                          >
+                            <sa.icon className="w-4 h-4" /> {sa.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </>
+              );
+            })()}
           {!isProfissional && ag.status !== "cancelado" && ag.status !== "concluido" && !ehPendenteOnline && (
             <Button
               size="sm"
