@@ -23,6 +23,7 @@ import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { maskCNS } from "@/lib/cnsUtils";
 import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
 import BuscaCepPorRua from "@/components/BuscaCepPorRua";
+import BairroPacienteInput from "@/components/BairroPacienteInput";
 import { firstPacienteError, PACIENTE_FIELD_TABS } from "@/lib/pacienteFormFields";
 import { mergeLatestReferral } from "@/lib/pacienteReferralSnapshot";
 import type { PatientReferral } from "@/services/patientReferralService";
@@ -597,7 +598,8 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               <div>
                 <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Bairro</Label>
-                <Input
+                <BairroPacienteInput
+                  cep={cd.cep || ""}
                   value={cd.bairro || ""}
                   onChange={(e) => endereco.changeField("bairro", sanitizeUpper(e.target.value))}
                   placeholder="BAIRRO"

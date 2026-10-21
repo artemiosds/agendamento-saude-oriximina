@@ -12,6 +12,7 @@ import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
 import { sanitizeUpper } from "@/lib/enderecoPaciente";
 import BuscaCepPorRua from "@/components/BuscaCepPorRua";
+import BairroPacienteInput from "@/components/BairroPacienteInput";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 const RACA_COR = [
@@ -234,7 +235,8 @@ const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, em
             </div>
             <div>
               <Label>Bairro</Label>
-              <Input value={value.bairro} onChange={e => endereco.changeField("bairro", sanitizeUpper(e.target.value))} />
+              <BairroPacienteInput cep={value.cep} value={value.bairro}
+                onChange={e => endereco.changeField("bairro", sanitizeUpper(e.target.value))} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
