@@ -66,7 +66,7 @@ const Home: React.FC = () => {
       {/* Hero */}
       <section className="relative isolate overflow-hidden bg-sky-50 text-slate-900">
         <img src={heroAtendimento} alt="Profissional de saúde acolhendo uma paciente" width={1600} height={800} loading="eager" className="block aspect-[2/1] w-full object-cover lg:absolute lg:inset-y-0 lg:right-0 lg:h-full lg:w-[58%]" />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-sky-50 via-sky-50/95 to-transparent lg:block" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(90deg,#f0f9ff_0%,#f0f9ff_38%,rgba(240,249,255,0.75)_48%,rgba(240,249,255,0.15)_62%,transparent_76%)] lg:block" />
         <div className="container relative mx-auto px-4 py-10 sm:py-14 lg:py-24">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -75,7 +75,7 @@ const Home: React.FC = () => {
             className="max-w-xl"
           >
             <p className="mb-3 text-sm font-semibold text-sky-800">Saúde pública de Oriximiná</p>
-            <h1 className="text-3xl md:text-5xl font-bold font-display leading-tight mb-4">
+            <h1 className="text-3xl md:text-5xl font-bold font-display leading-tight mb-4 text-balance">
               Sua saúde, mais perto de você.
             </h1>
             <p className="text-lg opacity-90 mb-8">
