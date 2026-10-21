@@ -157,9 +157,9 @@ const Home: React.FC = () => {
               <div>
                 <h3 className="font-semibold text-foreground">Contato</h3>
                 <p className="text-sm text-muted-foreground">
-                  (93) 3544-1587
+                  (93) 99108-3163
                   <br />
-                  WhatsApp: (93) 99999-0000
+                  WhatsApp: a0(93) 99108-3163
                 </p>
               </div>
             </div>
