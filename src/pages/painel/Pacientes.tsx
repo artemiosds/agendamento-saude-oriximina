@@ -47,6 +47,9 @@ import ProfissaoCboSelect from "@/components/fila/ProfissaoCboSelect";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
+import { firstPacienteError } from "@/lib/pacienteFormFields";
+import { patientDemographicUpdate } from "@/lib/pacienteReferralSnapshot";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
 
@@ -538,8 +541,7 @@ const Pacientes: React.FC = () => {
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      const firstError = Object.values(newErrors)[0];
-      toast.error(firstError);
+      toast.error(firstPacienteError(newErrors)!.message);
       return;
     }
     if (!editId && user?.role === "recepcao" && !unidadeIdFuncionario) {
@@ -551,7 +553,7 @@ const Pacientes: React.FC = () => {
 
     const normalizedPhone = normalizePhone(rawPhone!) || "";
 
-    const dbFields: any = {
+    const dbFields: Database["public"]["Tables"]["pacientes"]["Update"] & { custom_data: Record<string, Json> } = {
       nome: form.nome,
       cpf: (form.cpf || "").replace(/\D/g, ""),
       cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
@@ -619,7 +621,7 @@ const Pacientes: React.FC = () => {
     try {
       if (editId) {
         // Agora aguardamos o salvamento real para garantir sincronização e evitar race conditions
-        const { data: updatedPaciente, error } = await supabase.from("pacientes").update(dbFields).eq("id", editId).select().single();
+        const { data: updatedPaciente, error } = await supabase.from("pacientes").update(patientDemographicUpdate(dbFields)).eq("id", editId).select().single();
         
         if (error) {
           console.error("Erro ao atualizar paciente:", error);

@@ -7,6 +7,15 @@ import { PatientReferral } from "@/services/patientReferralService";
 import { format } from "date-fns";
 import { buildDocumentShell, loadDocumentConfig, printViaIframe } from "@/lib/printLayout";
 
+/** Data de calendário: não converte meia-noite UTC para o dia anterior. */
+export function formatLocalDate(dateStr?: string | null, anoCurto = false): string {
+  if (!dateStr) return "-";
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(dateStr);
+  if (!match) return dateStr;
+  const [, y, m, d] = match;
+  return `${d}/${m}/${anoCurto ? y.slice(-2) : y}`;
+}
+
 function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -36,11 +45,11 @@ export async function printReferral(referral: PatientReferral, patient: any): Pr
   const config = await loadDocumentConfig();
 
   const dataEncaminhamento = referral.data_encaminhamento
-    ? format(new Date(referral.data_encaminhamento), "dd/MM/yyyy")
+    ? formatLocalDate(referral.data_encaminhamento)
     : format(new Date(), "dd/MM/yyyy");
 
-  const dataNasc = patient.data_nascimento
-    ? format(new Date(patient.data_nascimento), "dd/MM/yyyy")
+  const dataNasc = (patient.data_nascimento || patient.dataNascimento)
+    ? formatLocalDate(patient.data_nascimento || patient.dataNascimento)
     : "—";
 
   const dadosPaciente = `

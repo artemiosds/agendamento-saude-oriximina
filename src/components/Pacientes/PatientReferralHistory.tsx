@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { 
   getPatientReferrals, 
   createPatientReferral, 
@@ -21,7 +21,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { printReferral } from "@/lib/referralPrinter";
+import { printReferral, formatLocalDate } from "@/lib/referralPrinter";
+import { latestReferral } from "@/lib/pacienteReferralSnapshot";
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
 } from "@/components/ui/dialog";
@@ -134,6 +135,7 @@ interface Props {
   patientData: any;
   unidadeId?: string;
   professionalId?: string;
+  onLatestReferralChange?: (referral: Partial<PatientReferral>) => void;
 }
 
 export interface PatientReferralHistoryHandle {
@@ -142,7 +144,7 @@ export interface PatientReferralHistoryHandle {
 }
 
 const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
-  ({ patientId, patientData, unidadeId, professionalId }, ref) => {
+  ({ patientId, patientData, unidadeId, professionalId, onLatestReferralChange }, ref) => {
   const isPendingMode = !patientId;
 
   const [referrals, setReferrals] = useState<PatientReferral[]>([]);
@@ -157,10 +159,57 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState(emptyForm());
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const callback = useRef(onLatestReferralChange);
+  callback.current = onLatestReferralChange;
+  const currentPatient = useRef(patientId);
+  currentPatient.current = patientId;
+  const requestId = useRef(0);
+  const mounted = useRef(false);
+  const currentReferrals = useRef<PatientReferral[]>([]);
+
+  const loadReferrals = useCallback(async () => {
+    if (!mounted.current || !patientId || currentPatient.current !== patientId) return;
+    const request = ++requestId.current;
+    setLoading(true);
+    try {
+      const data = await getPatientReferrals(patientId);
+      if (request !== requestId.current || currentPatient.current !== patientId) return;
+      currentReferrals.current = data;
+      setReferrals(data);
+      const latest = latestReferral(data);
+      if (latest) callback.current?.(latest);
+    } catch {
+      if (request === requestId.current) toast.error("Erro ao carregar histórico");
+    } finally {
+      if (request === requestId.current) setLoading(false);
+    }
+  }, [patientId]);
+
+  const notifySavedReferral = (saved: PatientReferral) => {
+    if (!mounted.current || currentPatient.current !== saved.patient_id) return;
+    // Invalida leituras iniciadas antes da gravação.
+    requestId.current++;
+    const next = [saved, ...currentReferrals.current.filter(r => r.id !== saved.id)];
+    currentReferrals.current = next;
+    setReferrals(next);
+    setLoading(false);
+    const latest = latestReferral(next);
+    if (latest) callback.current?.(latest);
+  };
 
   useEffect(() => {
-    if (patientId) loadReferrals();
-  }, [patientId]);
+    mounted.current = true;
+    currentReferrals.current = [];
+    setReferrals([]);
+    setLoading(!!patientId);
+    if (patientId) void loadReferrals();
+    return () => {
+      mounted.current = false;
+      // Geração mutável de consultas, não uma ref de elemento DOM.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      requestId.current++;
+    };
+  }, [patientId, loadReferrals]);
 
   useImperativeHandle(ref, () => ({
     hasPending: () => pending.length > 0,
@@ -184,19 +233,6 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
       setPending([]);
     },
   }), [pending, unidadeId, professionalId]);
-
-  const loadReferrals = async () => {
-    if (!patientId) return;
-    setLoading(true);
-    try {
-      const data = await getPatientReferrals(patientId);
-      setReferrals(data);
-    } catch {
-      toast.error("Erro ao carregar histórico");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const openNew = () => {
     setEditing(null);
@@ -240,9 +276,11 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
             pendingFiles: [...stagedFiles],
           },
         ]);
+        callback.current?.({ ...formData });
         toast.success("Encaminhamento adicionado (será salvo após cadastrar o paciente)");
       } else if (editing) {
-        await updatePatientReferral(editing.id, formData as any);
+        const updated = await updatePatientReferral(editing.id, formData as any);
+        notifySavedReferral(updated);
         for (const f of stagedFiles) {
           try { await uploadReferralAttachment(editing.id, f); } catch {}
         }
@@ -255,6 +293,7 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
           unidade_id: unidadeId,
           professional_id: professionalId,
         } as any);
+        notifySavedReferral(created);
         for (const f of stagedFiles) {
           try { await uploadReferralAttachment(created.id, f); } catch {}
         }
@@ -315,7 +354,12 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
   };
 
   const removePending = (localId: string) => {
-    setPending(p => p.filter(x => x._localId !== localId));
+    const next = pending.filter(x => x._localId !== localId);
+    setPending(next);
+    callback.current?.(next[next.length - 1]?.data || {
+      especialidade_destino: "", ubs_origem: "", profissional_solicitante: "",
+      tipo_encaminhamento: "", cid: "", diagnostico_resumido: "", justificativa: "", data_encaminhamento: "",
+    });
   };
 
   return (
@@ -367,7 +411,7 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
               {pending.map(p => (
                 <TableRow key={p._localId} className="bg-amber-500/5">
                   <TableCell className="font-medium text-xs">
-                    {p.data.data_encaminhamento ? format(new Date(p.data.data_encaminhamento), "dd/MM/yy") : "-"}
+                    {formatLocalDate(p.data.data_encaminhamento, true)}
                   </TableCell>
                   <TableCell className="text-xs font-semibold uppercase text-primary">{p.data.especialidade_destino}</TableCell>
                   <TableCell className="text-xs">{p.data.ubs_origem || "---"}</TableCell>
@@ -387,7 +431,7 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
               {referrals.map((r) => (
                 <TableRow key={r.id} className="cursor-pointer hover:bg-muted/30" onClick={() => { setSelectedReferral(r); setViewModalOpen(true); }}>
                   <TableCell className="font-medium text-xs">
-                    {r.data_encaminhamento ? format(new Date(r.data_encaminhamento), "dd/MM/yy") : "-"}
+                    {formatLocalDate(r.data_encaminhamento, true)}
                   </TableCell>
                   <TableCell className="text-xs font-semibold uppercase text-primary">{r.especialidade_destino}</TableCell>
                   <TableCell className="text-xs">{r.ubs_origem || "---"}</TableCell>
@@ -560,7 +604,7 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
               </DialogHeader>
               <div className="space-y-3 py-3 text-sm">
                 <div className="grid grid-cols-2 gap-3">
-                  <div><span className="text-muted-foreground block text-xs">Data:</span><span className="font-semibold">{selectedReferral.data_encaminhamento ? format(new Date(selectedReferral.data_encaminhamento), "dd/MM/yyyy") : "-"}</span></div>
+                  <div><span className="text-muted-foreground block text-xs">Data:</span><span className="font-semibold">{formatLocalDate(selectedReferral.data_encaminhamento)}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Origem:</span><span className="font-semibold">{selectedReferral.ubs_origem || "—"}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Tipo:</span><span className="font-semibold uppercase">{selectedReferral.tipo_encaminhamento || "—"}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Solicitante:</span><span className="font-semibold">{selectedReferral.profissional_solicitante || "—"}</span></div>

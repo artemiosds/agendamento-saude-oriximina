@@ -98,12 +98,12 @@ export function useEnderecoPaciente(
         ibge_municipio: info?.ibge || "",
       };
       const mudouMunicipio = sanitizeUpper(latest.current.municipio).trim() !== sanitizeUpper(municipio).trim()
-        || latest.current.uf !== patch.uf;
+        || sanitizeUpper(latest.current.uf).trim() !== sanitizeUpper(patch.uf).trim();
       if (mudouMunicipio) {
         // A troca explícita do município invalida o CEP do endereço anterior.
         // Não usa prefixos/faixas postais como se fossem CEPs válidos.
         patch.cep = info?.cep || "";
-        if (!info?.cep) toast.info("Informe o CEP da rua para o município selecionado.");
+        if (!info?.cep) toast.info("Município alterado. Informe o CEP correspondente.");
         for (const field of ["logradouro", "bairro"] as const) {
           if (automatic.current[field] && latest.current[field] === automatic.current[field]) patch[field] = "";
           delete automatic.current[field];

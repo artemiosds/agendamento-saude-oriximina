@@ -24,7 +24,7 @@ for (const m of municipios) {
 
 export function getMunicipioEndereco(municipio?: string, uf?: string): MunicipioEndereco | undefined {
   const candidates = porNome.get(norm(municipio || "")) || [];
-  if (uf) return candidates.find(m => m.uf === uf.toUpperCase());
+  if (uf) return candidates.find(m => m.uf === uf.trim().toUpperCase());
   // Nomes repetidos em estados diferentes nunca são inferidos.
   return candidates.length === 1 ? candidates[0] : undefined;
 }

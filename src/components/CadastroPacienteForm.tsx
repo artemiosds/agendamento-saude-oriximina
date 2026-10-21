@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,9 @@ import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { maskCNS } from "@/lib/cnsUtils";
 import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
+import { firstPacienteError, PACIENTE_FIELD_TABS } from "@/lib/pacienteFormFields";
+import { mergeLatestReferral } from "@/lib/pacienteReferralSnapshot";
+import type { PatientReferral } from "@/services/patientReferralService";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -162,17 +165,27 @@ interface Props {
 }
 
 const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
-  const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
-  const setCustom = (key: string, value: any) =>
-    onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
+  const latestForm = useRef(form);
+  latestForm.current = form;
+  const set = (field: keyof PacienteFormData, value: any) => {
+    const next = { ...latestForm.current, [field]: value };
+    latestForm.current = next;
+    onChange(next);
+  };
+  const setCustom = (key: string, value: any) => {
+    const current = latestForm.current;
+    const next = { ...current, customData: { ...current.customData, [key]: value } };
+    latestForm.current = next;
+    onChange(next);
+  };
   const cd = form.customData || {};
 
   // Nacionalidade não tem default: usuário deve selecionar explicitamente (validação obrigatória)
 
 
   const [uploading, setUploading] = useState(false);
-  const latestForm = useRef(form);
-  latestForm.current = form;
+  const currentPacienteId = useRef(pacienteId);
+  currentPacienteId.current = pacienteId;
   const endereco = useEnderecoPaciente({
     cep: cd.cep || "", municipio: form.municipio || "",
     uf: cd.uf ?? cd.endereco_uf ?? "", ibge_municipio: cd.ibge_municipio || "",
@@ -192,6 +205,27 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
     onChange(next);
   }, pacienteId || (isEdit ? "edit" : "new"));
   const [activeTab, setActiveTab] = useState("identificacao");
+  const formElement = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const first = firstPacienteError(errors);
+    if (!first) return;
+    setActiveTab(first.tab);
+    const timer = setTimeout(() => {
+      const message = formElement.current?.querySelector(`[data-validation-field="${first.field}"]`);
+      const control = message?.parentElement?.querySelector<HTMLElement>(
+        'input:not([type="hidden"]),textarea,button[role="combobox"],[role="radio"],button',
+      );
+      control?.focus();
+      control?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [errors]);
+  const syncLatestReferral = useCallback((referral: Partial<PatientReferral>) => {
+    if (referral.patient_id && referral.patient_id !== currentPacienteId.current) return;
+    const next = mergeLatestReferral(latestForm.current, referral);
+    latestForm.current = next;
+    onChange(next);
+  }, [onChange]);
   // Removido estado de autosave para evitar fechamento indesejado da modal
   const { user } = useAuth();
   const { resolved: customConfig, getNativeLabel, isNativeHidden } = useCustomFields("paciente", user?.unidadeId);
@@ -226,17 +260,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
   // Carregar procedimentos vinculados se for edição
   useEffect(() => {
+    let active = true;
     if (isEdit && pacienteId) {
       (async () => {
         const { data, error } = await supabase
           .from("patient_procedures")
           .select("*")
           .eq("patient_id", pacienteId);
-        if (!error && data) {
+        if (active && !error && data) {
           set("patientProcedures", data);
         }
       })();
     }
+    return () => { active = false; };
   }, [isEdit, pacienteId]);
 
   const addProcedure = () => {
@@ -281,16 +317,16 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
   // Validação visual por aba (badge se erro)
   const tabHasError = {
-    identificacao: !!(errors.nome || errors.cpf || errors.cns || errors.nomeMae || errors.dataNascimento || errors.naturalidade || errors.nomeResponsavel || errors.cpfResponsavel),
-    endereco: !!(errors.cep || errors.logradouro || errors.numero || errors.bairro || errors.municipio || errors.uf),
-    contato: !!(errors.telefone || errors.email),
-    complementares: !!(errors.nacionalidade || errors.racaCor || errors.especialidadeDestino || errors.ubsOrigem || errors.cid || errors.justificativa),
+    identificacao: Object.keys(errors).some(key => errors[key] && PACIENTE_FIELD_TABS[key] === "identificacao"),
+    endereco: Object.keys(errors).some(key => errors[key] && PACIENTE_FIELD_TABS[key] === "endereco"),
+    contato: Object.keys(errors).some(key => errors[key] && PACIENTE_FIELD_TABS[key] === "contato"),
+    complementares: Object.keys(errors).some(key => errors[key] && PACIENTE_FIELD_TABS[key] === "complementares"),
   };
 
   console.log("FORM SEXO NO COMPONENTE", form.sexo);
 
   return (
-    <div className="flex flex-col h-full">
+    <div ref={formElement} className="flex flex-col h-full">
       {/* Status autosave removido */}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
@@ -332,7 +368,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     onChange={(e) => set("nome", sanitizeUpper(e.target.value))}
                     placeholder="NOME DO PACIENTE"
                   />
-                  {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
+                  {errors.nome && <p data-validation-field="nome" role="alert" className="text-xs text-destructive mt-1">{errors.nome}</p>}
                 </div>
               )}
 
@@ -344,7 +380,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     onChange={(e) => set("nomeMae", sanitizeUpper(e.target.value))}
                     placeholder="NOME DA MAE"
                   />
-                  {errors.nomeMae && <p className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
+                  {errors.nomeMae && <p data-validation-field="nomeMae" role="alert" className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
                 </div>
               )}
 
@@ -363,7 +399,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 <div>
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("dataNascimento", "Data de Nascimento")}</Label>
                   <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
-                  {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
+                  {errors.dataNascimento && <p data-validation-field="dataNascimento" role="alert" className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
                 </div>
               )}
 
@@ -377,7 +413,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       <SelectItem value="feminino">Feminino</SelectItem>
                     </SelectContent>
                   </Select>
-                  {errors.sexo && <p className="text-xs text-destructive mt-1">{errors.sexo}</p>}
+                  {errors.sexo && <p data-validation-field="sexo" role="alert" className="text-xs text-destructive mt-1">{errors.sexo}</p>}
                 </div>
               )}
 
@@ -390,7 +426,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     placeholder="000.000.000-00"
                     inputMode="numeric"
                   />
-                  {errors.cpf && <p className="text-xs text-destructive mt-1">{errors.cpf}</p>}
+                  {errors.cpf && <p data-validation-field="cpf" role="alert" className="text-xs text-destructive mt-1">{errors.cpf}</p>}
                 </div>
               )}
 
@@ -404,7 +440,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     inputMode="numeric"
                     maxLength={18}
                   />
-                  {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
+                  {errors.cns && <p data-validation-field="cns" role="alert" className="text-xs text-destructive mt-1">{errors.cns}</p>}
                 </div>
               )}
 
@@ -417,7 +453,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     onChange={(cidade, uf) => onChange({ ...form, naturalidade: cidade, naturalidadeUf: uf })}
                     placeholder="Selecione o município de naturalidade"
                   />
-                  {errors.naturalidade && <p className="text-xs text-destructive mt-1">{errors.naturalidade}</p>}
+                  {errors.naturalidade && <p data-validation-field="naturalidade" role="alert" className="text-xs text-destructive mt-1">{errors.naturalidade}</p>}
                 </div>
               )}
 
@@ -466,7 +502,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     value={form.nomeResponsavel}
                     onChange={(e) => set("nomeResponsavel", sanitizeUpper(e.target.value))}
                   />
-                  {errors.nomeResponsavel && <p className="text-xs text-destructive mt-1">{errors.nomeResponsavel}</p>}
+                  {errors.nomeResponsavel && <p data-validation-field="nomeResponsavel" role="alert" className="text-xs text-destructive mt-1">{errors.nomeResponsavel}</p>}
                 </div>
                 <div>
                   <Label>CPF responsável *</Label>
@@ -475,7 +511,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     onChange={(e) => set("cpfResponsavel", maskCPF(e.target.value))}
                     placeholder="000.000.000-00"
                   />
-                  {errors.cpfResponsavel && <p className="text-xs text-destructive mt-1">{errors.cpfResponsavel}</p>}
+                  {errors.cpfResponsavel && <p data-validation-field="cpfResponsavel" role="alert" className="text-xs text-destructive mt-1">{errors.cpfResponsavel}</p>}
                 </div>
               </div>
             )}
@@ -498,7 +534,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     <Loader2 role="status" aria-label="Consultando CEP" className="w-4 h-4 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-[#2A6F97]" />
                   )}
                 </div>
-                {errors.cep && <p className="text-xs text-destructive mt-1">{errors.cep}</p>}
+                {errors.cep && <p data-validation-field="cep" role="alert" className="text-xs text-destructive mt-1">{errors.cep}</p>}
               </div>
 
               <div>
@@ -522,6 +558,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   }}
                   required
                 />
+                {errors.tipoLogradouro && <p data-validation-field="tipoLogradouro" role="alert" className="text-xs text-destructive mt-1">{errors.tipoLogradouro}</p>}
               </div>
 
               <div className="md:col-span-2">
@@ -531,7 +568,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   onChange={(e) => endereco.changeField("logradouro", sanitizeUpper(e.target.value))}
                   placeholder="NOME DA RUA / AVENIDA"
                 />
-                {errors.logradouro && <p className="text-xs text-destructive mt-1">{errors.logradouro}</p>}
+                {errors.logradouro && <p data-validation-field="logradouro" role="alert" className="text-xs text-destructive mt-1">{errors.logradouro}</p>}
               </div>
 
               <div>
@@ -542,7 +579,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   placeholder="Nº (deixe vazio para S/N)"
                   inputMode="text"
                 />
-                {errors.numero && <p className="text-xs text-destructive mt-1">{errors.numero}</p>}
+                {errors.numero && <p data-validation-field="numero" role="alert" className="text-xs text-destructive mt-1">{errors.numero}</p>}
               </div>
 
               <div>
@@ -561,7 +598,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   onChange={(e) => endereco.changeField("bairro", sanitizeUpper(e.target.value))}
                   placeholder="BAIRRO"
                 />
-                {errors.bairro && <p className="text-xs text-destructive mt-1">{errors.bairro}</p>}
+                {errors.bairro && <p data-validation-field="bairro" role="alert" className="text-xs text-destructive mt-1">{errors.bairro}</p>}
               </div>
 
               {!H("municipio") && (
@@ -569,7 +606,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("municipio", "Município")}</Label>
                   <MunicipioCombobox allowCustom value={form.municipio || ""} uf={cd.uf ?? cd.endereco_uf}
                     onChange={endereco.selectMunicipio} placeholder="Busque o município" />
-                  {errors.municipio && <p className="text-xs text-destructive mt-1">{errors.municipio}</p>}
+                  {errors.municipio && <p data-validation-field="municipio" role="alert" className="text-xs text-destructive mt-1">{errors.municipio}</p>}
                 </div>
               )}
 
@@ -581,7 +618,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     {UFS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {errors.uf && <p className="text-xs text-destructive mt-1">{errors.uf}</p>}
+                {errors.uf && <p data-validation-field="uf" role="alert" className="text-xs text-destructive mt-1">{errors.uf}</p>}
               </div>
 
               {/* Mantém endereco legacy (oculto, sincroniza para retrocompat) */}
@@ -610,7 +647,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     placeholder="(99) 99999-9999"
                     inputMode="numeric"
                   />
-                  {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
+                  {errors.telefone && <p data-validation-field="telefone" role="alert" className="text-xs text-destructive mt-1">{errors.telefone}</p>}
                 </div>
               )}
 
@@ -633,7 +670,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     onChange={(e) => set("email", e.target.value.toLowerCase())}
                     placeholder="email@exemplo.com"
                   />
-                  {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
+                  {errors.email && <p data-validation-field="email" role="alert" className="text-xs text-destructive mt-1">{errors.email}</p>}
                 </div>
               )}
             </div>
@@ -663,7 +700,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       <SelectItem value="estrangeiro">Estrangeiro(a)</SelectItem>
                     </SelectContent>
                   </Select>
-                  {errors.nacionalidade && <p className="text-xs text-destructive mt-1">{errors.nacionalidade}</p>}
+                  {errors.nacionalidade && <p data-validation-field="nacionalidade" role="alert" className="text-xs text-destructive mt-1">{errors.nacionalidade}</p>}
                 </div>
 
                 <div>
@@ -689,7 +726,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.racaCor && <p className="text-xs text-destructive mt-1">{errors.racaCor}</p>}
+                  {errors.racaCor && <p data-validation-field="racaCor" role="alert" className="text-xs text-destructive mt-1">{errors.racaCor}</p>}
                 </div>
 
                 {/* Etnia: obrigatória apenas se Raça/Cor = Indígena */}
@@ -749,7 +786,9 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 patientData={form}
                 unidadeId={user?.unidadeId}
                 professionalId={user?.id}
+                onLatestReferralChange={syncLatestReferral}
               />
+              {errors.especialidadeDestino && <p data-validation-field="especialidadeDestino" role="alert" className="text-xs text-destructive mt-1">{errors.especialidadeDestino}</p>}
 
               {/* Patient Attachment Manager (Documentação Geral) */}
               <div className="space-y-3 border-t pt-3">
@@ -791,6 +830,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   <Label htmlFor="cond-tea" className="cursor-pointer text-sm">TEA</Label>
                 </div>
               </RadioGroup>
+              {errors.tipoCondicao && <p data-validation-field="tipoCondicao" role="alert" className="text-xs text-destructive mt-1">{errors.tipoCondicao}</p>}
 
               {form.tipoCondicao === "fisica" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
