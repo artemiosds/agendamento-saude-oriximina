@@ -66,5 +66,11 @@ describe("base local oficial IBGE", () => {
     expect(getMunicipioEndereco("Bom Jesus")).toBeUndefined();
     expect(getMunicipioEndereco("Manaus", "AM")?.cep).toBe("");
     expect(getMunicipioEndereco("Oriximiná", "PA")?.cep).toBe("68270-000");
+    expect(getMunicipioEndereco("Prainha", "PA")).toMatchObject({ cep: "68130-000", ibge: "1506005" });
+    expect(getMunicipioEndereco("Almeirim", "PA")).toMatchObject({ cep: "68230-000", ibge: "1500503" });
+    for (const [cidade, uf] of [["Santarém", "PA"], ["Belém", "PA"], ["Ananindeua", "PA"], ["Macapá", "AP"], ["Manaus", "AM"], ["Itaituba", "PA"]]) {
+      expect(getMunicipioEndereco(cidade, uf)?.cep).toBe("");
+      expect(getCodigoIbge(cidade, uf)).toMatch(/^\d{7}$/);
+    }
   });
 });

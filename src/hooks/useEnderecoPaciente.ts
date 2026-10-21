@@ -97,11 +97,20 @@ export function useEnderecoPaciente(
         municipio: sanitizeUpper(municipio), uf: info?.uf || uf || latest.current.uf,
         ibge_municipio: info?.ibge || "",
       };
-      if (latest.current.cep && sanitizeUpper(latest.current.municipio) !== sanitizeUpper(municipio)) {
-        toast.info("Município alterado. Confira se o CEP informado corresponde ao novo endereço.");
+      const mudouMunicipio = sanitizeUpper(latest.current.municipio).trim() !== sanitizeUpper(municipio).trim()
+        || latest.current.uf !== patch.uf;
+      if (mudouMunicipio) {
+        // A troca explícita do município invalida o CEP do endereço anterior.
+        // Não usa prefixos/faixas postais como se fossem CEPs válidos.
+        patch.cep = info?.cep || "";
+        if (!info?.cep) toast.info("Informe o CEP da rua para o município selecionado.");
+        for (const field of ["logradouro", "bairro"] as const) {
+          if (automatic.current[field] && latest.current[field] === automatic.current[field]) patch[field] = "";
+          delete automatic.current[field];
+        }
+      } else if (!latest.current.cep && info?.cep) {
+        patch.cep = info.cep;
       }
-      // Nunca substitui um CEP já preenchido, mesmo que seja sugestão anterior.
-      if (!latest.current.cep && info?.cep) patch.cep = info.cep;
       commit(patch);
     },
     selectUf: (uf: string) => {
@@ -111,7 +120,7 @@ export function useEnderecoPaciente(
       commit({
         uf,
         ...(uf !== latest.current.uf && (!info || info.uf !== uf)
-          ? { municipio: "", ibge_municipio: "" } : {}),
+          ? { municipio: "", ibge_municipio: "", cep: "" } : {}),
       });
     },
   };

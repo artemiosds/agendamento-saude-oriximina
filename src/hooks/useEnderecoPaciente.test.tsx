@@ -71,14 +71,61 @@ describe("automação segura do endereço", () => {
     expect(result.current.form).toMatchObject({ cep: "68170-000", municipio: "JURUTI", ibge_municipio: "1503903" });
   });
 
-  it("preenche UF/IBGE e CEP vazio pelo município, preservando CEP informado", () => {
+  it("substitui o CEP anterior na troca de município e limpa em cidades sem CEP geral", () => {
     const { result } = renderHook(() => useForm({ ...initial, cep: "" }));
     act(() => result.current.selectMunicipio("Óbidos", "PA"));
     expect(result.current.form).toMatchObject({ cep: "68250-000", municipio: "OBIDOS", uf: "PA", ibge_municipio: "1505106" });
     act(() => result.current.selectMunicipio("Manaus", "AM"));
-    expect(result.current.form).toMatchObject({ cep: "68250-000", uf: "AM", ibge_municipio: "1302603" });
+    expect(result.current.form).toMatchObject({ cep: "", uf: "AM", ibge_municipio: "1302603" });
     act(() => result.current.selectUf("PA"));
-    expect(result.current.form).toMatchObject({ municipio: "", uf: "PA", ibge_municipio: "" });
+    expect(result.current.form).toMatchObject({ municipio: "", uf: "PA", ibge_municipio: "", cep: "" });
+  });
+
+  it("troca o CEP inicial de Oriximiná pelo município escolhido mesmo com campo preenchido", () => {
+    const { result } = renderHook(() => useForm());
+    act(() => result.current.selectMunicipio("Óbidos", "PA"));
+    expect(result.current.form).toMatchObject({ cep: "68250-000", municipio: "OBIDOS", uf: "PA", ibge_municipio: "1505106" });
+    act(() => result.current.selectMunicipio("Juruti", "PA"));
+    expect(result.current.form).toMatchObject({ cep: "68170-000", ibge_municipio: "1503903" });
+    act(() => result.current.selectMunicipio("Terra Santa", "PA"));
+    expect(result.current.form).toMatchObject({ cep: "68285-000", ibge_municipio: "1507979" });
+    expect(mocks.buscar).not.toHaveBeenCalled();
+  });
+
+  it("preserva CEP específico e dados manuais ao selecionar novamente o mesmo município", () => {
+    const { result } = renderHook(() => useForm({
+      ...initial, cep: "68270-123", logradouro: "RUA MANUAL", bairro: "BAIRRO MANUAL",
+    }));
+    act(() => result.current.selectMunicipio("ORIXIMINA", "PA"));
+    expect(result.current.form).toMatchObject({ cep: "68270-123", logradouro: "RUA MANUAL", bairro: "BAIRRO MANUAL" });
+    act(() => result.current.selectMunicipio("Óbidos", "PA"));
+    expect(result.current.form).toMatchObject({ cep: "68250-000", logradouro: "RUA MANUAL", bairro: "BAIRRO MANUAL" });
+  });
+
+  it("não grava CEPs gerais inexistentes para cidades com CEP por logradouro", () => {
+    const { result } = renderHook(() => useForm());
+    for (const [cidade, uf] of [["Santarém", "PA"], ["Belém", "PA"], ["Manaus", "AM"], ["Macapá", "AP"]]) {
+      act(() => result.current.selectMunicipio(cidade, uf));
+      expect(result.current.form).toMatchObject({ cep: "", uf });
+      expect(result.current.form.ibge_municipio).toMatch(/^\d{7}$/);
+    }
+  });
+
+  it("cancela a consulta anterior e limpa só endereço preenchido automaticamente", async () => {
+    mocks.buscar.mockResolvedValueOnce(resultCep());
+    const { result } = renderHook(() => useForm());
+    act(() => result.current.changeCep("68250-000"));
+    await act(() => vi.advanceTimersByTimeAsync(350));
+    act(() => result.current.changeField("bairro", "BAIRRO MANUAL"));
+    let resolve: (v: EnderecoPaciente) => void;
+    mocks.buscar.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    act(() => result.current.changeCep("68170-000"));
+    await act(() => vi.advanceTimersByTimeAsync(350));
+    act(() => result.current.selectMunicipio("Faro", "PA"));
+    await act(async () => resolve!(resultCep("JURUTI")));
+    expect(result.current.form).toMatchObject({
+      municipio: "FARO", cep: "68280-000", ibge_municipio: "1503002", logradouro: "", bairro: "BAIRRO MANUAL",
+    });
   });
 
   it("falha de rede mantém campos editáveis e encerra o spinner", async () => {
