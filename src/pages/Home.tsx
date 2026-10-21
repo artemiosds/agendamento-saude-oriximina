@@ -42,22 +42,22 @@ const services = [
 const Home: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-background">
-        <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 px-4 py-4">
+      <header className="border-b border-primary/10 bg-background shadow-sm">
+        <div className="container mx-auto flex flex-wrap items-center justify-between gap-5 px-6 py-4 sm:px-10 lg:px-16">
           <Link to="/" className="flex min-w-0 items-center gap-3" aria-label="SMS Oriximiná — página inicial">
             <img src={logoSms} alt="Logo oficial SMS Oriximiná" width={96} height={96} className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24" />
-            <span className="text-sm font-semibold leading-snug text-foreground sm:text-base">Prefeitura de Oriximiná<span className="block text-xs font-normal text-muted-foreground sm:text-sm">Secretaria Municipal de Saúde</span></span>
+            <span className="min-w-0 text-base font-semibold leading-snug text-foreground sm:text-lg">Prefeitura de Oriximiná<span className="mt-1 block text-sm font-normal text-muted-foreground sm:text-base">Secretaria Municipal de Saúde</span></span>
           </Link>
-          <nav aria-label="Navegação principal" className="flex w-full items-center justify-between gap-3 text-sm sm:w-auto sm:gap-6">
-            <a href="#servicos" className="text-muted-foreground hover:text-foreground">Serviços</a>
-            <a href="#contato" className="text-muted-foreground hover:text-foreground">Contato</a>
+          <nav aria-label="Navegação principal" className="flex w-full flex-wrap items-center justify-between gap-3 text-base sm:w-auto sm:gap-6">
+            <a href="#servicos" className="inline-flex min-h-12 items-center font-medium text-muted-foreground hover:text-foreground">Serviços</a>
+            <a href="#contato" className="inline-flex min-h-12 items-center font-medium text-muted-foreground hover:text-foreground">Contato</a>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2"><Shield className="h-4 w-4" aria-hidden="true" />Área Restrita<ChevronDown className="h-4 w-4" aria-hidden="true" /></Button>
+                <Button variant="outline" className="h-12 gap-2 rounded-xl border-primary/25 px-4 text-base font-semibold text-foreground shadow-sm hover:bg-primary/5 sm:px-5"><Shield className="h-5 w-5" aria-hidden="true" />Área Restrita<ChevronDown className="h-5 w-5" aria-hidden="true" /></Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuItem asChild><Link to="/login" className="gap-2"><Shield className="h-4 w-4" />Painel do Servidor</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild><Link to="/externo" className="gap-2"><UserCheck className="h-4 w-4" />Acesso Regulador / Externo</Link></DropdownMenuItem>
+              <DropdownMenuContent align="end" sideOffset={10} className="w-80 max-w-[calc(100vw-2rem)] rounded-2xl border-primary/15 p-2 shadow-xl">
+                <DropdownMenuItem asChild><Link to="/login" aria-label="Painel do Servidor" className="min-h-20 items-start gap-3 rounded-xl px-3 py-4"><Shield className="mt-1 h-6 w-6 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0"><span className="block text-base font-semibold">Painel do Servidor</span><span className="mt-1 block whitespace-normal text-sm leading-relaxed text-muted-foreground">Acesso da equipe e administração.</span></span></Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link to="/externo" aria-label="Acesso Regulador / Externo" className="min-h-20 items-start gap-3 rounded-xl px-3 py-4"><UserCheck className="mt-1 h-6 w-6 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0"><span className="block whitespace-normal text-base font-semibold">Acesso Regulador / Externo</span><span className="mt-1 block whitespace-normal text-sm leading-relaxed text-muted-foreground">Acesso de reguladores e parceiros.</span></span></Link></DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </nav>
@@ -67,25 +67,25 @@ const Home: React.FC = () => {
       <section className="relative isolate overflow-hidden bg-sky-50 text-slate-900">
         <img src={heroAtendimento} alt="Profissional de saúde acolhendo uma paciente" width={1600} height={800} loading="eager" className="block aspect-[2/1] w-full object-cover lg:absolute lg:inset-y-0 lg:right-0 lg:h-full lg:w-[58%]" />
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(90deg,#f0f9ff_0%,#f0f9ff_38%,rgba(240,249,255,0.75)_48%,rgba(240,249,255,0.15)_62%,transparent_76%)] lg:block" />
-        <div className="container relative mx-auto px-4 py-10 sm:py-14 lg:py-24">
+        <div className="container relative mx-auto px-6 py-12 sm:px-10 sm:py-16 lg:px-16 lg:py-24">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="max-w-xl"
+            className="max-w-xl lg:w-[48%]"
           >
-            <p className="mb-3 text-sm font-semibold text-sky-800">Saúde pública de Oriximiná</p>
+            <p className="mb-4 inline-flex rounded-full border border-sky-200 bg-white/80 px-4 py-2 text-sm font-semibold text-sky-800">Saúde pública de Oriximiná</p>
             <h1 className="text-3xl md:text-5xl font-bold font-display leading-tight mb-4 text-balance">
               Sua saúde, mais perto de você.
             </h1>
-            <p className="text-lg opacity-90 mb-8">
+            <p className="mb-8 max-w-lg text-lg leading-relaxed text-slate-700">
               Agendamento online e serviços de saúde para você e sua família.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link to="/agendar">
                 <Button
                   size="lg"
-                  className="bg-gradient-to-br from-[hsl(200,55%,38%)] to-[hsl(200,60%,28%)] text-white font-semibold tracking-wide shadow-[0_6px_14px_rgba(0,0,0,0.15)] hover:brightness-105 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
+                  className="h-14 rounded-xl bg-gradient-to-br from-[hsl(200,55%,38%)] to-[hsl(200,60%,28%)] px-6 text-base text-white font-semibold shadow-[0_6px_14px_rgba(0,0,0,0.15)] hover:brightness-105 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
                 >
                   <Calendar className="w-5 h-5 mr-2" />
                   Agendar Online
@@ -95,7 +95,7 @@ const Home: React.FC = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-sky-700 bg-white text-sky-800 hover:bg-sky-100 hover:text-sky-900 w-full sm:w-auto"
+                  className="h-14 rounded-xl border-sky-700 bg-white px-6 text-base font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-900 w-full sm:w-auto"
                 >
                   <User className="w-5 h-5 mr-2" />
                   Consultar Agendamento
@@ -107,9 +107,10 @@ const Home: React.FC = () => {
       </section>
 
       {/* Services */}
-      <section id="servicos" className="container mx-auto scroll-mt-6 px-4 py-12 md:py-16">
-        <h2 className="text-2xl font-bold font-display text-foreground text-center mb-8">Nossos Serviços</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section id="servicos" className="container mx-auto scroll-mt-6 px-6 py-12 sm:px-10 md:py-16 lg:px-16">
+        <h2 className="mb-3 text-center text-3xl font-bold font-display text-foreground">Nossos Serviços</h2>
+        <p className="mx-auto mb-9 max-w-xl text-center text-base leading-relaxed text-muted-foreground">Cuidado e acolhimento para você em cada etapa da vida.</p>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
           {services.map((s, i) => (
             <motion.div
               key={i}
@@ -117,13 +118,13 @@ const Home: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
             >
-              <Card className="shadow-card border-0 hover:shadow-elevated transition-shadow text-center">
-                <CardContent className="p-6">
-                  <div className="w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-4">
+              <Card className="h-full rounded-2xl border border-primary/10 shadow-sm hover:shadow-card transition-shadow text-center">
+                <CardContent className="p-6 sm:px-4 sm:py-7">
+                  <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-5 shadow-sm">
                     <s.icon className="w-7 h-7 text-primary-foreground" />
                   </div>
-                  <h3 className="font-semibold font-display text-foreground mb-1">{s.title}</h3>
-                  <p className="text-sm text-muted-foreground">{s.desc}</p>
+                  <h3 className="mb-2 text-lg font-semibold font-display text-foreground">{s.title}</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{s.desc}</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -133,7 +134,7 @@ const Home: React.FC = () => {
 
       {/* Info */}
       <section id="contato" className="scroll-mt-6 bg-muted/50">
-        <div className="container mx-auto px-4 py-16">
+        <div className="container mx-auto px-6 py-16 sm:px-10 lg:px-16">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-start gap-3">
               <MapPin className="w-6 h-6 text-primary shrink-0 mt-0.5" />
