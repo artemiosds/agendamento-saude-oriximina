@@ -10,20 +10,40 @@ const mocks = vi.hoisted(() => ({
   queryCount: 0,
   patientName: 'Paciente de teste',
   patientNames: {} as Record<string, string>,
+  userUnit: '',
+  patientUnits: {} as Record<string, string>,
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ user: { role: "master", usuario: "admin.sms", unidadeId: "" } }),
+  useAuth: () => ({ user: { role: "master", usuario: mocks.userUnit ? 'gestao.unidade' : "admin.sms", unidadeId: mocks.userUnit } }),
 }));
+
+// UI tests control the filtered index; the real request strategy is tested separately.
+vi.mock('@/services/triageHistorySearch', async importOriginal => {
+  const original = await importOriginal<typeof import('@/services/triageHistorySearch')>();
+  return { ...original, searchTriageHistoryIndex: async () => {
+    const rows: Record<string, unknown>[] = [];
+    while (mocks.searchRequests.length) {
+      mocks.queryCount++;
+      const { data, error } = await mocks.searchRequests.shift()!();
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < 100) break;
+    }
+    return rows;
+  } };
+});
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (table: string) => ({
       select: (columns: string) => {
+        let selectedIds: string[] = [];
         const builder = {
           order: () => builder,
           ilike: () => builder,
           or: () => builder,
+          abortSignal: () => builder,
           range: () => {
             if (table !== "triage_records") throw new Error("Consulta inesperada");
             mocks.queryCount++;
@@ -31,14 +51,15 @@ vi.mock("@/integrations/supabase/client", () => ({
             if (!next) throw new Error("Resposta de índice não preparada");
             return next();
           },
-          in: (_column: string, ids: string[]) => Promise.resolve({
+          in: (_column: string, ids: string[]) => { selectedIds = ids; return builder; },
+          then: (resolve: (value: unknown) => unknown) => Promise.resolve({
             data: table === "triage_records"
-              ? ids.map((id) => ({ id, agendamento_id: id, tecnico_id: "", classificacao_risco: "", criado_em: "2026-09-26T10:00:00Z", confirmado_em: null }))
+              ? selectedIds.map((id) => ({ id, agendamento_id: id, tecnico_id: "", classificacao_risco: "", criado_em: "2026-09-26T10:00:00Z", confirmado_em: null }))
               : table === "agendamentos"
-                ? ids.map((id) => ({ id, paciente_id: null, paciente_nome: mocks.patientNames[id] || mocks.patientName, unidade_id: "" }))
+                ? selectedIds.map((id) => ({ id, paciente_id: null, paciente_nome: mocks.patientNames[id] || mocks.patientName, unidade_id: mocks.patientUnits[id] || "" }))
                 : [],
             error: null,
-          }),
+          }).then(resolve),
         };
         return builder;
       },
@@ -70,6 +91,7 @@ describe("Histórico de Triagem: carregamento, erro e vazio", () => {
     mocks.queryCount = 0;
     mocks.patientName = 'Paciente de teste';
     mocks.patientNames = {};
+    mocks.userUnit = ''; mocks.patientUnits = {};
   });
   afterEach(() => { cleanup(); });
 
@@ -190,5 +212,34 @@ describe("Histórico de Triagem: carregamento, erro e vazio", () => {
     fireEvent.submit(screen.getByRole('button', { name: 'Pesquisar paciente' }).closest('form')!);
     await waitFor(() => expect(mocks.queryCount).toBe(4));
     expect(await screen.findByText('JOSÉ ANTIGO')).toBeInTheDocument();
+  });
+
+  it('mantém o isolamento por unidade ao pesquisar nomes', async () => {
+    mocks.userUnit = 'u1'; mocks.patientUnits = { dentro: 'u1', fora: 'u2' };
+    mocks.searchRequests.push(async () => ({ data: [], error: null }), async () => ({
+      data: ['dentro', 'fora'].map(id => ({ id, agendamento_id: id, tecnico_id: '', custom_data: {} })), error: null,
+    }));
+    render(<HistoricoTriagem />);
+    await screen.findByText('Nenhum registro encontrado.');
+    fireEvent.change(screen.getByPlaceholderText('Nome do paciente...'), { target: { value: 'Paciente' } });
+    await screen.findByText('1 registro(s) encontrado(s)');
+    expect(screen.getAllByText('Paciente de teste')).toHaveLength(1);
+  });
+
+  it('pagina os resultados sem repetir a pesquisa por nome', async () => {
+    mocks.indexRequests.push(async () => success());
+    mocks.searchRequests.push(async () => ({ data: Array.from({ length: 31 }, (_, i) => ({
+      id: `ficha-${i}`, agendamento_id: `ficha-${i}`, tecnico_id: '', custom_data: {},
+    })), error: null }));
+    render(<HistoricoTriagem />);
+    await screen.findByText('Nenhum registro encontrado.');
+    fireEvent.change(screen.getByPlaceholderText('Nome do paciente...'), { target: { value: 'Paciente' } });
+    await screen.findByText('Página 1 de 2');
+    expect(screen.getAllByText('Paciente de teste')).toHaveLength(20);
+    const next = screen.getAllByRole('button').find(button => button.querySelector('.lucide-chevron-right'));
+    fireEvent.click(next!);
+    await screen.findByText('Página 2 de 2');
+    expect(screen.getAllByText('Paciente de teste')).toHaveLength(11);
+    expect(mocks.queryCount).toBe(2);
   });
 });

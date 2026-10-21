@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MANCHESTER_LEVELS, getManchesterConfig } from "@/lib/manchesterProtocol";
 import { ModalEdicaoTriagem } from "@/components/Triagem/ModalEdicaoTriagem";
+import { normalizePatientSearch, searchTriageHistoryIndex, TRIAGE_INDEX_COLUMNS } from '@/services/triageHistorySearch';
 
 interface TriageRecord {
   id: string;
@@ -66,9 +67,6 @@ interface EnrichedRecord extends TriageRecord {
 const PAGE_SIZE = 20;
 const SCAN_SIZE = 100;
 
-// Cadastros antigos e atuais podem diferir em acentuação e espaçamento.
-const normalizePatientSearch = (value: string) => value.normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim().replace(/\s+/g, ' ');
 
 const riskBadge = (risk: string) => {
   const config = getManchesterConfig(risk);
@@ -99,15 +97,16 @@ const HistoricoTriagem: React.FC = () => {
   const [selected, setSelected] = useState<EnrichedRecord | null>(null);
   const [editing, setEditing] = useState<EnrichedRecord | null>(null);
   const requestId = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
   const scanCache = useRef({ key: "", matched: [] as string[], offset: 0, exhausted: false });
 
   // Only triage records on the requested page receive their clinical details.
-  const resolveNames = async <T extends TriageIndexRow,>(rows: T[]) => {
+  const resolveNames = async <T extends TriageIndexRow,>(rows: T[], signal: AbortSignal) => {
     if (!rows.length) return [];
     const ids = [...new Set(rows.map((r) => r.agendamento_id))];
     const [agRes, filaRes] = await Promise.all([
-      supabase.from("agendamentos").select("id, paciente_id, paciente_nome, unidade_id").in("id", ids),
-      supabase.from("fila_espera").select("id, paciente_id, paciente_nome, unidade_id").in("id", ids),
+      supabase.from("agendamentos").select("id, paciente_id, paciente_nome, unidade_id").in("id", ids).abortSignal(signal),
+      supabase.from("fila_espera").select("id, paciente_id, paciente_nome, unidade_id").in("id", ids).abortSignal(signal),
     ]);
     if (agRes.error) throw agRes.error;
     if (filaRes.error) throw filaRes.error;
@@ -116,7 +115,7 @@ const HistoricoTriagem: React.FC = () => {
     const patientIds = [...new Set([...agMap.values(), ...filaMap.values()].map((r) => r.paciente_id).filter((id): id is string => !!id))];
     const pacMap = new Map<string, string>();
     if (patientIds.length) {
-      const { data, error } = await supabase.from("pacientes").select("id, nome").in("id", patientIds);
+      const { data, error } = await supabase.from("pacientes").select("id, nome").in("id", patientIds).abortSignal(signal);
       if (error) throw error;
       (data || []).forEach((p) => { if (p.nome) pacMap.set(p.id, p.nome); });
     }
@@ -135,8 +134,13 @@ const HistoricoTriagem: React.FC = () => {
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
+    const signal = controller.signal;
     const role = user?.role?.toLowerCase().trim();
     if (role !== "master" && role !== "tecnico") return;
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     setLoading(true);
     setLoadError(false);
     try {
@@ -154,7 +158,7 @@ const HistoricoTriagem: React.FC = () => {
           const createdTo = dateTo ? `,criado_em.lte.${dateTo}T23:59:59` : "";
           query = query.or(`and(confirmado_em.not.is.null${from}${to}),and(confirmado_em.is.null${createdFrom}${createdTo})`);
         }
-        return query.order("criado_em", { ascending: false }).order("id", { ascending: false });
+        return query.order("criado_em", { ascending: false }).order("id", { ascending: false }).abortSignal(signal);
       };
 
       let pageIds: string[] = [];
@@ -168,21 +172,36 @@ const HistoricoTriagem: React.FC = () => {
         count = exactCount ?? 0;
         more = (page + 1) * PAGE_SIZE < count;
       } else {
-        // No FK from triage_records to appointments: resolve only small index batches
-        // until this page and one following record are known, preserving name fallback.
-        const key = JSON.stringify([user?.unidadeId, user?.usuario, search, riskFilter, dateFrom, dateTo]);
+        // Named searches query related IDs first. The unit-only listing retains
+        // its existing small-batch scan because there is no appointment FK.
+        const key = JSON.stringify([user?.id, user?.role, user?.unidadeId, user?.usuario, search, riskFilter, dateFrom, dateTo]);
         if (scanCache.current.key !== key) {
           scanCache.current = { key, matched: [], offset: 0, exhausted: false };
         }
         const cache = scanCache.current;
+        if (searchTerm && !cache.exhausted) {
+          const candidates = await searchTriageHistoryIndex<TriageIndexRow>(searchTerm, makeQuery, signal);
+          const matched: string[] = [];
+          for (let offset = 0; offset < candidates.length; offset += SCAN_SIZE) {
+            const resolved = await resolveNames(candidates.slice(offset, offset + SCAN_SIZE), signal);
+            if (currentRequest !== requestId.current) return;
+            for (const item of resolved) {
+              if (user?.unidadeId && user.usuario !== "admin.sms" && item.unidadeId !== user.unidadeId && item.filaUnidadeId !== user.unidadeId) continue;
+              if (normalizePatientSearch(item.pacienteNome).includes(searchTerm)) matched.push(item.record.id);
+            }
+          }
+          if (currentRequest !== requestId.current) return;
+          cache.matched = matched;
+          cache.exhausted = true;
+        }
         const target = (page + 1) * PAGE_SIZE + 1;
         while (cache.matched.length < target && !cache.exhausted) {
-          const { data, error } = await makeQuery("id, agendamento_id, tecnico_id, classificacao_risco, criado_em, confirmado_em, custom_data")
+          const { data, error } = await makeQuery(TRIAGE_INDEX_COLUMNS)
             .range(cache.offset, cache.offset + SCAN_SIZE - 1);
           if (error) throw error;
           if (currentRequest !== requestId.current) return;
           const batch = (data || []) as TriageIndexRow[];
-          const resolved = await resolveNames(batch);
+          const resolved = await resolveNames(batch, signal);
           if (currentRequest !== requestId.current) return;
           for (const item of resolved) {
             if (user?.unidadeId && user.usuario !== "admin.sms" && item.unidadeId !== user.unidadeId && item.filaUnidadeId !== user.unidadeId) continue;
@@ -199,21 +218,21 @@ const HistoricoTriagem: React.FC = () => {
 
       if (currentRequest !== requestId.current) return;
       const { data: detailRows, error: detailError } = pageIds.length
-        ? await supabase.from("triage_records").select("*").in("id", pageIds)
+        ? await supabase.from("triage_records").select("*").in("id", pageIds).abortSignal(signal)
         : { data: [] as TriageRecordRow[], error: null };
       if (detailError) throw detailError;
       const byId = new Map<string, TriageRecordRow>((detailRows || []).map((r: TriageRecordRow) => [r.id, r] as const));
       const rows = pageIds.map((id) => byId.get(id)).filter((r): r is TriageRecordRow => !!r);
-      const names = await resolveNames(rows);
+      const names = await resolveNames(rows, signal);
       const appointmentIds = [...new Set(rows.map((r) => r.agendamento_id))];
       // Both funcionario keys are UUIDs, while historical tecnico_id is free text.
       const techIds = [...new Set(rows.map((r) => r.tecnico_id).filter((id) =>
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
       ))];
       const [nursRes, funcIdRes, funcAuthRes] = await Promise.all([
-        appointmentIds.length ? supabase.from("nursing_evaluations").select("agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado").in("agendamento_id", appointmentIds) : Promise.resolve({ data: [], error: null }),
-        techIds.length ? supabase.from("funcionarios").select("id, nome, auth_user_id").in("id", techIds) : Promise.resolve({ data: [], error: null }),
-        techIds.length ? supabase.from("funcionarios").select("id, nome, auth_user_id").in("auth_user_id", techIds) : Promise.resolve({ data: [], error: null }),
+        appointmentIds.length ? supabase.from("nursing_evaluations").select("agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado").in("agendamento_id", appointmentIds).abortSignal(signal) : Promise.resolve({ data: [], error: null }),
+        techIds.length ? supabase.from("funcionarios").select("id, nome, auth_user_id").in("id", techIds).abortSignal(signal) : Promise.resolve({ data: [], error: null }),
+        techIds.length ? supabase.from("funcionarios").select("id, nome, auth_user_id").in("auth_user_id", techIds).abortSignal(signal) : Promise.resolve({ data: [], error: null }),
       ]);
       if (nursRes.error) throw nursRes.error;
       if (funcIdRes.error) throw funcIdRes.error;
@@ -242,14 +261,15 @@ const HistoricoTriagem: React.FC = () => {
         setLoadError(true);
       }
     } finally {
+      window.clearTimeout(timeout);
       if (currentRequest === requestId.current) setLoading(false);
     }
-  }, [user?.role, user?.usuario, user?.unidadeId, page, search, riskFilter, dateFrom, dateTo]);
+  }, [user?.id, user?.role, user?.usuario, user?.unidadeId, page, search, riskFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     void loadData();
     const activeRequest = requestId.current;
-    return () => { requestId.current = activeRequest + 1; };
+    return () => { requestId.current = activeRequest + 1; requestController.current?.abort(); };
   }, [loadData]);
 
   const totalPages = totalCount === null ? null : Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -288,10 +308,15 @@ const HistoricoTriagem: React.FC = () => {
               <form className="relative" onSubmit={(event) => {
                 event.preventDefault();
                 const input = event.currentTarget.elements.namedItem('pacienteSearch') as HTMLInputElement | null;
+                if (input?.value === search && page === 0 && !loading) {
+                  scanCache.current.key = '';
+                  void loadData();
+                  return;
+                }
                 setPage(0);
                 setSearch(input?.value || '');
               }}>
-                <DebouncedInput id="triagem-nome-paciente" name="pacienteSearch" className="pl-10" placeholder="Nome do paciente..." value={search} onChange={(e) => { setPage(0); setSearch(e.target.value); }} debounceMs={300} />
+                <DebouncedInput id="triagem-nome-paciente" name="pacienteSearch" autoComplete="off" className="pl-10" placeholder="Nome do paciente..." value={search} onChange={(e) => { setPage(0); setSearch(e.target.value); }} debounceMs={300} />
                 <button type="submit" aria-label="Pesquisar paciente" title="Pesquisar paciente"
                   className="absolute left-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-[#2A6F97] hover:bg-[#2A6F97]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#2A6F97] dark:text-sky-300">
                   <Search aria-hidden="true" className="h-4 w-4" />
