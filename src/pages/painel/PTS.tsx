@@ -24,6 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
 import { cn, todayLocalStr } from '@/lib/utils';
+import { sigtapCodeKey, sigtapCodeLabel, uniqueSigtapCodes } from '@/lib/sigtapCode';
 import {
   competenciaFromDate,
   resolveProfessionalCboReliable,
@@ -361,7 +362,7 @@ const PTS: React.FC = () => {
       : null;
     const items = [
       ...sigtapSelecionados,
-      ...(selectedPreview && !sigtapSelecionados.some((s) => s.procedimento_codigo === selectedPreview.codigo)
+      ...(selectedPreview && !sigtapSelecionados.some((s) => sigtapCodeKey(s.procedimento_codigo) === sigtapCodeKey(selectedPreview.codigo))
         ? [{
             procedimento_codigo: selectedPreview.codigo,
             procedimento_nome: selectedPreview.nome,
@@ -440,7 +441,8 @@ const PTS: React.FC = () => {
     setSearchingGlobal(true);
     try {
       const q = procSearch.trim().toUpperCase();
-      const isCode = /^\d+$/.test(q);
+      const isCode = /^[\d.-]+$/.test(q);
+      const searchCode = isCode ? q.replace(/\D/g, '') : q;
       const isCid = /^[A-Z]\d/.test(q); // Ex: A00, B10
       
       let finalProcs: SigtapProcedimento[] = [];
@@ -470,7 +472,9 @@ const PTS: React.FC = () => {
         // Search by name or code
         let query = supabase.from('sigtap_procedimentos').select('*').eq('ativo', true);
         if (isCode) {
-          query = query.ilike('codigo', `%${q}%`);
+          query = q === searchCode
+            ? query.ilike('codigo', `%${q}%`)
+            : query.or(`codigo.ilike.%${q}%,codigo.ilike.%${searchCode}%`);
         } else {
           query = query.ilike('nome', `%${q}%`);
         }
@@ -736,7 +740,7 @@ const PTS: React.FC = () => {
     if (!selectedProcCodigo) return;
     const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
     if (!proc) return;
-    if (sigtapSelecionados.some(s => s.procedimento_codigo === proc.codigo)) {
+    if (sigtapSelecionados.some(s => sigtapCodeKey(s.procedimento_codigo) === sigtapCodeKey(proc.codigo))) {
       toast.info('Procedimento já adicionado.');
       return;
     }
@@ -945,7 +949,7 @@ const PTS: React.FC = () => {
     let finalSigtap = [...sigtapSelecionados];
     let finalCids = [...cidsSelecionados];
 
-    if (selectedProcCodigo && !finalSigtap.some(s => s.procedimento_codigo === selectedProcCodigo)) {
+    if (selectedProcCodigo && !finalSigtap.some(s => sigtapCodeKey(s.procedimento_codigo) === sigtapCodeKey(selectedProcCodigo))) {
       const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
       if (proc) {
         const newItem: SelectedSigtap = { procedimento_codigo: proc.codigo, procedimento_nome: proc.nome, especialidade: proc.especialidade };
@@ -1238,17 +1242,24 @@ const PTS: React.FC = () => {
   const procsBySpecialty = useMemo(() => {
     const map: Record<string, SigtapProcedimento[]> = {};
     const searchTerm = normalize(procSearch);
-    for (const p of sigtapProcs) {
+    const searchCode = /^[\d.-]+$/.test(searchTerm) ? searchTerm.replace(/\D/g, '') : searchTerm;
+    const distinct = uniqueSigtapCodes(sigtapProcs);
+    if (selectedProcCodigo) {
+      const selected = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+      const index = distinct.findIndex(p => sigtapCodeKey(p.codigo) === sigtapCodeKey(selectedProcCodigo));
+      if (selected && index >= 0) distinct[index] = selected;
+    }
+    for (const p of distinct) {
       if (searchTerm) {
         const procName = normalize(p.nome);
-        if (!procName.includes(searchTerm) && !p.codigo.includes(searchTerm)) continue;
+        if (!procName.includes(searchTerm) && !sigtapCodeKey(p.codigo).includes(searchCode)) continue;
       }
       const esp = p.especialidade || 'outros';
       if (!map[esp]) map[esp] = [];
       map[esp].push(p);
     }
     return map;
-  }, [sigtapProcs, procSearch, normalize]);
+  }, [sigtapProcs, selectedProcCodigo, procSearch, normalize]);
 
   const getSpecLabelForSigtap = useCallback((key: string): string => {
     const entry = Object.entries(SPECIALTY_TO_SIGTAP).find(([, v]) => v === key);
@@ -1726,7 +1737,7 @@ const PTS: React.FC = () => {
                                       </div>
                                       {procs.map(p => (
                                         <SelectItem key={p.codigo} value={p.codigo}>
-                                          <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
+                                          <span className="text-xs font-mono text-muted-foreground mr-1">{sigtapCodeLabel(p.codigo)}</span>
                                           <span className="text-xs">{p.nome}</span>
                                         </SelectItem>
                                       ))}
@@ -1807,7 +1818,7 @@ const PTS: React.FC = () => {
                             return (
                               <div key={s.procedimento_codigo} className="bg-background rounded px-2 py-2 text-xs border space-y-2">
                                 <div className="flex items-center gap-2">
-                                  <Badge variant="secondary" className="font-mono text-xs shrink-0">{s.procedimento_codigo}</Badge>
+                                  <Badge variant="secondary" className="font-mono text-xs shrink-0">{sigtapCodeLabel(s.procedimento_codigo)}</Badge>
                                   <span className="flex-1 truncate">{s.procedimento_nome}</span>
                                   <span className="text-muted-foreground shrink-0">{getSpecLabelForSigtap(s.especialidade)}</span>
                                   {status?.status === "compatível" && status.bpaICompativel === false && (

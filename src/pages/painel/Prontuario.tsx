@@ -47,6 +47,7 @@ import { imprimirVisitaDomiciliar } from "@/lib/visitaDomiciliarPdf";
 import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
+import { sigtapCodeKey, sigtapCodeLabel, uniqueSigtapCodes } from "@/lib/sigtapCode";
 import {
   competenciaFromDate,
   resolveProfessionalCboReliable,
@@ -556,7 +557,7 @@ const ProntuarioPage: React.FC = () => {
       const res = await procedureService.searchUnified(q, 30);
       if (requestId !== unifiedRequestRef.current) return;
       const limited = {
-        procedimentos: res.procedimentos.slice(0, 30),
+        procedimentos: uniqueSigtapCodes(res.procedimentos).slice(0, 30),
         cids: res.cids.slice(0, 30),
       };
       const hydrated = await procedureService.getSpecific({ codes: limited.procedimentos.map((item) => item.codigo) });
@@ -580,6 +581,13 @@ const ProntuarioPage: React.FC = () => {
   }, [unifiedQuery, mergeProcedimentos, sigtapDisponibilizarTodos, user?.id, user?.profissao]);
 
   const handlePickProcedimento = useCallback(async (codigo: string, nome: string) => {
+    const previouslySelected = selectedProcIds.find((id) => sigtapCodeKey(id) === sigtapCodeKey(codigo));
+    if (previouslySelected) {
+      setExpandedProcId(previouslySelected);
+      setUnifiedQuery("");
+      setUnifiedOpen(false);
+      return;
+    }
     if (!procedimentos.some((item) => item.id === codigo)) {
       const hydrated = await procedureService.getSpecific({ codes: [codigo] });
       if (hydrated.length === 0) {
@@ -595,7 +603,7 @@ const ProntuarioPage: React.FC = () => {
     setUnifiedQuery("");
     setUnifiedOpen(false);
     toast.success(`Procedimento adicionado: ${codigo} — ${nome}`);
-  }, [loadCidsForProc, mergeProcedimentos, procedimentos]);
+  }, [loadCidsForProc, mergeProcedimentos, procedimentos, selectedProcIds]);
 
   const handlePickCid = useCallback(async (cid: { codigo: string; descricao: string }) => {
     // 1) If there is an expanded/selected procedure, attach there
@@ -1119,12 +1127,19 @@ const ProntuarioPage: React.FC = () => {
 
   const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
   const listedProcedimentos = useMemo(() => {
-    const resultCodes = new Set(unifiedResults.procedimentos.map((item) => item.codigo));
+    const resultCodes = new Set(unifiedResults.procedimentos.map((item) => sigtapCodeKey(item.codigo)));
+    const selectedCodes = new Set(selectedProcIds.map(sigtapCodeKey));
     const selected = selectedProcIds
       .map((id) => procedimentos.find((item) => item.id === id))
       .filter((item): item is ProcedimentoDB => Boolean(item));
-    const results = procedimentos.filter((item) => resultCodes.has(item.id) && !selectedProcIdSet.has(item.id));
-    return [...selected, ...results];
+    const results = new Map<string, ProcedimentoDB>();
+    for (const item of procedimentos) {
+      const key = sigtapCodeKey(item.id);
+      if (!resultCodes.has(key) || selectedCodes.has(key)) continue;
+      const current = results.get(key);
+      if (!current || (item.id === key && current.id !== key)) results.set(key, item);
+    }
+    return [...selected, ...results.values()];
   }, [procedimentos, selectedProcIds, unifiedResults.procedimentos]);
   const unifiedSearchReady = useMemo(() => {
     const query = unifiedQuery.trim();
@@ -4705,7 +4720,7 @@ const ProntuarioPage: React.FC = () => {
                             🔵 Procedimentos SIGTAP ({unifiedResults.procedimentos.length})
                           </div>
                           {unifiedResults.procedimentos.map((p) => {
-                            const already = selectedProcIds.includes(p.codigo);
+                            const already = selectedProcIds.some((id) => sigtapCodeKey(id) === sigtapCodeKey(p.codigo));
                             const viaCid = p.matched_by === 'cid';
                             return (
                               <button
@@ -4717,7 +4732,7 @@ const ProntuarioPage: React.FC = () => {
                                 className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 ${already ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title={viaCid && p.cid_codigo ? `Vinculado pelo CID ${p.cid_codigo} — ${p.cid_descricao ?? ''}` : undefined}
                               >
-                                <span className="font-mono text-[10px] text-muted-foreground shrink-0">{p.codigo}</span>
+                                <span className="font-mono text-[10px] text-muted-foreground shrink-0">{sigtapCodeLabel(p.codigo)}</span>
                                 <span className="truncate flex-1">{p.nome}</span>
                                 {viaCid && (
                                   <Badge variant="secondary" className="h-4 text-[9px] shrink-0">
@@ -4794,7 +4809,7 @@ const ProntuarioPage: React.FC = () => {
                               : <Tag className="h-3 w-3 text-muted-foreground shrink-0" />}
                             <span className="text-sm flex-1 truncate select-none">
                               {!isCustom && (
-                                <span className="font-mono text-[11px] text-muted-foreground mr-2">{proc.id}</span>
+                                <span className="font-mono text-[11px] text-muted-foreground mr-2">{sigtapCodeLabel(proc.id)}</span>
                               )}
                               {proc.nome}
                             </span>
