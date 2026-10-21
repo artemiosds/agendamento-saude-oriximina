@@ -66,6 +66,10 @@ interface EnrichedRecord extends TriageRecord {
 const PAGE_SIZE = 20;
 const SCAN_SIZE = 100;
 
+// Cadastros antigos e atuais podem diferir em acentuação e espaçamento.
+const normalizePatientSearch = (value: string) => value.normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim().replace(/\s+/g, ' ');
+
 const riskBadge = (risk: string) => {
   const config = getManchesterConfig(risk);
   if (!config) return <Badge variant="outline">—</Badge>;
@@ -136,7 +140,8 @@ const HistoricoTriagem: React.FC = () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const needsLookup = !!search.trim() || !!(user?.unidadeId && user.usuario !== "admin.sms");
+      const searchTerm = normalizePatientSearch(search);
+      const needsLookup = !!searchTerm || !!(user?.unidadeId && user.usuario !== "admin.sms");
       const makeQuery = (columns: string, count: "exact" | undefined = undefined) => {
         // Supabase's generated SelectQueryError cannot infer a runtime column list.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -181,7 +186,7 @@ const HistoricoTriagem: React.FC = () => {
           if (currentRequest !== requestId.current) return;
           for (const item of resolved) {
             if (user?.unidadeId && user.usuario !== "admin.sms" && item.unidadeId !== user.unidadeId && item.filaUnidadeId !== user.unidadeId) continue;
-            if (search.trim() && !item.pacienteNome.toLowerCase().includes(search.toLowerCase())) continue;
+            if (searchTerm && !normalizePatientSearch(item.pacienteNome).includes(searchTerm)) continue;
             cache.matched.push(item.record.id);
           }
           cache.offset += batch.length;
@@ -279,11 +284,19 @@ const HistoricoTriagem: React.FC = () => {
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <Label className="text-xs">Buscar paciente</Label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <DebouncedInput className="pl-9" placeholder="Nome do paciente..." value={search} onChange={(e) => { setPage(0); setSearch(e.target.value); }} debounceMs={300} />
-              </div>
+              <Label htmlFor="triagem-nome-paciente" className="text-xs">Buscar paciente</Label>
+              <form className="relative" onSubmit={(event) => {
+                event.preventDefault();
+                const input = event.currentTarget.elements.namedItem('pacienteSearch') as HTMLInputElement | null;
+                setPage(0);
+                setSearch(input?.value || '');
+              }}>
+                <DebouncedInput id="triagem-nome-paciente" name="pacienteSearch" className="pl-10" placeholder="Nome do paciente..." value={search} onChange={(e) => { setPage(0); setSearch(e.target.value); }} debounceMs={300} />
+                <button type="submit" aria-label="Pesquisar paciente" title="Pesquisar paciente"
+                  className="absolute left-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-[#2A6F97] hover:bg-[#2A6F97]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#2A6F97] dark:text-sky-300">
+                  <Search aria-hidden="true" className="h-4 w-4" />
+                </button>
+              </form>
             </div>
             <div>
               <Label className="text-xs">Classificação de Risco</Label>

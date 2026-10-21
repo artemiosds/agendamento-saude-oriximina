@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   indexRequests: [] as Array<() => Promise<IndexResult>>,
   searchRequests: [] as Array<() => Promise<{ data: Record<string, unknown>[]; error: Error | null }>>,
   queryCount: 0,
+  patientName: 'Paciente de teste',
+  patientNames: {} as Record<string, string>,
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -33,7 +35,7 @@ vi.mock("@/integrations/supabase/client", () => ({
             data: table === "triage_records"
               ? ids.map((id) => ({ id, agendamento_id: id, tecnico_id: "", classificacao_risco: "", criado_em: "2026-09-26T10:00:00Z", confirmado_em: null }))
               : table === "agendamentos"
-                ? ids.map((id) => ({ id, paciente_id: null, paciente_nome: "Paciente de teste", unidade_id: "" }))
+                ? ids.map((id) => ({ id, paciente_id: null, paciente_nome: mocks.patientNames[id] || mocks.patientName, unidade_id: "" }))
                 : [],
             error: null,
           }),
@@ -66,6 +68,8 @@ describe("Histórico de Triagem: carregamento, erro e vazio", () => {
     mocks.indexRequests.length = 0;
     mocks.searchRequests.length = 0;
     mocks.queryCount = 0;
+    mocks.patientName = 'Paciente de teste';
+    mocks.patientNames = {};
   });
   afterEach(() => { cleanup(); });
 
@@ -142,5 +146,49 @@ describe("Histórico de Triagem: carregamento, erro e vazio", () => {
     expect(await screen.findByText("Paciente de teste")).toBeInTheDocument();
     expect(mocks.queryCount).toBe(2);
     expect(screen.getByText("1 registro(s) encontrado(s)")).toBeInTheDocument();
+  });
+
+  it('encontra nomes independentemente de acentos e espaços extras', async () => {
+    mocks.patientName = 'JOÃO  DA SILVA';
+    mocks.indexRequests.push(async () => success());
+    mocks.searchRequests.push(async () => ({ data: [{ id: 'ficha-1', agendamento_id: 'ficha-1', tecnico_id: '', custom_data: {} }], error: null }));
+    render(<HistoricoTriagem />);
+    await screen.findByText('Nenhum registro encontrado.');
+    fireEvent.change(screen.getByPlaceholderText('Nome do paciente...'), { target: { value: '  joao da silva  ' } });
+    expect(await screen.findByText('JOÃO DA SILVA')).toBeInTheDocument();
+  });
+
+  it.each(['lupa', 'Enter'])('permite pesquisar imediatamente por %s', async (trigger) => {
+    mocks.indexRequests.push(async () => success());
+    mocks.searchRequests.push(async () => ({ data: [{ id: 'ficha-1', agendamento_id: 'ficha-1', tecnico_id: '', custom_data: {} }], error: null }));
+    render(<HistoricoTriagem />);
+    await screen.findByText('Nenhum registro encontrado.');
+    fireEvent.change(screen.getByPlaceholderText('Nome do paciente...'), { target: { value: 'Paciente' } });
+    const button = screen.getByRole('button', { name: 'Pesquisar paciente' });
+    expect(button).toHaveAttribute('type', 'submit');
+    if (trigger === 'lupa') fireEvent.click(button);
+    else fireEvent.submit(button.closest('form')!);
+    expect(await screen.findByText('Paciente de teste', {}, { timeout: 250 })).toBeInTheDocument();
+  });
+
+  it('encontra o nome em lotes posteriores do histórico e restaura a lista ao limpar', async () => {
+    mocks.patientName = 'OUTRO PACIENTE';
+    mocks.patientNames['alvo'] = 'JOSÉ ANTIGO';
+    mocks.indexRequests.push(async () => success(), async () => success(['alvo']));
+    const row = (id: string) => ({ id, agendamento_id: id, tecnico_id: '', custom_data: {} });
+    mocks.searchRequests.push(
+      async () => ({ data: Array.from({ length: 100 }, (_, i) => row(`outro-${i}`)), error: null }),
+      async () => ({ data: [row('alvo')], error: null }),
+    );
+    render(<HistoricoTriagem />);
+    await screen.findByText('Nenhum registro encontrado.');
+    const input = screen.getByPlaceholderText('Nome do paciente...');
+    fireEvent.change(input, { target: { value: 'jose' } });
+    expect(await screen.findByText('JOSÉ ANTIGO')).toBeInTheDocument();
+    expect(mocks.queryCount).toBe(3);
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Pesquisar paciente' }).closest('form')!);
+    await waitFor(() => expect(mocks.queryCount).toBe(4));
+    expect(await screen.findByText('JOSÉ ANTIGO')).toBeInTheDocument();
   });
 });
