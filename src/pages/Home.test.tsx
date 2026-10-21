@@ -18,9 +18,9 @@ describe("Home navigation", () => {
     renderHome();
     const hero = screen.getByRole("heading", { name: "Sua saúde, mais perto de você." }).closest("section")!;
     expect(hero.querySelectorAll("a")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("link", { name: "Agendar Online", exact: true }));
+    fireEvent.click(screen.getByRole("link", { name: "Agendar Online" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/agendar");
-    fireEvent.click(screen.getByRole("link", { name: "Consultar Agendamento", exact: true }));
+    fireEvent.click(screen.getByRole("link", { name: "Consultar Agendamento" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/portal");
   });
 
