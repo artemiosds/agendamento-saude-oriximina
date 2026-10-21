@@ -159,7 +159,7 @@ const Home: React.FC = () => {
                 <p className="text-sm text-muted-foreground">
                   (93) 99108-3163
                   <br />
-                  WhatsApp: a0(93) 99108-3163
+                  WhatsApp: (93) 99108-3163
                 </p>
               </div>
             </div>
