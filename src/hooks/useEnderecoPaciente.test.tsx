@@ -119,7 +119,7 @@ describe("automação segura do endereço", () => {
     expect(result.current.form).toMatchObject({ cep: "68143-000", municipio: "BELTERRA", ibge_municipio: "1501451" });
   });
 
-  it("aplica CEP da rua escolhida preservando número, complemento e bairro manual", () => {
+  it("aplica CEP e bairro da opção escolhida preservando número e complemento", () => {
     const { result } = renderHook(() => useForm({
       ...initial, municipio: "SANTAREM", uf: "PA", ibge_municipio: "1506807", cep: "", bairro: "BAIRRO MANUAL",
     }));
@@ -127,7 +127,7 @@ describe("automação segura do endereço", () => {
       ...initial, municipio: "SANTAREM", uf: "PA", ibge_municipio: "1506807",
       cep: "68005000", logradouro: "RUA ESCOLHIDA", bairro: "BAIRRO API",
     }));
-    expect(result.current.form).toMatchObject({ cep: "68005-000", logradouro: "RUA ESCOLHIDA", bairro: "BAIRRO MANUAL", numero: "12", complemento: "CASA" });
+    expect(result.current.form).toMatchObject({ cep: "68005-000", logradouro: "RUA ESCOLHIDA", bairro: "BAIRRO API", numero: "12", complemento: "CASA" });
     act(() => result.current.selectEndereco(resultCep()));
     expect(result.current.form.municipio).toBe("SANTAREM");
     expect(result.current.form.cep).toBe("68005-000");

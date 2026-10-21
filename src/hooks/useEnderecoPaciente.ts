@@ -133,7 +133,9 @@ export function useEnderecoPaciente(
         municipio: sanitizeUpper(info.nome), uf: info.uf, ibge_municipio: info.ibge,
         logradouro: address.logradouro || latest.current.logradouro,
       };
-      if (address.bairro && (!latest.current.bairro || latest.current.bairro === automatic.current.bairro)) {
+      // Clique explícito no endereço: aplica também o bairro da opção escolhida.
+      // Consultas automáticas por CEP continuam preservando o bairro manual.
+      if (address.bairro) {
         patch.bairro = address.bairro;
         automatic.current.bairro = address.bairro;
       }
