@@ -14,6 +14,9 @@ const CEPS: Record<string, string> = {
   "1507979": "68285-000", "1503002": "68280-000", "1502855": "68210-000",
   "1500404": "68200-000", "1504802": "68220-000",
   "1506005": "68130-000", "1500503": "68230-000",
+  "1503101": "68300-000", "1508159": "68140-000", "1505650": "68138-000",
+  "1501451": "68143-000", "1504752": "68129-000", "1506195": "68165-000",
+  "1508050": "68198-000", "1504455": "68145-000",
 };
 const porNome = new Map<string, MunicipioEndereco[]>();
 for (const m of municipios) {
@@ -23,8 +26,13 @@ for (const m of municipios) {
 }
 
 export function getMunicipioEndereco(municipio?: string, uf?: string): MunicipioEndereco | undefined {
-  const candidates = porNome.get(norm(municipio || "")) || [];
-  if (uf) return candidates.find(m => m.uf === uf.trim().toUpperCase());
+  // Aceita a forma exibida pelo seletor e entrada manual "Cidade - UF"/"Cidade/UF".
+  const text = (municipio || "").trim();
+  const suffix = /\s*(?:-|\/)\s*([A-Za-z]{2})$/.exec(text);
+  const name = suffix ? text.slice(0, suffix.index).trim() : text;
+  const state = (suffix?.[1] || uf || "").trim().toUpperCase();
+  const candidates = porNome.get(norm(name)) || [];
+  if (state) return candidates.find(m => m.uf === state);
   // Nomes repetidos em estados diferentes nunca são inferidos.
   return candidates.length === 1 ? candidates[0] : undefined;
 }

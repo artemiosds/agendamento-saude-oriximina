@@ -22,6 +22,7 @@ import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { maskCNS } from "@/lib/cnsUtils";
 import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
+import BuscaCepPorRua from "@/components/BuscaCepPorRua";
 import { firstPacienteError, PACIENTE_FIELD_TABS } from "@/lib/pacienteFormFields";
 import { mergeLatestReferral } from "@/lib/pacienteReferralSnapshot";
 import type { PatientReferral } from "@/services/patientReferralService";
@@ -563,9 +564,12 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               <div className="md:col-span-2">
                 <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Logradouro</Label>
-                <Input
+                <BuscaCepPorRua
+                  key={pacienteId || (isEdit ? "edit" : "new")}
                   value={cd.logradouro || ""}
-                  onChange={(e) => endereco.changeField("logradouro", sanitizeUpper(e.target.value))}
+                  municipio={form.municipio || ""} uf={cd.uf ?? cd.endereco_uf ?? ""} cep={cd.cep || ""}
+                  onChange={value => endereco.changeField("logradouro", sanitizeUpper(value))}
+                  onSelect={endereco.selectEndereco}
                   placeholder="NOME DA RUA / AVENIDA"
                 />
                 {errors.logradouro && <p data-validation-field="logradouro" role="alert" className="text-xs text-destructive mt-1">{errors.logradouro}</p>}

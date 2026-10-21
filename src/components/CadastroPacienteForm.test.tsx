@@ -24,6 +24,23 @@ vi.mock("@/components/Pacientes/PatientReferralHistory", async () => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("formulário principal e endereço", () => {
+  it("selecionar município no endereço preenche CEP/UF/IBGE no formulário real", async () => {
+    function Form() {
+      const [value, setValue] = useState<PacienteFormData>(emptyPacienteForm);
+      return <><CadastroPacienteForm form={value} onChange={setValue} isEdit={false}
+        onSave={() => {}} saving={false} errors={{}} /><output data-testid="municipio-form">{JSON.stringify(value)}</output></>;
+    }
+    render(<Form />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Endereço" }), { button: 0 });
+    fireEvent.click(screen.getByText("Oriximiná - PA"));
+    fireEvent.change(screen.getByPlaceholderText("Buscar por nome ou UF (ex: Orix, PA)…"), { target: { value: "Óbidos" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Óbidos - PA" }));
+    expect(screen.getByPlaceholderText("00000-000")).toHaveValue("68250-000");
+    expect(JSON.parse(screen.getByTestId("municipio-form").textContent!)).toMatchObject({
+      municipio: "OBIDOS", naturalidade: "", customData: { uf: "PA", ibge_municipio: "1505106", cep: "68250-000" },
+    });
+  });
+
   it("inicia novos cadastros com sugestões sem alterar o paciente ao abrir edição", () => {
     expect(emptyPacienteForm).toMatchObject({
       municipio: "Oriximiná", customData: { cep: "68270-000", uf: "PA", ibge_municipio: "1505304" },

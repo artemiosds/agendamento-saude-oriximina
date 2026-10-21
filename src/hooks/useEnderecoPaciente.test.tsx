@@ -111,6 +111,28 @@ describe("automação segura do endereço", () => {
     }
   });
 
+  it("preenche CEP e nome canônico quando município é digitado com UF", () => {
+    const { result } = renderHook(() => useForm());
+    act(() => result.current.selectMunicipio("Óbidos - PA", "PA"));
+    expect(result.current.form).toMatchObject({ cep: "68250-000", municipio: "OBIDOS", uf: "PA", ibge_municipio: "1505106" });
+    act(() => result.current.selectMunicipio("Belterra/PA"));
+    expect(result.current.form).toMatchObject({ cep: "68143-000", municipio: "BELTERRA", ibge_municipio: "1501451" });
+  });
+
+  it("aplica CEP da rua escolhida preservando número, complemento e bairro manual", () => {
+    const { result } = renderHook(() => useForm({
+      ...initial, municipio: "SANTAREM", uf: "PA", ibge_municipio: "1506807", cep: "", bairro: "BAIRRO MANUAL",
+    }));
+    act(() => result.current.selectEndereco({
+      ...initial, municipio: "SANTAREM", uf: "PA", ibge_municipio: "1506807",
+      cep: "68005000", logradouro: "RUA ESCOLHIDA", bairro: "BAIRRO API",
+    }));
+    expect(result.current.form).toMatchObject({ cep: "68005-000", logradouro: "RUA ESCOLHIDA", bairro: "BAIRRO MANUAL", numero: "12", complemento: "CASA" });
+    act(() => result.current.selectEndereco(resultCep()));
+    expect(result.current.form.municipio).toBe("SANTAREM");
+    expect(result.current.form.cep).toBe("68005-000");
+  });
+
   it("cancela a consulta anterior e limpa só endereço preenchido automaticamente", async () => {
     mocks.buscar.mockResolvedValueOnce(resultCep());
     const { result } = renderHook(() => useForm());

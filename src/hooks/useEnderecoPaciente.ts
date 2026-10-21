@@ -94,16 +94,16 @@ export function useEnderecoPaciente(
       lastCep.current = "";
       const info = getMunicipioEndereco(municipio, uf) || getMunicipioEndereco(municipio);
       const patch: Partial<EnderecoPaciente> = {
-        municipio: sanitizeUpper(municipio), uf: info?.uf || uf || latest.current.uf,
+        municipio: sanitizeUpper(info?.nome || municipio), uf: info?.uf || uf || latest.current.uf,
         ibge_municipio: info?.ibge || "",
       };
-      const mudouMunicipio = sanitizeUpper(latest.current.municipio).trim() !== sanitizeUpper(municipio).trim()
+      const mudouMunicipio = sanitizeUpper(latest.current.municipio).trim() !== patch.municipio
         || sanitizeUpper(latest.current.uf).trim() !== sanitizeUpper(patch.uf).trim();
       if (mudouMunicipio) {
         // A troca explícita do município invalida o CEP do endereço anterior.
         // Não usa prefixos/faixas postais como se fossem CEPs válidos.
         patch.cep = info?.cep || "";
-        if (!info?.cep) toast.info("Município alterado. Informe o CEP correspondente.");
+        if (!info?.cep) toast.info("Município selecionado. Digite a rua para buscar o CEP ou informe-o manualmente.");
         for (const field of ["logradouro", "bairro"] as const) {
           if (automatic.current[field] && latest.current[field] === automatic.current[field]) patch[field] = "";
           delete automatic.current[field];
@@ -122,6 +122,23 @@ export function useEnderecoPaciente(
         ...(uf !== latest.current.uf && (!info || info.uf !== uf)
           ? { municipio: "", ibge_municipio: "", cep: "" } : {}),
       });
+    },
+    selectEndereco: (address: EnderecoPaciente) => {
+      const info = getMunicipioEndereco(latest.current.municipio, latest.current.uf);
+      if (!info || address.ibge_municipio !== info.ibge || cepDigits(address.cep).length !== 8) return;
+      cancel();
+      lastCep.current = cepDigits(address.cep);
+      const patch: Partial<EnderecoPaciente> = {
+        cep: `${lastCep.current.slice(0, 5)}-${lastCep.current.slice(5)}`,
+        municipio: sanitizeUpper(info.nome), uf: info.uf, ibge_municipio: info.ibge,
+        logradouro: address.logradouro || latest.current.logradouro,
+      };
+      if (address.bairro && (!latest.current.bairro || latest.current.bairro === automatic.current.bairro)) {
+        patch.bairro = address.bairro;
+        automatic.current.bairro = address.bairro;
+      }
+      automatic.current.logradouro = patch.logradouro;
+      commit(patch);
     },
   };
 }

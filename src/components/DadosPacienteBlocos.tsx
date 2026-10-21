@@ -11,6 +11,7 @@ import { applyPhoneMask } from "@/lib/phoneUtils";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
 import { sanitizeUpper } from "@/lib/enderecoPaciente";
+import BuscaCepPorRua from "@/components/BuscaCepPorRua";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 const RACA_COR = [
@@ -216,7 +217,10 @@ const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, em
             </div>
             <div className="col-span-2">
               <Label>Logradouro (rua, avenida, travessa…)</Label>
-              <Input value={value.logradouro} onChange={e => endereco.changeField("logradouro", sanitizeUpper(e.target.value))} />
+              <BuscaCepPorRua key={value.enderecoRegistroId || "new"}
+                value={value.logradouro} municipio={value.endereco_municipio} uf={value.endereco_uf} cep={value.cep}
+                onChange={text => endereco.changeField("logradouro", sanitizeUpper(text))}
+                onSelect={endereco.selectEndereco} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">

@@ -68,6 +68,11 @@ describe("base local oficial IBGE", () => {
     expect(getMunicipioEndereco("Oriximiná", "PA")?.cep).toBe("68270-000");
     expect(getMunicipioEndereco("Prainha", "PA")).toMatchObject({ cep: "68130-000", ibge: "1506005" });
     expect(getMunicipioEndereco("Almeirim", "PA")).toMatchObject({ cep: "68230-000", ibge: "1500503" });
+    expect(getMunicipioEndereco("Óbidos - PA", "PA")?.cep).toBe("68250-000");
+    expect(getMunicipioEndereco("Juruti/PA")?.cep).toBe("68170-000");
+    expect(getMunicipioEndereco("Mojuí dos Campos", "PA")?.cep).toBe("68129-000");
+    expect(getMunicipioEndereco("Belterra", "PA")?.cep).toBe("68143-000");
+    expect(getMunicipioEndereco("Gurupá", "PA")?.cep).toBe("68300-000");
     for (const [cidade, uf] of [["Santarém", "PA"], ["Belém", "PA"], ["Ananindeua", "PA"], ["Macapá", "AP"], ["Manaus", "AM"], ["Itaituba", "PA"]]) {
       expect(getMunicipioEndereco(cidade, uf)?.cep).toBe("");
       expect(getCodigoIbge(cidade, uf)).toMatch(/^\d{7}$/);
