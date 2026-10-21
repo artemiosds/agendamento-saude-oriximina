@@ -20,6 +20,7 @@ import {
   HandMetal,
   UserCheck,
   ChevronDown,
+  Ear,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
@@ -32,6 +33,7 @@ const services = [
   { icon: Smile, title: "Odontologia", desc: "Saúde bucal" },
   { icon: Heart, title: "Enfermagem", desc: "Procedimentos e curativos" },
   { icon: Activity, title: "Fisioterapia", desc: "Reabilitação e movimento" },
+  { icon: Ear, title: "Fonoaudiologia", desc: "Cuidado com a fala, audição e deglutição" },
   { icon: Brain, title: "Psicologia", desc: "Saúde mental e bem-estar" },
   { icon: Apple, title: "Nutrição", desc: "Orientação alimentar" },
   { icon: Baby, title: "Odontopediatria", desc: "Saúde bucal infantil" },
