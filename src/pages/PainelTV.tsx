@@ -17,7 +17,7 @@ function tocarSino(ctx: AudioContext) {
     o.frequency.value = f;
     const t = ctx.currentTime + i * 0.45;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.4, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.9, t + 0.03);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
     o.connect(g).connect(ctx.destination);
     o.start(t);
@@ -31,6 +31,7 @@ function escolherVoz(): SpeechSynthesisVoice | undefined {
   const pt = vozes.filter((v) => v.lang?.toLowerCase().startsWith("pt"));
   return (
     pt.find((v) => /natural|neural|online/i.test(v.name) && /br/i.test(v.lang)) ||
+    pt.find((v) => /maria|francisca|thalita/i.test(v.name) && /br/i.test(v.lang)) ||
     pt.find((v) => /google/i.test(v.name) && /br/i.test(v.lang)) ||
     pt.find((v) => /br/i.test(v.lang)) ||
     pt[0]
@@ -46,6 +47,8 @@ function falar(texto: string) {
     const v = escolherVoz();
     if (v) u.voice = v;
     u.lang = "pt-BR";
+    u.volume = 1;
+    u.pitch = 1;
     u.rate = 0.9;
     let feito = false;
     // Chrome/Smart TV: síntese longa pode "congelar"; resume periódico evita travamento.
@@ -115,8 +118,8 @@ export default function PainelTV() {
     try {
       if (ctxRef.current.state === "suspended") await ctxRef.current.resume().catch(() => {});
       await tocarSino(ctxRef.current);
-      const prof = c.profissionalNome ? `, com ${c.profissionalNome.toLowerCase()}` : "";
-      const txt = `Atenção: ${c.pacienteNome.toLowerCase()}, dirigir-se ao ${c.local}${prof}.`;
+      // Padrão e-SUS PEC: voz apenas com paciente e local (profissional só na tela).
+      const txt = `Atenção: ${c.pacienteNome.toLowerCase()}, dirigir-se ao ${c.local}.`;
       await falar(txt);
       if (repetir) { await espera(700); await falar(txt); }
     } catch { /* silencioso */ }
