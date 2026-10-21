@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { canalPainel, type ChamadaPaciente } from "@/lib/painelChamadas";
+import { canalPainel, chamadaValida, type ChamadaPaciente } from "@/lib/painelChamadas";
+import { PainelCallQueue, aguardarPainel, limitarPainel } from '@/lib/painelCallQueue';
+import { playlistPainel, videoSeguro } from '@/lib/painelVideo';
 import { useAuth } from "@/contexts/AuthContext";
 import { Volume2, Mic, Maximize } from "lucide-react";
 
 const HIST_KEY = (u: string) => `painel_tv_hist_${u}`;
-const TEMPO_EXIBICAO_MS = 15000;
-const INTERVALO_MS = 2000;
 
-function tocarSino(ctx: AudioContext) {
+async function tocarSino(ctx: AudioContext, signal: AbortSignal) {
+  const oscillators: OscillatorNode[] = [];
   [880, 660].forEach((f, i) => {
     const o = ctx.createOscillator();
     const g = ctx.createGain();
@@ -22,8 +23,12 @@ function tocarSino(ctx: AudioContext) {
     o.connect(g).connect(ctx.destination);
     o.start(t);
     o.stop(t + 1);
+    oscillators.push(o);
   });
-  return new Promise((r) => setTimeout(r, 1400));
+  const stop = () => oscillators.forEach(o => { try { o.stop(); } catch { /* already stopped */ } });
+  signal.addEventListener('abort', stop, { once: true });
+  try { await aguardarPainel(1400, signal); }
+  finally { signal.removeEventListener('abort', stop); stop(); }
 }
 
 function escolherVoz(): SpeechSynthesisVoice | undefined {
@@ -38,9 +43,9 @@ function escolherVoz(): SpeechSynthesisVoice | undefined {
   );
 }
 
-function falar(texto: string) {
-  return new Promise<void>((resolve) => {
-    if (!("speechSynthesis" in window)) return resolve();
+function falar(texto: string, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === 'undefined') return reject(new Error('Voz indisponível neste navegador'));
     const synth = window.speechSynthesis;
     try { synth.cancel(); } catch { /* */ }
     const u = new SpeechSynthesisUtterance(texto);
@@ -53,54 +58,92 @@ function falar(texto: string) {
     let feito = false;
     // Chrome/Smart TV: síntese longa pode "congelar"; resume periódico evita travamento.
     const keep = setInterval(() => { try { synth.resume(); } catch { /* */ } }, 5000);
-    const limite = setTimeout(() => { try { synth.cancel(); } catch { /* */ } fim(); }, Math.min(15000, 3000 + texto.length * 120));
-    function fim() { if (!feito) { feito = true; clearInterval(keep); clearTimeout(limite); resolve(); } }
-    u.onend = fim;
-    u.onerror = fim;
-    try { synth.speak(u); } catch { fim(); }
+    const limite = setTimeout(() => finish(new Error('A voz excedeu o tempo limite')), Math.min(15000, 3000 + texto.length * 120));
+    const abort = () => finish(new DOMException('Áudio cancelado', 'AbortError'));
+    function finish(error?: Error) {
+      if (feito) return;
+      feito = true; clearInterval(keep); clearTimeout(limite); signal.removeEventListener('abort', abort);
+      u.onend = null; u.onerror = null;
+      if (error) { try { synth.cancel(); } catch { /* */ } reject(error); } else resolve();
+    }
+    signal.addEventListener('abort', abort, { once: true });
+    u.onend = () => finish();
+    u.onerror = () => finish(new Error('Falha na reprodução de voz'));
+    if (signal.aborted) return abort();
+    try { synth.speak(u); } catch { finish(new Error('Não foi possível iniciar a voz')); }
   });
 }
-
-const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function PainelTV() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth();
   const unidade = params.get("unidade") || params.get("unit_id") || user?.unidadeId || "";
   const [videoCad, setVideoCad] = useState<string[]>([]);
-  const playlist = params.get("video") ? [params.get("video") as string] : videoCad;
+  const videoParam = params.get('video') || '';
+  const playlist = videoSeguro(videoParam) ? [videoParam] : videoCad;
+  const [videoError, setVideoError] = useState('');
+  const [videoFailed, setVideoFailed] = useState(false);
+  const failedVideos = useRef(new Set<string>());
+  const videoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [videoIdx, setVideoIdx] = useState(0);
   const video = playlist.length ? playlist[videoIdx % playlist.length] : "";
   const proximoVideo = () => setVideoIdx((i) => (playlist.length ? (i + 1) % playlist.length : 0));
   useEffect(() => {
-    if (!unidade || params.get("video")) return;
-    supabase.from("unidades").select("custom_data").eq("id", unidade).maybeSingle()
-      .then(({ data }) => {
-        const cd = ((data as any)?.custom_data || {});
-        const lista: string[] = Array.isArray(cd.video_urls) ? cd.video_urls.filter((x: any) => typeof x === "string" && x) : (cd.video_url ? [String(cd.video_url)] : []);
-        setVideoCad(lista); setVideoIdx(0);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unidade]);
+    setVideoCad([]); setVideoIdx(0); setVideoError(''); setVideoFailed(false); failedVideos.current.clear();
+    if (videoTimer.current) clearTimeout(videoTimer.current);
+    const controller = new AbortController();
+    if (unidade && !videoSeguro(videoParam)) {
+      void Promise.all([
+        supabase.from('unidades').select('custom_data').eq('id', unidade).abortSignal(controller.signal).maybeSingle(),
+        supabase.from('system_config').select('configuracoes').eq('id', 'default').abortSignal(controller.signal).maybeSingle(),
+      ]).then(([unit, legacy]) => {
+        if (controller.signal.aborted) return;
+        const fallback = (legacy.data?.configuracoes as any)?.painel_tv?.videos?.[unidade];
+        setVideoCad(playlistPainel((unit.data?.custom_data as any) || {}, fallback));
+        if (unit.error && legacy.error) setVideoError('Vídeo indisponível. O painel de chamadas continua funcionando.');
+      }).catch(() => { if (!controller.signal.aborted) setVideoError('Vídeo indisponível.'); });
+    }
+    return () => { controller.abort(); if (videoTimer.current) clearTimeout(videoTimer.current); };
+  }, [unidade, videoParam]);
+  const falhaVideo = () => {
+    failedVideos.current.add(video);
+    const next = playlist.findIndex(url => !failedVideos.current.has(url));
+    if (next < 0) { setVideoFailed(true); setVideoError('Os vídeos não puderam ser reproduzidos. O painel continua disponível.'); return; }
+    if (videoTimer.current) clearTimeout(videoTimer.current);
+    videoTimer.current = setTimeout(() => setVideoIdx(next), 2000);
+  };
   const debug = params.get("debug") === "true";
 
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
   const [atual, setAtual] = useState<ChamadaPaciente | null>(null);
   const [hist, setHist] = useState<ChamadaPaciente[]>([]);
   const [audioOn, setAudioOn] = useState(false);
+  const [iniciou, setIniciou] = useState(false);
+  const [audioError, setAudioError] = useState('');
+  const [pendentes, setPendentes] = useState(0);
+  const [ocupado, setOcupado] = useState(false);
   const [agora, setAgora] = useState(new Date());
   const [destaque, setDestaque] = useState(false);
   const [status, setStatus] = useState("conectando");
   const [logs, setLogs] = useState<string[]>([]);
-  const fila = useRef<ChamadaPaciente[]>([]);
-  const tocando = useRef(false);
+  const queueRef = useRef<PainelCallQueue | null>(null);
+  const displayRef = useRef<ChamadaPaciente[]>([]);
   const ctxRef = useRef<AudioContext | null>(null);
   const audioRef = useRef(false);
+  const startedRef = useRef(false);
+  const testandoRef = useRef(false);
+  const audioWork = useRef<AbortController | null>(null);
+  const audioScope = useRef(unidade); audioScope.current = unidade;
 
   const log = (m: string) => debug && setLogs((l) => [`${new Date().toLocaleTimeString("pt-BR")} ${m}`, ...l].slice(0, 12));
 
   useEffect(() => { audioRef.current = audioOn; }, [audioOn]);
-  useEffect(() => { const t = setInterval(() => setAgora(new Date()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => { setAgora(new Date()); timer = setTimeout(tick, 60000 - Date.now() % 60000); };
+    timer = setTimeout(tick, 60000 - Date.now() % 60000);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => { window.speechSynthesis?.getVoices(); }, []);
 
   useEffect(() => {
@@ -109,120 +152,155 @@ export default function PainelTV() {
       .then(({ data }) => setUnidades((data as any) || []));
   }, [unidade]);
 
-  const salvarHist = (c: ChamadaPaciente, h: ChamadaPaciente[]) => {
-    try { localStorage.setItem(HIST_KEY(unidade), JSON.stringify([c, ...h].slice(0, 5))); } catch { /* */ }
+  const stopAudio = () => {
+    audioWork.current?.abort();
+    try { window.speechSynthesis?.cancel(); } catch { /* unsupported browser */ }
   };
-
-  const anunciar = async (c: ChamadaPaciente, repetir: boolean) => {
+  const anunciar = async (c: ChamadaPaciente, parent: AbortSignal, repeat: () => boolean) => {
     if (!audioRef.current || !ctxRef.current) return;
+    const controller = new AbortController(); audioWork.current = controller;
+    const abort = () => controller.abort();
+    parent.addEventListener('abort', abort, { once: true });
+    if (parent.aborted) controller.abort();
+    const signal = controller.signal;
     try {
-      if (ctxRef.current.state === "suspended") await ctxRef.current.resume().catch(() => {});
-      await tocarSino(ctxRef.current);
-      // Padrão e-SUS PEC: voz apenas com paciente e local (profissional só na tela).
+      if (ctxRef.current.state !== 'running') await limitarPainel(ctxRef.current.resume(), 2000, signal);
+      if (ctxRef.current.state !== 'running') throw new Error('Áudio suspenso');
+      await tocarSino(ctxRef.current, signal);
       const txt = `Atenção: ${c.pacienteNome.toLowerCase()}, dirigir-se ao ${c.local}.`;
-      await falar(txt);
-      if (repetir) { await espera(700); await falar(txt); }
-    } catch { /* silencioso */ }
-  };
-
-  const vistos = useRef<Set<string>>(new Set());
-
-  const processar = async () => {
-    if (tocando.current) return;
-    tocando.current = true;
-    try {
-      while (fila.current.length) {
-        const c = fila.current.shift()!;
-        // Tempo adaptativo: com fila acumulada, exibe menos e fala uma vez só.
-        const pendentes = fila.current.length;
-        const tempo = pendentes >= 3 ? 5000 : pendentes >= 1 ? 8000 : TEMPO_EXIBICAO_MS;
-        log(`exibindo ${c.pacienteNome} → ${c.local} (fila ${pendentes})`);
-        setAtual((prev) => {
-          setHist((h) => {
-            const n = prev ? [prev, ...h.filter((x) => x.id !== prev.id)].slice(0, 4) : h;
-            salvarHist(c, n);
-            return n;
-          });
-          return c;
-        });
-        setDestaque(true);
-        const inicio = Date.now();
-        await anunciar(c, pendentes === 0);
-        const resto = tempo - (Date.now() - inicio);
-        if (resto > 0) await espera(resto);
-        setDestaque(false);
-        await espera(fila.current.length ? 800 : INTERVALO_MS);
-      }
-    } catch (e) {
-      log(`erro na fila: ${String(e)}`);
+      await falar(txt, signal);
+      // Recheck the queue after speaking: do not repeat while another patient waits.
+      if (repeat()) { await aguardarPainel(700, signal); if (repeat()) await falar(txt, signal); }
     } finally {
-      tocando.current = false;
-      if (fila.current.length) processar();
+      parent.removeEventListener('abort', abort);
+      if (audioWork.current === controller) audioWork.current = null;
     }
   };
 
   useEffect(() => {
     if (!unidade) return;
-    try {
-      const salvo: ChamadaPaciente[] = JSON.parse(localStorage.getItem(HIST_KEY(unidade)) || "[]");
-      setAtual(salvo[0] || null);
-      setHist(salvo.slice(1, 5));
-    } catch { /* */ }
-    let ativo = true;
+    let active = true;
     let channel: ReturnType<typeof supabase.channel> | null = null;
+    const channels = new Set<ReturnType<typeof supabase.channel>>();
     let retry: ReturnType<typeof setTimeout> | null = null;
-    const conectar = () => {
-      if (!ativo) return;
-      const ch = supabase
-        .channel(canalPainel(unidade))
-        .on("broadcast", { event: "chamada" }, ({ payload }) => {
-          const c = payload as ChamadaPaciente;
-          if (!c?.id || vistos.current.has(c.id)) return;
-          vistos.current.add(c.id);
-          if (vistos.current.size > 500) vistos.current = new Set(Array.from(vistos.current).slice(-200));
-          log(`recebida chamada ${c.pacienteNome}`);
-          if (fila.current.length >= 50) fila.current.shift();
-          fila.current.push(c);
-          processar();
-        })
-        .subscribe((s) => {
-          setStatus(s); log(`canal: ${s}`);
-          if (channel !== ch) return;
-          if ((s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") && ativo) {
-            channel = null;
-            if (retry) clearTimeout(retry);
-            retry = setTimeout(() => {
-              supabase.removeChannel(ch);
-              conectar();
-            }, 3000);
-          }
-        });
-      channel = ch;
+    let failures = 0;
+    setAtual(null); setHist([]); setDestaque(false); setPendentes(0); setOcupado(false);
+    displayRef.current = [];
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(HIST_KEY(unidade)) || '[]');
+      if (Array.isArray(saved)) {
+        const valid = saved.filter(c => chamadaValida(c, unidade, false)).slice(0, 5);
+        displayRef.current = valid;
+        setAtual(valid[0] || null); setHist(valid.slice(1));
+      }
+    } catch { /* A damaged history cannot stop new calls. */ }
+    const queue = new PainelCallQueue({
+      display: c => {
+        if (!active) return;
+        const history = [c, ...displayRef.current.filter(x => x.id !== c.id)].slice(0, 5);
+        displayRef.current = history;
+        setAtual(c); setHist(history.slice(1)); setDestaque(true);
+        try { localStorage.setItem(HIST_KEY(unidade), JSON.stringify(history)); } catch { /* storage may be disabled */ }
+      },
+      announce: anunciar,
+      stopAudio,
+      changed: (pending, busy) => {
+        if (!active) return;
+        setPendentes(pending); setOcupado(busy);
+        if (!busy) setDestaque(false);
+      },
+      error: () => {
+        if (!active) return;
+        audioRef.current = false; setAudioOn(false);
+        setAudioError('Falha no áudio. As chamadas continuam na tela. Ative o som e faça o teste de voz.');
+      },
+    });
+    queueRef.current = queue;
+    if (startedRef.current) queue.resume();
+    const remove = (ch: ReturnType<typeof supabase.channel>) => {
+      try { void supabase.removeChannel(ch).catch(() => {}).finally(() => channels.delete(ch)); } catch { channels.delete(ch); }
     };
-    conectar();
+    const connect = () => {
+      if (!active) return;
+      setStatus('conectando');
+      const ch = supabase.channel(canalPainel(unidade));
+      channel = ch; channels.add(ch);
+      ch.on('broadcast', { event: 'chamada' }, ({ payload }) => {
+        if (!active || channel !== ch || !chamadaValida(payload, unidade)) return;
+        const accepted = queue.accept(payload);
+        const status = accepted === 'ocupado' ? 'ocupado' : audioRef.current ? 'recebida' : 'recebida_sem_audio';
+        // Reception acknowledgement is distinct from the server transport ACK.
+        void ch.send({ type: 'broadcast', event: 'chamada_status', payload: { id: payload.id, unidadeId: unidade, status } }, { timeout: 2000 }).catch(() => {});
+        if (accepted === 'ocupado') setAudioError('Fila do painel cheia. Novas chamadas estão sendo recusadas com aviso ao profissional.');
+      });
+      ch.subscribe(status => {
+        if (!active || channel !== ch) return;
+        setStatus(status); log(`canal: ${status}`);
+        if (status === 'SUBSCRIBED') { failures = 0; return; }
+        if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+          channel = null; remove(ch);
+          if (retry) clearTimeout(retry);
+          retry = setTimeout(connect, Math.min(10000, 1000 * 2 ** failures++));
+        }
+      });
+    };
+    connect();
     return () => {
-      ativo = false;
+      active = false;
       if (retry) clearTimeout(retry);
-      if (channel) supabase.removeChannel(channel);
+      queue.dispose();
+      if (queueRef.current === queue) queueRef.current = null;
+      channels.forEach(remove);
     };
+    // Stable callbacks use refs; a clock/audio rerender must not recreate the channel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unidade]);
 
-  const ativarAudio = () => {
+  useEffect(() => () => {
+    stopAudio();
+    try { void ctxRef.current?.close().catch(() => {}); } catch { /* already closed */ }
+  }, []);
+
+  const ativarAudio = async () => {
+    const scope = unidade;
+    const controller = new AbortController();
+    stopAudio(); audioWork.current = controller;
     try {
       const Ctx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!ctxRef.current) ctxRef.current = new Ctx();
-      ctxRef.current.resume();
-      window.speechSynthesis?.speak(new SpeechSynthesisUtterance(" "));
-    } catch { /* */ }
-    audioRef.current = true;
-    setAudioOn(true);
+      if (!Ctx || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') throw new Error('Áudio não suportado');
+      if (!ctxRef.current || ctxRef.current.state === 'closed') ctxRef.current = new Ctx();
+      await limitarPainel(ctxRef.current!.resume(), 2000, controller.signal);
+      if (controller.signal.aborted || audioScope.current !== scope) return false;
+      if (ctxRef.current!.state !== 'running') throw new Error('Áudio suspenso');
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(' '));
+      audioRef.current = true; startedRef.current = true;
+      setAudioOn(true); setIniciou(true); setAudioError('');
+      if (!testandoRef.current) queueRef.current?.resume();
+      return true;
+    } catch {
+      if (audioScope.current !== scope || controller.signal.aborted) return false;
+      audioRef.current = false; setAudioOn(false);
+      setAudioError('Não foi possível ativar o áudio. Verifique o navegador e o volume da TV.');
+      return false;
+    } finally { if (audioWork.current === controller) audioWork.current = null; }
   };
 
   const testarVoz = async () => {
-    if (!audioRef.current) ativarAudio();
-    if (ctxRef.current) await tocarSino(ctxRef.current);
-    await falar("Teste de voz do painel de chamadas.");
+    if (queueRef.current?.busy || testandoRef.current) return;
+    testandoRef.current = true; queueRef.current?.pause();
+    const controller = new AbortController();
+    try {
+      if (!audioRef.current && !(await ativarAudio())) return;
+      queueRef.current?.pause(); audioWork.current = controller;
+      if (ctxRef.current) await tocarSino(ctxRef.current, controller.signal);
+      await falar('Teste de voz do painel de chamadas.', controller.signal);
+    } catch {
+      if (!controller.signal.aborted) { audioRef.current = false; setAudioOn(false); setAudioError('Teste de voz falhou. Confira o áudio da TV.'); }
+    } finally {
+      testandoRef.current = false;
+      if (audioWork.current === controller) audioWork.current = null;
+      if (startedRef.current) queueRef.current?.resume();
+    }
   };
 
   const telaCheia = () => {
@@ -248,7 +326,7 @@ export default function PainelTV() {
     );
   }
 
-  const mostrarVideo = !!video && !destaque;
+  const mostrarVideo = !!video && !videoFailed && !destaque;
 
   return (
     <div className="min-h-screen bg-primary text-primary-foreground flex flex-col select-none">
@@ -256,8 +334,8 @@ export default function PainelTV() {
         <h1 className="text-3xl font-bold tracking-wide">Painel de Chamadas</h1>
         <div className="flex items-center gap-6">
           <div className="flex gap-2 opacity-60 hover:opacity-100 transition-opacity">
-            <button onClick={ativarAudio} title="Ativar som" className="rounded-lg bg-primary-foreground/10 p-2"><Volume2 className="w-5 h-5" /></button>
-            <button onClick={testarVoz} title="Testar voz" className="rounded-lg bg-primary-foreground/10 p-2"><Mic className="w-5 h-5" /></button>
+            <button onClick={() => void ativarAudio()} disabled={ocupado} title="Ativar som" className="rounded-lg bg-primary-foreground/10 p-2 disabled:opacity-40"><Volume2 className="w-5 h-5" /></button>
+            <button onClick={testarVoz} disabled={ocupado} title="Testar voz" className="rounded-lg bg-primary-foreground/10 p-2 disabled:opacity-40"><Mic className="w-5 h-5" /></button>
             <button onClick={telaCheia} title="Tela cheia" className="rounded-lg bg-primary-foreground/10 p-2"><Maximize className="w-5 h-5" /></button>
           </div>
           <div className="text-right">
@@ -266,11 +344,17 @@ export default function PainelTV() {
           </div>
         </div>
       </header>
+      <div role="status" className="flex flex-wrap justify-between gap-2 px-10 py-2 text-sm border-b border-primary-foreground/20">
+        <span>{status === 'SUBSCRIBED' ? 'Painel conectado' : 'Painel desconectado — tentando reconectar. Novas chamadas podem não chegar.'}</span>
+        <span>{audioOn ? 'Som ativado' : 'Som inativo'} · {pendentes} chamada(s) aguardando</span>
+      </div>
+      {audioError && <p role="alert" className="px-10 py-2 bg-amber-100 text-amber-950">{audioError}</p>}
+      {videoError && <p className="px-10 py-1 text-sm">{videoError}</p>}
 
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[7fr_3fr]">
         <section className={`relative flex flex-col items-center justify-center p-10 text-center transition-colors duration-500 ${destaque ? "bg-primary-foreground/15" : ""}`}>
           {mostrarVideo ? (
-            <video key={video + videoIdx} src={video} autoPlay muted loop={playlist.length <= 1} playsInline onEnded={proximoVideo} onError={() => playlist.length > 1 && setTimeout(proximoVideo, 2000)} className="absolute inset-0 w-full h-full object-contain bg-foreground" />
+            <video key={video + videoIdx} src={video} autoPlay muted loop={playlist.length <= 1} playsInline onEnded={proximoVideo} onError={falhaVideo} className="absolute inset-0 w-full h-full object-contain bg-foreground" />
           ) : atual ? (
             <>
               <p className="text-3xl uppercase opacity-80 mb-6">Paciente</p>
@@ -298,20 +382,23 @@ export default function PainelTV() {
 
       {debug && (
         <div className="fixed bottom-2 left-2 max-w-md rounded-lg bg-foreground/80 text-background text-xs p-3 font-mono space-y-0.5">
-          <div>unidade: {unidade} | canal: {status} | som: {audioOn ? "on" : "off"} | fila: {fila.current.length}</div>
+          <div>unidade: {unidade} | canal: {status} | som: {audioOn ? "on" : "off"} | fila: {pendentes}</div>
           <div>voz: {escolherVoz()?.name || "nenhuma pt-BR"}</div>
           {logs.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
 
-      {!audioOn && (
-        <button
-          onClick={() => { ativarAudio(); telaCheia(); }}
+      {!iniciou && (
+        <div
           className="fixed inset-0 bg-foreground/70 flex flex-col items-center justify-center gap-4 text-background text-4xl font-bold"
         >
           <Volume2 className="w-24 h-24" />
-          Clique para ativar o áudio
-        </button>
+          <button onClick={() => { void ativarAudio(); telaCheia(); }} className="rounded-xl border px-6 py-4">Clique para ativar o áudio</button>
+          {audioError && <p className="max-w-xl text-center text-lg">{audioError}</p>}
+          <button className="text-lg underline" onClick={() => {
+            startedRef.current = true; setIniciou(true); queueRef.current?.resume();
+          }}>Continuar sem áudio (somente exibição)</button>
+        </div>
       )}
     </div>
   );

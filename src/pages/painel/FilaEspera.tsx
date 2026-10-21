@@ -1201,18 +1201,22 @@ const FilaEspera: React.FC = () => {
     (f: any, slot: any) => expirarReservaRef.current(f.id, slot, user),
     [user],
   );
+  const chamadasEmAndamento = useRef(new Set<string>());
   const stableChamar = useCallback(async (f: any) => {
+    if (chamadasEmAndamento.current.has(f.id)) return;
+    chamadasEmAndamento.current.add(f.id);
+    try {
     await updateFilaRef.current(f.id, {
       status: "chamado",
       horaChamada: new Date().toLocaleTimeString("pt-BR", {
         hour: "2-digit",
         minute: "2-digit",
       }),
-    });
+    }, true);
     const pac = pacienteMapRef.current.get(f.pacienteId);
     const unidadeN = unitMapRef.current.get(f.unidadeId);
     const prof = f.profissionalId ? employeeMapRef.current.get(f.profissionalId) : null;
-    await notifyRef.current({
+    const result = await notifyRef.current({
       evento: "fila_chamada",
       paciente_nome: f.pacienteNome,
       telefone: pac?.telefone || "",
@@ -1228,7 +1232,11 @@ const FilaEspera: React.FC = () => {
       status_agendamento: "chamado",
       id_agendamento: "",
     });
-    toast.info("Paciente chamado!");
+    if (result.success) toast.info("Chamada registrada e notificação enviada.");
+    else toast.warning("Chamada registrada na fila, mas a notificação não foi confirmada.");
+    } catch (error) {
+      toast.error("Não foi possível concluir a chamada: " + ((error as Error)?.message || "tente novamente"));
+    } finally { chamadasEmAndamento.current.delete(f.id); }
   }, []);
   const stableIniciar = useCallback(
     (f: any) => updateFilaRef.current(f.id, { status: "em_atendimento" }),

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Building2, DoorOpen, Pencil, Trash2, Tv, Copy, Video, X, Upload, Loader2 } from 'lucide-react';
-const DOMINIO_OFICIAL = 'https://agendamento-saude-sms-oriximina.site';
+import { linkPainelTV } from '@/lib/painelVideo';
 import { toast } from 'sonner';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
@@ -100,9 +100,7 @@ const UnidadesSalas: React.FC = () => {
   const [enviando, setEnviando] = useState(false);
 
   const linkTV = (id: string) => {
-    const h = window.location.hostname;
-    const base = h.includes('lovable') || h === 'localhost' ? window.location.origin : DOMINIO_OFICIAL;
-    return `${base}/painel/chamadas?unit_id=${encodeURIComponent(id)}`;
+    return linkPainelTV(window.location.origin, id);
   };
   const copiarLink = async (id: string) => {
     try { await navigator.clipboard.writeText(linkTV(id)); toast.success('Link da TV copiado!'); }
@@ -139,7 +137,8 @@ const UnidadesSalas: React.FC = () => {
     const lista = pend ? [...videoList, pend] : videoList;
     const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', videoUnit.id).maybeSingle();
     const cd = { ...(((data as any)?.custom_data) || {}) };
-    if (lista.length) { cd.video_urls = lista; cd.video_url = lista[0]; } else { delete cd.video_urls; delete cd.video_url; }
+    cd.video_urls = lista;
+    if (lista.length) cd.video_url = lista[0]; else delete cd.video_url;
     const { error } = await supabase.from('unidades' as any).update({ custom_data: cd }).eq('id', videoUnit.id);
     if (error) { toast.error('Não foi possível salvar.'); return; }
     toast.success('Vídeo salvo! Recarregue a TV.');
