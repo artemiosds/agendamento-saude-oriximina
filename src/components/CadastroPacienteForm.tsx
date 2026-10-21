@@ -791,7 +791,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 patientId={isEdit ? pacienteId : null}
                 patientData={form}
                 unidadeId={user?.unidadeId}
-                professionalId={user?.id}
+                professionalId={user?.authUserId || null}
                 onLatestReferralChange={syncLatestReferral}
               />
               {errors.especialidadeDestino && <p data-validation-field="especialidadeDestino" role="alert" className="text-xs text-destructive mt-1">{errors.especialidadeDestino}</p>}

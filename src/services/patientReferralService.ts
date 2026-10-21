@@ -4,7 +4,7 @@ export interface PatientReferral {
   id: string;
   patient_id: string;
   unidade_id?: string;
-  professional_id?: string;
+  professional_id?: string | null;
   especialidade_destino: string;
   ubs_origem?: string;
   profissional_solicitante?: string;
@@ -12,6 +12,7 @@ export interface PatientReferral {
   cid?: string;
   diagnostico_resumido?: string;
   justificativa?: string;
+  observacoes?: string | null;
   data_encaminhamento?: string;
   status: string;
   created_at: string;
@@ -45,9 +46,14 @@ export async function getPatientReferrals(patientId: string): Promise<PatientRef
 }
 
 export async function createPatientReferral(referral: Omit<PatientReferral, 'id' | 'created_at' | 'updated_at' | 'attachments'>): Promise<PatientReferral> {
+  // The database foreign key references auth.users; blank optional IDs must be NULL.
+  const normalizedReferral = {
+    ...referral,
+    professional_id: referral.professional_id?.trim() || null,
+  };
   const { data, error } = await supabase
     .from('patient_referrals')
-    .insert(referral)
+    .insert(normalizedReferral)
     .select()
     .single();
 
@@ -76,6 +82,9 @@ export async function createPatientReferral(referral: Omit<PatientReferral, 'id'
 
 export async function updatePatientReferral(id: string, updates: Partial<PatientReferral>): Promise<PatientReferral> {
   const { attachments: _ignored, ...dbUpdates } = updates as any;
+  if ('professional_id' in dbUpdates) {
+    dbUpdates.professional_id = dbUpdates.professional_id?.trim?.() || null;
+  }
   const { data, error } = await supabase
     .from('patient_referrals')
     .update(dbUpdates)

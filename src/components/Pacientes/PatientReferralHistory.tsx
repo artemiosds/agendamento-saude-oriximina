@@ -134,7 +134,7 @@ interface Props {
   patientId?: string | null;
   patientData: any;
   unidadeId?: string;
-  professionalId?: string;
+  professionalId?: string | null;
   onLatestReferralChange?: (referral: Partial<PatientReferral>) => void;
 }
 
@@ -253,7 +253,7 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
       justificativa: r.justificativa || "",
       data_encaminhamento: r.data_encaminhamento || format(new Date(), "yyyy-MM-dd"),
       status: r.status || "pendente",
-      observacoes: (r as any).observacoes || "",
+      observacoes: r.observacoes || "",
     });
     setStagedFiles([]);
     setModalOpen(true);

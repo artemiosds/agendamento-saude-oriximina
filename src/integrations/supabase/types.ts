@@ -1937,6 +1937,7 @@ export type Database = {
           especialidade_destino: string
           id: string
           justificativa: string | null
+          observacoes: string | null
           patient_id: string
           professional_id: string | null
           profissional_solicitante: string | null
@@ -1954,6 +1955,7 @@ export type Database = {
           especialidade_destino: string
           id?: string
           justificativa?: string | null
+          observacoes?: string | null
           patient_id: string
           professional_id?: string | null
           profissional_solicitante?: string | null
@@ -1971,6 +1973,7 @@ export type Database = {
           especialidade_destino?: string
           id?: string
           justificativa?: string | null
+          observacoes?: string | null
           patient_id?: string
           professional_id?: string | null
           profissional_solicitante?: string | null
