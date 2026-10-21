@@ -19,6 +19,8 @@ interface MunicipioComboboxProps {
   disabled?: boolean;
   className?: string;
   id?: string;
+  /** Mantém a entrada manual de localidades legadas nos formulários de endereço. */
+  allowCustom?: boolean;
 }
 
 let _cache: MunicipioItem[] | null = null;
@@ -42,6 +44,7 @@ export function MunicipioCombobox({
   disabled,
   className,
   id,
+  allowCustom = false,
 }: MunicipioComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -166,6 +169,12 @@ export function MunicipioCombobox({
                 </button>
               );
             })
+          )}
+          {allowCustom && query.trim() && !filtered.some(it => it.n.toLocaleLowerCase() === query.trim().toLocaleLowerCase()) && (
+            <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-accent border-t"
+              onClick={() => { onChange(query.trim(), uf || ""); setOpen(false); }}>
+              Usar município digitado: {query.trim()}
+            </button>
           )}
           {!loading && query.trim() && filtered.length === 200 && (
             <div className="px-3 py-2 text-[11px] text-muted-foreground text-center border-t">

@@ -5,9 +5,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { User, MapPin, Phone, FileHeart } from "lucide-react";
+import { User, MapPin, Phone, FileHeart, Loader2 } from "lucide-react";
 import { maskCNS } from "@/lib/cnsUtils";
 import { applyPhoneMask } from "@/lib/phoneUtils";
+import MunicipioCombobox from "@/components/MunicipioCombobox";
+import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
+import { sanitizeUpper } from "@/lib/enderecoPaciente";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 const RACA_COR = [
@@ -59,6 +62,9 @@ export interface DadosPacienteValue {
   bairro: string;
   endereco_municipio: string;
   endereco_uf: string;
+  ibge_municipio?: string;
+  enderecoAtualizado?: boolean;
+  enderecoRegistroId?: string;
   // Contato
   telefone: string;
   telefone_secundario: string;
@@ -75,8 +81,9 @@ export const emptyDadosPaciente = (): DadosPacienteValue => ({
   nome: "", dataNascimento: "", cpf: "", cns: "", sexo: "", raca_cor: "",
   nacionalidade: "Brasileira", naturalidade: "", naturalidade_uf: "", municipio: "Oriximiná",
   nome_mae: "", menor_idade: false, nome_responsavel: "", cpf_responsavel: "",
-  cep: "", logradouro: "", numero: "", complemento: "", bairro: "",
+  cep: "68270-000", logradouro: "", numero: "", complemento: "", bairro: "",
   endereco_municipio: "Oriximiná", endereco_uf: "PA",
+  ibge_municipio: "1505304",
   telefone: "", telefone_secundario: "", email: "",
   is_gestante: false, is_pne: false, is_autista: false, ubs_origem: "", observacoes: "",
 });
@@ -89,6 +96,14 @@ interface Props {
 }
 
 const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, emailDisabled }) => {
+  const endereco = useEnderecoPaciente({
+    cep: value.cep, municipio: value.endereco_municipio, uf: value.endereco_uf,
+    ibge_municipio: value.ibge_municipio || "", logradouro: value.logradouro, bairro: value.bairro,
+  }, ({ municipio, uf, ...patch }) => onChange({
+    ...patch, enderecoAtualizado: true,
+    ...(municipio !== undefined ? { municipio, endereco_municipio: municipio } : {}),
+    ...(uf !== undefined ? { endereco_uf: uf } : {}),
+  }), value.enderecoRegistroId || "new");
   const set = (k: keyof DadosPacienteValue) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     onChange({ [k]: e.target.value } as Partial<DadosPacienteValue>);
 
@@ -192,11 +207,16 @@ const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, em
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label>CEP</Label>
-              <Input value={value.cep} onChange={(e) => onChange({ cep: maskCEP(e.target.value) })} placeholder="00000-000" />
+              <div className="relative">
+                <Input value={value.cep} onChange={(e) => endereco.changeCep(maskCEP(e.target.value))}
+                  onBlur={() => void endereco.lookupCep()} placeholder="00000-000" inputMode="numeric" className="pr-8" />
+                {endereco.loading && <Loader2 role="status" aria-label="Consultando CEP"
+                  className="w-4 h-4 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-[#2A6F97]" />}
+              </div>
             </div>
             <div className="col-span-2">
               <Label>Logradouro (rua, avenida, travessa…)</Label>
-              <Input value={value.logradouro} onChange={set("logradouro")} />
+              <Input value={value.logradouro} onChange={e => endereco.changeField("logradouro", sanitizeUpper(e.target.value))} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -210,17 +230,18 @@ const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, em
             </div>
             <div>
               <Label>Bairro</Label>
-              <Input value={value.bairro} onChange={set("bairro")} />
+              <Input value={value.bairro} onChange={e => endereco.changeField("bairro", sanitizeUpper(e.target.value))} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
               <Label>Município</Label>
-              <Input value={value.endereco_municipio} onChange={set("endereco_municipio")} />
+              <MunicipioCombobox allowCustom value={value.endereco_municipio} uf={value.endereco_uf}
+                onChange={endereco.selectMunicipio} placeholder="Busque o município" />
             </div>
             <div>
               <Label>UF</Label>
-              <Select value={value.endereco_uf} onValueChange={(v) => onChange({ endereco_uf: v })}>
+              <Select value={value.endereco_uf} onValueChange={endereco.selectUf}>
                 <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
                 <SelectContent>{UFS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
               </Select>
@@ -312,6 +333,9 @@ export function serializeDadosPaciente(v: DadosPacienteValue, prevCustomData: Re
     bairro: v.bairro,
     endereco_municipio: v.endereco_municipio,
     endereco_uf: v.endereco_uf,
+    ...(v.enderecoAtualizado || !Object.prototype.hasOwnProperty.call(prevCustomData, "uf")
+      ? { uf: v.endereco_uf } : {}),
+    ...(v.ibge_municipio !== undefined ? { ibge_municipio: v.ibge_municipio } : {}),
     telefone_secundario: v.telefone_secundario,
     nacionalidade: v.nacionalidade,
   };
@@ -355,7 +379,7 @@ export function deserializeDadosPaciente(row: any): DadosPacienteValue {
     nacionalidade: cd.nacionalidade || "Brasileira",
     naturalidade: row?.naturalidade || "",
     naturalidade_uf: row?.naturalidade_uf || "",
-    municipio: row?.municipio || "Oriximiná",
+    municipio: row?.municipio ?? "",
     nome_mae: row?.nome_mae || "",
     menor_idade: !!row?.menor_idade,
     nome_responsavel: row?.nome_responsavel || "",
@@ -365,8 +389,10 @@ export function deserializeDadosPaciente(row: any): DadosPacienteValue {
     numero: cd.numero || "",
     complemento: cd.complemento || "",
     bairro: cd.bairro || "",
-    endereco_municipio: cd.endereco_municipio || "Oriximiná",
-    endereco_uf: cd.endereco_uf || "PA",
+    endereco_municipio: cd.endereco_municipio ?? row?.municipio ?? "",
+    endereco_uf: cd.endereco_uf ?? cd.uf ?? "",
+    ibge_municipio: cd.ibge_municipio,
+    enderecoRegistroId: row?.id,
     telefone: row?.telefone || "",
     telefone_secundario: cd.telefone_secundario || "",
     email: row?.email || "",

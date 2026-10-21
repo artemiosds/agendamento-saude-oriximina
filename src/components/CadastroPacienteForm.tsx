@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { maskCNS } from "@/lib/cnsUtils";
+import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -29,11 +30,6 @@ const ESPECIALIDADES_DESTINO = [
   { value: "psicologia", label: "Psicologia" },
   { value: "terapia_ocupacional", label: "Terapia Ocupacional" },
   { value: "outros", label: "Outros" },
-];
-
-const MUNICIPIOS = [
-  "Oriximiná", "Óbidos", "Terra Santa", "Faro", "Juruti", "Nhamundá",
-  "Parintins", "Santarém", "Alenquer", "Monte Alegre", "Outro",
 ];
 
 const UBS_LIST = [
@@ -138,7 +134,7 @@ export interface PacienteFormData {
 }
 
 export const emptyPacienteForm: PacienteFormData = {
-  nome: "", dataNascimento: "", cpf: "", cns: "", telefone: "", municipio: "",
+  nome: "", dataNascimento: "", cpf: "", cns: "", telefone: "", municipio: "Oriximiná",
   naturalidade: "", naturalidadeUf: "",
   menorIdade: false, nomeResponsavel: "", cpfResponsavel: "",
   especialidadeDestino: "", ubsOrigem: "", profissionalSolicitante: "",
@@ -150,7 +146,7 @@ export const emptyPacienteForm: PacienteFormData = {
   email: "", endereco: "", nomeMae: "", descricaoClinica: "",
   isGestante: false, isPne: false, isAutista: false,
   patientProcedures: [],
-  customData: {},
+  customData: { uf: "PA", cep: "68270-000", ibge_municipio: "1505304" },
   sexo: "",
 };
 
@@ -175,7 +171,26 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
 
   const [uploading, setUploading] = useState(false);
-  const [cepLoading, setCepLoading] = useState(false);
+  const latestForm = useRef(form);
+  latestForm.current = form;
+  const endereco = useEnderecoPaciente({
+    cep: cd.cep || "", municipio: form.municipio || "",
+    uf: cd.uf ?? cd.endereco_uf ?? "", ibge_municipio: cd.ibge_municipio || "",
+    logradouro: cd.logradouro || "", bairro: cd.bairro || "",
+  }, ({ municipio, ...patch }) => {
+    const current = latestForm.current;
+    const next = {
+      ...current,
+      ...(municipio !== undefined ? { municipio } : {}),
+      customData: {
+        ...current.customData, ...patch,
+        ...(patch.uf !== undefined ? { endereco_uf: patch.uf } : {}),
+        ...(municipio !== undefined ? { endereco_municipio: municipio } : {}),
+      },
+    };
+    latestForm.current = next;
+    onChange(next);
+  }, pacienteId || (isEdit ? "edit" : "new"));
   const [activeTab, setActiveTab] = useState("identificacao");
   // Removido estado de autosave para evitar fechamento indesejado da modal
   const { user } = useAuth();
@@ -238,41 +253,6 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
   const removeProcedure = (index: number) => {
     const newList = (form.patientProcedures || []).filter((_, i) => i !== index);
     set("patientProcedures", newList);
-  };
-
-  // ---- ViaCEP ----
-  const handleCepBlur = async () => {
-    const cep = (cd.cep || "").replace(/\D/g, "");
-    if (cep.length !== 8) return;
-    setCepLoading(true);
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await res.json();
-      if (data?.erro) {
-        toast.error("CEP não encontrado.");
-      } else {
-        const update = {
-          ...cd,
-          logradouro: data.logradouro ? sanitizeUpper(data.logradouro) : cd.logradouro,
-          bairro: data.bairro ? sanitizeUpper(data.bairro) : cd.bairro,
-          uf: data.uf || cd.uf,
-        };
-        const novoMunicipio = data.localidade || form.municipio;
-        const municipioMatch = MUNICIPIOS.find((m) =>
-          sanitizeUpper(m) === sanitizeUpper(novoMunicipio)
-        );
-        onChange({
-          ...form,
-          municipio: municipioMatch || form.municipio,
-          customData: update,
-        });
-        toast.success("Endereço preenchido pelo CEP");
-      }
-    } catch {
-      toast.error("Erro ao buscar CEP.");
-    } finally {
-      setCepLoading(false);
-    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -509,13 +489,13 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 <div className="relative">
                   <Input
                     value={cd.cep || ""}
-                    onChange={(e) => setCustom("cep", maskCEP(e.target.value))}
-                    onBlur={handleCepBlur}
+                    onChange={(e) => endereco.changeCep(maskCEP(e.target.value))}
+                    onBlur={() => void endereco.lookupCep()}
                     placeholder="00000-000"
                     inputMode="numeric"
                   />
-                  {cepLoading && (
-                    <Loader2 className="w-4 h-4 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  {endereco.loading && (
+                    <Loader2 role="status" aria-label="Consultando CEP" className="w-4 h-4 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-[#2A6F97]" />
                   )}
                 </div>
                 {errors.cep && <p className="text-xs text-destructive mt-1">{errors.cep}</p>}
@@ -548,7 +528,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Logradouro</Label>
                 <Input
                   value={cd.logradouro || ""}
-                  onChange={(e) => setCustom("logradouro", sanitizeUpper(e.target.value))}
+                  onChange={(e) => endereco.changeField("logradouro", sanitizeUpper(e.target.value))}
                   placeholder="NOME DA RUA / AVENIDA"
                 />
                 {errors.logradouro && <p className="text-xs text-destructive mt-1">{errors.logradouro}</p>}
@@ -578,7 +558,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">Bairro</Label>
                 <Input
                   value={cd.bairro || ""}
-                  onChange={(e) => setCustom("bairro", sanitizeUpper(e.target.value))}
+                  onChange={(e) => endereco.changeField("bairro", sanitizeUpper(e.target.value))}
                   placeholder="BAIRRO"
                 />
                 {errors.bairro && <p className="text-xs text-destructive mt-1">{errors.bairro}</p>}
@@ -587,19 +567,15 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               {!H("municipio") && (
                 <div>
                   <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("municipio", "Município")}</Label>
-                  <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {MUNICIPIOS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <MunicipioCombobox allowCustom value={form.municipio || ""} uf={cd.uf ?? cd.endereco_uf}
+                    onChange={endereco.selectMunicipio} placeholder="Busque o município" />
                   {errors.municipio && <p className="text-xs text-destructive mt-1">{errors.municipio}</p>}
                 </div>
               )}
 
               <div>
                 <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">UF</Label>
-                <Select value={cd.uf || ""} onValueChange={(v) => setCustom("uf", v)}>
+                <Select value={cd.uf ?? cd.endereco_uf ?? ""} onValueChange={endereco.selectUf}>
                   <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
                   <SelectContent>
                     {UFS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
