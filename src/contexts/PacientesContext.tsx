@@ -24,6 +24,7 @@ interface PacientesContextType {
   addPaciente: (p: Paciente) => Promise<void>;
   updatePaciente: (id: string, data: Partial<Paciente>) => Promise<void>;
   refreshPacientes: () => Promise<void>;
+  applySavedPaciente: (row: Record<string, any>) => void;
   activateLegacyPacientes: () => Promise<void>;
   activateAgendaPatients: () => void;
   hydrateAgendaPatients: (ids: string[], force?: boolean) => Promise<Paciente[]>;
@@ -186,6 +187,18 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, [isGlobalAdmin, resolveScopedUnidadeId, scopeKey]);
 
+  // The persisted row is already available after saving: patch only a loaded patient.
+  const applySavedPaciente = useCallback((row: Record<string, any>) => {
+    if (!row?.id || scopeKeyRef.current !== scopeKey) return;
+    const current = pacientesRef.current;
+    const index = current.findIndex(p => p.id === row.id);
+    if (index < 0) return;
+    const next = [...current];
+    next[index] = { ...current[index], ...mapPacienteRow(row) };
+    pacientesRef.current = next;
+    setPacientes(next);
+  }, [scopeKey]);
+
   const refreshPacientes = useCallback(async () => {
     if (agendaModeRef.current && window.location.pathname === '/painel/agenda') {
       await hydrateAgendaPatients([...agendaPatientIdsRef.current], true);
@@ -332,8 +345,8 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   });
 
   const value = useMemo<PacientesContextType>(
-    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients }),
-    [pacientes, addPaciente, updatePaciente, refreshPacientes, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients],
+    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients }),
+    [pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients],
   );
 
   return <PacientesContext.Provider value={value}>{children}</PacientesContext.Provider>;

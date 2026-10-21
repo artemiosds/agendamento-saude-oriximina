@@ -20,6 +20,9 @@ import { usePacientes } from '@/contexts/PacientesContext';
 import { useAuth } from "@/contexts/AuthContext";
 import { auditService } from "@/services/auditService";
 import { patientService } from "@/services/patientService";
+import { patientAge } from "@/lib/queuePriority";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { maskCNS as maskCnsUtil } from "@/lib/cnsUtils";
 
 export interface ConferirDadosPacienteModalProps {
@@ -140,7 +143,8 @@ export function ConferirDadosPacienteModal({
   const formRef = useRef<any>({});
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
-  const { refreshPacientes } = usePacientes();
+  const { applySavedPaciente } = usePacientes();
+  const [attachmentsOpen, setAttachmentsOpen] = useState("");
   const { user } = useAuth();
 
   const fetchPaciente = useCallback(async (id: string) => {
@@ -168,6 +172,7 @@ export function ConferirDadosPacienteModal({
   useEffect(() => {
     if (!open || !pacienteId) return;
     setConfirmou(false);
+    setAttachmentsOpen("");
     setDirty(false);
     setPaciente(null);
     setLoadError(null);
@@ -187,9 +192,9 @@ export function ConferirDadosPacienteModal({
     });
   }, [paciente, form]);
 
-  const updateField = (name: string, value: string) => {
-    const masked = MASKS[name] ? MASKS[name](value) : value;
-    const newForm = { ...form, [name]: masked };
+  const updateField = (name: string, value: string | boolean) => {
+    const masked = typeof value === 'string' && MASKS[name] ? MASKS[name](value) : value;
+    const newForm = { ...form, [name]: masked, ...(name === 'tipo_condicao' && value === 'tea' ? { is_autista: true } : {}) };
     setForm(newForm);
     setDirty(true);
     setSaveStatus("idle");
@@ -231,8 +236,10 @@ export function ConferirDadosPacienteModal({
       setSaveStatus("saved");
       setPaciente(data);
 
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
+      applySavedPaciente(data);
+      queryClient.setQueryData(queryKeys.pacientes.detail(paciente.id), data);
+      // Mark list caches stale without forcing unrelated active screens to reload.
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all, refetchType: 'none' });
       queryClient.invalidateQueries({ queryKey: ['paciente_by_id', paciente.id] });
       queryClient.invalidateQueries({ queryKey: ['conferir_dados_paciente', paciente.id] });
       queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
@@ -241,7 +248,6 @@ export function ConferirDadosPacienteModal({
       queryClient.invalidateQueries({ queryKey: ['prontuario', paciente.id] });
       queryClient.invalidateQueries({ queryKey: ['ficha_cadastral', paciente.id] });
       
-      try { await refreshPacientes(); } catch {}
 
       if (!silent) toast.success("Dados salvos com sucesso!");
     } catch (e: any) {
@@ -303,6 +309,7 @@ export function ConferirDadosPacienteModal({
 
   const isIndigena = form.raca_cor === "indigena";
   const isEstrangeiro = form.nacionalidade === "estrangeiro";
+  const idade = patientAge(form.data_nascimento);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -516,12 +523,16 @@ export function ConferirDadosPacienteModal({
               </div>
 
               {/* Documentos e Anexos */}
-              <div>
-                <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
-                  <Paperclip className="w-4 h-4 text-primary" />Documentos e Anexos
-                </div>
-                <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />
-              </div>
+              <Accordion type="single" collapsible value={attachmentsOpen} onValueChange={setAttachmentsOpen}>
+                <AccordionItem value="anexos">
+                  <AccordionTrigger>
+                    <span className="flex items-center gap-2 text-sm"><Paperclip className="w-4 h-4 text-primary" />Documentos e Anexos (opcional)</span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    {attachmentsOpen === 'anexos' && <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />}
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
 
               {/* Contato */}
               <div>
@@ -534,6 +545,35 @@ export function ConferirDadosPacienteModal({
                   {renderFieldText("E-mail", "email", "email", "email@exemplo.com", "email")}
                 </div>
               </div>
+
+              {modo === 'chegada' && (
+                <div className="space-y-3 rounded-lg border border-[#2A6F97]/30 bg-[#2A6F97]/5 p-4">
+                  <h3 className="text-sm font-semibold text-[#2A6F97] dark:text-sky-300">Condição e Prioridade de Atendimento (Triagem)</h3>
+                  <Label>Tipo de condição</Label>
+                  <RadioGroup value={form.tipo_condicao || 'nenhuma'} disabled={saving || confirming}
+                    onValueChange={value => updateField('tipo_condicao', value === 'nenhuma' ? '' : value)}
+                    className="flex flex-wrap gap-x-5 gap-y-3">
+                    {[['nenhuma', 'Nenhuma'], ['fisica', 'Física'], ['intelectual', 'Intelectual'], ['tea', 'TEA']].map(([value, label]) => (
+                      <label key={value} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <RadioGroupItem value={value} />{label}
+                      </label>
+                    ))}
+                  </RadioGroup>
+                  {idade !== null && idade >= 60 && (
+                    <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-200">
+                      Prioridade Legal: Idoso ({idade} anos){idade >= 80 ? ' — 80 anos ou mais' : ''}
+                    </Badge>
+                  )}
+                  <div className="flex flex-wrap gap-x-5 gap-y-3">
+                    {[['is_gestante', 'Gestante'], ['is_pne', 'PNE — Pessoa com deficiência'], ['is_autista', 'Autista (TEA)']].map(([field, label]) => (
+                      <label key={field} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox checked={form[field] === true} disabled={saving || confirming || (field === 'is_autista' && form.tipo_condicao === 'tea')}
+                          onCheckedChange={checked => updateField(field, checked === true)} />{label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Botão salvar (fallback discreto) */}
               {dirty && (

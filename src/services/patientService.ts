@@ -61,6 +61,10 @@ export const patientService = {
       municipio: paciente.municipio || "",
       naturalidade: paciente.naturalidade || "",
       naturalidade_uf: paciente.naturalidade_uf || "",
+      tipo_condicao: paciente.tipo_condicao ?? cd.tipo_condicao ?? "",
+      is_gestante: paciente.is_gestante ?? cd.is_gestante ?? false,
+      is_pne: paciente.is_pne ?? cd.is_pne ?? false,
+      is_autista: paciente.is_autista ?? cd.is_autista ?? false,
       // Campos do custom_data
       sexo: normalizeSexo(paciente.sexo || cd.sexo),
       raca_cor: cd.raca_cor || cd.racaCor || "",
@@ -115,6 +119,16 @@ export const patientService = {
 
     const telNormalizado = getValue('telefone_principal') || getValue('telefone') || "";
     const telSecNormalizado = getValue('telefone_secundario') || getValue('telefoneSecundario') || "";
+    // Explicit false/empty values win; omitted fields retain the saved native value.
+    const priorityValue = (key: string, alias: string, fallback: any) =>
+      formData[alias] ?? formData[key] ?? inputCustomData[alias] ?? inputCustomData[key]
+      ?? oldPaciente[key] ?? cd[key] ?? fallback;
+    const priorities = {
+      tipo_condicao: priorityValue('tipo_condicao', 'tipoCondicao', ''),
+      is_gestante: priorityValue('is_gestante', 'isGestante', false),
+      is_pne: priorityValue('is_pne', 'isPne', false),
+      is_autista: priorityValue('is_autista', 'isAutista', false),
+    };
 
     const updatedCustomData = {
       ...cd,
@@ -138,9 +152,7 @@ export const patientService = {
       cep: String(getValue('cep', cd.cep || "")).replace(/\D/g, ""),
       telefone_secundario: telSecNormalizado,
       situacaoRua: getValue('situacaoRua', cd.situacaoRua),
-      is_gestante: getValue('isGestante', getValue('is_gestante', cd.is_gestante)),
-      is_pne: getValue('isPne', getValue('is_pne', cd.is_pne)),
-      is_autista: getValue('isAutista', getValue('is_autista', cd.is_autista)),
+      ...priorities,
       menor_idade: getValue('menorIdade', getValue('menor_idade', cd.menor_idade)),
       nome_responsavel: getValue('nomeResponsavel', getValue('nome_responsavel', cd.nome_responsavel)),
       cpf_responsavel: getValue('cpfResponsavel', getValue('cpf_responsavel', cd.cpf_responsavel)),
@@ -152,6 +164,7 @@ export const patientService = {
     };
 
     const payload = {
+      ...priorities,
       nome: getValue('nome', oldPaciente.nome),
       nome_mae: getValue('nome_mae', getValue('nomeMae', oldPaciente.nome_mae)),
       data_nascimento: getValue('data_nascimento', getValue('dataNascimento', oldPaciente.data_nascimento)) || null,
@@ -232,13 +245,15 @@ export const patientService = {
   },
 
   async savePacienteCadastro(pacienteId: string, formData: any, origem: string = "Indefinida") {
-    const { data: current } = await supabase
+    const { data: current, error: fetchError } = await supabase
       .from('pacientes')
       .select('*')
       .eq('id', pacienteId)
       .single();
     
-    const updatePayload = this.mapPacienteFormToDb(formData, current || {});
+    if (fetchError) throw fetchError;
+    if (!current) throw new Error('Paciente não encontrado. Atualize a página e tente novamente.');
+    const updatePayload = this.mapPacienteFormToDb(formData, current);
     
     const { data, error } = await supabase
       .from('pacientes')
