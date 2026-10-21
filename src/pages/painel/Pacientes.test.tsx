@@ -12,10 +12,11 @@ const fixture = vi.hoisted(() => {
       tipoLogradouroCodigo: "081", nacionalidade: "brasileiro", racaCor: "parda", campo_extra: true } };
   return { patient, pacientes: [patient], empty: [], unidades: [{ id: "u1", nome: "UNIDADE TESTE" }],
     user: { id: "user", usuario: "admin.sms", role: "master", unidadeId: "u1", nome: "TESTE" },
-    refresh: vi.fn(async () => {}), log: vi.fn(), update: vi.fn(), insert: vi.fn(), from: vi.fn(), toast: vi.fn() };
+    refresh: vi.fn(async () => {}), applySaved: vi.fn(), log: vi.fn(), update: vi.fn(), insert: vi.fn(), from: vi.fn(), toast: vi.fn() };
 });
 vi.mock("@/contexts/PacientesContext", () => ({ usePacientes: () => ({
-  pacientes: fixture.pacientes, refreshPacientes: fixture.refresh, addPaciente: vi.fn(), updatePaciente: vi.fn(),
+  pacientes: fixture.pacientes, refreshPacientes: fixture.refresh, applySavedPaciente: fixture.applySaved,
+  addPaciente: vi.fn(), updatePaciente: vi.fn(),
 }) }));
 vi.mock("@/contexts/AgendamentosContext", () => ({ useAgendamentos: () => ({ agendamentos: fixture.empty }) }));
 vi.mock("@/contexts/FilaContext", () => ({ useFila: () => ({ fila: fixture.empty }) }));
@@ -79,6 +80,8 @@ describe("gravação real do handler de Pacientes com consultas simuladas", () =
     for (const key of ["cid", "especialidade_destino", "ubs_origem", "profissional_solicitante", "tipo_encaminhamento",
       "diagnostico_resumido", "justificativa", "data_encaminhamento"]) expect(payload).not.toHaveProperty(key);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Salvar teste" })).not.toBeInTheDocument());
+    expect(fixture.applySaved).toHaveBeenCalledWith({ id: "p1" });
+    expect(fixture.refresh).toHaveBeenCalledTimes(1); // carregamento inicial, sem recarga após salvar
   });
   it("mantém dados de encaminhamento no INSERT de novo cadastro e salva com sucesso", async () => {
     setup();

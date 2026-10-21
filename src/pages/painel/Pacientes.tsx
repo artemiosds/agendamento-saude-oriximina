@@ -131,7 +131,7 @@ const fetchPacientesByIds = async (ids: string[]) => {
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
-  const { pacientes, addPaciente, updatePaciente, refreshPacientes } = usePacientes();
+  const { pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente } = usePacientes();
   const { agendamentos } = useAgendamentos();
   const { fila, addToFila, refreshFila } = useFila();
   const { unidades, funcionarios, logAction } = useOperacional();
@@ -647,11 +647,12 @@ const Pacientes: React.FC = () => {
             }
           }
 
-          // Invalidação agressiva e imediata
-          await refreshPacientes();
-          await queryClient.invalidateQueries();
-          
-          await queryClient.refetchQueries({ queryKey: queryKeys.pacientes.detail(editId) });
+          // A resposta do UPDATE já contém o cadastro persistido: atualize só este paciente.
+          applySavedPaciente(updatedPaciente);
+          queryClient.setQueryData(queryKeys.pacientes.detail(editId), updatedPaciente);
+          void queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all, refetchType: 'none' });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.fila.all });
           
           toast.success("Dados do paciente sincronizados com sucesso!");
           
