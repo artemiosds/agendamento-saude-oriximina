@@ -329,6 +329,7 @@ const TriagemItem = React.memo(({
               unidadeId={item.unidadeId}
               pacienteNome={resolvePaciente(item.pacienteId, item.pacienteNome)}
               defaultLocal="Sala de Triagem"
+              className="border border-[#2A6F97] bg-[#EAF3F8] text-[#1B4D6B] hover:bg-[#D8EAF4] hover:text-[#153F58] focus-visible:ring-[#2A6F97] dark:border-sky-400 dark:bg-slate-900 dark:text-sky-200 dark:hover:bg-slate-800 dark:hover:text-sky-100"
             />
           )}
           <Button 

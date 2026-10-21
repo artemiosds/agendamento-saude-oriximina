@@ -7,15 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarPaciente, getLocalSalvo, setLocalSalvo } from "@/lib/painelChamadas";
+import { cn } from "@/lib/utils";
 
 interface Props {
   unidadeId: string;
   pacienteNome: string;
   profissionalNome?: string;
   defaultLocal?: string;
+  className?: string;
 }
 
-export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissionalNome, defaultLocal }: Props) {
+export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissionalNome, defaultLocal, className }: Props) {
   const [open, setOpen] = useState(false);
   const [local, setLocal] = useState(() => getLocalSalvo() || defaultLocal || "");
   const [enviando, setEnviando] = useState(false);
@@ -51,7 +53,7 @@ export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissi
         <Button
           size="sm"
           variant={chamadoEm ? "outline" : "default"}
-          className="h-9 px-3 gap-2 text-sm font-semibold shadow-sm"
+          className={cn("h-9 px-3 gap-2 text-sm font-semibold shadow-sm", className)}
           title="Chamar paciente no painel"
           aria-label="Chamar paciente no painel"
         >
