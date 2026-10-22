@@ -12,7 +12,7 @@ const fixture = vi.hoisted(() => {
       tipoLogradouroCodigo: "081", nacionalidade: "brasileiro", racaCor: "parda", campo_extra: true } };
   return { patient, pacientes: [patient], empty: [], unidades: [{ id: "u1", nome: "UNIDADE TESTE" }],
     user: { id: "user", usuario: "admin.sms", role: "master", unidadeId: "u1", nome: "TESTE" },
-    refresh: vi.fn(async () => {}), applySaved: vi.fn(), log: vi.fn(), update: vi.fn(), insert: vi.fn(), from: vi.fn(), toast: vi.fn() };
+    refresh: vi.fn(async () => {}), applySaved: vi.fn(), log: vi.fn(), update: vi.fn(), insert: vi.fn(), from: vi.fn(), toast: vi.fn(), directory: vi.fn() };
 });
 vi.mock("@/contexts/PacientesContext", () => ({ usePacientes: () => ({
   pacientes: fixture.pacientes, refreshPacientes: fixture.refresh, applySavedPaciente: fixture.applySaved,
@@ -21,8 +21,9 @@ vi.mock("@/contexts/PacientesContext", () => ({ usePacientes: () => ({
 vi.mock("@/contexts/AgendamentosContext", () => ({ useAgendamentos: () => ({ agendamentos: fixture.empty }) }));
 vi.mock("@/contexts/FilaContext", () => ({ useFila: () => ({ fila: fixture.empty }) }));
 vi.mock("@/contexts/OperacionalContext", () => ({ useOperacional: () => ({
-  unidades: fixture.unidades, funcionarios: fixture.empty, logAction: fixture.log,
+  unidades: fixture.unidades, funcionarios: fixture.empty, logAction: fixture.log, resolveScopedUnidadeId: async () => 'u1',
 }) }));
+vi.mock("@/services/patientDirectoryService", () => ({ fetchPatientDirectory: (...args: unknown[]) => fixture.directory(...args) }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: fixture.user }) }));
 vi.mock("@/contexts/PermissionsContext", () => ({ usePermissions: () => ({ can: () => true }) }));
 vi.mock("@/hooks/useUnidadeFilter", () => ({ useUnidadeFilter: () => ({ unidadesVisiveis: fixture.unidades, profissionaisVisiveis: fixture.empty }) }));
@@ -53,6 +54,9 @@ vi.mock("@/components/CadastroPacienteForm", async importOriginal => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  fixture.directory.mockResolvedValue({ rows: [{ ...fixture.patient, nome_mae: fixture.patient.nomeMae,
+    data_nascimento: fixture.patient.dataNascimento, unidade_id: fixture.patient.unidadeId,
+    especialidade_destino: fixture.patient.especialidade_destino }], total: 1 });
   fixture.from.mockImplementation((table: string) => {
     if (table === "pacientes") return {
       update: (payload: object) => { fixture.update(payload); return {
@@ -72,7 +76,7 @@ function setup() {
 describe("gravação real do handler de Pacientes com consultas simuladas", () => {
   it("salva edição sem enviar nenhum campo do histórico no UPDATE cadastral", async () => {
     setup();
-    fireEvent.click(screen.getByRole("button", { name: "Editar teste" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Editar teste" }));
     fireEvent.click(screen.getByRole("button", { name: "Salvar teste" }));
     await waitFor(() => expect(fixture.update).toHaveBeenCalledTimes(1));
     const payload = fixture.update.mock.calls[0][0];
@@ -81,7 +85,7 @@ describe("gravação real do handler de Pacientes com consultas simuladas", () =
       "diagnostico_resumido", "justificativa", "data_encaminhamento"]) expect(payload).not.toHaveProperty(key);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Salvar teste" })).not.toBeInTheDocument());
     expect(fixture.applySaved).toHaveBeenCalledWith({ id: "p1" });
-    expect(fixture.refresh).toHaveBeenCalledTimes(1); // carregamento inicial, sem recarga após salvar
+    expect(fixture.refresh).not.toHaveBeenCalled(); // sem carregamento integral do cadastro
   });
   it("mantém dados de encaminhamento no INSERT de novo cadastro e salva com sucesso", async () => {
     setup();
@@ -104,5 +108,15 @@ describe("gravação real do handler de Pacientes com consultas simuladas", () =
     expect(screen.getByTestId("errors")).toHaveTextContent("nome");
     expect(fixture.update).not.toHaveBeenCalled();
     expect(fixture.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("visibilidade e carregamento do diretório", () => {
+  it("consulta uma página por unidade e mostra paciente sem agendamento próprio do profissional", async () => {
+    fixture.user = { id: 'prof1', usuario: 'prof1', role: 'profissional', unidadeId: 'u1', nome: 'PROFISSIONAL' };
+    setup();
+    await waitFor(() => expect(fixture.directory).toHaveBeenCalledWith(expect.objectContaining({ unitId: 'u1', limit: 50, full: false })));
+    expect(await screen.findByRole('button', { name: 'Editar teste' })).toBeInTheDocument();
+    fixture.user = { id: 'user', usuario: 'admin.sms', role: 'master', unidadeId: 'u1', nome: 'TESTE' };
   });
 });

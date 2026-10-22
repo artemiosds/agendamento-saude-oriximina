@@ -30,6 +30,7 @@ interface PacientesContextType {
   hydrateAgendaPatients: (ids: string[], force?: boolean) => Promise<Paciente[]>;
   activateTreatmentPatients: () => void;
   hydrateTreatmentPatients: (ids: string[], force?: boolean) => Promise<Paciente[]>;
+  activatePatientList: () => void;
 }
 
 const PacientesContext = createContext<PacientesContextType | null>(null);
@@ -97,14 +98,14 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   const legacyLoadedRef = useRef(false);
   const legacyLoadRef = useRef<Promise<void> | null>(null);
   const agendaModeRef = useRef(false);
-  const scopedRouteRef = useRef<"agenda" | "treatments" | null>(null);
+  const scopedRouteRef = useRef<"agenda" | "treatments" | "patients" | null>(null);
   const agendaPatientIdsRef = useRef(new Set<string>());
   const agendaEpochRef = useRef(0);
   const scopeKey = `${authUser?.id || "anonymous"}|${authUser?.role || "none"}|${isGlobalAdmin ? "all" : authUser?.unidadeId || "none"}`;
   const scopeKeyRef = useRef(scopeKey);
   scopeKeyRef.current = scopeKey;
 
-  const activateScopedPatients = useCallback((route: "agenda" | "treatments") => {
+  const activateScopedPatients = useCallback((route: "agenda" | "treatments" | "patients") => {
     if (agendaModeRef.current && scopedRouteRef.current === route) return;
     agendaModeRef.current = true;
     scopedRouteRef.current = route;
@@ -119,6 +120,7 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
 
   const activateAgendaPatients = useCallback(() => activateScopedPatients("agenda"), [activateScopedPatients]);
   const activateTreatmentPatients = useCallback(() => activateScopedPatients("treatments"), [activateScopedPatients]);
+  const activatePatientList = useCallback(() => activateScopedPatients("patients"), [activateScopedPatients]);
 
   const hydrateScopedPatients = useCallback(async (ids: string[], force: boolean, route: "agenda" | "treatments") => {
     activateScopedPatients(route);
@@ -222,6 +224,10 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   }, [scopeKey]);
 
   const refreshPacientes = useCallback(async () => {
+    if (window.location.pathname === '/painel/pacientes' && scopedRouteRef.current === 'patients') {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      return;
+    }
     if (agendaModeRef.current && window.location.pathname === '/painel/agenda' && scopedRouteRef.current === 'agenda') {
       await hydrateAgendaPatients([...agendaPatientIdsRef.current], true);
       return;
@@ -235,7 +241,7 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     legacyActiveRef.current = true;
     await loadPacientes();
     if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
-  }, [loadPacientes, hydrateAgendaPatients, hydrateTreatmentPatients, scopeKey]);
+  }, [loadPacientes, hydrateAgendaPatients, hydrateTreatmentPatients, scopeKey, queryClient]);
 
   const activateLegacyPacientes = useCallback(async () => {
     if (agendaModeRef.current) {
@@ -376,8 +382,8 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   });
 
   const value = useMemo<PacientesContextType>(
-    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients }),
-    [pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients],
+    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients, activatePatientList }),
+    [pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients, activatePatientList],
   );
 
   return <PacientesContext.Provider value={value}>{children}</PacientesContext.Provider>;

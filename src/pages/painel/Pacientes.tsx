@@ -58,6 +58,7 @@ import { FileSignature } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PacienteItemCard from "./pacientes/PacienteItemCard";
 import { queryKeys } from "@/hooks/queries/queryKeys";
+import { fetchPatientDirectory } from "@/services/patientDirectoryService";
 
 import { buildFichaAtendimentoData, type FichaDados } from "@/lib/fichaAtendimentoData";
 
@@ -114,9 +115,6 @@ const mapPacienteRow = (p: any) => ({
 });
 
 
-const normalizeUnitId = (value?: string | null) => (value || "").trim();
-
-
 const fetchPacientesByIds = async (ids: string[]) => {
   const pacientes: any[] = [];
   const chunkSize = 200;
@@ -131,16 +129,15 @@ const fetchPacientesByIds = async (ids: string[]) => {
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
-  const { pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente } = usePacientes();
+  const { pacientes, applySavedPaciente } = usePacientes();
   const { agendamentos } = useAgendamentos();
   const { fila, addToFila, refreshFila } = useFila();
-  const { unidades, funcionarios, logAction } = useOperacional();
+  const { unidades, funcionarios, logAction, resolveScopedUnidadeId } = useOperacional();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const { can } = usePermissions();
-  const isProfissional = user?.role === "profissional";
   const canDelete = can("pacientes", "can_delete");
   const canImportCSV = can("pacientes", "can_create");
   const canAddToFila = can("fila", "can_create");
@@ -163,75 +160,12 @@ const Pacientes: React.FC = () => {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
-    // Check for ID in URL to automatically open edit modal
-    const params = new URLSearchParams(window.location.search);
-    const idFromUrl = params.get('id');
-    
-    if (idFromUrl && pacientes.length > 0) {
-      const target = pacientes.find(p => p.id === idFromUrl);
-      if (target) {
-        setEditId(target.id);
-        setForm({
-          nome: target.nome,
-          cpf: target.cpf,
-          cns: target.cns,
-          nomeMae: target.nomeMae,
-          telefone: target.telefone,
-          dataNascimento: target.dataNascimento,
-          email: target.email,
-          endereco: target.endereco,
-          naturalidade: target.naturalidade,
-          naturalidadeUf: target.naturalidade_uf,
-          municipio: target.municipio,
-          menorIdade: target.menor_idade,
-          nomeResponsavel: target.nome_responsavel,
-          cpfResponsavel: target.cpf_responsavel,
-          ubsOrigem: target.ubs_origem,
-          profissionalSolicitante: target.profissional_solicitante,
-          tipoEncaminhamento: target.tipo_encaminhamento,
-          diagnosticoResumido: target.diagnostico_resumido,
-          justificativa: target.justificativa,
-          dataEncaminhamento: target.data_encaminhamento,
-          tipoCondicao: target.tipo_condicao,
-          mobilidade: target.mobilidade,
-          usaDispositivo: target.usa_dispositivo,
-          tipoDispositivo: target.tipo_dispositivo,
-          comunicacao: target.comunicacao,
-          comportamento: target.comportamento,
-          usaEquipamentos: target.usa_equipamentos,
-          equipamentos: target.equipamentos,
-          observacaoEquipamentos: target.observacao_equipamentos,
-          outroServicoSus: target.outro_servico_sus,
-          transporte: target.transporte,
-          turnoPreferido: target.turno_preferido,
-          especialidadeDestino: target.especialidade_destino,
-          customData: target.custom_data,
-          cid: target.cid,
-          descricaoClinica: target.descricaoClinica,
-          isGestante: target.isGestante,
-          isPne: target.isPne,
-          isAutista: target.isAutista,
-          documentoUrl: target.documento_url || "",
-          sexo: normalizeSexo((target as any).sexo || target.custom_data?.sexo)
-        });
-        const formSexo = normalizeSexo((target as any).sexo || target.custom_data?.sexo);
-        console.log("Paciente carregado:", target);
-        console.log("Sexo aplicado no formulário:", formSexo);
-        console.log("PACIENTE RAW (URL ID)", target);
-        console.log("SEXO NORMALIZADO (URL ID)", normalizeSexo((target as any).sexo || target.custom_data?.sexo));
-        setDialogOpen(true);
-        
-        // Clean URL after opening
-        window.history.replaceState({}, '', '/painel/pacientes');
-      }
-    }
-
     const t = window.setTimeout(() => {
       setDebouncedSearch(search);
       setVisibleCount(PAGE_SIZE); // reset pagination on search
     }, 300);
     return () => window.clearTimeout(t);
-  }, [search, pacientes]);
+  }, [search]);
   const [importOpen, setImportOpen] = useState(false);
   const [apacLaudo, setApacLaudo] = useState<{ paciente: any; unidadeNome: string; cnesUnidade: string } | null>(null);
   const openApacLaudo = (p: any) => {
@@ -306,52 +240,37 @@ const Pacientes: React.FC = () => {
   const pacientesQueryScope = useMemo(
     () => ({
       unidadeId: unidadeIdFuncionario || "global",
+      userId: user?.id || "anonymous",
       role: user?.role || "anon",
       usuario: user?.usuario || "",
       search: debouncedSearch,
       filterFila,
       sortBy,
-      page: Math.ceil(visibleCount / PAGE_SIZE),
+      page: filterFila !== 'all' || sortBy !== 'nome' ? 0 : Math.ceil(visibleCount / PAGE_SIZE),
+      fila: filterFila === 'all' && sortBy === 'nome' ? '' : fila.map(f => `${f.id}:${f.pacienteId}:${f.status}:${f.origemCadastro}`).join('|'),
     }),
-    [unidadeIdFuncionario, user?.role, user?.usuario, debouncedSearch, filterFila, sortBy, visibleCount],
+    [unidadeIdFuncionario, user?.id, user?.role, user?.usuario, debouncedSearch, filterFila, sortBy, visibleCount, fila],
   );
 
-  useQuery({
+  const needsFullList = filterFila !== 'all' || sortBy !== 'nome';
+  const queuePatientIds = useMemo(() => filterFila === 'fila' ? [...pacientesNaFila] :
+    filterFila === 'demanda_reprimida' ? [...pacientesDemandaReprimida] : undefined,
+    [filterFila, pacientesNaFila, pacientesDemandaReprimida]);
+  const directoryQuery = useQuery({
     queryKey: queryKeys.pacientes.page(pacientesQueryScope),
-    queryFn: async () => true,
+    queryFn: async () => fetchPatientDirectory({
+      unitId: isGlobalAdminUser ? null : await resolveScopedUnidadeId(),
+      search: debouncedSearch,
+      limit: visibleCount,
+      full: needsFullList,
+      ids: queuePatientIds,
+    }),
     enabled: !!user,
-    staleTime: 0,
+    staleTime: 30_000,
   });
-
-  useEffect(() => {
-    // Recarrega a lista apenas quando o escopo do usuário/unidade muda.
-    // A busca filtra localmente a lista já carregada (sem nova leitura do banco).
-    const invalidate = async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-      refreshPacientes();
-    };
-    invalidate();
-  }, [queryClient, refreshPacientes, unidadeIdFuncionario, user?.role, user?.usuario]);
-
-  // Profissionais veem pacientes vinculados aos seus agendamentos.
-  // Recepção/Gestão/Master de unidade usam exclusivamente unidade_id real do funcionário.
-  // Não filtrar por setor, sala, criado_por, profissional, fila ou agendamento.
-  const visiblePacientes = useMemo(() => {
-    if (isProfissional && user) {
-      const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
-      return pacientes.filter((p) => myPacienteIds.has(p.id));
-    }
-    if (!isGlobalAdminUser && unidadeIdFuncionario) {
-      const unitId = normalizeUnitId(unidadeIdFuncionario);
-      // Mostra pacientes da unidade + pacientes sem unidade vinculada (legados/órfãos)
-      // para que a Recepção tenha visibilidade completa e possa revisar/corrigir o cadastro.
-      return pacientes.filter((p) => {
-        const u = normalizeUnitId(p.unidadeId);
-        return !u || u === unitId;
-      });
-    }
-    return pacientes;
-  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
+  // O banco pagina a lista normal por unidade. O profissional consulta os mesmos
+  // pacientes da unidade que a recepção, sem vínculo obrigatório com sua agenda.
+  const visiblePacientes = useMemo(() => (directoryQuery.data?.rows || []).map(mapPacienteRow), [directoryQuery.data]);
 
   const analyzedPendencies = useMemo(() => {
     const list = visiblePacientes.map(p => calculatePatientPendingFields(p));
@@ -362,8 +281,10 @@ const Pacientes: React.FC = () => {
     };
   }, [visiblePacientes]);
 
-  const exportCSV = (type: "pendentes" | "todos") => {
-    const list = visiblePacientes.map(p => ({
+  const exportCSV = async (type: "pendentes" | "todos") => {
+    try {
+    const { rows: patientRows } = await fetchPatientDirectory({ unitId: isGlobalAdminUser ? null : await resolveScopedUnidadeId(), full: true });
+    const list = patientRows.map(mapPacienteRow).map(p => ({
       ...p,
       analysis: calculatePatientPendingFields(p)
     }));
@@ -392,16 +313,20 @@ const Pacientes: React.FC = () => {
     link.click();
     URL.revokeObjectURL(url);
     toast.success("CSV exportado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao exportar pacientes:", error);
+      toast.error("Não foi possível exportar os pacientes.");
+    }
   };
 
   const filtered = useMemo(() => {
-    const q = debouncedSearch.toLowerCase();
+    const q = (needsFullList ? debouncedSearch : '').toLowerCase();
     const qDigits = debouncedSearch.replace(/\D/g, "");
     let list = visiblePacientes.filter(
       (p) =>
         p.nome.toLowerCase().includes(q) ||
-        p.cpf.includes(debouncedSearch) ||
-        p.telefone.includes(debouncedSearch) ||
+        p.cpf.includes(needsFullList ? debouncedSearch : '') ||
+        p.telefone.includes(needsFullList ? debouncedSearch : '') ||
         (p.cns && qDigits && (p.cns || "").replace(/\D/g, "").includes(qDigits)),
     );
 
@@ -446,7 +371,7 @@ const Pacientes: React.FC = () => {
     }
 
     return list;
-  }, [visiblePacientes, debouncedSearch, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
+  }, [visiblePacientes, debouncedSearch, needsFullList, filterFila, sortBy, pacientesNaFila, pacientesDemandaReprimida, filaEntryMap]);
 
   const openNew = () => {
     setEditId(null);
@@ -507,6 +432,28 @@ const Pacientes: React.FC = () => {
     setErrors({});
     setDialogOpen(true);
   };
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (!id || !user) return;
+    let cancelled = false;
+    const load = async () => {
+      const unitId = isGlobalAdminUser ? null : await resolveScopedUnidadeId();
+      if (unitId === '') return;
+      let query = supabase.from('pacientes').select(PACIENTE_COLUMNS).eq('id', id);
+      if (unitId !== null) query = query.or(`unidade_id.eq.${unitId},unidade_id.is.null,unidade_id.eq.`);
+      const { data, error } = await query.maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        toast.error('Paciente não encontrado nesta unidade.');
+        return;
+      }
+      openEdit(mapPacienteRow(data));
+      window.history.replaceState({}, '', '/painel/pacientes');
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [user?.id, isGlobalAdminUser, resolveScopedUnidadeId]);
 
   const handleSave = async () => {
     const { normalizePhone } = await import("@/lib/phoneUtils");
@@ -650,7 +597,7 @@ const Pacientes: React.FC = () => {
           // A resposta do UPDATE já contém o cadastro persistido: atualize só este paciente.
           applySavedPaciente(updatedPaciente);
           queryClient.setQueryData(queryKeys.pacientes.detail(editId), updatedPaciente);
-          void queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all, refetchType: 'none' });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
           void queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
           void queryClient.invalidateQueries({ queryKey: queryKeys.fila.all });
           
@@ -753,9 +700,7 @@ const Pacientes: React.FC = () => {
             }
           } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
 
-          // Invalidação agressiva e abrangente
-          await refreshPacientes();
-          await queryClient.invalidateQueries(); 
+          await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
           
           toast.success("Novo paciente cadastrado e sincronizado!");
           
@@ -801,7 +746,7 @@ const Pacientes: React.FC = () => {
         detalhes: { nome: p.nome, cpf: p.cpf },
         user,
       });
-      await refreshPacientes();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
       toast.success("Paciente excluído!");
     } catch (err) {
       console.error("Error deleting patient:", err);
@@ -979,7 +924,7 @@ const Pacientes: React.FC = () => {
         title="Pacientes"
         subtitle={
           <>
-            {visiblePacientes.length} cadastrados
+            {needsFullList ? filtered.length : directoryQuery.data?.total ?? 0} cadastrados
             {pacientesNaFila.size > 0 && (
               <span className="ml-2">
                 • <Users className="w-3.5 h-3.5 inline" /> {pacientesNaFila.size} na fila
@@ -991,6 +936,9 @@ const Pacientes: React.FC = () => {
           <>
             <Button variant="outline" onClick={() => navigate("/painel/atualizacao-cadastral")}>
               <AlertTriangle className="w-4 h-4 mr-2 text-orange-500" /> Pendências Cadastrais
+            </Button>
+            <Button variant="outline" onClick={() => void exportCSV("pendentes")}>
+              <FileDown className="w-4 h-4 mr-2" /> Exportar pendentes
             </Button>
             {canImportCSV && (
               <Button variant="outline" onClick={() => setImportOpen(true)}>
@@ -1013,7 +961,7 @@ const Pacientes: React.FC = () => {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-warning" />
                 <span>
-                  Existem <strong>{analyzedPendencies.total}</strong> pacientes com pendências cadastrais (CPF, CNS, endereço ou unidade faltando).
+                  Entre os pacientes exibidos, <strong>{analyzedPendencies.total}</strong> têm pendências cadastrais (CPF, CNS, endereço ou unidade faltando).
                 </span>
               </div>
               <div className="flex gap-2">
@@ -1212,6 +1160,8 @@ const Pacientes: React.FC = () => {
       </Dialog>
 
       {/* Search + Filters */}
+      {directoryQuery.isError && <ErrorState description="Não foi possível carregar os pacientes. Tente novamente." onRetry={() => void directoryQuery.refetch()} />}
+      {directoryQuery.isLoading && <LoadingState label="Carregando pacientes..." />}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1273,13 +1223,13 @@ const Pacientes: React.FC = () => {
         })}
 
       </div>
-      {visibleCount < filtered.length && (
+      {visibleCount < (needsFullList ? filtered.length : directoryQuery.data?.total || 0) && (
         <div className="flex justify-center pt-2">
           <Button
             variant="outline"
             onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
           >
-            Carregar mais ({filtered.length - visibleCount} restantes)
+            Carregar mais ({(needsFullList ? filtered.length : directoryQuery.data?.total || 0) - visibleCount} restantes)
           </Button>
         </div>
       )}
