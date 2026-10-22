@@ -24,6 +24,7 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
     onChangeRef.current = onChange;
     const lastPropValue = React.useRef(value ?? "");
     const dirtyRef = React.useRef(false);
+    const pendingChangeRef = React.useRef({ value: value ?? "", name: props.name });
 
     const emitChange = React.useCallback((newValue: string, name?: string) => {
       const fakeEvent = {
@@ -59,6 +60,7 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
 
         if (timerRef.current) clearTimeout(timerRef.current);
         const fieldName = e.target.name;
+        pendingChangeRef.current = { value: newValue, name: fieldName };
         timerRef.current = setTimeout(() => {
           React.startTransition(() => emitChange(newValue, fieldName));
           lastPropValue.current = newValue;
@@ -82,12 +84,14 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
     React.useEffect(() => {
       return () => {
         if (timerRef.current) {
-          // flush pendente ao desmontar
-          emitChange(localValue ?? "", undefined);
           clearTimeout(timerRef.current);
+          timerRef.current = null;
+          // Só ao desmontar: envia o último texto, sem capturar um valor antigo.
+          const pending = pendingChangeRef.current;
+          emitChange(pending.value, pending.name);
         }
       };
-    }, [emitChange, localValue]);
+    }, [emitChange]);
 
     return <Textarea ref={ref} {...props} value={localValue} onChange={handleChange} onBlur={handleBlur} />;
   },
