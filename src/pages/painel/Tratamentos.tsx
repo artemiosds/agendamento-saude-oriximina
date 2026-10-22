@@ -54,6 +54,7 @@ import { isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
 import { treatmentCycleWriter, assertStoredTreatmentCycle, loadTreatmentCycleSnapshot } from "@/services/treatmentCycleService";
+import { deleteTreatmentCycle } from "@/services/treatmentCycleDeletion";
 import { validateTreatmentCycle, assertTreatmentSessionChange } from "@/lib/treatmentCycleIntegrity";
 import { TreatmentIntegrityReview } from "@/components/tratamentos/TreatmentIntegrityReview";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
@@ -198,6 +199,7 @@ const Tratamentos: React.FC = () => {
     cancelAgendamento,
     deleteAgendamentoTransactionally,
     applyTreatmentAgendamentoUpdate,
+    refreshAgendamentos,
   } = useAgendamentos();
   const { user } = useAuth();
   const restrictTreatmentUnit = !!(user?.unidadeId && user?.usuario !== "admin.sms");
@@ -240,6 +242,7 @@ const Tratamentos: React.FC = () => {
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [dischargeOpen, setDischargeOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TreatmentCycle | null>(null);
+  const [deletingCycle, setDeletingCycle] = useState(false);
   const [duplicateConfirm, setDuplicateConfirm] = useState<TreatmentCycle[]>([]);
 
   const [agendarSessaoTarget, setAgendarSessaoTarget] = useState<TreatmentSession | null>(null);
@@ -998,31 +1001,20 @@ const Tratamentos: React.FC = () => {
   };
 
   const handleDeleteCycle = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || deletingCycle) return;
     const reason = window.prompt("Justificativa obrigatória para excluir o ciclo:")?.trim();
     if (!reason) return;
+    setDeletingCycle(true);
     try {
-      await supabase.from("treatment_sessions").delete().eq("cycle_id", deleteTarget.id);
-      await supabase.from("treatment_extensions").delete().eq("cycle_id", deleteTarget.id);
-      await supabase.from("patient_discharges").delete().eq("cycle_id", deleteTarget.id);
-      const { error } = await supabase.from("treatment_cycles").delete().eq("id", deleteTarget.id);
-      if (error) throw error;
-
-      await logAction({
-        acao: "excluir",
-        entidade: "treatment_cycle",
-        entidadeId: deleteTarget.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: { tipo: deleteTarget.treatment_type, paciente: deleteTarget.patient_id, motivo_alteracao: reason },
-      });
-
-      toast.success("Ciclo excluído com sucesso.");
+      const result = await deleteTreatmentCycle(deleteTarget.id, reason);
+      toast.success(`Ciclo excluído. ${result.sessions_removed} sessão(ões) e ${result.appointments_removed} agendamento(s) vinculado(s) removido(s).`);
       setDeleteTarget(null);
-      loadData(true);
+      await Promise.allSettled([loadData(true), refreshAgendamentos()]);
     } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao excluir ciclo.");
+      toast.error(err?.message || "Erro ao excluir ciclo. Nenhum dado foi alterado.");
+    } finally {
+      setDeletingCycle(false);
     }
   };
 
@@ -3683,7 +3675,7 @@ const Tratamentos: React.FC = () => {
       <Dialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+          if (!open && !deletingCycle) setDeleteTarget(null);
         }}
       >
         <DialogContent className="sm:max-w-sm">
@@ -3699,14 +3691,14 @@ const Tratamentos: React.FC = () => {
               {deleteTarget?.treatment_type ? ` — ${deleteTarget.treatment_type}` : ""}.
             </p>
             <p className="text-sm text-destructive font-medium">
-              Todas as sessões, extensões e vínculos com PTS serão removidos permanentemente.
+              As sessões ainda não realizadas e seus agendamentos vinculados serão excluídos da Agenda. Ciclos com atendimento, PTS, alta ou histórico serão preservados e terão a exclusão recusada.
             </p>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
+              <Button variant="outline" size="sm" disabled={deletingCycle} onClick={() => setDeleteTarget(null)}>
                 Cancelar
               </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteCycle}>
-                Confirmar exclusão
+              <Button variant="destructive" size="sm" disabled={deletingCycle} onClick={handleDeleteCycle}>
+                {deletingCycle ? "Excluindo..." : "Confirmar exclusão"}
               </Button>
             </div>
           </div>
