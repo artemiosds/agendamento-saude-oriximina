@@ -96,6 +96,42 @@ export interface BlockedRange {
   start: string; // YYYY-MM-DD
   end: string;   // YYYY-MM-DD
 }
+// Bounded fallback horizon when blocks or availability shift planned dates.
+const MAX_ADDITIONAL_SEARCH_DAYS = 3650;
+
+function toDateOnlyString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+function addCalendarDays(date: Date, days: number): Date {
+  const result = new Date(date); result.setDate(result.getDate() + days); return result;
+}
+function addCalendarMonthsClamped(date: Date, months: number): Date {
+  const result = new Date(date); const day = result.getDate(); result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  result.setDate(Math.min(day, new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate()));
+  return result;
+}
+function getSafeSearchHorizon(startDate: string, frequency: string, totalSessions: number): Date {
+  const start = new Date(startDate + 'T12:00:00');
+  const end = frequency === 'mensal' ? addCalendarMonthsClamped(start, totalSessions - 1)
+    : addCalendarDays(start, frequency === 'manual' ? (totalSessions - 1) * 7 : totalSessions * 7);
+  return addCalendarDays(end, MAX_ADDITIONAL_SEARCH_DAYS);
+}
+function calendarDaysInclusive(from: Date, through: Date): number {
+  const a = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = Date.UTC(through.getFullYear(), through.getMonth(), through.getDate());
+  return Math.max(0, Math.floor((b - a) / 86400000) + 1);
+}
+function assertCompleteSessionPlan(dates: string[], total: number, blocked: BlockedRange[], available?: ReadonlySet<string>): void {
+  if (dates.length !== total) throw new Error(`Geração incompleta: ${total} sessões previstas, mas apenas ${dates.length} datas válidas encontradas dentro do limite seguro. Confira disponibilidade, folgas e bloqueios. Nenhum plano foi salvo.`);
+  const seen = new Set<string>();
+  for (const date of dates) {
+    if (seen.has(date) || isInvalidSessionDate(date, blocked) || (available !== undefined && !available.has(date))) {
+      throw new Error('O plano contém datas repetidas, bloqueadas ou indisponíveis. Nenhum plano foi salvo.');
+    }
+    seen.add(date);
+  }
+}
 
 /**
  * Build blocked ranges from bloqueios data for a specific professional.
@@ -136,7 +172,7 @@ function findNextValidDate(
   current: Date,
   sortedDays: number[],
   blockedRanges: BlockedRange[],
-  maxAttempts: number = 365,
+  maxAttempts: number = MAX_ADDITIONAL_SEARCH_DAYS,
   availableDates?: ReadonlySet<string>,
 ): { date: Date; skipped: number } | null {
   let skipped = 0;
@@ -145,7 +181,7 @@ function findNextValidDate(
     const dow = d.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
     if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = toDateOnlyString(d);
       if (!isDateBlocked(dateStr, blockedRanges) && (!availableDates || availableDates.has(dateStr))) {
         return { date: new Date(d), skipped };
       }
@@ -190,6 +226,7 @@ export function generateSessionDatesWithInfo(
   }
   const dates: string[] = [];
   const start = new Date(startDate + 'T12:00:00');
+  const searchHorizon = getSafeSearchHorizon(startDate, frequency, totalSessions);
   let totalSkipped = 0;
 
   if (frequency === 'manual') {
@@ -198,20 +235,20 @@ export function generateSessionDatesWithInfo(
       d.setDate(d.getDate() + i * 7);
       const originalDow = d.getDay() === 0 ? 7 : d.getDay();
       let shifted = false;
-      if (dates.length && d.toISOString().split('T')[0] <= dates[dates.length - 1]) {
+      if (dates.length && toDateOnlyString(d) <= dates[dates.length - 1]) {
         shifted = true;
         d.setTime(new Date(dates[dates.length - 1] + 'T12:00:00').getTime());
         d.setDate(d.getDate() + 1);
       }
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = toDateOnlyString(d);
       if (shifted || isInvalidSessionDate(dateStr, blockedRanges) || (availableDates && !availableDates.has(dateStr))) {
         // Find next valid weekday (Mon-Fri only)
         const baseDow = originalDow;
         const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
-        const valid = findNextValidDate(d, targetDays, blockedRanges, 365, availableDates);
+        const valid = findNextValidDate(d, targetDays, blockedRanges, calendarDaysInclusive(d, searchHorizon), availableDates);
         if (valid) {
-          dates.push(valid.date.toISOString().split('T')[0]);
-          totalSkipped += valid.skipped + 1;
+          dates.push(toDateOnlyString(valid.date));
+          totalSkipped += Math.max(1, valid.skipped);
         } else {
           throw new Error('Não foi possível gerar todas as sessões em datas válidas. Confira a disponibilidade da agenda. Nenhum plano foi salvo.');
         }
@@ -219,28 +256,28 @@ export function generateSessionDatesWithInfo(
         dates.push(dateStr);
       }
     }
+    assertCompleteSessionPlan(dates, totalSessions, blockedRanges, availableDates);
     return { dates, skippedCount: totalSkipped };
   }
 
   if (frequency === 'mensal') {
     for (let i = 0; i < totalSessions; i++) {
-      const d = new Date(start);
-      d.setMonth(d.getMonth() + i);
+      const d = addCalendarMonthsClamped(start, i);
       const originalDow = d.getDay() === 0 ? 7 : d.getDay();
       let shifted = false;
-      if (dates.length && d.toISOString().split('T')[0] <= dates[dates.length - 1]) {
+      if (dates.length && toDateOnlyString(d) <= dates[dates.length - 1]) {
         shifted = true;
         d.setTime(new Date(dates[dates.length - 1] + 'T12:00:00').getTime());
         d.setDate(d.getDate() + 1);
       }
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = toDateOnlyString(d);
       if (shifted || isInvalidSessionDate(dateStr, blockedRanges) || (availableDates && !availableDates.has(dateStr))) {
         const baseDow = originalDow;
         const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
-        const valid = findNextValidDate(d, targetDays, blockedRanges, 365, availableDates);
+        const valid = findNextValidDate(d, targetDays, blockedRanges, calendarDaysInclusive(d, searchHorizon), availableDates);
         if (valid) {
-          dates.push(valid.date.toISOString().split('T')[0]);
-          totalSkipped += valid.skipped + 1;
+          dates.push(toDateOnlyString(valid.date));
+          totalSkipped += Math.max(1, valid.skipped);
         } else {
           throw new Error('Não foi possível gerar todas as sessões em datas válidas. Confira a disponibilidade da agenda. Nenhum plano foi salvo.');
         }
@@ -248,6 +285,7 @@ export function generateSessionDatesWithInfo(
         dates.push(dateStr);
       }
     }
+    assertCompleteSessionPlan(dates, totalSessions, blockedRanges, availableDates);
     return { dates, skippedCount: totalSkipped };
   }
 
@@ -262,14 +300,14 @@ export function generateSessionDatesWithInfo(
 
   const current = new Date(start);
   let count = 0;
-  const maxIterations = totalSessions * 60; // increased safety margin for skips
+  const maxIterations = calendarDaysInclusive(current, searchHorizon);
   let iter = 0;
 
   while (count < totalSessions && iter < maxIterations) {
     const dow = current.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
     if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
-      const dateStr = current.toISOString().split('T')[0];
+      const dateStr = toDateOnlyString(current);
       if (!isDateBlocked(dateStr, blockedRanges) && (!availableDates || availableDates.has(dateStr))) {
         dates.push(dateStr);
         count++;
@@ -284,6 +322,7 @@ export function generateSessionDatesWithInfo(
   if (dates.length !== totalSessions) {
     throw new Error(`Geração incompleta: ${totalSessions} sessões previstas, mas apenas ${dates.length} datas disponíveis. Confira a disponibilidade da agenda. Nenhum plano foi salvo.`);
   }
+  assertCompleteSessionPlan(dates, totalSessions, blockedRanges, availableDates);
   return { dates, skippedCount: totalSkipped };
 }
 

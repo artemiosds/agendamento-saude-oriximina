@@ -937,8 +937,14 @@ const Tratamentos: React.FC = () => {
         }
       }
 
-      const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
-      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges, new Set(getAvailableDates(newCycle.professional_id, newCycle.unit_id || prof?.unidadeId || "")));
+      const targetUnitId = newCycle.unit_id || prof?.unidadeId || "";
+      if (!targetUnitId) throw new Error("Selecione a unidade do profissional antes de gerar o plano.");
+      const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, targetUnitId);
+      // Generate and validate the complete date plan before the atomic database write.
+      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(
+        newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges,
+        new Set(getAvailableDates(newCycle.professional_id, targetUnitId)),
+      );
       const endDate = calcEndDateFromSessions(sessionDates);
 
       if (skippedCount > 0) {
@@ -949,7 +955,7 @@ const Tratamentos: React.FC = () => {
           id: crypto.randomUUID(),
           patient_id: newCycle.patient_id,
           professional_id: newCycle.professional_id,
-          unit_id: newCycle.unit_id || prof?.unidadeId || "",
+          unit_id: targetUnitId,
           specialty: newCycle.specialty || prof?.profissao || "",
           treatment_type: newCycle.treatment_type,
           start_date: newCycle.start_date,
@@ -978,7 +984,9 @@ const Tratamentos: React.FC = () => {
         },
       });
 
-      toast.success(`Ciclo criado com ${totalSessions} sessões! Aguardam agendamento pela recepção.`);
+      const formatDateBR = (date: string) => new Date(date + "T12:00:00").toLocaleDateString("pt-BR");
+      const adjustmentMessage = skippedCount > 0 ? " Datas ajustadas para respeitar bloqueios, feriados e disponibilidade." : "";
+      toast.success(`${sessionDates.length} de ${totalSessions} sessões criadas.${adjustmentMessage} Período: ${formatDateBR(sessionDates[0])} a ${formatDateBR(sessionDates[sessionDates.length - 1])}. Aguardam agendamento pela recepção.`);
       setCreateOpen(false);
       loadData(true);
     } catch (err: any) {
@@ -3552,9 +3560,15 @@ const Tratamentos: React.FC = () => {
                   <strong>
                     {(() => {
                       const total = Math.max(1, newCycle.total_sessions || 0);
-                      const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
-                      const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total, ranges);
-                      return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+                      const previewProfessional = profissionais.find((p) => p.id === newCycle.professional_id);
+                      const previewUnitId = newCycle.unit_id || previewProfessional?.unidadeId || "";
+                      const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, previewUnitId);
+                      try {
+                        const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total, ranges);
+                        return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+                      } catch {
+                        return 'Sem datas válidas no limite de busca';
+                      }
                     })()}
                   </strong>
                 </div>
