@@ -1,3 +1,4 @@
+import { assertStoredTreatmentCycle } from './treatmentCycleService';
 import { supabase } from "@/integrations/supabase/client";
 
 export type TreatmentDischargeType = "conclusao" | "outro";
@@ -21,6 +22,7 @@ export async function registerTreatmentDischarge(input: {
   finalNotes: string;
   scope?: TreatmentDischargeScope;
 }): Promise<TreatmentDischargeResult> {
+  if (input.type === 'conclusao') await assertStoredTreatmentCycle(input.cycleId);
   const { data, error } = await (supabase as any).rpc("register_treatment_discharge", {
     p_cycle_id: input.cycleId,
     p_tipo_alta: input.type,
