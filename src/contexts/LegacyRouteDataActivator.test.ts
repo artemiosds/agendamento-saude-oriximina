@@ -22,13 +22,16 @@ describe("A1.1 route data activation", () => {
       "/painel/fila",
       "/painel/prontuario",
       "/painel/triagem",
-      "/painel/tratamentos",
     ]) {
       expect(getLegacyRouteDataNeeds(pathname)).toEqual({
         pacientes: true,
         agendamentos: true,
       });
     }
+  });
+
+  it("loads only appointments for Treatments; patients are hydrated by visible cycle", () => {
+    expect(getLegacyRouteDataNeeds("/painel/tratamentos")).toEqual({ pacientes: false, agendamentos: true });
   });
 
   it("activates only the dataset required by the remaining legacy routes", () => {

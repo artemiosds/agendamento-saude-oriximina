@@ -6,7 +6,7 @@ import { getLegacyRouteDataNeeds } from "@/contexts/legacyRouteDataNeeds";
 
 export const LegacyRouteDataActivator = () => {
   const { pathname } = useLocation();
-  const { activateLegacyPacientes, activateAgendaPatients } = usePacientes();
+  const { activateLegacyPacientes, activateAgendaPatients, activateTreatmentPatients } = usePacientes();
   const { activateLegacyAgendamentos, activateAgendaMode } = useAgendamentos();
 
   useEffect(() => {
@@ -19,13 +19,14 @@ export const LegacyRouteDataActivator = () => {
         activateAgendaMode();
         return;
       }
+      if (pathname === '/painel/tratamentos') activateTreatmentPatients();
       if (needs.pacientes) void activateLegacyPacientes();
       if (needs.agendamentos) void activateLegacyAgendamentos();
     });
     return () => {
       cancelled = true;
     };
-  }, [pathname, activateLegacyPacientes, activateLegacyAgendamentos, activateAgendaPatients, activateAgendaMode]);
+  }, [pathname, activateLegacyPacientes, activateLegacyAgendamentos, activateAgendaPatients, activateTreatmentPatients, activateAgendaMode]);
 
   return null;
 };

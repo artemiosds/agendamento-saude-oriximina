@@ -4,7 +4,6 @@ const PATIENT_ROUTES = new Set([
   "/painel/fila",
   "/painel/prontuario",
   "/painel/triagem",
-  "/painel/tratamentos",
   "/painel/pts",
   "/painel/relatorios",
   "/painel/alta",

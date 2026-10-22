@@ -190,7 +190,7 @@ const sessionStatusLabels: Record<string, string> = {
 };
 
 const Tratamentos: React.FC = () => {
-  const { pacientes } = usePacientes();
+  const { pacientes, hydrateTreatmentPatients } = usePacientes();
   const { funcionarios, unidades, salas, disponibilidades, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
   const { fila, addToFila } = useFila();
   const {
@@ -431,6 +431,12 @@ const Tratamentos: React.FC = () => {
   const selectedCycleIdRef = useRef<string | null>(selectedCycle?.id || null);
   const loadDataScopeRef = useRef("");
   const sessionsScopeRef = useRef("");
+  const treatmentPatientIds = useMemo(() => [...new Set([
+    ...cycles.map((cycle) => cycle.patient_id),
+    selectedCycle?.patient_id,
+    createOpen ? newCycle.patient_id : null,
+  ].filter((id): id is string => !!id))], [cycles, selectedCycle?.patient_id, createOpen, newCycle.patient_id]);
+  const treatmentPatientKey = JSON.stringify(treatmentPatientIds.slice().sort());
   selectedCycleIdRef.current = selectedCycle?.id || null;
   loadDataScopeRef.current = JSON.stringify([
     user?.id,
@@ -462,6 +468,27 @@ const Tratamentos: React.FC = () => {
       loadSessionsGeneration.invalidate();
     };
   }, []);
+
+  // Cycles are already paged on the server. Fetch only their patients and the
+  // selected patient; obsolete page responses cannot replace the new cohort.
+  useEffect(() => {
+    if (!pageMountedRef.current) return;
+    let cancelled = false;
+    void hydrateTreatmentPatients(treatmentPatientIds).catch((error) => {
+      if (!cancelled && (error as Error)?.message !== 'Leitura de pacientes obsoleta') {
+        console.error('Erro ao carregar pacientes dos ciclos visíveis:', error);
+        toast.error('Não foi possível carregar os pacientes dos ciclos. Atualize a página e tente novamente.');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [hydrateTreatmentPatients, treatmentPatientKey]);
+
+  const getTreatmentPatient = useCallback(async (patientId: string) => {
+    const cached = pacientes.find((p) => p.id === patientId);
+    if (cached) return cached;
+    const currentIds = treatmentPatientIds.includes(patientId) ? treatmentPatientIds : [...treatmentPatientIds, patientId];
+    return (await hydrateTreatmentPatients(currentIds)).find((p) => p.id === patientId);
+  }, [pacientes, hydrateTreatmentPatients, treatmentPatientKey]);
 
   const loadData = useCallback(async (silent = false) => {
     if (!pageMountedRef.current) return;
@@ -871,9 +898,6 @@ const Tratamentos: React.FC = () => {
     if (loading) return; // Guard
     
     const prof = profissionais.find((p) => p.id === newCycle.professional_id);
-    const pac = pacientes.find((p) => p.id === newCycle.patient_id);
-
-
     // Total de sessões é o controle principal para TODAS as frequências
     const MAX_SESSIONS = 200;
     const totalSessions = Number(newCycle.total_sessions);
@@ -895,6 +919,8 @@ const Tratamentos: React.FC = () => {
 
     cycleWriteLock.current = true;
     try {
+      const pac = await getTreatmentPatient(newCycle.patient_id);
+      if (!pac) throw new Error('Paciente não encontrado na unidade. Confira o cadastro antes de criar o ciclo.');
       // Aviso de duplicidade: mesmo paciente + mesmo profissional com ciclo não concluído
       if (!force) {
         const { data: existingCycles, error: checkError } = await supabase
@@ -1242,7 +1268,7 @@ const Tratamentos: React.FC = () => {
       throw new Error("Esta sessão não está pendente para agendamento. Recarregue o ciclo e revise o vínculo com a Agenda.");
     }
     const prof = funcionarios.find((f) => f.id === cycle.professional_id);
-    const pac = pacientes.find((p) => p.id === cycle.patient_id);
+    const pac = await getTreatmentPatient(cycle.patient_id);
     if (!prof || !pac) throw new Error('Profissional ou paciente não encontrado.');
 
     const appointment: import('@/types').Agendamento = {
@@ -1450,7 +1476,7 @@ const Tratamentos: React.FC = () => {
     const pac = pacientes.find((p) => p.id === cycle.patient_id);
     const prof = funcionarios.find((f) => f.id === cycle.professional_id);
     if (!pac || !prof) {
-      toast.error("Paciente ou profissional não encontrado.");
+      toast.error("Paciente ou profissional ainda não carregado. Aguarde e tente novamente.");
       return;
     }
 
@@ -1870,7 +1896,7 @@ const Tratamentos: React.FC = () => {
     await addToFila({
       id: newId,
       pacienteId: cycle.patient_id,
-      pacienteNome: pac?.nome || "",
+      pacienteNome: pac?.nome || cycle.paciente_nome || "",
       unidadeId: cycle.unit_id,
       profissionalId: cycle.professional_id,
       setor: cycle.specialty,
@@ -3378,7 +3404,7 @@ const Tratamentos: React.FC = () => {
                 <BuscaPaciente
                   pacientes={pacientes}
                   value={newCycle.patient_id}
-                  onChange={(id, nome) => setNewCycle((p) => ({ ...p, patient_id: id }))}
+                  onChange={(id) => setNewCycle((p) => ({ ...p, patient_id: id }))}
                 />
               </div>
               {activeDuplicates.length > 0 && (

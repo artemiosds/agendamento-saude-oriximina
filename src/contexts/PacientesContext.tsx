@@ -28,6 +28,8 @@ interface PacientesContextType {
   activateLegacyPacientes: () => Promise<void>;
   activateAgendaPatients: () => void;
   hydrateAgendaPatients: (ids: string[], force?: boolean) => Promise<Paciente[]>;
+  activateTreatmentPatients: () => void;
+  hydrateTreatmentPatients: (ids: string[], force?: boolean) => Promise<Paciente[]>;
 }
 
 const PacientesContext = createContext<PacientesContextType | null>(null);
@@ -95,15 +97,17 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   const legacyLoadedRef = useRef(false);
   const legacyLoadRef = useRef<Promise<void> | null>(null);
   const agendaModeRef = useRef(false);
+  const scopedRouteRef = useRef<"agenda" | "treatments" | null>(null);
   const agendaPatientIdsRef = useRef(new Set<string>());
   const agendaEpochRef = useRef(0);
   const scopeKey = `${authUser?.id || "anonymous"}|${authUser?.role || "none"}|${isGlobalAdmin ? "all" : authUser?.unidadeId || "none"}`;
   const scopeKeyRef = useRef(scopeKey);
   scopeKeyRef.current = scopeKey;
 
-  const activateAgendaPatients = useCallback(() => {
-    if (agendaModeRef.current) return;
+  const activateScopedPatients = useCallback((route: "agenda" | "treatments") => {
+    if (agendaModeRef.current && scopedRouteRef.current === route) return;
     agendaModeRef.current = true;
+    scopedRouteRef.current = route;
     agendaEpochRef.current++;
     agendaPatientIdsRef.current.clear();
     legacyActiveRef.current = false;
@@ -113,8 +117,11 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     setPacientes([]);
   }, []);
 
-  const hydrateAgendaPatients = useCallback(async (ids: string[], force = false) => {
-    activateAgendaPatients();
+  const activateAgendaPatients = useCallback(() => activateScopedPatients("agenda"), [activateScopedPatients]);
+  const activateTreatmentPatients = useCallback(() => activateScopedPatients("treatments"), [activateScopedPatients]);
+
+  const hydrateScopedPatients = useCallback(async (ids: string[], force: boolean, route: "agenda" | "treatments") => {
+    activateScopedPatients(route);
     const unique = [...new Set(ids.filter(Boolean))].filter(id => force || !agendaPatientIdsRef.current.has(id));
     if (!unique.length) return pacientesRef.current.filter(p => ids.includes(p.id));
     const epoch = agendaEpochRef.current;
@@ -130,7 +137,7 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
       if (error || !data) throw error || new Error('Resposta de pacientes ausente');
       rows.push(...data.map(mapPacienteRow));
     }
-    if (epoch !== agendaEpochRef.current || scope !== scopeKeyRef.current || !agendaModeRef.current) {
+    if (epoch !== agendaEpochRef.current || scope !== scopeKeyRef.current || !agendaModeRef.current || scopedRouteRef.current !== route) {
       throw new Error('Leitura de pacientes obsoleta');
     }
     rows.forEach(p => agendaPatientIdsRef.current.add(p.id));
@@ -140,7 +147,22 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     pacientesRef.current = next;
     setPacientes(next);
     return ids.map(id => byId.get(id)).filter((p): p is Paciente => !!p);
-  }, [activateAgendaPatients, isGlobalAdmin, resolveScopedUnidadeId, scopeKey]);
+  }, [activateScopedPatients, isGlobalAdmin, resolveScopedUnidadeId, scopeKey]);
+
+  const hydrateAgendaPatients = useCallback((ids: string[], force = false) =>
+    hydrateScopedPatients(ids, force, "agenda"), [hydrateScopedPatients]);
+
+  // Replace the small visible cohort on page/filter change; never accumulate the entire registry.
+  const hydrateTreatmentPatients = useCallback((ids: string[], force = false) => {
+    activateTreatmentPatients();
+    agendaEpochRef.current++;
+    const wanted = new Set(ids.filter(Boolean));
+    const kept = pacientesRef.current.filter((p) => wanted.has(p.id));
+    pacientesRef.current = kept;
+    agendaPatientIdsRef.current = new Set(kept.map((p) => p.id));
+    setPacientes(kept);
+    return hydrateScopedPatients([...wanted], force, "treatments");
+  }, [activateTreatmentPatients, hydrateScopedPatients]);
 
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
@@ -200,19 +222,25 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   }, [scopeKey]);
 
   const refreshPacientes = useCallback(async () => {
-    if (agendaModeRef.current && window.location.pathname === '/painel/agenda') {
+    if (agendaModeRef.current && window.location.pathname === '/painel/agenda' && scopedRouteRef.current === 'agenda') {
       await hydrateAgendaPatients([...agendaPatientIdsRef.current], true);
       return;
     }
+    if (agendaModeRef.current && window.location.pathname === '/painel/tratamentos' && scopedRouteRef.current === 'treatments') {
+      await hydrateTreatmentPatients([...agendaPatientIdsRef.current], true);
+      return;
+    }
     agendaModeRef.current = false;
+    scopedRouteRef.current = null;
     legacyActiveRef.current = true;
     await loadPacientes();
     if (scopeKeyRef.current === scopeKey) legacyLoadedRef.current = true;
-  }, [loadPacientes, hydrateAgendaPatients, scopeKey]);
+  }, [loadPacientes, hydrateAgendaPatients, hydrateTreatmentPatients, scopeKey]);
 
   const activateLegacyPacientes = useCallback(async () => {
     if (agendaModeRef.current) {
       agendaModeRef.current = false;
+      scopedRouteRef.current = null;
       agendaEpochRef.current++;
       agendaPatientIdsRef.current.clear();
       legacyLoadedRef.current = false;
@@ -317,6 +345,7 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   // A1.1: mantém o provider montado, mas só ativa a carga legada sob demanda.
   useEffect(() => {
     agendaModeRef.current = false;
+    scopedRouteRef.current = null;
     agendaEpochRef.current++;
     agendaPatientIdsRef.current.clear();
     pacientesRef.current = [];
@@ -331,22 +360,24 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     enabled: !!authUser,
     table: "pacientes",
     onEvent: () => {
-      if (agendaModeRef.current && window.location.pathname === '/painel/agenda') {
+      if (agendaModeRef.current && ((scopedRouteRef.current === 'agenda' && window.location.pathname === '/painel/agenda') ||
+        (scopedRouteRef.current === 'treatments' && window.location.pathname === '/painel/tratamentos'))) {
         void refreshPacientes();
         return;
       }
       if (legacyActiveRef.current) loadPacientes();
     },
     poll: () => {
-      if (agendaModeRef.current && window.location.pathname === '/painel/agenda') return refreshPacientes();
+      if (agendaModeRef.current && ((scopedRouteRef.current === 'agenda' && window.location.pathname === '/painel/agenda') ||
+        (scopedRouteRef.current === 'treatments' && window.location.pathname === '/painel/tratamentos'))) return refreshPacientes();
       if (legacyActiveRef.current) return loadPacientes();
       return Promise.resolve();
     },
   });
 
   const value = useMemo<PacientesContextType>(
-    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients }),
-    [pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients],
+    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients }),
+    [pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients],
   );
 
   return <PacientesContext.Provider value={value}>{children}</PacientesContext.Provider>;

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
@@ -18,13 +18,55 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   state.user = { id: 'recepcao', role: 'recepcao', unidadeId: 'u1', usuario: 'recepcao' };
   state.read.mockReset();
-  const query = { select: () => query, in: () => query, or: () => query,
-    then: (resolve: (value: unknown) => void) => resolve({ data: [{ id: 'p1', nome: 'PACIENTE', unidade_id: 'u1', criado_em: '2026-01-01', custom_data: { bairro: 'CENTRO' } }], error: null }) };
+  let requestedIds = ['p1'];
+  const query = { select: () => query, in: (_column: string, ids: string[]) => { requestedIds = ids; return query; }, or: () => query,
+    then: (resolve: (value: unknown) => void) => resolve({ data: requestedIds.map(id => ({ id, nome: `PACIENTE ${id}`, unidade_id: 'u1', criado_em: '2026-01-01', custom_data: { bairro: 'CENTRO' } })), error: null }) };
   state.read.mockReturnValue(query);
 });
 afterEach(cleanup);
 
 describe('atualização pontual do paciente persistido', () => {
+  it('mantém só os pacientes dos ciclos visíveis e reutiliza o cache ao trocar de página', async () => {
+    const { result } = renderHook(usePacientes, { wrapper });
+    await act(async () => { result.current.activateTreatmentPatients(); await result.current.hydrateTreatmentPatients(['p1', 'p2']); });
+    expect(result.current.pacientes.map(p => p.id)).toEqual(['p1', 'p2']);
+    const reads = state.read.mock.calls.length;
+    await act(async () => { await result.current.hydrateTreatmentPatients(['p2']); });
+    expect(result.current.pacientes.map(p => p.id)).toEqual(['p2']);
+    expect(state.read).toHaveBeenCalledTimes(reads);
+    await act(async () => { await result.current.hydrateTreatmentPatients(['p2'], true); });
+    expect(state.read).toHaveBeenCalledTimes(reads + 1);
+    act(() => result.current.activateAgendaPatients());
+    expect(result.current.pacientes).toEqual([]);
+    expect(state.read).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it('ignora a resposta de outra página que chegou depois da página atual', async () => {
+    const pending: Array<{ ids: string[]; resolve: (value: unknown) => void }> = [];
+    state.read.mockImplementation(() => {
+      let ids: string[] = [];
+      const query = { select: () => query, or: () => query, in: (_column: string, values: string[]) => { ids = values; return query; },
+        then: (resolve: (value: unknown) => void) => new Promise<void>(done => {
+          pending.push({ ids, resolve: value => { resolve(value); done(); } });
+        }) };
+      return query;
+    });
+    const { result } = renderHook(usePacientes, { wrapper });
+    let oldPage!: Promise<unknown>;
+    let newPage!: Promise<unknown>;
+    act(() => {
+      oldPage = result.current.hydrateTreatmentPatients(['p1']);
+      newPage = result.current.hydrateTreatmentPatients(['p2']);
+    });
+    await waitFor(() => expect(pending.map(p => p.ids)).toEqual([['p1'], ['p2']]));
+    await act(async () => {
+      pending[1].resolve({ data: [{ id: 'p2', nome: 'ATUAL', unidade_id: 'u1', criado_em: '2026-01-01' }], error: null });
+      await newPage;
+    });
+    pending[0].resolve({ data: [{ id: 'p1', nome: 'ANTIGA', unidade_id: 'u1', criado_em: '2026-01-01' }], error: null });
+    await expect(oldPage).rejects.toThrow('Leitura de pacientes obsoleta');
+    expect(result.current.pacientes.map(p => p.id)).toEqual(['p2']);
+  });
   it('alimenta as prioridades usadas na Triagem sem fazer outra leitura', async () => {
     const { result } = renderHook(usePacientes, { wrapper });
     await act(async () => { await result.current.hydrateAgendaPatients(['p1']); });
