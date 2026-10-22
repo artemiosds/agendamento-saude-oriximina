@@ -546,7 +546,6 @@ export function ConferirDadosPacienteModal({
                 </div>
               </div>
 
-              {modo === 'chegada' && (
                 <div className="space-y-3 rounded-lg border border-[#2A6F97]/30 bg-[#2A6F97]/5 p-4">
                   <h3 className="text-sm font-semibold text-[#2A6F97] dark:text-sky-300">Condição e Prioridade de Atendimento (Triagem)</h3>
                   <Label>Tipo de condição</Label>
@@ -573,7 +572,6 @@ export function ConferirDadosPacienteModal({
                     ))}
                   </div>
                 </div>
-              )}
 
               {/* Botão salvar (fallback discreto) */}
               {dirty && (

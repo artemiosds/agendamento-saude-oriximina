@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
@@ -20,23 +20,63 @@ import { ConferirDadosPacienteModal } from './ConferirDadosPacienteModal';
 
 const patient = { id: 'p1', nome: 'PACIENTE', data_nascimento: '1940-01-01', is_autista: false,
   is_gestante: false, is_pne: false, tipo_condicao: '', custom_data: {}, unidade_id: 'u1' };
-function show(onConfirm = vi.fn(async () => {})) {
+function show(onConfirm = vi.fn(async () => {}), modo: 'chegada' | 'agendamento' = 'chegada') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   function Wrapper() {
     const [open, setOpen] = useState(true);
     return <QueryClientProvider client={client}><ConferirDadosPacienteModal open={open} onOpenChange={setOpen}
-      pacienteId="p1" modo="chegada" onConfirm={onConfirm} /></QueryClientProvider>;
+      pacienteId="p1" modo={modo} onConfirm={onConfirm} /></QueryClientProvider>;
   }
   render(<Wrapper />);
   return { client, onConfirm };
 }
 beforeEach(() => {
   vi.clearAllMocks(); mocks.get.mockResolvedValue(patient);
+  mocks.save.mockReset();
   mocks.save.mockImplementation(async (_id, form) => ({ ...patient, ...form }));
 });
 afterEach(cleanup);
 
 describe('conferência de chegada e prioridades', () => {
+  it('exibe e salva condição e prioridades antes de prosseguir com o novo agendamento', async () => {
+    let finish!: (value: typeof patient) => void;
+    mocks.save.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { onConfirm } = show(undefined, 'agendamento');
+    expect(await screen.findByRole('heading', { name: 'Condição e Prioridade de Atendimento (Triagem)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'TEA' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Gestante' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'PNE — Pessoa com deficiência' }));
+    expect(screen.getByRole('checkbox', { name: 'Autista (TEA)' })).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Confirmo que os dados foram conferidos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e continuar' }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save).toHaveBeenCalledWith('p1', expect.objectContaining({
+      tipo_condicao: 'tea', is_autista: true, is_gestante: true, is_pne: true,
+    }), 'Novo Agendamento');
+    expect(onConfirm).not.toHaveBeenCalled();
+    await act(async () => finish({ ...patient, tipo_condicao: 'tea', is_autista: true, is_gestante: true, is_pne: true }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(mocks.apply.mock.invocationCallOrder[0]).toBeLessThan(onConfirm.mock.invocationCallOrder[0]);
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it.each(['agendamento', 'chegada'] as const)('carrega TEA e prioridades já gravadas no modo %s', async modo => {
+    mocks.get.mockResolvedValueOnce({ ...patient, tipo_condicao: 'tea', is_autista: true, is_gestante: true, is_pne: true });
+    show(undefined, modo);
+    expect(await screen.findByRole('radio', { name: 'TEA' })).toBeChecked();
+    for (const name of ['Autista (TEA)', 'Gestante', 'PNE — Pessoa com deficiência']) {
+      expect(screen.getByRole('checkbox', { name })).toBeChecked();
+    }
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it('salva a prioridade no agendamento pelo botão Salvar agora sem prosseguir', async () => {
+    const { onConfirm } = show(undefined, 'agendamento');
+    fireEvent.click(await screen.findByRole('radio', { name: 'Física' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'PNE — Pessoa com deficiência' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar agora' }));
+    await waitFor(() => expect(mocks.apply).toHaveBeenCalled());
+    expect(mocks.save).toHaveBeenCalledWith('p1', expect.objectContaining({ tipo_condicao: 'fisica', is_pne: true }), 'Novo Agendamento');
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
   it('exibe idade automática e só carrega anexos quando a seção é aberta', async () => {
     show();
     expect(await screen.findByText(/Prioridade Legal: Idoso/)).toBeInTheDocument();
