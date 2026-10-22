@@ -14,12 +14,14 @@ interface Props {
   pacienteNome: string;
   profissionalNome?: string;
   defaultLocal?: string;
+  priorizarSalaPadrao?: boolean;
   className?: string;
 }
 
-export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissionalNome, defaultLocal, className }: Props) {
+export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissionalNome, defaultLocal, priorizarSalaPadrao = false, className }: Props) {
   const [open, setOpen] = useState(false);
-  const [local, setLocal] = useState(() => getLocalSalvo(unidadeId, defaultLocal) || defaultLocal || "");
+  const localInicial = () => (priorizarSalaPadrao && defaultLocal) ? defaultLocal : getLocalSalvo(unidadeId, defaultLocal) || defaultLocal || "";
+  const [local, setLocal] = useState(localInicial);
   const [enviando, setEnviando] = useState(false);
   const [salas, setSalas] = useState<string[]>([]);
   const [chamadoEm, setChamadoEm] = useState<number | null>(null);
@@ -28,9 +30,9 @@ export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissi
   const scope = `${unidadeId}|${defaultLocal || ''}|${pacienteNome}`;
   const scopeRef = useRef(scope); scopeRef.current = scope;
   useEffect(() => {
-    setLocal(getLocalSalvo(unidadeId, defaultLocal) || defaultLocal || '');
+    setLocal(localInicial());
     setSalas([]); setChamadoEm(null);
-  }, [unidadeId, defaultLocal, pacienteNome]);
+  }, [unidadeId, defaultLocal, pacienteNome, priorizarSalaPadrao]);
 
   useEffect(() => {
     if (!open || !unidadeId) return;

@@ -79,6 +79,7 @@ import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
 import AgendaItemCard from "./agenda/AgendaItemCard";
+import { salasDeChamadaPorProfissional } from "@/lib/painelChamadas";
 import { FichaImpressao, type FichaPrintMode } from "@/components/FichaImpressao";
 import { buildFichaAtendimentoData, type FichaDados } from "@/lib/fichaAtendimentoData";
 import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
@@ -325,6 +326,10 @@ const Agenda: React.FC = () => {
     });
     return map;
   }, [unidades]);
+  const salaChamadaByProfissional = React.useMemo(
+    () => salasDeChamadaPorProfissional(funcionarios, salas),
+    [funcionarios, salas],
+  );
 
   const rawAgendamentosDoDia = React.useMemo(
     () => agendamentos.filter((ag) => ag.data === selectedDate),
@@ -3496,6 +3501,7 @@ const Agenda: React.FC = () => {
                     paciente={pacienteById.get(ag.pacienteId)}
                     unidade={unidadeById.get(ag.unidadeId)}
                     pacienteNomeResolved={resolvePaciente(ag.pacienteId, ag.pacienteNome)}
+                    salaChamadaPadrao={salaChamadaByProfissional.get(`${ag.profissionalId}|${ag.unidadeId}`)}
                     lastAppt={lastProntuarios[ag.pacienteId]}
                     triageRisco={triageMap[ag.id]?.risco}
                     iniciadoEm={agendamentosRaw[ag.id]?.iniciado_em ?? null}

@@ -56,6 +56,7 @@ export interface AgendaItemCardProps {
   paciente: any | undefined;
   unidade: any | undefined;
   pacienteNomeResolved: string;
+  salaChamadaPadrao?: string;
   lastAppt: any | undefined;
   triageRisco: string | undefined;
   iniciadoEm: string | null | undefined;
@@ -107,6 +108,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   paciente,
   unidade,
   pacienteNomeResolved,
+  salaChamadaPadrao,
   lastAppt,
   triageRisco,
   iniciadoEm,
@@ -358,6 +360,8 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
               unidadeId={ag.unidadeId}
               pacienteNome={pacienteNomeResolved || ag.pacienteNome}
               profissionalNome={ag.profissionalNome}
+              defaultLocal={salaChamadaPadrao}
+              priorizarSalaPadrao={!!salaChamadaPadrao}
             />
           )}
           {onImprimirFicha && (

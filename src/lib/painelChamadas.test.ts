@@ -47,4 +47,18 @@ describe('transporte e confirmação da TV', () => {
     setLocalSalvo('SALA 1', 'u1', 'consulta');
     expect(getLocalSalvo('u1', 'consulta')).toBe('SALA 1'); expect(getLocalSalvo('u2', 'consulta')).toBe(''); expect(getLocalSalvo('u1', 'triagem')).toBe('');
   });
+  it('usa a sala ativa vinculada ao profissional na própria unidade', async () => {
+    const { salasDeChamadaPorProfissional } = await import('./painelChamadas');
+    const mapa = salasDeChamadaPorProfissional([
+      { id: 'prof1', unidadeId: 'u1', salaId: 's3' },
+      { id: 'prof2', unidadeId: 'u2', salaId: 's3' },
+      { id: 'prof3', unidadeId: 'u1', salaId: 's4' },
+    ], [
+      { id: 's3', nome: 'CONSULTÓRIO 3', unidadeId: 'u1', ativo: true },
+      { id: 's4', nome: 'CONSULTÓRIO 4', unidadeId: 'u1', ativo: false },
+    ]);
+    expect(mapa.get('prof1|u1')).toBe('CONSULTÓRIO 3');
+    expect(mapa.has('prof2|u2')).toBe(false);
+    expect(mapa.has('prof3|u1')).toBe(false);
+  });
 });

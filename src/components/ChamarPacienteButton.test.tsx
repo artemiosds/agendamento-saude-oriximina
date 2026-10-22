@@ -24,6 +24,19 @@ describe('botão de chamadas', () => {
     await waitFor(() => expect(fixture.send).toHaveBeenCalledWith('u1', expect.objectContaining({ local: 'Sala de Triagem' })));
     expect(fixture.filters).toContainEqual(['ativo', true]);
   });
+  it('pré-seleciona a sala cadastrada do profissional e mantém o seletor disponível', async () => {
+    fixture.rooms = [{ nome: 'CONSULTÓRIO 3' }, { nome: 'CONSULTÓRIO 4' }];
+    localStorage.setItem('painel_chamadas_local:u1:CONSULTÓRIO 3', 'CONSULTÓRIO 4');
+    render(<ChamarPacienteButton unidadeId="u1" pacienteNome="PACIENTE" profissionalNome="PROFISSIONAL"
+      defaultLocal="CONSULTÓRIO 3" priorizarSalaPadrao />);
+    await open();
+    expect(screen.getByText('CONSULTÓRIO 3')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Chamar no painel' }));
+    await waitFor(() => expect(fixture.send).toHaveBeenCalledWith('u1', expect.objectContaining({
+      local: 'CONSULTÓRIO 3', profissionalNome: 'PROFISSIONAL',
+    })));
+  });
   it('bloqueia Enter repetido e clique enquanto há envio em andamento', async () => {
     let finish!: (value: string) => void; fixture.send.mockReturnValue(new Promise(resolve => { finish = resolve; }));
     render(<ChamarPacienteButton unidadeId="u1" pacienteNome="PACIENTE" />); await open();

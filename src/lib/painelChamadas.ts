@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { Sala, User } from "@/types";
 
 /**
  * Painel de Chamadas — mensageria leve via Realtime Broadcast.
@@ -28,6 +29,22 @@ export const setLocalSalvo = (v: string, unidade = '', contexto = '') => {
   if (!unidade) return;
   try { localStorage.setItem(salaKey(unidade, contexto), v); } catch { /* ignore */ }
 };
+
+/** Sala configurada no cadastro do profissional, somente se ativa e da mesma unidade. */
+export function salasDeChamadaPorProfissional(
+  profissionais: ReadonlyArray<Pick<User, 'id' | 'unidadeId' | 'salaId'>>,
+  salas: ReadonlyArray<Sala>,
+) {
+  const salaPorId = new Map(salas.filter(s => s.ativo).map(s => [s.id, s]));
+  const resultado = new Map<string, string>();
+  profissionais.forEach(profissional => {
+    const sala = salaPorId.get(profissional.salaId || '');
+    if (sala?.unidadeId === profissional.unidadeId && sala.nome.trim()) {
+      resultado.set(`${profissional.id}|${profissional.unidadeId}`, sala.nome.trim());
+    }
+  });
+  return resultado;
+}
 
 /** Nome completo do paciente (falado e exibido), apenas com espaços normalizados. */
 export const nomeParaPainel = (nome: string) =>
