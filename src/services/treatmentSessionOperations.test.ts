@@ -163,6 +163,30 @@ describe('treatmentSessionOperations: schedule', () => {
     }));
   });
 
+  it('não esconde o código de erros inesperados do banco e registra detalhes para diagnóstico', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const ctx = setup();
+      ctx.rpc.mockResolvedValue({
+        data: null,
+        error: { code: '42703', message: 'column does not exist', details: 'schema mismatch', hint: 'refresh schema' },
+      });
+
+      await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' }))
+        .rejects.toThrow('Não foi possível concluir a operação da sessão (código 42703).');
+
+      expect(errorSpy).toHaveBeenCalledWith('[Tratamentos] Falha na operação transacional da sessão', {
+        code: '42703',
+        message: 'column does not exist',
+        details: 'schema mismatch',
+        hint: 'refresh schema',
+      });
+      expect(ctx.scheduleCommits).toHaveLength(0);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('bloqueia o lote com instrução clara se a migration do servidor ainda não estiver aplicada', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'function not found' } });

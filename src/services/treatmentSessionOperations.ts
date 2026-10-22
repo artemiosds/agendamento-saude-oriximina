@@ -1,6 +1,7 @@
 import type { Agendamento } from '@/types';
 
-type RpcResponse = { data: Record<string, unknown> | null; error: { message?: string; code?: string } | null };
+type RpcError = { message?: string; code?: string; details?: string; hint?: string };
+type RpcResponse = { data: Record<string, unknown> | null; error: RpcError | null };
 export type TreatmentOperationRpcClient = { rpc: (name: string, args: Record<string, unknown>) => Promise<RpcResponse> };
 
 export interface TreatmentSessionOperationResult {
@@ -33,17 +34,32 @@ export interface TreatmentSessionOperationsDependencies {
   isDateBlocked: (date: string, professionalId: string, unitId: string) => Promise<boolean>;
 }
 
-function throwRpcError(error: { message?: string; code?: string }): never {
+function throwRpcError(error: RpcError): never {
+  // Keep the database cause available for support instead of masking unknown SQL/PostgREST errors.
+  console.error('[Tratamentos] Falha na operação transacional da sessão', {
+    code: error.code || 'sem_codigo',
+    message: error.message || 'sem_mensagem',
+    details: error.details || null,
+    hint: error.hint || null,
+  });
+
   const safeMessages: Record<string, string> = {
     '42501': 'Você não tem permissão para realizar esta operação nesta unidade/profissional.',
     '40001': 'A sessão mudou durante a operação. Recarregue o ciclo e tente novamente.',
     '23505': 'Já existe um agendamento conflitante para este horário.',
     '23503': 'O vínculo entre a sessão e o agendamento não é válido.',
+    '23502': 'Faltam dados obrigatórios no agendamento. Confira os dados da sessão.',
+    '22P02': 'A data, horário ou identificador informado tem formato inválido.',
+    '22007': 'A data ou o horário informado é inválido. Selecione novamente.',
+    '42703': 'A estrutura do banco está desatualizada para esta operação. Informe o código ao suporte.',
+    '42P01': 'Uma estrutura necessária no banco não foi encontrada. Informe o código ao suporte.',
+    '42883': 'Uma função necessária no banco não está disponível. Informe o código ao suporte.',
   };
   if (['23514', 'P0001'].includes(error.code || '')) throw new Error(error.message || 'Integridade da sessão inválida. Revise o ciclo.');
   const message = error.code ? safeMessages[error.code] : undefined;
   if (message) throw new Error(message);
-  throw new Error('Não foi possível concluir a operação da sessão. Verifique a conexão e tente novamente.');
+  const errorCode = error.code ? ` (código ${error.code})` : '';
+  throw new Error(`Não foi possível concluir a operação da sessão${errorCode}. Verifique a conexão e informe o código ao suporte.`);
 }
 
 type AppointmentRow = Record<string, unknown>;
