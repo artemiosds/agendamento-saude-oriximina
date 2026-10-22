@@ -1,0 +1,1 @@
+- Treatment sessions: a DB trigger blocks two active (not cancelada/remarcada) sessions of the same cycle on the same date; existing duplicates are left for human review, never auto-fixed.
