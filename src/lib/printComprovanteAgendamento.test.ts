@@ -37,6 +37,7 @@ describe("comprovante de agendamento em uma página A4", () => {
     expect(body).toContain('class="content-block comprovante-agendamento"');
     expect(body).toContain('class="receipt-guidance"');
     expect(body).toContain('class="receipt-code"');
+    expect(body).toContain(".doc-header .logo-slot img.round { width: 54px !important; max-width: 54px !important; }");
     for (const requiredText of [
       "PACIENTE DE TESTE",
       "00000000000",

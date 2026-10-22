@@ -45,7 +45,9 @@ export function printComprovanteAgendamento(ag: ComprovanteAgendamentoInput) {
     <style>
 @media print {
   .doc-header { padding-bottom: 5px !important; margin-bottom: 6px !important; }
-  .doc-header .logo-slot img { height: 54px !important; max-height: 54px !important; width: auto !important; max-width: 135px !important; }
+  .doc-header .logo-slot img { height: 54px !important; max-height: 54px !important; }
+  .doc-header .logo-slot img.round { width: 54px !important; max-width: 54px !important; }
+  .doc-header .logo-slot img:not(.round) { width: auto !important; max-width: 135px !important; }
   .doc-header .header-text { margin-top: 3px !important; gap: 0 !important; }
   .doc-title-bar { font-size: 12pt !important; margin: 2px 0 5px !important; padding: 2px 0 !important; }
   .doc-emit { margin-bottom: 4px !important; }
