@@ -3,6 +3,12 @@ import { normalizePhone } from '@/lib/phoneUtils';
 import { auditService } from './auditService';
 import { normalizeSexo } from '@/lib/utils/sexo-normalization';
 
+// O formulário usa os mesmos valores do cadastro; preserve "Ignorado" quando
+// já existir no paciente, sem convertê-lo em campo vazio durante a conferência.
+const normalizeSexoCadastro = (value: unknown) => {
+  const sexo = normalizeSexo(value);
+  return sexo || (['i', 'ignorado'].includes(String(value ?? '').trim().toLowerCase()) ? 'I' : '');
+};
 
 
 export const patientService = {
@@ -69,7 +75,7 @@ export const patientService = {
       is_pne: paciente.is_pne ?? cd.is_pne ?? false,
       is_autista: paciente.is_autista ?? cd.is_autista ?? false,
       // Campos do custom_data
-      sexo: normalizeSexo(paciente.sexo || cd.sexo),
+      sexo: normalizeSexoCadastro(paciente.sexo || cd.sexo),
       raca_cor: cd.raca_cor || cd.racaCor || "",
       etnia: cd.etnia || "",
       etnia_outra: cd.etnia_outra || cd.etniaOutra || "",
@@ -136,7 +142,7 @@ export const patientService = {
     const updatedCustomData = {
       ...cd,
       ...inputCustomData,
-      sexo: normalizeSexo(getValue('sexo', cd.sexo)),
+      sexo: normalizeSexoCadastro(getValue('sexo', oldPaciente.sexo || cd.sexo)),
       raca_cor: getValue('raca_cor', getValue('racaCor', cd.raca_cor)),
       racaCor: getValue('raca_cor', getValue('racaCor', cd.raca_cor)),
       etnia: getValue('etnia', cd.etnia),
@@ -188,7 +194,7 @@ export const patientService = {
       usa_dispositivo: getValue('usa_dispositivo', oldPaciente.usa_dispositivo ?? cd.usa_dispositivo ?? false),
       tipo_dispositivo: getValue('tipo_dispositivo', oldPaciente.tipo_dispositivo ?? cd.tipo_dispositivo ?? ""),
       cid: getValue('cid', oldPaciente.cid),
-      sexo: normalizeSexo(getValue('sexo', oldPaciente.sexo)),
+      sexo: normalizeSexoCadastro(getValue('sexo', oldPaciente.sexo)),
       // Exceção administrativa de bloqueio (TFD / Ordem Judicial)
       is_tfd: (inputCustomData.is_tfd === true) || (oldPaciente.is_tfd === true && inputCustomData.is_tfd === undefined),
       possui_ordem_judicial: (inputCustomData.possui_ordem_judicial === true) || (oldPaciente.possui_ordem_judicial === true && inputCustomData.possui_ordem_judicial === undefined),

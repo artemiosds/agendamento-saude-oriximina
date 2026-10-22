@@ -5,6 +5,13 @@ vi.mock('./auditService', () => ({ auditService: { auditUpdate: vi.fn() } }));
 import { patientService } from './patientService';
 
 describe('prioridades no cadastro compartilhado', () => {
+  it('exibe os valores legados de sexo e preserva Ignorado ao salvar outros campos', () => {
+    expect(patientService.mapPacienteDbToForm({ sexo: 'M' }).sexo).toBe('masculino');
+    expect(patientService.mapPacienteDbToForm({ sexo: 'F' }).sexo).toBe('feminino');
+    expect(patientService.mapPacienteDbToForm({ sexo: 'I' }).sexo).toBe('I');
+    expect(patientService.mapPacienteFormToDb({ nome: 'PACIENTE' }, { sexo: 'I', custom_data: {} }))
+      .toMatchObject({ sexo: 'I', custom_data: { sexo: 'I' } });
+  });
   it('prefere false nativo a true legado e recupera valores ausentes', () => {
     expect(patientService.mapPacienteDbToForm({
       is_gestante: false, is_autista: true,

@@ -31,6 +31,7 @@ function show(onConfirm = vi.fn(async () => {}), modo: 'chegada' | 'agendamento'
   return { client, onConfirm };
 }
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   vi.clearAllMocks(); mocks.get.mockResolvedValue(patient);
   mocks.save.mockReset();
   mocks.save.mockImplementation(async (_id, form) => ({ ...patient, ...form }));
@@ -38,6 +39,27 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('conferência de chegada e prioridades', () => {
+  it.each(['agendamento', 'chegada'] as const)('mostra o sexo já cadastrado no modo %s', async modo => {
+    mocks.get.mockResolvedValueOnce({ ...patient, sexo: 'F' });
+    show(undefined, modo);
+    expect(await screen.findByText('Feminino')).toBeInTheDocument();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it('mantém o valor Ignorado visível quando já cadastrado', async () => {
+    mocks.get.mockResolvedValueOnce({ ...patient, sexo: 'I' });
+    show();
+    expect(await screen.findByText('Ignorado')).toBeInTheDocument();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it('salva a escolha no mesmo formato do cadastro principal', async () => {
+    mocks.get.mockResolvedValueOnce({ ...patient, sexo: 'F' });
+    show();
+    const female = await screen.findByText('Feminino');
+    fireEvent.click(female);
+    fireEvent.click(await screen.findByRole('option', { name: 'Masculino' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar agora' }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith('p1', expect.objectContaining({ sexo: 'masculino' }), 'Confirmar Chegada'));
+  });
   it('exibe e salva condição e prioridades antes de prosseguir com o novo agendamento', async () => {
     let finish!: (value: typeof patient) => void;
     mocks.save.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));

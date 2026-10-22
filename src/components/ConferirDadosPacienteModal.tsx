@@ -48,8 +48,8 @@ export interface ConferirDadosPacienteModalProps {
 
 // ───────── Listas oficiais (mesmas do CadastroPacienteForm) ─────────
 const SEXO_OPTIONS = [
-  { value: "M", label: "Masculino" },
-  { value: "F", label: "Feminino" },
+  { value: "masculino", label: "Masculino" },
+  { value: "feminino", label: "Feminino" },
   { value: "I", label: "Ignorado" },
 ];
 
