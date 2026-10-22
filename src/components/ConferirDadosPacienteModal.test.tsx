@@ -121,3 +121,24 @@ describe('conferência de chegada e prioridades', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });
+
+
+describe('mobilidade no modal de conferência da Agenda', () => {
+  it('exibe opções de mobilidade e salva o dispositivo ao selecionar Física', async () => {
+    const { onConfirm } = show(undefined, 'agendamento');
+    fireEvent.click(await screen.findByRole('radio', { name: 'Física' }));
+    expect(await screen.findByText('Mobilidade')).toBeInTheDocument();
+    expect(screen.getByText('Usa dispositivo?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Mobilidade' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Cadeira de rodas' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Usa dispositivo?' }));
+    fireEvent.change(screen.getByLabelText('Tipo de dispositivo'), { target: { value: 'Muleta' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar agora' }));
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith('p1', expect.objectContaining({
+      tipo_condicao: 'fisica', mobilidade: 'cadeira_rodas', usa_dispositivo: true, tipo_dispositivo: 'Muleta',
+    }), 'Novo Agendamento'));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});

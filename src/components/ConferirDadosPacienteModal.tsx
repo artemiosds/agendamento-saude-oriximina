@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -558,6 +559,39 @@ export function ConferirDadosPacienteModal({
                       </label>
                     ))}
                   </RadioGroup>
+                  {form.tipo_condicao === "fisica" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border border-[#2A6F97]/20 bg-background/60 p-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="fld-mobilidade">Mobilidade</Label>
+                        <Select value={form.mobilidade || ""} onValueChange={value => updateField("mobilidade", value)}>
+                          <SelectTrigger id="fld-mobilidade" aria-label="Mobilidade" disabled={saving || confirming}>
+                            <SelectValue placeholder="Selecione a mobilidade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="deambula">Deambula</SelectItem>
+                            <SelectItem value="cadeira_rodas">Cadeira de rodas</SelectItem>
+                            <SelectItem value="acamado">Acamado</SelectItem>
+                            <SelectItem value="muleta_andador">Muleta/Andador</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-3 sm:pt-6">
+                        <Switch id="fld-usa-dispositivo" checked={form.usa_dispositivo === true}
+                          disabled={saving || confirming}
+                          onCheckedChange={checked => updateField("usa_dispositivo", checked)} />
+                        <Label htmlFor="fld-usa-dispositivo" className="text-sm cursor-pointer">Usa dispositivo?</Label>
+                      </div>
+                      {form.usa_dispositivo === true && (
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label htmlFor="fld-tipo-dispositivo">Tipo de dispositivo</Label>
+                          <Input id="fld-tipo-dispositivo" value={form.tipo_dispositivo || ""}
+                            onChange={event => updateField("tipo_dispositivo", event.target.value)}
+                            placeholder="Ex.: bengala, cadeira de rodas, muleta"
+                            disabled={saving || confirming} />
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {idade !== null && idade >= 60 && (
                     <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-200">
                       Prioridade Legal: Idoso ({idade} anos){idade >= 80 ? ' — 80 anos ou mais' : ''}
