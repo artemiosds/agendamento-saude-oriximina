@@ -426,16 +426,6 @@ const sigtapCodigoExibicao = (v: any): string => {
   return n.padStart(10, "0").slice(-10);
 };
 
-// Formata "Origem SIGTAP" no padrão "[codigo] - [origem]".
-// Se não houver código, devolve apenas a origem (ou '—').
-const formatarOrigemSigtap = (codigo: any, origem: any): string => {
-  const cod = sigtapCodigoExibicao(codigo);
-  const org = String(origem || "").trim();
-  if (cod && org) return `${cod} - ${org}`;
-  if (cod) return cod;
-  return org || "—";
-};
-
 // Valida e normaliza CID para exibição: aceita formatos oficiais (ex.: M54,
 // M545, F32, F329). Rejeita lixo textual como "DESE", strings vazias, etc.
 // Retorna '—' quando inválido. NÃO inventa CID.
@@ -874,7 +864,7 @@ const BpaExportar: React.FC = () => {
   // Apenas para a Conferência impressa: procedimentos do prontuário que não
   // entraram no TXT por CID × procedimento. Não interfere no TXT nem contadores.
   type RejCidExtra = {
-    prontId?: string; cns?: string; nasc?: string; sexo?: string; dataBpa?: string;
+    prontId?: string; cns?: string; cpf?: string; nasc?: string; sexo?: string; dataBpa?: string;
     tipoLog?: string; logradouro?: string; numero?: string; bairro?: string;
   };
   const rejeitadosCidRef = useRef<Array<{ paciente: string; data: string; codigo: string; cid: string; origem?: string } & RejCidExtra>>([]);
@@ -894,7 +884,7 @@ const BpaExportar: React.FC = () => {
     const cd = (pac?.custom_data as any) || {};
     const pick = (...v: any[]) => String(v.find((x) => x !== undefined && x !== null && String(x).trim() !== "") ?? "");
     return {
-      prontId: pront?.id, cns, nasc, sexo, dataBpa,
+      prontId: pront?.id, cns, cpf: pick(pac?.cpf, cd.cpf), nasc, sexo, dataBpa,
       tipoLog: pick(cd.codigo_logradouro, cd.tipo_logradouro_codigo, pac?.tipo_logradouro, cd.tipo_logradouro),
       logradouro: pick(pac?.logradouro, cd.logradouro, pac?.endereco, cd.endereco),
       numero: pick(pac?.numero, cd.numero) || "S/N",
@@ -2762,6 +2752,7 @@ const BpaExportar: React.FC = () => {
               const rowConf = {
                 paciente_nome: String(registroFinal.nomePaciente || "").toUpperCase(),
                 paciente_cns: String(registroFinal.cnsPaciente || ""),
+                paciente_cpf: String(registroFinal.cpfPaciente || ""),
                 data_nascimento: formatarDataBR(String(registroFinal.dataNascimento || "")),
                 sexo: registroFinal.sexo,
                 tipo_logradouro: String(registroFinal.tipoLogradouro || ""),
@@ -3178,6 +3169,7 @@ const BpaExportar: React.FC = () => {
       const cols = [
         "paciente_nome",
         "paciente_cns",
+        "paciente_cpf",
         "data_nascimento",
         "sexo",
         "tipo_logradouro",
@@ -3187,12 +3179,12 @@ const BpaExportar: React.FC = () => {
         "data_atendimento",
         "codigo_sigtap",
         "tipo_procedimento",
-        "origem_sigtap",
         "cid_usado",
       ];
       const colsLabels = [
         "PACIENTE",
         "CNS",
+        "CPF",
         "NASCIMENTO",
         "SEXO",
         "TIPO LOG.",
@@ -3202,14 +3194,10 @@ const BpaExportar: React.FC = () => {
         "ATENDIMENTO",
         "SIGTAP",
         "TIPO",
-        "ORIGEM SIGTAP",
         "CID",
       ];
       const dataRows = confSorted.map((r) =>
         cols.map((c) => {
-          if (c === "origem_sigtap") {
-            return formatarOrigemSigtap((r as any)?.codigo_sigtap, (r as any)?._ctx?.origem_sigtap);
-          }
           const v = (r as any)[c] ?? "";
           if (c === "paciente_nome" || c === "logradouro" || c === "bairro" || c === "tipo_logradouro") {
             return String(v).toUpperCase();
@@ -3224,6 +3212,7 @@ const BpaExportar: React.FC = () => {
       ws["!cols"] = [
         { wch: 34 },
         { wch: 18 },
+        { wch: 14 },
         { wch: 12 },
         { wch: 6 },
         { wch: 12 },
@@ -3233,7 +3222,6 @@ const BpaExportar: React.FC = () => {
         { wch: 12 },
         { wch: 12 },
         { wch: 18 },
-        { wch: 14 },
         { wch: 10 },
       ];
       // Mesclar as linhas institucionais para visual mais limpo
@@ -3286,7 +3274,6 @@ const BpaExportar: React.FC = () => {
         "PROFISSÃO",
         "CBO",
         "SIGTAP",
-        "ORIGEM SIGTAP",
         "FONTES CONSULTADAS",
         "DATA",
         "PENDÊNCIAS",
@@ -3300,7 +3287,6 @@ const BpaExportar: React.FC = () => {
         String(p.profissao || "—").toUpperCase(),
         p.cbo || "",
         sigtapCodigoExibicao(p.codigo_sigtap ?? p.procedimento) || "—",
-        formatarOrigemSigtap(p.codigo_sigtap ?? p.procedimento, p.origem_sigtap),
         String(p.fontes_consultadas || "—"),
         formatarDataBR(p.data_atendimento),
         (p.pendencias || [p.pendencia || ""]).join("; "),
@@ -3314,7 +3300,6 @@ const BpaExportar: React.FC = () => {
         { wch: 30 },
         { wch: 8 },
         { wch: 14 },
-        { wch: 12 },
         { wch: 12 },
         { wch: 12 },
         { wch: 60 },
@@ -3416,6 +3401,7 @@ const BpaExportar: React.FC = () => {
       const linhasRejeitadas = rejeitadosCidRef.current.map((r) => ({
         paciente_nome: String(r.paciente || "").toUpperCase(),
         paciente_cns: r.cns || "",
+        paciente_cpf: r.cpf || "",
         data_nascimento: formatarDataBR(String(r.nasc || "")),
         sexo: r.sexo || "",
         tipo_logradouro: r.tipoLog || "",
@@ -3438,6 +3424,7 @@ const BpaExportar: React.FC = () => {
         .map((r: any) => ({
           paciente_nome: String(r.paciente_nome || "").toUpperCase(),
           paciente_cns: String(r.cns_paciente || ""),
+          paciente_cpf: String(r.paciente_cpf || ""),
           data_nascimento: formatarDataBR(String(r.paciente_nascimento || "").slice(0, 10)),
           sexo: String(r.sexo || "").charAt(0).toUpperCase(),
           tipo_logradouro: "", logradouro: "", numero: "", bairro: "",
@@ -3454,6 +3441,7 @@ const BpaExportar: React.FC = () => {
         <tr>
           <td class="nome">${esc(String(r.paciente_nome || "").toUpperCase())}</td>
           <td>${esc(r.paciente_cns)}</td>
+          <td>${esc(r.paciente_cpf)}</td>
           <td class="c">${esc(r.data_nascimento)}</td>
           <td class="c">${esc(r.sexo)}</td>
           <td class="c">${esc(r.tipo_logradouro)}</td>
@@ -3462,7 +3450,6 @@ const BpaExportar: React.FC = () => {
           <td>${esc(String(r.bairro || "").toUpperCase())}</td>
           <td class="c">${esc(r.data_atendimento)}</td>
           <td class="c">${esc(sigtapCodigoExibicao(r.codigo_sigtap) || r.codigo_sigtap || "—")}</td>
-          <td class="c">${esc(formatarOrigemSigtap(r.codigo_sigtap, r?._ctx?.origem_sigtap))}</td>
           <td class="c">${esc(cidExibicao(r.cid_usado))}</td>
         </tr>`,
         )
@@ -3521,14 +3508,14 @@ const BpaExportar: React.FC = () => {
 </div>
 <table class="bpa-table">
   <colgroup>
-    <col style="width:17%"/><col style="width:10%"/><col style="width:6%"/><col style="width:4%"/>
-    <col style="width:6%"/><col style="width:16%"/><col style="width:4%"/><col style="width:10%"/>
-    <col style="width:7%"/><col style="width:7%"/><col style="width:8%"/><col style="width:5%"/>
+    <col style="width:16%"/><col style="width:10%"/><col style="width:9%"/><col style="width:7%"/>
+    <col style="width:4%"/><col style="width:6%"/><col style="width:16%"/><col style="width:3%"/>
+    <col style="width:10%"/><col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
   </colgroup>
   <thead><tr>
-    <th>Paciente</th><th>CNS</th><th>Nasc.</th><th>Sexo</th>
+    <th>Paciente</th><th>CNS</th><th>CPF</th><th>Nasc.</th><th>Sexo</th>
     <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
-    <th>Atendimento</th><th>SIGTAP</th><th>Origem SIGTAP</th><th>CID</th>
+    <th>Atendimento</th><th>SIGTAP</th><th>CID</th>
   </tr></thead>
   <tbody>${rowsHtml}</tbody>
 </table>
