@@ -10,10 +10,11 @@ const fixture = vi.hoisted(() => ({
   holdFirst: false,
   releaseFirst: null as null | (() => void),
   realtime: null as null | ((payload: Record<string, unknown>) => void),
+  user: { id: 'admin', role: 'master', usuario: 'admin.sms', unidadeId: 'oriximina' },
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'admin', role: 'master', usuario: 'admin.sms', unidadeId: 'oriximina' } }),
+  useAuth: () => ({ user: fixture.user }),
 }));
 vi.mock('@/contexts/OperacionalContext', () => ({
   useOperacional: () => ({ getTurnoInfo: () => [], logAction: async () => {} }),
@@ -25,8 +26,10 @@ vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: () => {
       const params = { start: '', end: '', from: 0, to: 999, signal: null as AbortSignal | null };
+      const filters: Record<string, string> = {};
       const query = {
         select: () => query,
+        eq: (key: string, value: string) => { filters[key] = value; return query; },
         gte: (_: string, value: string) => { params.start = value; return query; },
         lte: (_: string, value: string) => { params.end = value; return query; },
         order: () => query,
@@ -41,6 +44,7 @@ vi.mock('@/integrations/supabase/client', () => ({
             if (params.signal?.aborted) return { data: null, error: new Error('aborted') };
             if (fixture.failSecondPage && params.from >= 1000) return { data: null, error: new Error('network') };
             const data = fixture.rows.filter(row => String(row.data) >= params.start && String(row.data) <= params.end)
+              .filter(row => Object.entries(filters).every(([key, value]) => row[key] === value))
               .slice(params.from, params.to + 1);
             return { data, error: null };
           }).then(resolve, reject),
@@ -51,6 +55,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 import { AgendamentosSliceProvider, useAgendamentos } from './AgendamentosContext';
+import { getAgendamentosSnapshot, isCompleteAgendaDate } from './_agendamentosBridge';
 
 const row = (id: string, date = '2026-09-23') => ({
   id, paciente_id: `p${id}`, paciente_nome: `Paciente ${id}`, unidade_id: 'oriximina',
@@ -71,10 +76,82 @@ beforeEach(() => {
   fixture.holdFirst = false;
   fixture.releaseFirst = null;
   fixture.realtime = null;
+  fixture.user = { id: 'admin', role: 'master', usuario: 'admin.sms', unidadeId: 'oriximina' };
   window.history.replaceState({}, '', '/painel/agenda');
 });
 
 describe('A1.2: intervalo completo da Agenda', () => {
+  it('reconcilia chegada atrasada sem regredir um atendimento já iniciado', async () => {
+    fixture.rows = [{ ...row('arrival'), status: 'em_atendimento' }];
+    const { result } = renderHook(() => useAgendamentos(), { wrapper });
+    await act(async () => { await result.current.loadAgendaRange('2026-09-23', '2026-09-23', { visible: true }); });
+    await act(async () => { fixture.realtime?.({ eventType: 'UPDATE', old: { id: 'arrival' },
+      new: { ...row('arrival'), status: 'confirmado_chegada' } }); });
+    await waitFor(() => expect(fixture.reads).toHaveLength(2));
+    expect(result.current.agendamentos[0].status).toBe('em_atendimento');
+  });
+
+  it.each(['unidade', 'profissional'])('não aplica chegada de outro vínculo: %s', async scope => {
+    fixture.user = { id: 'profissional', role: 'profissional', usuario: 'prof', unidadeId: 'oriximina' };
+    fixture.rows = [row('arrival')];
+    const { result } = renderHook(() => useAgendamentos(), { wrapper });
+    await act(async () => { await result.current.loadAgendaRange('2026-09-23', '2026-09-23', { visible: true }); });
+    const incoming = { ...row('arrival'), status: 'confirmado_chegada',
+      ...(scope === 'unidade' ? { unidade_id: 'outra' } : { profissional_id: 'outro' }) };
+    await act(async () => { fixture.realtime?.({ eventType: 'UPDATE', old: { id: 'arrival' }, new: incoming }); });
+    await waitFor(() => expect(fixture.reads).toHaveLength(2));
+    expect(result.current.agendamentos[0]).toMatchObject({ status: 'confirmado', unidadeId: 'oriximina', profissionalId: 'profissional' });
+  });
+
+  it('reconcilia chegada durante leitura em voo e descarta a resposta substituída', async () => {
+    fixture.rows = [row('arrival')];
+    const { result } = renderHook(() => useAgendamentos(), { wrapper });
+    await act(async () => { await result.current.loadAgendaRange('2026-09-23', '2026-09-23', { visible: true }); });
+    fixture.holdFirst = true;
+    let replaced: unknown;
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.loadAgendaRange('2026-09-23', '2026-09-23', { force: true }).catch(e => { replaced = e; }); });
+    await waitFor(() => expect(fixture.releaseFirst).toBeTypeOf('function'));
+    fixture.holdFirst = false;
+    fixture.rows = [{ ...row('arrival'), status: 'confirmado_chegada' }];
+    await act(async () => { fixture.realtime?.({ eventType: 'UPDATE', old: { id: 'arrival' }, new: fixture.rows[0] }); });
+    await waitFor(() => expect(fixture.reads).toHaveLength(3));
+    await act(async () => { fixture.releaseFirst?.(); await pending; });
+    expect(String(replaced)).toContain('substituída');
+    expect(result.current.agendamentos[0].status).toBe('confirmado_chegada');
+    expect(result.current.completeAgendaDates.has('2026-09-23')).toBe(true);
+  });
+
+  it.each(['confirmado_chegada', 'apto_atendimento'])('aplica chegada %s sem consultar novamente o intervalo e preserva os demais cartões', async status => {
+    fixture.rows = [row('arrival'), row('other')];
+    const { result } = renderHook(() => useAgendamentos(), { wrapper });
+    await act(async () => {
+      await result.current.loadAgendaRange('2026-09-23', '2026-09-23', { visible: true });
+    });
+    const other = result.current.agendamentos.find(a => a.id === 'other');
+    const updated = { ...fixture.rows[0], status, hora_chegada: '13:35' };
+    await act(async () => {
+      fixture.realtime?.({ eventType: 'UPDATE', old: { id: 'arrival' }, new: updated });
+    });
+    expect(fixture.reads).toHaveLength(1); // apenas carga inicial
+    expect(result.current.agendamentos.find(a => a.id === 'arrival')).toMatchObject({ status, horaChegada: '13:35' });
+    expect(result.current.agendamentos.find(a => a.id === 'other')).toBe(other);
+    expect(getAgendamentosSnapshot().filter(a => a.status === status)).toHaveLength(1);
+    expect(result.current.completeAgendaDates.has('2026-09-23')).toBe(true);
+    expect(isCompleteAgendaDate('2026-09-23')).toBe(true);
+    expect(result.current.agendaRevision).toBeGreaterThan(0);
+  });
+
+  it('reconcilia a data quando o evento de chegada também muda o horário', async () => {
+    fixture.rows = [row('arrival')];
+    const { result } = renderHook(() => useAgendamentos(), { wrapper });
+    await act(async () => { await result.current.loadAgendaRange('2026-09-23', '2026-09-23', { visible: true }); });
+    fixture.rows = [{ ...fixture.rows[0], status: 'confirmado_chegada', hora: '14:00' }];
+    await act(async () => { fixture.realtime?.({ eventType: 'UPDATE', old: { id: 'arrival' }, new: fixture.rows[0] }); });
+    await waitFor(() => expect(fixture.reads).toHaveLength(2));
+    expect(result.current.agendamentos[0]).toMatchObject({ status: 'confirmado_chegada', hora: '14:00' });
+  });
+
   it('busca todas as páginas da data movimentada e reaproveita o dia visitado', async () => {
     fixture.rows = Array.from({ length: 1005 }, (_, index) => row(String(index)));
     const { result } = renderHook(() => useAgendamentos(), { wrapper });

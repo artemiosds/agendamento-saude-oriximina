@@ -1809,7 +1809,9 @@ const Agenda: React.FC = () => {
           toast.success(`Triagem desabilitada para este profissional. ${ag.pacienteNome} liberado para atendimento direto.`);
         }
         setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
-        void Promise.allSettled([refreshAgendamentos(), refreshFila()]);
+        // updateAgendamento já confirmou a gravação e atualizou o cartão.
+        // Reconcilia a fila sem baixar novamente todo o período da Agenda.
+        void Promise.allSettled([refreshFila()]);
       } else {
         await updateAgendamento(agId, { status: newStatus as any });
         await Promise.all([refreshAgendamentos(), refreshFila()]);

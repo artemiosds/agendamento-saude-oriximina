@@ -143,6 +143,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
   const agendaVisibleAbortRef = useRef<AbortController | null>(null);
   const agendaEpochRef = useRef(0);
   const agendaDateGenerationRef = useRef(new Map<string, number>());
+  const agendaInFlightDatesRef = useRef(new Map<string, number>());
   const agendaExceptionIdsRef = useRef({ online: new Set<string>(), historical: new Set<string>() });
   const agendaRequestSequenceRef = useRef(0);
   const [agendaRevision, setAgendaRevision] = useState(0);
@@ -169,6 +170,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     agendaVisibleAbortRef.current?.abort();
     agendaDatesRef.current.clear();
     agendaDateGenerationRef.current.clear();
+    agendaInFlightDatesRef.current.clear();
     agendaExceptionIdsRef.current = { online: new Set(), historical: new Set() };
     agendaVisibleRef.current = null;
     agendaSelectedRef.current = null;
@@ -195,7 +197,10 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     if (!missing.length) return;
     const epoch = agendaEpochRef.current;
     const token = ++agendaRequestSequenceRef.current;
-    missing.forEach(date => agendaDateGenerationRef.current.set(date, token));
+    missing.forEach(date => {
+      agendaDateGenerationRef.current.set(date, token);
+      agendaInFlightDatesRef.current.set(date, token);
+    });
     const controller = new AbortController();
     if (options.visible) agendaVisibleAbortRef.current = controller;
     const rows: any[] = [];
@@ -240,6 +245,12 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       publishAgendaDates();
     } catch (error) {
       if (!controller.signal.aborted && epoch === agendaEpochRef.current) throw error;
+    } finally {
+      if (epoch === agendaEpochRef.current) {
+        missing.forEach(date => {
+          if (agendaInFlightDatesRef.current.get(date) === token) agendaInFlightDatesRef.current.delete(date);
+        });
+      }
     }
   }, [activateAgendaMode, isGlobalAdmin, userUnidadeId, authUser?.role, authUser?.id, scopeKey, publishAgendaDates]);
 
@@ -496,6 +507,23 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         const existing = agendamentosRef.current.find(a => a.id === (row?.id || oldRow?.id));
         const inScope = row && (isGlobalAdmin || row.unidade_id === userUnidadeId) &&
           (authUser?.role !== 'profissional' || row.profissional_id === authUser.id);
+        // Chegada em item já carregado: o evento contém o registro persistido.
+        // Mudanças de data/vínculo e leituras em voo mantêm a reconciliação existente.
+        if (payload.eventType === 'UPDATE' && inScope && existing &&
+          ['confirmado_chegada', 'apto_atendimento'].includes(row.status) &&
+          (existing.status === 'confirmado' || existing.status === row.status) &&
+          row.data === existing.data && row.hora === existing.hora &&
+          row.paciente_id === existing.pacienteId && row.unidade_id === existing.unidadeId &&
+          row.profissional_id === existing.profissionalId && typeof row.tipo === 'string' &&
+          agendaDatesRef.current.has(existing.data) && !agendaInFlightDatesRef.current.has(existing.data)) {
+          const next = upsertById(agendamentosRef.current, mapAgendamentoRow(row));
+          agendamentosRef.current = next;
+          setAgendamentosSnapshot(next);
+          setAgendamentos(next);
+          publishAgendaDates();
+          setAgendaRevision(v => v + 1);
+          return;
+        }
         const isException = row && inScope &&
           ((row.origem === 'online' && row.status === 'pendente') ||
             (row.data < todayLocalStr() && ['confirmado', 'aguardando', 'confirmado_chegada',
@@ -902,6 +930,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     agendaEpochRef.current++;
     agendaDatesRef.current.clear();
     agendaDateGenerationRef.current.clear();
+    agendaInFlightDatesRef.current.clear();
     agendaExceptionIdsRef.current = { online: new Set(), historical: new Set() };
     agendaRequestSequenceRef.current = 0;
     agendaModeRef.current = false;
