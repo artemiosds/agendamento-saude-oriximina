@@ -25,3 +25,12 @@ INSERT INTO public.treatment_sessions(cycle_id,patient_id,professional_id,sessio
  SELECT '00000000-0000-0000-0000-000000000001','patient','22222222-2222-2222-2222-222222222222',g,7,CASE WHEN g IN(3,4) THEN '2030-02-04'::date ELSE '2030-01-01'::date + g * 7 END,'pendente_agendamento' FROM generate_series(1,6)g;
 
 CREATE TABLE public.patient_discharges(id uuid DEFAULT gen_random_uuid(), cycle_id uuid, tipo_alta text);
+
+-- Extra columns/functions used by the real booking RPC and scoped query in the follow-up tests.
+ALTER TABLE public.pacientes ADD COLUMN cpf text DEFAULT '', ADD COLUMN cns text DEFAULT '';
+ALTER TABLE public.agendamentos ADD COLUMN paciente_nome text, ADD COLUMN sala_id text, ADD COLUMN setor_id text, ADD COLUMN profissional_nome text, ADD COLUMN tipo text, ADD COLUMN observacoes text, ADD COLUMN origem text, ADD COLUMN google_event_id text, ADD COLUMN sync_status text, ADD COLUMN criado_por text, ADD COLUMN prioridade_perfil text;
+CREATE FUNCTION public.unaccent(text) RETURNS text LANGUAGE sql IMMUTABLE AS $$SELECT $1$$;
+CREATE FUNCTION public.is_date_blocked(date,text,text) RETURNS boolean LANGUAGE sql STABLE AS $$SELECT false$$;
+INSERT INTO public.agendamentos(id,paciente_id,profissional_id,unidade_id,data,status) VALUES('legacy-valid','patient','22222222-2222-2222-2222-222222222222','u','2030-02-04','confirmado');
+UPDATE public.treatment_sessions SET appointment_id='legacy-valid',status='agendada' WHERE cycle_id='00000000-0000-0000-0000-000000000001' AND session_number=3;
+INSERT INTO public.permissoes(perfil,modulo,can_execute,can_delete) VALUES('profissional','tratamento',true,false);

@@ -3,7 +3,7 @@ export interface TreatmentSessionLinkSnapshot {
   appointment_id: string | null;
   patient_id: string;
   professional_id: string;
-  scheduled_date: string;
+  scheduled_date: string | null;
 }
 
 export interface TreatmentAppointmentSnapshot {
@@ -68,6 +68,7 @@ export function resolveTreatmentSessionIntegrity(input: {
   }
   if (session.status !== 'pendente_agendamento') return { kind: 'estado_protegido' };
 
+  if (!session.scheduled_date) return { kind: 'pendente' };
   const candidates = sameDayCandidates.filter((appointment) =>
     !input.claimedAppointmentIds?.has(appointment.id)
     && appointment.paciente_id === session.patient_id

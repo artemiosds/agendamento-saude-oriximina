@@ -132,7 +132,7 @@ describe('treatmentSessionOperations: schedule', () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data }, appointment: appointmentRow }, error: null });
     await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient', manualCapacityOverride: true });
-    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_manual_capacity', expect.objectContaining({ p_session_id: 'session-1' }));
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({ p_session_id: 'session-1' }));
     expect(ctx.scheduleCommits).toEqual([{ appointment: expect.objectContaining({ id: appointment.id }), created: true }]);
   });
   it('cria o vínculo por RPC e só confirma depois do resultado completo', async () => {
@@ -141,7 +141,7 @@ describe('treatmentSessionOperations: schedule', () => {
     const result = await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' });
     expect(result.status).toBe('agendado');
     expect(result.appointment?.id).toBe(appointment.id);
-    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_batch', expect.objectContaining({
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({
       p_session_id: 'session-1', p_cycle_id: 'cycle-1', p_appointment: expect.objectContaining({ id: appointment.id, status: 'confirmado', sala_id: 'room-1' }),
       p_check_patient_conflict: false,
     }));
@@ -151,14 +151,14 @@ describe('treatmentSessionOperations: schedule', () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null });
     await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient' });
-    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_batch', expect.objectContaining({ p_check_patient_conflict: true }));
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({ p_check_patient_conflict: true }));
   });
 
   it('usa validação transacional estrita para qualquer agendamento de sessão', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data }, appointment: appointmentRow }, error: null });
     await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' });
-    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_batch', expect.objectContaining({
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({
       p_session_id: 'session-1', p_cycle_id: 'cycle-1', p_check_patient_conflict: false,
     }));
   });
@@ -238,6 +238,13 @@ describe('treatmentSessionOperations: reschedule', () => {
     await ctx.service.reschedule({ reason: 'Revisão manual', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '10:30', manualCapacityOverride: true });
     expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_checked', expect.objectContaining({ p_expected_appointment_id: appointment.id, p_manual_capacity: true, p_reason: 'Revisão manual' }));
     expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id, data: '2026-10-01' }));
+  });
+  it('preserva a escolha de sala junto à remarcação atômica do Prontuário', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01', sala_id: 'sala-2' } }, error: null });
+    await ctx.service.reschedule({ reason: 'Troca conferida', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '10:30', newRoomId: 'sala-2' });
+    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_with_room', expect.objectContaining({ p_new_room_id: 'sala-2', p_reason: 'Troca conferida' }));
+    expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ salaId: 'sala-2' }));
   });
   it('remarca sessão e sincroniza somente a data no fluxo que não altera hora', async () => {
     const ctx = setup();
@@ -325,10 +332,10 @@ describe('treatmentSessionOperations: unschedule', () => {
 
 
 describe('bloqueios de integridade antes de gravar', () => {
-  it('não inicia agendamento nem estado otimista quando o ciclo está incompleto', async () => {
+  it('não inicia agendamento quando a data da sessão está duplicada', async () => {
     const ctx = setup();
-    ctx.validateCycle.mockRejectedValue(new Error('Quantidade incompleta: 6 de 7 sessões.'));
-    await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient' })).rejects.toThrow('6 de 7');
+    ctx.validateCycle.mockRejectedValue(new Error('Já existe a sessão nº 3 deste ciclo nesta data.'));
+    await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient' })).rejects.toThrow('Já existe a sessão');
     expect(ctx.rpc).not.toHaveBeenCalled();
     expect(ctx.addAgendamentoTransactionally).not.toHaveBeenCalled();
   });

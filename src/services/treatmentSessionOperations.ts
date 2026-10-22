@@ -20,7 +20,7 @@ export interface AgendaMutationBridge {
 
 export interface TreatmentSessionOperationsDependencies {
   client: TreatmentOperationRpcClient;
-  validateCycle?: (cycleId: string, change?: { sessionId: string; date: string }) => Promise<void>;
+  validateCycle?: (cycleId: string, change?: { sessionId: string; date?: string }) => Promise<void>;
   agenda: AgendaMutationBridge;
   findDuplicate: (input: {
     patientId: string;
@@ -134,7 +134,7 @@ function requireOperationResult(data: Record<string, unknown> | null, accepted: 
 export function createTreatmentSessionOperations(deps: TreatmentSessionOperationsDependencies) {
   return {
     async linkExistingAppointment(input: {
-      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
+      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string | null; status: string; appointment_id: string | null };
       cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };
       appointmentId: string;
       reason?: string;
@@ -143,7 +143,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
         throw new Error('Vínculo inconsistente: o agendamento não foi informado. Nenhum dado foi alterado.');
       }
       if (!input.reason?.trim()) throw new Error('Informe a justificativa do vínculo manual.');
-      await deps.validateCycle?.(input.cycle.id);
+      await deps.validateCycle?.(input.cycle.id, { sessionId: input.session.id });
       const { data, error } = await deps.client.rpc('link_treatment_session_checked', {
         p_reason: input.reason.trim(),
         p_session_id: input.session.id,
@@ -159,14 +159,15 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
     },
 
     async schedule(input: {
-      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
+      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string | null; status: string; appointment_id: string | null };
       cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };
       appointment: Agendamento;
       duplicateScope: 'patient' | 'patient_professional';
       checkPatientAbsenceBlock?: boolean;
       manualCapacityOverride?: boolean;
+      reason?: string;
     }): Promise<TreatmentSessionOperationResult> {
-      await deps.validateCycle?.(input.cycle.id);
+      await deps.validateCycle?.(input.cycle.id, { sessionId: input.session.id, date: input.appointment.data });
       const duplicate = await deps.findDuplicate({
         patientId: input.cycle.patient_id,
         professionalId: input.duplicateScope === 'patient_professional' ? input.cycle.professional_id : undefined,
@@ -186,9 +187,9 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
 
       let rpcResult: TreatmentSessionOperationResult | undefined;
       await deps.agenda.addAgendamentoTransactionally(input.appointment, async (normalized) => {
-        const { data, error } = await deps.client.rpc(input.manualCapacityOverride
-          ? 'schedule_treatment_session_manual_capacity'
-          : 'schedule_treatment_session_batch', {
+        const { data, error } = await deps.client.rpc('schedule_treatment_session_checked', {
+          p_manual_capacity: !!input.manualCapacityOverride,
+          p_reason: input.reason?.trim() || null,
           p_session_id: input.session.id,
           p_cycle_id: input.cycle.id,
           p_expected_session_date: input.session.scheduled_date,
@@ -208,11 +209,12 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
     },
 
     async reschedule(input: {
-      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
+      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string | null; status: string; appointment_id: string | null };
       cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };
       newDate: string;
       reason?: string;
       newTime?: string;
+      newRoomId?: string;
       checkPatientConflict?: boolean;
       bypassBlockCheck?: boolean;
       manualCapacityOverride?: boolean;
@@ -237,7 +239,8 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       if (!input.bypassBlockCheck && await deps.isDateBlocked(input.newDate, input.cycle.professional_id, input.cycle.unit_id)) {
         throw new Error('Data bloqueada.');
       }
-      const { data, error } = await deps.client.rpc('reschedule_treatment_session_checked', {
+      const { data, error } = await deps.client.rpc(input.newRoomId === undefined ? 'reschedule_treatment_session_checked' : 'reschedule_treatment_session_with_room', {
+        ...(input.newRoomId === undefined ? {} : { p_new_room_id: input.newRoomId }),
         p_reason: input.reason.trim(),
         p_manual_capacity: !!input.manualCapacityOverride,
         p_session_id: input.session.id,
@@ -257,7 +260,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
     },
 
     async unschedule(input: {
-      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
+      session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string | null; status: string; appointment_id: string | null };
       cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };
     }): Promise<TreatmentSessionOperationResult> {
       if (!input.session.appointment_id) {

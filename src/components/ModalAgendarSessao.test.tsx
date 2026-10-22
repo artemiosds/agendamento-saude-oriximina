@@ -53,6 +53,8 @@ describe('ModalAgendarSessao', () => {
     const timeInput = screen.getByRole('dialog').querySelector('input[type="time"]')!;
     fireEvent.change(timeInput, { target: { value: '09:00' } });
 
+    const reason = screen.queryByLabelText('Motivo da alteração da data *');
+    if (reason) fireEvent.change(reason, { target: { value: 'Nova data conferida com o paciente' } });
     expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeEnabled();
     fireEvent.change(timeInput, { target: { value: '08:00' } });
     expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
@@ -64,6 +66,7 @@ describe('ModalAgendarSessao', () => {
 
     await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
     fireEvent.change(screen.getByRole('dialog').querySelector('input[type="time"]')!, { target: { value: '09:00' } });
+    fireEvent.change(screen.getByLabelText('Motivo da alteração da data *'), { target: { value: 'Solicitação do paciente' } });
     expect(screen.getByRole('button', { name: 'Confirmar Remarcação' })).toBeEnabled();
   });
 
@@ -85,6 +88,6 @@ describe('ModalAgendarSessao', () => {
     fireEvent.change(screen.getByRole('dialog').querySelector('input[type="time"]')!, { target: { value: '08:00' } });
     expect(screen.getByText(/Encaixe acima da capacidade/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Agendamento' }));
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-08', '08:00', ''));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-08', '08:00', '', ''));
   });
 });

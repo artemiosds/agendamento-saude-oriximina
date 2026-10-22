@@ -1,3 +1,4 @@
+import { Textarea } from '@/components/ui/textarea';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,7 +16,7 @@ interface SessionInfo {
   id: string;
   session_number: number;
   total_sessions: number;
-  scheduled_date: string;
+  scheduled_date: string | null;
   status: string;
   appointment_id: string | null;
 }
@@ -49,8 +50,8 @@ interface ModalAgendarSessaoProps {
     duracaoConsulta?: number;
   }>;
   allowCapacityOverride?: boolean;
-  onConfirm: (data: string, hora: string, salaId: string) => Promise<void>;
-  onRemarcar?: (newDate: string, newHora: string, salaId: string) => Promise<void>;
+  onConfirm: (data: string, hora: string, salaId: string, reason?: string) => Promise<void>;
+  onRemarcar?: (newDate: string, newHora: string, salaId: string, reason?: string) => Promise<void>;
   mode?: 'agendar' | 'remarcar';
   isMaster?: boolean;
 }
@@ -91,6 +92,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const [selectedHora, setSelectedHora] = useState('');
   const [selectedSala, setSelectedSala] = useState('');
   const [saving, setSaving] = useState(false);
+  const [reason, setReason] = useState('');
+  const requiresReason = mode === 'remarcar' || (!!selectedDate && selectedDate !== session?.scheduled_date);
   const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
   const [loadingConflicts, setLoadingConflicts] = useState(false);
 
@@ -101,6 +104,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     if (!open || !session) return;
     const base = suggestedDate && suggestedDate >= todayStr ? suggestedDate : todayStr;
     setSelectedDate(suggestedDate && suggestedDate >= todayStr ? suggestedDate : '');
+    setReason('');
     setSelectedHora('');
     setSelectedSala('');
     const d = dateStrToUtcDate(base);
@@ -292,12 +296,13 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       toast.error(exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).');
       return;
     }
+    if (requiresReason && !reason.trim()) { toast.error('Informe o motivo da alteração da data.'); return; }
     setSaving(true);
     try {
       if (mode === 'remarcar' && onRemarcar) {
-        await onRemarcar(selectedDate, selectedHora, selectedSala);
+        await onRemarcar(selectedDate, selectedHora, selectedSala, reason.trim());
       } else {
-        await onConfirm(selectedDate, selectedHora, selectedSala);
+        await onConfirm(selectedDate, selectedHora, selectedSala, reason.trim());
       }
       onClose();
     } catch (err: any) {
@@ -544,10 +549,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
 
           {/* Action button — fixed footer */}
           <div className="modal-footer px-4 sm:px-6">
+            {requiresReason && <div className="space-y-1"><Label htmlFor="session-date-reason">Motivo da alteração da data *</Label><Textarea id="session-date-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div>}
             <Button
               onClick={handleConfirm}
               className="w-full gradient-primary text-primary-foreground"
-              disabled={!selectedDate || !selectedHora || saving || (!selectedTimeAllowed && !masterManualFallback)}
+              disabled={!selectedDate || !selectedHora || saving || (requiresReason && !reason.trim()) || (!selectedTimeAllowed && !masterManualFallback)}
             >
               {saving ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>

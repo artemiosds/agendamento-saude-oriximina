@@ -70,3 +70,25 @@ canceladas/remarcadas, vínculo único, extensão sem reescrever o histórico,
 concorrência por versão esperada, rejeição de renumeração e conclusão inconsistente,
 revisão Master e isolamento de unidade/profissional. O ensaio de versão esperada
 não substitui um teste de concorrência com duas conexões PostgreSQL reais.
+
+## Regularização manual e continuidade do trabalho
+
+- A migração `20261022123911_treatment_manual_regularization.sql` permite data nula
+  exclusivamente em sessão pendente sem agendamento, por CHECK validado. Não
+  atualiza registros antigos, nem cria tabelas ou colunas.
+- O profissional autorizado regulariza seu próprio ciclo com confirmação e motivo.
+  A retirada de uma data duplicada protege a sessão que possui agendamento válido.
+  A sessão mantida sem data aparece como “Aguarda agendamento”.
+- A reposição é individual pelo número faltante; repetir a mesma solicitação retorna
+  o registro existente. Nenhum preenchimento ocorre ao abrir a tela.
+- Uma pendência histórica em outra sessão não bloqueia uma marcação válida. O alvo
+  continua sujeito às regras de data, vínculo, paciente, profissional e unidade.
+- Prontuário e Gestão usam a mesma gravação atômica de sessão e agendamento.
+  Trocas de data exigem motivo e auditoria. Sugestões dependem da disponibilidade
+  conhecida e só são gravadas após confirmação humana.
+- A listagem aplica o escopo também no servidor. O filtro de integridade é exclusivo
+  do Master; admin.sms mantém alcance global e outros perfis respeitam sua unidade.
+
+Para o ensaio isolado completo, carregar nesta ordem: fixture de schema, primeira
+migração, `fixtures/treatment_booking_rpc.sql`, segunda migração, teste original
+e `treatment_manual_regularization.test.sql`. Nunca executar fixtures em produção.

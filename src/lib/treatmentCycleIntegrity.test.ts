@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateTreatmentCycle, type SessionIntegritySnapshot } from './treatmentCycleIntegrity';
+import { validateTreatmentCycle, assertTreatmentSessionChange, getMissingSessionNumbers, suggestTreatmentSessionDate, type SessionIntegritySnapshot } from './treatmentCycleIntegrity';
 
 const cycle = { id: 'c', patient_id: 'p', professional_id: 'd', unit_id: 'u', total_sessions: 7 };
 const sessions = (): SessionIntegritySnapshot[] => Array.from({ length: 7 }, (_, i) => ({
@@ -42,5 +42,32 @@ describe('integridade documental do ciclo (sem reparar histórico)', () => {
   it.each(['patient_id', 'professional_id', 'cycle_id'] as const)('detecta identidade divergente: %s', (key) => {
     const rows = sessions(); rows[0][key] = 'other';
     expect(validateTreatmentCycle(cycle, rows).map((i) => i.code)).toContain('identity');
+  });
+});
+
+
+describe('autonomia segura do profissional', () => {
+  it('não bloqueia sessão válida por quantidade histórica incompleta ou duplicidade em outra data', () => {
+    const rows = sessions().slice(0,6); rows[3].scheduled_date = rows[2].scheduled_date;
+    expect(() => assertTreatmentSessionChange(cycle,rows,'s4','2027-01-20')).not.toThrow();
+    expect(() => assertTreatmentSessionChange(cycle,rows,'s3',rows[2].scheduled_date!)).toThrow('sessão nº 3 deste ciclo');
+  });
+  it('sessão sem data permanece registrada e não bloqueia as demais', () => {
+    const rows = sessions(); rows[3].scheduled_date = null;
+    expect(getMissingSessionNumbers(7,rows)).toEqual([]);
+    expect(validateTreatmentCycle(cycle,rows).find((i) => i.code==='undated')?.message).toContain('Sessão nº 4 sem data');
+    expect(() => assertTreatmentSessionChange(cycle,rows,'s4')).not.toThrow();
+    expect(() => assertTreatmentSessionChange(cycle,rows,'s3','2027-01-25')).not.toThrow();
+  });
+  it('não considera outro ciclo ou profissional como duplicidade deste ciclo', () => {
+    const rows = sessions();
+    rows.push({ ...rows[0],id:'other',cycle_id:'other-cycle',professional_id:'other-professional' });
+    expect(() => assertTreatmentSessionChange(cycle,rows,'s0')).not.toThrow();
+  });
+  it('sugestão respeita a sequência e as datas ocupadas, sem alterar nada', () => {
+    const rows = sessions(); rows[3].scheduled_date = null;
+    const copy=JSON.stringify(rows);
+    expect(suggestTreatmentSessionDate(rows,4,['2027-01-13','2027-01-15','2027-01-14'],'2027-01-01','manual')).toBe('2027-01-13');
+    expect(JSON.stringify(rows)).toBe(copy);
   });
 });

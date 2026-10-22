@@ -1,4 +1,6 @@
-import { treatmentCycleWriter } from "@/services/treatmentCycleService";
+import { createTreatmentSessionOperations, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
+import { assertTreatmentSessionChange } from "@/lib/treatmentCycleIntegrity";
+import { treatmentCycleWriter, loadTreatmentCycleSnapshot } from "@/services/treatmentCycleService";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
@@ -392,8 +394,35 @@ const ProntuarioPage: React.FC = () => {
   const { user, isGlobalAdmin } = useAuth();
   const { can } = usePermissions();
   const { pacientes } = usePacientes();
-  const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamento } = useAgendamentos();
+  const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate } = useAgendamentos();
   const { unidades, funcionarios, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
+  const sessionOperations = useMemo(() => createTreatmentSessionOperations({
+    client: supabase as unknown as TreatmentOperationRpcClient,
+    agenda: { addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate },
+    validateCycle: async (cycleId, change) => {
+      const { cycle, sessions } = await loadTreatmentCycleSnapshot(cycleId);
+      if (change) assertTreatmentSessionChange(cycle, sessions, change.sessionId, change.date);
+    },
+    findDuplicate: async ({ patientId, professionalId, date, time, exceptAppointmentId }) => {
+      let query = supabase.from('agendamentos').select('id, profissional_nome').eq('paciente_id', patientId).eq('data', date).eq('hora', time).not('status','in','("cancelado","falta","remarcado")');
+      if (professionalId) query = query.eq('profissional_id', professionalId);
+      if (exceptAppointmentId) query = query.neq('id', exceptAppointmentId);
+      const { data, error } = await query.limit(1).maybeSingle();
+      if (error) throw error;
+      return data ? { professionalName: data.profissional_nome || undefined } : null;
+    },
+    ensurePatientCanBeScheduled: async (patientId, professionalId) => {
+      const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+      const { data: patient, error } = await supabase.from('pacientes').select('is_tfd, possui_ordem_judicial').eq('id',patientId).single();
+      if (error) throw error;
+      if (!isPacienteIsentoBloqueio(patient) && await isPacienteBloqueadoParaProfissional(patientId, professionalId)) throw new Error('Paciente bloqueado por faltas injustificadas. Regularize com o responsável da unidade.');
+    },
+    isDateBlocked: async (date, professionalId, unitId) => {
+      const { data, error } = await supabase.rpc('is_date_blocked', { p_date: date, p_profissional_id: professionalId, p_unidade_id: unitId });
+      if (error) throw error;
+      return !!data;
+    },
+  }), [addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -759,7 +788,7 @@ const ProntuarioPage: React.FC = () => {
 
 
   // Sessão: cycle + PTS state
-  interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
+  interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string | null; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
   interface ActiveCycle { id: string; patient_id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; unit_id: string; specialty?: string; pts_id?: string | null; }
   interface ActivePTS { id: string; patient_id: string; unit_id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; updated_at?: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
@@ -3294,7 +3323,7 @@ const ProntuarioPage: React.FC = () => {
         : calculateTotalSessions(cycleForm.frequency, cycleForm.duration_months, cycleForm.weekdays);
 
       const blockedRanges = buildBlockedRanges(bloqueios, user?.id || '', user?.unidadeId || '');
-      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, totalSessions, blockedRanges);
+      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, totalSessions, blockedRanges, new Set(getAvailableDates(user?.id || "", user?.unidadeId || "")));
       const endDate = calcEndDateFromSessions(sessionDates);
 
       if (skippedCount > 0) {
@@ -5377,47 +5406,25 @@ const ProntuarioPage: React.FC = () => {
         availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
         getAvailableSlots={getAvailableSlots}
         getTurnoInfo={getTurnoInfo}
-        onConfirm={async (data, hora, salaId) => {
+        onConfirm={async (data, hora, salaId, reason) => {
           if (!agendarSessaoTarget || !sessaoCycle) return;
-          const pac = pacienteByIdMap.get(sessaoCycle.patient_id);
-          
-          const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
-          if (!isPacienteIsentoBloqueio(pac)) {
-            const bloqueado = await isPacienteBloqueadoParaProfissional(sessaoCycle.patient_id, sessaoCycle.professional_id);
-            if (bloqueado) {
-              toast.error("Paciente bloqueado por faltas injustificadas para este profissional. Regularize na página de Pacientes Faltosos com o responsável da unidade.");
-              return;
-            }
-          }
-
-          const agId = `ag${Date.now()}`;
-          await addAgendamento({
-            id: agId,
-            pacienteId: sessaoCycle.patient_id,
-            pacienteNome: form.paciente_nome,
-            unidadeId: sessaoCycle.unit_id,
-            salaId: salaId || "",
-            setorId: "",
-            profissionalId: sessaoCycle.professional_id,
-            profissionalNome: funcionarios.find(f => f.id === sessaoCycle.professional_id)?.nome || "",
-            data,
-            hora,
-            status: "confirmado",
-            tipo: "Sessão de Tratamento",
-            observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${sessaoCycle.treatment_type}`,
-            origem: "profissional",
-            criadoEm: new Date().toISOString(),
-            criadoPor: user?.id || "",
+          await sessionOperations.schedule({
+            session: agendarSessaoTarget,
+            cycle: sessaoCycle,
+            duplicateScope: 'patient',
+            checkPatientAbsenceBlock: true,
+            reason,
+            appointment: {
+              id: `ag${crypto.randomUUID()}`, pacienteId: sessaoCycle.patient_id, pacienteNome: form.paciente_nome,
+              unidadeId: sessaoCycle.unit_id, salaId: salaId || '', setorId: '',
+              profissionalId: sessaoCycle.professional_id, profissionalNome: funcionarios.find((f) => f.id === sessaoCycle.professional_id)?.nome || '',
+              data, hora, status: 'confirmado', tipo: 'Sessão de Tratamento',
+              observacoes: `Sessão ${agendarSessaoTarget.session_number}/${sessaoCycle.total_sessions} — ${sessaoCycle.treatment_type}`,
+              origem: 'profissional', criadoEm: new Date().toISOString(), criadoPor: user?.id || '',
+            },
           });
-
-          await supabase
-            .from("treatment_sessions")
-            .update({ appointment_id: agId, status: "agendada", scheduled_date: data })
-            .eq("id", agendarSessaoTarget.id);
-
-          toast.success("Sessão agendada com sucesso!");
+          toast.success('Sessão e agendamento confirmados juntos.');
           await loadSessaoData(buildTreatmentContext());
-          refreshAgendamentos();
         }}
         mode="agendar"
         isMaster={user?.role === 'master' || isProfissional}
@@ -5434,22 +5441,11 @@ const ProntuarioPage: React.FC = () => {
         availableDates={sessaoCycle ? getAvailableDates(sessaoCycle.professional_id, sessaoCycle.unit_id) : []}
         getAvailableSlots={getAvailableSlots}
         getTurnoInfo={getTurnoInfo}
-        onConfirm={async (data, hora, salaId) => {
+        onConfirm={async (data, hora, salaId, reason) => {
           if (!remarcarTarget || !sessaoCycle) return;
-          const oldDate = remarcarTarget.scheduled_date;
-          
-          await supabase
-            .from("treatment_sessions")
-            .update({ scheduled_date: data })
-            .eq("id", remarcarTarget.id);
-
-          if (remarcarTarget.appointment_id) {
-            await supabase.from("agendamentos").update({ data, hora, sala_id: salaId }).eq("id", remarcarTarget.appointment_id);
-          }
-
-          toast.success(`Sessão remarcada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
+          await sessionOperations.reschedule({ session: remarcarTarget, cycle: sessaoCycle, newDate: data, newTime: hora, newRoomId: salaId, reason, checkPatientConflict: true });
+          toast.success('Data da sessão e do agendamento atualizadas juntas.');
           await loadSessaoData(buildTreatmentContext());
-          refreshAgendamentos();
         }}
         mode="remarcar"
         isMaster={user?.role === 'master' || isProfissional}
@@ -5472,7 +5468,7 @@ const ProntuarioPage: React.FC = () => {
               const sessoesDisponiveis = sessaoCycleSessions
                 .filter(
                   (s) =>
-                    ["agendada", "pendente_agendamento"].includes(s.status) &&
+                    !!s.scheduled_date && ["agendada", "pendente_agendamento"].includes(s.status) &&
                     s.professional_id === sessaoCycle?.professional_id,
                 )
                 .sort((a, b) => a.session_number - b.session_number);

@@ -1,3 +1,4 @@
+import { TreatmentCyclePendingPanel } from "@/components/tratamentos/TreatmentCyclePendingPanel";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { isSessionFalta } from "@/lib/sessionFalta";
 import { usePacientes } from "@/contexts/PacientesContext";
@@ -53,7 +54,7 @@ import { isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
 import { treatmentCycleWriter, assertStoredTreatmentCycle, loadTreatmentCycleSnapshot } from "@/services/treatmentCycleService";
-import { validateTreatmentCycle, assertTreatmentCycle } from "@/lib/treatmentCycleIntegrity";
+import { validateTreatmentCycle, assertTreatmentSessionChange } from "@/lib/treatmentCycleIntegrity";
 import { TreatmentIntegrityReview } from "@/components/tratamentos/TreatmentIntegrityReview";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { AltaTratamentoDialog } from "@/components/tratamentos/AltaTratamentoDialog";
@@ -110,7 +111,7 @@ interface TreatmentSession {
   appointment_id: string | null;
   session_number: number;
   total_sessions: number;
-  scheduled_date: string;
+  scheduled_date: string | null;
   status: string;
   absence_type: string | null;
   clinical_notes: string;
@@ -220,6 +221,7 @@ const Tratamentos: React.FC = () => {
   const [filterProf, setFilterProf] = useState("all");
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [integrityOnly, setIntegrityOnly] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
@@ -369,7 +371,7 @@ const Tratamentos: React.FC = () => {
     client: supabase as unknown as TreatmentOperationRpcClient,
     validateCycle: async (cycleId, change) => {
       const { cycle, sessions: freshSessions } = await loadTreatmentCycleSnapshot(cycleId);
-      assertTreatmentCycle(cycle, change ? freshSessions.map((session) => session.id === change.sessionId ? { ...session, scheduled_date: change.date } : session) : freshSessions);
+      if (change) assertTreatmentSessionChange(cycle, freshSessions, change.sessionId, change.date);
     },
     agenda: {
       addAgendamentoTransactionally,
@@ -439,6 +441,7 @@ const Tratamentos: React.FC = () => {
     filterProf,
     filterUnit,
     filterStatus,
+    integrityOnly,
     debouncedSearchTerm,
   ]);
   sessionsScopeRef.current = JSON.stringify([
@@ -471,13 +474,14 @@ const Tratamentos: React.FC = () => {
       // Server-side paginated cycles via RPC (lightweight, with stats only)
       const isProf = user?.role === "profissional";
 
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_scoped', {
         p_page: currentPage,
         p_page_size: PAGE_SIZE,
         p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
         p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictTreatmentUnit ? user?.unidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
         p_search: debouncedSearchTerm || null,
+        p_integrity_only: user?.role === 'master' && integrityOnly,
         p_only_own_professional: false, // already handled via p_professional_id
       });
 
@@ -495,7 +499,7 @@ const Tratamentos: React.FC = () => {
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [user, restrictTreatmentUnit, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
+  }, [user, restrictTreatmentUnit, currentPage, filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
@@ -534,7 +538,7 @@ const Tratamentos: React.FC = () => {
           .in("paciente_id", patientIds)
           .eq("profissional_id", cycle.professional_id)
           .eq("unidade_id", cycle.unit_id)
-          .in("data", [...new Set(sessionsData.map((session) => session.scheduled_date))])
+          .in("data", [...new Set(sessionsData.flatMap((session) => session.scheduled_date ? [session.scheduled_date] : []))])
           .not("status", "in", '("cancelado","falta","remarcado")');
         if (user?.unidadeId && user?.usuario !== 'admin.sms') {
           agQuery = agQuery.eq("unidade_id", user.unidadeId);
@@ -580,8 +584,6 @@ const Tratamentos: React.FC = () => {
             for (const id of scopedAppointmentIds) delete next[id];
             return { ...next, ...byId };
           });
-
-
         }
       }
     } catch (err) {
@@ -613,7 +615,7 @@ const Tratamentos: React.FC = () => {
     // Primeiro load: com spinner. Re-loads (busca/filtros/paginação): silencioso
     // para não desmontar o input de busca e causar perda de foco a cada tecla.
     loadData(!wasFirst);
-  }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm, currentPage, loadData]);
+  }, [filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm, currentPage, loadData]);
 
   // Lazy load sessions when a cycle is selected
   useEffect(() => {
@@ -682,7 +684,7 @@ const Tratamentos: React.FC = () => {
   // Reset pagination when filters/search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
+  }, [filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm]);
 
   // Remove sync filters that cause auto-resetting bugs when lists load asynchronously
   // The Select component handles missing values gracefully by showing placeholder/Todos
@@ -735,7 +737,7 @@ const Tratamentos: React.FC = () => {
       unitId: cycle.unit_id,
       appointmentById: session.appointment_id ? appointmentByIdMap[session.appointment_id] || null : null,
       claimedAppointmentIds,
-      sameDayCandidates: agendamentoMap[treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date)] || [],
+      sameDayCandidates: agendamentoMap[treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date || '')] || [],
     }), [agendamentoMap, appointmentByIdMap, claimedAppointmentIds]);
 
   const cycleExtensions = useMemo(() => {
@@ -910,11 +912,11 @@ const Tratamentos: React.FC = () => {
       }
 
       const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
-      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges);
+      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges, new Set(getAvailableDates(newCycle.professional_id, newCycle.unit_id || prof?.unidadeId || "")));
       const endDate = calcEndDateFromSessions(sessionDates);
 
       if (skippedCount > 0) {
-        toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
+        toast.info(`${skippedCount} sessão(ões) foram realocadas por feriados, bloqueios ou indisponibilidade da agenda.`);
       }
 
       const cycleData = await treatmentCycleWriter.create({
@@ -1234,6 +1236,7 @@ const Tratamentos: React.FC = () => {
     duplicateScope: 'patient' | 'patient_professional',
     checkPatientAbsenceBlock = false,
     manualCapacityOverride = false,
+    reason?: string,
   ) => {
     if (getSessionIntegrity(session, cycle).kind !== "pendente") {
       throw new Error("Esta sessão não está pendente para agendamento. Recarregue o ciclo e revise o vínculo com a Agenda.");
@@ -1266,6 +1269,7 @@ const Tratamentos: React.FC = () => {
       cycle,
       appointment,
       duplicateScope,
+      reason,
       checkPatientAbsenceBlock,
       manualCapacityOverride,
     });
@@ -1509,7 +1513,6 @@ const Tratamentos: React.FC = () => {
     } catch {}
 
     try {
-      await assertStoredTreatmentCycle(cycle.id);
       for (const sess of pendentes) {
         try {
           // Um registro semelhante precisa de revisão explícita; não vinculamos histórico automaticamente.
@@ -1667,6 +1670,7 @@ const Tratamentos: React.FC = () => {
     newDate: string,
     newTime?: string,
     checkPatientConflict = false,
+    providedReason?: string,
   ) => {
     if (getSessionIntegrity(session, cycle).kind !== "agendada") {
       throw new Error("A remarcação exige um vínculo ativo e confirmado entre a sessão e a Agenda.");
@@ -1689,7 +1693,7 @@ const Tratamentos: React.FC = () => {
       }
     }
     const oldDate = session.scheduled_date;
-    const reason = window.prompt("Justificativa obrigatória para remarcar esta sessão:")?.trim();
+    const reason = providedReason?.trim() || window.prompt("Justificativa obrigatória para remarcar esta sessão:")?.trim();
     if (!reason) throw new Error("Remarcação não realizada: informe uma justificativa.");
     const result = await treatmentSessionOperations.reschedule({
       reason,
@@ -1775,7 +1779,7 @@ const Tratamentos: React.FC = () => {
       const newTotal = freshCycle.total_sessions + extensionForm.new_sessions;
 
       // Determine weekdays from existing sessions or fallback
-      const existingSessions = freshSessions;
+      const existingSessions = freshSessions.filter((session) => !!session.scheduled_date);
       const weekdaysFromExisting = [...new Set(existingSessions.map(s => {
         const d = new Date(s.scheduled_date + 'T12:00:00');
         const dow = d.getDay();
@@ -1784,7 +1788,7 @@ const Tratamentos: React.FC = () => {
 
       // Find last existing session date as start for new sessions
       const lastSessionDate = existingSessions.length > 0
-        ? existingSessions.sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date))[0].scheduled_date
+        ? existingSessions.sort((a, b) => (b.scheduled_date || '').localeCompare(a.scheduled_date || ''))[0].scheduled_date
         : selectedCycle.start_date;
 
       const nextDay = new Date(lastSessionDate + 'T12:00:00');
@@ -1798,6 +1802,7 @@ const Tratamentos: React.FC = () => {
         weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [],
         extensionForm.new_sessions,
         blockedRanges,
+        new Set(getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id)),
       );
 
       if (skippedCount > 0) {
@@ -2352,10 +2357,7 @@ const Tratamentos: React.FC = () => {
                 </Button>
               )}
             </div>
-            {cycleIntegrityIssues.length > 0 && <div role="alert" className="mb-3 space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-              {cycleIntegrityIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}
-              <p className="font-medium">Revisão humana necessária. Nenhum dado será corrigido automaticamente.</p>
-            </div>}
+            <TreatmentCyclePendingPanel cycle={selectedCycle} sessions={cycleSessions} issues={cycleIntegrityIssues} appointments={appointmentByIdMap} canReview={canControlSessions && cycleIsClinicallyActive} availableDates={getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id)} onChanged={async () => { await loadSessionsForCycle(selectedCycle, false); await loadData(true); }} />
             <div className="max-h-[500px] overflow-y-auto border rounded-lg">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
@@ -2387,7 +2389,7 @@ const Tratamentos: React.FC = () => {
                           <p className="text-sm text-foreground">
                             {s.scheduled_date
                               ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
-                              : "—"}
+                              : "Sem data — aguarda agendamento"}
                             {effectiveIsPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
                             {duplicateDate && <span className="ml-2 text-xs text-destructive font-medium">· Data duplicada — revisão necessária</span>}
                             {!duplicateDate && integrity.kind === "possivel_sem_vinculo" && (
@@ -2448,20 +2450,6 @@ const Tratamentos: React.FC = () => {
                           </div>
                         )}
 
-                        {canControlSessions && cycleIsClinicallyActive && s.status === 'pendente_agendamento' && !s.appointment_id && (
-                          <Button size="sm" variant="outline" onClick={async () => {
-                            const date = window.prompt('Nova data prevista (AAAA-MM-DD):', s.scheduled_date)?.trim();
-                            if (!date || date === s.scheduled_date) return;
-                            const reason = window.prompt('Justificativa obrigatória da revisão:')?.trim();
-                            if (!reason) return;
-                            try {
-                              const { error } = await (supabase as any).rpc('review_treatment_session_date', { p_session_id: s.id, p_expected_date: s.scheduled_date, p_date: date, p_reason: reason });
-                              if (error) throw error;
-                              await loadSessionsForCycle(selectedCycle, false);
-                              toast.success('Data revisada. Histórico e vínculo existente preservados.');
-                            } catch (error: any) { toast.error(error.message || 'Não foi possível revisar a data.'); }
-                          }}>Revisar data</Button>
-                        )}
                         {canControlSessions && integrity.kind === 'possivel_sem_vinculo' && integrity.candidates.length === 1 && !duplicateDate && (
                           <Button size="sm" variant="outline" onClick={async () => {
                             const reason = window.prompt('Justificativa obrigatória para vincular este agendamento:')?.trim();
@@ -2954,7 +2942,7 @@ const Tratamentos: React.FC = () => {
           getTurnoInfo={getTurnoInfo}
           getConfiguredWindows={getTreatmentConfiguredWindows}
           allowCapacityOverride={canControlSessions}
-          onConfirm={async (data, hora, salaId) => {
+          onConfirm={async (data, hora, salaId, reason) => {
             if (!agendarSessaoTarget || !selectedCycle || agendandoSessao) return;
             setAgendarSessaoData(data);
             setAgendarSessaoHora(hora);
@@ -2970,6 +2958,7 @@ const Tratamentos: React.FC = () => {
                 "patient",
                 true,
                 canControlSessions,
+                reason,
               );
             } finally {
               setAgendandoSessao(false);
@@ -3005,11 +2994,11 @@ const Tratamentos: React.FC = () => {
           getTurnoInfo={getTurnoInfo}
           getConfiguredWindows={getTreatmentConfiguredWindows}
           allowCapacityOverride={canControlSessions}
-          onConfirm={async (data, hora, _salaId) => {
+          onConfirm={async (data, hora, _salaId, reason) => {
             if (!remarcarTarget || !selectedCycle || remarcarSaving) return;
             setRemarcarSaving(true);
             try {
-              await remarcationTreatmentSession(remarcarTarget, selectedCycle, data, hora, true);
+              await remarcationTreatmentSession(remarcarTarget, selectedCycle, data, hora, true, reason);
             } finally {
               setRemarcarSaving(false);
             }
@@ -3176,6 +3165,7 @@ const Tratamentos: React.FC = () => {
         )}
       </div>
 
+      {isMaster && <label className="flex items-center gap-2 text-sm"><Checkbox checked={integrityOnly} onCheckedChange={(value) => { setIntegrityOnly(value === true); setCurrentPage(1); }} />Pendências de integridade</label>}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input

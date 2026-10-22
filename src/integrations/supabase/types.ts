@@ -3644,7 +3644,7 @@ export type Database = {
           patient_id: string
           procedure_done: string
           professional_id: string
-          scheduled_date: string
+          scheduled_date: string | null
           session_number: number
           status: string
           tipo_falta: string | null
@@ -3665,7 +3665,7 @@ export type Database = {
           patient_id: string
           procedure_done?: string
           professional_id: string
-          scheduled_date?: string
+          scheduled_date?: string | null
           session_number?: number
           status?: string
           tipo_falta?: string | null
@@ -3686,7 +3686,7 @@ export type Database = {
           patient_id?: string
           procedure_done?: string
           professional_id?: string
-          scheduled_date?: string
+          scheduled_date?: string | null
           session_number?: number
           status?: string
           tipo_falta?: string | null

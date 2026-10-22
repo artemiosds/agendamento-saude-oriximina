@@ -30,3 +30,11 @@ describe('geração completa de novos planos', () => {
     expect(() => generateSessionDatesWithInfo('2026-10-19', 'manual', [], 7, [{ start: '2026-01-01', end: '2030-12-31' }])).toThrow('Nenhum plano foi salvo');
   });
 });
+
+
+it('pula datas sem disponibilidade ao gerar um novo ciclo completo', () => {
+  const available = new Set(['2030-01-07','2030-01-21','2030-02-04','2030-02-18','2030-03-04','2030-03-18','2030-04-01']);
+  const result = generateSessionDatesWithInfo('2030-01-07','1x_semana',[1],7,[],available);
+  expect(result.dates).toEqual([...available]);
+  expect(() => generateSessionDatesWithInfo('2030-01-07','1x_semana',[1],7,[],new Set())).toThrow('Geração incompleta');
+});
