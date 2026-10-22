@@ -80,3 +80,8 @@ describe('sessões com falta registrada', () => {
     });
   }
 });
+
+
+it('não sugere agendamento já vinculado a outra sessão, inclusive em outro ciclo', () => {
+  expect(resolveTreatmentSessionIntegrity({ session: session(), unitId: 'unit-1', appointmentById: null, sameDayCandidates: [appointment], claimedAppointmentIds: new Set([appointment.id]) })).toEqual({ kind: 'pendente' });
+});

@@ -52,7 +52,7 @@ import { addDaysToDateStr, cn, isoDayOfWeek, todayLocalStr } from "@/lib/utils";
 import { isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
-import { autoFixInvalidTreatmentSessions } from "@/lib/treatmentSessionAutoFix";
+import { validateTreatmentCycle } from "@/lib/treatmentCycleIntegrity";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { AltaTratamentoDialog } from "@/components/tratamentos/AltaTratamentoDialog";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -251,7 +251,7 @@ const Tratamentos: React.FC = () => {
 
   // Agendar ciclo completo
   const [agendandoCiclo, setAgendandoCiclo] = useState(false);
-  const [corrigindoDatasInvalidas, setCorrigindoDatasInvalidas] = useState(false);
+  const [claimedAppointmentIds, setClaimedAppointmentIds] = useState<Set<string>>(new Set());
   const agendarCicloInFlightRef = useRef(false);
   const [resumoCiclo, setResumoCiclo] = useState<ResumoSessaoItem[] | null>(null);
 
@@ -417,7 +417,6 @@ const Tratamentos: React.FC = () => {
   const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
   const loadDataRequestsRef = useRef(createRequestGeneration());
   const loadSessionsRequestsRef = useRef(createRequestGeneration());
-  const autoLinkAttemptsRef = useRef<Set<string>>(new Set());
   const pageMountedRef = useRef(false);
   const selectedCycleIdRef = useRef<string | null>(selectedCycle?.id || null);
   const loadDataScopeRef = useRef("");
@@ -525,6 +524,9 @@ const Tratamentos: React.FC = () => {
           .from("agendamentos")
           .select("id, data, hora, status, paciente_id, profissional_id, unidade_id")
           .in("paciente_id", patientIds)
+          .eq("profissional_id", cycle.professional_id)
+          .eq("unidade_id", cycle.unit_id)
+          .in("data", [...new Set(sessionsData.map((session) => session.scheduled_date))])
           .not("status", "in", '("cancelado","falta","remarcado")');
         if (user?.unidadeId && user?.usuario !== 'admin.sms') {
           agQuery = agQuery.eq("unidade_id", user.unidadeId);
@@ -538,6 +540,12 @@ const Tratamentos: React.FC = () => {
         ]);
         if (activeResult.error) throw activeResult.error;
         if (linkedResult.error) throw linkedResult.error;
+        const candidateIds = [...new Set([...(activeResult.data || []).map((a) => a.id), ...linkedAppointmentIds])];
+        const claims = candidateIds.length
+          ? await supabase.from("treatment_sessions").select("id, appointment_id").in("appointment_id", candidateIds)
+          : { data: [], error: null };
+        if (claims.error) throw claims.error;
+        if (isCurrentRequest()) setClaimedAppointmentIds(new Set((claims.data || []).flatMap((claim) => claim.appointment_id ? [claim.appointment_id] : [])));
         const agData = (activeResult.data || []) as TreatmentAppointmentSnapshot[];
         const linkedData = (linkedResult.data || []) as TreatmentAppointmentSnapshot[];
         if (isCurrentRequest()) {
@@ -565,62 +573,7 @@ const Tratamentos: React.FC = () => {
             return { ...next, ...byId };
           });
 
-          // Sincronização Agenda → Gestão: sessão pendente com exatamente um
-          // agendamento ativo do mesmo paciente/profissional/unidade/data (qualquer
-          // horário) e ainda não vinculado a outra sessão é vinculada pelo RPC
-          // validado no banco. Mais de um candidato continua exigindo revisão humana.
-          if (cycle.status === "em_andamento") {
-            const usedIds = new Set(linkedAppointmentIds);
-            const toLink: { session: TreatmentSession; appointmentId: string }[] = [];
-            for (const session of sessionsData) {
-              if (session.status !== "pendente_agendamento" || session.appointment_id) continue;
-              const key = treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date);
-              const candidates = (groupedCandidates[key] || []).filter((a) => !usedIds.has(a.id));
-              if (candidates.length !== 1) continue;
-              const attemptKey = `${session.id}|${candidates[0].id}`;
-              if (autoLinkAttemptsRef.current.has(attemptKey)) continue;
-              autoLinkAttemptsRef.current.add(attemptKey);
-              usedIds.add(candidates[0].id);
-              toLink.push({ session, appointmentId: candidates[0].id });
-            }
-            if (toLink.length > 0) {
-              let linked = 0;
-              for (const item of toLink) {
-                try {
-                  await treatmentSessionOperations.linkExistingAppointment({ session: item.session, cycle, appointmentId: item.appointmentId });
-                  linked++;
-                  void logAction({
-                    acao: "vincular_agenda_automatico",
-                    entidade: "treatment_session",
-                    entidadeId: item.session.id,
-                    modulo: "tratamentos",
-                    user,
-                    detalhes: {
-                      ciclo_id: cycle.id,
-                      sessao: item.session.session_number,
-                      data: item.session.scheduled_date,
-                      agendamento_id: item.appointmentId,
-                      motivo_alteracao: "Sincronização automática: agendamento existente na Agenda (mesmo paciente, profissional, unidade e data).",
-                    },
-                  });
-                } catch (linkErr) {
-                  console.warn("Vínculo automático não aplicado:", linkErr);
-                }
-              }
-              if (linked > 0 && isCurrentRequest()) {
-                const refreshed = (await treatmentService.getSessions(cycle.id)) as TreatmentSession[];
-                if (isCurrentRequest() && refreshed) {
-                  setSessions((prev) => [...prev.filter((s) => s.cycle_id !== cycle.id), ...refreshed]);
-                  const byIdLinked: Record<string, TreatmentAppointmentSnapshot> = {};
-                  for (const item of toLink) {
-                    const appt = agData.find((a) => a.id === item.appointmentId);
-                    if (appt) byIdLinked[appt.id] = appt;
-                  }
-                  setAppointmentByIdMap((prev) => ({ ...prev, ...byIdLinked }));
-                }
-              }
-            }
-          }
+
         }
       }
     } catch (err) {
@@ -628,7 +581,7 @@ const Tratamentos: React.FC = () => {
       console.error("Error loading cycle sessions:", err);
       if (!silent) toast.error("Erro ao carregar sessões do ciclo.");
     }
-  }, [user, treatmentSessionOperations, logAction]);
+  }, [user]);
 
   // Primeiro load: com spinner. Re-loads (filtros/busca/paginação): silencioso, sem spinner.
   const firstLoadRef = React.useRef(true);
@@ -653,27 +606,6 @@ const Tratamentos: React.FC = () => {
     // para não desmontar o input de busca e causar perda de foco a cada tecla.
     loadData(!wasFirst);
   }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm, currentPage, loadData]);
-
-  // Datas inválidas só são reparadas por uma ação explícita; abrir a página é leitura.
-  const handleCorrigirDatasInvalidas = async () => {
-    if (!window.confirm('Verificar sessões em fim de semana ou bloqueadas? As sessões afetadas voltarão para “Aguardando agendamento” e seus agendamentos serão cancelados.')) return;
-    setCorrigindoDatasInvalidas(true);
-    try {
-      const result = await autoFixInvalidTreatmentSessions();
-      if (result.fixed > 0) {
-        toast.success(`${result.fixed} sessão(ões) inválida(s) foram devolvidas para “Aguardando agendamento”.`);
-        await loadData(true);
-      } else {
-        toast.info('Nenhuma sessão agendada em fim de semana ou bloqueio foi encontrada.');
-      }
-      if (result.errors > 0) toast.error(`Falha ao corrigir ${result.errors} sessão(ões).`);
-    } catch (error: any) {
-      if (error?.result?.fixed > 0) await loadData(true);
-      toast.error(error?.message || 'Erro ao corrigir sessões em datas inválidas.');
-    } finally {
-      setCorrigindoDatasInvalidas(false);
-    }
-  };
 
   // Lazy load sessions when a cycle is selected
   useEffect(() => {
@@ -779,6 +711,10 @@ const Tratamentos: React.FC = () => {
     return sessions.filter((s) => s.cycle_id === selectedCycle.id).sort((a, b) => a.session_number - b.session_number);
   }, [selectedCycle, sessions]);
 
+  const cycleIntegrityIssues = useMemo(() => selectedCycle && loadedSessionsCycleId === selectedCycle.id
+    ? validateTreatmentCycle(selectedCycle, cycleSessions) : [], [selectedCycle, cycleSessions, loadedSessionsCycleId]);
+  const duplicateDateSessionIds = useMemo(() => new Set(cycleIntegrityIssues.filter((issue) => issue.code === 'date').flatMap((issue) => issue.sessionIds)), [cycleIntegrityIssues]);
+
   const getSessionIntegrity = useCallback((session: TreatmentSession, cycle: TreatmentCycle) =>
     resolveTreatmentSessionIntegrity({
       session: {
@@ -790,8 +726,9 @@ const Tratamentos: React.FC = () => {
       },
       unitId: cycle.unit_id,
       appointmentById: session.appointment_id ? appointmentByIdMap[session.appointment_id] || null : null,
+      claimedAppointmentIds,
       sameDayCandidates: agendamentoMap[treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date)] || [],
-    }), [agendamentoMap, appointmentByIdMap]);
+    }), [agendamentoMap, appointmentByIdMap, claimedAppointmentIds]);
 
   const cycleExtensions = useMemo(() => {
     if (!selectedCycle) return [];
@@ -2214,18 +2151,6 @@ const Tratamentos: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
           </Button>
           <h1 className="text-xl font-bold font-display text-foreground">Detalhe do Ciclo</h1>
-          {can('tratamento', 'can_view') && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCorrigirDatasInvalidas}
-              disabled={corrigindoDatasInvalidas || agendandoCiclo}
-              className={!canAgendarSessao || !cycleIsClinicallyActive || pendingCount === 0 ? "ml-auto" : ""}
-            >
-              {corrigindoDatasInvalidas && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Verificar datas inválidas
-            </Button>
-          )}
           {canAgendarSessao && cycleIsClinicallyActive && pendingCount > 0 && (
             <Button
               size="sm"
@@ -2536,7 +2461,8 @@ const Tratamentos: React.FC = () => {
         <Card className="shadow-card border-0">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-foreground">Sessões</h3>
+              <div><h3 className="font-semibold text-foreground">Sessões</h3>
+                <p className="text-sm text-muted-foreground">{loadedSessionsCycleId === selectedCycle.id ? `${cycleSessions.length} de ${selectedCycle.total_sessions} sessões registradas` : 'Carregando sessões…'}</p></div>
               {canControlSessions && cycleIsClinicallyActive && (
                 <Button
                   size="sm"
@@ -2548,15 +2474,20 @@ const Tratamentos: React.FC = () => {
                 </Button>
               )}
             </div>
+            {cycleIntegrityIssues.length > 0 && <div role="alert" className="mb-3 space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              {cycleIntegrityIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}
+              <p className="font-medium">Revisão humana necessária. Nenhum dado será corrigido automaticamente.</p>
+            </div>}
             <div className="max-h-[500px] overflow-y-auto border rounded-lg">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const integrity = getSessionIntegrity(s, selectedCycle);
+                  const duplicateDate = duplicateDateSessionIds.has(s.id);
                   const isPendente = integrity.kind === "pendente";
                   const isAgendada = integrity.kind === "agendada";
-                  const isInconsistent = integrity.kind === "possivel_sem_vinculo" || integrity.kind === "appointment_id_inexistente" || integrity.kind === "vinculo_divergente";
+                  const isInconsistent = duplicateDate || integrity.kind === "possivel_sem_vinculo" || integrity.kind === "appointment_id_inexistente" || integrity.kind === "vinculo_divergente";
                   const effectiveStatus = isAgendada ? "agendada" : isPendente ? "pendente_agendamento" : s.status;
-                  const effectiveIsPendente = isPendente;
+                  const effectiveIsPendente = isPendente && !duplicateDate;
                   const canRemarcarThis = canAgendarSessao && isAgendada && cycleIsClinicallyActive;
                   const isRealizada = s.status === "realizada";
 
@@ -2572,7 +2503,7 @@ const Tratamentos: React.FC = () => {
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-mono font-bold text-primary w-10 text-center shrink-0">
-                          {s.session_number}/{s.total_sessions}
+                          {s.session_number}/{selectedCycle.total_sessions}
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-foreground">
@@ -2580,7 +2511,8 @@ const Tratamentos: React.FC = () => {
                               ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
                               : "—"}
                             {effectiveIsPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
-                            {integrity.kind === "possivel_sem_vinculo" && (
+                            {duplicateDate && <span className="ml-2 text-xs text-destructive font-medium">· Data duplicada — revisão necessária</span>}
+                            {!duplicateDate && integrity.kind === "possivel_sem_vinculo" && (
                               <span className="ml-2 text-xs text-warning font-medium">· Possível agendamento sem vínculo — regularização necessária</span>
                             )}
                             {integrity.kind === "appointment_id_inexistente" && (

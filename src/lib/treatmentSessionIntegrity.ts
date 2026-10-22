@@ -37,6 +37,7 @@ export function resolveTreatmentSessionIntegrity(input: {
   unitId: string;
   appointmentById: TreatmentAppointmentSnapshot | null;
   sameDayCandidates: TreatmentAppointmentSnapshot[];
+  claimedAppointmentIds?: ReadonlySet<string>;
 }): TreatmentSessionIntegrityState {
   const { session, unitId, appointmentById, sameDayCandidates } = input;
 
@@ -68,7 +69,8 @@ export function resolveTreatmentSessionIntegrity(input: {
   if (session.status !== 'pendente_agendamento') return { kind: 'estado_protegido' };
 
   const candidates = sameDayCandidates.filter((appointment) =>
-    appointment.paciente_id === session.patient_id
+    !input.claimedAppointmentIds?.has(appointment.id)
+    && appointment.paciente_id === session.patient_id
     && appointment.profissional_id === session.professional_id
     && appointment.unidade_id === unitId
     && appointment.data === session.scheduled_date
