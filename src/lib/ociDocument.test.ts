@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyOciData, renderOciDocument, type OciPatientData } from "./ociDocument";
+import { createEmptyOciData, renderOciDocument, resolveOciEthnicity, type OciPatientData } from "./ociDocument";
+import { getCodigoIbge } from "@/lib/municipiosIbge";
 
 const paciente: OciPatientData = {
   nome: "Paciente de teste",
@@ -78,4 +79,37 @@ describe("documento OCI", () => {
     }));
     expect(countRows(renderOciDocument(data))).toBe(17);
   });
+
+  it("formata município e raça/cor em maiúsculas no documento sem alterar os dados de origem", () => {
+    const data = createEmptyOciData({
+      ...paciente,
+      municipio: "Oriximiná",
+      codigoIbge: "1505304",
+      racaCor: "parda",
+      etnia: resolveOciEthnicity("X238"),
+    }, profissional, "", "");
+    const html = renderOciDocument(data);
+    const pacienteSection = html.split('IDENTIFICAÇÃO DO PACIENTE</div>')[1]
+      .split('JUSTIFICATIVA DO(S) PROCEDIMENTO(S) SOLICITADO(S)</div>')[0];
+
+    expect(pacienteSection).toContain("ORIXIMINÁ");
+    expect(pacienteSection).toContain("1505304");
+    expect(pacienteSection).toContain("PARDA");
+    expect(pacienteSection).toContain("X238 — MUNDURUKÚ");
+    expect(data.paciente.municipio).toBe("Oriximiná");
+    expect(data.paciente.racaCor).toBe("parda");
+  });
+
+  it("resolve o código IBGE a partir do município e UF quando o cadastro não tem código", () => {
+    expect(getCodigoIbge("Oriximiná", "PA")).toBe("1505304");
+    expect(getCodigoIbge("ORIXIMINÁ", "pa")).toBe("1505304");
+    expect(getCodigoIbge("", "PA")).toBe("");
+  });
+
+  it("resolve etnia pelo código e usa a descrição informada para X999", () => {
+    expect(resolveOciEthnicity("X238")).toBe("X238 — Mundurukú");
+    expect(resolveOciEthnicity("x999", "WAI-WAI")).toBe("X999 — WAI-WAI");
+    expect(resolveOciEthnicity("")).toBe("");
+  });
+
 });

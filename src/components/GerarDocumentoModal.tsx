@@ -23,11 +23,13 @@ import { applyTemplateValues } from '@/lib/templateVariables';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 import { READY_TEMPLATES } from '@/lib/readyTemplates';
+import { getCodigoIbge } from "@/lib/municipiosIbge";
 import StructuredOciForm from '@/components/documents/StructuredOciForm';
 import {
   buildOciAddress,
   createEmptyOciData,
   renderOciDocument,
+  resolveOciEthnicity,
   type OciStructuredData,
   type OciTemplateMeta,
 } from '@/lib/ociDocument';
@@ -521,22 +523,29 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       if (!cancelled) setOciCbo(cbo);
     });
 
+    const municipio = pick("municipio", "cidade");
+    const uf = pick("uf", "estado");
+    const codigoIbgeSalvo = pick(
+      "ibge_municipio", "ibgeMunicipio", "municipio_ibge", "municipioIbge",
+      "codigo_ibge", "codigoIbge", "cod_ibge", "codIbge", "ibge",
+    );
+    const codigoIbge = codigoIbgeSalvo || getCodigoIbge(municipio, uf);
     const pacienteData = {
       nome: pick("nome") || paciente?.nome || "",
       sexo: pick("sexo"),
       prontuario: pick("numero_prontuario", "prontuario", "id") || paciente?.id || "",
       cns: pick("cns"),
       dataNascimento: pick("data_nascimento"),
-      racaCor: pick("raca_cor"),
-      etnia: pick("etnia"),
+      racaCor: pick("raca_cor", "racaCor", "raca"),
+      etnia: resolveOciEthnicity(pick("etnia"), pick("etnia_outra", "etniaOutra")),
       nomeMae: pick("nome_mae"),
       nomeResponsavel: pick("nome_responsavel", "responsavel_nome"),
       telefone: pick("telefone"),
       telefoneResponsavel: pick("telefone_responsavel", "responsavel_telefone"),
       enderecoCompleto: buildOciAddress(raw),
-      municipio: pick("municipio", "cidade"),
-      codigoIbge: pick("municipio_ibge", "codigo_ibge", "ibge"),
-      uf: pick("uf"),
+      municipio,
+      codigoIbge,
+      uf,
       cep: pick("cep"),
     };
 

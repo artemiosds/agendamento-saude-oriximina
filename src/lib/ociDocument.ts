@@ -128,6 +128,25 @@ export const buildOciAddress = (raw: any): string => {
   return partesEstruturadas.join(", ");
 };
 
+const OCI_ETHNICITY_LABELS: Record<string, string> = {
+  X101: "X101 — Apalai",
+  X117: "X117 — Arara do Pará",
+  X238: "X238 — Mundurukú",
+  X298: "X298 — Wai-Wai",
+  X305: "X305 — Tiriyó",
+  X313: "X313 — Yanomami",
+};
+
+/** Resolve official ethnicity labels without inventing missing patient data. */
+export function resolveOciEthnicity(value: unknown, otherValue?: unknown): string {
+  const codeOrName = String(value ?? "").trim();
+  const other = String(otherValue ?? "").trim();
+  if (!codeOrName) return other;
+  const code = codeOrName.toLocaleUpperCase("pt-BR");
+  if (code === "X999") return other ? `X999 — ${other}` : "X999 — Outra";
+  return OCI_ETHNICITY_LABELS[code] || codeOrName;
+}
+
 export const createEmptyOciData = (
   paciente: OciPatientData,
   profissional: OciProfessionalData,
@@ -184,7 +203,12 @@ export const renderOciDocument = (
          <img src="${logoCerIi}" alt="Secretaria Municipal de Saúde e Prefeitura de Oriximiná" />
        </div>`;
 
-  const p = data.paciente;
+  const p = {
+    ...data.paciente,
+    municipio: String(data.paciente.municipio || "").trim().toLocaleUpperCase("pt-BR"),
+    racaCor: String(data.paciente.racaCor || "").trim().toLocaleUpperCase("pt-BR"),
+    etnia: String(data.paciente.etnia || "").trim().toLocaleUpperCase("pt-BR"),
+  };
   const a = data.autorizacao;
 
   const valueStyle = (value: unknown, normal = 7.5, compact = 6.3, threshold = 58) =>
