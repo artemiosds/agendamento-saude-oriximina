@@ -109,27 +109,18 @@ async function resolveLinkedAppointment(params: {
   if (params.appointmentId) {
     const { data, error } = await (supabase as any)
       .from('agendamentos')
-      .select('id, hora, status')
+      .select('id, hora, status, paciente_id, profissional_id, data')
       .eq('id', params.appointmentId)
       .maybeSingle();
 
     if (error) throw error;
-    if (data) return data as { id: string; hora: string; status: string };
+    if (!data || data.paciente_id !== params.patientId || data.profissional_id !== params.professionalId || data.data !== params.scheduledDate) {
+      throw new Error('Vínculo de agendamento divergente. Revise a sessão sem alterar o histórico.');
+    }
+    return data as { id: string; hora: string; status: string };
   }
 
-  const { data, error } = await (supabase as any)
-    .from('agendamentos')
-    .select('id, hora, status')
-    .eq('paciente_id', params.patientId)
-    .eq('profissional_id', params.professionalId)
-    .eq('data', params.scheduledDate)
-    .not('status', 'in', '("cancelado","falta","remarcado")')
-    .order('criado_em', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data as { id: string; hora: string; status: string } | null) || null;
+  return null; // Never infer or attach an appointment from a matching date.
 }
 
 async function countCompletedSessions(cycleId: string) {

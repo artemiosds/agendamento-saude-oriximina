@@ -42,16 +42,17 @@ describe('treatmentSessionOperations: batch link to existing appointment', () =>
     });
 
     const result = await ctx.service.linkExistingAppointment({
-      session: session(), cycle: cycle(), appointmentId: appointment.id,
+      session: session(), cycle: cycle(), appointmentId: appointment.id, reason: 'Revisão manual',
     });
 
     expect(result.status).toBe('ja_agendado');
     expect(result.appointment?.id).toBe(appointment.id);
-    expect(ctx.rpc).toHaveBeenCalledWith('link_existing_treatment_session_appointment', {
+    expect(ctx.rpc).toHaveBeenCalledWith('link_treatment_session_checked', {
       p_session_id: 'session-1',
       p_cycle_id: 'cycle-1',
       p_expected_session_date: '2026-09-28',
       p_appointment_id: appointment.id,
+      p_reason: 'Revisão manual',
     });
     expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id }));
   });
@@ -71,7 +72,7 @@ describe('treatmentSessionOperations: batch link to existing appointment', () =>
   ])('não sincroniza estado local quando a operação é recusada: $label', async ({ response }) => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue(response);
-    await expect(ctx.service.linkExistingAppointment({ session: session(), cycle: cycle(), appointmentId: appointment.id }))
+    await expect(ctx.service.linkExistingAppointment({ session: session(), cycle: cycle(), appointmentId: appointment.id, reason: 'Revisão manual' }))
       .rejects.toThrow();
     expect(ctx.applyTreatmentAgendamentoUpdate).not.toHaveBeenCalled();
   });
@@ -81,7 +82,7 @@ describe('treatmentSessionOperations: batch link to existing appointment', () =>
     ctx.rpc
       .mockResolvedValueOnce({ data: { status: 'ja_agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null })
       .mockResolvedValueOnce({ data: { status: 'ja_agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null });
-    const input = { session: session(), cycle: cycle(), appointmentId: appointment.id };
+    const input = { session: session(), cycle: cycle(), appointmentId: appointment.id, reason: 'Revisão manual' };
 
     const results = await Promise.all([
       ctx.service.linkExistingAppointment(input),
@@ -116,12 +117,14 @@ function setup() {
   const findDuplicate = vi.fn(async () => null);
   const ensurePatientCanBeScheduled = vi.fn(async () => undefined);
   const isDateBlocked = vi.fn(async () => false);
+  const validateCycle = vi.fn(async () => undefined);
   const service = createTreatmentSessionOperations({
+    validateCycle,
     client: { rpc },
     agenda: { addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate },
     findDuplicate, ensurePatientCanBeScheduled, isDateBlocked,
   });
-  return { service, rpc, addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate, findDuplicate, ensurePatientCanBeScheduled, isDateBlocked, appointmentPresent: () => appointmentPresent, scheduleCommits };
+  return { service, rpc, validateCycle, addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate, findDuplicate, ensurePatientCanBeScheduled, isDateBlocked, appointmentPresent: () => appointmentPresent, scheduleCommits };
 }
 
 describe('treatmentSessionOperations: schedule', () => {
@@ -232,22 +235,22 @@ describe('treatmentSessionOperations: reschedule', () => {
   it('remarca por RPC manual e atualiza a Agenda só após confirmação', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01' } }, error: null });
-    await ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '10:30', manualCapacityOverride: true });
-    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_manual_capacity', expect.objectContaining({ p_expected_appointment_id: appointment.id }));
+    await ctx.service.reschedule({ reason: 'Revisão manual', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '10:30', manualCapacityOverride: true });
+    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_checked', expect.objectContaining({ p_expected_appointment_id: appointment.id, p_manual_capacity: true, p_reason: 'Revisão manual' }));
     expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id, data: '2026-10-01' }));
   });
   it('remarca sessão e sincroniza somente a data no fluxo que não altera hora', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01' } }, error: null });
-    await ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true });
-    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session', expect.objectContaining({ p_new_date: '2026-10-01', p_new_time: null }));
+    await ctx.service.reschedule({ reason: 'Revisão manual', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true });
+    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_checked', expect.objectContaining({ p_new_date: '2026-10-01', p_new_time: null }));
     expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id, data: '2026-10-01', hora: appointment.hora }));
   });
 
   it('preserva a alteração de hora do callback do modal', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01', hora: '11:00' } }, error: null });
-    await ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '11:00', checkPatientConflict: true, bypassBlockCheck: true });
+    await ctx.service.reschedule({ reason: 'Revisão manual', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '11:00', checkPatientConflict: true, bypassBlockCheck: true });
     expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id, data: '2026-10-01', hora: '11:00' }));
   });
 
@@ -255,7 +258,7 @@ describe('treatmentSessionOperations: reschedule', () => {
     const ctx = setup();
     for (const status of ['conflito', 'vinculo_inconsistente', 'estado_protegido', 'duplicado']) {
       ctx.rpc.mockResolvedValueOnce({ data: { status, reason: status }, error: null });
-      await expect(ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true })).rejects.toThrow();
+      await expect(ctx.service.reschedule({ reason: 'Revisão manual', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true })).rejects.toThrow();
     }
     expect(ctx.applyTreatmentAgendamentoUpdate).not.toHaveBeenCalled();
   });
@@ -264,9 +267,9 @@ describe('treatmentSessionOperations: reschedule', () => {
     const ctx = setup();
     ctx.isDateBlocked.mockResolvedValue(true);
     const linkedSession = session({ status: 'agendada', appointment_id: appointment.id });
-    await expect(ctx.service.reschedule({ session: linkedSession, cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('Data bloqueada.');
+    await expect(ctx.service.reschedule({ reason: 'Revisão manual', session: linkedSession, cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('Data bloqueada.');
     ctx.isDateBlocked.mockRejectedValue(new Error('check failed'));
-    await expect(ctx.service.reschedule({ session: linkedSession, cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('check failed');
+    await expect(ctx.service.reschedule({ reason: 'Revisão manual', session: linkedSession, cycle: cycle(), newDate: '2026-10-01' })).rejects.toThrow('check failed');
     expect(ctx.rpc).not.toHaveBeenCalled();
   });
 
@@ -277,7 +280,7 @@ describe('treatmentSessionOperations: reschedule', () => {
   ])('não aplica estado local após %s', async (_label, error) => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: null, error });
-    await expect(ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true })).rejects.toThrow();
+    await expect(ctx.service.reschedule({ reason: 'Revisão manual', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true })).rejects.toThrow();
     expect(ctx.applyTreatmentAgendamentoUpdate).not.toHaveBeenCalled();
   });
 });
@@ -317,5 +320,22 @@ describe('treatmentSessionOperations: unschedule', () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'fora_escopo', reason: 'unit' }, error: null });
     await expect(ctx.service.unschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle({ unit_id: 'unit-other', professional_id: 'staff-other' }) })).rejects.toThrow();
+  });
+});
+
+
+describe('bloqueios de integridade antes de gravar', () => {
+  it('não inicia agendamento nem estado otimista quando o ciclo está incompleto', async () => {
+    const ctx = setup();
+    ctx.validateCycle.mockRejectedValue(new Error('Quantidade incompleta: 6 de 7 sessões.'));
+    await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient' })).rejects.toThrow('6 de 7');
+    expect(ctx.rpc).not.toHaveBeenCalled();
+    expect(ctx.addAgendamentoTransactionally).not.toHaveBeenCalled();
+  });
+  it('exige justificativa de vínculo e de remarcação', async () => {
+    const ctx = setup();
+    await expect(ctx.service.linkExistingAppointment({ session: session(), cycle: cycle(), appointmentId: appointment.id })).rejects.toThrow('justificativa');
+    await expect(ctx.service.reschedule({ session: session({ appointment_id: appointment.id }), cycle: cycle(), newDate: '2027-01-04' })).rejects.toThrow('justificativa');
+    expect(ctx.rpc).not.toHaveBeenCalled();
   });
 });

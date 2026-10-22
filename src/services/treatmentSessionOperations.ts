@@ -20,6 +20,7 @@ export interface AgendaMutationBridge {
 
 export interface TreatmentSessionOperationsDependencies {
   client: TreatmentOperationRpcClient;
+  validateCycle?: (cycleId: string, change?: { sessionId: string; date: string }) => Promise<void>;
   agenda: AgendaMutationBridge;
   findDuplicate: (input: {
     patientId: string;
@@ -39,6 +40,7 @@ function throwRpcError(error: { message?: string; code?: string }): never {
     '23505': 'Já existe um agendamento conflitante para este horário.',
     '23503': 'O vínculo entre a sessão e o agendamento não é válido.',
   };
+  if (['23514', 'P0001'].includes(error.code || '')) throw new Error(error.message || 'Integridade da sessão inválida. Revise o ciclo.');
   const message = error.code ? safeMessages[error.code] : undefined;
   if (message) throw new Error(message);
   throw new Error('Não foi possível concluir a operação da sessão. Verifique a conexão e tente novamente.');
@@ -135,11 +137,15 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
       cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };
       appointmentId: string;
+      reason?: string;
     }): Promise<TreatmentSessionOperationResult> {
       if (!input.appointmentId) {
         throw new Error('Vínculo inconsistente: o agendamento não foi informado. Nenhum dado foi alterado.');
       }
-      const { data, error } = await deps.client.rpc('link_existing_treatment_session_appointment', {
+      if (!input.reason?.trim()) throw new Error('Informe a justificativa do vínculo manual.');
+      await deps.validateCycle?.(input.cycle.id);
+      const { data, error } = await deps.client.rpc('link_treatment_session_checked', {
+        p_reason: input.reason.trim(),
         p_session_id: input.session.id,
         p_cycle_id: input.cycle.id,
         p_expected_session_date: input.session.scheduled_date,
@@ -160,6 +166,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       checkPatientAbsenceBlock?: boolean;
       manualCapacityOverride?: boolean;
     }): Promise<TreatmentSessionOperationResult> {
+      await deps.validateCycle?.(input.cycle.id);
       const duplicate = await deps.findDuplicate({
         patientId: input.cycle.patient_id,
         professionalId: input.duplicateScope === 'patient_professional' ? input.cycle.professional_id : undefined,
@@ -204,6 +211,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       session: { id: string; cycle_id: string; patient_id: string; professional_id: string; scheduled_date: string; status: string; appointment_id: string | null };
       cycle: { id: string; patient_id: string; professional_id: string; unit_id: string; status: string };
       newDate: string;
+      reason?: string;
       newTime?: string;
       checkPatientConflict?: boolean;
       bypassBlockCheck?: boolean;
@@ -212,6 +220,8 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       if (!input.session.appointment_id) {
         throw new Error('Esta sessão não tem um agendamento confirmado para remarcar. Vincule o agendamento existente ou agende a sessão primeiro.');
       }
+      if (!input.reason?.trim()) throw new Error('Informe a justificativa da remarcação.');
+      await deps.validateCycle?.(input.cycle.id, { sessionId: input.session.id, date: input.newDate });
       if (input.checkPatientConflict && input.newTime) {
         const duplicate = await deps.findDuplicate({
           patientId: input.cycle.patient_id,
@@ -227,9 +237,9 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       if (!input.bypassBlockCheck && await deps.isDateBlocked(input.newDate, input.cycle.professional_id, input.cycle.unit_id)) {
         throw new Error('Data bloqueada.');
       }
-      const { data, error } = await deps.client.rpc(input.manualCapacityOverride
-        ? 'reschedule_treatment_session_manual_capacity'
-        : 'reschedule_treatment_session', {
+      const { data, error } = await deps.client.rpc('reschedule_treatment_session_checked', {
+        p_reason: input.reason.trim(),
+        p_manual_capacity: !!input.manualCapacityOverride,
         p_session_id: input.session.id,
         p_cycle_id: input.cycle.id,
         p_expected_session_date: input.session.scheduled_date,

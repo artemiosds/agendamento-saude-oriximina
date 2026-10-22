@@ -173,7 +173,8 @@ export function AltaTratamentoDialog({ open, onOpenChange, cycle, patientName, o
             <Label>Observações finais</Label>
             <Textarea value={finalNotes} onChange={(event) => setFinalNotes(event.target.value)} rows={3} maxLength={4000} />
           </div>
-          <Button onClick={handleSubmit} className="w-full" variant="destructive" disabled={!type || !reason.trim() || saving}>
+          {type === "conclusao" && futureSessions > 0 && <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">Conclusão indisponível: há {futureSessions} sessão(ões) futura(s) pendente(s). Revise o ciclo sem apagar o histórico.</p>}
+          <Button onClick={handleSubmit} className="w-full" variant="destructive" disabled={!type || !reason.trim() || saving || (type === "conclusao" && futureSessions > 0)}>
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Confirmar Alta
           </Button>

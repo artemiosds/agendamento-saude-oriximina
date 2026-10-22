@@ -1,3 +1,4 @@
+import { treatmentCycleWriter } from "@/services/treatmentCycleService";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
@@ -3300,7 +3301,8 @@ const ProntuarioPage: React.FC = () => {
         toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
       }
 
-      const { data: cycleData, error: cycleError } = await supabase.from("treatment_cycles").insert({
+      const cycleData = await treatmentCycleWriter.create({
+        id: crypto.randomUUID(),
         patient_id: form.paciente_id,
         professional_id: user?.id || "",
         unit_id: user?.unidadeId || "",
@@ -3314,19 +3316,7 @@ const ProntuarioPage: React.FC = () => {
         status: "em_andamento",
         clinical_notes: cycleForm.clinical_notes,
         created_by: user?.id || "",
-      }).select().single();
-      if (cycleError) throw cycleError;
-
-      const sessionsToCreate = sessionDates.map((date, i) => ({
-        cycle_id: cycleData.id,
-        patient_id: form.paciente_id,
-        professional_id: user?.id || "",
-        session_number: i + 1,
-        total_sessions: totalSessions,
-        scheduled_date: date,
-        status: "pendente_agendamento",
-      }));
-      await supabase.from("treatment_sessions").insert(sessionsToCreate);
+      }, sessionDates);
 
       await logAction({
         acao: "criar_ciclo_tratamento",

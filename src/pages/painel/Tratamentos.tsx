@@ -52,7 +52,9 @@ import { addDaysToDateStr, cn, isoDayOfWeek, todayLocalStr } from "@/lib/utils";
 import { isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
-import { validateTreatmentCycle } from "@/lib/treatmentCycleIntegrity";
+import { treatmentCycleWriter, assertStoredTreatmentCycle, loadTreatmentCycleSnapshot } from "@/services/treatmentCycleService";
+import { validateTreatmentCycle, assertTreatmentCycle } from "@/lib/treatmentCycleIntegrity";
+import { TreatmentIntegrityReview } from "@/components/tratamentos/TreatmentIntegrityReview";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { AltaTratamentoDialog } from "@/components/tratamentos/AltaTratamentoDialog";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -251,14 +253,16 @@ const Tratamentos: React.FC = () => {
 
   // Agendar ciclo completo
   const [agendandoCiclo, setAgendandoCiclo] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [claimedAppointmentIds, setClaimedAppointmentIds] = useState<Set<string>>(new Set());
   const agendarCicloInFlightRef = useRef(false);
+  const cycleWriteLock = useRef(false);
   const [resumoCiclo, setResumoCiclo] = useState<ResumoSessaoItem[] | null>(null);
 
   // Master: add intermediate session
   const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
   const [intermediateDate, setIntermediateDate] = useState("");
-  const [intermediateAfterSession, setIntermediateAfterSession] = useState(0);
+  const [intermediateReason, setIntermediateReason] = useState("");
   const [addingIntermediate, setAddingIntermediate] = useState(false);
 
   // Submission lock for "Registrar Sessão" to prevent double-clicks
@@ -363,6 +367,10 @@ const Tratamentos: React.FC = () => {
 
   const treatmentSessionOperations = useMemo(() => createTreatmentSessionOperations({
     client: supabase as unknown as TreatmentOperationRpcClient,
+    validateCycle: async (cycleId, change) => {
+      const { cycle, sessions: freshSessions } = await loadTreatmentCycleSnapshot(cycleId);
+      assertTreatmentCycle(cycle, change ? freshSessions.map((session) => session.id === change.sessionId ? { ...session, scheduled_date: change.date } : session) : freshSessions);
+    },
     agenda: {
       addAgendamentoTransactionally,
       deleteAgendamentoTransactionally,
@@ -848,6 +856,7 @@ const Tratamentos: React.FC = () => {
   };
 
   const handleCreateCycle = async (force = false) => {
+    if (cycleWriteLock.current) return;
     if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
       toast.error("Preencha paciente, profissional e tipo de tratamento.");
       return;
@@ -859,31 +868,14 @@ const Tratamentos: React.FC = () => {
 
     if (loading) return; // Guard
     
-    // Aviso de duplicidade: mesmo paciente + mesmo profissional com ciclo não concluído
-    if (!force) {
-      const { data: existingCycles, error: checkError } = await supabase
-        .from("treatment_cycles")
-        .select("*")
-        .eq("patient_id", newCycle.patient_id)
-        .eq("professional_id", newCycle.professional_id)
-        .in("status", ACTIVE_DUPLICATE_STATUSES);
-
-      if (checkError) {
-        console.error("Erro ao verificar duplicidade:", checkError);
-      } else if (existingCycles && existingCycles.length > 0) {
-        setDuplicateConfirm(existingCycles as TreatmentCycle[]);
-        return;
-      }
-    }
-
     const prof = profissionais.find((p) => p.id === newCycle.professional_id);
     const pac = pacientes.find((p) => p.id === newCycle.patient_id);
 
 
     // Total de sessões é o controle principal para TODAS as frequências
     const MAX_SESSIONS = 200;
-    const totalSessions = parseInt(String(newCycle.total_sessions)) || 0;
-    if (!totalSessions || totalSessions < 1) {
+    const totalSessions = Number(newCycle.total_sessions);
+    if (!Number.isInteger(totalSessions) || totalSessions < 1) {
       toast.error("Informe o total de sessões (mínimo 1).");
       return;
     }
@@ -899,18 +891,34 @@ const Tratamentos: React.FC = () => {
       }
     }
 
-    const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
-    const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges);
-    const endDate = calcEndDateFromSessions(sessionDates);
-
-    if (skippedCount > 0) {
-      toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
-    }
-
+    cycleWriteLock.current = true;
     try {
-      const { data: cycleData, error: cycleError } = await supabase
-        .from("treatment_cycles")
-        .insert({
+      // Aviso de duplicidade: mesmo paciente + mesmo profissional com ciclo não concluído
+      if (!force) {
+        const { data: existingCycles, error: checkError } = await supabase
+          .from("treatment_cycles")
+          .select("*")
+          .eq("patient_id", newCycle.patient_id)
+          .eq("professional_id", newCycle.professional_id)
+          .in("status", ACTIVE_DUPLICATE_STATUSES);
+
+        if (checkError) throw checkError;
+        if (existingCycles && existingCycles.length > 0) {
+          setDuplicateConfirm(existingCycles as TreatmentCycle[]);
+          return;
+        }
+      }
+
+      const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
+      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges);
+      const endDate = calcEndDateFromSessions(sessionDates);
+
+      if (skippedCount > 0) {
+        toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
+      }
+
+      const cycleData = await treatmentCycleWriter.create({
+          id: crypto.randomUUID(),
           patient_id: newCycle.patient_id,
           professional_id: newCycle.professional_id,
           unit_id: newCycle.unit_id || prof?.unidadeId || "",
@@ -925,27 +933,7 @@ const Tratamentos: React.FC = () => {
           clinical_notes: newCycle.clinical_notes,
           created_by: user?.id || "",
           pts_id: newCycle.pts_id || null,
-        })
-        .select()
-        .single();
-
-      if (cycleError) throw cycleError;
-
-      const sessionsToCreate = sessionDates.map((date, i) => ({
-        cycle_id: cycleData.id,
-        patient_id: newCycle.patient_id,
-        professional_id: newCycle.professional_id,
-        session_number: i + 1,
-        total_sessions: totalSessions,
-        scheduled_date: date,
-        status: "pendente_agendamento",
-      }));
-
-      const { error: sessionsError } = await supabase.from("treatment_sessions").insert(sessionsToCreate).select();
-      if (sessionsError) {
-        console.error("Erro ao criar sessões:", sessionsError);
-        toast.error("Erro ao criar sessões: " + sessionsError.message);
-      }
+      }, sessionDates);
 
       await logAction({
         acao: "criar",
@@ -968,11 +956,15 @@ const Tratamentos: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao criar ciclo de tratamento: " + err.message);
+    } finally {
+      cycleWriteLock.current = false;
     }
   };
 
   const handleDeleteCycle = async () => {
     if (!deleteTarget) return;
+    const reason = window.prompt("Justificativa obrigatória para excluir o ciclo:")?.trim();
+    if (!reason) return;
     try {
       await supabase.from("treatment_sessions").delete().eq("cycle_id", deleteTarget.id);
       await supabase.from("treatment_extensions").delete().eq("cycle_id", deleteTarget.id);
@@ -986,7 +978,7 @@ const Tratamentos: React.FC = () => {
         entidadeId: deleteTarget.id,
         modulo: "tratamentos",
         user,
-        detalhes: { tipo: deleteTarget.treatment_type, paciente: deleteTarget.patient_id },
+        detalhes: { tipo: deleteTarget.treatment_type, paciente: deleteTarget.patient_id, motivo_alteracao: reason },
       });
 
       toast.success("Ciclo excluído com sucesso.");
@@ -1130,6 +1122,12 @@ const Tratamentos: React.FC = () => {
 
   const handleEditRealizada = async () => {
     if (!editRealizadaTarget || !selectedCycle) return;
+    if (editRealizadaDate && editRealizadaDate !== editRealizadaTarget.scheduled_date) {
+      toast.error("A data de uma sessão realizada exige revisão clínica específica; o histórico e a produção devem ser preservados.");
+      return;
+    }
+    const reason = window.prompt("Justificativa obrigatória para editar esta sessão realizada:")?.trim();
+    if (!reason) return;
     // procedure_done is optional
     setEditRealizadaSaving(true);
     try {
@@ -1164,7 +1162,7 @@ const Tratamentos: React.FC = () => {
         entidadeId: editRealizadaTarget.id,
         modulo: "tratamentos",
         user,
-        detalhes: { ciclo: selectedCycle.id, sessao: editRealizadaTarget.session_number },
+        detalhes: { ciclo: selectedCycle.id, sessao: editRealizadaTarget.session_number, motivo_alteracao: reason, valor_anterior: editRealizadaTarget, valor_novo: updatePayload },
       });
 
       toast.success(`Sessão ${editRealizadaTarget.session_number} atualizada.`);
@@ -1185,6 +1183,8 @@ const Tratamentos: React.FC = () => {
       `Tem certeza que deseja limpar a sessão ${session.session_number}/${session.total_sessions}?\n\nIsto reverterá o status para "Agendada" e apagará os dados clínicos.`
     );
     if (!confirmed) return;
+    const reason = window.prompt("Justificativa obrigatória da revisão clínica:")?.trim();
+    if (!reason) return;
     try {
       const { error } = await supabase
         .from("treatment_sessions")
@@ -1214,7 +1214,7 @@ const Tratamentos: React.FC = () => {
         entidadeId: session.id,
         modulo: "tratamentos",
         user,
-        detalhes: { ciclo: selectedCycle.id, sessao: session.session_number },
+        detalhes: { ciclo: selectedCycle.id, sessao: session.session_number, motivo_alteracao: reason, valor_anterior: session },
       });
 
       toast.success(`Sessão ${session.session_number} revertida para "Agendada".`);
@@ -1333,6 +1333,8 @@ const Tratamentos: React.FC = () => {
       `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será EXCLUÍDO da agenda (horário liberado) e a sessão voltará para "Aguardando agendamento".`
     );
     if (!confirmed) return;
+    const reason = window.prompt("Justificativa obrigatória para desmarcar esta sessão:")?.trim();
+    if (!reason) return;
 
     try {
       const result = await treatmentSessionOperations.unschedule({ session, cycle: selectedCycle });
@@ -1347,6 +1349,7 @@ const Tratamentos: React.FC = () => {
           ciclo: selectedCycle.id,
           sessao: session.session_number,
           agendamento_excluido: session.appointment_id,
+          motivo_alteracao: reason,
         },
       });
 
@@ -1506,6 +1509,7 @@ const Tratamentos: React.FC = () => {
     } catch {}
 
     try {
+      await assertStoredTreatmentCycle(cycle.id);
       for (const sess of pendentes) {
         try {
           // Um registro semelhante precisa de revisão explícita; não vinculamos histórico automaticamente.
@@ -1524,7 +1528,11 @@ const Tratamentos: React.FC = () => {
 
           if (checkErr) throw checkErr;
 
-          if (existente) {
+          const existingClaims = existente
+            ? await supabase.from("treatment_sessions").select("id").eq("appointment_id", existente.id).neq("id", sess.id).limit(1)
+            : { data: [], error: null };
+          if (existingClaims.error) throw existingClaims.error;
+          if (existente && !existingClaims.data?.length) {
             resumo.push({
               numero: sess.session_number,
               data: sess.scheduled_date,
@@ -1681,7 +1689,10 @@ const Tratamentos: React.FC = () => {
       }
     }
     const oldDate = session.scheduled_date;
+    const reason = window.prompt("Justificativa obrigatória para remarcar esta sessão:")?.trim();
+    if (!reason) throw new Error("Remarcação não realizada: informe uma justificativa.");
     const result = await treatmentSessionOperations.reschedule({
+      reason,
       session,
       cycle,
       newDate,
@@ -1716,6 +1727,7 @@ const Tratamentos: React.FC = () => {
         detalhes: {
           ciclo: cycle.id,
           sessao: session.session_number,
+          motivo_alteracao: reason,
           data_anterior: oldDate,
           data_nova: newDate,
           agendamento_vinculado: session.appointment_id || null,
@@ -1733,126 +1745,20 @@ const Tratamentos: React.FC = () => {
   };
 
   const handleAddIntermediateSession = async () => {
-    if (!selectedCycle) {
-      toast.error("Selecione um ciclo.");
-      return;
-    }
-    if (!intermediateDate) {
-      toast.error("Informe a data da nova sessão.");
-      return;
-    }
-    if (intermediateAfterSession < 0) {
-      toast.error("Selecione onde a sessão será inserida.");
-      return;
-    }
-    if (addingIntermediate) return; // Double-click guard
+    if (!selectedCycle || !intermediateDate || !intermediateReason.trim() || addingIntermediate) return;
     setAddingIntermediate(true);
     try {
-      // SEMPRE busca sessões REAIS do banco (não confia no estado local)
-      // para evitar duplicações causadas por estado defasado/otimista.
-      const { data: freshSessions, error: fetchErr } = await supabase
-        .from("treatment_sessions")
-        .select("id, session_number, scheduled_date")
-        .eq("cycle_id", selectedCycle.id)
-        .order("session_number", { ascending: true });
-      if (fetchErr) throw fetchErr;
-
-      const currentSessions = (freshSessions || []) as Array<{
-        id: string;
-        session_number: number;
-        scheduled_date: string;
-      }>;
-
-      const insertPos = intermediateAfterSession; // posição-base: 0 = antes da 1ª
-      const novaNumeroSessao = insertPos + 1;
-      const newTotal = currentSessions.length + 1;
-
-      // Guard anti-duplicidade: já existe sessão neste ciclo, na mesma data
-      // e mesma numeração calculada? Aborta para não duplicar.
-      const possibleDup = currentSessions.find(
-        (s) => s.scheduled_date === intermediateDate && s.session_number === novaNumeroSessao,
-      );
-      if (possibleDup) {
-        toast.error("Já existe uma sessão registrada nesta data e posição.");
-        setAddingIntermediate(false);
-        return;
-      }
-
-      // 1) Renumera APENAS sessões >= novaNumeroSessao, em ordem DESC para
-      //    evitar colisões temporárias (sem unique constraint, mas é a
-      //    ordem segura caso seja adicionada futuramente).
-      const toRenumber = currentSessions
-        .filter((s) => s.session_number >= novaNumeroSessao)
-        .sort((a, b) => b.session_number - a.session_number);
-
-      for (const s of toRenumber) {
-        const { error: upErr } = await supabase
-          .from("treatment_sessions")
-          .update({ session_number: s.session_number + 1, total_sessions: newTotal })
-          .eq("id", s.id);
-        if (upErr) throw upErr;
-      }
-
-      // 2) Atualiza total_sessions nas sessões que ficaram antes da nova
-      const toUpdateTotal = currentSessions.filter((s) => s.session_number < novaNumeroSessao);
-      for (const s of toUpdateTotal) {
-        const { error: upErr } = await supabase
-          .from("treatment_sessions")
-          .update({ total_sessions: newTotal })
-          .eq("id", s.id);
-        if (upErr) throw upErr;
-      }
-
-      // 3) Insere UMA ÚNICA sessão intermediária na posição escolhida.
-      //    NÃO chama nenhuma função de "próxima sessão" e NÃO cria nada
-      //    extra no final.
-      const { error: insertError } = await supabase.from("treatment_sessions").insert({
-        cycle_id: selectedCycle.id,
-        patient_id: selectedCycle.patient_id,
-        professional_id: selectedCycle.professional_id,
-        session_number: novaNumeroSessao,
-        total_sessions: newTotal,
-        scheduled_date: intermediateDate,
-        status: "pendente_agendamento",
-      });
-      if (insertError) throw insertError;
-
-      // 4) Atualiza total do ciclo (apenas +1, nunca mais)
-      const { error: cycleErr } = await supabase
-        .from("treatment_cycles")
-        .update({ total_sessions: newTotal })
-        .eq("id", selectedCycle.id);
-      if (cycleErr) throw cycleErr;
-
-      await logAction({
-        acao: "adicionar_sessao_intermediaria",
-        entidade: "treatment_session",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: {
-          ciclo: selectedCycle.id,
-          posicao: novaNumeroSessao,
-          data: intermediateDate,
-          total_anterior: currentSessions.length,
-          total_novo: newTotal,
-        },
-      });
-
-      toast.success("Sessão intermediária criada com sucesso.");
+      const { cycle, sessions: freshSessions } = await assertStoredTreatmentCycle(selectedCycle.id);
+      const updated = await treatmentCycleWriter.extend({ ...cycle, total_sessions: cycle.total_sessions + 1 }, freshSessions, [intermediateDate], intermediateReason);
+      toast.success("Sessão acrescentada ao final da numeração, sem renumerar o histórico.");
       setAddIntermediateOpen(false);
       setIntermediateDate("");
-      setIntermediateAfterSession(0);
-
-      // Atualiza UI com dados REAIS do banco (evita estado otimista duplicado)
-      await loadSessionsForCycle(selectedCycle, true);
+      setIntermediateReason("");
+      setSelectedCycle((previous) => previous ? { ...previous, ...updated } : previous);
+      await loadSessionsForCycle({ ...selectedCycle, ...updated }, false);
       await loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(
-        "Não foi possível criar a sessão intermediária. Nenhuma alteração foi salva. " +
-          (err?.message || ""),
-      );
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível acrescentar a sessão.");
     } finally {
       setAddingIntermediate(false);
     }
@@ -1862,11 +1768,14 @@ const Tratamentos: React.FC = () => {
       toast.error("Informe a quantidade de sessões e o motivo.");
       return;
     }
+    if (cycleWriteLock.current) return;
+    cycleWriteLock.current = true;
     try {
-      const newTotal = selectedCycle.total_sessions + extensionForm.new_sessions;
+      const { cycle: freshCycle, sessions: freshSessions } = await assertStoredTreatmentCycle(selectedCycle.id);
+      const newTotal = freshCycle.total_sessions + extensionForm.new_sessions;
 
       // Determine weekdays from existing sessions or fallback
-      const existingSessions = sessions.filter(s => s.cycle_id === selectedCycle.id);
+      const existingSessions = freshSessions;
       const weekdaysFromExisting = [...new Set(existingSessions.map(s => {
         const d = new Date(s.scheduled_date + 'T12:00:00');
         const dow = d.getDay();
@@ -1897,44 +1806,9 @@ const Tratamentos: React.FC = () => {
 
       const newEndDate = newDates.length > 0 ? newDates[newDates.length - 1] : selectedCycle.end_date_predicted || new Date().toISOString().split('T')[0];
 
-      await supabase.from("treatment_extensions").insert({
-        cycle_id: selectedCycle.id,
-        previous_sessions: selectedCycle.total_sessions,
-        new_sessions: newTotal,
-        previous_end_date: selectedCycle.end_date_predicted,
-        new_end_date: newEndDate,
-        reason: extensionForm.reason,
-        changed_by: user?.id || "",
-      });
-
-      const newSessions = newDates.map((date, idx) => ({
-        cycle_id: selectedCycle.id,
-        patient_id: selectedCycle.patient_id,
-        professional_id: selectedCycle.professional_id,
-        session_number: selectedCycle.total_sessions + idx + 1,
-        total_sessions: newTotal,
-        scheduled_date: date,
-        status: "pendente_agendamento",
-      }));
-      await supabase.from("treatment_sessions").insert(newSessions);
-
-      await supabase
-        .from("treatment_cycles")
-        .update({
-          total_sessions: newTotal,
-          end_date_predicted: newEndDate,
-          status: "em_andamento",
-        })
-        .eq("id", selectedCycle.id);
-
-      await logAction({
-        acao: "extensao_tratamento",
-        entidade: "treatment_cycle",
-        entidadeId: selectedCycle.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: { anterior: selectedCycle.total_sessions, novo: newTotal, motivo: extensionForm.reason },
-      });
+      const updated = await treatmentCycleWriter.extend({ ...freshCycle, total_sessions: newTotal, end_date_predicted: newEndDate }, freshSessions, newDates, extensionForm.reason);
+      setSelectedCycle((previous) => previous ? { ...previous, ...updated } : previous);
+      await loadSessionsForCycle({ ...selectedCycle, ...updated }, false);
 
       toast.success("Extensão registrada com sucesso!");
       setExtensionOpen(false);
@@ -1943,6 +1817,8 @@ const Tratamentos: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao registrar extensão: " + err.message);
+    } finally {
+      cycleWriteLock.current = false;
     }
   };
 
@@ -2151,6 +2027,8 @@ const Tratamentos: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
           </Button>
           <h1 className="text-xl font-bold font-display text-foreground">Detalhe do Ciclo</h1>
+          {isMaster && <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>Pendências para revisão</Button>}
+          <TreatmentIntegrityReview open={reviewOpen} onOpenChange={setReviewOpen} key={`${user?.id}|${user?.unidadeId}`} isMaster={isMaster} onSelect={setSelectedCycle} />
           {canAgendarSessao && cycleIsClinicallyActive && pendingCount > 0 && (
             <Button
               size="sm"
@@ -2470,7 +2348,7 @@ const Tratamentos: React.FC = () => {
                   className="h-7 text-xs"
                   onClick={() => setAddIntermediateOpen(true)}
                 >
-                  <Plus className="w-3 h-3 mr-1" /> Sessão Intermediária
+                  <Plus className="w-3 h-3 mr-1" /> Acrescentar sessão
                 </Button>
               )}
             </div>
@@ -2570,6 +2448,31 @@ const Tratamentos: React.FC = () => {
                           </div>
                         )}
 
+                        {canControlSessions && cycleIsClinicallyActive && s.status === 'pendente_agendamento' && !s.appointment_id && (
+                          <Button size="sm" variant="outline" onClick={async () => {
+                            const date = window.prompt('Nova data prevista (AAAA-MM-DD):', s.scheduled_date)?.trim();
+                            if (!date || date === s.scheduled_date) return;
+                            const reason = window.prompt('Justificativa obrigatória da revisão:')?.trim();
+                            if (!reason) return;
+                            try {
+                              const { error } = await (supabase as any).rpc('review_treatment_session_date', { p_session_id: s.id, p_expected_date: s.scheduled_date, p_date: date, p_reason: reason });
+                              if (error) throw error;
+                              await loadSessionsForCycle(selectedCycle, false);
+                              toast.success('Data revisada. Histórico e vínculo existente preservados.');
+                            } catch (error: any) { toast.error(error.message || 'Não foi possível revisar a data.'); }
+                          }}>Revisar data</Button>
+                        )}
+                        {canControlSessions && integrity.kind === 'possivel_sem_vinculo' && integrity.candidates.length === 1 && !duplicateDate && (
+                          <Button size="sm" variant="outline" onClick={async () => {
+                            const reason = window.prompt('Justificativa obrigatória para vincular este agendamento:')?.trim();
+                            if (!reason) return;
+                            try {
+                              await treatmentSessionOperations.linkExistingAppointment({ session: s, cycle: selectedCycle, appointmentId: integrity.candidates[0].id, reason });
+                              await loadSessionsForCycle(selectedCycle, false);
+                              toast.success('Vínculo confirmado após revisão.');
+                            } catch (error: any) { toast.error(error.message || 'Não foi possível confirmar o vínculo.'); }
+                          }}>Revisar vínculo</Button>
+                        )}
                         {canRemarcarThis && (
                           <Button
                             size="sm"
@@ -2943,7 +2846,8 @@ const Tratamentos: React.FC = () => {
                 <Input
                   type="date"
                   value={editRealizadaDate}
-                  onChange={(e) => setEditRealizadaDate(e.target.value)}
+                  readOnly
+                  title="Data histórica preservada; correções exigem revisão clínica específica."
                 />
               </div>
               <div>
@@ -3114,35 +3018,17 @@ const Tratamentos: React.FC = () => {
           isMaster={isMaster}
         />
 
-        {/* Dialog: Adicionar Sessão Intermediária (Master) */}
+        {/* Dialog: Acrescentar sessão (Master) */}
         <Dialog open={addIntermediateOpen} onOpenChange={setAddIntermediateOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Adicionar Sessão Intermediária</DialogTitle>
+              <DialogTitle>Acrescentar sessão</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Insira uma nova sessão entre as existentes. A numeração será ajustada automaticamente.
+                A nova sessão recebe o próximo número. As sessões já registradas mantêm seus números e datas.
               </p>
-              <div>
-                <Label>Inserir após sessão nº</Label>
-                <Select
-                  value={String(intermediateAfterSession)}
-                  onValueChange={(v) => setIntermediateAfterSession(parseInt(v))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">Antes da 1ª sessão</SelectItem>
-                    {cycleSessions.map((s) => (
-                      <SelectItem key={s.session_number} value={String(s.session_number)}>
-                        Após sessão {s.session_number} — {new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <div><Label>Justificativa obrigatória</Label><Textarea value={intermediateReason} onChange={(event) => setIntermediateReason(event.target.value)} /></div>
               <div>
                 <Label>Data da nova sessão</Label>
                 <Input
@@ -3159,7 +3045,7 @@ const Tratamentos: React.FC = () => {
                   handleAddIntermediateSession();
                 }}
                 className="w-full gradient-primary text-primary-foreground"
-                disabled={!intermediateDate || addingIntermediate}
+                disabled={!intermediateDate || !intermediateReason.trim() || addingIntermediate}
               >
                 {addingIntermediate ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
@@ -3259,6 +3145,8 @@ const Tratamentos: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Gestão de Tratamentos</h1>
+          {isMaster && <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>Pendências para revisão</Button>}
+          <TreatmentIntegrityReview open={reviewOpen} onOpenChange={setReviewOpen} key={`${user?.id}|${user?.unidadeId}`} isMaster={isMaster} onSelect={setSelectedCycle} />
           <p className="text-muted-foreground text-sm">{filteredCycles.length} ciclo(s) de tratamento</p>
         </div>
         {(isProfissional || canManageFull) && (

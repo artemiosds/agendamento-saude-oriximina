@@ -180,6 +180,12 @@ export function generateSessionDatesWithInfo(
   totalSessions: number,
   blockedRanges: BlockedRange[] = [],
 ): GenerateSessionResult {
+  if (!Number.isInteger(totalSessions) || totalSessions < 1 || totalSessions > 200) {
+    throw new Error('Informe entre 1 e 200 sessões inteiras.');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !Number.isFinite(new Date(startDate + 'T12:00:00').getTime())) {
+    throw new Error('Informe uma data inicial válida.');
+  }
   const dates: string[] = [];
   const start = new Date(startDate + 'T12:00:00');
   let totalSkipped = 0;
@@ -188,17 +194,24 @@ export function generateSessionDatesWithInfo(
     for (let i = 0; i < totalSessions; i++) {
       const d = new Date(start);
       d.setDate(d.getDate() + i * 7);
+      const originalDow = d.getDay() === 0 ? 7 : d.getDay();
+      let shifted = false;
+      if (dates.length && d.toISOString().split('T')[0] <= dates[dates.length - 1]) {
+        shifted = true;
+        d.setTime(new Date(dates[dates.length - 1] + 'T12:00:00').getTime());
+        d.setDate(d.getDate() + 1);
+      }
       const dateStr = d.toISOString().split('T')[0];
-      if (isInvalidSessionDate(dateStr, blockedRanges)) {
+      if (shifted || isInvalidSessionDate(dateStr, blockedRanges)) {
         // Find next valid weekday (Mon-Fri only)
-        const baseDow = d.getDay() === 0 ? 7 : d.getDay();
+        const baseDow = originalDow;
         const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
         const valid = findNextValidDate(d, targetDays, blockedRanges);
         if (valid) {
           dates.push(valid.date.toISOString().split('T')[0]);
           totalSkipped += valid.skipped + 1;
         } else {
-          dates.push(dateStr); // fallback
+          throw new Error('Não foi possível gerar todas as sessões em datas válidas. Nenhum plano foi salvo.');
         }
       } else {
         dates.push(dateStr);
@@ -211,16 +224,23 @@ export function generateSessionDatesWithInfo(
     for (let i = 0; i < totalSessions; i++) {
       const d = new Date(start);
       d.setMonth(d.getMonth() + i);
+      const originalDow = d.getDay() === 0 ? 7 : d.getDay();
+      let shifted = false;
+      if (dates.length && d.toISOString().split('T')[0] <= dates[dates.length - 1]) {
+        shifted = true;
+        d.setTime(new Date(dates[dates.length - 1] + 'T12:00:00').getTime());
+        d.setDate(d.getDate() + 1);
+      }
       const dateStr = d.toISOString().split('T')[0];
-      if (isInvalidSessionDate(dateStr, blockedRanges)) {
-        const baseDow = d.getDay() === 0 ? 7 : d.getDay();
+      if (shifted || isInvalidSessionDate(dateStr, blockedRanges)) {
+        const baseDow = originalDow;
         const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
         const valid = findNextValidDate(d, targetDays, blockedRanges);
         if (valid) {
           dates.push(valid.date.toISOString().split('T')[0]);
           totalSkipped += valid.skipped + 1;
         } else {
-          dates.push(dateStr);
+          throw new Error('Não foi possível gerar todas as sessões em datas válidas. Nenhum plano foi salvo.');
         }
       } else {
         dates.push(dateStr);
@@ -259,6 +279,9 @@ export function generateSessionDatesWithInfo(
     iter++;
   }
 
+  if (dates.length !== totalSessions) {
+    throw new Error(`Geração incompleta: ${totalSessions} sessões previstas, mas apenas ${dates.length} datas disponíveis. Nenhum plano foi salvo.`);
+  }
   return { dates, skippedCount: totalSkipped };
 }
 
