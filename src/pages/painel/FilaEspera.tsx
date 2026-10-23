@@ -233,7 +233,7 @@ const FilaEspera: React.FC = () => {
   const [filterUnidade, setFilterUnidade] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [filterEspecialidade] = useState("all");
+  const [filterEspecialidade, setFilterEspecialidade] = useState("all");
   const [sortField, setSortField] = useState<"prioridade" | "tempo" | "entrada" | "solicitacao">("prioridade");
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const reservasProcessandoRef = useRef<Set<string>>(new Set());
@@ -463,6 +463,16 @@ const FilaEspera: React.FC = () => {
 
   const sortTimestamp = sortField === "tempo" ? now : 0;
 
+  const profissoesAbertas = useMemo(() => {
+    const destinos = new Set<string>();
+    for (const item of fila) {
+      if (user?.unidadeId && user?.usuario !== "admin.sms" && item.unidadeId !== user.unidadeId) continue;
+      if (filterUnidade !== "all" && item.unidadeId !== filterUnidade) continue;
+      if (!item.profissionalId && item.especialidadeDestino) destinos.add(item.especialidadeDestino);
+    }
+    return [...destinos].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [fila, user?.unidadeId, user?.usuario, filterUnidade]);
+
   const filteredFila = useMemo(() => {
     const keys = new Map(fila.map((f) => {
       const patient = pacienteMap.get(f.pacienteId);
@@ -479,7 +489,8 @@ const FilaEspera: React.FC = () => {
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
       .filter((f) => filterProf === "all" || f.profissionalId === filterProf)
       .filter((f) => filterStatus === "all" || f.status === filterStatus)
-      .filter((f) => filterEspecialidade === "all" || (f as any).especialidadeDestino === filterEspecialidade)
+      .filter((f) => filterEspecialidade === "all" || (!f.profissionalId && !!f.especialidadeDestino
+        && (filterEspecialidade === "open" || f.especialidadeDestino === filterEspecialidade)))
       .sort((a, b) => {
         if (sortField === "prioridade") {
           const aKey = keys.get(a.id);
@@ -1369,7 +1380,7 @@ const FilaEspera: React.FC = () => {
           className="pl-9"
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 items-end gap-2">
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
           <SelectTrigger>
             <SelectValue placeholder="Unidade" />
@@ -1383,7 +1394,7 @@ const FilaEspera: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterProf} onValueChange={setFilterProf}>
+        <Select value={filterProf} onValueChange={(value) => { setFilterProf(value); if (value !== "all") setFilterEspecialidade("all"); }}>
           <SelectTrigger>
             <SelectValue placeholder="Profissional" />
           </SelectTrigger>
@@ -1397,6 +1408,24 @@ const FilaEspera: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
+        <div className="space-y-1">
+          <Label htmlFor="fila-profissao-filter" className="text-xs text-muted-foreground">Profissão / CBO (qualquer profissional)</Label>
+          <Select value={filterEspecialidade} onValueChange={(value) => {
+            setFilterEspecialidade(value);
+            if (value !== "all") setFilterProf("all");
+          }}>
+            <SelectTrigger id="fila-profissao-filter">
+              <SelectValue placeholder="Profissão / CBO" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os direcionamentos</SelectItem>
+              <SelectItem value="open">Todas as profissões — sem profissional definido</SelectItem>
+              {profissoesAbertas.map((profissao) => (
+                <SelectItem key={profissao} value={profissao}>Aberto para: {getProfissaoLabel(profissionais, profissao)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
           <SelectTrigger>
             <SelectValue placeholder="Status" />
