@@ -143,11 +143,11 @@ describe('Agenda: diálogo único de exclusão', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir teste' }));
     expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
     expect(screen.getByRole('alertdialog')).toHaveTextContent('PACIENTE TESTE às 08:00');
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: /^Cancelar$/ }));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(f.deleteRow).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Excluir teste' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: /^Excluir$/ }));
     await waitFor(() => expect(f.log).toHaveBeenCalledWith(expect.objectContaining({ acao: 'excluir_agendamento', entidadeId: 'ag1', agendamentoId: 'ag1' })));
     expect(f.deleteRow).toHaveBeenCalledWith('agendamentos');
     expect(f.refresh).toHaveBeenCalledTimes(1);

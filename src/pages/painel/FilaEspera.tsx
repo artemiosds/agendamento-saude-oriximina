@@ -492,6 +492,10 @@ const FilaEspera: React.FC = () => {
       .filter((f) => filterEspecialidade === "all" || (!f.profissionalId && !!f.especialidadeDestino
         && (filterEspecialidade === "open" || f.especialidadeDestino === filterEspecialidade)))
       .sort((a, b) => {
+        // Keep patients awaiting a call above the other states in every sort mode.
+        // Within each group, preserve the selected clinical/time ordering below.
+        const waitingOrder = Number(b.status === "aguardando") - Number(a.status === "aguardando");
+        if (waitingOrder) return waitingOrder;
         if (sortField === "prioridade") {
           const aKey = keys.get(a.id);
           const bKey = keys.get(b.id);
