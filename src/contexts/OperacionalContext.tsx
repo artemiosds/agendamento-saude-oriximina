@@ -320,6 +320,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
       errorMessage: input.erro,
       before: input.before,
       after: input.after,
+      origem: input.origem,
+      rota: input.rota,
       detalhes: input.detalhes as Record<string, any>,
     });
   }, []);

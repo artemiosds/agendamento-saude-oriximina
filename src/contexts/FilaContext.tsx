@@ -180,7 +180,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         observacoes: f.observacoes || "",
         descricao_clinica: f.descricaoClinica || "",
         cid: f.cid || "",
-        criado_por: f.criadoPor || "sistema",
+        criado_por: f.criadoPor || authUser?.nome || "sistema",
         data_solicitacao_original: f.dataSolicitacaoOriginal || "",
         origem_cadastro: f.origemCadastro || "normal",
         especialidade_destino: f.especialidadeDestino || "",
@@ -191,6 +191,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
           acao: "criar",
           entidade: "fila_espera",
           entidadeId: f.id,
+          user: authUser,
           unidadeId: f.unidadeId,
           detalhes: {
             prioridade: f.prioridade,
@@ -203,7 +204,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         if (throwOnError) throw error;
       }
     },
-    [logAction, invalidateCache],
+    [authUser, logAction, invalidateCache],
   );
 
   const updateFila = useCallback(
@@ -248,6 +249,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
           acao: "editar",
           entidade: "fila_espera",
           entidadeId: id,
+          user: authUser,
           detalhes: data as Record<string, unknown>,
         });
         invalidateCache(queryKeys.fila.all);
@@ -256,7 +258,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         if (throwOnError) throw error;
       }
     },
-    [logAction, invalidateCache],
+    [authUser, logAction, invalidateCache],
   );
 
   const removeFromFila = useCallback(
@@ -271,11 +273,12 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
           acao: "excluir",
           entidade: "fila_espera",
           entidadeId: id,
+          user: authUser,
         });
         invalidateCache(queryKeys.fila.all);
       } else console.error("Error removing from fila:", error);
     },
-    [logAction, invalidateCache],
+    [authUser, logAction, invalidateCache],
   );
 
   const checkFilaForSlot = useCallback(

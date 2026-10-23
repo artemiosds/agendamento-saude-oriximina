@@ -22,6 +22,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { openPrintDocument } from '@/lib/printLayout';
 import { auditService } from '@/services/auditService';
+import { getAuditActorLabel } from '@/lib/auditActor';
 
 async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -41,6 +42,7 @@ interface LogEntry {
   entidade_nome?: string;
   user_id: string;
   user_nome: string;
+  origem?: string;
   role: string;
   unidade_id: string;
   unidade_nome?: string;
@@ -301,7 +303,7 @@ const formatAuditValue = (field: string, value: any): string => {
 };
 
 const generateHumanSummary = (log: EnrichedLog) => {
-  const user = log.user_nome || 'O sistema';
+  const user = getAuditActorLabel(log);
   const acao = log.acao_legivel || formatAuditAction(log.acao);
   const entidade = log.entidade_resolvida?.titulo || log.entidade_nome || log.entidade_id || log.entidade;
   const data = format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
@@ -1034,7 +1036,7 @@ const Auditoria: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium leading-none">{log.user_nome || 'Sistema'}</span>
+                          <span className="text-sm font-medium leading-none">{getAuditActorLabel(log)}</span>
                           <span className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{log.role}</span>
                         </div>
                       </TableCell>
@@ -1173,11 +1175,11 @@ const Auditoria: React.FC = () => {
                 <div className="grid grid-cols-1 gap-3 bg-muted/30 p-4 rounded-xl border">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                      {selectedLog.user_nome ? selectedLog.user_nome.charAt(0) : 'S'}
+                      {getAuditActorLabel(selectedLog).charAt(0)}
                     </div>
                     <div>
-                      <p className="text-sm font-bold">{selectedLog.user_nome || 'Sistema / Automação'}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{selectedLog.role}</p>
+                      <p className="text-sm font-bold">{getAuditActorLabel(selectedLog)}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{selectedLog.role || (selectedLog.user_nome ? 'Perfil não informado' : getAuditActorLabel(selectedLog) === 'Sistema / Automação' ? 'ORIGEM AUTOMATIZADA' : 'IDENTIFICAÇÃO AUSENTE')}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-1">
