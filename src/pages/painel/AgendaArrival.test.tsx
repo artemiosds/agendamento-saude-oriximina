@@ -13,7 +13,7 @@ const f = vi.hoisted(() => ({
   triage: true, globalTriage: null as null | boolean, readStatus: 'confirmado', queryError: null as any,
   update: vi.fn(), addQueue: vi.fn(), updateQueue: vi.fn(), refresh: vi.fn(), refreshQueue: vi.fn(),
   loadRange: vi.fn(), hydrate: vi.fn(), exceptions: vi.fn(), selected: vi.fn(),
-  log: vi.fn(), notify: vi.fn(), toastError: vi.fn(), rpc: vi.fn(),
+  log: vi.fn(), notify: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), rpc: vi.fn(), apply: vi.fn(),
   setter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
   queueSetter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
 }));
@@ -21,7 +21,7 @@ vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: f.user }) }))
 vi.mock('@/contexts/PacientesContext', () => ({ usePacientes: () => ({ pacientes: f.patients, hydrateAgendaPatients: f.hydrate }) }));
 vi.mock('@/contexts/AgendamentosContext', () => ({ useAgendamentos: () => {
   const [agendamentos, set] = useState(f.rows); f.setter = set;
-  return { agendamentos, updateAgendamento: f.update, refreshAgendamentos: f.refresh,
+  return { agendamentos, updateAgendamento: f.update, refreshAgendamentos: f.refresh, applyCareFlowAgendamentoUpdate: f.apply,
     loadAgendaRange: f.loadRange, completeAgendaDates: f.complete,
     loadAgendaExceptions: f.exceptions, setAgendaSelectedDate: f.selected };
 } }));
@@ -42,7 +42,8 @@ vi.mock('@/hooks/useWebhookNotify', () => ({ useWebhookNotify: () => ({ notify: 
 vi.mock('@/hooks/useFilaAutomatica', () => ({ useFilaAutomatica: () => ({ handleVagaLiberada: vi.fn() }) }));
 vi.mock('@/hooks/useEnsurePortalAccess', () => ({ useEnsurePortalAccess: () => ({ ensurePortalAccess: vi.fn() }) }));
 vi.mock('@/lib/utils', async original => ({ ...await original<typeof import('@/lib/utils')>(), todayLocalStr: () => f.day }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: f.toastError, info: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: f.toastError, info: f.toastInfo } }));
+vi.mock('@/components/TriageReconciliationPanel', () => ({ default: () => null }));
 vi.mock('@/components/BuscaPaciente', () => ({ BuscaPaciente: () => null }));
 vi.mock('@/components/RegistrarFaltaModal', () => ({ RegistrarFaltaModal: () => null }));
 vi.mock('@/components/ConcluirAtendimentoModal', () => ({ ConcluirAtendimentoModal: () => null }));
@@ -88,7 +89,8 @@ beforeEach(() => {
     status: 'confirmado', tipo: 'Consulta', origem: 'recepcao', observacoes: '', criadoEm: '' }];
   f.queue = []; f.hydrate.mockResolvedValue(f.patients); f.exceptions.mockResolvedValue([]);
   f.loadRange.mockResolvedValue(undefined); f.refresh.mockResolvedValue(undefined); f.refreshQueue.mockResolvedValue(undefined);
-  f.rpc.mockResolvedValue({ error: null }); f.log.mockResolvedValue(undefined); f.notify.mockResolvedValue(undefined);
+  f.apply.mockImplementation(row => f.setter?.(rows => rows.map(a => a.id === row.id ? { ...a, status: row.status } : a)));
+  f.rpc.mockImplementation(async () => ({ data: { already_processed: false, status: f.triage ? 'confirmado_chegada' : 'apto_atendimento', agendamento: { id: 'ag1', status: f.triage ? 'confirmado_chegada' : 'apto_atendimento' }, fila: { hora_chegada: '08:00' } }, error: null })); f.log.mockResolvedValue(undefined); f.notify.mockResolvedValue(undefined);
   f.update.mockImplementation(async (id, patch) => { f.setter?.(rows => rows.map(a => a.id === id ? { ...a, ...patch } : a)); });
   f.addQueue.mockReset().mockImplementation(async row => { f.queueSetter?.(rows => [...rows, row]); });
   f.updateQueue.mockReset().mockImplementation(async (id, patch) => { f.queueSetter?.(rows => rows.map(a => a.id === id ? { ...a, ...patch } : a)); });
@@ -99,50 +101,36 @@ async function confirmArrival() {
   fireEvent.click(await screen.findByRole('button', { name: 'Chegada teste' }));
   fireEvent.click(screen.getByRole('button', { name: 'Confirmar teste' }));
 }
-describe('confirmação de chegada na Agenda', () => {
-  it.each([true, false])('preserva o encaminhamento com triagem=%s sem recarregar o período', async enabled => {
+describe('confirmação atômica de chegada na Agenda', () => {
+  it.each([true, false])('aplica o resultado confirmado pelo banco com triagem=%s sem recarregar o período', async enabled => {
     f.triage = enabled;
     await confirmArrival();
-    const status = enabled ? 'confirmado_chegada' : 'apto_atendimento';
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByTestId('status')).toHaveTextContent(status);
-    expect(screen.getByRole('button', { name: 'Todos (1)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirmados (0)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: enabled ? 'Aptos (0)' : 'Aptos (1)' })).toBeInTheDocument();
-    expect(f.update).toHaveBeenCalledWith('ag1', { status });
-    expect(f.addQueue).toHaveBeenCalledWith(expect.objectContaining({ id: 'ag1', pacienteId: 'p1',
-      unidadeId: 'u1', profissionalId: 'prof1', status: enabled ? 'chegada_confirmada' : 'apto_atendimento', horaChegada: expect.any(String) }), true);
-    expect(f.refresh).not.toHaveBeenCalled();
-    expect(f.loadRange).toHaveBeenCalledTimes(1); // carga inicial do calendário
-    expect(f.refreshQueue).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(f.log).toHaveBeenCalledWith(expect.objectContaining({ acao: 'status_change', agendamentoId: 'ag1' })));
+    expect(screen.getByTestId('status')).toHaveTextContent(enabled ? 'confirmado_chegada' : 'apto_atendimento');
+    expect(f.rpc).toHaveBeenCalledTimes(1);
+    expect(f.rpc).toHaveBeenCalledWith('confirmar_chegada_atendimento', expect.objectContaining({ p_agendamento_id: 'ag1', p_usuario_id: 'admin', p_unidade_id: 'u1', p_paciente_id_esperado: 'p1', p_reconciliar: false }));
+    expect(f.update).not.toHaveBeenCalled(); expect(f.addQueue).not.toHaveBeenCalled(); expect(f.updateQueue).not.toHaveBeenCalled();
+    expect(f.refresh).not.toHaveBeenCalled(); expect(f.refreshQueue).toHaveBeenCalledTimes(1);
+    expect(f.loadRange).toHaveBeenCalledTimes(1);
+    expect(f.log).not.toHaveBeenCalled();
   });
-  it('reutiliza fila existente sem criar outra entrada', async () => {
-    f.queue = [{ id: 'ag1', status: 'aguardando' }];
+  it('fecha o modal e informa chegada já processada sem repetir auditoria ou notificações', async () => {
+    f.rpc.mockResolvedValueOnce({ data: { already_processed: true, status: 'em_atendimento', agendamento: { id: 'ag1', status: 'em_atendimento' }, fila: null }, error: null });
     await confirmArrival();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(f.updateQueue).toHaveBeenCalledWith('ag1', expect.objectContaining({ status: 'chegada_confirmada' }), true);
-    expect(f.addQueue).not.toHaveBeenCalled(); expect(f.refresh).not.toHaveBeenCalled();
+    expect(f.toastInfo).toHaveBeenCalledWith('A chegada deste paciente já foi confirmada por outro terminal.');
+    expect(screen.getByTestId('status')).toHaveTextContent('em_atendimento');
+    expect(f.log).not.toHaveBeenCalled(); expect(f.notify).not.toHaveBeenCalled();
   });
-  it('preserva o tratamento de inserção concorrente na fila', async () => {
-    f.addQueue.mockRejectedValueOnce({ code: '23505' });
-    await confirmArrival();
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(f.updateQueue).toHaveBeenCalledWith('ag1', expect.objectContaining({ status: 'chegada_confirmada' }), true);
-    expect(f.refresh).not.toHaveBeenCalled();
+  it('mantém o formulário aberto e o cartão anterior quando a transação falha', async () => {
+    f.rpc.mockResolvedValueOnce({ data: null, error: { code: 'P0001', message: 'Falha na fila' } });
+    await confirmArrival(); expect(await screen.findByText('Falha na fila')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument(); expect(screen.getByTestId('status')).toHaveTextContent('confirmado');
+    expect(f.apply).not.toHaveBeenCalled(); expect(f.addQueue).not.toHaveBeenCalled();
   });
-  it('mantém o modal aberto quando a fila falha', async () => {
-    f.addQueue.mockRejectedValueOnce(new Error('Falha na fila'));
-    await confirmArrival();
-    expect(await screen.findByText('Falha na fila')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(f.refreshQueue).not.toHaveBeenCalled();
-  });
-  it('bloqueia chegada repetida e mantém a recarga de recuperação', async () => {
-    f.readStatus = 'em_atendimento';
-    await confirmArrival();
-    expect(await screen.findByText(/Este atendimento já avançou/)).toBeInTheDocument();
+  it('RPC indisponível não dispara o antigo fluxo parcial', async () => {
+    f.rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202' } });
+    await confirmArrival(); expect(await screen.findByText(/operação segura ainda não está disponível/)).toBeInTheDocument();
     expect(f.update).not.toHaveBeenCalled(); expect(f.addQueue).not.toHaveBeenCalled();
-    expect(f.refresh).toHaveBeenCalledTimes(1);
   });
 });

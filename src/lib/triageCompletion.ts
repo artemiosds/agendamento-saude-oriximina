@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 const ARRIVAL_ALREADY_PROCESSED = new Set([
+  "confirmado_chegada", "chegada_confirmada", "aguardando_triagem",
   "triagem_concluida", "aguardando_enfermagem", "aguardando_atendimento",
   "apto_atendimento", "chamado", "em_atendimento", "concluido",
   "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",

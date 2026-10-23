@@ -1,3 +1,5 @@
+import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
+import { confirmCareArrival } from "@/services/careFlowService";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
@@ -87,7 +89,7 @@ import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteMo
 import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
 import { openPrintDocument } from "@/lib/printLayout";
 import { printComprovanteAgendamento } from "@/lib/printComprovanteAgendamento";
-import { hasConfirmedTriage, isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
+import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -263,6 +265,7 @@ const Agenda: React.FC = () => {
     addAgendamento,
     addAgendamentoTransactionally,
     updateAgendamento,
+    applyCareFlowAgendamentoUpdate,
     refreshAgendamentos,
     loadAgendaRange,
     completeAgendaDates,
@@ -1720,103 +1723,22 @@ const Agenda: React.FC = () => {
       }
     }
 
+    let committedStatus = newStatus;
     try {
       if (newStatus === "confirmado_chegada") {
-        const { data: agAtual, error: agReadError } = await supabase
-          .from("agendamentos")
-          .select("status, paciente_id, unidade_id")
-          .eq("id", agId)
-          .single();
-        if (agReadError) throw agReadError;
-        if (agAtual.paciente_id !== ag.pacienteId || agAtual.unidade_id !== ag.unidadeId) {
-          throw new Error("Os dados do agendamento mudaram. Atualize a Agenda antes de confirmar a chegada.");
+        const result = await confirmCareArrival({ id: agId, userId: user?.id || '', userName: user?.nome || '', unitId: ag.unidadeId, expectedPatientId: ag.pacienteId, arrivalTime: nowTimeBrazilStr().slice(0, 5) });
+        committedStatus = result.status;
+        applyCareFlowAgendamentoUpdate(result.agendamento);
+        const horaChegada = String(result.fila?.hora_chegada || '');
+        if (horaChegada) setArrivalMap(prev => ({ ...prev, [agId]: horaChegada }));
+        void refreshFila().catch(error => console.error('Erro ao atualizar a fila após chegada:', error));
+        if (result.already_processed) {
+          toast.info('A chegada deste paciente já foi confirmada por outro terminal.');
+          return;
         }
-        if (isArrivalAlreadyProcessed(agAtual.status) || await hasConfirmedTriage(agId)) {
-          await Promise.all([refreshAgendamentos(), refreshFila()]);
-          throw new Error("Este atendimento já avançou após a chegada ou teve a triagem concluída. Não confirme a chegada novamente.");
-        }
-
-        const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        // Triage routing is OPT-IN. Default = direct to professional's queue.
-        // Only routes to triage when explicitly enabled (per professional or globally).
-        let triagemHabilitada = false;
-        // A failure to read the configuration must not silently skip triage.
-        const { data: profSetting, error: profError } = await supabase
-          .from('triage_settings')
-          .select('enabled')
-          .eq('profissional_id', ag.profissionalId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (profError) throw profError;
-        if (profSetting) {
-          triagemHabilitada = !!profSetting.enabled;
-        } else {
-          const { data: globalSetting, error: globalError } = await supabase
-            .from('triage_settings')
-            .select('enabled')
-            .is('profissional_id', null)
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (globalError) throw globalError;
-          if (globalSetting) triagemHabilitada = !!globalSetting.enabled;
-        }
-
-        const filaExistente = fila.find((item) => item.id === agId);
-        const statusFila = triagemHabilitada ? "chegada_confirmada" : "apto_atendimento";
-        const dadosFila = {
-          status: statusFila as any,
-          pacienteId: ag.pacienteId,
-          pacienteNome: ag.pacienteNome,
-          unidadeId: ag.unidadeId,
-          profissionalId: ag.profissionalId,
-          horaChegada,
-          observacoes: ag.observacoes || "",
-        };
-        const encaminharParaFila = async () => {
-          if (filaExistente) {
-            await updateFila(agId, dadosFila, true);
-            return;
-          }
-          try {
-            await addToFila({
-              id: agId,
-              ...dadosFila,
-              setor: "",
-              prioridade: "normal",
-              posicao: fila.length + 1,
-              criadoPor: user?.nome || "recepcao",
-            } as any, true);
-          } catch (error) {
-            if ((error as { code?: string })?.code !== "23505") throw error;
-            // Another session already inserted this arrival; reuse its row.
-            await updateFila(agId, dadosFila, true);
-          }
-        };
-
-        if (triagemHabilitada) {
-          // Normal flow: go to triage
-          await updateAgendamento(agId, { status: "confirmado_chegada" as any });
-
-          await encaminharParaFila();
-
-          void (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: ag.pacienteId })
-            .then(({ error }: { error?: unknown }) => { if (error) console.error("Erro ao atualizar faltas:", error); })
-            .catch((error: unknown) => console.error("Erro ao atualizar faltas:", error));
-          toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
-        } else {
-          // Triage disabled for this professional: skip triage
-          await updateAgendamento(agId, { status: "apto_atendimento" as any });
-
-          await encaminharParaFila();
-
-          toast.success(`Triagem desabilitada para este profissional. ${ag.pacienteNome} liberado para atendimento direto.`);
-        }
-        setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
-        // updateAgendamento já confirmou a gravação e atualizou o cartão.
-        // Reconcilia a fila sem baixar novamente todo o período da Agenda.
-        void Promise.allSettled([refreshFila()]);
+        toast.success(result.status === 'apto_atendimento'
+          ? `Triagem desabilitada para este profissional. ${ag.pacienteNome} liberado para atendimento direto.`
+          : `Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
       } else {
         await updateAgendamento(agId, { status: newStatus as any });
         await Promise.all([refreshAgendamentos(), refreshFila()]);
@@ -1851,15 +1773,15 @@ const Agenda: React.FC = () => {
           unidade: unidade?.nome || "",
           profissional: ag.profissionalNome,
           tipo_atendimento: ag.tipo,
-          status_agendamento: newStatus,
+          status_agendamento: committedStatus,
           id_agendamento: agId,
         });
       }
       // WhatsApp: handled via notify webhook hook
 
 
-      // Log the status change
-      await logAction({
+      // Arrival is already audited inside the same database transaction.
+      if (newStatus !== "confirmado_chegada") await logAction({
         acao: "status_change",
         entidade: "agendamento",
         entidadeId: agId,
@@ -2671,6 +2593,7 @@ const Agenda: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      <TriageReconciliationPanel />
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Agenda</h1>

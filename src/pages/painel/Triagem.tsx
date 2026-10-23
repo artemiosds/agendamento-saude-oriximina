@@ -1,3 +1,5 @@
+import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
+import { startCareTriage, saveCareTriageDraft, completeCareTriage } from "@/services/careFlowService";
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { PageHeader } from '@/components/ui/page-header';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
@@ -117,7 +119,7 @@ interface TriagemForm {
   observacoes: string;
 }
 
-const VERSAO_FLUXO_TRIAGEM = "triagem-diagnostico-20260925-v1";
+const VERSAO_FLUXO_TRIAGEM = "triagem-atomica-20261023-v2";
 
 /**
  * Textarea leve: o texto aparece na hora (estado local) e só é repassado ao
@@ -377,7 +379,7 @@ const TriagemItem = React.memo(({
 
 const Triagem: React.FC = () => {
   const { pacientes } = usePacientes();
-  const { agendamentos, updateAgendamento, refreshAgendamentos } = useAgendamentos();
+  const { agendamentos, updateAgendamento, applyCareFlowAgendamentoUpdate, refreshAgendamentos } = useAgendamentos();
   const { fila, updateFila, refreshFila } = useFila();
   const { logAction } = useOperacional();
   const { user, isGlobalAdmin } = useAuth();
@@ -653,21 +655,16 @@ const Triagem: React.FC = () => {
       if (openingTriagemId) return;
       setOpeningTriagemId(ag.filaId);
       try {
-        if (await hasConfirmedTriage(ag.id)) {
-          toast.error('A triagem deste agendamento já foi concluída. A fila será atualizada.');
-          await Promise.all([refreshFila(), refreshAgendamentos()]);
-          setOpeningTriagemId(null);
-          return;
-        }
+        const result = await startCareTriage(ag.id, user?.id || '', ag.pacienteId);
+        applyCareFlowAgendamentoUpdate(result.agendamento);
+        void refreshFila().catch(error => console.error('Erro ao atualizar a fila:', error));
       } catch (error) {
         console.error('Erro ao verificar conclusão da triagem:', error);
-        toast.error('Não foi possível verificar a triagem. Tente novamente.');
+        toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a triagem. Tente novamente.');
         setOpeningTriagemId(null);
         return;
       }
       
-      let itemSelecionado = ag;
-
       // Abrir o modal imediatamente com os dados que já temos
       setSelectedItem(ag);
       setDialogOpen(true);
@@ -695,26 +692,9 @@ const Triagem: React.FC = () => {
       });
       setCustomData({});
 
-      // Se for chegada confirmada, atualiza o status no background
-      if (ag.filaStatus === "chegada_confirmada") {
-        try {
-          await Promise.all([
-            updateFila(ag.filaId, { status: "aguardando_triagem" as any }),
-            updateAgendamento(ag.id, { status: "aguardando_triagem" as any }),
-          ]);
-          // Não precisamos dar refresh em tudo agora, o usuário já está com o modal aberto
-          // O updateFila/updateAgendamento já atualiza o estado local no DataContext
-          itemSelecionado = { ...ag, filaStatus: "aguardando_triagem", status: "aguardando_triagem" };
-          setSelectedItem(itemSelecionado);
-        } catch (error) {
-          console.error("Erro ao iniciar triagem no background:", error);
-          // Se falhar o background update, o usuário ainda pode preencher a triagem
-        }
-      }
-      
       setOpeningTriagemId(null);
     },
-    [pacientes, updateAgendamento, updateFila, openingTriagemId, refreshFila, refreshAgendamentos],
+    [pacientes, openingTriagemId, refreshFila, applyCareFlowAgendamentoUpdate, user?.id],
   );
 
 
@@ -723,11 +703,9 @@ const Triagem: React.FC = () => {
     if (!vitalValidation.valid) { toast.error(Object.values(vitalValidation.errors)[0]); return; }
     setSaving(true);
     try {
-      if (await hasConfirmedTriage(selectedItem.id)) {
-        throw new Error('Esta triagem já foi concluída. O rascunho não pode substituí-la.');
-      }
       const triagePayload: any = {
         agendamento_id: selectedItem.id,
+        paciente_id_esperado: selectedItem.pacienteId,
         tecnico_id: user?.id || "",
         ...vitalValidation.values,
         pressao_arterial: form.pressaoArterial || null,
@@ -740,17 +718,11 @@ const Triagem: React.FC = () => {
         iniciado_em: new Date().toISOString(),
       };
 
-      const { data: savedRecord, error: saveError } = await supabase
-        .from("triage_records")
-        .upsert(triagePayload, { onConflict: "agendamento_id" })
-        .select("id")
-        .single();
-      if (saveError) throw saveError;
-      if (!savedRecord) throw new Error("A ficha de triagem não foi gravada.");
+      await saveCareTriageDraft(selectedItem.id, user?.id || '', triagePayload);
       toast.success("Rascunho da triagem salvo!");
     } catch (error) {
       console.error("Erro ao salvar rascunho:", error);
-      toast.error("Erro ao salvar rascunho da triagem.");
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar rascunho da triagem.");
     } finally {
       setSaving(false);
     }
@@ -760,16 +732,12 @@ const Triagem: React.FC = () => {
     if (!selectedItem || saving) return;
     if (!vitalValidation.valid) { toast.error(Object.values(vitalValidation.errors)[0]); return; }
     setSaving(true);
-    let etapa = "gravar_ficha";
+    const etapa = "transacao_triagem";
 
     try {
-      if (await hasConfirmedTriage(selectedItem.id)) {
-        throw new Error('Esta triagem já foi concluída. Atualize a fila antes de continuar.');
-      }
-      const novoStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_atendimento";
-
       const triagePayload: any = {
         agendamento_id: selectedItem.id,
+        paciente_id_esperado: selectedItem.pacienteId,
         tecnico_id: user?.id || "",
         ...vitalValidation.values,
         pressao_arterial: form.pressaoArterial || null,
@@ -782,46 +750,10 @@ const Triagem: React.FC = () => {
         confirmado_em: new Date().toISOString(),
       };
 
-      const { data: savedRecord, error: saveError } = await supabase
-        .from("triage_records")
-        .upsert(triagePayload, { onConflict: "agendamento_id" })
-        .select("id")
-        .single();
-      if (saveError) throw saveError;
-      if (!savedRecord) throw new Error("A ficha de triagem não foi gravada.");
-
-      etapa = "atualizar_agendamento";
-      const { data: updatedAgendamento, error: agendamentoError } = await supabase
-        .from("agendamentos")
-        .update({ status: novoStatus as any })
-        .eq("id", selectedItem.id)
-        .select("id")
-        .single();
-      if (agendamentoError) throw agendamentoError;
-      if (!updatedAgendamento) throw new Error("O agendamento não foi atualizado.");
-
-      etapa = "atualizar_fila";
-      const { data: updatedFila, error: filaError } = await supabase
-        .from("fila_espera")
-        .update({ status: novoStatus as any })
-        .eq("id", selectedItem.filaId)
-        .select("id")
-        .single();
-      if (filaError) throw filaError;
-      if (!updatedFila) throw new Error("A fila não foi atualizada.");
-      etapa = "pos_gravacao";
-
-      // Log silent para não bloquear o encerramento do modal
-      void Promise.resolve().then(() => logAction({
-        acao: "finalizar_triagem",
-        entidade: "agendamento",
-        entidadeId: selectedItem.id,
-        modulo: "triagem",
-        user,
-        detalhes: { paciente: selectedItem.pacienteNome, status: novoStatus, classificacaoRisco: form.classificacaoRisco, versao_fluxo: VERSAO_FLUXO_TRIAGEM },
-      })).catch((error) => console.error("Erro ao registrar finalização da triagem:", error));
-
-      toast.success(encaminharEnfermagem ? "Encaminhado para enfermagem!" : "Encaminhado diretamente!");
+      const result = await completeCareTriage(selectedItem.id, user?.id || '', triagePayload, encaminharEnfermagem);
+      applyCareFlowAgendamentoUpdate(result.agendamento);
+      if (result.already_processed) toast.info('Esta triagem já foi concluída por outro terminal. A fila foi atualizada.');
+      else toast.success(encaminharEnfermagem ? 'Encaminhado para enfermagem!' : 'Encaminhado diretamente!');
       setDialogOpen(false);
       setSelectedItem(null);
 
@@ -861,7 +793,7 @@ const Triagem: React.FC = () => {
       })).then(({ error: logError }) => {
         if (logError) console.error("Erro ao registrar falha da triagem:", logError);
       }).catch((logError) => console.error("Erro ao registrar falha da triagem:", logError));
-      toast.error("Não foi possível concluir a triagem. Confira a ficha e tente novamente.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível concluir a triagem. Confira a ficha e tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -877,6 +809,7 @@ const Triagem: React.FC = () => {
         title="Triagem de Enfermagem"
         subtitle={`${filaFiltrada.length} paciente(s) aguardando triagem`}
       />
+      <TriageReconciliationPanel />
       <div className="relative flex gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

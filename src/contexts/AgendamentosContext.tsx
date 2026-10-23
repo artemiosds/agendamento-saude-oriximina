@@ -42,6 +42,7 @@ interface AgendamentosContextType {
   deleteAgendamento: (id: string) => Promise<void>;
   deleteAgendamentoTransactionally: (id: string, persist: () => Promise<void>) => Promise<void>;
   applyTreatmentAgendamentoUpdate: (appointment: Agendamento) => void;
+  applyCareFlowAgendamentoUpdate: (row: Record<string, unknown>) => void;
   refreshAgendamentos: () => Promise<void>;
   activateLegacyAgendamentos: () => Promise<void>;
   ensureAgendamentosForDate: (date: string) => Promise<void>;
@@ -880,6 +881,10 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
     [invalidateCache],
   );
 
+  const applyCareFlowAgendamentoUpdate = useCallback((row: Record<string, unknown>) => {
+    applyTreatmentAgendamentoUpdate(mapAgendamentoRow(row));
+  }, [applyTreatmentAgendamentoUpdate]);
+
   const addAtendimento = useCallback(
     async (a: Atendimento) => {
       try {
@@ -965,6 +970,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       deleteAgendamento,
       deleteAgendamentoTransactionally,
       applyTreatmentAgendamentoUpdate,
+      applyCareFlowAgendamentoUpdate,
       refreshAgendamentos,
       activateLegacyAgendamentos,
       ensureAgendamentosForDate,
@@ -988,6 +994,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       deleteAgendamento,
       deleteAgendamentoTransactionally,
       applyTreatmentAgendamentoUpdate,
+      applyCareFlowAgendamentoUpdate,
       refreshAgendamentos,
       activateLegacyAgendamentos,
       ensureAgendamentosForDate,
