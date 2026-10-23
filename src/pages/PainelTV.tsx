@@ -7,6 +7,8 @@ import { playlistPainel, videoSeguro } from '@/lib/painelVideo';
 import { useAuth } from "@/contexts/AuthContext";
 import { Volume2, Mic, Maximize } from "lucide-react";
 
+import { carregarVozPainel, escolherVozPainel, textoChamadaPainel } from "@/lib/painelVoice";
+
 const HIST_KEY = (u: string) => `painel_tv_hist_${u}`;
 
 async function tocarSino(ctx: AudioContext, signal: AbortSignal) {
@@ -31,30 +33,19 @@ async function tocarSino(ctx: AudioContext, signal: AbortSignal) {
   finally { signal.removeEventListener('abort', stop); stop(); }
 }
 
-function escolherVoz(): SpeechSynthesisVoice | undefined {
-  const vozes = window.speechSynthesis?.getVoices() || [];
-  const pt = vozes.filter((v) => v.lang?.toLowerCase().startsWith("pt"));
-  return (
-    pt.find((v) => /natural|neural|online/i.test(v.name) && /br/i.test(v.lang)) ||
-    pt.find((v) => /maria|francisca|thalita/i.test(v.name) && /br/i.test(v.lang)) ||
-    pt.find((v) => /google/i.test(v.name) && /br/i.test(v.lang)) ||
-    pt.find((v) => /br/i.test(v.lang)) ||
-    pt[0]
-  );
-}
-
-function falar(texto: string, signal: AbortSignal) {
+async function falar(texto: string, signal: AbortSignal) {
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === 'undefined') throw new Error('Voz indisponível neste navegador');
+  const voz = await carregarVozPainel(window.speechSynthesis, signal);
   return new Promise<void>((resolve, reject) => {
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === 'undefined') return reject(new Error('Voz indisponível neste navegador'));
     const synth = window.speechSynthesis;
     try { synth.cancel(); } catch { /* */ }
     const u = new SpeechSynthesisUtterance(texto);
-    const v = escolherVoz();
-    if (v) u.voice = v;
+    if (voz) u.voice = voz;
     u.lang = "pt-BR";
     u.volume = 1;
     u.pitch = 1;
-    u.rate = 0.9;
+    u.rate = 1;
     let feito = false;
     // Chrome/Smart TV: síntese longa pode "congelar"; resume periódico evita travamento.
     const keep = setInterval(() => { try { synth.resume(); } catch { /* */ } }, 5000);
@@ -167,7 +158,7 @@ export default function PainelTV() {
       if (ctxRef.current.state !== 'running') await limitarPainel(ctxRef.current.resume(), 2000, signal);
       if (ctxRef.current.state !== 'running') throw new Error('Áudio suspenso');
       await tocarSino(ctxRef.current, signal);
-      const txt = `Atenção: ${c.pacienteNome.toLowerCase()}, dirigir-se ao ${c.local}.`;
+      const txt = textoChamadaPainel(c.pacienteNome, c.local);
       await falar(txt, signal);
       // Recheck the queue after speaking: do not repeat while another patient waits.
       if (repeat()) { await aguardarPainel(700, signal); if (repeat()) await falar(txt, signal); }
@@ -383,7 +374,7 @@ export default function PainelTV() {
       {debug && (
         <div className="fixed bottom-2 left-2 max-w-md rounded-lg bg-foreground/80 text-background text-xs p-3 font-mono space-y-0.5">
           <div>unidade: {unidade} | canal: {status} | som: {audioOn ? "on" : "off"} | fila: {pendentes}</div>
-          <div>voz: {escolherVoz()?.name || "nenhuma pt-BR"}</div>
+          <div>voz: {escolherVozPainel(window.speechSynthesis?.getVoices() || [])?.name || "nenhuma pt-BR"}</div>
           {logs.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
