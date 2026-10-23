@@ -10,17 +10,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -51,8 +40,7 @@ import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 
 export interface AgendaItemCardProps {
   ag: any;
-  idx: number;
-  idxPendentesManha: number;
+  showMorningDivider: boolean;
   paciente: any | undefined;
   unidade: any | undefined;
   pacienteNomeResolved: string;
@@ -63,7 +51,7 @@ export interface AgendaItemCardProps {
   displayStatus: string;
   displayStatusLabel: string;
   displayStatusClass: string;
-  tipoInfo: { label: string; class: string; icon: string };
+  tipoInfo?: { label: string; class: string; icon: string };
   user: any;
   isProfissional: boolean;
   isMaster: boolean;
@@ -93,7 +81,7 @@ export interface AgendaItemCardProps {
     hora: string;
     iniciado_em: string | null;
   }) => void;
-  onDelete: (id: string) => void;
+  onDeleteInit: (ag: any) => void;
   onImprimirFicha?: (ag: any) => void;
   onImprimirComprovante?: (ag: any) => void;
 }
@@ -103,8 +91,7 @@ const isSameDay = (a: Date, b: Date) =>
 
 const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   ag,
-  idx,
-  idxPendentesManha,
+  showMorningDivider,
   paciente,
   unidade,
   pacienteNomeResolved,
@@ -138,10 +125,11 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   onStatusChange,
   onCancelInit,
   onConcluir,
-  onDelete,
+  onDeleteInit,
   onImprimirFicha,
   onImprimirComprovante,
 }) => {
+  const badge = tipoInfo || { label: ag.tipo, class: "bg-muted text-muted-foreground", icon: "⚪" };
   const today = todayLocalStr();
   const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
   const isFuture = ag.data > today;
@@ -162,7 +150,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
 
   return (
     <React.Fragment>
-      {idx === idxPendentesManha && (
+      {showMorningDivider && (
         <div className="flex items-center gap-2 px-3 py-1.5 mt-2 mb-1 rounded-md bg-amber-50 dark:bg-amber-950/30 border-l-4 border-amber-500">
           <Clock className="w-3.5 h-3.5 text-amber-700 dark:text-amber-300" />
           <span className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
@@ -191,7 +179,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <p className="font-semibold text-foreground cursor-default truncate">
-                    {tipoInfo.icon} {pacienteNomeResolved}
+                    {badge.icon} {pacienteNomeResolved}
                     {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                   </p>
                 </TooltipTrigger>
@@ -215,7 +203,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
                     </p>
                   )}
                   <p className="text-xs">
-                    <strong>Tipo:</strong> {tipoInfo.label}
+                    <strong>Tipo:</strong> {badge.label}
                   </p>
                 <p className="text-xs">
                   <strong>Origem:</strong> {(ag.origem as string) === 'externo' ? '🔗 Externo' : ag.origem}
@@ -256,8 +244,8 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
-            {tipoInfo.label}
+          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", badge.class)}>
+            {badge.label}
           </span>
           {(() => {
             const dob = paciente?.dataNascimento as string | undefined;
@@ -640,36 +628,15 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
             </Button>
           )}
           {canDelete && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 px-2 text-xs text-destructive"
-                  title="Excluir"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir agendamento?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Tem certeza que deseja excluir o agendamento de {ag.pacienteNome} às {ag.hora}? Esta
-                    ação será registrada no log de auditoria.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => onDelete(ag.id)}
-                    className="bg-destructive text-destructive-foreground"
-                  >
-                    Excluir
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2 text-xs text-destructive"
+              title="Excluir"
+              onClick={() => onDeleteInit(ag)}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
           )}
         </div>
       </CardContent>

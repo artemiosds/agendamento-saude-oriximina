@@ -13,7 +13,7 @@ const f = vi.hoisted(() => ({
   triage: true, globalTriage: null as null | boolean, readStatus: 'confirmado', queryError: null as any,
   update: vi.fn(), addQueue: vi.fn(), updateQueue: vi.fn(), refresh: vi.fn(), refreshQueue: vi.fn(),
   loadRange: vi.fn(), hydrate: vi.fn(), exceptions: vi.fn(), selected: vi.fn(),
-  log: vi.fn(), notify: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), rpc: vi.fn(), apply: vi.fn(),
+  deleteRow: vi.fn(), log: vi.fn(), notify: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), rpc: vi.fn(), apply: vi.fn(),
   setter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
   queueSetter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
 }));
@@ -51,7 +51,8 @@ vi.mock('@/components/AgendaNotificacoes', () => ({ AgendaNotificacaoIndividual:
 vi.mock('./CalendarioAgenda', () => ({ CalendarioAgenda: ({ onVisibleRangeChange }: any) => {
   useEffect(() => { onVisibleRangeChange(f.day, f.day); }, [onVisibleRangeChange]); return null;
 } }));
-vi.mock('./agenda/AgendaItemCard', () => ({ default: ({ ag, onStatusChange }: any) => <div>
+vi.mock('./agenda/AgendaItemCard', () => ({ default: ({ ag, onStatusChange, onDeleteInit }: any) => <div>
+  <button onClick={() => onDeleteInit(ag)}>Excluir teste</button>
   <output data-testid="status">{ag.status}</output>
   <button onClick={() => onStatusChange(ag.id, 'confirmado_chegada')}>Chegada teste</button>
 </div> }));
@@ -67,6 +68,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {
     let professional = false;
     const q: any = {
       select: () => q,
+      delete: () => { f.deleteRow(table); return q; },
       eq: (key: string) => { if (key === 'profissional_id') professional = true; return q; },
       is: () => q, in: () => q, not: () => q, order: () => q, limit: () => q,
       single: async () => ({ data: { status: f.readStatus, paciente_id: 'p1', unidade_id: 'u1' }, error: f.queryError }),
@@ -132,5 +134,23 @@ describe('confirmação atômica de chegada na Agenda', () => {
     f.rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202' } });
     await confirmArrival(); expect(await screen.findByText(/operação segura ainda não está disponível/)).toBeInTheDocument();
     expect(f.update).not.toHaveBeenCalled(); expect(f.addQueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('Agenda: diálogo único de exclusão', () => {
+  it('abre com nome e horário corretos, cancela sem gravação e confirma pelo handler auditado existente', async () => {
+    render(<MemoryRouter><Agenda /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir teste' }));
+    expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('PACIENTE TESTE às 08:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar', exact: true }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(f.deleteRow).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir teste' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir', exact: true }));
+    await waitFor(() => expect(f.log).toHaveBeenCalledWith(expect.objectContaining({ acao: 'excluir_agendamento', entidadeId: 'ag1', agendamentoId: 'ag1' })));
+    expect(f.deleteRow).toHaveBeenCalledWith('agendamentos');
+    expect(f.refresh).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 });

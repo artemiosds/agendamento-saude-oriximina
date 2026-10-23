@@ -81,6 +81,7 @@ import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
 import AgendaItemCard from "./agenda/AgendaItemCard";
+import { useAgendaDaySnapshot } from "./agenda/useAgendaDaySnapshot";
 import { salasDeChamadaPorProfissional } from "@/lib/painelChamadas";
 import { FichaImpressao, type FichaPrintMode } from "@/components/FichaImpressao";
 import { buildFichaAtendimentoData, type FichaDados } from "@/lib/fichaAtendimentoData";
@@ -358,10 +359,9 @@ const Agenda: React.FC = () => {
     });
     return () => { cancelled = true; };
   }, [rawAgendamentosDoDia, selectedDate, completeAgendaDates, hydrateAgendaPatients, dayPatientKey]);
-  const agendamentosDoDia = React.useMemo(
-    () => completeAgendaDates.has(selectedDate) && hydratedDayKey === dayPatientKey ? rawAgendamentosDoDia : [],
-    [completeAgendaDates, selectedDate, hydratedDayKey, dayPatientKey, rawAgendamentosDoDia],
-  );
+  const dayReady = completeAgendaDates.has(selectedDate) && hydratedDayKey === dayPatientKey;
+  const dayScope = `${user?.id || ''}|${user?.role || ''}|${user?.unidadeId || ''}|${user?.usuario || ''}|${selectedDate}|${selectionGenerationRef.current}`;
+  const { rows: agendamentosDoDia, retained: retainingDaySnapshot } = useAgendaDaySnapshot(dayScope, rawAgendamentosDoDia, dayReady);
   const dayAgIds = React.useMemo(
     () => agendamentosDoDia.map((ag) => ag.id).sort(),
     [agendamentosDoDia],
@@ -588,11 +588,7 @@ const Agenda: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [turnoFilter, setTurnoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
-    return () => clearTimeout(t);
-  }, [searchTerm]);
+  const deferredSearchTerm = React.useDeferredValue(searchTerm.trim().toLowerCase());
 
   // ── Horário atual (atualiza a cada 60s) para reordenação dinâmica da fila ──
   const [nowMinutes, setNowMinutes] = useState<number>(() => nowMinutesInBrazil());
@@ -931,13 +927,13 @@ const Agenda: React.FC = () => {
 
     let result = base;
 
-    if (debouncedSearch) {
+    if (deferredSearchTerm) {
       result = result.filter((a) => {
         const pac = pacienteById.get(a.pacienteId);
         const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
         const cpf = pac?.cpf?.toLowerCase() || "";
         const cns = pac?.cns?.toLowerCase() || "";
-        return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
+        return nome.includes(deferredSearchTerm) || cpf.includes(deferredSearchTerm) || cns.includes(deferredSearchTerm);
       });
     }
 
@@ -963,23 +959,25 @@ const Agenda: React.FC = () => {
     // Regra centralizada: Se não estiver buscando por nome/CPF/CNS nem filtrando por status específico,
     // a lista principal deve omitir agendamentos que não ocupam vaga (cancelados/faltas)
     // APENAS para datas futuras ou hoje. Para datas passadas, mostramos tudo o que aconteceu.
-    if (!debouncedSearch && statusFilter === "all" && selectedDate >= todayLocalStr()) {
+    if (!deferredSearchTerm && statusFilter === "all" && selectedDate >= todayLocalStr()) {
       result = result.filter((a) => statusOcupaVaga(a.status));
     }
 
     return result;
 
 
-  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, turnoFilter, pacienteById, triageMap, arrivalMap, nowMinutes, resolvePaciente]);
+  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, deferredSearchTerm, statusFilter, tipoFilter, turnoFilter, pacienteById, triageMap, arrivalMap, nowMinutes, resolvePaciente]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
     [filtered],
   );
-  const dayListState = getAgendaDayListState(
+  const requestedDayListState = getAgendaDayListState(
     selectedDate, completeAgendaDates, hydratedDayKey, dayPatientKey,
     rangeError, hydrationError, selectionGenerationRef.current, filtered.length,
   );
+  const dayListState = retainingDaySnapshot && requestedDayListState === 'loading'
+    ? (filtered.length ? 'results' : 'empty') : requestedDayListState;
 
   const handleImprimirLista = React.useCallback(() => {
     const fmtDate = (s: string) => { if (!s) return "-"; const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; };
@@ -1062,12 +1060,12 @@ const Agenda: React.FC = () => {
       if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
       if (isProfissional && a.profissionalId !== user?.id) return false;
       if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
-      if (debouncedSearch) {
+      if (deferredSearchTerm) {
         const pac = pacienteById.get(a.pacienteId);
         const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
         const cpf = pac?.cpf?.toLowerCase() || "";
         const cns = pac?.cns?.toLowerCase() || "";
-        if (!nome.includes(debouncedSearch) && !cpf.includes(debouncedSearch) && !cns.includes(debouncedSearch)) return false;
+        if (!nome.includes(deferredSearchTerm) && !cpf.includes(deferredSearchTerm) && !cns.includes(deferredSearchTerm)) return false;
       }
       return true;
     });
@@ -1088,7 +1086,7 @@ const Agenda: React.FC = () => {
     // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
     return { total, byGroup };
 
-  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacienteById, resolvePaciente]);
+  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, deferredSearchTerm, pacienteById, resolvePaciente]);
 
 
   // (primeiro item da manhã que ainda não foi concluído).
@@ -2534,10 +2532,8 @@ const Agenda: React.FC = () => {
   const stableConcluir = React.useCallback((payload: any) => {
     setConcluirTarget(payload);
   }, []);
-  const stableDelete = React.useCallback(
-    (id: string) => handleDeleteAgendamentoRef.current(id),
-    [],
-  );
+  const [agendamentoParaExcluir, setAgendamentoParaExcluir] = useState<(typeof agendamentos)[number] | null>(null);
+  const stableDeleteInit = useCallback((ag: (typeof agendamentos)[number]) => setAgendamentoParaExcluir(ag), []);
 
   // ---- Ficha de Atendimento Clínico (impressão a partir da Agenda) ----
   const [fichaOpen, setFichaOpen] = useState(false);
@@ -3409,18 +3405,13 @@ const Agenda: React.FC = () => {
               </Card>
             ) : (
               filtered.map((ag, idx) => {
-                const tipoInfo = tipoBadge[ag.tipo] || {
-                  label: ag.tipo,
-                  class: "bg-muted text-muted-foreground",
-                  icon: "⚪",
-                };
+                const tipoInfo = tipoBadge[ag.tipo];
                 const displayStatus = getDisplayStatus(ag, todayLocalStr());
                 return (
                   <AgendaItemCard
                     key={ag.id}
                     ag={ag}
-                    idx={idx}
-                    idxPendentesManha={idxPendentesManha}
+                    showMorningDivider={idx === idxPendentesManha}
                     paciente={pacienteById.get(ag.pacienteId)}
                     unidade={unidadeById.get(ag.unidadeId)}
                     pacienteNomeResolved={resolvePaciente(ag.pacienteId, ag.pacienteNome)}
@@ -3454,7 +3445,7 @@ const Agenda: React.FC = () => {
                     onStatusChange={stableStatusChange}
                     onCancelInit={stableCancelInit}
                     onConcluir={stableConcluir}
-                    onDelete={stableDelete}
+                    onDeleteInit={stableDeleteInit}
                     onImprimirFicha={stableImprimirFicha}
                     onImprimirComprovante={stableComprovante}
                   />
@@ -4010,6 +4001,26 @@ const Agenda: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={agendamentoParaExcluir !== null} onOpenChange={(open) => { if (!open) setAgendamentoParaExcluir(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir agendamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o agendamento de {agendamentoParaExcluir?.pacienteNome} às {agendamentoParaExcluir?.hora}? Esta
+              ação será registrada no log de auditoria.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground" onClick={() => {
+              const target = agendamentoParaExcluir;
+              setAgendamentoParaExcluir(null);
+              if (target) void handleDeleteAgendamentoRef.current(target.id);
+            }}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={!!confirmStatusTarget} onOpenChange={(o) => { if (!o) setConfirmStatusTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
