@@ -30,6 +30,7 @@ import { compareLegalPriority, legalPriorityKey } from "@/lib/queuePriority";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { hasConfirmedTriage } from "@/lib/triageCompletion";
+import { sanitizeVitalInput, validateTriageVitals } from "@/lib/triageVitals";
 import { differenceInMinutes } from "date-fns";
 import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
 import { EmptyState } from "@/components/EmptyState";
@@ -543,23 +544,12 @@ const Triagem: React.FC = () => {
     }));
   }, []);
 
-  const normalizarAlturaCm = useCallback((value: string): number | null => {
-    if (!value) return null;
-    const alturaInformada = Number(String(value).replace(",", "."));
-    if (!Number.isFinite(alturaInformada) || alturaInformada <= 0) return null;
-    // A tela historicamente pede centímetros, mas equipes também informam metros
-    // (ex.: 1,56). Aceita os dois formatos e persiste sempre em centímetros.
-    return alturaInformada <= 3 ? alturaInformada * 100 : alturaInformada;
-  }, []);
-
-  const calcularImcTriagem = useCallback((pesoValue: string, alturaValue: string): number | null => {
-    const peso = Number(String(pesoValue || "").replace(",", "."));
-    const alturaCm = normalizarAlturaCm(alturaValue);
-    if (!Number.isFinite(peso) || peso <= 0 || !alturaCm || alturaCm <= 0) return null;
-    const alturaM = alturaCm / 100;
-    const imcCalculado = peso / (alturaM * alturaM);
-    return Number.isFinite(imcCalculado) ? Number(imcCalculado.toFixed(2)) : null;
-  }, [normalizarAlturaCm]);
+  const vitalValidation = useMemo(() => validateTriageVitals(form), [form.peso, form.altura, form.temperatura, form.frequenciaCardiaca, form.saturacaoOxigenio, form.glicemia]);
+  const normalizarAlturaCm = (value: string) => validateTriageVitals({ ...form, altura: value }).values.altura;
+  const calcularImcTriagem = (peso: string, altura: string) => {
+    const result = validateTriageVitals({ ...form, peso, altura });
+    return result.errors.peso || result.errors.altura || result.errors.imc ? null : result.values.imc;
+  };
 
   const now = useMemo(() => new Date(), []);
 
@@ -654,7 +644,7 @@ const Triagem: React.FC = () => {
     else if (value < 39.9) label = "Obesidade Grau II";
     else label = "Obesidade Grau III";
     return { value: value.toFixed(2), label };
-  }, [calcularImcTriagem, form.peso, form.altura]);
+  }, [form.peso, form.altura]);
 
   const [openingTriagemId, setOpeningTriagemId] = useState<string | null>(null);
 
@@ -729,7 +719,8 @@ const Triagem: React.FC = () => {
 
 
   const salvarRascunho = async () => {
-    if (!selectedItem) return;
+    if (!selectedItem || saving) return;
+    if (!vitalValidation.valid) { toast.error(Object.values(vitalValidation.errors)[0]); return; }
     setSaving(true);
     try {
       if (await hasConfirmedTriage(selectedItem.id)) {
@@ -738,14 +729,8 @@ const Triagem: React.FC = () => {
       const triagePayload: any = {
         agendamento_id: selectedItem.id,
         tecnico_id: user?.id || "",
-        peso: form.peso ? parseFloat(form.peso) : null,
-        altura: normalizarAlturaCm(form.altura),
+        ...vitalValidation.values,
         pressao_arterial: form.pressaoArterial || null,
-        temperatura: form.temperatura ? parseFloat(form.temperatura) : null,
-        frequencia_cardiaca: form.frequenciaCardiaca ? parseInt(form.frequenciaCardiaca) : null,
-        saturacao_oxigenio: form.saturacaoOxigenio ? parseInt(form.saturacaoOxigenio) : null,
-        glicemia: form.glicemia ? parseFloat(form.glicemia) : null,
-        imc: calcularImcTriagem(form.peso, form.altura),
         alergias: form.alergias,
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
@@ -772,7 +757,8 @@ const Triagem: React.FC = () => {
   };
 
   const confirmarTriagem = async (encaminharEnfermagem: boolean) => {
-    if (!selectedItem) return;
+    if (!selectedItem || saving) return;
+    if (!vitalValidation.valid) { toast.error(Object.values(vitalValidation.errors)[0]); return; }
     setSaving(true);
     let etapa = "gravar_ficha";
 
@@ -785,14 +771,8 @@ const Triagem: React.FC = () => {
       const triagePayload: any = {
         agendamento_id: selectedItem.id,
         tecnico_id: user?.id || "",
-        peso: form.peso ? parseFloat(form.peso) : null,
-        altura: normalizarAlturaCm(form.altura),
+        ...vitalValidation.values,
         pressao_arterial: form.pressaoArterial || null,
-        temperatura: form.temperatura ? parseFloat(form.temperatura) : null,
-        frequencia_cardiaca: form.frequenciaCardiaca ? parseInt(form.frequenciaCardiaca) : null,
-        saturacao_oxigenio: form.saturacaoOxigenio ? parseInt(form.saturacaoOxigenio) : null,
-        glicemia: form.glicemia ? parseFloat(form.glicemia) : null,
-        imc: calcularImcTriagem(form.peso, form.altura),
         alergias: form.alergias,
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
@@ -977,11 +957,11 @@ const Triagem: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
                 <Label>Peso (kg)</Label>
-                <Input type="number" step="0.01" value={form.peso} onChange={(e) => setForm((p) => ({ ...p, peso: e.target.value }))} placeholder="70.5" />
+                <Input aria-label="Peso (kg)" type="text" inputMode="decimal" min="0.5" max="400" step="0.01" aria-invalid={!!vitalValidation.errors.peso} value={form.peso} onChange={(e) => setForm((p) => ({ ...p, peso: sanitizeVitalInput(e.target.value) }))} placeholder="70.5" />
               </div>
               <div>
                 <Label>Altura (cm ou m)</Label>
-                <Input type="number" step="0.01" value={form.altura} onChange={(e) => setForm((p) => ({ ...p, altura: e.target.value }))} placeholder="170 ou 1.70" />
+                <Input aria-label="Altura (cm ou m)" type="text" inputMode="decimal" min="0.2" max="260" step="0.01" aria-invalid={!!vitalValidation.errors.altura} value={form.altura} onChange={(e) => setForm((p) => ({ ...p, altura: sanitizeVitalInput(e.target.value) }))} placeholder="170 ou 1.70" />
                 <p className="mt-1 text-[10px] text-muted-foreground">Aceita 156 cm ou 1,56 m; o sistema normaliza automaticamente.</p>
               </div>
               <div>
@@ -1002,21 +982,22 @@ const Triagem: React.FC = () => {
               </div>
               <div>
                 <Label>Temperatura (°C)</Label>
-                <Input type="number" step="0.1" value={form.temperatura} onChange={(e) => setForm((p) => ({ ...p, temperatura: e.target.value }))} placeholder="36.5" />
+                <Input type="number" step="0.1" min="0" max="60" value={form.temperatura} onChange={(e) => setForm((p) => ({ ...p, temperatura: e.target.value }))} placeholder="36.5" />
               </div>
               <div>
                 <Label>FC (bpm)</Label>
-                <Input type="number" value={form.frequenciaCardiaca} onChange={(e) => setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))} placeholder="72" />
+                <Input type="number" min="0" max="350" step="1" value={form.frequenciaCardiaca} onChange={(e) => setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))} placeholder="72" />
               </div>
               <div>
                 <Label>SatO2 (%)</Label>
-                <Input type="number" value={form.saturacaoOxigenio} onChange={(e) => setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))} placeholder="98" />
+                <Input type="number" min="0" max="100" step="1" value={form.saturacaoOxigenio} onChange={(e) => setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))} placeholder="98" />
               </div>
               <div>
                 <Label>Glicemia (mg/dL)</Label>
-                <Input type="number" step="0.01" value={form.glicemia} onChange={(e) => setForm((p) => ({ ...p, glicemia: e.target.value }))} placeholder="Opcional" />
+                <Input type="number" step="0.01" min="0" max="9999.99" value={form.glicemia} onChange={(e) => setForm((p) => ({ ...p, glicemia: e.target.value }))} placeholder="Opcional" />
               </div>
             </div>
+            {!vitalValidation.valid && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{Object.values(vitalValidation.errors).map(message => <p key={message}>{message}</p>)}</div>}
             <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">2. Avaliação Clínica e Risco</h3>
             <div>
               <Label className="text-base font-semibold">Escala de Dor (010): {form.dor}</Label>
@@ -1160,10 +1141,10 @@ const Triagem: React.FC = () => {
               />
             )}
             <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex items-center justify-between gap-2 border-t bg-background px-6 py-3">
-              <Button variant="outline" onClick={salvarRascunho} disabled={saving}>
+              <Button variant="outline" onClick={salvarRascunho} disabled={saving || !vitalValidation.valid}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4" /> Salvar Rascunho
               </Button>
-              <Button variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving}>
+              <Button variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving || !vitalValidation.valid}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Seguir sem Enfermagem
               </Button>
             </div>
