@@ -51,4 +51,10 @@ describe('botão de chamadas', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Chamar no painel' }));
     await waitFor(() => expect(fixture.warning).toHaveBeenCalled()); expect(fixture.success).not.toHaveBeenCalled();
   });
+  it('supports a full visible and accessible label while preserving the default card label', async () => {
+    render(<ChamarPacienteButton unidadeId="u1" pacienteNome="PACIENTE" buttonLabel="Chamar Paciente" />);
+    expect(screen.getByText("Chamar Paciente")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Chamar Paciente" })).toBeInTheDocument();
+  });
+
 });

@@ -1,7 +1,7 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const f = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn(), refresh: vi.fn(), log: vi.fn(), update: vi.fn(), apply: vi.fn(),
+const f = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn(), refresh: vi.fn(), log: vi.fn(), update: vi.fn(), apply: vi.fn(), callProps: [] as any[],
   ag: [{ id: 'ag1', pacienteId: 'p1', pacienteNome: 'PACIENTE TESTE', unidadeId: 'u1', profissionalId: 'prof1', profissionalNome: 'PROF TESTE', data: '2026-10-23', hora: '08:00', status: 'aguardando_triagem' }],
   queue: [{ id: 'ag1', pacienteId: 'p1', pacienteNome: 'PACIENTE TESTE', unidadeId: 'u1', profissionalId: 'prof1', status: 'aguardando_triagem', horaChegada: '08:00' }],
   patients: [{ id: 'p1', nome: 'PACIENTE TESTE' }], toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
@@ -13,7 +13,10 @@ vi.mock('@/contexts/OperacionalContext', () => ({ useOperacional: () => ({ logAc
 vi.mock('@/hooks/useCustomFields', () => ({ useCustomFields: () => ({ resolved: { fields: [] } }) }));
 vi.mock('@/components/TriageReconciliationPanel', () => ({ default: () => null }));
 vi.mock('@/components/ui/slider', () => ({ Slider: () => null }));
-vi.mock('@/components/ChamarPacienteButton', () => ({ default: () => null }));
+vi.mock('@/components/ChamarPacienteButton', () => ({ default: (props: any) => {
+  f.callProps.push(props);
+  return <button type="button" data-testid="mock-chamar-paciente">{props.buttonLabel || 'Chamar'}</button>;
+} }));
 vi.mock('@/components/CondicaoBadges', () => ({ default: () => null }));
 vi.mock('@/components/triagem/MedicamentoBusca', () => ({ default: () => null }));
 vi.mock('@/components/triagem/AlergiaBusca', () => ({ default: () => null }));
@@ -21,7 +24,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: (...args: a
 vi.mock('sonner', () => ({ toast: f.toast }));
 import Triagem from './Triagem';
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.clearAllMocks(); f.callProps.length = 0;
   f.from.mockImplementation(() => { const q: any = { select: () => q, eq: () => q, not: () => q, limit: () => q, maybeSingle: async () => ({ data: null, error: null }) }; return q; });
   f.refresh.mockResolvedValue(undefined); f.rpc.mockResolvedValue({ data: { already_processed: false, status: 'aguardando_triagem', agendamento: { id: 'ag1', status: 'aguardando_triagem' }, fila: { id: 'ag1' } }, error: null });
 });
@@ -67,5 +70,31 @@ describe('Triagem: conclusão atômica e erros recuperáveis', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument(); expect(screen.getByLabelText('Peso (kg)')).toHaveValue('63');
     expect(screen.getByRole('button', { name: 'Seguir sem Enfermagem' })).toBeEnabled();
     expect(f.update).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('Triagem: chamada do paciente dentro do modal', () => {
+  it('mantém o modal e os campos preenchidos e reutiliza os dados da triagem', async () => {
+    await open();
+    const dialog = screen.getByRole('dialog');
+    const chamar = within(dialog).getByRole('button', { name: 'Chamar Paciente' });
+    expect(chamar).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText('Peso (kg)'), { target: { value: '63' } });
+    fireEvent.click(chamar);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Peso (kg)')).toHaveValue('63');
+    expect(f.rpc).not.toHaveBeenCalled();
+    expect(f.update).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId('mock-chamar-paciente')).toHaveLength(2);
+    expect(f.callProps).toContainEqual(expect.objectContaining({
+      unidadeId: 'u1',
+      pacienteNome: 'PACIENTE TESTE',
+      profissionalNome: 'PROF TESTE',
+      defaultLocal: 'Sala de Triagem',
+      buttonLabel: 'Chamar Paciente',
+    }));
   });
 });

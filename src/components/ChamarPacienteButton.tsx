@@ -16,9 +16,11 @@ interface Props {
   defaultLocal?: string;
   priorizarSalaPadrao?: boolean;
   className?: string;
+  /** Optional visible and accessible label for contexts where the full action name is clearer. */
+  buttonLabel?: string;
 }
 
-export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissionalNome, defaultLocal, priorizarSalaPadrao = false, className }: Props) {
+export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissionalNome, defaultLocal, priorizarSalaPadrao = false, className, buttonLabel }: Props) {
   const [open, setOpen] = useState(false);
   const localInicial = () => (priorizarSalaPadrao && defaultLocal) ? defaultLocal : getLocalSalvo(unidadeId, defaultLocal) || defaultLocal || "";
   const [local, setLocal] = useState(localInicial);
@@ -86,11 +88,11 @@ export default function ChamarPacienteButton({ unidadeId, pacienteNome, profissi
           variant={chamadoEm ? "outline" : "default"}
           className={cn("h-9 px-3 gap-2 text-sm font-semibold shadow-sm", className)}
           title="Chamar paciente no painel"
-          aria-label="Chamar paciente no painel"
+          aria-label={buttonLabel ? (chamadoEm ? "Chamar paciente novamente" : buttonLabel) : "Chamar paciente no painel"}
           disabled={enviando || !unidadeId}
         >
           <Megaphone className="w-4 h-4" />
-          {chamadoEm ? "Chamar de novo" : "Chamar"}
+          {chamadoEm ? (buttonLabel ? "Chamar novamente" : "Chamar de novo") : (buttonLabel || "Chamar")}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-2" align="end">

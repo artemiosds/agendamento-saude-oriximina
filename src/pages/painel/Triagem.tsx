@@ -855,8 +855,20 @@ const Triagem: React.FC = () => {
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-display">Triagem  {selectedItem?.pacienteNome}</DialogTitle>
+          <DialogHeader className="flex flex-col gap-2 pr-8 space-y-0 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="font-display break-words">Triagem  {selectedItem?.pacienteNome}</DialogTitle>
+            </div>
+            {selectedItem?.unidadeId && (
+              <ChamarPacienteButton
+                unidadeId={selectedItem.unidadeId}
+                pacienteNome={resolvePaciente(selectedItem.pacienteId, selectedItem.pacienteNome)}
+                profissionalNome={selectedItem.profissionalNome}
+                defaultLocal="Sala de Triagem"
+                buttonLabel="Chamar Paciente"
+                className="shrink-0 border border-[#2A6F97] bg-[#EAF3F8] text-[#1B4D6B] hover:bg-[#D8EAF4] hover:text-[#153F58] focus-visible:ring-[#2A6F97] dark:border-sky-400 dark:bg-slate-900 dark:text-sky-200 dark:hover:bg-slate-800 dark:hover:text-sky-100"
+              />
+            )}
           </DialogHeader>
           {(pacienteInfo || selectedItem) && (
             <div className="space-y-2">
