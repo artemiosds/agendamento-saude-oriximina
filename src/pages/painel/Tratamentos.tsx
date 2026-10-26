@@ -2386,7 +2386,16 @@ const Tratamentos: React.FC = () => {
             <TreatmentCyclePendingPanel cycle={selectedCycle} sessions={cycleSessions} issues={cycleIntegrityIssues} appointments={appointmentByIdMap} canReview={canControlSessions && cycleIsClinicallyActive} availableDates={getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id)} onChanged={async () => { await loadSessionsForCycle(selectedCycle, false); await loadData(true); }} />
             <div className="max-h-[500px] overflow-y-auto border rounded-lg">
               <div className="space-y-2">
-                {cycleSessions.map((s) => {
+                {(() => {
+                  // Exibição cronológica: ordena pela data; a numeração gravada (histórica) é preservada.
+                  const ordered = [...cycleSessions].sort((a, b) => {
+                    if (!a.scheduled_date && !b.scheduled_date) return a.session_number - b.session_number;
+                    if (!a.scheduled_date) return 1;
+                    if (!b.scheduled_date) return -1;
+                    return a.scheduled_date.localeCompare(b.scheduled_date) || a.session_number - b.session_number;
+                  });
+                  return ordered.map((s, idx) => ({ s, pos: idx + 1 }));
+                })().map(({ s, pos }) => {
                   const integrity = getSessionIntegrity(s, selectedCycle);
                   const duplicateDate = duplicateDateSessionIds.has(s.id);
                   const isPendente = integrity.kind === "pendente";
@@ -2408,8 +2417,11 @@ const Tratamentos: React.FC = () => {
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-mono font-bold text-primary w-10 text-center shrink-0">
-                          {s.session_number}/{selectedCycle.total_sessions}
+                        <span className="text-sm font-mono font-bold text-primary w-12 text-center shrink-0 flex flex-col leading-tight">
+                          <span>{pos}/{selectedCycle.total_sessions}</span>
+                          {pos !== s.session_number && (
+                            <span className="text-[10px] font-normal text-muted-foreground" title="Número original gravado no histórico">reg. nº {s.session_number}</span>
+                          )}
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-foreground">
