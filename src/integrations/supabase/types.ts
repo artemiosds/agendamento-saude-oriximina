@@ -4398,6 +4398,22 @@ export type Database = {
         Args: { p_discharge_id: string; p_force?: boolean }
         Returns: Json
       }
+      assert_care_flow_actor: {
+        Args: { p_actor: string; p_module: string; p_unit: string }
+        Returns: Json
+      }
+      assert_treatment_cycle_integrity: {
+        Args: { p_cycle_id: string }
+        Returns: undefined
+      }
+      assert_treatment_write_scope: {
+        Args: {
+          p_manage?: boolean
+          p_professional_id: string
+          p_unit_id: string
+        }
+        Returns: Json
+      }
       atualizar_status_falta:
         | { Args: { p_paciente_id: string }; Returns: Json }
         | {
@@ -4449,6 +4465,15 @@ export type Database = {
         }
         Returns: Json
       }
+      clear_duplicate_treatment_session_date: {
+        Args: {
+          p_confirmed: boolean
+          p_expected_date: string
+          p_reason: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       concluir_atendimento_master: {
         Args: {
           p_agendamento_id: string
@@ -4462,8 +4487,29 @@ export type Database = {
         }
         Returns: Json
       }
+      concluir_triagem_atendimento: {
+        Args: {
+          p_agendamento_id: string
+          p_dados_triagem: Json
+          p_encaminhar_enfermagem?: boolean
+          p_tecnico_id: string
+        }
+        Returns: Json
+      }
       confirm_profession_careness_mapping: {
         Args: { p_signature: string }
+        Returns: Json
+      }
+      confirmar_chegada_atendimento: {
+        Args: {
+          p_agendamento_id: string
+          p_hora_chegada: string
+          p_paciente_id_esperado?: string
+          p_reconciliar?: boolean
+          p_unidade_id: string
+          p_usuario_id: string
+          p_usuario_nome: string
+        }
         Returns: Json
       }
       create_external_appointment: {
@@ -4489,6 +4535,10 @@ export type Database = {
         Returns: Json
       }
       current_user_cbo_codigo: { Args: never; Returns: string }
+      delete_treatment_cycle_with_appointments: {
+        Args: { p_cycle_id: string; p_reason: string }
+        Returns: Json
+      }
       desbloquear_paciente_faltas: {
         Args: {
           p_paciente_id: string
@@ -4551,10 +4601,45 @@ export type Database = {
         }
         Returns: Json
       }
+      get_treatment_cycles_scoped: {
+        Args: {
+          p_integrity_only?: boolean
+          p_only_own_professional?: boolean
+          p_page?: number
+          p_page_size?: number
+          p_professional_id?: string
+          p_search?: string
+          p_status?: string
+          p_unit_id?: string
+        }
+        Returns: Json
+      }
+      get_treatment_integrity_pending: {
+        Args: { p_limit?: number; p_page?: number }
+        Returns: Json
+      }
+      gravar_triagem_atendimento: {
+        Args: {
+          p_agendamento_id: string
+          p_confirmar: boolean
+          p_dados: Json
+          p_enfermagem: boolean
+          p_tecnico_id: string
+        }
+        Returns: Json
+      }
       has_staff_role: { Args: { _role: string }; Returns: boolean }
       iniciar_atendimento: {
         Args: { p_agendamento_id: string; p_profissional_id: string }
         Returns: undefined
+      }
+      iniciar_triagem_atendimento: {
+        Args: {
+          p_agendamento_id: string
+          p_paciente_id_esperado?: string
+          p_tecnico_id: string
+        }
+        Returns: Json
       }
       is_date_blocked: {
         Args: {
@@ -4602,6 +4687,16 @@ export type Database = {
           p_appointment_id: string
           p_cycle_id: string
           p_expected_session_date: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      link_treatment_session_checked: {
+        Args: {
+          p_appointment_id: string
+          p_cycle_id: string
+          p_expected_session_date: string
+          p_reason: string
           p_session_id: string
         }
         Returns: Json
@@ -4676,6 +4771,20 @@ export type Database = {
         }
         Returns: Json
       }
+      reschedule_treatment_session_checked: {
+        Args: {
+          p_check_patient_conflict: boolean
+          p_cycle_id: string
+          p_expected_appointment_id: string
+          p_expected_session_date: string
+          p_manual_capacity: boolean
+          p_new_date: string
+          p_new_time: string
+          p_reason: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       reschedule_treatment_session_manual_capacity: {
         Args: {
           p_check_patient_conflict: boolean
@@ -4684,6 +4793,21 @@ export type Database = {
           p_expected_session_date: string
           p_new_date: string
           p_new_time: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      reschedule_treatment_session_with_room: {
+        Args: {
+          p_check_patient_conflict: boolean
+          p_cycle_id: string
+          p_expected_appointment_id: string
+          p_expected_session_date: string
+          p_manual_capacity: boolean
+          p_new_date: string
+          p_new_room_id: string
+          p_new_time: string
+          p_reason: string
           p_session_id: string
         }
         Returns: Json
@@ -4697,6 +4821,33 @@ export type Database = {
           p_form_slug: string
           p_profissional_id?: string
           p_unidade_id?: string
+        }
+        Returns: Json
+      }
+      restore_missing_treatment_session: {
+        Args: {
+          p_confirmed: boolean
+          p_cycle_id: string
+          p_date: string
+          p_reason: string
+          p_session_number: number
+        }
+        Returns: Json
+      }
+      review_treatment_session_date: {
+        Args: {
+          p_date: string
+          p_expected_date: string
+          p_reason: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      salvar_rascunho_triagem_atendimento: {
+        Args: {
+          p_agendamento_id: string
+          p_dados_triagem: Json
+          p_tecnico_id: string
         }
         Returns: Json
       }
@@ -4748,6 +4899,15 @@ export type Database = {
         }
         Returns: Json
       }
+      save_treatment_cycle_plan: {
+        Args: {
+          p_cycle: Json
+          p_dates: string[]
+          p_expected_total: number
+          p_reason: string
+        }
+        Returns: Json
+      }
       schedule_treatment_session: {
         Args: {
           p_appointment: Json
@@ -4764,6 +4924,18 @@ export type Database = {
           p_check_patient_conflict: boolean
           p_cycle_id: string
           p_expected_session_date: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      schedule_treatment_session_checked: {
+        Args: {
+          p_appointment: Json
+          p_check_patient_conflict: boolean
+          p_cycle_id: string
+          p_expected_session_date: string
+          p_manual_capacity: boolean
+          p_reason: string
           p_session_id: string
         }
         Returns: Json
@@ -4877,6 +5049,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      treatment_cycle_integrity_issues: {
+        Args: { p_cycle_id: string }
+        Returns: string[]
+      }
       treatment_manual_capacity_override_matches: {
         Args: {
           p_appointment_id: string
@@ -4898,6 +5074,7 @@ export type Database = {
         }
         Returns: Json
       }
+      validar_sinais_triagem: { Args: { p_data: Json }; Returns: Json }
     }
     Enums: {
       tipo_alta: "conclusao" | "outro"
