@@ -1,3 +1,4 @@
+import { resolveBpaCidDetails } from "./bpaCid";
 import { describe, expect, it } from "vitest";
 import {
   BPA_HEADER_LENGTH,
@@ -257,5 +258,17 @@ describe("layout TXT BPA-I", () => {
     });
     expect(result.codigo).toBe("150680");
     expect(result.fonte).toBe("cep");
+  });
+});
+
+ describe("CID estruturado até o TXT", () => {
+  it("envia apenas o CID selecionado e mantém adicionais fora do Registro 03", () => {
+    const result = resolveBpaCidDetails({ procedureCid: [{ codigo: "F82" }, { codigo: "G80.9", principal: true }, { codigo: "M54.5" }] });
+    const registro = { ...registroValido(), cid: result.cid };
+    const txt = buildRegistro03(registro).line;
+    expect(readRegistro03Field(txt, "cid").trim()).toBe("G809");
+    expect(result.adicionais).toEqual(["F82", "M545"]);
+    expect(txt.length).toBe(BPA_I_RECORD_LENGTH);
+    expect(auditRegistro03Serialization(registro, txt)).toEqual([]);
   });
 });

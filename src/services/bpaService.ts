@@ -1,3 +1,4 @@
+import { extractBpaCidCodes } from "@/lib/bpaCid";
 import { supabase } from '@/integrations/supabase/client';
 
 export interface LinhaBpaNormalizada {
@@ -96,17 +97,7 @@ const onlyDigits = (v: any) => String(v ?? '').replace(/\D/g, '');
 // Extrai apenas CID-10 reconhecível. A versão anterior removia caracteres e
 // cortava os quatro primeiros, podendo transformar texto como "DOR LOMBAR" em
 // um falso CID "DORL" e "F79/G70/G80" em "F79G".
-const extractCidCodes = (v: any): string[] => {
-  const texto = String(v ?? '').toUpperCase();
-  const encontrados: string[] = [];
-  const regex = /(?:^|[^A-Z0-9])([A-TV-Z][0-9]{2}(?:\.[0-9]|[0-9])?)(?=$|[^A-Z0-9])/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(texto)) !== null) {
-    const codigo = match[1].replace(/\./g, '');
-    if (!encontrados.includes(codigo)) encontrados.push(codigo);
-  }
-  return encontrados;
-};
+const extractCidCodes = extractBpaCidCodes;
 const sanitizeCid = (v: any) => extractCidCodes(v)[0] || '';
 const normalizeName = (s: any) => String(s ?? '')
   .normalize('NFD')
@@ -121,21 +112,7 @@ const tokenize = (s: any) => normalizeName(s).split(' ').filter((w) => w.length 
 
 const unique = <T,>(arr: T[]) => [...new Set(arr.filter(Boolean))];
 
-const pushCid = (bag: string[], v: any) => {
-  if (!v) return;
-  if (Array.isArray(v)) return v.forEach((x) => pushCid(bag, x));
-  if (typeof v === 'object') {
-    pushCid(bag, v.codigo || v.code || v.cid || v.cid10 || v.cid_codigo || v.value);
-    return;
-  }
-  extractCidCodes(v).forEach((cid) => bag.push(cid));
-};
-
-const extractCidsFromAny = (...sources: any[]): string[] => {
-  const out: string[] = [];
-  sources.forEach((src) => pushCid(out, src));
-  return unique(out);
-};
+const extractCidsFromAny = (...sources: any[]): string[] => extractBpaCidCodes(sources);
 
 const extractArray = (v: any): any[] => {
   if (!v) return [];
@@ -483,7 +460,7 @@ const resolveCidForBpaProcedure = ({ prontuario, procedimento, pts, paciente }: 
   const prontCids = extractCidsFromAny(
     prontuario?.cid, prontuario?.cid10, prontuario?.diagCid, prontuario?.cid_principal, prontuario?.cids, prontuario?.cids_vinculados,
     prontuario?.diagnostico_cid, prontuario?.hipotese_diagnostica, prontuario?.hipotese,
-    cd.cid, cd.cids, cd.cid_principal, cd.diagnostico_cid, cd.hipotese_diagnostica, cd.hipotese_diagnostica_cid
+    cd.cid_principal, cd.cid, cd.cid10, cd.esp_hipotese_cid, cd.hipotese_cid, cd.cids_selecionados, cd.cids, cd.diagnostico_cid, cd.hipotese_diagnostica, cd.hipotese_diagnostica_cid
   );
   const ptsProcMatch = (pts?.procs || []).find((p) => {
     const sameId = p.procedimento_id && procedimento.procedimento_id && p.procedimento_id === procedimento.procedimento_id;

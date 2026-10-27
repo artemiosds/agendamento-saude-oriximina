@@ -50,7 +50,7 @@ import {
 import { resolveBpaHeaderDocument } from "@/lib/bpaHeaderSource";
 import { normalizeBpaPhone } from "@/lib/bpaPhoneNormalization";
 import { parseBpaDate as parseDataSegura } from "@/lib/bpaDate";
-import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCid } from "@/lib/bpaCid";
+import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails } from "@/lib/bpaCid";
 import { includeBpaProductionResolution, loadBpaEntitiesByIds } from "@/lib/bpaSourceLoading";
 
 
@@ -1370,26 +1370,30 @@ const BpaExportar: React.FC = () => {
         const pacIdsPts = Array.from(new Set(prontuarios.map((p: any) => String(p.paciente_id || "")).filter(Boolean)));
         for (let i = 0; i < pacIdsPts.length; i += 300) {
           const lote = pacIdsPts.slice(i, i + 300);
-          const { data: ptsRows } = await (supabase as any)
-            .from("pts").select("id, patient_id, professional_id, status, updated_at").in("patient_id", lote);
+          const ptsRows = await fetchAllRowsBpa<any>(() => (supabase as any)
+            .from("pts").select("id, patient_id, professional_id, status, updated_at").in("patient_id", lote).order("id"));
           const ptsAtivos = ((ptsRows || []) as any[]).filter((r) => !/cancel|inativ|exclu/i.test(String(r.status || "")));
           const ids = ptsAtivos.map((r) => r.id);
           if (!ids.length) continue;
-          const { data: cidRows } = await (supabase as any).from("pts_cid").select("pts_id, cid_codigo").in("pts_id", ids);
+          const cidRows: any[] = [];
+          for (let j = 0; j < ids.length; j += 300) {
+            cidRows.push(...await fetchAllRowsBpa<any>(() => (supabase as any).from("pts_cid")
+              .select("pts_id, cid_codigo").in("pts_id", ids.slice(j, j + 300)).order("pts_id").order("cid_codigo")));
+          }
           const porPts = new Map<string, string[]>();
           for (const c of (cidRows || []) as any[]) {
             const l = porPts.get(c.pts_id) || []; l.push(String(c.cid_codigo || "")); porPts.set(c.pts_id, l);
           }
           ptsAtivos.sort((x, y) => String(y.updated_at || "").localeCompare(String(x.updated_at || "")));
           for (const r of ptsAtivos) {
-            const cid = (porPts.get(r.id) || []).find((c) => extrairCodigosCid(c).length > 0);
+            const cid = extrairCodigosCid(porPts.get(r.id) || []).join(" / ");
             if (!cid) continue;
             const l = ptsCidPorPaciente.get(String(r.patient_id)) || [];
             l.push({ profissional: String(r.professional_id || ""), cid });
             ptsCidPorPaciente.set(String(r.patient_id), l);
           }
         }
-      } catch (e) { console.warn("[BPA] falha ao ler CIDs do PTS", e); }
+      } catch (e) { throw new Error("Não foi possível consultar os CIDs do PTS. Tente gerar novamente."); }
       const cidPtsDoAtendimento = (pront: any): string => {
         const l = ptsCidPorPaciente.get(String(pront?.paciente_id || "")) || [];
         return (l.find((x) => x.profissional === String(pront?.profissional_id || "")) || l[0])?.cid || "";
@@ -1738,7 +1742,7 @@ const BpaExportar: React.FC = () => {
             );
             return;
           }
-          const cid = extrairCodigoCid(r.cids_selecionados);
+          const cid = extrairCodigosCid(r.cids_selecionados).join(" / ");
           const itens = sigtapItensPorProntuario.get(r.prontuario_id) || [];
           if (!itens.some((item) => item.codigo === code && (item.cid || "") === cid)) {
             itens.push({ codigo: code, cid });
@@ -2298,7 +2302,7 @@ const BpaExportar: React.FC = () => {
             servico: servicoValidacao,
             classificacao: classificacaoValidacao,
           };
-          const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar, validacaoCtxLinha);
+          const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar.map(p => ({ ...p, cid: extrairCodigoCid(p.cid) })), validacaoCtxLinha);
 
 
           const codigosValidados = validacaoProcs.validos.map((r) => {
@@ -2607,10 +2611,12 @@ const BpaExportar: React.FC = () => {
                   )
                 : undefined;
               const cidProducaoLinha = resolucaoCid?.cid || "";
-              const cidBrutoLinha = ehTecnicoEnfermagem
-                ? ""
-                : resolveBpaCid({ procedureCid: procEntry.cid, productionCid: cidProducaoLinha, prontuario: pront, paciente: pac, ptsCid: cidPtsDoAtendimento(pront) });
+              const cidResolvido = ehTecnicoEnfermagem
+                ? { cid: "", adicionais: [] as string[] }
+                : resolveBpaCidDetails({ procedureCid: sigtapVinculadoItens.filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo)).map(item => item.cid).filter(Boolean).concat(procEntry.cid || []), productionCid: cidProducaoLinha, prontuario: pront, paciente: pac, ptsCid: cidPtsDoAtendimento(pront) });
+              const cidBrutoLinha = cidResolvido.cid;
               let cidBrutoFinal = cidBrutoLinha;
+              if (cidResolvido.adicionais.length) warnings.push(`${ident}: procedimento ${proc} possui múltiplos CIDs. CID selecionado: ${cidBrutoLinha}; adicionais: ${cidResolvido.adicionais.join(", ")}. Confira a indicação de principal no registro de origem.`);
               if (
                 !ehTecnicoEnfermagem &&
                 !String(cidBrutoLinha || "").trim() &&
@@ -2797,6 +2803,7 @@ const BpaExportar: React.FC = () => {
                   ? "Procedimento Aditivo"
                   : "Procedimento Clínico",
                 cid_usado: cidExibicao(registroFinal.cid),
+                cids_adicionais: cidResolvido.adicionais,
                 _ctx: {
                   profissional_nome: String(registroFinal.profissionalNome || ""),
                   cns_prof: String(registroFinal.cnsProfissional || ""),
@@ -3465,7 +3472,7 @@ const BpaExportar: React.FC = () => {
           _ctx: { origem_sigtap: r.origem_sigtap || "" },
         }));
       void linhasPendentes; // pendências cadastrais não entram na Conferência
-      const confSorted = [...results.confRows, ...linhasRejeitadas].sort(cmpAlfa);
+      const confSorted = [...results.confRows].sort(cmpAlfa);
       const rowsHtml = confSorted
         .map(
           (r: any) => `
@@ -3482,12 +3489,12 @@ const BpaExportar: React.FC = () => {
           <td class="c">${esc(r.data_atendimento)}</td>
           <td class="c">${esc(sigtapCodigoExibicao(r.codigo_sigtap) || r.codigo_sigtap || "—")}</td>
           <td class="c">${esc(cidExibicao(r.cid_usado))}</td>
-        </tr>`,
+        </tr>${r.cids_adicionais?.length ? `<tr><td colspan="12">CIDs adicionais registrados (não enviados no TXT): ${esc(r.cids_adicionais.join(", "))}</td></tr>` : ""}`,
         )
         .join("");
 
-      // Tabela de auditoria com motivos técnicos não é impressa na Conferência.
-      const auditHtml = "";
+      // Rejeitados ficam separados das linhas efetivamente emitidas no TXT.
+      const auditHtml = linhasRejeitadas.length ? `<h3>Não exportados — incompatibilidade de procedimento/CID</h3><table><thead><tr><th>Paciente</th><th>Data</th><th>Procedimento</th><th>CID</th></tr></thead><tbody>${linhasRejeitadas.map(r => `<tr><td>${esc(r.paciente_nome)}</td><td>${esc(r.data_atendimento)}</td><td>${esc(r.codigo_sigtap)}</td><td>${esc(r.cid_usado)}</td></tr>`).join("")}</tbody></table>` : "";
 
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
       // Não é position:fixed, portanto não sobrepõe o conteúdo.
