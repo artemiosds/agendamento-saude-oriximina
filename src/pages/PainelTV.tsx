@@ -159,9 +159,9 @@ export default function PainelTV() {
       if (ctxRef.current.state !== 'running') throw new Error('Áudio suspenso');
       await tocarSino(ctxRef.current, signal);
       const txt = textoChamadaPainel(c.pacienteNome, c.local);
+      // Um clique em "Chamar" = um único anúncio. Nova chamada só quando o usuário clicar novamente.
+      void repeat;
       await falar(txt, signal);
-      // Recheck the queue after speaking: do not repeat while another patient waits.
-      if (repeat()) { await aguardarPainel(700, signal); if (repeat()) await falar(txt, signal); }
     } finally {
       parent.removeEventListener('abort', abort);
       if (audioWork.current === controller) audioWork.current = null;
