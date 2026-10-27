@@ -770,6 +770,43 @@ const Tratamentos: React.FC = () => {
       sameDayCandidates: agendamentoMap[treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date || '')] || [],
     }), [agendamentoMap, appointmentByIdMap, claimedAppointmentIds]);
 
+  // Vínculo automático: sessão pendente com exatamente UM agendamento ativo já feito
+  // (mesmo paciente, profissional, unidade e data) é ligada a ele, sem criar nem apagar nada.
+  const autoLinkAttemptedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!selectedCycle || loadedSessionsCycleId !== selectedCycle.id) return;
+    if (user?.role !== 'master' && user?.role !== 'profissional') return;
+    if (selectedCycle.status !== 'em_andamento' && selectedCycle.status !== 'ativo') return;
+    const usedIds = new Set<string>();
+    const targets = cycleSessions.flatMap((s) => {
+      if (autoLinkAttemptedRef.current.has(s.id) || duplicateDateSessionIds.has(s.id)) return [];
+      const integrity = getSessionIntegrity(s, selectedCycle);
+      if (integrity.kind !== 'possivel_sem_vinculo' || integrity.candidates.length !== 1) return [];
+      const appointmentId = integrity.candidates[0].id;
+      if (usedIds.has(appointmentId)) return [];
+      usedIds.add(appointmentId);
+      return [{ s, appointmentId }];
+    });
+    if (targets.length === 0) return;
+    targets.forEach(({ s }) => autoLinkAttemptedRef.current.add(s.id));
+    (async () => {
+      let linked = 0;
+      for (const { s, appointmentId } of targets) {
+        try {
+          await treatmentSessionOperations.linkExistingAppointment({
+            session: s, cycle: selectedCycle, appointmentId,
+            reason: 'Vínculo automático: agendamento já existente na Agenda (mesmo paciente, profissional, unidade e data).',
+          });
+          linked++;
+        } catch (error) { console.warn('[auto-link sessão]', s.id, error); }
+      }
+      if (linked > 0) {
+        await loadSessionsForCycle(selectedCycle, true);
+        toast.success(`${linked} sessão(ões) ligada(s) automaticamente a agendamento(s) já existente(s) na Agenda.`);
+      }
+    })();
+  }, [selectedCycle, loadedSessionsCycleId, cycleSessions, duplicateDateSessionIds, getSessionIntegrity, treatmentSessionOperations, loadSessionsForCycle, user?.role]);
+
   const cycleExtensions = useMemo(() => {
     if (!selectedCycle) return [];
     return extensions.filter((e) => e.cycle_id === selectedCycle.id);
