@@ -140,3 +140,17 @@ export async function chamarPaciente(unidadeId: string, dados: Omit<ChamadaPacie
   const result = await solicitarChamada(unidadeId, dados);
   return result === 'recebida' || result === 'recebida_sem_audio';
 }
+
+/** Tells open TV panels of the unit to reload their video list (best effort). */
+export async function avisarVideoAtualizado(unidadeId: string): Promise<void> {
+  if (!unidadeId) return;
+  const ch = supabase.channel(canalPainel(unidadeId));
+  try {
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, 4000);
+      ch.subscribe((s) => { if (s === 'SUBSCRIBED') { clearTimeout(t); resolve(); } });
+    });
+    await ch.send({ type: 'broadcast', event: 'video_atualizado', payload: { unidadeId } });
+  } catch { /* TV also refreshes periodically */ }
+  finally { void supabase.removeChannel(ch).catch(() => {}); }
+}
