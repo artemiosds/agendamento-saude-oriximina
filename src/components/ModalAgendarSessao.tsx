@@ -54,6 +54,8 @@ interface ModalAgendarSessaoProps {
   onRemarcar?: (newDate: string, newHora: string, salaId: string, reason?: string) => Promise<void>;
   mode?: 'agendar' | 'remarcar';
   isMaster?: boolean;
+  /** Datas já ocupadas por outras sessões ativas do mesmo ciclo (evita data duplicada). */
+  cycleTakenDates?: string[];
 }
 
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -84,6 +86,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   onRemarcar,
   mode = 'agendar',
   isMaster = false,
+  cycleTakenDates,
 }) => {
   const todayStr = todayLocalStr();
   const suggestedDate = session?.scheduled_date || '';
@@ -362,7 +365,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 const status = getDayStatus(dateStr);
                 const isSelected = dateStr === selectedDate;
                 // Liberdade de data: qualquer dia não passado pode ser escolhido; feriados/bloqueios são barrados no servidor.
-                const canClick = status !== 'past';
+                const takenByCycle = (cycleTakenDates || []).includes(dateStr);
+                const canClick = status !== 'past' && !takenByCycle;
 
                 return (
                   <div key={dateStr} className="flex items-center justify-center py-0.5">
@@ -384,9 +388,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                         !isSelected && status === 'available' && 'hover:bg-primary/10 text-foreground cursor-pointer',
                         status === 'past' && 'text-muted-foreground/30 cursor-default',
                         status === 'unavailable' && 'text-muted-foreground/40 cursor-default',
+                        takenByCycle && !isSelected && 'line-through opacity-50 cursor-not-allowed',
                       )}
                       title={
-                        status === 'suggested' ? 'Data sugerida'
+                        takenByCycle ? 'Outra sessão deste ciclo já está nesta data'
+                        : status === 'suggested' ? 'Data sugerida'
                         : status === 'already_scheduled' ? 'Já agendada'
                         : status === 'conflict_same' ? 'Conflito: mesmo profissional'
                         : status === 'conflict_other' ? 'Outro agendamento nesta data'
