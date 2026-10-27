@@ -1,3 +1,4 @@
+import { avisarVideoAtualizado } from '@/lib/painelChamadas';
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,7 +65,7 @@ export default function PainelChamadasConfig() {
       if (error) throw error;
       setPlaylists(old => ({ ...old, [unidade]: next }));
       setVideos(old => ({ ...old, [unidade]: next[0] || '' }));
-      toast.success("Vídeo de espera salvo. Atualize o link na TV.");
+      toast.success("Vídeo de espera salvo. A TV atualiza sozinha."); void avisarVideoAtualizado(unidade);
     } catch {
       toast.error("Não foi possível salvar o vídeo.");
     } finally { setSalvando(false); }

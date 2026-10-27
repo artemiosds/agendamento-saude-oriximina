@@ -96,6 +96,28 @@ export default function PainelTV() {
     }
     return () => { controller.abort(); if (videoTimer.current) clearTimeout(videoTimer.current); };
   }, [unidade, videoParam]);
+  // Silent refresh: new/changed unit videos appear without reloading the TV page.
+  const recarregarVideosRef = useRef<() => void>(() => {});
+  recarregarVideosRef.current = () => {
+    if (!unidade || videoSeguro(videoParam)) return;
+    void Promise.all([
+      supabase.from('unidades').select('custom_data').eq('id', unidade).maybeSingle(),
+      supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle(),
+    ]).then(([unit, legacy]) => {
+      if (unit.error && legacy.error) return;
+      const fallback = (legacy.data?.configuracoes as any)?.painel_tv?.videos?.[unidade];
+      const next = playlistPainel((unit.data?.custom_data as any) || {}, fallback);
+      setVideoCad(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        failedVideos.current.clear(); setVideoFailed(false); setVideoError(''); setVideoIdx(0);
+        return next;
+      });
+    }).catch(() => {});
+  };
+  useEffect(() => {
+    const t = setInterval(() => recarregarVideosRef.current(), 120000);
+    return () => clearInterval(t);
+  }, []);
   const falhaVideo = () => {
     failedVideos.current.add(video);
     const next = playlist.findIndex(url => !failedVideos.current.has(url));
@@ -224,6 +246,7 @@ export default function PainelTV() {
         void ch.send({ type: 'broadcast', event: 'chamada_status', payload: { id: payload.id, unidadeId: unidade, status } }, { timeout: 2000 }).catch(() => {});
         if (accepted === 'ocupado') setAudioError('Fila do painel cheia. Novas chamadas estão sendo recusadas com aviso ao profissional.');
       });
+      ch.on('broadcast', { event: 'video_atualizado' }, () => { if (active) recarregarVideosRef.current(); });
       ch.subscribe(status => {
         if (!active || channel !== ch) return;
         setStatus(status); log(`canal: ${status}`);

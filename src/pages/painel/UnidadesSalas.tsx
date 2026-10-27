@@ -1,3 +1,4 @@
+import { avisarVideoAtualizado } from '@/lib/painelChamadas';
 import React, { useState } from 'react';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -141,7 +142,7 @@ const UnidadesSalas: React.FC = () => {
     if (lista.length) cd.video_url = lista[0]; else delete cd.video_url;
     const { error } = await supabase.from('unidades' as any).update({ custom_data: cd }).eq('id', videoUnit.id);
     if (error) { toast.error('Não foi possível salvar.'); return; }
-    toast.success('Vídeo salvo! Recarregue a TV.');
+    toast.success('Vídeo salvo! A TV atualiza sozinha.'); void avisarVideoAtualizado(videoUnit.id);
     setVideoUnit(null);
   };
 

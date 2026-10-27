@@ -140,3 +140,12 @@ export async function chamarPaciente(unidadeId: string, dados: Omit<ChamadaPacie
   const result = await solicitarChamada(unidadeId, dados);
   return result === 'recebida' || result === 'recebida_sem_audio';
 }
+
+/** Tells open TV panels of the unit to reload their video list (best effort). */
+export async function avisarVideoAtualizado(unidadeId: string): Promise<void> {
+  if (!unidadeId) return;
+  try {
+    const ch = await obterCanal(unidadeId);
+    await ch.send({ type: 'broadcast', event: 'video_atualizado', payload: { unidadeId } }, { timeout: 2000 });
+  } catch { /* TV also refreshes periodically */ }
+}
