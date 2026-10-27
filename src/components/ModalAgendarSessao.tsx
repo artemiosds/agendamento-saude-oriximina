@@ -86,6 +86,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   onRemarcar,
   mode = 'agendar',
   isMaster = false,
+  cycleTakenDates,
 }) => {
   const todayStr = todayLocalStr();
   const suggestedDate = session?.scheduled_date || '';
@@ -387,9 +388,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                         !isSelected && status === 'available' && 'hover:bg-primary/10 text-foreground cursor-pointer',
                         status === 'past' && 'text-muted-foreground/30 cursor-default',
                         status === 'unavailable' && 'text-muted-foreground/40 cursor-default',
+                        takenByCycle && !isSelected && 'line-through opacity-50 cursor-not-allowed',
                       )}
                       title={
-                        status === 'suggested' ? 'Data sugerida'
+                        takenByCycle ? 'Outra sessão deste ciclo já está nesta data'
+                        : status === 'suggested' ? 'Data sugerida'
                         : status === 'already_scheduled' ? 'Já agendada'
                         : status === 'conflict_same' ? 'Conflito: mesmo profissional'
                         : status === 'conflict_other' ? 'Outro agendamento nesta data'

@@ -3004,6 +3004,7 @@ const Tratamentos: React.FC = () => {
           }}
           mode="agendar"
           isMaster={isMaster}
+          cycleTakenDates={sessions.filter((s) => s.id !== agendarSessaoTarget?.id && s.scheduled_date && !['cancelada', 'remarcada'].includes(s.status)).map((s) => s.scheduled_date as string)}
         />
 
         <ModalAgendarSessao
