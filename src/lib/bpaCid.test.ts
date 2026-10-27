@@ -19,3 +19,15 @@ describe("CID da linha BPA-I", () => {
     expect(extractBpaCidCodes("CID: I64 / AVC")).toEqual(["I64"]);
   });
 });
+
+describe("resolveBpaCid — hipótese e PTS", () => {
+  it("usa a hipótese do prontuário", () => {
+    expect(resolveBpaCid({ prontuario: { hipotese: "F84.0 autismo" } })).toBe("F840");
+  });
+  it("usa o CID do PTS quando o prontuário não tem CID", () => {
+    expect(resolveBpaCid({ prontuario: {}, ptsCid: "G80.9" })).toBe("G809");
+  });
+  it("prontuário tem prioridade sobre o PTS", () => {
+    expect(resolveBpaCid({ prontuario: { custom_data: { esp_hipotese_cid: "M54.5" } }, ptsCid: "G80.9" })).toBe("M545");
+  });
+});

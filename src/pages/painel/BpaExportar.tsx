@@ -1364,6 +1364,37 @@ const BpaExportar: React.FC = () => {
       );
       const prontuarios: any[] = [...((prontuariosOriginais as any[]) || []), ...triagensInseridas];
 
+      // CIDs do PTS (pts_cid) por paciente — fallback quando o prontuário não tem CID.
+      const ptsCidPorPaciente = new Map<string, Array<{ profissional: string; cid: string }>>();
+      try {
+        const pacIdsPts = Array.from(new Set(prontuarios.map((p: any) => String(p.paciente_id || "")).filter(Boolean)));
+        for (let i = 0; i < pacIdsPts.length; i += 300) {
+          const lote = pacIdsPts.slice(i, i + 300);
+          const { data: ptsRows } = await (supabase as any)
+            .from("pts").select("id, patient_id, professional_id, status, updated_at").in("patient_id", lote);
+          const ptsAtivos = ((ptsRows || []) as any[]).filter((r) => !/cancel|inativ|exclu/i.test(String(r.status || "")));
+          const ids = ptsAtivos.map((r) => r.id);
+          if (!ids.length) continue;
+          const { data: cidRows } = await (supabase as any).from("pts_cid").select("pts_id, cid_codigo").in("pts_id", ids);
+          const porPts = new Map<string, string[]>();
+          for (const c of (cidRows || []) as any[]) {
+            const l = porPts.get(c.pts_id) || []; l.push(String(c.cid_codigo || "")); porPts.set(c.pts_id, l);
+          }
+          ptsAtivos.sort((x, y) => String(y.updated_at || "").localeCompare(String(x.updated_at || "")));
+          for (const r of ptsAtivos) {
+            const cid = (porPts.get(r.id) || []).find((c) => extrairCodigosCid(c).length > 0);
+            if (!cid) continue;
+            const l = ptsCidPorPaciente.get(String(r.patient_id)) || [];
+            l.push({ profissional: String(r.professional_id || ""), cid });
+            ptsCidPorPaciente.set(String(r.patient_id), l);
+          }
+        }
+      } catch (e) { console.warn("[BPA] falha ao ler CIDs do PTS", e); }
+      const cidPtsDoAtendimento = (pront: any): string => {
+        const l = ptsCidPorPaciente.get(String(pront?.paciente_id || "")) || [];
+        return (l.find((x) => x.profissional === String(pront?.profissional_id || "")) || l[0])?.cid || "";
+      };
+
       // === Inclusão de pacientes da AGENDA sem prontuário ===
       // Sempre injeta agendamentos com presença confirmada que já tenham
       // produção manual (custom_data.bpa_manual) salva — assim, após corrigir
@@ -2578,7 +2609,7 @@ const BpaExportar: React.FC = () => {
               const cidProducaoLinha = resolucaoCid?.cid || "";
               const cidBrutoLinha = ehTecnicoEnfermagem
                 ? ""
-                : resolveBpaCid({ procedureCid: procEntry.cid, productionCid: cidProducaoLinha, prontuario: pront, paciente: pac });
+                : resolveBpaCid({ procedureCid: procEntry.cid, productionCid: cidProducaoLinha, prontuario: pront, paciente: pac, ptsCid: cidPtsDoAtendimento(pront) });
               let cidBrutoFinal = cidBrutoLinha;
               if (
                 !ehTecnicoEnfermagem &&

@@ -17,6 +17,8 @@ export function resolveBpaCid(input: {
   productionCid?: unknown;
   prontuario?: any;
   paciente?: any;
+  /** CID(s) do PTS do paciente — usado só quando o prontuário não traz CID. */
+  ptsCid?: unknown;
 }): string {
   const pront = input.prontuario || {};
   const clinical = pront.custom_data || {};
@@ -35,9 +37,16 @@ export function resolveBpaCid(input: {
     clinical.cidPrincipal,
     clinical.diagnostico_cid,
     clinical.hipotese_cid,
+    clinical.esp_hipotese_cid,
+    clinical.cids,
+    clinical.cids_selecionados,
+    pront.cids_selecionados,
+    pront.hipotese,
+    clinical.hipotese,
     dados.cid,
     dados.cid10,
     dados.cid_principal,
+    input.ptsCid,
     patient.cid,
     patient.cid10,
     patientData.cid,
