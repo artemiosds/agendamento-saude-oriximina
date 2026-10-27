@@ -54,6 +54,8 @@ interface ModalAgendarSessaoProps {
   onRemarcar?: (newDate: string, newHora: string, salaId: string, reason?: string) => Promise<void>;
   mode?: 'agendar' | 'remarcar';
   isMaster?: boolean;
+  /** Datas já ocupadas por outras sessões ativas do mesmo ciclo (evita data duplicada). */
+  cycleTakenDates?: string[];
 }
 
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -362,7 +364,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 const status = getDayStatus(dateStr);
                 const isSelected = dateStr === selectedDate;
                 // Liberdade de data: qualquer dia não passado pode ser escolhido; feriados/bloqueios são barrados no servidor.
-                const canClick = status !== 'past';
+                const takenByCycle = (cycleTakenDates || []).includes(dateStr);
+                const canClick = status !== 'past' && !takenByCycle;
 
                 return (
                   <div key={dateStr} className="flex items-center justify-center py-0.5">
