@@ -15,6 +15,13 @@
       "when": 1792668169204,
       "tag": "0001_block_duplicate_session_date_in_cycle",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793068551057,
+      "tag": "0002_clear_duplicate_without_appointment",
+      "breakpoints": true
     }
   ]
 }
