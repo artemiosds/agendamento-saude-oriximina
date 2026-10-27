@@ -368,7 +368,21 @@ export default function PainelTV() {
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[7fr_3fr]">
         <section className={`relative flex flex-col items-center justify-center p-10 text-center transition-colors duration-500 ${destaque ? "bg-primary-foreground/15" : ""}`}>
           {mostrarVideo ? (
-            <video key={video + videoIdx} src={video} autoPlay muted loop={playlist.length <= 1} playsInline onEnded={proximoVideo} onError={falhaVideo} className="absolute inset-0 w-full h-full object-contain bg-foreground" />
+            <video
+              key={video + videoIdx}
+              src={video}
+              autoPlay
+              muted
+              loop={playlist.length <= 1}
+              playsInline
+              ref={(el) => { if (el) { el.muted = true; el.volume = 0; } }}
+              onLoadedMetadata={(e) => { e.currentTarget.muted = true; e.currentTarget.volume = 0; }}
+              onPlay={(e) => { e.currentTarget.muted = true; e.currentTarget.volume = 0; }}
+              onVolumeChange={(e) => { const v = e.currentTarget; if (!v.muted || v.volume > 0) { v.muted = true; v.volume = 0; } }}
+              onEnded={proximoVideo}
+              onError={falhaVideo}
+              className="absolute inset-0 w-full h-full object-contain bg-foreground"
+            />
           ) : atual ? (
             <>
               <p className="text-3xl uppercase opacity-80 mb-6">Paciente</p>
