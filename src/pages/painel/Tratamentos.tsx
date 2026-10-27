@@ -3044,6 +3044,7 @@ const Tratamentos: React.FC = () => {
           }}
           mode="remarcar"
           isMaster={isMaster}
+          cycleTakenDates={sessions.filter((s) => s.id !== remarcarTarget?.id && s.scheduled_date && !['cancelada', 'remarcada'].includes(s.status)).map((s) => s.scheduled_date as string)}
         />
 
         {/* Dialog: Acrescentar sessão (Master) */}
