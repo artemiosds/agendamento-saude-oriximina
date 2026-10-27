@@ -10,7 +10,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   },
   channel(name: string) {
     const ch = { name, event: (_v: any) => {}, status: (_s: string) => {}, send: vi.fn(async () => 'ok'),
-      on(_t: unknown, _e: unknown, callback: any) { this.event = callback; return this; },
+      on(_t: unknown, e: any, callback: any) { if (e?.event !== 'video_atualizado') this.event = callback; return this; },
       subscribe(callback: any) { this.status = callback; callback('SUBSCRIBED'); return this; },
     }; fixture.channels.push(ch); return ch;
   }, removeChannel: async (ch: any) => { fixture.removed.push(ch); return 'ok'; },
