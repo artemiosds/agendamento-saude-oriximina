@@ -18,21 +18,28 @@ export default function TriageReconciliationPanel() {
   const [candidates, setCandidates] = useState<PendingArrival[]>([]);
   const [missing, setMissing] = useState<string[]>([]);
   const [verifiedScope, setVerifiedScope] = useState('');
+  const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const allowed = (user?.role === 'master' || ['recepcao', 'recepção'].includes(user?.role || '')) && (user?.usuario === 'admin.sms' || !!user?.unidadeId);
+  useEffect(() => {
+    if (!allowed) return;
+    const refresh = () => setRevision(value => value + 1);
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [allowed]);
   const day = todayLocalStr();
   const scopeKey = `${user?.id || ''}|${user?.unidadeId || ''}|${user?.usuario || ''}|${day}`;
   const localCandidates = useMemo(() => allowed ? agendamentos.filter(a => a.data === day &&
     ['confirmado_chegada', 'chegada_confirmada', 'aguardando_triagem'].includes(a.status) &&
     (user?.usuario === 'admin.sms' || (!!user?.unidadeId && a.unidadeId === user.unidadeId))) : [],
   [allowed, agendamentos, day, user?.usuario, user?.unidadeId]);
-  const key = localCandidates.map(a => a.id).sort().join('|');
+  const key = localCandidates.map(a => `${a.id}:${a.status}`).sort().join('|');
   const candidateIds = new Set(localCandidates.map(a => a.id));
   const queueKey = fila.filter(f => candidateIds.has(f.id)).map(f => `${f.id}:${f.status}`).sort().join('|');
   useEffect(() => {
     let active = true;
-    setMissing([]);
-    if (!allowed) return;
+    if (!allowed) { setMissing([]); return; }
     void (async () => {
       // Read only today's pending arrivals, even when the Agenda displays another month.
       const pending: PendingArrival[] = [];
@@ -59,7 +66,7 @@ export default function TriageReconciliationPanel() {
       if (active) { setVerifiedScope(scopeKey); setCandidates(pending); setMissing(ids.filter(id => !existing.has(id) || existing.get(id) === 'excluido_da_fila_triagem')); }
     })().catch(error => console.error('Não foi possível verificar a fila de triagem:', error));
     return () => { active = false; };
-  }, [allowed, day, key, queueKey, scopeKey, user?.usuario, user?.unidadeId]);
+  }, [allowed, day, key, queueKey, scopeKey, revision, user?.usuario, user?.unidadeId]);
   if (!allowed || verifiedScope !== scopeKey || missing.length === 0) return null;
   const synchronize = async (id: string) => {
     const appointment = candidates.find(a => a.id === id);

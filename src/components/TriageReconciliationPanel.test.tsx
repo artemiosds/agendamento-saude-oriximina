@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const f=vi.hoisted(()=>({ user: { id:'r1',nome:'RECEPÇÃO',role:'recepcao',usuario:'r1',unidadeId:'u1' },
   appointments: [] as any[], queue: [] as any[], server: [] as any[], query:vi.fn(),rpc:vi.fn(),apply:vi.fn(),refresh:vi.fn(),toast:vi.fn() }));
@@ -35,6 +35,35 @@ describe('sincronização manual de chegadas',()=>{
  it('não oferece correção quando a fila já está ativa no banco',async()=>{
   f.server=[{id:'ag1',status:'aguardando_triagem'}];render(<TriageReconciliationPanel/>);
   await waitFor(()=>expect(f.query).toHaveBeenCalled());expect(screen.queryByRole('button')).not.toBeInTheDocument();
+ });
+ it('reconfere periodicamente e libera o timer ao desmontar',async()=>{
+  vi.useFakeTimers();
+  try {
+   const {unmount}=render(<TriageReconciliationPanel/>);
+   await act(async()=>{await vi.advanceTimersByTimeAsync(0);});
+   expect(screen.getByRole('region')).toBeInTheDocument();
+   f.server=[{id:'ag1',status:'apto_atendimento'}];
+   await act(async()=>{await vi.advanceTimersByTimeAsync(30000);});
+   expect(screen.queryByRole('region')).not.toBeInTheDocument();
+   expect(f.rpc).not.toHaveBeenCalled();
+   unmount();expect(vi.getTimerCount()).toBe(0);
+  } finally {cleanup();vi.useRealTimers();}
+ });
+ it('remove aviso resolvido em outro terminal ao retornar à janela',async()=>{
+  render(<TriageReconciliationPanel/>);
+  await screen.findByRole('button',{name:'Sincronizar com a Triagem'});
+  f.server=[{id:'ag1',status:'apto_atendimento'}];
+  fireEvent(window,new Event('focus'));
+  await waitFor(()=>expect(screen.queryByRole('region')).not.toBeInTheDocument());
+  expect(f.rpc).not.toHaveBeenCalled();
+ });
+ it('revalida mudança de status mesmo quando os IDs da agenda não mudam',async()=>{
+  const {rerender}=render(<TriageReconciliationPanel/>);
+  await screen.findByRole('button',{name:'Sincronizar com a Triagem'});
+  f.server=[{id:'ag1',status:'apto_atendimento'}];
+  f.appointments=[{...f.appointments[0],status:'aguardando_triagem'}];
+  rerender(<TriageReconciliationPanel/>);
+  await waitFor(()=>expect(screen.queryByRole('region')).not.toBeInTheDocument());
  });
  it('exclusão explícita da fila exige ação manual para ser revertida',async()=>{
   f.server=[{id:'ag1',status:'excluido_da_fila_triagem'}];render(<TriageReconciliationPanel/>);
