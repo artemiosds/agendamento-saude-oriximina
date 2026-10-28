@@ -117,7 +117,7 @@ describe('A1.2: intervalo completo da Agenda', () => {
     await act(async () => { fixture.realtime?.({ eventType: 'UPDATE', old: { id: 'arrival' }, new: fixture.rows[0] }); });
     await waitFor(() => expect(fixture.reads).toHaveLength(3));
     await act(async () => { fixture.releaseFirst?.(); await pending; });
-    expect(String(replaced)).toContain('substituída');
+    expect(replaced).toBeUndefined(); // leitura substituída é descartada sem erro ao usuário
     expect(result.current.agendamentos[0].status).toBe('confirmado_chegada');
     expect(result.current.completeAgendaDates.has('2026-09-23')).toBe(true);
   });
