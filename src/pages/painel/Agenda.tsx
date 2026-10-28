@@ -2147,7 +2147,7 @@ const Agenda: React.FC = () => {
       return;
     }
 
-    if (ag.status === "confirmado_chegada" || ag.status === "chegada_confirmada" || ag.status === "aguardando_triagem") {
+    if (["confirmado_chegada", "chegada_confirmada", "aguardando_triagem"].includes(String(ag.status))) {
       toast.info("Aguardando liberação pela Triagem de Enfermagem.");
       return;
     }
