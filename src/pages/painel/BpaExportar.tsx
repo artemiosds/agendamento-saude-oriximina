@@ -1,3 +1,4 @@
+import { buildBpaConferenceGroups, BPA_CONFERENCE_CSS } from "@/lib/bpaConferencePrint";
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2805,6 +2806,7 @@ const BpaExportar: React.FC = () => {
                 cid_usado: cidExibicao(registroFinal.cid),
                 cids_adicionais: cidResolvido.adicionais,
                 _ctx: {
+                  paciente_id: String(pront.paciente_id || ""),
                   profissional_nome: String(registroFinal.profissionalNome || ""),
                   cns_prof: String(registroFinal.cnsProfissional || ""),
                   cbo: String(registroFinal.cbo || ""),
@@ -3473,25 +3475,7 @@ const BpaExportar: React.FC = () => {
         }));
       void linhasPendentes; // pendências cadastrais não entram na Conferência
       const confSorted = [...results.confRows].sort(cmpAlfa);
-      const rowsHtml = confSorted
-        .map(
-          (r: any) => `
-        <tr>
-          <td class="nome">${esc(String(r.paciente_nome || "").toUpperCase())}</td>
-          <td>${esc(r.paciente_cns)}</td>
-          <td>${esc(r.paciente_cpf)}</td>
-          <td class="c">${esc(r.data_nascimento)}</td>
-          <td class="c">${esc(r.sexo)}</td>
-          <td class="c">${esc(r.tipo_logradouro)}</td>
-          <td>${esc(String(r.logradouro || "").toUpperCase())}</td>
-          <td class="c">${esc(r.numero)}</td>
-          <td>${esc(String(r.bairro || "").toUpperCase())}</td>
-          <td class="c">${esc(r.data_atendimento)}</td>
-          <td class="c">${esc(sigtapCodigoExibicao(r.codigo_sigtap) || r.codigo_sigtap || "—")}</td>
-          <td class="c">${esc(cidExibicao(r.cid_usado))}</td>
-        </tr>${r.cids_adicionais?.length ? `<tr><td colspan="12">CIDs adicionais registrados (não enviados no TXT): ${esc(r.cids_adicionais.join(", "))}</td></tr>` : ""}`,
-        )
-        .join("");
+      const rowsHtml = buildBpaConferenceGroups(confSorted);
 
       // Rejeitados ficam separados das linhas efetivamente emitidas no TXT.
       const auditHtml = linhasRejeitadas.length ? `<h3>Não exportados — incompatibilidade de procedimento/CID</h3><table><thead><tr><th>Paciente</th><th>Data</th><th>Procedimento</th><th>CID</th></tr></thead><tbody>${linhasRejeitadas.map(r => `<tr><td>${esc(r.paciente_nome)}</td><td>${esc(r.data_atendimento)}</td><td>${esc(r.codigo_sigtap)}</td><td>${esc(r.cid_usado)}</td></tr>`).join("")}</tbody></table>` : "";
@@ -3518,20 +3502,7 @@ const BpaExportar: React.FC = () => {
   }
   .bpa-meta b { color: #0c4a6e; }
   .bpa-meta .full { grid-column: 1 / -1; }
-  .bpa-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 4px; }
-  .bpa-table thead { display: table-header-group; }
-  .bpa-table th, .bpa-table td {
-    border: 1px solid #555;
-    padding: 3px 4px;
-    font-size: 8.5pt;
-    word-wrap: break-word;
-    overflow-wrap: anywhere;
-    vertical-align: top;
-  }
-  .bpa-table th { background:#2A6F97; color:#fff; font-weight: 700; text-align:center; }
-  .bpa-table td.c { text-align:center; }
-  .bpa-table td.nome { font-weight: 600; }
-  .bpa-table tbody tr:nth-child(even) td { background:#f5f7fa; }
+  ${BPA_CONFERENCE_CSS}
 </style>
 <div class="bpa-meta">
   <div><b>Unidade:</b> ${esc(ctx.unidade_nome)}</div>
@@ -3544,24 +3515,14 @@ const BpaExportar: React.FC = () => {
   <div><b>Responsável pela geração:</b> ${respo}</div>
   <div class="full"><b>Gerado em:</b> ${new Date().toLocaleString("pt-BR")}</div>
 </div>
-<table class="bpa-table">
-  <colgroup>
-    <col style="width:16%"/><col style="width:10%"/><col style="width:9%"/><col style="width:7%"/>
-    <col style="width:4%"/><col style="width:6%"/><col style="width:16%"/><col style="width:3%"/>
-    <col style="width:10%"/><col style="width:8%"/><col style="width:7%"/><col style="width:4%"/>
-  </colgroup>
-  <thead><tr>
-    <th>Paciente</th><th>CNS</th><th>CPF</th><th>Nasc.</th><th>Sexo</th>
-    <th>Tipo Log.</th><th>Logradouro</th><th>Nº</th><th>Bairro</th>
-    <th>Atendimento</th><th>SIGTAP</th><th>CID</th>
-  </tr></thead>
-  <tbody>${rowsHtml}</tbody>
-</table>
+<p class="bpa-print-legend">* Adicionais: diagnósticos da fonte utilizada para o registro desta linha, não enviados no TXT. A observação não substitui a revisão do vínculo clínico. “Sem CID” indica ausência de CID na linha exportada.</p>
+${rowsHtml}
 ${auditHtml}`;
 
       const config = await loadDocumentConfig();
       const title = `Conferência BPA-I — Competência ${ctx.competencia}`;
-      const html = buildDocumentShell(title, body, config);
+      const printConfig = { ...config, margens: { ...config.margens, superior: 12, esquerda: 10, direita: 10 } };
+      const html = buildDocumentShell(title, body, printConfig);
       printViaIframe(html);
     } catch (e: any) {
       console.error(e);
