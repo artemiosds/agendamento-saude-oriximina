@@ -276,11 +276,13 @@ const TriagemItem = React.memo(({
   especialidade,
   posicaoEspecialidade,
   posicaoGeral,
+  filtroAtivo,
 }: { 
   item: Agendamento,
   especialidade: string,
   posicaoEspecialidade: number,
   posicaoGeral: number,
+  filtroAtivo: boolean,
   onOpen: (ag: Agendamento) => void,
   onRelease: (ag: Agendamento) => void,
   onRemove: (ag: Agendamento) => void,
@@ -297,12 +299,19 @@ const TriagemItem = React.memo(({
   return (
     <Card className="border-0 shadow-card">
       <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
-        <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="outline">{posicaoEspecialidade}º {especialidade}</Badge>
-            <span className="text-muted-foreground">{posicaoGeral}º na fila geral</span>
+        <div className="flex shrink-0 items-center gap-3 sm:w-36 sm:flex-col sm:items-start sm:gap-1">
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-center sm:w-full">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Posição na fila</p>
+            <p className="font-mono text-3xl font-bold leading-tight tabular-nums text-primary">{String(filtroAtivo ? posicaoEspecialidade : posicaoGeral).padStart(3, '0')}</p>
+            <p className="text-xs font-medium text-primary">{filtroAtivo ? especialidade : 'Fila geral'}</p>
+            {filtroAtivo && <p className="mt-1 text-xs text-muted-foreground">{posicaoGeral}º na fila geral</p>}
           </div>
+          <div className="text-xs text-muted-foreground sm:mt-1">
+            Horário: <span className="font-mono font-semibold tabular-nums text-foreground">{item.hora}</span>
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          {!filtroAtivo && <p className="mb-1 text-xs text-muted-foreground">{posicaoEspecialidade}º em {especialidade}</p>}
           <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
             {item.pacienteDataNascimento && item.pacienteIdade != null ? (
@@ -914,6 +923,7 @@ const Triagem: React.FC = () => {
               especialidade={TRIAGE_CATEGORY_LABELS[especialidadesFila.posicoes.get(item.filaId)?.categoria || 'outros']}
               posicaoEspecialidade={especialidadesFila.posicoes.get(item.filaId)?.especialidade || 0}
               posicaoGeral={especialidadesFila.posicoes.get(item.filaId)?.geral || 0}
+              filtroAtivo={filtroEspecialidade !== 'todos'}
               onOpen={openTriagem}
               onRelease={solicitarLiberacao}
               onRemove={solicitarRemocao}
