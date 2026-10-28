@@ -245,7 +245,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       && conflict.id !== session?.appointment_id,
   );
   const selectedTimeAfterCutoff = isTimeAfterSchedulingCutoff(
-    selectedHora, selectedDate, todayStr, nowMinutesInBrazil(),
+    selectedHora, selectedDate, todayStr, nowMinutesInBrazil(), 0, true,
   );
   // Horário livre: qualquer horário válido (sem antecedência mínima nem limite de turno).
   // Feriados/bloqueios e capacidade continuam conferidos no servidor.

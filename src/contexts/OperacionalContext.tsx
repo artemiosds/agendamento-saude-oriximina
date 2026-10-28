@@ -1063,7 +1063,9 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
   );
 
   const getAvailableSlots = useCallback(
-    (profissionalId: string, unidadeId: string, date: string, isPublic = false, minimumLeadMinutes: number | null = 30): string[] => {
+    (profissionalId: string, unidadeId: string, date: string, isPublic = false, minimumLeadMinutesArg?: number | null): string[] => {
+      // Equipe interna escolhe horários sem antecedência mínima; agendamento público mantém 30 min.
+      const minimumLeadMinutes = minimumLeadMinutesArg === undefined ? (isPublic ? 30 : null) : minimumLeadMinutesArg;
       const agendaMode = window.location.pathname === '/painel/agenda';
       if (agendaMode && !isCompleteAgendaDate(date)) return [];
       const todayStr = todayLocalStr();
