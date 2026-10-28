@@ -242,6 +242,7 @@ const Tratamentos: React.FC = () => {
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [dischargeOpen, setDischargeOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TreatmentCycle | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const [deletingCycle, setDeletingCycle] = useState(false);
   const [duplicateConfirm, setDuplicateConfirm] = useState<TreatmentCycle[]>([]);
 
@@ -1039,8 +1040,8 @@ const Tratamentos: React.FC = () => {
 
   const handleDeleteCycle = async () => {
     if (!deleteTarget || deletingCycle) return;
-    const reason = window.prompt("Justificativa obrigatória para excluir o ciclo:")?.trim();
-    if (!reason) return;
+    const reason = deleteReason.trim();
+    if (!reason) { toast.error("Informe a justificativa para excluir o ciclo."); return; }
     setDeletingCycle(true);
     try {
       const result = await deleteTreatmentCycle(deleteTarget.id, reason);
@@ -1815,7 +1816,7 @@ const Tratamentos: React.FC = () => {
     if (!selectedCycle || !intermediateDate || !intermediateReason.trim() || addingIntermediate) return;
     setAddingIntermediate(true);
     try {
-      const { cycle, sessions: freshSessions } = await assertStoredTreatmentCycle(selectedCycle.id);
+      const { cycle, sessions: freshSessions } = await loadTreatmentCycleSnapshot(selectedCycle.id);
       const updated = await treatmentCycleWriter.extend({ ...cycle, total_sessions: cycle.total_sessions + 1 }, freshSessions, [intermediateDate], intermediateReason);
       toast.success("Sessão acrescentada ao final da numeração, sem renumerar o histórico.");
       setAddIntermediateOpen(false);
@@ -1838,7 +1839,7 @@ const Tratamentos: React.FC = () => {
     if (cycleWriteLock.current) return;
     cycleWriteLock.current = true;
     try {
-      const { cycle: freshCycle, sessions: freshSessions } = await assertStoredTreatmentCycle(selectedCycle.id);
+      const { cycle: freshCycle, sessions: freshSessions } = await loadTreatmentCycleSnapshot(selectedCycle.id);
       const newTotal = freshCycle.total_sessions + extensionForm.new_sessions;
 
       // Determine weekdays from existing sessions or fallback
@@ -1865,8 +1866,9 @@ const Tratamentos: React.FC = () => {
         weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [],
         extensionForm.new_sessions,
         blockedRanges,
-        new Set(getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id)),
-      );
+      ).dates.filter((d) => !freshSessions.some((x) => x.scheduled_date === d && !['cancelada', 'remarcada'].includes(x.status))).length === extensionForm.new_sessions
+        ? generateSessionDatesWithInfo(startForNew, selectedCycle.frequency, weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [], extensionForm.new_sessions, blockedRanges)
+        : generateSessionDatesWithInfo(startForNew, selectedCycle.frequency, weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [], extensionForm.new_sessions, blockedRanges);
 
       if (skippedCount > 0) {
         toast.info(`${skippedCount} sessão(ões) da extensão foram realocadas devido a feriados ou bloqueios.`);
@@ -3404,6 +3406,7 @@ const Tratamentos: React.FC = () => {
                           className="text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setDeleteReason("");
                             setDeleteTarget(cycle);
                           }}
                         >
@@ -3742,13 +3745,17 @@ const Tratamentos: React.FC = () => {
               {deleteTarget?.treatment_type ? ` — ${deleteTarget.treatment_type}` : ""}.
             </p>
             <p className="text-sm text-destructive font-medium">
-              As sessões ainda não realizadas e seus agendamentos vinculados serão excluídos da Agenda. Ciclos com atendimento, PTS, alta ou histórico serão preservados e terão a exclusão recusada.
+              As sessões não realizadas e seus agendamentos futuros serão excluídos da Agenda. Agendamentos com chegada, triagem ou prontuário permanecem na Agenda. Ciclo com sessão já realizada deve receber Alta.
             </p>
+            <div>
+              <Label>Justificativa obrigatória</Label>
+              <Textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} rows={2} />
+            </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" disabled={deletingCycle} onClick={() => setDeleteTarget(null)}>
                 Cancelar
               </Button>
-              <Button variant="destructive" size="sm" disabled={deletingCycle} onClick={handleDeleteCycle}>
+              <Button variant="destructive" size="sm" disabled={deletingCycle || !deleteReason.trim()} onClick={handleDeleteCycle}>
                 {deletingCycle ? "Excluindo..." : "Confirmar exclusão"}
               </Button>
             </div>
