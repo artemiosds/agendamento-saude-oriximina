@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UNKNOWN_BPA_BLOCK, describeBpaBlock, resolveBpaAppointmentBlock, createBpaAttendanceBlockResolver, type BpaAvailability } from "./bpaAttendanceBlock";
+import { toggleBpaBlockSelection, filterBpaAttendanceBlocks, UNKNOWN_BPA_BLOCK, describeBpaBlock, resolveBpaAppointmentBlock, createBpaAttendanceBlockResolver, type BpaAvailability } from "./bpaAttendanceBlock";
 const names = new Map([["eco", "ECOCARDIOGRAMA"]]);
 const base: BpaAvailability = { id: "1", profissional_id: "p", unidade_id: "u", sala_id: "eco", data_inicio: "2026-10-01", data_fim: "2026-10-31", dias_semana: [3], hora_inicio: "13:30:00", hora_fim: "14:00:00", vagas_por_hora: 0 };
 const risk = { ...base, id: "2", sala_id: "RISCO CIRURGICO", hora_inicio: "14:30:00", hora_fim: "15:00:00" };
@@ -56,5 +56,26 @@ describe("seleção BPA por bloco da Agenda", () => {
     expect(selected).toEqual([rows[0]]);
     expect(JSON.stringify(rows)).toBe(before);
     expect(rows.filter(p => resolve(p) === riskKey)).toEqual([rows[1]]);
+  });
+});
+
+
+describe("união de múltiplos blocos", () => {
+  it("seleciona Eco e Risco uma única vez, preservando ordem, CID e procedimentos", () => {
+    const appointments = [appointment, { ...appointment, id: "b", hora: "14:30" }];
+    const rows = [{ ...record, cid: "I10", procedimentos: ["0301010072"] }, { ...record, agendamento_id: "b", cid: "Z01" }, { ...record, agendamento_id: "ausente" }];
+    const before = JSON.stringify(rows);
+    const resolve = createBpaAttendanceBlockResolver(appointments, availability, names);
+    expect(filterBpaAttendanceBlocks(rows, [ecoKey, riskKey, ecoKey], resolve)).toEqual(rows.slice(0, 2));
+    expect(filterBpaAttendanceBlocks(rows, [], resolve)).toEqual(rows);
+    expect(filterBpaAttendanceBlocks(rows, [ecoKey, UNKNOWN_BPA_BLOCK], resolve)).toEqual([rows[0], rows[2]]);
+    expect(JSON.stringify(rows)).toBe(before);
+  });
+  it("adiciona e remove escolhas sem duplicar chaves", () => {
+    const initial = [ecoKey];
+    expect(toggleBpaBlockSelection(initial, riskKey)).toEqual([ecoKey, riskKey]);
+    expect(toggleBpaBlockSelection([ecoKey, riskKey], ecoKey)).toEqual([riskKey]);
+    expect(toggleBpaBlockSelection(initial, ecoKey)).toEqual([]);
+    expect(initial).toEqual([ecoKey]);
   });
 });

@@ -51,3 +51,15 @@ export function createBpaAttendanceBlockResolver(appointments: any[], availabili
     return candidates.length === 1 ? resolveBpaAppointmentBlock(candidates[0], availability, names) : UNKNOWN_BPA_BLOCK;
   };
 }
+
+/** Empty selection means all blocks; keys are opaque and never split on names. */
+export function toggleBpaBlockSelection(selected: string[], key: string): string[] {
+  return selected.includes(key) ? selected.filter(k => k !== key) : [...new Set([...selected, key])];
+}
+
+/** Union in source order, with each record visited once (no duplicated production). */
+export function filterBpaAttendanceBlocks<T>(records: T[], selected: string[], resolveBlock: (record: T) => string): T[] {
+  if (selected.length === 0) return records;
+  const keys = new Set(selected);
+  return records.filter(record => keys.has(resolveBlock(record)));
+}
