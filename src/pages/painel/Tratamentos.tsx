@@ -1866,9 +1866,7 @@ const Tratamentos: React.FC = () => {
         weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [],
         extensionForm.new_sessions,
         blockedRanges,
-      ).dates.filter((d) => !freshSessions.some((x) => x.scheduled_date === d && !['cancelada', 'remarcada'].includes(x.status))).length === extensionForm.new_sessions
-        ? generateSessionDatesWithInfo(startForNew, selectedCycle.frequency, weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [], extensionForm.new_sessions, blockedRanges)
-        : generateSessionDatesWithInfo(startForNew, selectedCycle.frequency, weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [], extensionForm.new_sessions, blockedRanges);
+      );
 
       if (skippedCount > 0) {
         toast.info(`${skippedCount} sessão(ões) da extensão foram realocadas devido a feriados ou bloqueios.`);
