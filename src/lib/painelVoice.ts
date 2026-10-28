@@ -34,5 +34,5 @@ export function textoChamadaPainel(nome: string, local: string): string {
   // Avoid spelling out upper-case room names as acronyms; retain mixed-case labels.
   const destino = local === local.toLocaleUpperCase('pt-BR') ? local.toLocaleLowerCase('pt-BR') : local;
   const artigo = /^(sala|recepção|enfermaria)\b/i.test(destino) ? 'à' : 'ao';
-  return `Atenção. ${nome.toLocaleLowerCase('pt-BR')}, por favor, compareça ${artigo} ${destino}.`;
+  return `Paciente ${nome.toLocaleLowerCase('pt-BR')}, favor comparecer ${artigo} ${destino}.`;
 }
