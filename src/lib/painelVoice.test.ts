@@ -36,6 +36,6 @@ describe('voz do painel', () => {
     controller.abort(); await assertion; expect(vi.getTimerCount()).toBe(0);
   });
   it('usa pausas e texto fluido preservando nome e destino', () => {
-    expect(textoChamadaPainel('JOÃO DA SILVA', 'SALA 2')).toBe('Atenção. joão da silva, por favor, compareça à sala 2.');
+    expect(textoChamadaPainel('JOÃO DA SILVA', 'SALA 2')).toBe('Paciente joão da silva, favor comparecer à sala 2.');
   });
 });
