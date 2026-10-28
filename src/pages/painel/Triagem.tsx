@@ -1,3 +1,5 @@
+import { normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
+import type { User } from "@/types";
 import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
 import { startCareTriage, saveCareTriageDraft, completeCareTriage } from "@/services/careFlowService";
 import React, { useState, useCallback, useMemo, useEffect } from "react";
@@ -42,6 +44,13 @@ import ChamarPacienteButton from "@/components/ChamarPacienteButton";
 import CondicaoBadges from "@/components/CondicaoBadges";
 import MedicamentoBusca from "@/components/triagem/MedicamentoBusca";
 import AlergiaBusca from "@/components/triagem/AlergiaBusca";
+
+const TRIAGE_CATEGORY_LABELS: Record<string, string> = {
+  fisioterapia: 'Fisioterapia', medicina: 'Medicina', psicologia: 'Psicologia',
+  fonoaudiologia: 'Fonoaudiologia', terapia_ocupacional: 'Terapia Ocupacional',
+  nutricao: 'Nutrição', enfermagem: 'Enfermagem', servico_social: 'Serviço Social',
+  odontologia: 'Odontologia', outros: 'Outros / Geral',
+};
 
 interface Agendamento {
   id: string;
@@ -263,9 +272,15 @@ const TriagemItem = React.memo(({
   onRemove,
   isOpening,
   isActioning,
-  resolvePaciente 
+  resolvePaciente,
+  especialidade,
+  posicaoEspecialidade,
+  posicaoGeral,
 }: { 
-  item: Agendamento, 
+  item: Agendamento,
+  especialidade: string,
+  posicaoEspecialidade: number,
+  posicaoGeral: number,
   onOpen: (ag: Agendamento) => void,
   onRelease: (ag: Agendamento) => void,
   onRemove: (ag: Agendamento) => void,
@@ -284,6 +299,10 @@ const TriagemItem = React.memo(({
       <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
         <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
         <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
+            <Badge variant="outline">{posicaoEspecialidade}º {especialidade}</Badge>
+            <span className="text-muted-foreground">{posicaoGeral}º na fila geral</span>
+          </div>
           <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
             {item.pacienteDataNascimento && item.pacienteIdade != null ? (
@@ -381,11 +400,28 @@ const Triagem: React.FC = () => {
   const { pacientes } = usePacientes();
   const { agendamentos, updateAgendamento, applyCareFlowAgendamentoUpdate, refreshAgendamentos } = useAgendamentos();
   const { fila, updateFila, refreshFila } = useFila();
-  const { logAction } = useOperacional();
+  const { logAction, funcionarios = [] } = useOperacional();
   const { user, isGlobalAdmin } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
   const { resolved: customConfig } = useCustomFields('triagem', user?.unidadeId);
   const [customData, setCustomData] = useState<Record<string, any>>({});
+
+  const [especialidadeSelecionada, setEspecialidadeSelecionada] = useState('todos');
+  useEffect(() => { setEspecialidadeSelecionada('todos'); }, [user?.id, user?.unidadeId, isGlobalAdmin]);
+  const funcionarioPorId = useMemo(() => {
+    const index = new Map<string, User>();
+    for (const funcionario of funcionarios) if (!index.has(funcionario.id)) index.set(funcionario.id, funcionario);
+    return index;
+  }, [funcionarios]);
+  const categoriaPorProfissional = useMemo(() => {
+    const index = new Map<string, string>();
+    for (const [id, funcionario] of funcionarioPorId) {
+      const category = [funcionario.profissao, funcionario.cargo].map(normalizeProfissaoForSoap)
+        .find(value => value === 'tecnico_enfermagem' || !!(value && TRIAGE_CATEGORY_LABELS[value]));
+      index.set(id, category === 'tecnico_enfermagem' ? 'enfermagem' : category && TRIAGE_CATEGORY_LABELS[category] ? category : 'outros');
+    }
+    return index;
+  }, [funcionarioPorId]);
 
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
@@ -578,11 +614,10 @@ const Triagem: React.FC = () => {
     return m;
   }, [pacientes]);
 
-  const filaFiltrada = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
+  const filaOrdenada = useMemo(() => {
 
     return fila
-      .filter((item) => (isGlobalAdmin || !user?.unidadeId || item.unidadeId === user?.unidadeId) && STATUS_TRIAGEM_FILA.includes(item.status))
+      .filter((item) => (isGlobalAdmin || (!!user?.unidadeId && item.unidadeId === user.unidadeId)) && STATUS_TRIAGEM_FILA.includes(item.status))
       .map((item) => {
         const agendamentoRelacionado =
           agendamentoPorId.get(item.id)
@@ -622,7 +657,6 @@ const Triagem: React.FC = () => {
         } as Agendamento;
       })
       .filter((item): item is Agendamento => Boolean(item))
-      .filter((item) => !termo || item.pacienteNome.toLowerCase().includes(termo))
       .sort((a, b) => {
         const prioridade = compareLegalPriority(a.prioridadeLegal!, b.prioridadeLegal!);
         if (prioridade) return prioridade;
@@ -633,7 +667,29 @@ const Triagem: React.FC = () => {
         if (a.filaCriadoEm && b.filaCriadoEm) return a.filaCriadoEm.localeCompare(b.filaCriadoEm);
         return (a.hora || '').localeCompare(b.hora || '');
       });
-  }, [agendamentoPorId, agendamentoTriagemPorPacienteUnidade, pacientePorId, fila, isGlobalAdmin, user?.unidadeId, busca]);
+  }, [agendamentoPorId, agendamentoTriagemPorPacienteUnidade, pacientePorId, fila, isGlobalAdmin, user?.unidadeId]);
+
+  // One pass over the already ordered, unit-scoped queue. Search never renumbers it.
+  const especialidadesFila = useMemo(() => {
+    const contagens = new Map<string, number>();
+    const posicoes = new Map<string, { categoria: string; geral: number; especialidade: number }>();
+    filaOrdenada.forEach((item, index) => {
+      const categoria = categoriaPorProfissional.get(item.profissionalId) || 'outros';
+      const especialidade = (contagens.get(categoria) || 0) + 1;
+      contagens.set(categoria, especialidade);
+      posicoes.set(item.filaId, { categoria, geral: index + 1, especialidade });
+    });
+    return { contagens, posicoes };
+  }, [filaOrdenada, categoriaPorProfissional]);
+  const filtroEspecialidade = especialidadesFila.contagens.has(especialidadeSelecionada) ? especialidadeSelecionada : 'todos';
+  useEffect(() => {
+    if (especialidadeSelecionada !== 'todos' && !especialidadesFila.contagens.has(especialidadeSelecionada)) setEspecialidadeSelecionada('todos');
+  }, [especialidadeSelecionada, especialidadesFila]);
+  const filaFiltrada = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return filaOrdenada.filter(item => (!termo || item.pacienteNome.toLowerCase().includes(termo)) &&
+      (filtroEspecialidade === 'todos' || especialidadesFila.posicoes.get(item.filaId)?.categoria === filtroEspecialidade));
+  }, [filaOrdenada, busca, filtroEspecialidade, especialidadesFila]);
 
   const imc = useMemo(() => {
     const value = calcularImcTriagem(form.peso, form.altura);
@@ -803,6 +859,9 @@ const Triagem: React.FC = () => {
     return selectedItem?.profissionalId ? `Especialidade: ${selectedItem.profissionalNome}` : "";
   }, [selectedItem]);
 
+  const solicitarLiberacao = useCallback((item: Agendamento) => setConfirmAction({ type: 'release', item }), []);
+  const solicitarRemocao = useCallback((item: Agendamento) => setConfirmAction({ type: 'remove', item }), []);
+
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader
@@ -810,6 +869,15 @@ const Triagem: React.FC = () => {
         subtitle={`${filaFiltrada.length} paciente(s) aguardando triagem`}
       />
       <TriageReconciliationPanel />
+      <div role="group" aria-label="Filtrar triagem por profissão" className="flex min-w-0 max-w-full overflow-x-auto no-scrollbar gap-2 pb-1">
+        {[['todos', 'Todos'], ...Object.entries(TRIAGE_CATEGORY_LABELS).filter(([key]) => especialidadesFila.contagens.has(key))].map(([key, label]) => (
+          <Button key={key} type="button" variant={filtroEspecialidade === key ? 'default' : 'outline'}
+            aria-pressed={filtroEspecialidade === key} className="shrink-0 h-auto min-h-10 px-4 py-2"
+            onClick={() => setEspecialidadeSelecionada(key)}>
+            {label} ({key === 'todos' ? filaOrdenada.length : especialidadesFila.contagens.get(key) || 0})
+          </Button>
+        ))}
+      </div>
       <div className="relative flex gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -833,7 +901,7 @@ const Triagem: React.FC = () => {
             <EmptyState
               icon={<ClipboardList className="w-8 h-8 text-muted-foreground/50" />}
               title={busca.trim() ? "Nenhum resultado" : "Fila vazia"}
-              description={busca.trim() ? `Nenhum paciente encontrado para "${busca}".` : "Nenhum paciente aguardando triagem no momento."}
+              description={busca.trim() ? `Nenhum paciente encontrado para "${busca}" no filtro selecionado.` : "Nenhum paciente aguardando triagem no momento."}
             />
           </CardContent>
         </Card>
@@ -843,9 +911,12 @@ const Triagem: React.FC = () => {
             <TriagemItem
               key={item.filaId}
               item={item}
+              especialidade={TRIAGE_CATEGORY_LABELS[especialidadesFila.posicoes.get(item.filaId)?.categoria || 'outros']}
+              posicaoEspecialidade={especialidadesFila.posicoes.get(item.filaId)?.especialidade || 0}
+              posicaoGeral={especialidadesFila.posicoes.get(item.filaId)?.geral || 0}
               onOpen={openTriagem}
-              onRelease={(item) => setConfirmAction({ type: 'release', item })}
-              onRemove={(item) => setConfirmAction({ type: 'remove', item })}
+              onRelease={solicitarLiberacao}
+              onRemove={solicitarRemocao}
               isOpening={openingTriagemId === item.filaId}
               isActioning={actionLoading && confirmAction?.item.filaId === item.filaId}
               resolvePaciente={resolvePaciente}
