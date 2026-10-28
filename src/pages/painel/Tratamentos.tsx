@@ -1853,16 +1853,16 @@ const Tratamentos: React.FC = () => {
       // Find last existing session date as start for new sessions
       const lastSessionDate = existingSessions.length > 0
         ? existingSessions.sort((a, b) => (b.scheduled_date || '').localeCompare(a.scheduled_date || ''))[0].scheduled_date
-        : selectedCycle.start_date;
+        : freshCycle.start_date;
 
       const nextDay = new Date(lastSessionDate + 'T12:00:00');
       nextDay.setDate(nextDay.getDate() + 1);
       const startForNew = nextDay.toISOString().split('T')[0];
 
-      const blockedRanges = buildBlockedRanges(bloqueios, selectedCycle.professional_id, selectedCycle.unit_id);
+      const blockedRanges = buildBlockedRanges(bloqueios, freshCycle.professional_id, freshCycle.unit_id);
       const { dates: newDates, skippedCount } = generateSessionDatesWithInfo(
         startForNew,
-        selectedCycle.frequency,
+        freshCycle.frequency,
         weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [],
         extensionForm.new_sessions,
         blockedRanges,

@@ -47,7 +47,7 @@ export const treatmentCycleWriter = createTreatmentCycleWriter(supabase as unkno
 /** Fresh rows, used before scheduling and clinical conclusion; never creates missing rows. */
 export async function loadTreatmentCycleSnapshot(cycleId: string) {
   const [cycleResult, sessionsResult] = await Promise.all([
-    supabase.from('treatment_cycles').select('id, patient_id, professional_id, unit_id, total_sessions, end_date_predicted, status').eq('id', cycleId).single(),
+    supabase.from('treatment_cycles').select('id, patient_id, professional_id, unit_id, total_sessions, start_date, frequency, end_date_predicted, status').eq('id', cycleId).single(),
     supabase.from('treatment_sessions').select('id, cycle_id, patient_id, professional_id, session_number, scheduled_date, status, appointment_id').eq('cycle_id', cycleId).order('session_number').limit(10000),
   ]);
   if (cycleResult.error) throw cycleResult.error;

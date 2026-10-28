@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc: vi.fn() } }));
-import { createTreatmentCycleWriter } from './treatmentCycleService';
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc: vi.fn(), from: vi.fn() } }));
+import { supabase } from '@/integrations/supabase/client';
+import { generateSessionDatesWithInfo } from '@/lib/treatmentSessionGenerator';
+import { loadTreatmentCycleSnapshot, createTreatmentCycleWriter } from './treatmentCycleService';
 
 const cycle = { id: 'cycle', patient_id: 'patient', professional_id: 'professional', unit_id: 'unit', total_sessions: 7 };
 const dates = ['2027-01-04', '2027-01-11', '2027-01-18', '2027-01-25', '2027-02-01', '2027-02-08', '2027-02-15'];
@@ -36,5 +38,23 @@ describe('gravação transacional de plano', () => {
     await writer.extend({ ...cycle, total_sessions: 8 }, rows, ['2027-02-22'], '  Continuidade autorizada  ');
     expect(rpc).toHaveBeenCalledWith('save_treatment_cycle_plan', expect.objectContaining({ p_expected_total: 7, p_reason: 'Continuidade autorizada' }));
     expect(JSON.stringify(rows)).toBe(before);
+  });
+});
+
+
+describe('snapshot completo para extensão', () => {
+  it('carrega frequência e início e mantém a extensão mensal', async () => {
+    const fresh = { ...cycle, total_sessions: 1, start_date: '2030-01-07', frequency: 'mensal' };
+    const select = vi.fn();
+    const chain: any = { select, eq: vi.fn(), order: vi.fn(), single: vi.fn(), limit: vi.fn() };
+    select.mockReturnValue(chain); chain.eq.mockReturnValue(chain); chain.order.mockReturnValue(chain);
+    chain.single.mockResolvedValue({ data: fresh, error: null });
+    chain.limit.mockResolvedValue({ data: [], error: null });
+    vi.mocked(supabase.from).mockReturnValue(chain);
+    const { cycle: loaded } = await loadTreatmentCycleSnapshot('cycle');
+    expect(select.mock.calls[0][0]).toContain('start_date, frequency');
+    expect(loaded.frequency).toBe('mensal');
+    expect(loaded.start_date).toBe('2030-01-07');
+    expect(generateSessionDatesWithInfo(loaded.start_date, loaded.frequency, [], 2).dates).toEqual(['2030-01-07', '2030-02-07']);
   });
 });
