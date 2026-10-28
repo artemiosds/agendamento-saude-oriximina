@@ -2453,7 +2453,7 @@ const Agenda: React.FC = () => {
       await refreshAgendamentos();
     } catch (err) {
       console.error(err);
-      toast.error("Erro ao editar agendamento.");
+      toast.error(err instanceof Error ? err.message : "Erro ao editar agendamento.");
     }
   }, [editAg, editTimeAllowed, profissionais, agendamentos, updateAgendamento, logAction, user, refreshAgendamentos, loadAgendaRange]);
 

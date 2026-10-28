@@ -1,3 +1,4 @@
+import { TreatmentAgendaAlignmentButton } from "@/components/tratamentos/TreatmentAgendaAlignmentButton";
 import { TreatmentCyclePendingPanel } from "@/components/tratamentos/TreatmentCyclePendingPanel";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { isSessionFalta } from "@/lib/sessionFalta";
@@ -682,6 +683,14 @@ const Tratamentos: React.FC = () => {
     enabled: true,
     debounceMs: 400,
   });
+
+  // Reload the selected cycle on focus as a fallback when realtime was disconnected.
+  useEffect(() => {
+    const refresh = () => { if (selectedCycle && !document.hidden) void loadSessionsForCycle(selectedCycle, true); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [selectedCycle, loadSessionsForCycle]);
 
   // O(1) lookup maps to avoid .find() per row
   const pacientesMap = useMemo(() => {
@@ -2475,7 +2484,10 @@ const Tratamentos: React.FC = () => {
                             )}
                             {integrity.kind === "vinculo_divergente" && (
                               <span className="ml-2 text-xs text-destructive font-medium">
-                                · Vínculo inconsistente — revisão necessária
+                                {integrity.appointment && integrity.appointment.data !== s.scheduled_date
+                                  && integrity.appointment.paciente_id === s.patient_id && integrity.appointment.profissional_id === s.professional_id
+                                  && integrity.appointment.unidade_id === selectedCycle.unit_id
+                                  ? "· Data da sessão não sincronizada com a Agenda" : "· Vínculo inconsistente — revisão necessária"}
                                 {integrity.appointment?.data && integrity.appointment.data !== s.scheduled_date
                                   ? ` (Agenda: ${new Date(integrity.appointment.data + "T12:00:00").toLocaleDateString("pt-BR")} às ${integrity.appointment.hora})`
                                   : ""}
@@ -2490,6 +2502,14 @@ const Tratamentos: React.FC = () => {
                         <Badge className={cn("text-xs shrink-0", isInconsistent ? "bg-warning/15 text-warning border-warning/30" : sessionStatusColors[effectiveStatus])}>
                           {isInconsistent ? "Revisão necessária" : sessionStatusLabels[effectiveStatus] || effectiveStatus}
                         </Badge>
+                        {canControlSessions && cycleIsClinicallyActive && integrity.kind === "vinculo_divergente" && integrity.appointment
+                          && s.status === "agendada" && integrity.appointment.data !== s.scheduled_date
+                          && integrity.appointment.paciente_id === s.patient_id && integrity.appointment.profissional_id === s.professional_id
+                          && integrity.appointment.unidade_id === selectedCycle.unit_id
+                          && !["cancelado","falta","remarcado","concluido","em_atendimento"].includes(integrity.appointment.status) && (
+                          <TreatmentAgendaAlignmentButton sessionId={s.id} sessionDate={s.scheduled_date} appointmentId={s.appointment_id!}
+                            agendaDate={integrity.appointment.data} onChanged={() => loadSessionsForCycle(selectedCycle, false)} />
+                        )}
                         {canAgendarSessao && effectiveIsPendente && cycleIsClinicallyActive && (
                           <div className="flex gap-1 shrink-0">
                             <Button

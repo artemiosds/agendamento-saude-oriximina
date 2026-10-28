@@ -1,3 +1,4 @@
+import { updateAgendaWithTreatment } from "@/services/agendaTreatmentSync";
 import React, {
   createContext,
   useCallback,
@@ -764,12 +765,9 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
         }
       }
 
-      const { data: persisted, error } = await supabase
-        .from("agendamentos" as any)
-        .update(dbData)
-        .eq("id", id)
-        .select("id")
-        .maybeSingle();
+      const { data: persisted, error } = needsQuotaCheck
+        ? await updateAgendaWithTreatment(id, dbData, agendamentosRef.current.find(a => a.id === id))
+        : await supabase.from("agendamentos" as any).update(dbData).eq("id", id).select("id").maybeSingle();
       if (!error && persisted) {
         setAgendamentos((prev) =>
           prev.map((a) => (a.id === id ? { ...a, ...data } : a)),
