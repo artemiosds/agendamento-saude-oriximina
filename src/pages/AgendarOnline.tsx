@@ -238,7 +238,7 @@ const AgendarOnline: React.FC = () => {
       }
     }
 
-    return dates.sort().filter(d => getAvailableSlots(profissionalId, unidadeId, d, false, 30).length > 0);
+    return dates.sort().filter(d => getAvailableSlots(profissionalId, unidadeId, d).length > 0);
   }, [disponibilidades, appointmentCountsByKey, isSlotBlocked, getAvailableSlots]);
 
   const getBlockingInfo = useCallback((profissionalId: string, unidadeId: string, date: string) => {
@@ -292,7 +292,7 @@ const AgendarOnline: React.FC = () => {
         map[dateStr] = { dateStr, status: isHoliday ? 'holiday' : 'blocked', label: blockInfo.label || (isHoliday ? 'Feriado' : 'Bloqueado') };
         continue;
       }
-      const slots = getAvailableSlots(form.profissionalId, form.unidadeId, dateStr, false, 30);
+      const slots = getAvailableSlots(form.profissionalId, form.unidadeId, dateStr);
       if (slots.length === 0) {
         const key = `${form.profissionalId}|${form.unidadeId}|${dateStr}`;
         const dayCount = appointmentCountsByKey.get(key) || 0;
@@ -304,7 +304,7 @@ const AgendarOnline: React.FC = () => {
 
   const availableSlots = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId || !form.data) return [];
-    return getAvailableSlots(form.profissionalId, form.unidadeId, form.data, false, 30);
+    return getAvailableSlots(form.profissionalId, form.unidadeId, form.data);
   }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
   const validateStep2 = (): boolean => {
