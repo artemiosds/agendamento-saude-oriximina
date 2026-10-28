@@ -53,21 +53,24 @@ describe('ModalAgendarSessao', () => {
     const timeInput = screen.getByRole('dialog').querySelector('input[type="time"]')!;
     fireEvent.change(timeInput, { target: { value: '09:00' } });
 
-    const reason = screen.queryByLabelText('Motivo da alteração da data *');
+    const reason = screen.queryByLabelText('Motivo da alteração da data (opcional)');
     if (reason) fireEvent.change(reason, { target: { value: 'Nova data conferida com o paciente' } });
     expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeEnabled();
     fireEvent.change(timeInput, { target: { value: '08:00' } });
     expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
   });
 
-  it('permite remarcar no próprio turno cheio sem criar uma vaga adicional', async () => {
+  it('permite remarcar no próprio turno cheio sem exigir motivo', async () => {
+    const onRemarcar = vi.fn(async () => {});
     fixture.appointments = [{ id: 'appointment-1', data: '2099-10-08', profissional_id: 'professional-1', profissional_nome: 'Profissional', hora: '07:30' }];
-    render(<ModalAgendarSessao {...baseProps} mode="remarcar" availableDates={[]} getAvailableSlots={() => []} getTurnoInfo={() => [{ horaInicio: '07:30', horaFim: '11:00', vagasLivresInternas: 0 }]} currentAppointment={{ id: 'appointment-1', data: '2099-10-08', hora: '07:30' }} session={{ id: 'session-1', session_number: 8, total_sessions: 12, scheduled_date: '2099-10-08', status: 'agendada', appointment_id: 'appointment-1' }} />);
+    render(<ModalAgendarSessao {...baseProps} mode="remarcar" onRemarcar={onRemarcar} availableDates={[]} getAvailableSlots={() => []} getTurnoInfo={() => [{ horaInicio: '07:30', horaFim: '11:00', vagasLivresInternas: 0 }]} currentAppointment={{ id: 'appointment-1', data: '2099-10-08', hora: '07:30' }} session={{ id: 'session-1', session_number: 8, total_sessions: 12, scheduled_date: '2099-10-08', status: 'agendada', appointment_id: 'appointment-1' }} />);
 
     await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
     fireEvent.change(screen.getByRole('dialog').querySelector('input[type="time"]')!, { target: { value: '09:00' } });
-    fireEvent.change(screen.getByLabelText('Motivo da alteração da data *'), { target: { value: 'Solicitação do paciente' } });
+    expect(screen.getByLabelText('Motivo da alteração da data (opcional)')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Confirmar Remarcação' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Remarcação' }));
+    await waitFor(() => expect(onRemarcar).toHaveBeenCalledWith('2099-10-08', '09:00', expect.any(String), ''));
   });
 
   it('permite digitar horário livre mesmo com turno cheio (capacidade conferida no servidor)', async () => {

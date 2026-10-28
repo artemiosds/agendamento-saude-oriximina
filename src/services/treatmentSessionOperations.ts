@@ -1,3 +1,4 @@
+import { treatmentDateChangeReason } from "@/lib/treatmentDateChangeReason";
 import type { Agendamento } from '@/types';
 
 type RpcError = { message?: string; code?: string; details?: string; hint?: string };
@@ -205,7 +206,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       await deps.agenda.addAgendamentoTransactionally(input.appointment, async (normalized) => {
         const { data, error } = await deps.client.rpc('schedule_treatment_session_checked', {
           p_manual_capacity: !!input.manualCapacityOverride,
-          p_reason: input.reason?.trim() || null,
+          p_reason: input.appointment.data !== input.session.scheduled_date ? treatmentDateChangeReason(input.reason) : input.reason?.trim() || null,
           p_session_id: input.session.id,
           p_cycle_id: input.cycle.id,
           p_expected_session_date: input.session.scheduled_date,
@@ -238,7 +239,6 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       if (!input.session.appointment_id) {
         throw new Error('Esta sessão não tem um agendamento confirmado para remarcar. Vincule o agendamento existente ou agende a sessão primeiro.');
       }
-      if (!input.reason?.trim()) throw new Error('Informe a justificativa da remarcação.');
       await deps.validateCycle?.(input.cycle.id, { sessionId: input.session.id, date: input.newDate });
       if (input.checkPatientConflict && input.newTime) {
         const duplicate = await deps.findDuplicate({
@@ -257,7 +257,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       }
       const { data, error } = await deps.client.rpc(input.newRoomId === undefined ? 'reschedule_treatment_session_checked' : 'reschedule_treatment_session_with_room', {
         ...(input.newRoomId === undefined ? {} : { p_new_room_id: input.newRoomId }),
-        p_reason: input.reason.trim(),
+        p_reason: treatmentDateChangeReason(input.reason),
         p_manual_capacity: !!input.manualCapacityOverride,
         p_session_id: input.session.id,
         p_cycle_id: input.cycle.id,

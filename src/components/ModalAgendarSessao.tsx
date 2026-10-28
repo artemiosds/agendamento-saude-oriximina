@@ -96,7 +96,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   const [selectedSala, setSelectedSala] = useState('');
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState('');
-  const requiresReason = mode === 'remarcar' || (!!selectedDate && selectedDate !== session?.scheduled_date);
+  const showReason = mode === 'remarcar' || (!!selectedDate && selectedDate !== session?.scheduled_date);
   const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
   const [loadingConflicts, setLoadingConflicts] = useState(false);
 
@@ -299,7 +299,6 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       toast.error(exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).');
       return;
     }
-    if (requiresReason && !reason.trim()) { toast.error('Informe o motivo da alteração da data.'); return; }
     setSaving(true);
     try {
       if (mode === 'remarcar' && onRemarcar) {
@@ -555,11 +554,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
 
           {/* Action button — fixed footer */}
           <div className="modal-footer px-4 sm:px-6">
-            {requiresReason && <div className="space-y-1"><Label htmlFor="session-date-reason">Motivo da alteração da data *</Label><Textarea id="session-date-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div>}
+            {showReason && <div className="space-y-1"><Label htmlFor="session-date-reason">Motivo da alteração da data (opcional)</Label><Textarea id="session-date-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div>}
             <Button
               onClick={handleConfirm}
               className="w-full gradient-primary text-primary-foreground"
-              disabled={!selectedDate || !selectedHora || saving || (requiresReason && !reason.trim()) || (!selectedTimeAllowed && !masterManualFallback)}
+              disabled={!selectedDate || !selectedHora || saving || (!selectedTimeAllowed && !masterManualFallback)}
             >
               {saving ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>

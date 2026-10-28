@@ -1,3 +1,4 @@
+import { treatmentDateChangeReason } from "@/lib/treatmentDateChangeReason";
 import { TreatmentAgendaAlignmentButton } from "@/components/tratamentos/TreatmentAgendaAlignmentButton";
 import { TreatmentCyclePendingPanel } from "@/components/tratamentos/TreatmentCyclePendingPanel";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -1766,8 +1767,7 @@ const Tratamentos: React.FC = () => {
       }
     }
     const oldDate = session.scheduled_date;
-    const reason = providedReason?.trim() || window.prompt("Justificativa obrigatória para remarcar esta sessão:")?.trim();
-    if (!reason) throw new Error("Remarcação não realizada: informe uma justificativa.");
+    const reason = treatmentDateChangeReason(providedReason);
     const result = await treatmentSessionOperations.reschedule({
       reason,
       session,

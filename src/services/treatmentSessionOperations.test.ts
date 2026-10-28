@@ -263,6 +263,14 @@ describe('treatmentSessionOperations: reschedule', () => {
     expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_checked', expect.objectContaining({ p_expected_appointment_id: appointment.id, p_manual_capacity: true, p_reason: 'Revisão manual' }));
     expect(ctx.applyTreatmentAgendamentoUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: appointment.id, data: '2026-10-01' }));
   });
+
+  it('permite remarcar sem motivo digitado e registra a omissão na auditoria', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01' } }, error: null });
+    await ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '10:30' });
+    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_checked', expect.objectContaining({ p_reason: 'Motivo não informado (campo opcional).' }));
+  });
+
   it('preserva a escolha de sala junto à remarcação atômica do Prontuário', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01', sala_id: 'sala-2' } }, error: null });
@@ -363,10 +371,9 @@ describe('bloqueios de integridade antes de gravar', () => {
     expect(ctx.rpc).not.toHaveBeenCalled();
     expect(ctx.addAgendamentoTransactionally).not.toHaveBeenCalled();
   });
-  it('exige justificativa de vínculo e de remarcação', async () => {
+  it('mantém justificativa obrigatória somente no vínculo manual', async () => {
     const ctx = setup();
     await expect(ctx.service.linkExistingAppointment({ session: session(), cycle: cycle(), appointmentId: appointment.id })).rejects.toThrow('justificativa');
-    await expect(ctx.service.reschedule({ session: session({ appointment_id: appointment.id }), cycle: cycle(), newDate: '2027-01-04' })).rejects.toThrow('justificativa');
     expect(ctx.rpc).not.toHaveBeenCalled();
   });
 });
