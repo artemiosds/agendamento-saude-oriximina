@@ -1,5 +1,6 @@
+import { UNKNOWN_BPA_BLOCK, describeBpaBlock, bpaAvailabilityOnDate, createBpaAttendanceBlockResolver, type BpaAvailability } from "@/lib/bpaAttendanceBlock";
 import { buildBpaConferenceGroups, BPA_CONFERENCE_CSS } from "@/lib/bpaConferencePrint";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -722,7 +723,66 @@ const BpaExportar: React.FC = () => {
     // Filtros avançados (opcionais). Vazio/"todos" = comportamento atual.
     data_especifica: "",
     turno: "todos",
+    bloco: "todos",
   });
+
+  const [blockData, setBlockData] = useState<{ scope: string; rows: BpaAvailability[]; names: Map<string, string> }>({ scope: "", rows: [], names: new Map() });
+  const [blocksLoading, setBlocksLoading] = useState(false);
+  const [blocksError, setBlocksError] = useState("");
+  const generatedBlockLabel = useRef("Todos os blocos");
+  const blockScope = JSON.stringify([formData.competencia, formData.unidade_id, formData.profissional_id]);
+  const blockOptions = useMemo(() => {
+    if (blockData.scope !== blockScope) return [];
+    const options = new Map<string, ReturnType<typeof describeBpaBlock>>();
+    for (const d of blockData.rows) {
+      if (d.vagas_por_hora !== 0 || (formData.data_especifica && !bpaAvailabilityOnDate(d, formData.data_especifica))) continue;
+      const b = describeBpaBlock(d, blockData.names);
+      if (formData.turno === "manha" && b.start >= "12:00") continue;
+      if (formData.turno === "tarde" && b.start < "12:00") continue;
+      if (formData.turno === "noite" && b.start < "18:00") continue;
+      options.set(b.key, b);
+    }
+    return [...options.values()].sort((a, b) => a.start.localeCompare(b.start) || a.label.localeCompare(b.label, "pt-BR"));
+  }, [blockData, blockScope, formData.data_especifica, formData.turno]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFormData(prev => prev.bloco === "todos" ? prev : { ...prev, bloco: "todos" });
+    setBlocksError("");
+    if (!/^\d{6}$/.test(formData.competencia) || formData.profissional_id === "all") {
+      setBlocksLoading(false);
+      return;
+    }
+    const year = Number(formData.competencia.slice(0, 4)), month = Number(formData.competencia.slice(4));
+    if (year < 2000 || month < 1 || month > 12) return;
+    setBlocksLoading(true);
+    void (async () => {
+      try {
+        const start = `${formData.competencia.slice(0, 4)}-${String(month).padStart(2, "0")}-01`;
+        const end = `${start.slice(0, 8)}${new Date(year, month, 0).getDate()}`;
+        const [rows, config] = await Promise.all([
+          fetchAllRowsBpa<BpaAvailability>(() => {
+            let q = supabase.from("disponibilidades").select("id, profissional_id, unidade_id, sala_id, data_inicio, data_fim, dias_semana, hora_inicio, hora_fim, vagas_por_hora")
+              .eq("profissional_id", formData.profissional_id).lte("data_inicio", end).gte("data_fim", start).order("id");
+            if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+            return q;
+          }),
+          supabase.from("system_config").select("configuracoes").eq("id", "default").maybeSingle(),
+        ]);
+        if (config.error) throw config.error;
+        const turns = (config.data?.configuracoes as any)?.config_fluxo_atendimento?.turnos || [];
+        if (!cancelled) setBlockData({ scope: blockScope, rows, names: new Map(turns.map((t: any) => [String(t.id), String(t.nome)])) });
+      } catch {
+        if (!cancelled) { setBlockData({ scope: "", rows: [], names: new Map() }); setBlocksError("Não foi possível carregar os blocos. Selecione novamente o profissional para tentar de novo."); }
+      } finally { if (!cancelled) setBlocksLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [blockScope]);
+
+  useEffect(() => {
+    setFormData(prev => prev.bloco === "todos" || prev.bloco === UNKNOWN_BPA_BLOCK || blockOptions.some(b => b.key === prev.bloco)
+      ? prev : { ...prev, bloco: "todos" });
+  }, [blockOptions]);
 
   // Listas de procedimentos SIGTAP padrão (multi). Persistência em localStorage.
   // - procedimentosPadraoList: usado quando o profissional NÃO exige SIGTAP e
@@ -1111,6 +1171,7 @@ const BpaExportar: React.FC = () => {
       incluir_agenda_sem_prontuario: false,
       data_especifica: "",
       turno: "todos",
+      bloco: "todos",
     });
     setResults(null);
     setSelectedCategory(null);
@@ -1119,12 +1180,24 @@ const BpaExportar: React.FC = () => {
   // Limpa apenas os filtros avançados, preservando competência, unidade,
   // profissional, fallbacks e os Procedimentos Padrão.
   const handleLimparFiltrosAvancados = () => {
-    setFormData((prev) => ({ ...prev, data_especifica: "", turno: "todos" }));
+    setFormData((prev) => ({ ...prev, data_especifica: "", turno: "todos", bloco: "todos" }));
   };
 
   const handleGerar = async () => {
     setResults(null);
     setSelectedCategory(null);
+    if (formData.bloco !== "todos" && (blocksLoading || blockData.scope !== blockScope || blocksError)) {
+      toast.error("Aguarde o carregamento dos blocos antes de gerar a exportação.");
+      return;
+    }
+    generatedBlockLabel.current = formData.bloco === "todos" ? "Todos os blocos" :
+      formData.bloco === UNKNOWN_BPA_BLOCK ? "Sem bloco identificado" : blockOptions.find(b => b.key === formData.bloco)?.label || "";
+    if (!generatedBlockLabel.current) { toast.error("Selecione novamente o bloco de atendimento."); return; }
+    if (formData.unidade_id === "all") {
+      const selectedBlock = blockOptions.find(b => b.key === formData.bloco);
+      const unitName = selectedBlock && unidades.find(u => u.id === selectedBlock.unit)?.nome;
+      if (unitName) generatedBlockLabel.current += ` · ${unitName}`;
+    }
 
     if (formData.competencia.length !== 6 || isNaN(Number(formData.competencia))) {
       toast.error("Competência deve ter 6 dígitos (AAAAMM)");
@@ -1503,6 +1576,22 @@ const BpaExportar: React.FC = () => {
         }
       } catch (e) {
         console.warn("[BPA-Exportar] falha ao injetar agenda sem prontuário:", e);
+      }
+
+      // This single selection feeds validation, preview, TXT, Excel and print.
+      if (formData.bloco !== "todos") {
+        const appointments = await fetchAllRowsBpa<any>(() => {
+          let q = supabase.from("agendamentos").select("id, paciente_id, profissional_id, unidade_id, data, hora")
+            .gte("data", startDate).lte("data", endDate).eq("profissional_id", formData.profissional_id).order("id");
+          if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+          return q;
+        });
+        const resolveBlock = createBpaAttendanceBlockResolver(appointments, blockData.rows, blockData.names);
+        const selected = prontuarios.filter(p => resolveBlock(p) === formData.bloco);
+        const unknown = prontuarios.filter(p => resolveBlock(p) === UNKNOWN_BPA_BLOCK).length;
+        warnings.push(`Bloco de atendimento: ${generatedBlockLabel.current}. ${selected.length} atendimento(s) selecionado(s).`);
+        if (unknown && formData.bloco !== UNKNOWN_BPA_BLOCK) warnings.push(`${unknown} atendimento(s) sem bloco identificado não foram incluídos neste recorte. Confira-os em “Sem bloco identificado” ou “Todos os blocos”.`);
+        prontuarios.splice(0, prontuarios.length, ...selected);
       }
 
       // === Filtro avançado de turno ===
@@ -3202,6 +3291,7 @@ const BpaExportar: React.FC = () => {
         ["CONFERÊNCIA BPA-I (Boletim de Produção Ambulatorial Individualizado)"],
         [`UNIDADE DE SAÚDE: ${ctx.unidade_nome}    CNES: ${ctx.cnes}`],
         [`MÊS DE REFERÊNCIA: ${ctx.competencia}`],
+        [`BLOCO DE ATENDIMENTO: ${generatedBlockLabel.current}`],
         [`PROFISSIONAL: ${ctx.profissional_nome}    CNS: ${ctx.cns_prof}    CBO: ${ctx.cbo}`],
         [`Gerado em ${new Date().toLocaleString("pt-BR")} por ${user?.nome || user?.usuario || "—"}`],
         [],
@@ -3511,6 +3601,7 @@ const BpaExportar: React.FC = () => {
   <div><b>Profissional:</b> ${esc(ctx.profissional_nome)}</div>
   <div><b>CNS:</b> ${esc(ctx.cns_prof || "—")}</div>
   <div><b>CBO:</b> ${esc(ctx.cbo || "—")}</div>
+  <div class="full"><b>Bloco de atendimento:</b> ${esc(generatedBlockLabel.current)}</div>
   <div><b>Total de registros:</b> ${confSorted.length}</div>
   <div><b>Responsável pela geração:</b> ${respo}</div>
   <div class="full"><b>Gerado em:</b> ${new Date().toLocaleString("pt-BR")}</div>
@@ -3618,7 +3709,7 @@ ${auditHtml}`;
                 variant="ghost"
                 size="sm"
                 onClick={handleLimparFiltrosAvancados}
-                disabled={loading || (!formData.data_especifica && formData.turno === "todos")}
+                disabled={loading || (!formData.data_especifica && formData.turno === "todos" && formData.bloco === "todos")}
               >
                 Limpar filtros
               </Button>
@@ -3655,6 +3746,19 @@ ${auditHtml}`;
                     <SelectItem value="noite">Noite</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2 min-w-0">
+                <Label htmlFor="bloco_atendimento">Bloco de atendimento</Label>
+                <Select value={formData.bloco} onValueChange={v => setFormData(prev => ({ ...prev, bloco: v }))}
+                  disabled={loading || blocksLoading || formData.profissional_id === "all" || blockData.scope !== blockScope}>
+                  <SelectTrigger id="bloco_atendimento" className="text-left [&>span]:truncate"><SelectValue placeholder="Todos os blocos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os blocos</SelectItem>
+                    {blockOptions.map(b => <SelectItem key={b.key} value={b.key}>{b.label}{formData.unidade_id === "all" ? ` · ${unidades.find(u => u.id === b.unit)?.nome || b.unit}` : ""}</SelectItem>)}
+                    <SelectItem value={UNKNOWN_BPA_BLOCK}>Sem bloco identificado</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{blocksLoading ? "Carregando blocos…" : blocksError || (formData.profissional_id === "all" ? "Selecione um profissional para ver os blocos." : "Usa os blocos cadastrados na Agenda e o horário agendado. Não altera procedimentos ou CIDs.")}</p>
               </div>
             </div>
           </div>
@@ -3877,6 +3981,7 @@ ${auditHtml}`;
 
       {results && (
         <div ref={resultsRef} className="scroll-mt-4 space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          <p className="text-sm text-muted-foreground">Bloco da exportação: <strong>{generatedBlockLabel.current}</strong></p>
           {results.blobUrl && (
             <Alert className="border-primary/30 bg-card">
               <CheckCircle2 className="h-4 w-4 text-primary" />
