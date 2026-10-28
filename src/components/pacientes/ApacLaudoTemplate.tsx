@@ -1,3 +1,4 @@
+import type { ApacClinicalData } from "@/lib/apacClinicalData";
 // Wrapper de compatibilidade — toda a renderização real do Laudo APAC vive
 // agora em ApacLaudoSvg (SVG único). Este arquivo mantém a API antiga
 // (ref com `element`, `isReady`, `waitReady`) e adiciona `svg` para a
@@ -9,6 +10,7 @@ import { ApacLaudoSvg, type ApacLaudoSvgHandle } from "./ApacLaudoSvg";
 
 interface Props {
   paciente: AnyPaciente | null;
+  clinicalData?: ApacClinicalData;
 }
 
 export interface ApacLaudoTemplateHandle {
@@ -19,7 +21,7 @@ export interface ApacLaudoTemplateHandle {
 }
 
 export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
-  function ApacLaudoTemplate({ paciente }, ref) {
+  function ApacLaudoTemplate({ paciente, clinicalData }, ref) {
     const inner = useRef<ApacLaudoSvgHandle>(null);
     useImperativeHandle(
       ref,
@@ -35,7 +37,7 @@ export const ApacLaudoTemplate = forwardRef<ApacLaudoTemplateHandle, Props>(
       }),
       [],
     );
-    return <ApacLaudoSvg ref={inner} paciente={paciente} />;
+    return <ApacLaudoSvg ref={inner} paciente={paciente} clinicalData={clinicalData} />;
   },
 );
 

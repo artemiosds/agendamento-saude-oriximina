@@ -1,4 +1,6 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import ApacClinicalForm from "./ApacClinicalForm";
+import { emptyApacClinicalData, validateApacClinicalData } from "@/lib/apacClinicalData";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer, Download, X } from "lucide-react";
@@ -25,6 +27,15 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
   const [printing, setPrinting] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  const [editing, setEditing] = useState(false);
+  const [clinical, setClinical] = useState(emptyApacClinicalData);
+  const [showForm, setShowForm] = useState(false);
+  const patientKey = paciente?.id || paciente?.cpf || paciente?.cns || paciente?.nome || '';
+  useEffect(() => {
+    setEditing(false); setShowForm(false); setClinical(emptyApacClinicalData());
+  }, [open, patientKey]);
+  const errors = editing ? validateApacClinicalData(clinical) : [];
+
   useLayoutEffect(() => {
     const recalc = () => {
       const el = wrapRef.current;
@@ -38,10 +49,10 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
     const ro = new ResizeObserver(recalc);
     if (wrapRef.current) ro.observe(wrapRef.current);
     return () => ro.disconnect();
-  }, [open]);
+  }, [open, showForm]);
 
   const handlePrint = async () => {
-    if (printing) return;
+    if (printing || errors.length) return;
     setPrinting(true);
     try {
       await templateRef.current?.waitReady(5000);
@@ -55,7 +66,7 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
   };
 
   const handleDownload = async () => {
-    if (downloading) return;
+    if (downloading || errors.length) return;
     setDownloading(true);
     try {
       await templateRef.current?.waitReady(5000);
@@ -76,7 +87,9 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
             Laudo APAC{paciente?.nome ? ` — ${paciente.nome}` : ""}
           </DialogTitle>
           <div className="flex items-center gap-2 mr-8 flex-wrap">
-            <Button size="sm" onClick={handlePrint} disabled={carregando || printing}>
+            <Button size="sm" variant="outline" disabled={carregando || printing || downloading} onClick={() => {setEditing(true);setShowForm(!showForm);}}>{showForm ? 'Ver prévia' : 'Preencher laudo'}</Button>
+            {editing && <Button size="sm" variant="outline" disabled={printing || downloading} onClick={() => {if(window.confirm('Descartar os campos preenchidos e manter somente a identificação do paciente?')) {setEditing(false);setShowForm(false);setClinical(emptyApacClinicalData());}}}>Somente dados do paciente</Button>}
+            <Button size="sm" onClick={handlePrint} disabled={carregando || printing || downloading || errors.length > 0}>
               <Printer className="w-4 h-4 mr-2" />
               {printing ? "Preparando impressão..." : "Imprimir Laudo APAC"}
             </Button>
@@ -84,7 +97,7 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
               size="sm"
               variant="secondary"
               onClick={handleDownload}
-              disabled={carregando || downloading}
+              disabled={carregando || downloading || printing || errors.length > 0}
             >
               <Download className="w-4 h-4 mr-2" />
               {downloading ? "Gerando PDF..." : "Baixar PDF"}
@@ -95,7 +108,9 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
             </Button>
           </div>
         </DialogHeader>
-        <div ref={wrapRef} className="flex-1 overflow-auto bg-muted flex items-start justify-center p-2">
+        {errors.length > 0 && <div role="alert" className="border-b px-4 py-2 text-sm text-destructive">{errors.join(' ')}</div>}
+        {showForm && <div className="flex-1 overflow-auto"><ApacClinicalForm value={clinical} onChange={setClinical}/></div>}
+        <div ref={wrapRef} className={`flex-1 overflow-auto bg-muted flex items-start justify-center p-2 ${showForm ? "hidden" : ""}`}>
           {carregando ? (
             <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
               Carregando dados do paciente...
@@ -122,7 +137,7 @@ export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalP
                   background: "#fff",
                 }}
               >
-                <ApacLaudoTemplate ref={templateRef} paciente={paciente} />
+                <ApacLaudoTemplate ref={templateRef} paciente={paciente} clinicalData={editing ? clinical : undefined} />
               </div>
             </div>
           )}

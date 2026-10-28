@@ -1,3 +1,5 @@
+import ApacClinicalOverlay from "./ApacClinicalOverlay";
+import type { ApacClinicalData } from "@/lib/apacClinicalData";
 // ============================================================================
 // Laudo APAC — renderização SVG única.
 //
@@ -30,6 +32,7 @@ import {
 
 interface Props {
   paciente: AnyPaciente | null;
+  clinicalData?: ApacClinicalData;
 }
 
 export interface ApacLaudoSvgHandle {
@@ -135,7 +138,7 @@ function DebugDigit({ box, id }: { box: SvgDigitBox; id?: string }) {
 }
 
 export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacLaudoSvg(
-  { paciente },
+  { paciente, clinicalData },
   ref,
 ) {
   const { data, ibgeLoading } = useApacLaudoData(paciente);
@@ -303,6 +306,8 @@ export const ApacLaudoSvg = forwardRef<ApacLaudoSvgHandle, Props>(function ApacL
         <SvgDigits value={data.uf} boxes={F.state} />
 
         <SvgDigits value={data.cep} boxes={F.zipCode} />
+
+        {clinicalData && <ApacClinicalOverlay data={clinicalData} />}
 
         {/* Debug — só aparece no preview. Removido na impressão/PDF. */}
         {APAC_DEBUG && (
