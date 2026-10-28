@@ -1,28 +1,37 @@
 import { supabase } from '@/integrations/supabase/client';
-import { assertTreatmentCycle, type CycleIntegritySnapshot, type SessionIntegritySnapshot } from '@/lib/treatmentCycleIntegrity';
+import { assertTreatmentCycle, isActiveCycleSession, type CycleIntegritySnapshot, type SessionIntegritySnapshot } from '@/lib/treatmentCycleIntegrity';
 
 type RpcClient = { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: any; error: { message?: string; code?: string } | null }> };
 
 /** One transaction on the server; no client-side compensation or partial success. */
 export function createTreatmentCycleWriter(client: RpcClient) {
   async function persist(cycle: CycleIntegritySnapshot & Record<string, unknown>, dates: string[], reason: string | null, existing: SessionIntegritySnapshot[] = []) {
-    const sessions = dates.map((date, index) => ({
-      cycle_id: cycle.id, patient_id: cycle.patient_id, professional_id: cycle.professional_id,
-      scheduled_date: date, session_number: existing.length + index + 1,
-      status: 'pendente_agendamento', appointment_id: null,
-    }));
-    assertTreatmentCycle(cycle, [...existing, ...sessions]);
-    if (reason !== null && !reason.trim()) throw new Error('Informe a justificativa da alteração.');
+    const isExtension = reason !== null;
+    const previousTotal = isExtension ? cycle.total_sessions - dates.length : 0;
+    if (!isExtension) {
+      const sessions = dates.map((date, index) => ({
+        cycle_id: cycle.id, patient_id: cycle.patient_id, professional_id: cycle.professional_id,
+        scheduled_date: date, session_number: index + 1,
+        status: 'pendente_agendamento', appointment_id: null,
+      }));
+      assertTreatmentCycle(cycle, sessions);
+    } else {
+      // Pendências antigas não bloqueiam extensão: só verifica as novas datas.
+      if (!reason.trim()) throw new Error('Informe a justificativa da alteração.');
+      if (new Set(dates).size !== dates.length) throw new Error('Data repetida nas novas sessões.');
+      const taken = existing.find((s) => isActiveCycleSession(s) && s.scheduled_date && dates.includes(s.scheduled_date));
+      if (taken) throw new Error(`Já existe a sessão nº ${taken.session_number} neste ciclo em ${taken.scheduled_date!.split('-').reverse().join('/')}. Escolha outra data.`);
+    }
     const { data, error } = await client.rpc('save_treatment_cycle_plan', {
       p_cycle: cycle, p_dates: dates, p_reason: reason?.trim() ?? null,
-      p_expected_total: existing.length,
+      p_expected_total: previousTotal,
     });
     if (error) {
       if (error.code === 'PGRST202') throw new Error('Validação transacional de sessões ainda não ativada no banco. Nenhuma sessão foi gravada.');
       throw new Error(error.message || 'Não foi possível registrar o plano de sessões.');
     }
     const recorded = Number(data?.registered_sessions);
-    if (!data?.cycle?.id || recorded !== cycle.total_sessions) {
+    if (!data?.cycle?.id || (!isExtension && recorded !== cycle.total_sessions)) {
       throw new Error(`Gravação não confirmada: ${cycle.total_sessions} sessões previstas e ${Number.isFinite(recorded) ? recorded : 'quantidade não confirmada'} registradas. Recarregue o ciclo para revisão; não repita a geração.`);
     }
     return data.cycle;
