@@ -133,7 +133,9 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   const today = todayLocalStr();
   const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
   const isFuture = ag.data > today;
-  const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
+  // "confirmado_chegada" só existe quando a Triagem de Enfermagem está habilitada
+  // (sem triagem, a chegada já grava "apto_atendimento"). Por isso não libera o início.
+  const STATUS_LIBERADOS = ["aguardando_atendimento", "apto_atendimento"];
   const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && !isFuture;
   const isEmAtendimento = ag.status === "em_atendimento";
   const ehPendenteOnline = ag.origem === "online" && ag.status === "pendente";
@@ -441,6 +443,23 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {(ag.status === "confirmado_chegada" || ag.status === "chegada_confirmada") && ehHoje && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning"
+                        disabled
+                      >
+                        🩺 Aguardando Triagem
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Aguardando liberação pela Triagem de Enfermagem</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}

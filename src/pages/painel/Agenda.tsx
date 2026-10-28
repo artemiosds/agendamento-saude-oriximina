@@ -2147,7 +2147,11 @@ const Agenda: React.FC = () => {
       return;
     }
 
-    const statusPermitidos = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
+    if (["confirmado_chegada", "chegada_confirmada", "aguardando_triagem"].includes(String(ag.status))) {
+      toast.info("Aguardando liberação pela Triagem de Enfermagem.");
+      return;
+    }
+    const statusPermitidos = ["aguardando_atendimento", "apto_atendimento"];
     if (!statusPermitidos.includes(ag.status)) {
       toast.error("Este agendamento ainda não está liberado para iniciar atendimento.");
       return;
@@ -3795,7 +3799,7 @@ const Agenda: React.FC = () => {
             const isFutureAg = detalheAg.data > hojeStr;
             const podeIniciar =
               isProfissional &&
-              ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"].includes(detalheAg.status) &&
+              ["aguardando_atendimento", "apto_atendimento"].includes(detalheAg.status) &&
               !isFutureAg;
             const dispStatus = getDisplayStatus(detalheAg, hojeStr);
             const fechar = (fn: () => void) => {
