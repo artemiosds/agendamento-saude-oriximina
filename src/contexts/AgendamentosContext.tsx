@@ -233,7 +233,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       }
       if (controller.signal.aborted || epoch !== agendaEpochRef.current || scopeKeyRef.current !== scopeKey ||
         missing.some(date => agendaDateGenerationRef.current.get(date) !== token)) {
-        throw new Error('Leitura da Agenda substituída por outra mais recente');
+        return; // leitura mais recente já em andamento; não é erro para o usuário
       }
       const days = new Set(missing);
       const merged = new Map(agendamentosRef.current.filter(a => !days.has(a.data)).map(a => [a.id, a] as const));
