@@ -88,3 +88,18 @@ describe('atualização pontual do paciente persistido', () => {
     expect(result.current.pacientes).toEqual([]);
   });
 });
+
+
+it('inclui só o novo cadastro em memória, evita duplicar e dispensa nova leitura para selecioná-lo',async()=>{
+ const {result}=renderHook(usePacientes,{wrapper});
+ act(()=>result.current.activateAgendaPatients());
+ const calls=state.read.mock.calls.length;
+ act(()=>result.current.applyCreatedPaciente({id:'new',nome:'NOVO PACIENTE',unidade_id:'u1',custom_data:{racaCor:'parda'}}));
+ expect(result.current.pacientes).toHaveLength(1);
+ act(()=>result.current.applyCreatedPaciente({id:'new',nome:'NOVO PACIENTE',unidade_id:'u1'}));
+ expect(result.current.pacientes).toHaveLength(1);
+ await act(async()=>{expect((await result.current.hydrateAgendaPatients(['new']))[0].id).toBe('new');});
+ expect(state.read).toHaveBeenCalledTimes(calls);
+ act(()=>result.current.applyCreatedPaciente({id:'other-unit',nome:'OUTRO',unidade_id:'u2'}));
+ expect(result.current.pacientes).toHaveLength(1);
+});

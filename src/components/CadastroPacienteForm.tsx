@@ -158,6 +158,8 @@ export const emptyPacienteForm: PacienteFormData = {
 
 interface Props {
   pacienteId?: string | null;
+  /** Registration inside Agenda writes only pacientes; referrals/procedures remain in their own pages. */
+  administrativeOnly?: boolean;
   form: PacienteFormData;
   onChange: (form: PacienteFormData) => void;
   onSave: () => void;
@@ -166,7 +168,7 @@ interface Props {
   errors: Record<string, string>;
 }
 
-const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
+const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors, administrativeOnly = false }) => {
   const latestForm = useRef(form);
   latestForm.current = form;
   const set = (field: keyof PacienteFormData, value: any) => {
@@ -325,7 +327,6 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
     complementares: Object.keys(errors).some(key => errors[key] && PACIENTE_FIELD_TABS[key] === "complementares"),
   };
 
-  console.log("FORM SEXO NO COMPONENTE", form.sexo);
 
   return (
     <div ref={formElement} className="flex flex-col h-full">
@@ -780,6 +781,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </p>
             </div>
 
+            {administrativeOnly ? <p className="text-xs text-muted-foreground">Encaminhamentos, anexos e procedimentos vinculados podem ser gerenciados na página Pacientes após salvar o cadastro.</p> : <>
             {/* Encaminhamento (UBS) - Histórico e Anexos */}
             <div className="space-y-4 border-t pt-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-primary">
@@ -812,6 +814,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
             </div>
 
+            </>}
             {/* Clínico */}
             <div className="space-y-3 border-t pt-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-primary">
@@ -1005,6 +1008,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </AccordionItem>
             </Accordion>
 
+            {!administrativeOnly && <>
             {/* Procedimentos Vinculados ao Paciente */}
             <div className="space-y-4 border-t pt-4 mt-2">
               <div className="flex items-center justify-between">
@@ -1072,6 +1076,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
             </div>
 
+            </>}
             {/* Condições administrativas / Exceção de bloqueio */}
             <div className="p-4 border rounded-lg bg-blue-50/40 border-blue-200">
               <h4 className="font-semibold text-blue-900 mb-3 text-sm">

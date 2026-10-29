@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,11 +14,12 @@ const f = vi.hoisted(() => ({
   update: vi.fn(), addQueue: vi.fn(), updateQueue: vi.fn(), refresh: vi.fn(), refreshQueue: vi.fn(),
   loadRange: vi.fn(), hydrate: vi.fn(), exceptions: vi.fn(), selected: vi.fn(),
   deleteRow: vi.fn(), log: vi.fn(), notify: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), rpc: vi.fn(), apply: vi.fn(),
+  createdPatient: vi.fn(), registrationMount: vi.fn(),
   setter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
   queueSetter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
 }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: f.user }) }));
-vi.mock('@/contexts/PacientesContext', () => ({ usePacientes: () => ({ pacientes: f.patients, hydrateAgendaPatients: f.hydrate }) }));
+vi.mock('@/contexts/PacientesContext', () => ({ usePacientes: () => ({ pacientes: f.patients, hydrateAgendaPatients: f.hydrate, applyCreatedPaciente: f.createdPatient }) }));
 vi.mock('@/contexts/AgendamentosContext', () => ({ useAgendamentos: () => {
   const [agendamentos, set] = useState(f.rows); f.setter = set;
   return { agendamentos, updateAgendamento: f.update, refreshAgendamentos: f.refresh, applyCareFlowAgendamentoUpdate: f.apply,
@@ -44,7 +45,8 @@ vi.mock('@/hooks/useEnsurePortalAccess', () => ({ useEnsurePortalAccess: () => (
 vi.mock('@/lib/utils', async original => ({ ...await original<typeof import('@/lib/utils')>(), todayLocalStr: () => f.day }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: f.toastError, info: f.toastInfo } }));
 vi.mock('@/components/TriageReconciliationPanel', () => ({ default: () => null }));
-vi.mock('@/components/BuscaPaciente', () => ({ BuscaPaciente: () => null }));
+vi.mock('@/components/BuscaPaciente', () => ({ BuscaPaciente: ({onCadastrarNovo,value}:any) => <><output data-testid="patient-selected">{value}</output>{onCadastrarNovo && <button onClick={()=>onCadastrarNovo('MARIA')}>Cadastrar paciente teste</button>}</> }));
+vi.mock('@/components/agenda/CadastroPacienteNaAgenda',()=>({default:({termo,onSaved,onCancel}:any)=>{f.registrationMount();return <div><output>{termo}</output><button onClick={onCancel}>Voltar teste</button><button onClick={()=>onSaved({id:'new-patient',nome:'MARIA',unidade_id:'u1'})}>Salvar paciente teste</button></div>;}}));
 vi.mock('@/components/RegistrarFaltaModal', () => ({ RegistrarFaltaModal: () => null }));
 vi.mock('@/components/ConcluirAtendimentoModal', () => ({ ConcluirAtendimentoModal: () => null }));
 vi.mock('@/components/AgendaNotificacoes', () => ({ AgendaNotificacaoIndividual: () => null, AgendaNotificacoesMassa: () => null }));
@@ -154,4 +156,36 @@ describe('Agenda: diálogo único de exclusão', () => {
     expect(f.refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
+});
+
+
+describe('cadastro dentro do mesmo diálogo da Agenda',()=>{
+ it('monta sob demanda, preserva profissional e horário e seleciona o paciente salvo sem recarregar',async()=>{
+   f.user.id='admin';f.user.role='master';f.user.usuario='admin.sms';
+   vi.stubGlobal('ResizeObserver',class {observe(){} unobserve(){} disconnect(){}});
+   const originalScroll=HTMLElement.prototype.scrollIntoView;HTMLElement.prototype.scrollIntoView=vi.fn();
+   try {
+    render(<MemoryRouter><Agenda /></MemoryRouter>);
+    expect(f.registrationMount).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole('button',{name:'Novo Agendamento'})[0]);
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('combobox')[0]);
+    fireEvent.click((await screen.findAllByRole('option'))[0]);
+    fireEvent.keyDown(document.activeElement || document.body,{key:'Escape'});
+    const time=screen.getByRole('dialog').querySelector('input[type="time"]')!;
+    fireEvent.change(time,{target:{value:'09:30'}});
+    fireEvent.click(screen.getByText('Cadastrar paciente teste'));
+    await screen.findByText('Voltar teste');expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    fireEvent.click(screen.getByText('Voltar teste'));
+    expect(screen.getByRole('dialog').querySelector('input[type="time"]')).toHaveValue('09:30');
+    expect(screen.getByRole('dialog')).toHaveTextContent('PROFISSIONAL TESTE');
+    fireEvent.click(screen.getByText('Cadastrar paciente teste'));
+    fireEvent.click(await screen.findByText('Salvar paciente teste'));
+    await waitFor(()=>expect(screen.getByTestId('patient-selected')).toHaveTextContent('new-patient'));
+    expect(screen.getByText('✓ Dados conferidos')).toBeInTheDocument();
+    expect(f.createdPatient).toHaveBeenCalledWith(expect.objectContaining({id:'new-patient'}));
+    expect(screen.getByRole('dialog').querySelector('input[type="time"]')).toHaveValue('09:30');
+    expect(f.refresh).not.toHaveBeenCalled();
+   }finally{f.user.id='admin';f.user.role='master';f.user.usuario='admin.sms';HTMLElement.prototype.scrollIntoView=originalScroll;vi.unstubAllGlobals();}
+ });
 });

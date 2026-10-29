@@ -11,6 +11,7 @@ interface BuscaPacienteProps {
   value: string;
   onChange: (pacienteId: string, pacienteNome: string) => void;
   unidadeId?: string | null;
+  onCadastrarNovo?: (termoBuscado: string) => void;
 }
 
 
@@ -33,11 +34,12 @@ const mapPaciente = (row: any): Paciente => ({
 const sanitizeSearchTerm = (value: string) => value.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ');
 const escapeIlikeTerm = (value: string) => sanitizeSearchTerm(value).replace(/[%_]/g, '\\$&');
 
-function BuscaPacienteComponent({ pacientes = [], value, onChange, unidadeId = null }: BuscaPacienteProps) {
+function BuscaPacienteComponent({ pacientes = [], value, onChange, unidadeId = null, onCadastrarNovo }: BuscaPacienteProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [aberto, setAberto] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [resultados, setResultados] = useState<Paciente[]>([]);
   const [selectedPaciente, setSelectedPaciente] = useState<Paciente | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -102,7 +104,8 @@ function BuscaPacienteComponent({ pacientes = [], value, onChange, unidadeId = n
 
     const searchPatients = async () => {
       setLoading(true);
-
+      setSearchError(false);
+      try {
       const { data, error } = await supabase
         .from('pacientes')
         .select('id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em')
@@ -111,8 +114,12 @@ function BuscaPacienteComponent({ pacientes = [], value, onChange, unidadeId = n
         .limit(20);
 
       if (!cancelled) {
+        setSearchError(!!error);
         setResultados(error || !data ? [] : (data as any[]).map(mapPaciente));
         setLoading(false);
+      }
+      } catch {
+        if (!cancelled) { setResultados([]); setSearchError(true); setLoading(false); }
       }
     };
 
@@ -184,9 +191,9 @@ function BuscaPacienteComponent({ pacientes = [], value, onChange, unidadeId = n
 
       {aberto && query.trim().length >= 2 && (
         <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-popover shadow-md">
-          {loading ? (
+          {loading || query.trim() !== debouncedQuery.trim() ? (
             <p className="p-3 text-center text-sm text-muted-foreground">Buscando pacientes...</p>
-          ) : resultados.length === 0 ? (
+          ) : searchError ? <p role="alert" className="p-3 text-sm text-destructive">Não foi possível consultar os pacientes. Tente novamente antes de cadastrar.</p> : resultados.length === 0 ? (
             <p className="p-3 text-center text-sm text-muted-foreground">Nenhum paciente encontrado para "{query}"</p>
           ) : (
             resultados.map((paciente) => (
@@ -210,6 +217,13 @@ function BuscaPacienteComponent({ pacientes = [], value, onChange, unidadeId = n
               </button>
             ))
           )}
+          {!loading && !searchError && query.trim() === debouncedQuery.trim() && onCadastrarNovo && <div className="border-t p-2">
+            {resultados.length > 0 && <p className="text-xs text-muted-foreground mb-1">Não é nenhum destes?</p>}
+            <button type="button" className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-primary hover:bg-accent"
+              onClick={() => { setAberto(false); onCadastrarNovo(query.trim()); }}>
+              {resultados.length ? '+ Cadastrar outro paciente' : '+ Cadastrar Novo Paciente Completo'}
+            </button>
+          </div>}
         </div>
       )}
     </div>

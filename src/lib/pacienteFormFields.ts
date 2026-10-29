@@ -6,7 +6,7 @@ export const PACIENTE_FIELD_TABS: Record<string, string> = {
   cep: "endereco", tipoLogradouro: "endereco", logradouro: "endereco", numero: "endereco",
   bairro: "endereco", municipio: "endereco", uf: "endereco",
   telefone: "contato", email: "contato",
-  nacionalidade: "complementares", racaCor: "complementares", tipoCondicao: "complementares",
+  nacionalidade: "complementares", racaCor: "complementares", etnia: "complementares", tipoCondicao: "complementares",
   especialidadeDestino: "complementares", ubsOrigem: "complementares", cid: "complementares",
   justificativa: "complementares",
 };

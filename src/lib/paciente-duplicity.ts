@@ -36,7 +36,7 @@ export async function checkPatientDuplicity(data: {
   cpf?: string;
   cns?: string;
   idToExclude?: string | null;
-}): Promise<DuplicateCheckResult> {
+}, options: { strict?: boolean } = {}): Promise<DuplicateCheckResult> {
   const nomeNorm = normalizeString(data.nome);
   const cpfClean = cleanNumericString(data.cpf || "");
   const cnsClean = cleanNumericString(data.cns || "").slice(0, 15);
@@ -49,6 +49,7 @@ export async function checkPatientDuplicity(data: {
       .select("id, nome")
       .eq("cpf", cpfClean);
 
+    if (cpfError && options.strict) throw cpfError;
     const duplicate = cpfMatch?.find(m => m.id !== data.idToExclude);
     if (duplicate) {
       return {
@@ -66,6 +67,7 @@ export async function checkPatientDuplicity(data: {
       .select("id, nome")
       .eq("cns", cnsClean);
 
+    if (cnsError && options.strict) throw cnsError;
     const duplicate = cnsMatch?.find(m => m.id !== data.idToExclude);
     if (duplicate) {
       return {
@@ -84,6 +86,7 @@ export async function checkPatientDuplicity(data: {
       .select("id, nome")
       .eq("data_nascimento", dataNasc);
 
+    if (error && options.strict) throw error;
     if (matches) {
       const duplicate = matches.find(m => normalizeString(m.nome) === nomeNorm && m.id !== data.idToExclude);
       if (duplicate) {

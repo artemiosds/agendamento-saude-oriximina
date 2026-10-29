@@ -25,6 +25,7 @@ interface PacientesContextType {
   updatePaciente: (id: string, data: Partial<Paciente>) => Promise<void>;
   refreshPacientes: () => Promise<void>;
   applySavedPaciente: (row: Record<string, any>) => void;
+  applyCreatedPaciente: (row: Record<string, any>) => void;
   activateLegacyPacientes: () => Promise<void>;
   activateAgendaPatients: () => void;
   hydrateAgendaPatients: (ids: string[], force?: boolean) => Promise<Paciente[]>;
@@ -223,6 +224,17 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
     setPacientes(next);
   }, [scopeKey]);
 
+  const applyCreatedPaciente = useCallback((row: Record<string, any>) => {
+    if (!row?.id || scopeKeyRef.current !== scopeKey) return;
+    if (!isGlobalAdmin && (!authUser?.unidadeId || row.unidade_id !== authUser.unidadeId)) return;
+    agendaPatientIdsRef.current.add(String(row.id));
+    const current=pacientesRef.current;
+    const mapped=mapPacienteRow(row);
+    const next=current.some(p=>p.id===row.id) ? current.map(p=>p.id===row.id ? {...p,...mapped}:p) : [...current,mapped];
+    pacientesRef.current=next;
+    setPacientes(next);
+  }, [scopeKey,isGlobalAdmin,authUser?.unidadeId]);
+
   const refreshPacientes = useCallback(async () => {
     if (window.location.pathname === '/painel/pacientes' && scopedRouteRef.current === 'patients') {
       await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
@@ -382,8 +394,8 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
   });
 
   const value = useMemo<PacientesContextType>(
-    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients, activatePatientList }),
-    [pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients, activatePatientList],
+    () => ({ pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, applyCreatedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients, activatePatientList }),
+    [pacientes, addPaciente, updatePaciente, refreshPacientes, applySavedPaciente, applyCreatedPaciente, activateLegacyPacientes, activateAgendaPatients, hydrateAgendaPatients, activateTreatmentPatients, hydrateTreatmentPatients, activatePatientList],
   );
 
   return <PacientesContext.Provider value={value}>{children}</PacientesContext.Provider>;

@@ -1,3 +1,6 @@
+import type { PacienteFormData } from '@/components/CadastroPacienteForm';
+import { buildPacienteCadastroFields, validatePacienteCadastro } from '@/lib/pacienteCadastro';
+import { checkPatientDuplicity } from '@/lib/paciente-duplicity';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizePhone } from '@/lib/phoneUtils';
 import { auditService } from './auditService';
@@ -12,6 +15,35 @@ const normalizeSexoCadastro = (value: unknown) => {
 
 
 export const patientService = {
+  /** Creates only the patient and returns the persisted row; no list refetch. */
+  async createPaciente(form: PacienteFormData, actor: {id:string; nome?:string; usuario?:string; role?:string; unidadeId?:string}, unidadeId: string, requestId: string) {
+    const errors=validatePacienteCadastro(form);
+    if (Object.keys(errors).length) throw Object.assign(new Error(Object.values(errors)[0]), {fieldErrors:errors});
+    if (!actor.id || !unidadeId || (actor.usuario !== 'admin.sms' && actor.unidadeId !== unidadeId)) throw new Error('Selecione uma unidade válida para cadastrar o paciente.');
+    // Stable request ID also permits recovery after an uncertain network response.
+    const {data:existing,error:lookupError}=await supabase.from('pacientes').select('*').eq('id',requestId).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) {
+      if (existing.unidade_id!==unidadeId || (existing.custom_data as any)?.cadastro_request_id!==requestId || (existing.custom_data as any)?.criado_por!==actor.id) throw new Error('Identificador de cadastro já utilizado.');
+      return existing;
+    }
+    const duplicate=await checkPatientDuplicity({nome:form.nome,dataNascimento:form.dataNascimento,cpf:form.cpf,cns:form.cns},{strict:true});
+    if (duplicate.isDuplicate) throw new Error(duplicate.message || 'Paciente já cadastrado.');
+    const fields=buildPacienteCadastroFields(form,actor);
+    const stamp=new Date().toISOString();
+    const payload={id:requestId,...fields,unidade_id:unidadeId,criado_em:stamp,custom_data:{...fields.custom_data,
+      criado_por:actor.id,criado_por_nome:actor.nome || '',criado_por_usuario:actor.usuario || '',
+      unidade_origem_id:unidadeId,cadastro_request_id:requestId,criado_at:stamp,motivo_alteracao:'Cadastro via Novo Agendamento'}};
+    const {data,error}=await supabase.from('pacientes').insert(payload).select('*').single();
+    if (error?.code === '23505') throw new Error('Paciente já cadastrado com este CPF ou identificador. Volte à busca e confira o cadastro existente.');
+    if (error) throw error;
+    if (!data?.id) throw new Error('O banco não confirmou o cadastro.');
+    void auditService.auditCreate({acao:'criar_paciente',modulo:'pacientes',entidade:'paciente',entidadeId:data.id,
+      pacienteId:data.id,pacienteNome:data.nome,unidadeId,origem:'agenda',user:actor as any,
+      detalhes:{motivo_alteracao:'Cadastro via Novo Agendamento'},after:data});
+    return data;
+  },
+
   async getAll(limit = 1000, unidadeId?: string) {
     const all: any[] = [];
     let offset = 0;

@@ -1,6 +1,8 @@
+import PatientRegistrationBoundary from '@/components/agenda/PatientRegistrationBoundary';
 import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
 import { confirmCareArrival } from "@/services/careFlowService";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+const CadastroPacienteNaAgenda = React.lazy(() => import("@/components/agenda/CadastroPacienteNaAgenda"));
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { compareClinicalAndLegalPriority, hasTriageTea, legalPriorityKey } from '@/lib/queuePriority';
@@ -260,7 +262,7 @@ const Agenda: React.FC = () => {
   const { user } = useAuth();
   const isProfissional = user?.role === "profissional";
 
-  const { pacientes, hydrateAgendaPatients } = usePacientes();
+  const { pacientes, hydrateAgendaPatients, applyCreatedPaciente } = usePacientes();
   const {
     agendamentos,
     addAgendamento,
@@ -652,6 +654,10 @@ const Agenda: React.FC = () => {
 
   // Pacientes já conferidos durante a sessão atual do diálogo de Novo Agendamento
   const [pacientesConferidos, setPacientesConferidos] = useState<Set<string>>(new Set());
+  const [novoAgStep, setNovoAgStep] = useState<'agendamento' | 'cadastro_paciente'>('agendamento');
+  const [termoInicialCadastro, setTermoInicialCadastro] = useState('');
+  const [savingPacienteNovo, setSavingPacienteNovo] = useState(false);
+
 
   // Dispara o modal de conferência ASSIM que o paciente é selecionado.
   // Se o usuário cancelar a conferência ou desmarcar o checkbox, o paciente é removido da seleção.
@@ -2636,8 +2642,9 @@ const Agenda: React.FC = () => {
                 <Dialog
                   open={dialogOpen}
                   onOpenChange={(open) => {
+                    if (savingPacienteNovo) return;
                     setDialogOpen(open);
-                    if (!open) setPacientesConferidos(new Set());
+                    if (!open) { setPacientesConferidos(new Set()); setNovoAgStep('agendamento'); setTermoInicialCadastro(''); }
                   }}
                 >
                   <DialogTrigger asChild>
@@ -2647,9 +2654,20 @@ const Agenda: React.FC = () => {
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle className="font-display">Novo Agendamento</DialogTitle>
+                  <DialogTitle className="font-display">{novoAgStep === 'agendamento' ? 'Novo Agendamento' : 'Cadastro Completo de Paciente'}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-6">
+                {novoAgStep === 'cadastro_paciente' ? <PatientRegistrationBoundary onBack={() => { setNovoAgStep('agendamento'); setTermoInicialCadastro(''); }}><React.Suspense fallback={<p role="status" className="p-4 text-sm">Carregando cadastro completo…</p>}>
+                  <CadastroPacienteNaAgenda termo={termoInicialCadastro}
+                    unidadeId={user?.unidadeId || profissionais.find(p => p.id === newAg.profissionalId)?.unidadeId || ''}
+                    onBusyChange={setSavingPacienteNovo}
+                    onCancel={() => { setNovoAgStep('agendamento'); setTermoInicialCadastro(''); }}
+                    onSaved={(row) => {
+                      applyCreatedPaciente(row);
+                      setPacientesConferidos(prev => new Set(prev).add(String(row.id)));
+                      setNewAg(prev => ({ ...prev, pacienteId: String(row.id) }));
+                      setNovoAgStep('agendamento'); setTermoInicialCadastro('');
+                    }} />
+                </React.Suspense></PatientRegistrationBoundary> : <div className="space-y-6">
                   <div className="space-y-2">
                     <Label>Paciente</Label>
                     <BuscaPaciente
@@ -2657,6 +2675,9 @@ const Agenda: React.FC = () => {
                       value={newAg.pacienteId}
                       onChange={(id) => handlePacienteSelecionadoNovoAg(id)}
                       unidadeId={user?.unidadeId}
+                      onCadastrarNovo={can('pacientes', 'can_create') ? (termo) => {
+                        setTermoInicialCadastro(termo); setNovoAgStep('cadastro_paciente');
+                      } : undefined}
                     />
 
                     <p className="text-xs text-muted-foreground">
@@ -2943,7 +2964,7 @@ const Agenda: React.FC = () => {
                   >
                     {createLock.isLocked ? "Agendando..." : "Agendar"}
                   </Button>
-                </div>
+                </div>}
               </DialogContent>
             </Dialog>
           </>
