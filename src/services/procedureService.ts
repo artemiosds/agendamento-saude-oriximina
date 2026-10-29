@@ -79,6 +79,65 @@ let cachedLinks: Map<string, string[]> | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
+// Bounded, session-partitioned lookup cache. It stores catalog data only, never
+// patient notes. The existing full-procedure cache above keeps its own TTL.
+const LOOKUP_TTL = 10 * 60 * 1000;
+const LOOKUP_MAX_ENTRIES = 100;
+const LOOKUP_MAX_ROWS = 5000;
+const lookupCache = new Map<string, { value: unknown; expires: number; rows: number }>();
+const lookupPending = new Map<string, Promise<unknown>>();
+let lookupRows = 0;
+let lookupVersion = 0;
+let lookupScope = '';
+function clearLookupCache() {
+  lookupCache.clear(); lookupPending.clear(); lookupRows = 0; lookupVersion++;
+}
+function removeLookup(key: string) {
+  const entry = lookupCache.get(key);
+  if (entry) lookupRows -= entry.rows;
+  lookupCache.delete(key);
+}
+async function lookup<T>(key: string, load: () => Promise<{ value: T; cacheable: boolean }>): Promise<T> {
+  // getSession uses the SDK session; no catalog/database query is required on a hit.
+  // If session verification fails, bypass caching and let the normal RLS request run.
+  let scope: string | null = null;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (!error) scope = data.session ? `${data.session.user.id}|${data.session.access_token}` : 'anonymous';
+  } catch { /* Keep the normal request outside this catch: never repeat a failed query. */ }
+  if (scope === null) return (await load()).value;
+  if (scope !== lookupScope) { clearLookupCache(); lookupScope = scope; }
+  const version = lookupVersion;
+  const now = Date.now();
+  // Expired entries release memory even if a different term is searched next.
+  for (const [entryKey, entry] of lookupCache) if (entry.expires <= now) removeLookup(entryKey);
+  const hit = lookupCache.get(key);
+  if (hit) {
+    lookupCache.delete(key); lookupCache.set(key, hit); // LRU touch
+    return structuredClone(hit.value) as T;
+  }
+  const pending = lookupPending.get(key);
+  if (pending) return structuredClone(await pending) as T;
+  const promise = (async () => {
+    const result = await load();
+    const arrays = Array.isArray(result.value) ? [result.value] : Object.values(result.value || {}).filter(Array.isArray);
+    const rows = arrays.reduce((total, array) => total + array.length, 0);
+    if (result.cacheable && version === lookupVersion && scope === lookupScope && rows <= LOOKUP_MAX_ROWS) {
+      while (lookupCache.size >= LOOKUP_MAX_ENTRIES || lookupRows + rows > LOOKUP_MAX_ROWS) {
+        const oldest = lookupCache.keys().next().value;
+        if (oldest === undefined) break;
+        removeLookup(oldest);
+      }
+      lookupCache.set(key, { value: structuredClone(result.value), expires: Date.now() + LOOKUP_TTL, rows });
+      lookupRows += rows;
+    }
+    return result.value;
+  })();
+  lookupPending.set(key, promise);
+  try { return structuredClone(await promise); }
+  finally { if (lookupPending.get(key) === promise) lookupPending.delete(key); }
+}
+
 async function fetchAll(): Promise<{ procs: ProcedimentoDB[]; links: Map<string, string[]> }> {
   const PAGE_SIZE = 1000;
   let allSigtap: any[] = [];
@@ -306,30 +365,35 @@ export const procedureService = {
   },
 
   async getCidsForProcedure(codigo: string): Promise<{ codigo: string; descricao: string }[]> {
-    const { data } = await (supabase as any)
-      .from('sigtap_procedimento_cids')
-      .select('cid_codigo, cid_descricao')
-      .eq('procedimento_codigo', codigo);
-    // REMOVIDO .limit(50) para garantir que todos os CIDs vinculados apareçam
-    return (data || []).map((r: any) => ({ codigo: r.cid_codigo, descricao: r.cid_descricao }));
+    return lookup(`procedure-cids:${codigo}`, async () => {
+      const { data, error } = await (supabase as any)
+        .from('sigtap_procedimento_cids')
+        .select('cid_codigo, cid_descricao')
+        .eq('procedimento_codigo', codigo);
+      // Keep every returned CID; never truncate to fit the cache.
+      return { value: (data || []).map((r: any) => ({ codigo: r.cid_codigo, descricao: r.cid_descricao })), cacheable: !error && data != null };
+    });
   },
 
   async searchCids(query: string): Promise<{ codigo: string; descricao: string }[]> {
     const q = query.trim();
     if (!q) return [];
-    const { data } = await (supabase as any)
+    return lookup(`cid-search:${q}`, async () => {
+    const { data, error } = await (supabase as any)
       .from('cid10_codigos')
       .select('codigo, descricao')
       .or(`codigo.ilike.%${q}%,descricao.ilike.%${q}%`)
       .limit(100);
     // Dedupe by codigo (cid10_codigos may have multiple rows per codigo for different especialidades)
     const seen = new Set<string>();
-    return (data || []).reduce((acc: { codigo: string; descricao: string }[], r: any) => {
+    const value = (data || []).reduce((acc: { codigo: string; descricao: string }[], r: any) => {
       if (seen.has(r.codigo)) return acc;
       seen.add(r.codigo);
       acc.push({ codigo: r.codigo, descricao: r.descricao });
       return acc;
     }, []);
+    return { value, cacheable: !error && data != null };
+    });
   },
 
   /**
@@ -349,12 +413,16 @@ export const procedureService = {
   }> {
     const q = query.trim();
     if (!q) return { procedimentos: [], cids: [] };
-    const { data, error } = await (supabase as any).rpc('search_sigtap_and_cid', { q, lim });
-    if (error || !data) return { procedimentos: [], cids: [] };
-    return {
-      procedimentos: (data.procedimentos || []) as any,
-      cids: (data.cids || []) as any,
-    };
+    return lookup(`unified:${JSON.stringify([q, lim])}`, async () => {
+      const { data, error } = await (supabase as any).rpc('search_sigtap_and_cid', { q, lim });
+      return {
+        value: error || !data ? { procedimentos: [], cids: [] } : {
+          procedimentos: (data.procedimentos || []) as any,
+          cids: (data.cids || []) as any,
+        },
+        cacheable: !error && data != null,
+      };
+    });
   },
 
   /**
@@ -423,6 +491,7 @@ export const procedureService = {
   },
 
   invalidateCache() {
+    clearLookupCache();
     cached = null;
     cachedLinks = null;
     cacheTimestamp = 0;

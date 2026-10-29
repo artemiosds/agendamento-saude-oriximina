@@ -786,4 +786,4 @@ const VitalCard = ({ label, value, unit }: { label: string; value: string; unit:
   </div>
 );
 
-export default FichaPacienteCabecalho;
+export default React.memo(FichaPacienteCabecalho);

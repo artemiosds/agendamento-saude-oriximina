@@ -1,3 +1,4 @@
+import AutosaveBadge, { createAutosaveIndicator } from '@/components/prontuario/AutosaveBadge';
 import { instrumentoBadge } from '@/lib/sigtapInstruments';
 import { usePreviousProcedures } from "@/hooks/usePreviousProcedures";
 import { createTreatmentSessionOperations, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
@@ -6,7 +7,18 @@ import { treatmentCycleWriter, loadTreatmentCycleSnapshot } from "@/services/tre
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
-import { AltaTratamentoDialog } from "@/components/tratamentos/AltaTratamentoDialog";
+// Failed secondary chunks must never unmount the editor with unsaved text.
+class SecondaryPanelBoundary extends React.Component<{ children: React.ReactNode; onClose?: () => void }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    return this.state.failed ? <div role="alert" className="p-3 text-sm text-muted-foreground">
+      Não foi possível carregar este painel. O prontuário permanece aberto.
+      {this.props.onClose && <Button type="button" variant="outline" size="sm" onClick={this.props.onClose}>Fechar painel</Button>}
+    </div> : this.props.children;
+  }
+}
+const AltaTratamentoDialog = React.lazy(() => import("@/components/tratamentos/AltaTratamentoDialog").then(module => ({ default: module.AltaTratamentoDialog })));
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,7 +58,7 @@ import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History,
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
+const HistoricoPacientePanel = React.lazy(() => import("@/components/prontuario/HistoricoPacientePanel"));
 import VisitaDomiciliarProntuario from "@/components/visita-domiciliar/VisitaDomiciliarProntuario";
 import { imprimirVisitaDomiciliar } from "@/lib/visitaDomiciliarPdf";
 import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
@@ -70,15 +82,15 @@ import { openPrintDocument } from "@/lib/printLayout";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
 import { Lock, FileDown } from "lucide-react";
 import type { TreatmentDischargeResult } from "@/services/treatmentDischargeService";
-import { HistoricoClinico } from "@/components/HistoricoClinico";
+const HistoricoClinico = React.lazy(() => import("@/components/HistoricoClinico").then(module => ({ default: module.HistoricoClinico })));
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
-import DocumentosHistorico from "@/components/DocumentosHistorico";
+const DocumentosHistorico = React.lazy(() => import("@/components/DocumentosHistorico"));
 
 import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
-import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+const HistoricoCompletoModal = React.lazy(() => import("@/components/HistoricoCompletoModal"));
 import EncaminhamentoInternoModal from "@/components/EncaminhamentoInternoModal";
 import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
 import DynamicProntuarioFields from "@/components/prontuario/DynamicProntuarioFields";
@@ -435,8 +447,9 @@ const ProntuarioPage: React.FC = () => {
   const [form, setForm] = useState(emptyForm);
   const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
   // Autosave state
-  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [autosaveAt, setAutosaveAt] = useState<Date | null>(null);
+  const autosaveIndicator = useMemo(createAutosaveIndicator, []);
+  const setAutosaveStatus = autosaveIndicator.setStatus;
+  const setAutosaveAt = autosaveIndicator.setAt;
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutosaveHashRef = useRef<string>('');
   const editIdRef = useRef<string | null>(null);
@@ -3409,6 +3422,15 @@ const ProntuarioPage: React.FC = () => {
     frequencia_cardiaca: triagem.frequencia_cardiaca,
     classificacao_risco: (triagem as any).classificacao_risco,
   } : null, [triagem]);
+  const handleDynamicFieldChange = useCallback((key: string, value: any) => {
+    setForm(previous => Object.is((previous as any)[key], value) ? previous : { ...previous, [key]: value });
+  }, []);
+  const textFieldHandlers = useMemo(() => Object.fromEntries([
+    'queixa_principal','anamnese','sinais_sintomas','exame_fisico','hipotese','conduta','evolucao','observacoes','resultado_exame','motivo_alteracao','outro_procedimento',
+  ].map(key => [key, (event: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    const value = event.target.value;
+    setForm(previous => Object.is((previous as any)[key], value) ? previous : { ...previous, [key]: value });
+  }])), []);
   const handleSoapChange = useCallback((field: keyof typeof soapValues, value: string) => {
     setForm(p => ((p as any)[field] === value ? p : { ...p, [field]: value }));
   }, []);
@@ -3481,7 +3503,7 @@ const ProntuarioPage: React.FC = () => {
       {queryPacienteId && showHistorico && (
         <Card className="shadow-card border-0">
           <CardContent className="p-4">
-            <HistoricoClinico
+            <SecondaryPanelBoundary><React.Suspense fallback={null}><HistoricoClinico
               pacienteId={queryPacienteId}
               pacienteNome={queryPacienteNome || ""}
               currentProfissionalId={user?.id}
@@ -3490,7 +3512,7 @@ const ProntuarioPage: React.FC = () => {
                 setHistoricoPacienteId({ id: queryPacienteId, nome: queryPacienteNome || "Paciente" });
                 setHistoricoCompletoOpen(true);
               }}
-            />
+            /></React.Suspense></SecondaryPanelBoundary>
           </CardContent>
         </Card>
       )}
@@ -3501,10 +3523,10 @@ const ProntuarioPage: React.FC = () => {
       {queryPacienteId && (
         <Card className="shadow-card border-0">
           <CardContent className="p-4">
-            <DocumentosHistorico
+            <SecondaryPanelBoundary><React.Suspense fallback={null}><DocumentosHistorico
               pacienteId={queryPacienteId}
               pacienteNome={queryPacienteNome || "Paciente"}
-            />
+            /></React.Suspense></SecondaryPanelBoundary>
           </CardContent>
         </Card>
       )}
@@ -3647,23 +3669,7 @@ const ProntuarioPage: React.FC = () => {
           <DialogHeader className="px-6 py-3 border-b border-border shrink-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
-              <div className="text-xs flex items-center gap-1.5" aria-live="polite">
-                {autosaveStatus === 'saving' && (
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
-                  </span>
-                )}
-                {autosaveStatus === 'saved' && autosaveAt && (
-                  <span className="text-success flex items-center gap-1.5">
-                    <CheckCircle className="w-3 h-3" /> Salvo automaticamente às {autosaveAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-                {autosaveStatus === 'error' && (
-                  <span className="text-destructive flex items-center gap-1.5">
-                    <AlertTriangle className="w-3 h-3" /> Falha ao salvar — tentaremos novamente
-                  </span>
-                )}
-              </div>
+              <AutosaveBadge indicator={autosaveIndicator} />
             </div>
           </DialogHeader>
 
@@ -4023,7 +4029,7 @@ const ProntuarioPage: React.FC = () => {
                   <DynamicProntuarioFields
                     fields={structureFields}
                     values={form}
-                    onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                    onChange={handleDynamicFieldChange}
                   />
                 </div>
 
@@ -4080,7 +4086,7 @@ const ProntuarioPage: React.FC = () => {
                     <DynamicProntuarioFields
                       fields={structureFields}
                       values={form}
-                      onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                      onChange={handleDynamicFieldChange}
                     />
                   </div>
                 </div>
@@ -4526,7 +4532,7 @@ const ProntuarioPage: React.FC = () => {
                       <DynamicProntuarioFields
                         fields={structureFields}
                         values={form}
-                        onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                        onChange={handleDynamicFieldChange}
                       />
                     </div>
                     {effectiveProfissao && (
@@ -4567,7 +4573,7 @@ const ProntuarioPage: React.FC = () => {
                   <DynamicProntuarioFields
                     fields={structureFields}
                     values={form}
-                    onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                    onChange={handleDynamicFieldChange}
                   />
                 </div>
                 {effectiveProfissao && (
@@ -4594,7 +4600,7 @@ const ProntuarioPage: React.FC = () => {
                   <DynamicProntuarioFields
                     fields={structureFields}
                     values={form}
-                    onChange={(k, v) => setForm(p => ({ ...p, [k]: v }))}
+                    onChange={handleDynamicFieldChange}
                   />
                 </div>
                 {effectiveProfissao && (
@@ -4613,14 +4619,14 @@ const ProntuarioPage: React.FC = () => {
             {/* Legacy types: show generic fields */}
             {!['avaliacao_inicial', 'retorno', 'sessao', 'urgencia', 'procedimento', 'visita_domiciliar'].includes(form.tipo_registro) && (
               <div className="space-y-3">
-                <div><Label>Queixa Principal</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
-                <div><Label>Anamnese</Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} /></div>
-                <div><Label>Sinais e Sintomas</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} /></div>
-                <div><Label>Exame Físico</Label><DebouncedTextarea rows={3} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} /></div>
-                <div><Label>Hipótese / Avaliação</Label><DebouncedTextarea rows={2} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} /></div>
-                <div><Label>Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} /></div>
-                <div><Label>Evolução</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} /></div>
-                <div><Label>Observações Gerais</Label><DebouncedTextarea rows={2} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} /></div>
+                <div><Label>Queixa Principal</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={textFieldHandlers.queixa_principal} /></div>
+                <div><Label>Anamnese</Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={textFieldHandlers.anamnese} /></div>
+                <div><Label>Sinais e Sintomas</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={textFieldHandlers.sinais_sintomas} /></div>
+                <div><Label>Exame Físico</Label><DebouncedTextarea rows={3} value={form.exame_fisico} onChange={textFieldHandlers.exame_fisico} /></div>
+                <div><Label>Hipótese / Avaliação</Label><DebouncedTextarea rows={2} value={form.hipotese} onChange={textFieldHandlers.hipotese} /></div>
+                <div><Label>Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={textFieldHandlers.conduta} /></div>
+                <div><Label>Evolução</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={textFieldHandlers.evolucao} /></div>
+                <div><Label>Observações Gerais</Label><DebouncedTextarea rows={2} value={form.observacoes} onChange={textFieldHandlers.observacoes} /></div>
               </div>
             )}
 
@@ -5078,7 +5084,7 @@ const ProntuarioPage: React.FC = () => {
 
             <div>
               <Label>Outro Procedimento</Label>
-              <DebouncedInput value={form.outro_procedimento} onChange={(e) => setForm((p) => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." />
+              <DebouncedInput value={form.outro_procedimento} onChange={textFieldHandlers.outro_procedimento} placeholder="Descreva outro procedimento..." />
             </div>
 
             <NovoProcedimentoModal
@@ -5158,7 +5164,7 @@ const ProntuarioPage: React.FC = () => {
               </div>
               <DebouncedTextarea
                 value={form.resultado_exame}
-                onChange={(e) => setForm((p) => ({ ...p, resultado_exame: e.target.value }))}
+                onChange={textFieldHandlers.resultado_exame}
                 placeholder="Registre os resultados de exames apresentados pelo paciente, valores relevantes, alterações encontradas e interpretação clínica..."
                 className="min-h-[140px] md:min-h-[160px] bg-background resize-y leading-relaxed"
               />
@@ -5187,7 +5193,7 @@ const ProntuarioPage: React.FC = () => {
                 <DebouncedTextarea
                   rows={2}
                   value={form.motivo_alteracao}
-                  onChange={(e) => setForm((p) => ({ ...p, motivo_alteracao: e.target.value }))}
+                  onChange={textFieldHandlers.motivo_alteracao}
                   placeholder="Ex: Correção de informação, complemento clínico..."
                   className="border-warning/50"
                 />
@@ -5242,7 +5248,7 @@ const ProntuarioPage: React.FC = () => {
           </div>{/* end left column */}
 
           {/* Painel direito fixo — Histórico do paciente */}
-          <HistoricoPacientePanel
+          <SecondaryPanelBoundary><React.Suspense fallback={null}><HistoricoPacientePanel
             pacienteId={form.paciente_id || undefined}
             paciente={pacienteForPanel}
             currentId={editId || undefined}
@@ -5252,7 +5258,7 @@ const ProntuarioPage: React.FC = () => {
             onView={handleViewProntuarioFromHistory}
             onGerarDocumento={form.paciente_id ? openPainelDoc : undefined}
             documentosRefreshKey={painelDocRefresh}
-          />
+          /></React.Suspense></SecondaryPanelBoundary>
           </div>{/* end grid split */}
 
             <div className="flex items-center justify-between gap-2 flex-wrap shrink-0 border-t border-border py-3 px-6 bg-background">
@@ -5607,6 +5613,7 @@ const ProntuarioPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {dischargeCycleOpen && <SecondaryPanelBoundary onClose={() => setDischargeCycleOpen(false)}><React.Suspense fallback={null}>
       <AltaTratamentoDialog
         open={dischargeCycleOpen}
         onOpenChange={setDischargeCycleOpen}
@@ -5614,6 +5621,7 @@ const ProntuarioPage: React.FC = () => {
         patientName={form.paciente_nome || "Paciente"}
         onSuccess={handleDischargeCycleSuccess}
       />
+      </React.Suspense></SecondaryPanelBoundary>}
 
       {loading ? (
         <div className="space-y-3" aria-label="Carregando prontuários">
@@ -5914,7 +5922,8 @@ const ProntuarioPage: React.FC = () => {
       })()}
 
       {/* Histórico Completo Modal */}
-      {(historicoPacienteId || queryPacienteId || form.paciente_id) && (
+      {historicoCompletoOpen && (historicoPacienteId || queryPacienteId || form.paciente_id) && (
+        <SecondaryPanelBoundary onClose={() => { setHistoricoCompletoOpen(false); setHistoricoPacienteId(null); }}><React.Suspense fallback={null}>
         <HistoricoCompletoModal
           open={historicoCompletoOpen}
           onOpenChange={(open) => {
@@ -5927,6 +5936,7 @@ const ProntuarioPage: React.FC = () => {
           currentProfissionalId={user?.id}
           onViewProntuario={(p) => { setViewerProntuario(p); setHistoricoCompletoOpen(false); }}
         />
+        </React.Suspense></SecondaryPanelBoundary>
       )}
 
       {/* Drawer de visualização rápida do prontuário */}

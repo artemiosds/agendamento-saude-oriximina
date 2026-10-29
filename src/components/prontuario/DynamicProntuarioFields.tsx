@@ -121,4 +121,14 @@ const DynamicProntuarioFields: React.FC<DynamicProntuarioFieldsProps> = ({
   );
 };
 
-export default DynamicProntuarioFields;
+// The structure hook returns a new array on each parent render, with stable field
+// objects. Compare every displayed descriptor, value and error; never hide a real
+// schema, required-field, option, callback or clinical value change.
+export default React.memo(DynamicProntuarioFields, (previous, next) => {
+  if (previous.onChange !== next.onChange) return false;
+  if (!previous.fields || !next.fields) return previous.fields === next.fields;
+  if (previous.fields.length !== next.fields.length) return false;
+  return previous.fields.every((field, index) => field === next.fields[index]
+    && Object.is(previous.values[field.key], next.values[field.key])
+    && previous.errors?.[field.key] === next.errors?.[field.key]);
+});
