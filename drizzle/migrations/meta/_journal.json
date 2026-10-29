@@ -43,6 +43,13 @@
       "when": 1793211293713,
       "tag": "0005_agenda_treatment_date_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793243064918,
+      "tag": "0006_agenda_sync_real_schema",
+      "breakpoints": true
     }
   ]
 }
