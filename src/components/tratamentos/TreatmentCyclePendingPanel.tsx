@@ -66,9 +66,9 @@ export function TreatmentCyclePendingPanel({ cycle, sessions, issues, appointmen
         const keeper = protectedRows.length ? null : (!anyLinked ? [...involved].sort((a, b) => a.session_number - b.session_number)[0] : null);
         const clearable = involved.filter((s) => !s.appointment_id && s.status === 'pendente_agendamento' && s.id !== keeper?.id);
         return <div className="space-y-2">
-          <p>{protectedRows.length ? `Agendamento protegido: sessão nº ${protectedRows.map((s) => s.session_number).join(', ')} permanece em ${dateLabel(protectedRows[0].scheduled_date!)}.` : keeper ? `A sessão nº ${keeper.session_number} permanece em ${dateLabel(keeper.scheduled_date!)}; libere a outra para escolher um novo dia.` : 'Não foi identificado um único vínculo válido para proteger. Confira os vínculos antes de regularizar.'}</p>
+          <p>{protectedRows.length ? `Reserva vinculada: sessão nº ${protectedRows.map((s) => s.session_number).join(', ')} está em ${dateLabel(protectedRows[0].scheduled_date!)}.` : keeper ? `A sessão nº ${keeper.session_number} está em ${dateLabel(keeper.scheduled_date!)}; libere a outra para escolher um novo dia.` : 'Não foi identificado um único vínculo válido para proteger. Confira os vínculos antes de regularizar.'}</p>
           {canReview && (protectedRows.length > 0 || keeper) && clearable.map((s) => <Button key={s.id} size="sm" variant="outline" disabled={saving} onClick={() => { begin({ kind: 'clear', session: s, number: s.session_number }); setReason(`Data duplicada no ciclo: sessão nº ${s.session_number} liberada para novo agendamento.`); }}>Retirar data duplicada da sessão nº {s.session_number}</Button>)}
-          <p className="text-muted-foreground">A retirada preserva a sessão e seu número. Nenhuma nova data ou reserva é criada.</p>
+          <p className="text-muted-foreground">Para sessões vinculadas, use “Liberar para agendar” na linha da sessão que deseja corrigir. A sessão e seu número são preservados.</p>
         </div>;
       })()}
       {issue.code === 'undated' && canReview && issue.sessionIds.map((id) => {

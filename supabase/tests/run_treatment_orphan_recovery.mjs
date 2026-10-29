@@ -20,6 +20,8 @@ try {
  await db.exec(read('drizzle/migrations/0005_agenda_treatment_date_sync.sql'));
  await db.exec(read('drizzle/migrations/0006_agenda_sync_real_schema.sql'));
  await db.exec(read('drizzle/migrations/0007_treatment_missing_appointment_recovery.sql'));
+ await db.exec(read('drizzle/migrations/0008_treatment_professional_resolution.sql'));
+ await db.exec(read('supabase/tests/treatment_professional_resolution.test.sql'));
  await db.exec(read('supabase/tests/treatment_orphan_recovery.test.sql'));
  console.log('PASS: orphan recovery / schedule / unschedule / deletion / history / scope');
  await db.exec(read('supabase/tests/agenda_treatment_sync.test.sql'));

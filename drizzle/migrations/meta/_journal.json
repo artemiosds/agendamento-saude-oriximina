@@ -57,6 +57,13 @@
       "when": 1793244475627,
       "tag": "0007_treatment_missing_appointment_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793278869468,
+      "tag": "0008_treatment_professional_resolution",
+      "breakpoints": true
     }
   ]
 }

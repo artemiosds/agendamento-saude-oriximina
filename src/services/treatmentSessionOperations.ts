@@ -126,6 +126,7 @@ function requireOperationResult(data: Record<string, unknown> | null, accepted: 
       sem_disponibilidade: 'Não há disponibilidade válida para este horário. O lote não gravou a sessão.',
       capacidade_esgotada: 'A capacidade da agenda foi atingida antes da confirmação. O lote não gravou a sessão.',
       fora_escopo: 'Você não tem permissão para realizar esta operação nesta unidade/profissional.',
+      vinculo_compartilhado: 'Reserva compartilhada: use Liberar para agendar na sessão que deseja corrigir.',
       sessao_ja_vinculada: 'Esta sessão já está vinculada a outro agendamento. Recarregue o ciclo.',
       vinculo_inconsistente: 'O vínculo entre a sessão e o agendamento está inconsistente. Nenhum dado foi alterado.',
       estado_protegido: 'O estado atual da sessão não permite esta operação.',

@@ -20,7 +20,7 @@ describe('regularização manual sem alterar o vínculo protegido', () => {
     rpc.mockResolvedValue({ data: { message: 'Data duplicada removida' }, error: null });
     render(<TreatmentCyclePendingPanel cycle={cycle} sessions={rows} issues={validateTreatmentCycle(cycle, rows)} appointments={appointments} canReview availableDates={[]} onChanged={onChanged} />);
     expect(rpc).not.toHaveBeenCalled();
-    expect(screen.getByText(/Agendamento protegido: sessão nº 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Reserva vinculada: sessão nº 1/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retirar data duplicada da sessão nº 1' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Retirar data duplicada da sessão nº 2' }));
     expect(screen.getByRole('button', { name: 'Confirmar regularização' })).toBeDisabled();
