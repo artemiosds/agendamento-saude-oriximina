@@ -1,3 +1,4 @@
+import { instrumentoBadge } from '@/lib/sigtapInstruments';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -334,6 +335,7 @@ const PTS: React.FC = () => {
         idadeMeses: null,
         instrumentos: [],
         bpaICompativel: null,
+              instrumentoRotulo: "Instrumento não confirmado",
       };
     }
 
@@ -1757,20 +1759,20 @@ const PTS: React.FC = () => {
                         <div
                           className={cn(
                             "rounded-md border p-2 text-xs",
-                            sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel === false && "border-amber-300 bg-amber-50 text-amber-800",
-                            sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel !== false && "border-emerald-300 bg-emerald-50 text-emerald-800",
+                            sigtapValidationByCode[selectedProcCodigo].bpaICompativel === false && "border-amber-300 bg-amber-50 text-amber-800",
+                            sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel === true && "border-emerald-300 bg-emerald-50 text-emerald-800",
                             sigtapValidationByCode[selectedProcCodigo].status === "incompatível" && "border-red-300 bg-red-50 text-red-800",
                             sigtapValidationByCode[selectedProcCodigo].status === "indeterminado" && "border-amber-300 bg-amber-50 text-amber-800",
                           )}
                         >
-                          {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel === false && (
+                          {sigtapValidationByCode[selectedProcCodigo].bpaICompativel === false && (
                             <div>
-                              <div className="font-medium">Registro clínico permitido; fora da exportação BPA-I.</div>
+                              <div className="font-medium">{instrumentoBadge(sigtapValidationByCode[selectedProcCodigo].instrumentos)}</div>
                               <div className="mt-1">{sigtapValidationByCode[selectedProcCodigo].avisos.join(" ")}</div>
                             </div>
                           )}
-                          {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel !== false && (
-                            <div className="font-medium">CBO, idade e sexo conferidos.</div>
+                          {sigtapValidationByCode[selectedProcCodigo].status === "compatível" && sigtapValidationByCode[selectedProcCodigo].bpaICompativel === true && (
+                            <div className="font-medium">BPA-I compatível (CBO, idade e sexo conferidos).</div>
                           )}
                           {sigtapValidationByCode[selectedProcCodigo].status === "incompatível" && (
                             <>
@@ -1817,15 +1819,15 @@ const PTS: React.FC = () => {
                             const status = sigtapValidationByCode[s.procedimento_codigo];
                             return (
                               <div key={s.procedimento_codigo} className="bg-background rounded px-2 py-2 text-xs border space-y-2">
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant="secondary" className="font-mono text-xs shrink-0">{sigtapCodeLabel(s.procedimento_codigo)}</Badge>
                                   <span className="flex-1 truncate">{s.procedimento_nome}</span>
                                   <span className="text-muted-foreground shrink-0">{getSpecLabelForSigtap(s.especialidade)}</span>
-                                  {status?.status === "compatível" && status.bpaICompativel === false && (
-                                    <Badge variant="outline" className="border-amber-400 text-amber-700 text-[10px]">Clínico · fora do BPA-I</Badge>
+                                  {status?.bpaICompativel === false && (
+                                    <Badge variant="outline" className="border-amber-400 text-amber-700 text-[10px]">{instrumentoBadge(status.instrumentos)}</Badge>
                                   )}
-                                  {status?.status === "compatível" && status.bpaICompativel !== false && (
-                                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">CBO, idade e sexo</Badge>
+                                  {status?.status === "compatível" && status.bpaICompativel === true && (
+                                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">BPA-I compatível</Badge>
                                   )}
                                   {status?.status === "incompatível" && (
                                     <Badge variant="destructive" className="text-[10px]">Incompatível</Badge>

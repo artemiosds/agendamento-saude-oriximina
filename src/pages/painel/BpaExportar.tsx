@@ -1,3 +1,4 @@
+import { isInstrumentRejection, instrumentoRotulo } from '@/lib/sigtapInstruments';
 import BpaBlockMultiSelect from "@/components/bpa/BpaBlockMultiSelect";
 import { filterBpaAttendanceBlocks, UNKNOWN_BPA_BLOCK, describeBpaBlock, bpaAvailabilityOnDate, createBpaAttendanceBlockResolver, type BpaAvailability } from "@/lib/bpaAttendanceBlock";
 import { buildBpaConferenceGroups, BPA_CONFERENCE_CSS } from "@/lib/bpaConferencePrint";
@@ -3035,7 +3036,7 @@ const BpaExportar: React.FC = () => {
           return;
         }
 
-        if (!meta.instrumentos.has("02")) auditErrors.push(`${label}: instrumento incompatível com BPA-I`);
+        if (!meta.instrumentos.has("02")) auditErrors.push(`${label}: instrumento de registro incompatível com BPA-I — ${instrumentoRotulo([...meta.instrumentos])}. Confira o procedimento no Resolver SIGTAP.`);
         if (!/^\d{6}$/.test(cboLinha) || /^0+$/.test(cboLinha)) {
           auditErrors.push(`${label}: CBO ausente ou inválido`);
         } else if (!formData.exportar_cbo_incompativel && avaliarCboSigtap(meta, cboLinha) === "incompativel") {
@@ -4620,7 +4621,7 @@ ${auditHtml}`;
                         Fora da competência: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Atendimento fora da competência")).length}</b>
                       </div>
                       <div>
-                        Instrumento incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("Instrumento incompatível")).length}</b>
+                        Procedimento de outro instrumento de registro em folha individual (BPA-I): <b>{results.resumo.rejeitados.filter((r) => isInstrumentRejection(r.motivo)).length}</b>
                       </div>
                       <div>
                         CBO incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO incompatível")).length}</b>
@@ -4679,9 +4680,15 @@ ${auditHtml}`;
                           Procedimentos rejeitados (não entraram no TXT):
                         </div>
                         <div className="max-h-40 overflow-auto space-y-0.5">
-                          {results.resumo.rejeitados.slice(0, 100).map((r, i) => (
-                            <div key={i} className="text-muted-foreground">
-                              • {r.paciente} — {r.data} — {r.codigo} (CBO {r.cbo}): {r.motivo}
+                          {[
+                            { titulo: 'Procedimento de registro coletivo/consolidado ou de outro instrumento em folha individual (BPA-I)', itens: results.resumo.rejeitados.filter(r => isInstrumentRejection(r.motivo)) },
+                            { titulo: 'Outros motivos de rejeição', itens: results.resumo.rejeitados.filter(r => !isInstrumentRejection(r.motivo)) },
+                          ].filter(grupo => grupo.itens.length > 0).map(grupo => (
+                            <div key={grupo.titulo} className="space-y-1">
+                              <p className="font-medium text-amber-700">{grupo.titulo} ({grupo.itens.length})</p>
+                              {grupo.itens.slice(0, 100).map((r, i) => <div key={i} className="text-muted-foreground">
+                                • {r.paciente} — {r.data} — {r.codigo} (CBO {r.cbo}): {r.motivo}
+                              </div>)}
                             </div>
                           ))}
                         </div>

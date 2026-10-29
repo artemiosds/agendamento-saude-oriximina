@@ -1,3 +1,5 @@
+import { SigtapInstrumentBadge, useSigtapInstruments } from './SigtapInstrumentBadge';
+import { instrumentoBadge } from '@/lib/sigtapInstruments';
 import React, { useEffect, useMemo, useState } from "react";
 import { Search, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -97,13 +99,15 @@ const SigtapProcedurePicker: React.FC<Props> = ({
     validation?.sexo,
   ]);
 
+  const instruments = useSigtapInstruments(results.map(item => item.codigo), validation?.competencia);
+
   const status = useMemo(() => {
     if (!validationResult) return null;
     if (validationResult.status === "compatível") {
       if (validationResult.bpaICompativel === false) {
-        return <Badge variant="outline" className="text-amber-700 border-amber-300"><AlertTriangle className="w-3 h-3 mr-1" />Clínico · fora do BPA-I</Badge>;
+        return <Badge variant="outline" className="text-amber-700 border-amber-300"><AlertTriangle className="w-3 h-3 mr-1" />{instrumentoBadge(validationResult.instrumentos)}</Badge>;
       }
-      return <Badge className="bg-emerald-600 hover:bg-emerald-600"><CheckCircle2 className="w-3 h-3 mr-1" />SIGTAP compatível</Badge>;
+      return validationResult.bpaICompativel === true ? <Badge className="bg-emerald-600 hover:bg-emerald-600"><CheckCircle2 className="w-3 h-3 mr-1" />BPA-I compatível</Badge> : <Badge variant="outline">Instrumento não confirmado</Badge>;
     }
     if (validationResult.status === "incompatível") {
       return <Badge variant="destructive"><AlertTriangle className="w-3 h-3 mr-1" />SIGTAP incompatível</Badge>;
@@ -125,6 +129,7 @@ const SigtapProcedurePicker: React.FC<Props> = ({
             )}
           </div>
           {status && <div className="mt-2">{status}</div>}
+          {validationResult?.competenciaReferencia && <p className="text-xs text-amber-700">Referência SIGTAP {validationResult.competenciaReferencia}; confira a competência do faturamento.</p>}
           {validationResult?.status === "incompatível" && validationResult.motivos.length > 0 && (
             <div className="mt-2 text-xs text-destructive space-y-1">
               {validationResult.motivos.map((motivo, index) => <p key={index}>• {motivo}</p>)}
@@ -159,7 +164,8 @@ const SigtapProcedurePicker: React.FC<Props> = ({
                   className="w-full text-left px-3 py-2 border-b last:border-b-0 hover:bg-muted/50"
                 >
                   <span className="font-mono text-xs text-muted-foreground mr-2">{item.codigo}</span>
-                  <span className="text-sm">{item.nome}</span>
+                  <SigtapInstrumentBadge codes={instruments?.map.get(item.codigo)} reference={instruments?.ref} />
+                  <span className="text-sm ml-2">{item.nome}</span>
                 </button>
               ))}
             </div>

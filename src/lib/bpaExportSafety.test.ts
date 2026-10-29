@@ -34,7 +34,7 @@ describe("segurança da exportação BPA-I", () => {
     ], ctx);
     expect(result.validos.map((item) => item.codigo)).toEqual(["0301100039"]);
     expect(result.rejeitados).toHaveLength(3);
-    expect(result.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento incompatível");
+    expect(result.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento de registro incompatível");
     expect(result.rejeitados[1].rejeicoes.join(" ")).toContain("CBO incompatível");
     expect(result.rejeitados[2].rejeicoes.join(" ")).toContain("não vigente");
   });
@@ -46,7 +46,7 @@ describe("segurança da exportação BPA-I", () => {
     expect(cboIncompativel.validos[0].avisos.join(" ")).toContain("Exportação autorizada por opção manual");
 
     const instrumento = validarListaProcedimentosBpaI([{ codigo: "0301100268" }], contextoExcecao);
-    expect(instrumento.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento incompatível");
+    expect(instrumento.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento de registro incompatível");
 
     const cboAusente = validarListaProcedimentosBpaI(
       [{ codigo: "0301010048" }], { ...contextoExcecao, cbo: "" },
@@ -66,7 +66,7 @@ describe("segurança da exportação BPA-I", () => {
     );
     expect(result.validos).toHaveLength(0);
     expect(result.rejeitados).toHaveLength(1);
-    expect(result.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento incompatível com BPA-I");
+    expect(result.rejeitados[0].rejeicoes.join(" ")).toContain("Instrumento de registro incompatível com BPA-I");
     expect(result.rejeitados[0].rejeicoes.join(" ")).not.toContain("CBO incompatível");
   });
 

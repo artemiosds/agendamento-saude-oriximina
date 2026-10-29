@@ -1,3 +1,4 @@
+import { instrumentoRotulo } from './sigtapInstruments';
 /**
  * Validação final obrigatória do BPA-I (Registro 03).
  *
@@ -254,7 +255,7 @@ export function validarProcedimentoBpaI(
   // 9) Instrumento de registro
   if (ctx.catalogoOficial) {
     if (oficial && !oficial.instrumentos.has("02")) {
-      rejeicoes.push(`Instrumento incompatível com BPA-I: procedimento ${codigo}, instrumentos SIGTAP ${[...oficial.instrumentos].join(", ") || "nenhum"}, competência ${competencia}`);
+      rejeicoes.push(`Instrumento de registro incompatível com BPA-I: o procedimento ${codigo} pertence a ${instrumentoRotulo([...oficial.instrumentos])} (SIGTAP ${competencia}). Para um atendimento individual, confira o procedimento de consulta/sessão individual adequado no botão "Resolver SIGTAP". Preserve o registro clínico da ação efetivamente realizada.`);
     }
   } else if (restricao?.instrumento) {
     const inst = restricao.instrumento.toUpperCase().replace(/[\s-]/g, "");

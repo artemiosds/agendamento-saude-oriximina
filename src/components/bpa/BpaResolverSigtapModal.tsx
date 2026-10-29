@@ -1,3 +1,4 @@
+import { SigtapInstrumentBadge, useSigtapInstruments } from '@/components/documents/SigtapInstrumentBadge';
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -116,6 +117,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [hits, setHits] = useState<SigtapHit[]>([]);
+  const instruments = useSigtapInstruments(hits.map(hit => hit.codigo), item?.competencia);
   const [selSigtap, setSelSigtap] = useState<SigtapHit | null>(null);
 
   // CIDs relacionados ao procedimento escolhido
@@ -801,7 +803,7 @@ const BpaResolverSigtapModal: React.FC<Props> = ({
                 onClick={() => onSelectProc(h)}
                 className={`w-full text-left px-3 py-2 border-b last:border-0 hover:bg-accent text-sm ${selSigtap?.codigo === h.codigo ? "bg-accent" : ""}`}
               >
-                <div className="font-mono text-xs text-primary">{h.codigo}</div>
+                <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs text-primary">{h.codigo}</span><SigtapInstrumentBadge codes={instruments?.map.get(h.codigo)} reference={instruments?.ref} /></div>
                 <div className="font-medium">{h.nome}</div>
                 {h.especialidade && <div className="text-xs text-muted-foreground">{h.especialidade}</div>}
               </button>

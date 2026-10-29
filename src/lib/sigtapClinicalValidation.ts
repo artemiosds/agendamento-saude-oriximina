@@ -1,3 +1,4 @@
+import { instrumentoRotulo, orientacaoInstrumento } from './sigtapInstruments';
 import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo, avaliarCboSigtap, mensagemCboSigtap } from "./bpaSigtapCatalog";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -24,6 +25,7 @@ export interface SigtapClinicalValidationResult {
   faixaEtaria?: { minimaMeses: number | null; maximaMeses: number | null };
   instrumentos: string[];
   bpaICompativel: boolean | null;
+  instrumentoRotulo: string;
   competenciaReferencia?: string;
   catalogoIndisponivel?: boolean;
   semRegrasProcedimento?: boolean;
@@ -203,6 +205,7 @@ export async function validarCompatibilidadeClinicaSigtap(
     idadeMeses: calcularIdadeMesesSigtap(input.dataNascimento, input.dataAtendimento),
     instrumentos: [] as string[],
     bpaICompativel: null as boolean | null,
+    instrumentoRotulo: instrumentoRotulo([]),
     validacaoClinicaLimitada: Boolean(input.usarReferenciaAnterior),
   };
 
@@ -257,7 +260,11 @@ export async function validarCompatibilidadeClinicaSigtap(
           }
           return {
             ...base,
-            competenciaReferencia: referencia,
+            competenciaReferencia: getCompetenciaReferenciaCatalogo(previousCatalog) || referencia,
+            instrumentos: previousProc ? [...previousProc.instrumentos] : [],
+            bpaICompativel: previousProc ? previousProc.instrumentos.has("02") : null,
+            instrumentoRotulo: instrumentoRotulo(previousProc ? [...previousProc.instrumentos] : []),
+            avisos: previousProc && !previousProc.instrumentos.has("02") ? [...avisos, orientacaoInstrumento([...previousProc.instrumentos])] : avisos,
             motivos: indicacoes,
             faixaEtaria: previousProc
               ? { minimaMeses: previousProc.idadeMinimaMeses, maximaMeses: previousProc.idadeMaximaMeses }
@@ -287,11 +294,9 @@ export async function validarCompatibilidadeClinicaSigtap(
     };
   }
 
-  const instrumentos = input.usarReferenciaAnterior ? [] : [...proc.instrumentos];
-  const bpaICompativel = input.usarReferenciaAnterior ? null : proc.instrumentos.has("02");
-  const instrumentosDescritos = instrumentos.map((codigo) =>
-    codigo === "10" ? "10 (e-SUS APS)" : codigo,
-  ).join(", ");
+  const instrumentos = [...proc.instrumentos];
+  const bpaICompativel = proc.instrumentos.has("02");
+
 
   const compRef = refUsada || competencia;
   const cboStatus = avaliarCboSigtap(proc, cbo);
@@ -304,9 +309,7 @@ export async function validarCompatibilidadeClinicaSigtap(
     );
   }
   if (bpaICompativel === false) {
-    avisos.push(
-      `Registro clínico permitido, mas fora do BPA-I: o procedimento ${procedimento} usa instrumento(s) ${instrumentosDescritos || "não informado"} na competência ${competencia}; o BPA-I exige o instrumento 02.`,
-    );
+    avisos.push(orientacaoInstrumento(instrumentos));
   }
 
   const sexo = String(input.sexo || "").trim().toUpperCase().slice(0, 1);
@@ -353,5 +356,6 @@ export async function validarCompatibilidadeClinicaSigtap(
       : undefined,
     instrumentos,
     bpaICompativel,
+    instrumentoRotulo: instrumentoRotulo(instrumentos),
   };
 }

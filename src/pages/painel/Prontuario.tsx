@@ -1,3 +1,4 @@
+import { instrumentoBadge } from '@/lib/sigtapInstruments';
 import { usePreviousProcedures } from "@/hooks/usePreviousProcedures";
 import { createTreatmentSessionOperations, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
 import { assertTreatmentSessionChange } from "@/lib/treatmentCycleIntegrity";
@@ -754,6 +755,7 @@ const ProntuarioPage: React.FC = () => {
               idadeMeses: null,
               instrumentos: [],
               bpaICompativel: null,
+              instrumentoRotulo: "Instrumento não confirmado",
             } satisfies SigtapClinicalValidationResult,
           ] as const;
         }
@@ -2020,6 +2022,7 @@ const ProntuarioPage: React.FC = () => {
               idadeMeses: null,
               instrumentos: [],
               bpaICompativel: null,
+              instrumentoRotulo: "Instrumento não confirmado",
             } satisfies SigtapClinicalValidationResult),
       ] as const),
     );
@@ -2761,6 +2764,7 @@ const ProntuarioPage: React.FC = () => {
               idadeMeses: null,
               instrumentos: [],
               bpaICompativel: null,
+              instrumentoRotulo: "Instrumento não confirmado",
             } satisfies SigtapClinicalValidationResult),
       ] as const),
     );
@@ -4768,7 +4772,7 @@ const ProntuarioPage: React.FC = () => {
                       return (
                         <div key={proc.id} className={`rounded-md border bg-background transition-colors ${checked ? 'border-primary/40' : ''}`}>
                           <div
-                            className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 rounded-md px-2 py-1.5"
+                            className="flex flex-wrap items-center gap-2 cursor-pointer hover:bg-muted/40 rounded-md px-2 py-1.5"
                             onClick={() => toggleExpandProc(proc.id)}
                           >
                             <Checkbox
@@ -4799,11 +4803,11 @@ const ProntuarioPage: React.FC = () => {
                             {checked && selCids.length > 0 && (
                               <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
                             )}
-                            {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === false && (
-                              <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-amber-400 text-amber-700">Clínico · fora do BPA-I</Badge>
+                            {checked && sigtapStatus?.bpaICompativel === false && (
+                              <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-amber-400 text-amber-700">{instrumentoBadge(sigtapStatus.instrumentos)}</Badge>
                             )}
-                            {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel !== false && (
-                              <Badge className="h-5 text-[10px] shrink-0 bg-emerald-600 hover:bg-emerald-600">CBO, idade e sexo conferidos</Badge>
+                            {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === true && (
+                              <Badge className="min-h-5 h-auto py-0.5 whitespace-normal text-[10px] bg-emerald-600 hover:bg-emerald-600">BPA-I compatível (CBO, idade e sexo conferidos)</Badge>
                             )}
                             {checked && sigtapStatus?.status === "incompatível" && (
                               <Badge variant="destructive" className="h-5 text-[10px] shrink-0">SIGTAP incompatível</Badge>
@@ -4821,17 +4825,17 @@ const ProntuarioPage: React.FC = () => {
                                 <p className="text-[11px] text-muted-foreground">{proc.especialidade}</p>
                               )}
 
-                              {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === false && (
+                              {checked && sigtapStatus?.bpaICompativel === false && (
                                 <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-                                  <div className="font-medium flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Registro clínico permitido; fora da exportação BPA-I</div>
+                                  <div className="font-medium flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> {instrumentoBadge(sigtapStatus.instrumentos)}</div>
                                   <div className="mt-1 text-[11px]">{sigtapStatus.avisos.join(" ")}</div>
                                 </div>
                               )}
 
-                              {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel !== false && (
+                              {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === true && (
                                 <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">
                                   <div className="font-medium flex items-center gap-1">
-                                    <CheckCircle className="h-3.5 w-3.5" /> CBO, idade e sexo conferidos
+                                    <CheckCircle className="h-3.5 w-3.5" /> BPA-I compatível (CBO, idade e sexo conferidos)
                                   </div>
                                   <div className="mt-1 text-[11px]">
                                     Competência {sigtapStatus.competencia} · CBO {sigtapStatus.cbo}
