@@ -66,13 +66,14 @@ vi.mock('@/components/ConferirDadosPacienteModal', () => ({ ConferirDadosPacient
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   from: (table: string) => {
     let professional = false;
+    let deleting = false;
     const q: any = {
       select: () => q,
-      delete: () => { f.deleteRow(table); return q; },
+      delete: () => { deleting = true; f.deleteRow(table); return q; },
       eq: (key: string) => { if (key === 'profissional_id') professional = true; return q; },
       is: () => q, in: () => q, not: () => q, order: () => q, limit: () => q,
       single: async () => ({ data: { status: f.readStatus, paciente_id: 'p1', unidade_id: 'u1' }, error: f.queryError }),
-      maybeSingle: async () => ({ data: table === 'triage_settings'
+      maybeSingle: async () => ({ data: deleting ? { id: 'ag1' } : table === 'triage_settings'
         ? (professional ? { enabled: f.triage } : f.globalTriage === null ? null : { enabled: f.globalTriage }) : null, error: f.queryError }),
       then: (resolve: any, reject: any) => Promise.resolve({ data: [], error: null }).then(resolve, reject),
     };

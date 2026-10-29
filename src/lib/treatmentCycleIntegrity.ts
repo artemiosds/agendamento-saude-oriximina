@@ -47,7 +47,7 @@ export function validateTreatmentCycle(
     if (session.cycle_id !== cycle.id || session.patient_id !== cycle.patient_id || session.professional_id !== cycle.professional_id || !cycle.unit_id) {
       issues.push({ code: 'identity', message: 'Paciente, profissional ou unidade divergente do ciclo — revisão necessária.', sessionIds: session.id ? [session.id] : [] });
     }
-    if (isActiveCycleSession(session) && !session.scheduled_date) {
+    if (isActiveCycleSession(session) && !session.scheduled_date && !(session.status === 'pendente_agendamento' && !session.appointment_id)) {
       issues.push({ code: 'undated', message: `Sessão nº ${session.session_number} sem data — aguarda agendamento. Escolha uma nova data manualmente.`, sessionIds: session.id ? [session.id] : [] });
     }
     if (isActiveCycleSession(session) && session.scheduled_date) {

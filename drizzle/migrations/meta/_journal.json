@@ -50,6 +50,13 @@
       "when": 1793243064918,
       "tag": "0006_agenda_sync_real_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793244475627,
+      "tag": "0007_treatment_missing_appointment_recovery",
+      "breakpoints": true
     }
   ]
 }

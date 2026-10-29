@@ -2116,7 +2116,9 @@ const Agenda: React.FC = () => {
         setCancelTarget(ag);
         return;
       }
-      await (supabase as any).from("agendamentos").delete().eq("id", agId);
+      const { data: deleted, error: deleteError } = await (supabase as any).from("agendamentos").delete().eq("id", agId).select("id").maybeSingle();
+      if (deleteError) throw new Error(deleteError.message);
+      if (!deleted) throw new Error("O agendamento não foi excluído. Atualize a Agenda e tente novamente.");
       await logAction({
         acao: "excluir_agendamento",
         entidade: "agendamento",
@@ -2135,7 +2137,7 @@ const Agenda: React.FC = () => {
       await refreshAgendamentos();
     } catch (err) {
       console.error("Error deleting:", err);
-      toast.error("Erro ao excluir agendamento.");
+      toast.error(err instanceof Error ? err.message : "Erro ao excluir agendamento.");
     }
   };
 

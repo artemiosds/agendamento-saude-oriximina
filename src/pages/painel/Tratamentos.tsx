@@ -1,3 +1,4 @@
+import { recoverMissingTreatmentAppointments } from "@/services/treatmentAppointmentRecovery";
 import { treatmentDateChangeReason } from "@/lib/treatmentDateChangeReason";
 import { TreatmentAgendaAlignmentButton } from "@/components/tratamentos/TreatmentAgendaAlignmentButton";
 import { TreatmentCyclePendingPanel } from "@/components/tratamentos/TreatmentCyclePendingPanel";
@@ -431,6 +432,7 @@ const Tratamentos: React.FC = () => {
   const [totalCycles, setTotalCycles] = useState(0);
   // Tracks which cycle has had its sessions loaded (lazy load)
   const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
+  const [linkLookup, setLinkLookup] = useState<{ cycleId: string; status: 'loading' | 'error' | 'ready' }>({ cycleId: '', status: 'loading' });
   const loadDataRequestsRef = useRef(createRequestGeneration());
   const loadSessionsRequestsRef = useRef(createRequestGeneration());
   const pageMountedRef = useRef(false);
@@ -543,24 +545,15 @@ const Tratamentos: React.FC = () => {
       isRequestCurrent(loadSessionsRequestsRef.current, requestId, requestScope, sessionsScopeRef.current, pageMountedRef.current) &&
       selectedCycleIdRef.current === cycle.id;
     if (!isCurrentRequest()) return;
+    setLinkLookup({ cycleId: cycle.id, status: 'loading' });
     try {
       const [sData, eData] = await Promise.all([
         treatmentService.getSessions(cycle.id),
         supabase.from("treatment_extensions").select("*").eq("cycle_id", cycle.id).order("changed_at", { ascending: false }),
       ]);
       if (!isCurrentRequest()) return;
-      const sessionsData = (sData || []) as TreatmentSession[];
-      // Replace only this cycle's sessions in the global state
-      setSessions((prev) => {
-        const others = prev.filter((s) => s.cycle_id !== cycle.id);
-        return [...others, ...sessionsData];
-      });
-      setExtensions((prev) => {
-        const others = prev.filter((x) => x.cycle_id !== cycle.id);
-        return [...others, ...((eData.data || []) as TreatmentExtension[])];
-      });
-      setLoadedSessionsCycleId(cycle.id);
-
+      if (eData.error) throw eData.error;
+      let sessionsData = (sData || []) as TreatmentSession[];
       // Cross-reference agendamentos for this cycle's sessions only
       if (sessionsData.length > 0) {
         const patientIds = [...new Set(sessionsData.map((s) => s.patient_id))];
@@ -585,6 +578,10 @@ const Tratamentos: React.FC = () => {
         ]);
         if (activeResult.error) throw activeResult.error;
         if (linkedResult.error) throw linkedResult.error;
+        if (canAgendarSessao && ['em_andamento', 'ativo', 'concluido'].includes(cycle.status)) {
+          sessionsData = await recoverMissingTreatmentAppointments(cycle.id, sessionsData, new Set((linkedResult.data || []).map(a => a.id)));
+          if (!isCurrentRequest()) return;
+        }
         const candidateIds = [...new Set([...(activeResult.data || []).map((a) => a.id), ...linkedAppointmentIds])];
         const claims = candidateIds.length
           ? await supabase.from("treatment_sessions").select("id, appointment_id").in("appointment_id", candidateIds)
@@ -619,12 +616,19 @@ const Tratamentos: React.FC = () => {
           });
         }
       }
+      if (!isCurrentRequest()) return;
+      // Publish sessions only after all appointment/claim lookups have succeeded.
+      setSessions(prev => [...prev.filter(s => s.cycle_id !== cycle.id), ...sessionsData]);
+      setExtensions(prev => [...prev.filter(x => x.cycle_id !== cycle.id), ...((eData.data || []) as TreatmentExtension[])]);
+      setLoadedSessionsCycleId(cycle.id);
+      setLinkLookup({ cycleId: cycle.id, status: 'ready' });
     } catch (err) {
       if (!isCurrentRequest()) return;
+      setLinkLookup({ cycleId: cycle.id, status: 'error' });
       console.error("Error loading cycle sessions:", err);
       if (!silent) toast.error("Erro ao carregar sessões do ciclo.");
     }
-  }, [user]);
+  }, [user, canAgendarSessao]);
 
   // Primeiro load: com spinner. Re-loads (filtros/busca/paginação): silencioso, sem spinner.
   const firstLoadRef = React.useRef(true);
@@ -778,14 +782,16 @@ const Tratamentos: React.FC = () => {
       unitId: cycle.unit_id,
       appointmentById: session.appointment_id ? appointmentByIdMap[session.appointment_id] || null : null,
       claimedAppointmentIds,
+      lookupStatus: linkLookup.cycleId !== cycle.id ? 'loading' : linkLookup.status !== 'ready' ? linkLookup.status
+        : session.appointment_id && !appointmentByIdMap[session.appointment_id] ? 'error' : 'ready',
       sameDayCandidates: agendamentoMap[treatmentAppointmentKey(session.patient_id, session.professional_id, cycle.unit_id, session.scheduled_date || '')] || [],
-    }), [agendamentoMap, appointmentByIdMap, claimedAppointmentIds]);
+    }), [agendamentoMap, appointmentByIdMap, claimedAppointmentIds, linkLookup]);
 
   // Vínculo automático: sessão pendente com exatamente UM agendamento ativo já feito
   // (mesmo paciente, profissional, unidade e data) é ligada a ele, sem criar nem apagar nada.
   const autoLinkAttemptedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!selectedCycle || loadedSessionsCycleId !== selectedCycle.id) return;
+    if (!selectedCycle || loadedSessionsCycleId !== selectedCycle.id || linkLookup.cycleId !== selectedCycle.id || linkLookup.status !== 'ready') return;
     if (user?.role !== 'master' && user?.role !== 'profissional') return;
     if (selectedCycle.status !== 'em_andamento' && selectedCycle.status !== 'ativo') return;
     const usedIds = new Set<string>();
@@ -816,7 +822,7 @@ const Tratamentos: React.FC = () => {
         toast.success(`${linked} sessão(ões) ligada(s) automaticamente a agendamento(s) já existente(s) na Agenda.`);
       }
     })();
-  }, [selectedCycle, loadedSessionsCycleId, cycleSessions, duplicateDateSessionIds, getSessionIntegrity, treatmentSessionOperations, loadSessionsForCycle, user?.role]);
+  }, [selectedCycle, loadedSessionsCycleId, cycleSessions, duplicateDateSessionIds, getSessionIntegrity, treatmentSessionOperations, loadSessionsForCycle, user?.role, linkLookup]);
 
   const cycleExtensions = useMemo(() => {
     if (!selectedCycle) return [];
@@ -2429,6 +2435,7 @@ const Tratamentos: React.FC = () => {
                 </Button>
               )}
             </div>
+            {linkLookup.cycleId === selectedCycle.id && linkLookup.status === 'error' && <div className="mb-3 rounded-lg border p-3 text-sm" role="alert">Não foi possível verificar os vínculos com a Agenda. <Button size="sm" variant="outline" onClick={() => loadSessionsForCycle(selectedCycle, false)}>Tentar novamente</Button></div>}
             <TreatmentCyclePendingPanel cycle={selectedCycle} sessions={cycleSessions} issues={cycleIntegrityIssues} appointments={appointmentByIdMap} canReview={canControlSessions && cycleIsClinicallyActive} availableDates={getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id)} onChanged={async () => { await loadSessionsForCycle(selectedCycle, false); await loadData(true); }} />
             <div className="max-h-[500px] overflow-y-auto border rounded-lg">
               <div className="space-y-2">
@@ -2500,8 +2507,9 @@ const Tratamentos: React.FC = () => {
                           {s.procedure_done && <p className="text-xs text-muted-foreground">{s.procedure_done}</p>}
                         </div>
                         <Badge className={cn("text-xs shrink-0", isInconsistent ? "bg-warning/15 text-warning border-warning/30" : sessionStatusColors[effectiveStatus])}>
-                          {isInconsistent ? "Revisão necessária" : sessionStatusLabels[effectiveStatus] || effectiveStatus}
+                          {integrity.kind === 'verificando_vinculo' ? 'Verificando vínculo…' : integrity.kind === 'verificacao_falhou' ? 'Verificação indisponível' : isInconsistent ? "Revisão necessária" : sessionStatusLabels[effectiveStatus] || effectiveStatus}
                         </Badge>
+                        {integrity.kind === 'verificacao_falhou' && <Button size="sm" variant="outline" onClick={() => loadSessionsForCycle(selectedCycle, false)}>Tentar novamente</Button>}
                         {canControlSessions && cycleIsClinicallyActive && integrity.kind === "vinculo_divergente" && integrity.appointment
                           && s.status === "agendada" && integrity.appointment.data !== s.scheduled_date
                           && integrity.appointment.paciente_id === s.patient_id && integrity.appointment.profissional_id === s.professional_id

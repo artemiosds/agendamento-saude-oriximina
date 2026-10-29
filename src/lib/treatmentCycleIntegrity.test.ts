@@ -55,7 +55,7 @@ describe('autonomia segura do profissional', () => {
   it('sessão sem data permanece registrada e não bloqueia as demais', () => {
     const rows = sessions(); rows[3].scheduled_date = null;
     expect(getMissingSessionNumbers(7,rows)).toEqual([]);
-    expect(validateTreatmentCycle(cycle,rows).find((i) => i.code==='undated')?.message).toContain('Sessão nº 4 sem data');
+    expect(validateTreatmentCycle(cycle,rows).some((i) => i.code==='undated')).toBe(false);
     expect(() => assertTreatmentSessionChange(cycle,rows,'s4')).not.toThrow();
     expect(() => assertTreatmentSessionChange(cycle,rows,'s3','2027-01-25')).not.toThrow();
   });

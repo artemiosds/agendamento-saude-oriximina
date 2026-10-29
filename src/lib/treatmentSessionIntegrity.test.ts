@@ -85,3 +85,14 @@ describe('sessões com falta registrada', () => {
 it('não sugere agendamento já vinculado a outra sessão, inclusive em outro ciclo', () => {
   expect(resolveTreatmentSessionIntegrity({ session: session(), unitId: 'unit-1', appointmentById: null, sameDayCandidates: [appointment], claimedAppointmentIds: new Set([appointment.id]) })).toEqual({ kind: 'pendente' });
 });
+
+describe('resultado do carregamento dos vínculos',()=>{
+ it('não acusa agendamento ausente enquanto carrega ou quando a consulta falha',()=>{
+  const input={session:session({status:'agendada',appointment_id:'missing'}),unitId:'unit-1',appointmentById:null,sameDayCandidates:[]};
+  expect(resolveTreatmentSessionIntegrity({...input,lookupStatus:'loading'})).toEqual({kind:'verificando_vinculo'});
+  expect(resolveTreatmentSessionIntegrity({...input,lookupStatus:'error'})).toEqual({kind:'verificacao_falhou'});
+ });
+ it('sessão recuperada sem reserva aparece pendente mesmo havendo agendamento parecido',()=>{
+  expect(resolveTreatmentSessionIntegrity({session:session({status:'pendente_agendamento',appointment_id:null,scheduled_date:null}),unitId:'unit-1',appointmentById:null,sameDayCandidates:[appointment],lookupStatus:'ready'})).toEqual({kind:'pendente'});
+ });
+});
