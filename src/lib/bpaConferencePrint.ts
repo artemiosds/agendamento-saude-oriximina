@@ -8,7 +8,17 @@ export interface BpaConferenceRow {
 }
 const escape = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]!);
 
-export function buildBpaConferenceGroups(rows: readonly BpaConferenceRow[]): string {
+export interface BpaConferenceGroupOptions {
+  /** Number of records preceding this section; the first row is startIndex + 1. */
+  startIndex?: number;
+  variant?: 'default' | 'rejected';
+  cidColumnHeader?: string;
+}
+
+export function buildBpaConferenceGroups(rows: readonly BpaConferenceRow[], options: BpaConferenceGroupOptions = {}): string {
+  const rejected = options.variant === 'rejected';
+  const startIndex = Number.isSafeInteger(options.startIndex) && options.startIndex! >= 0 ? options.startIndex! : 0;
+  const cidHeader = options.cidColumnHeader ?? (rejected ? 'CID no Prontuário' : 'CID no TXT');
   const groups = new Map<string, { row: BpaConferenceRow; entries: { row: BpaConferenceRow; index: number }[] }>();
   rows.forEach((row, index) => {
     const identity = row._ctx?.paciente_id || row.paciente_cpf || row.paciente_cns || `registro:${index}`;
@@ -18,14 +28,14 @@ export function buildBpaConferenceGroups(rows: readonly BpaConferenceRow[]): str
     if (!groups.has(key)) groups.set(key, { row, entries: [] });
     groups.get(key)!.entries.push({ row, index });
   });
-  return [...groups.values()].map(({ row, entries }) => `<table class="bpa-group-table">
+  return [...groups.values()].map(({ row, entries }) => `<table class="bpa-group-table${rejected ? ' bpa-rejected' : ''}">
     <colgroup><col style="width:5%"><col style="width:12%"><col style="width:17%"><col style="width:13%"><col style="width:43%"><col style="width:10%"></colgroup>
     <thead><tr><th colspan="6" class="bpa-patient">
       <div><strong>${escape(row.paciente_nome)}</strong> · Nasc.: <span class="bpa-nowrap">${escape(row.data_nascimento)}</span> · Sexo: ${escape(row.sexo)}</div>
       <div>CNS: <span class="bpa-nowrap">${escape(row.paciente_cns)}</span> · CPF: <span class="bpa-nowrap">${escape(row.paciente_cpf)}</span></div>
       <div>Endereço: ${escape([row.tipo_logradouro, row.logradouro].filter(Boolean).join(' '))}, <span class="bpa-nowrap">${escape(row.numero || '—')}</span> · Bairro: ${escape(row.bairro)}</div>
-    </th></tr><tr><th>Nº</th><th>Atendimento</th><th>SIGTAP</th><th>CID no TXT</th><th>Adicionais deste registro*</th><th>Conferido</th></tr></thead>
-    <tbody>${entries.map(({ row: r, index }) => `<tr data-bpa-record="${index + 1}"><td class="bpa-nowrap">${index + 1}</td><td class="bpa-nowrap">${escape(r.data_atendimento)}</td><td class="bpa-nowrap bpa-code">${escape(r.codigo_sigtap || '—')}</td><td class="bpa-nowrap bpa-cid">${escape(r.cid_usado && r.cid_usado !== '—' ? r.cid_usado : 'Sem CID')}</td><td class="bpa-additional">${escape(r.cids_adicionais?.join(', ') || '—')}</td><td aria-label="Marcação de conferência"></td></tr>`).join('')}</tbody></table>`).join('');
+    </th></tr><tr><th>Nº</th><th>Atendimento</th><th>SIGTAP</th><th>${escape(cidHeader)}</th><th>Adicionais deste registro*</th><th>Conferido</th></tr></thead>
+    <tbody>${entries.map(({ row: r, index }) => `<tr data-bpa-record="${startIndex + index + 1}"><td class="bpa-nowrap">${startIndex + index + 1}</td><td class="bpa-nowrap">${escape(r.data_atendimento)}</td><td class="bpa-nowrap bpa-code">${escape(r.codigo_sigtap || '—')}</td><td class="bpa-nowrap bpa-cid">${escape(r.cid_usado && r.cid_usado !== '—' ? r.cid_usado : 'Sem CID')}</td><td class="bpa-additional">${escape(r.cids_adicionais?.join(', ') || '—')}</td><td aria-label="Marcação de conferência"></td></tr>`).join('')}</tbody></table>`).join('');
 }
 
 export const BPA_CONFERENCE_CSS = `
@@ -41,5 +51,14 @@ export const BPA_CONFERENCE_CSS = `
   .bpa-group-table .bpa-cid, .bpa-group-table .bpa-code { font-weight:700; }
   .bpa-group-table .bpa-nowrap { white-space:nowrap; overflow-wrap:normal; word-break:normal; hyphens:none; }
   .bpa-group-table tbody tr:nth-child(even) { background:#f5f7f9; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+  .bpa-group-table.bpa-rejected th, .bpa-group-table.bpa-rejected td { border-color:#e2b4b4; color:#7f1d1d; }
+  .bpa-group-table.bpa-rejected thead th { background:#7f1d1d; color:#fff; }
+  .bpa-group-table.bpa-rejected .bpa-patient { background:#fef2f2; color:#7f1d1d; border-color:#fecaca; }
+  .bpa-group-table.bpa-rejected tbody tr:nth-child(even) { background:#fff5f5; }
+  .bpa-group-table.bpa-rejected .bpa-cid, .bpa-group-table.bpa-rejected .bpa-code { color:#991b1b; }
+  .bpa-rejected-section { margin-top:14px; }
+  .bpa-rejected-header { border-top:2px solid #7f1d1d; padding-top:7px; break-after:avoid; page-break-after:avoid; color:#7f1d1d; font-family:Arial,sans-serif; }
+  .bpa-rejected-header h3 { margin:0 0 4px; font-size:11pt; }
+  .bpa-rejected-header p { margin:0 0 6px; font-size:8.5pt; line-height:1.3; }
   .bpa-print-legend { font:8.5pt/1.3 Arial,sans-serif; color:#334155; margin:6px 0; }
 `;

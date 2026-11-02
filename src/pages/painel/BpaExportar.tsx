@@ -929,7 +929,8 @@ const BpaExportar: React.FC = () => {
   // Apenas para a Conferência impressa: procedimentos do prontuário que não
   // entraram no TXT por CID × procedimento. Não interfere no TXT nem contadores.
   type RejCidExtra = {
-    prontId?: string; cns?: string; cpf?: string; nasc?: string; sexo?: string; dataBpa?: string;
+    prontId?: string; pacienteId?: string; cns?: string; cpf?: string; nasc?: string; sexo?: string; dataBpa?: string;
+    cidsAdicionais?: string[];
     tipoLog?: string; logradouro?: string; numero?: string; bairro?: string;
   };
   const rejeitadosCidRef = useRef<Array<{ paciente: string; data: string; codigo: string; cid: string; origem?: string } & RejCidExtra>>([]);
@@ -945,11 +946,11 @@ const BpaExportar: React.FC = () => {
     if (!motivos.length || !motivos.every((m) => /\bCID\b/i.test(String(m)))) return;
     rejeitadosCidRef.current.push({ paciente, data, codigo: String(rej.codigo || ""), cid: String(rej.cid || ""), origem: rej.origem, ...extra });
   };
-  const extraRejeicao = (pront: any, pac: any, cns: string, nasc: string, sexo: string, dataBpa: string): RejCidExtra => {
+  const extraRejeicao = (pront: any, pac: any, cns: string, nasc: string, sexo: string, dataBpa: string, cidsAdicionais: string[] = []): RejCidExtra => {
     const cd = (pac?.custom_data as any) || {};
     const pick = (...v: any[]) => String(v.find((x) => x !== undefined && x !== null && String(x).trim() !== "") ?? "");
     return {
-      prontId: pront?.id, cns, cpf: pick(pac?.cpf, cd.cpf), nasc, sexo, dataBpa,
+      prontId: pront?.id, pacienteId: pront?.paciente_id || pac?.id, cidsAdicionais: [...cidsAdicionais], cns, cpf: pick(pac?.cpf, cd.cpf), nasc, sexo, dataBpa,
       tipoLog: pick(cd.codigo_logradouro, cd.tipo_logradouro_codigo, pac?.tipo_logradouro, cd.tipo_logradouro),
       logradouro: pick(pac?.logradouro, cd.logradouro, pac?.endereco, cd.endereco),
       numero: pick(pac?.numero, cd.numero) || "S/N",
@@ -2756,7 +2757,7 @@ const BpaExportar: React.FC = () => {
                 });
               } else if (validacaoLinhaFinal.rejeitados.length > 0) {
                 const rejFinal = validacaoLinhaFinal.rejeitados[0];
-                registrarRejeicaoCid(rejFinal, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
+                registrarRejeicaoCid(rejFinal, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend, cidResolvido.adicionais));
                 const motivoFinal = rejFinal.rejeicoes.join(" | ");
                 stats.rejectedProc++;
                 resumoIntegridade.rejeitados.push({
@@ -3531,8 +3532,7 @@ const BpaExportar: React.FC = () => {
       const ctx = obterContextoCabecalho();
       const esc = (s: any) =>
         String(s ?? "").replace(/[&<>]/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }) as any)[c]);
-      // Procedimentos rejeitados por CID × procedimento entram na mesma tabela,
-      // no mesmo formato, sem título ou motivo técnico. Não altera o TXT.
+      // Auditoria visual dos rejeitados por CID × procedimento, separada do TXT.
       const linhasRejeitadas = rejeitadosCidRef.current.map((r) => ({
         paciente_nome: String(r.paciente || "").toUpperCase(),
         paciente_cns: r.cns || "",
@@ -3546,7 +3546,8 @@ const BpaExportar: React.FC = () => {
         data_atendimento: r.dataBpa ? formatarDataBR(r.dataBpa) : (/^\d{4}-\d{2}-\d{2}$/.test(r.data) ? r.data.split("-").reverse().join("/") : r.data),
         codigo_sigtap: sigtapCodigoExibicao(r.codigo) || r.codigo || "",
         cid_usado: cidExibicao(r.cid) || r.cid || "",
-        _ctx: { origem_sigtap: r.origem || "" },
+        cids_adicionais: r.cidsAdicionais || [],
+        _ctx: { paciente_id: r.pacienteId || "", pront_id: r.prontId || "", origem_sigtap: r.origem || "" },
       }));
       // Registros totalmente fora do TXT (pendência cadastral/erro crítico, sem nenhuma
       // linha exportada nem rejeição já listada) também entram na mesma tabela.
@@ -3573,7 +3574,14 @@ const BpaExportar: React.FC = () => {
       const rowsHtml = buildBpaConferenceGroups(confSorted);
 
       // Rejeitados ficam separados das linhas efetivamente emitidas no TXT.
-      const auditHtml = linhasRejeitadas.length ? `<h3>Não exportados — incompatibilidade de procedimento/CID</h3><table><thead><tr><th>Paciente</th><th>Data</th><th>Procedimento</th><th>CID</th></tr></thead><tbody>${linhasRejeitadas.map(r => `<tr><td>${esc(r.paciente_nome)}</td><td>${esc(r.data_atendimento)}</td><td>${esc(r.codigo_sigtap)}</td><td>${esc(r.cid_usado)}</td></tr>`).join("")}</tbody></table>` : "";
+      const linhasRejeitadasSorted = [...linhasRejeitadas].sort(cmpAlfa);
+      const rejectedHtml = linhasRejeitadasSorted.length ? `<div class="bpa-rejected-section">
+        <div class="bpa-rejected-header">
+          <h3>Não exportados — NO TXT (${linhasRejeitadasSorted.length})</h3>
+          <p>Registros abaixo não enviados no arquivo magnético TXT por incompatibilidade de procedimento/CID perante a tabela SIGTAP/SIA-SUS. O registro clínico permanece preservado. Este bloco reúne as rejeições de CID capturadas nesta conferência; outras pendências devem ser consultadas no resumo da exportação.</p>
+        </div>
+        ${buildBpaConferenceGroups(linhasRejeitadasSorted, { startIndex: confSorted.length, variant: 'rejected', cidColumnHeader: 'CID no Prontuário' })}
+      </div>` : "";
 
       // Bloco visual com metadados — fica ENTRE o cabeçalho institucional e a tabela.
       // Não é position:fixed, portanto não sobrepõe o conteúdo.
@@ -3613,7 +3621,7 @@ const BpaExportar: React.FC = () => {
 </div>
 <p class="bpa-print-legend">* Adicionais: diagnósticos da fonte utilizada para o registro desta linha, não enviados no TXT. A observação não substitui a revisão do vínculo clínico. “Sem CID” indica ausência de CID na linha exportada.</p>
 ${rowsHtml}
-${auditHtml}`;
+${rejectedHtml}`;
 
       const config = await loadDocumentConfig();
       const title = `Conferência BPA-I — Competência ${ctx.competencia}`;
