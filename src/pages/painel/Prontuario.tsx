@@ -1,5 +1,5 @@
 import ProcedureCidPicker from "@/components/prontuario/ProcedureCidPicker";
-import { loadProcedureCidOptions, partitionProcedureCids, normalizeProcedureCid } from "@/lib/procedureCidSelection";
+import { loadProcedureCidOptions, partitionProcedureCids, normalizeProcedureCid, resolveManualProcedureCid } from "@/lib/procedureCidSelection";
 import AutosaveBadge, { createAutosaveIndicator } from '@/components/prontuario/AutosaveBadge';
 import { instrumentoBadge } from '@/lib/sigtapInstruments';
 import { usePreviousProcedures } from "@/hooks/usePreviousProcedures";
@@ -680,7 +680,10 @@ const ProntuarioPage: React.FC = () => {
       const options = await loadProcedureCidOptions(targetProc, cidCompetencia);
       if (scope !== cidSelectionEpochRef.current || cidTargetRef.current !== targetProc || !selectedProcIdsRef.current.includes(targetProc)) return;
       const code = normalizeProcedureCid(cid.codigo);
-      if (!options.some(item => item.codigo === code)) {
+      if (!options.length) {
+        await resolveManualProcedureCid(targetProc, cidCompetencia, code);
+        if (scope !== cidSelectionEpochRef.current || cidTargetRef.current !== targetProc || !selectedProcIdsRef.current.includes(targetProc)) return;
+      } else if (!options.some(item => item.codigo === code)) {
         toast.warning(`CID ${code} não relacionado ao procedimento ${targetProc} na competência ${cidCompetencia}. Registre o diagnóstico clínico no campo próprio.`);
         return;
       }
@@ -4960,6 +4963,14 @@ const ProntuarioPage: React.FC = () => {
                                 options={cids}
                                 selected={selCids}
                                 error={cidErrorsByProc[cidKey]}
+                                onAddManual={async typedCode => {
+                                  const scope = cidSelectionEpochRef.current;
+                                  const cid = await resolveManualProcedureCid(proc.id, cidCompetencia, typedCode);
+                                  if (scope !== cidSelectionEpochRef.current) return;
+                                  setSelectedCidsByProc(m => ({ ...m, [proc.id]: Array.from(new Set([...(m[proc.id] || []), cid.codigo])) }));
+                                  setSelectedProcIds(prev => Array.from(new Set([...prev, proc.id])));
+                                  setProcDetails(prev => ({ ...prev, [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" } }));
+                                }}
                                 onChange={codes => {
                                   setSelectedCidsByProc(m => ({ ...m, [proc.id]: codes }));
                                   if (codes.length && !selectedProcIdSet.has(proc.id)) {

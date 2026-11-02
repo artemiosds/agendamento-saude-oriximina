@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ProcedureCidPicker from './ProcedureCidPicker';
 
@@ -44,4 +44,36 @@ describe('Busca restrita de CID no procedimento', () => {
     expect(screen.getByText(/CIDs registrados/)).toHaveTextContent('F840');
     expect(change).not.toHaveBeenCalled();
   });
+});
+
+
+describe('campo manual condicionado ao catálogo', () => {
+ it('exibe a inclusão manual apenas para lista confirmada vazia', () => {
+  const manual=vi.fn();const props={selected:[],onChange:vi.fn(),onAddManual:manual};
+  const {rerender}=render(<ProcedureCidPicker {...props} options={options} />);
+  expect(screen.queryByText('Adicionar CID informado')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'Z000'}});
+  expect(screen.queryByText('Adicionar CID informado')).not.toBeInTheDocument();
+  rerender(<ProcedureCidPicker {...props} error="Consulta falhou" />);
+  expect(screen.queryByText('Adicionar CID informado')).not.toBeInTheDocument();
+  rerender(<ProcedureCidPicker {...props} options={[]} />);
+  expect(screen.getByText('Adicionar CID informado')).toBeInTheDocument();
+ });
+ it('confirma o código digitado e não submete o formulário com Enter', async () => {
+  const manual=vi.fn().mockResolvedValue(undefined),submit=vi.fn(e=>e.preventDefault());
+  render(<form onSubmit={submit}><ProcedureCidPicker options={[]} selected={[]} onChange={vi.fn()} onAddManual={manual}/></form>);
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'Z000'}});
+  fireEvent.keyDown(screen.getByRole('textbox'),{key:'Enter'});
+  await waitFor(()=>expect(manual).toHaveBeenCalledWith('Z000'));
+  expect(submit).not.toHaveBeenCalled();
+  await waitFor(()=>expect(screen.getByRole('textbox')).toHaveValue(''));
+ });
+ it('mantém o código digitado e informa erro quando ele não existe', async () => {
+  const manual=vi.fn().mockRejectedValue(new Error('CID não encontrado'));
+  render(<ProcedureCidPicker options={[]} selected={[]} onChange={vi.fn()} onAddManual={manual}/>);
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'Z999'}});
+  fireEvent.click(screen.getByText('Adicionar CID informado'));
+  expect(await screen.findByRole('alert')).toHaveTextContent('CID não encontrado');
+  expect(screen.getByRole('textbox')).toHaveValue('Z999');
+ });
 });

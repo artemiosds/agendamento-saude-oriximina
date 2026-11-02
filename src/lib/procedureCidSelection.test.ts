@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./bpaSigtapCatalog', () => ({ loadBpaSigtapCatalog: vi.fn(), getCompetenciaReferenciaCatalogo: vi.fn() }));
-vi.mock('@/services/procedureService', () => ({ procedureService: { getCidsForProcedure: vi.fn() } }));
+vi.mock('@/services/procedureService', () => ({ procedureService: { getCidsForProcedure: vi.fn(), getCidByCode: vi.fn() } }));
 import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo } from './bpaSigtapCatalog';
 import { procedureService } from '@/services/procedureService';
-import { loadProcedureCidOptions, partitionProcedureCids } from './procedureCidSelection';
+import { loadProcedureCidOptions, partitionProcedureCids, resolveManualProcedureCid } from './procedureCidSelection';
 
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(getCompetenciaReferenciaCatalogo).mockReturnValue('202610'); });
 describe('Vínculo CID × procedimento por competência', () => {
@@ -32,4 +32,36 @@ describe('Vínculo CID × procedimento por competência', () => {
   it('não trata ausência de lista restritiva como incompatibilidade', () => {
     expect(partitionProcedureCids(['F840'], [])).toEqual({ accepted: ['F840'], rejected: [] });
   });
+});
+
+
+describe('CID manual somente sem lista restritiva', () => {
+ beforeEach(() => {
+  vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(new Map([['0301010048', { cids: new Set() }]]) as any);
+  vi.mocked(procedureService.getCidsForProcedure).mockResolvedValue([]);
+  vi.mocked(procedureService.getCidByCode).mockResolvedValue({codigo:'Z000',descricao:'Exame médico geral'});
+ });
+ it('aceita Z00.0 somente após confirmar a ausência de lista e conferir o código exato', async () => {
+  expect(await resolveManualProcedureCid('0301010048','202610',' z00.0 ')).toEqual({codigo:'Z000',descricao:'Exame médico geral'});
+  expect(procedureService.getCidByCode).toHaveBeenCalledWith('Z000');
+ });
+ it('bloqueia a via manual se o procedimento tiver qualquer lista restritiva', async () => {
+  vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(new Map([['0303190019',{cids:new Set(['G800'])}]]) as any);
+  await expect(resolveManualProcedureCid('0303190019','202610','F840')).rejects.toThrow('lista restritiva');
+  expect(procedureService.getCidByCode).not.toHaveBeenCalled();
+ });
+ it('não confunde falha na consulta com lista vazia', async () => {
+  vi.mocked(loadBpaSigtapCatalog).mockRejectedValue(new Error('Catálogo indisponível'));
+  await expect(resolveManualProcedureCid('0301010048','202610','Z000')).rejects.toThrow('indisponível');
+  expect(procedureService.getCidByCode).not.toHaveBeenCalled();
+ });
+ it('rejeita código inexistente e texto livre sem criar diagnósticos', async () => {
+  vi.mocked(procedureService.getCidByCode).mockResolvedValue(null);
+  await expect(resolveManualProcedureCid('0301010048','202610','Z999')).rejects.toThrow('não encontrado');
+  await expect(resolveManualProcedureCid('0301010048','202610','diagnóstico livre')).rejects.toThrow('código CID-10 válido');
+ });
+ it('propaga falha da leitura CID-10 para não dar confirmação falsa', async () => {
+  vi.mocked(procedureService.getCidByCode).mockRejectedValue(new Error('Falha de rede'));
+  await expect(resolveManualProcedureCid('0301010048','202610','Z000')).rejects.toThrow('Falha de rede');
+ });
 });

@@ -29,3 +29,14 @@ export function partitionProcedureCids(selected: string[], options: ProcedureCid
   }
   return { accepted, rejected };
 }
+
+/** Manual entry is available only after the exact month's unrestricted relation is confirmed. */
+export async function resolveManualProcedureCid(procedure: string, competencia: string, typedCode: string): Promise<ProcedureCidOption> {
+  const options = await loadProcedureCidOptions(procedure, competencia);
+  if (options.length) throw new Error('Este procedimento possui lista restritiva. Selecione um dos CIDs relacionados.');
+  const code = normalizeProcedureCid(typedCode);
+  if (!/^[A-Z][0-9]{2}[A-Z0-9]?$/.test(code)) throw new Error('Informe um código CID-10 válido, por exemplo Z000 ou Z00.0.');
+  const cid = await procedureService.getCidByCode(code);
+  if (!cid) throw new Error(`CID ${code} não encontrado no catálogo CID-10. Confira o código.`);
+  return cid;
+}

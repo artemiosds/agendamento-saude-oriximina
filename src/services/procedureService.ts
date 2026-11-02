@@ -375,6 +375,17 @@ export const procedureService = {
     });
   },
 
+  /** Exact read on explicit confirmation; no global search and no write. */
+  async getCidByCode(value: string): Promise<{ codigo: string; descricao: string } | null> {
+    const code = value.trim().toUpperCase().replace(/\./g, '');
+    if (!/^[A-Z][0-9]{2}[A-Z0-9]?$/.test(code)) return null;
+    const dotted = code.length === 4 ? `${code.slice(0, 3)}.${code.slice(3)}` : code;
+    const { data, error } = await (supabase as any).from('cid10_codigos')
+      .select('codigo,descricao').in('codigo', [code, dotted]).limit(1).maybeSingle();
+    if (error) throw error;
+    return data ? { codigo: code, descricao: data.descricao || '' } : null;
+  },
+
   async searchCids(query: string): Promise<{ codigo: string; descricao: string }[]> {
     const q = query.trim();
     if (!q) return [];

@@ -1,5 +1,7 @@
+import ProcedureCidPicker from "@/components/prontuario/ProcedureCidPicker";
+import { loadProcedureCidOptions, resolveManualProcedureCid, normalizeProcedureCid } from "@/lib/procedureCidSelection";
 import { instrumentoBadge } from '@/lib/sigtapInstruments';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { usePacientes } from '@/contexts/PacientesContext';
@@ -206,7 +208,7 @@ const PTS: React.FC = () => {
   const [validCids, setValidCids] = useState<SigtapCid[]>([]);
   const [cidSearch, setCidSearch] = useState('');
   const [procSearch, setProcSearch] = useState('');
-  const [cidWarning, setCidWarning] = useState(false);
+
   const [loadingCids, setLoadingCids] = useState(false);
   const [loadingProcs, setLoadingProcs] = useState(false);
   const [searchingGlobal, setSearchingGlobal] = useState(false);
@@ -274,6 +276,15 @@ const PTS: React.FC = () => {
   };
 
   const [form, setForm] = useState(emptyForm);
+  const ptsCidCompetencia = competenciaFromDate(todayLocalStr());
+  const ptsCidScope = `${dialogOpen}|${editingPts?.id || ''}|${form.patient_id}|${selectedProcCodigo}|${ptsCidCompetencia}`;
+  const ptsCidScopeRef = useRef(ptsCidScope);
+  const ptsCidEpochRef = useRef(0);
+  if (ptsCidScopeRef.current !== ptsCidScope) { ptsCidScopeRef.current = ptsCidScope; ptsCidEpochRef.current += 1; }
+  const [verifiedCidScope, setVerifiedCidScope] = useState('');
+  const [ptsCidError, setPtsCidError] = useState('');
+  const ptsCidOptions = useMemo(() => verifiedCidScope === ptsCidScope && !loadingCids ? validCids.map(c => ({ codigo: c.cid_codigo, descricao: c.cid_descricao })) : undefined, [verifiedCidScope, ptsCidScope, loadingCids, validCids]);
+
 
   const resolvePtsProcedureProfessional = useCallback((especialidade?: string) => {
     const esp = normalize(especialidade || "");
@@ -418,21 +429,20 @@ const PTS: React.FC = () => {
     loadSigtapProcsForSpecialties(form.especialidades_envolvidas);
   }, [form.especialidades_envolvidas, dialogOpen, isFisioterapeuta, isMaster, loadSigtapProcsForSpecialties]);
 
-  // Load CIDs for selected procedure
+  // Only a successfully read exact-month catalog can authorize manual entry.
   useEffect(() => {
-    if (!selectedProcCodigo) { setValidCids([]); return; }
+    let active = true;
+    setVerifiedCidScope(''); setPtsCidError(''); setValidCids([]);
+    if (!dialogOpen || !selectedProcCodigo) { setLoadingCids(false); return; }
     setLoadingCids(true);
-    supabase
-      .from('sigtap_procedimento_cids')
-      .select('cid_codigo, cid_descricao')
-      .eq('procedimento_codigo', selectedProcCodigo)
-      .order('cid_codigo')
-      .then(({ data, error }) => {
-        if (error) console.error('Erro ao carregar CIDs:', error);
-        setValidCids(data || []);
-        setLoadingCids(false);
-      });
-  }, [selectedProcCodigo]);
+    void loadProcedureCidOptions(selectedProcCodigo, ptsCidCompetencia).then(options => {
+      if (!active) return;
+      setValidCids(options.map(c => ({ cid_codigo: c.codigo, cid_descricao: c.descricao })));
+      setVerifiedCidScope(ptsCidScope);
+    }).catch(error => { if (active) setPtsCidError(error instanceof Error ? error.message : 'Falha ao conferir os CIDs.'); })
+      .finally(() => { if (active) setLoadingCids(false); });
+    return () => { active = false; };
+  }, [dialogOpen, selectedProcCodigo, ptsCidCompetencia, ptsCidScope]);
 
   // Global SIGTAP Search
   const searchGlobalSigtap = async () => {
@@ -502,29 +512,6 @@ const PTS: React.FC = () => {
       setSearchingGlobal(false);
     }
   };
-
-  // CID warning
-
-  useEffect(() => {
-    if (!selectedProcCodigo || !cidSearch.trim()) { setCidWarning(false); return; }
-    const typed = cidSearch.trim().toUpperCase();
-    if (typed.length >= 3) {
-      const found = validCids.some(c =>
-        c.cid_codigo.toUpperCase() === typed || c.cid_codigo.toUpperCase().startsWith(typed)
-      );
-      setCidWarning(!found);
-    } else {
-      setCidWarning(false);
-    }
-  }, [cidSearch, validCids, selectedProcCodigo]);
-
-  const filteredCids = useMemo(() => {
-    if (!cidSearch.trim()) return validCids.slice(0, 20);
-    const q = cidSearch.trim().toUpperCase();
-    return validCids
-      .filter(c => c.cid_codigo.toUpperCase().includes(q) || c.cid_descricao.toUpperCase().includes(q))
-      .slice(0, 30);
-  }, [validCids, cidSearch]);
 
   const loadPts = useCallback(async () => {
     setLoading(true);
@@ -782,40 +769,28 @@ const PTS: React.FC = () => {
     }
   };
 
-  const handleAddCid = async (cid: SigtapCid) => {
-    if (cidsSelecionados.some(c => c.cid_codigo === cid.cid_codigo)) {
-      toast.info('CID já adicionado.');
-      return;
-    }
-    const newCid = { cid_codigo: cid.cid_codigo, cid_descricao: cid.cid_descricao };
-    setCidsSelecionados(prev => [...prev, newCid]);
-    setCidSearch('');
-    const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+  const handleAddCid = async (candidate: SigtapCid) => {
+    const procedure = selectedProcCodigo;
+    if (!procedure) throw new Error('Selecione o procedimento antes de informar o CID.');
+    const epoch = ptsCidEpochRef.current;
+    const options = await loadProcedureCidOptions(procedure, ptsCidCompetencia);
+    const code = normalizeProcedureCid(candidate.cid_codigo);
+    const cid = options.length
+      ? options.find(item => item.codigo === code)
+      : await resolveManualProcedureCid(procedure, ptsCidCompetencia, code);
+    if (!cid) throw new Error('CID não relacionado ao procedimento. Selecione um dos CIDs vinculados.');
+    if (epoch !== ptsCidEpochRef.current) return;
+    if (cidsSelecionados.some(c => normalizeProcedureCid(c.cid_codigo) === code)) { toast.info('CID já adicionado.'); return; }
+    const newCid = { cid_codigo: cid.codigo, cid_descricao: cid.descricao };
+    const currentProc = sigtapProcs.find(p => p.codigo === procedure);
     if (currentProc?.especialidade === 'fonoaudiologia' && editingPts) {
-      await (supabase as any).from('pts_cid').upsert({
-        pts_id: editingPts.id,
-        cid_codigo: cid.cid_codigo,
-        cid_descricao: cid.cid_descricao
-      }, { onConflict: 'pts_id, cid_codigo' });
+      const { error } = await (supabase as any).from('pts_cid').upsert({ pts_id: editingPts.id, ...newCid }, { onConflict: 'pts_id, cid_codigo' });
+      if (error) throw error;
     }
-    toast.success(`CID ${cid.cid_codigo} adicionado.`);
-  };
-
-  const handleForceAddCid = async () => {
-    const code = cidSearch.trim().toUpperCase();
-    if (!code) return;
-    if (cidsSelecionados.some(c => c.cid_codigo === code)) { toast.info('CID já adicionado.'); return; }
-    const newCid = { cid_codigo: code, cid_descricao: 'CID informado manualmente' };
-    setCidsSelecionados(prev => [...prev, newCid]);
+    if (epoch !== ptsCidEpochRef.current) return;
+    setCidsSelecionados(prev => prev.some(c => normalizeProcedureCid(c.cid_codigo) === code) ? prev : [...prev, newCid]);
     setCidSearch('');
-    setCidWarning(false);
-    const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
-    if (currentProc?.especialidade === 'fonoaudiologia' && editingPts) {
-      await (supabase as any).from('pts_cid').upsert({
-        pts_id: editingPts.id, cid_codigo: code, cid_descricao: 'CID informado manualmente'
-      }, { onConflict: 'pts_id, cid_codigo' });
-    }
-    toast.info('CID aceito manualmente.');
+    toast.success(`CID ${code} adicionado.`);
   };
 
   const removeSigtap = (codigo: string) => setSigtapSelecionados(prev => prev.filter(s => s.procedimento_codigo !== codigo));
@@ -823,7 +798,7 @@ const PTS: React.FC = () => {
 
   const resetSigtapState = () => {
     setSelectedProcCodigo(''); setCidSearch(''); setSigtapProcs([]);
-    setSigtapSelecionados([]); setCidsSelecionados([]); setValidCids([]); setCidWarning(false);
+    setSigtapSelecionados([]); setCidsSelecionados([]); setValidCids([]);
     setSigtapValidationByCode({}); setSigtapJustificationByCode({});
   };
 
@@ -1887,40 +1862,20 @@ const PTS: React.FC = () => {
 
                       {selectedProcCodigo && (
                         <div className="space-y-2 border-t pt-2">
-                          <Label className="text-xs">
-                            Buscar CID vinculado ao procedimento ({validCids.length} CIDs válidos)
-                          </Label>
-                          <Input placeholder="Digite código ou descrição do CID..."
-                            value={cidSearch} onChange={e => setCidSearch(e.target.value)} className="text-sm" />
-                          {cidWarning && (
-                            <div className="flex items-start gap-2 p-2 rounded bg-warning/10 border border-warning/30 text-xs">
-                              <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
-                              <div>
-                                <p className="font-medium text-warning">CID não vinculado ao procedimento no SIGTAP.</p>
-                                <Button size="sm" variant="outline" className="mt-1 h-6 text-xs" onClick={handleForceAddCid}>
-                                  Usar mesmo assim?
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                          {loadingCids ? (
-                            <div className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Loader2 className="w-3 h-3 animate-spin" /> Carregando CIDs...
-                            </div>
-                          ) : (
-                            cidSearch.trim() && filteredCids.length > 0 && (
-                              <div className="max-h-40 overflow-y-auto border rounded text-xs divide-y">
-                                {filteredCids.map(c => (
-                                  <button key={c.cid_codigo}
-                                    className="w-full text-left px-2 py-1.5 hover:bg-accent/50 flex gap-2"
-                                    onClick={() => handleAddCid(c)}>
-                                    <span className="font-mono font-medium text-primary shrink-0">{c.cid_codigo}</span>
-                                    <span className="text-muted-foreground truncate">{c.cid_descricao}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )
-                          )}
+                          <ProcedureCidPicker
+                            key={ptsCidScope}
+                            options={ptsCidOptions}
+                            error={ptsCidError || undefined}
+                            selected={cidsSelecionados.filter(c => !validCids.length || validCids.some(v => v.cid_codigo === c.cid_codigo)).map(c => c.cid_codigo)}
+                            onAddManual={async code => { await handleAddCid({ cid_codigo: code, cid_descricao: '' }); }}
+                            onChange={codes => {
+                              const selected = cidsSelecionados.filter(c => validCids.some(v => v.cid_codigo === c.cid_codigo));
+                              selected.filter(c => !codes.includes(c.cid_codigo)).forEach(c => removeCid(c.cid_codigo));
+                              if (!validCids.length) cidsSelecionados.filter(c => !codes.includes(c.cid_codigo)).forEach(c => removeCid(c.cid_codigo));
+                              const added = codes.find(code => !cidsSelecionados.some(c => c.cid_codigo === code));
+                              if (added) void handleAddCid({ cid_codigo: added, cid_descricao: '' }).catch(error => toast.error(error instanceof Error ? error.message : 'Não foi possível conferir o CID.'));
+                            }}
+                          />
                         </div>
                       )}
 
