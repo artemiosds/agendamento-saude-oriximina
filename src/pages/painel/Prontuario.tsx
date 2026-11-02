@@ -1,3 +1,5 @@
+import ProcedureCidPicker from "@/components/prontuario/ProcedureCidPicker";
+import { loadProcedureCidOptions, partitionProcedureCids, normalizeProcedureCid } from "@/lib/procedureCidSelection";
 import AutosaveBadge, { createAutosaveIndicator } from '@/components/prontuario/AutosaveBadge';
 import { instrumentoBadge } from '@/lib/sigtapInstruments';
 import { usePreviousProcedures } from "@/hooks/usePreviousProcedures";
@@ -533,18 +535,35 @@ const ProntuarioPage: React.FC = () => {
   const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string; isGlobal?: boolean }[]>([]);
   const [novoProcOpen, setNovoProcOpen] = useState(false);
   const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
-  const [cidSearchByProc, setCidSearchByProc] = useState<Record<string, string>>({});
-  const [cidSearchResults, setCidSearchResults] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
-  const [cidSearchLoading, setCidSearchLoading] = useState<Record<string, boolean>>({});
-
+  const [cidErrorsByProc, setCidErrorsByProc] = useState<Record<string, string>>({});
+  const cidRequestsRef = useRef(new Set<string>());
+  const cidCompetencia = competenciaFromDate(form.data_atendimento);
+  const cidSelectionScope = `${dialogOpen}|${editId || ''}|${form.paciente_id}|${form.data_atendimento}`;
+  const cidSelectionScopeRef = useRef(cidSelectionScope);
+  const cidTargetRef = useRef<string | null>(null);
+  cidTargetRef.current = expandedProcId && selectedProcIds.includes(expandedProcId)
+    ? expandedProcId : selectedProcIds.length === 1 ? selectedProcIds[0] : null;
+  const cidSelectionEpochRef = useRef(0);
+  if (cidSelectionScopeRef.current !== cidSelectionScope) {
+    cidSelectionScopeRef.current = cidSelectionScope;
+    cidSelectionEpochRef.current += 1;
+  }
   const loadCidsForProc = useCallback((procId: string) => {
-    if (cidsByProc[procId]) return;
-    procedureService.getCidsForProcedure(procId).then((list) => {
-      setCidsByProc((m) => ({ ...m, [procId]: list }));
-      // Preserve any pre-existing user/loaded selection; do NOT auto-select all suggested CIDs.
-      setSelectedCidsByProc((m) => ({ ...m, [procId]: m[procId] ?? [] }));
+    const key = `${cidCompetencia}:${procId}`;
+    if (cidRequestsRef.current.has(key)) return;
+    cidRequestsRef.current.add(key);
+    setCidErrorsByProc(m => { const next = { ...m }; delete next[key]; return next; });
+    void loadProcedureCidOptions(procId, cidCompetencia).then(list => {
+      setCidsByProc(m => ({ ...m, [key]: list }));
+    }).catch(error => {
+      cidRequestsRef.current.delete(key);
+      setCidErrorsByProc(m => ({ ...m, [key]: error instanceof Error ? error.message : 'Falha na consulta.' }));
     });
-  }, [cidsByProc]);
+  }, [cidCompetencia]);
+
+  useEffect(() => {
+    if (dialogOpen) selectedProcIds.forEach(loadCidsForProc);
+  }, [dialogOpen, selectedProcIds, loadCidsForProc]);
 
   const toggleExpandProc = useCallback((procId: string) => {
     setExpandedProcId((prev) => {
@@ -651,45 +670,30 @@ const ProntuarioPage: React.FC = () => {
   }, [loadCidsForProc, mergeProcedimentos, procedimentos, selectedProcIds]);
 
   const handlePickCid = useCallback(async (cid: { codigo: string; descricao: string }) => {
-    // 1) If there is an expanded/selected procedure, attach there
-    const targetProc = expandedProcId && selectedProcIds.includes(expandedProcId)
-      ? expandedProcId
-      : selectedProcIds[selectedProcIds.length - 1] || null;
-
-    if (targetProc) {
-      setCidsByProc((m) => {
-        const cur = m[targetProc] || [];
-        return cur.some((x) => x.codigo === cid.codigo) ? m : { ...m, [targetProc]: [...cur, cid] };
-      });
-      setSelectedCidsByProc((m) => ({
-        ...m,
-        [targetProc]: Array.from(new Set([...(m[targetProc] || []), cid.codigo])),
-      }));
+    const targetProc = cidTargetRef.current;
+    if (!targetProc) {
+      toast.info("Selecione o procedimento realizado antes de vincular um CID.");
+      return;
+    }
+    const scope = cidSelectionEpochRef.current;
+    try {
+      const options = await loadProcedureCidOptions(targetProc, cidCompetencia);
+      if (scope !== cidSelectionEpochRef.current || cidTargetRef.current !== targetProc || !selectedProcIdsRef.current.includes(targetProc)) return;
+      const code = normalizeProcedureCid(cid.codigo);
+      if (!options.some(item => item.codigo === code)) {
+        toast.warning(`CID ${code} não relacionado ao procedimento ${targetProc} na competência ${cidCompetencia}. Registre o diagnóstico clínico no campo próprio.`);
+        return;
+      }
+      setCidsByProc(m => ({ ...m, [`${cidCompetencia}:${targetProc}`]: options }));
+      setSelectedCidsByProc(m => ({ ...m, [targetProc]: Array.from(new Set([...(m[targetProc] || []), code])) }));
       setUnifiedQuery("");
       setUnifiedOpen(false);
-      toast.success(`CID ${cid.codigo} vinculado ao procedimento selecionado.`);
-      return;
+      toast.success(`CID ${code} vinculado ao procedimento selecionado.`);
+    } catch {
+      toast.error("Não foi possível conferir o vínculo CID × procedimento. Nenhum CID foi acrescentado. Tente novamente.");
     }
+  }, [expandedProcId, selectedProcIds, cidCompetencia]);
 
-    // 2) Otherwise look up procedures linked to this CID
-    const linked = await procedureService.getProceduresForCid(cid.codigo, 5);
-    if (linked.length === 0) {
-      toast.error("Selecione um procedimento antes de adicionar o CID (não há procedimento vinculado a este CID).");
-      return;
-    }
-    const first = linked[0];
-    handlePickProcedimento(first.codigo, first.nome);
-    // Attach the CID to it
-    setCidsByProc((m) => {
-      const cur = m[first.codigo] || [];
-      return cur.some((x) => x.codigo === cid.codigo) ? m : { ...m, [first.codigo]: [...cur, cid] };
-    });
-    setSelectedCidsByProc((m) => ({
-      ...m,
-      [first.codigo]: Array.from(new Set([...(m[first.codigo] || []), cid.codigo])),
-    }));
-    toast.success(`Procedimento ${first.codigo} sugerido pelo CID ${cid.codigo} foi adicionado.`);
-  }, [expandedProcId, selectedProcIds, handlePickProcedimento]);
 
 
   const isProfissional = user?.role === "profissional";
@@ -1734,23 +1738,42 @@ const ProntuarioPage: React.FC = () => {
     form, user, mergeProcedimentos,
   });
 
-  const repetirProcedimentosAnteriores = () => {
+  const repetirProcedimentosAnteriores = async () => {
     if (!ultimoAtendProcs) return;
     const novos = ultimoAtendProcs.itens.filter((i) => !selectedProcIds.includes(i.id));
     if (novos.length === 0) { toast.info("Os procedimentos do último atendimento já estão marcados."); return; }
-    setSelectedProcIds((prev) => [...prev, ...novos.map((i) => i.id)]);
+    const scope = cidSelectionEpochRef.current;
+    let verified: Array<{ id: string; accepted: string[]; rejected: string[] }>;
+    try {
+      verified = await Promise.all(novos.map(async item => ({
+        id: item.id,
+        ...(/^\d{10}$/.test(item.id)
+          ? partitionProcedureCids(item.cids, await loadProcedureCidOptions(item.id, cidCompetencia))
+          : { accepted: [...item.cids], rejected: [] }),
+      })));
+    } catch {
+      toast.error("Não foi possível conferir os CIDs anteriores. Nenhum procedimento foi repetido. Tente novamente.");
+      return;
+    }
+    if (scope !== cidSelectionEpochRef.current) return;
+    const currentIds = new Set(selectedProcIdsRef.current);
+    const additions = novos.filter(item => !currentIds.has(item.id));
+    const acceptedById = new Map(verified.map(item => [item.id, item.accepted]));
+    const rejected = verified.filter(item => item.rejected.length);
+    if (rejected.length) toast.warning(`CIDs não copiados por falta de vínculo nesta competência: ${rejected.map(item => `${item.id}: ${item.rejected.join(', ')}`).join('; ')}. Os prontuários de origem foram preservados.`);
+    setSelectedProcIds((prev) => Array.from(new Set([...prev, ...additions.map((i) => i.id)])));
     setSelectedCidsByProc((m) => {
       const n = { ...m };
-      novos.forEach((i) => { n[i.id] = i.cids; });
+      additions.forEach((i) => { n[i.id] = acceptedById.get(i.id) || []; });
       return n;
     });
     setProcDetails((prev) => {
       const n = { ...prev };
-      novos.forEach((i) => { n[i.id] = prev[i.id] || { quantidade: i.quantidade, observacao: "" }; });
+      additions.forEach((i) => { n[i.id] = prev[i.id] || { quantidade: i.quantidade, observacao: "" }; });
       return n;
     });
-    novos.forEach((i) => loadCidsForProc(i.id));
-    toast.success(`${novos.length} procedimento(s) do atendimento de ${ultimoAtendProcs.data} adicionados. Revise antes de salvar.`);
+    additions.forEach((i) => loadCidsForProc(i.id));
+    toast.success(`${additions.length} procedimento(s) do atendimento de ${ultimoAtendProcs.data} adicionados. Revise antes de salvar.`);
   };
 
 
@@ -4765,16 +4788,15 @@ const ProntuarioPage: React.FC = () => {
                   <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
                     {listedProcedimentos.map((proc) => {
                       const checked = selectedProcIdSet.has(proc.id);
-                      const cids = cidsByProc[proc.id] || [];
+                      const cidKey = `${cidCompetencia}:${proc.id}`;
+                      const cids = cidsByProc[cidKey];
                       const selCids = selectedCidsByProc[proc.id] || [];
                       const isCustom = proc.origem === 'PERSONALIZADO';
                       const isExpanded = expandedProcId === proc.id;
                       const sigtapStatus = sigtapValidationByProc[proc.id];
-                      const cidQuery = (cidSearchByProc[proc.id] || '').trim().toLowerCase();
-                      const filteredCids = cidQuery
-                        ? cids.filter((c) => c.codigo.toLowerCase().includes(cidQuery) || (c.descricao || '').toLowerCase().includes(cidQuery))
-                        : cids;
-                      const searchResults = cidSearchResults[proc.id] || [];
+                      const cidReady = !!cids && !cidErrorsByProc[cidKey];
+                      const cidInvalid = cidReady && partitionProcedureCids(selCids, cids).rejected.length > 0;
+                      const cidConfirmed = cidReady && !cidInvalid && selCids.length > 0;
                       return (
                         <div key={proc.id} className={`rounded-md border bg-background transition-colors ${checked ? 'border-primary/40' : ''}`}>
                           <div
@@ -4812,8 +4834,11 @@ const ProntuarioPage: React.FC = () => {
                             {checked && sigtapStatus?.bpaICompativel === false && (
                               <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-amber-400 text-amber-700">{instrumentoBadge(sigtapStatus.instrumentos)}</Badge>
                             )}
-                            {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === true && (
-                              <Badge className="min-h-5 h-auto py-0.5 whitespace-normal text-[10px] bg-emerald-600 hover:bg-emerald-600">BPA-I compatível (CBO, idade e sexo conferidos)</Badge>
+                            {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === true && cidConfirmed && (
+                              <Badge className="min-h-5 h-auto py-0.5 whitespace-normal text-[10px] bg-emerald-600 hover:bg-emerald-600">{cids?.length ? 'BPA-I: CID, CBO, idade e sexo conferidos' : 'CBO, idade e sexo conferidos · CID sem lista restritiva'}</Badge>
+                            )}
+                            {checked && (!cidConfirmed) && (
+                              <Badge variant="outline" className="min-h-5 h-auto py-0.5 text-[10px] border-amber-500 text-amber-950 dark:text-amber-100">{cidInvalid ? 'CID não relacionado — revisar BPA-I' : selCids.length ? 'Conferência do CID pendente' : 'CID não informado'}</Badge>
                             )}
                             {checked && sigtapStatus?.status === "incompatível" && (
                               <Badge variant="destructive" className="h-5 text-[10px] shrink-0">SIGTAP incompatível</Badge>
@@ -4838,10 +4863,10 @@ const ProntuarioPage: React.FC = () => {
                                 </div>
                               )}
 
-                              {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === true && (
+                              {checked && sigtapStatus?.status === "compatível" && sigtapStatus.bpaICompativel === true && cidConfirmed && (
                                 <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">
                                   <div className="font-medium flex items-center gap-1">
-                                    <CheckCircle className="h-3.5 w-3.5" /> BPA-I compatível (CBO, idade e sexo conferidos)
+                                    <CheckCircle className="h-3.5 w-3.5" /> {cids?.length ? "BPA-I: CID, CBO, idade e sexo conferidos" : "CBO, idade e sexo conferidos · CID sem lista restritiva"}
                                   </div>
                                   <div className="mt-1 text-[11px]">
                                     Competência {sigtapStatus.competencia} · CBO {sigtapStatus.cbo}
@@ -4930,142 +4955,19 @@ const ProntuarioPage: React.FC = () => {
                                 </div>
                               </div>
 
-                              <div className="relative">
-                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                                <Input
-                                  value={cidSearchByProc[proc.id] || ''}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    setCidSearchByProc((m) => ({ ...m, [proc.id]: v }));
-                                    const q = v.trim();
-                                    if (q.length < 2) {
-                                      setCidSearchResults((m) => ({ ...m, [proc.id]: [] }));
-                                      return;
-                                    }
-                                    setCidSearchLoading((m) => ({ ...m, [proc.id]: true }));
-                                    procedureService.searchCids(q).then((res) => {
-                                      setCidSearchResults((m) => ({ ...m, [proc.id]: res }));
-                                      setCidSearchLoading((m) => ({ ...m, [proc.id]: false }));
-                                    });
-                                  }}
-                                  placeholder="Pesquisar CIDs (filtra sugeridos e busca novos)..."
-                                  className="pl-7 h-8 text-xs"
-                                />
-                              </div>
-
-                              {/* CIDs sugeridos (filtrados) */}
-                              <p className="text-[11px] font-medium text-muted-foreground mb-1">📋 Sugeridos</p>
-                              {!cidsByProc[proc.id] ? (
-                                <p className="text-xs text-muted-foreground italic">Carregando...</p>
-                              ) : filteredCids.length === 0 ? (
-                                <p className="text-xs text-muted-foreground italic">
-                                  {cids.length === 0 ? 'Nenhum CID vinculado.' : 'Nenhum CID sugerido corresponde à busca.'}
-                                </p>
-                              ) : (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {filteredCids.map((c) => {
-                                    const isSel = selCids.includes(c.codigo);
-                                    return (
-                                      <button
-                                        type="button"
-                                        key={c.codigo}
-                                        onClick={() => {
-                                          setSelectedCidsByProc((m) => ({
-                                            ...m,
-                                            [proc.id]: isSel
-                                              ? (m[proc.id] || []).filter((x) => x !== c.codigo)
-                                              : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
-                                          }));
-                                          // Auto-mark procedure when selecting a CID (rule: no CID without procedure)
-                                                if (!isSel && !selectedProcIdSet.has(proc.id)) {
-                                                setSelectedProcIds((prev) => [...prev, proc.id]);
-                                                setProcDetails(prev => ({
-                                                  ...prev,
-                                                  [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
-                                                }));
-                                              }
-                                        }}
-                                        aria-pressed={isSel}
-                                        title={c.descricao || c.codigo}
-                                        className={
-                                          "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors " +
-                                          (isSel
-                                            ? "bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90"
-                                            : "bg-background text-foreground border-border hover:bg-muted")
-                                        }
-                                      >
-                                        {isSel && <CheckCircle className="h-3 w-3 shrink-0" />}
-                                        <span className="font-mono">{c.codigo}</span>
-                                        {c.descricao && (
-                                          <span className={isSel ? "opacity-90" : "text-muted-foreground"}>
-                                            · {c.descricao.slice(0, 36)}
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Resultados externos da busca */}
-                              {cidSearchLoading[proc.id] && (
-                                <p className="text-xs text-muted-foreground italic mt-2">Buscando no catálogo...</p>
-                              )}
-                              {searchResults.length > 0 && (
-                                <>
-                                  <p className="text-[11px] font-medium text-muted-foreground mt-2 mb-1">🔎 Outros resultados</p>
-                                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-                                    {searchResults
-                                      .filter((c) => !cids.some((x) => x.codigo === c.codigo))
-                                      .map((c) => {
-                                        const isSel = (selectedCidsByProc[proc.id] || []).includes(c.codigo);
-                                        return (
-                                          <button
-                                            type="button"
-                                            key={c.codigo}
-                                            onClick={() => {
-                                              setCidsByProc((m) => ({
-                                                ...m,
-                                                [proc.id]: (m[proc.id] || []).some((x) => x.codigo === c.codigo)
-                                                  ? (m[proc.id] || [])
-                                                  : [...(m[proc.id] || []), c],
-                                              }));
-                                              setSelectedCidsByProc((m) => ({
-                                                ...m,
-                                                [proc.id]: isSel
-                                                  ? (m[proc.id] || []).filter((x) => x !== c.codigo)
-                                                  : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
-                                              }));
-                                          if (!isSel && !selectedProcIdSet.has(proc.id)) {
-                                            setSelectedProcIds((prev) => [...prev, proc.id]);
-                                            setProcDetails(prev => ({
-                                              ...prev,
-                                              [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
-                                            }));
-                                          }
-                                            }}
-                                            aria-pressed={isSel}
-                                            title={c.descricao || c.codigo}
-                                            className={
-                                              "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors " +
-                                              (isSel
-                                                ? "bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90"
-                                                : "bg-secondary text-secondary-foreground border-border hover:bg-muted")
-                                            }
-                                          >
-                                            {isSel ? <CheckCircle className="h-3 w-3 shrink-0" /> : <Plus className="h-3 w-3 shrink-0" />}
-                                            <span className="font-mono">{c.codigo}</span>
-                                            {c.descricao && (
-                                              <span className={isSel ? "opacity-90" : "text-muted-foreground"}>
-                                                · {c.descricao.slice(0, 36)}
-                                              </span>
-                                            )}
-                                          </button>
-                                        );
-                                      })}
-                                  </div>
-                                </>
-                              )}
+                              <ProcedureCidPicker
+                                key={cidKey}
+                                options={cids}
+                                selected={selCids}
+                                error={cidErrorsByProc[cidKey]}
+                                onChange={codes => {
+                                  setSelectedCidsByProc(m => ({ ...m, [proc.id]: codes }));
+                                  if (codes.length && !selectedProcIdSet.has(proc.id)) {
+                                    setSelectedProcIds(prev => Array.from(new Set([...prev, proc.id])));
+                                    setProcDetails(prev => ({ ...prev, [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" } }));
+                                  }
+                                }}
+                              />
                             </div>
                           )}
                         </div>
