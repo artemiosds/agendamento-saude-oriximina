@@ -4394,6 +4394,15 @@ export type Database = {
       }
     }
     Functions: {
+      align_treatment_session_to_agenda: {
+        Args: {
+          p_appointment_id: string
+          p_expected_agenda_date: string
+          p_expected_date: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       apply_profession_careness_for_discharge: {
         Args: { p_discharge_id: string; p_force?: boolean }
         Returns: Json
@@ -4729,6 +4738,10 @@ export type Database = {
       profession_careness_catalog: { Args: never; Returns: Json }
       profession_careness_mapping_is_current: { Args: never; Returns: boolean }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
+      recover_missing_treatment_appointments: {
+        Args: { p_cycle_id: string }
+        Returns: Json
+      }
       refresh_paciente_profissional_status: { Args: never; Returns: undefined }
       register_treatment_discharge: {
         Args: {
@@ -4756,6 +4769,14 @@ export type Database = {
           p_source?: string
           p_source_id?: string
           p_specialty: string
+        }
+        Returns: Json
+      }
+      release_treatment_session_for_booking: {
+        Args: {
+          p_expected_appointment_id: string
+          p_expected_date: string
+          p_session_id: string
         }
         Returns: Json
       }
@@ -5072,6 +5093,10 @@ export type Database = {
           p_expected_session_date: string
           p_session_id: string
         }
+        Returns: Json
+      }
+      update_agenda_treatment_appointment: {
+        Args: { p_expected?: Json; p_id: string; p_patch: Json }
         Returns: Json
       }
       validar_sinais_triagem: { Args: { p_data: Json }; Returns: Json }
