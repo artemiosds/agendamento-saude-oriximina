@@ -4,13 +4,17 @@ import { procedureService } from '@/services/procedureService';
 export interface ProcedureCidOption { codigo: string; descricao: string }
 export const normalizeProcedureCid = (code: string) => code.trim().toUpperCase().replace(/\./g, '');
 
-/** Local descriptions are labels only. Membership comes from the exact billing month. */
+/**
+ * Local descriptions are labels only. Membership comes from the billing month's
+ * catalog or, when DATASUS has not published it yet, the most recent earlier one
+ * (SIGTAP delay must never block clinical registration).
+ */
 export async function loadProcedureCidOptions(code: string, competencia: string): Promise<ProcedureCidOption[]> {
   const catalog = await loadBpaSigtapCatalog(competencia);
-  const reference = getCompetenciaReferenciaCatalogo(catalog);
-  if (reference && reference !== competencia) throw new Error(`Catálogo da competência ${competencia} indisponível. Referência recebida: ${reference}.`);
+  const reference = getCompetenciaReferenciaCatalogo(catalog) || competencia;
+  if (reference > competencia) throw new Error(`Catálogo SIGTAP recebido (${reference}) é posterior à competência ${competencia}.`);
   const procedure = catalog.get(code);
-  if (!procedure) throw new Error(`Procedimento ${code} não encontrado na competência ${competencia}.`);
+  if (!procedure) throw new Error(`Procedimento ${code} não encontrado no SIGTAP ${reference}.`);
   const descriptions = await procedureService.getCidsForProcedure(code);
   const labels = new Map(descriptions.map(item => [normalizeProcedureCid(item.codigo), item.descricao]));
   return [...procedure.cids].sort().map(codigo => ({ codigo, descricao: labels.get(codigo) || '' }));

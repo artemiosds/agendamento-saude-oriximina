@@ -12,10 +12,16 @@ describe('Vínculo CID × procedimento por competência', () => {
     vi.mocked(procedureService.getCidsForProcedure).mockResolvedValue([{ codigo: 'G800', descricao: 'Paralisia cerebral' }, { codigo: 'F840', descricao: 'Autismo' }]);
     expect(await loadProcedureCidOptions('0303190019', '202610')).toEqual([{ codigo: 'G800', descricao: 'Paralisia cerebral' }, { codigo: 'R262', descricao: '' }]);
   });
-  it('não aceita uma referência de outro mês como lista confirmada', async () => {
+  it('usa o SIGTAP mais recente anterior quando a competência 202611 ainda não foi publicada', async () => {
+    vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(new Map([['0303190019', { cids: new Set(['G800']) }]]) as any);
+    vi.mocked(getCompetenciaReferenciaCatalogo).mockReturnValue('202610');
+    vi.mocked(procedureService.getCidsForProcedure).mockResolvedValue([]);
+    expect(await loadProcedureCidOptions('0303190019', '202611')).toEqual([{ codigo: 'G800', descricao: '' }]);
+  });
+  it('não aceita catálogo de mês posterior à competência', async () => {
     vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(new Map());
-    vi.mocked(getCompetenciaReferenciaCatalogo).mockReturnValue('202609');
-    await expect(loadProcedureCidOptions('0303190019', '202610')).rejects.toThrow('202609');
+    vi.mocked(getCompetenciaReferenciaCatalogo).mockReturnValue('202612');
+    await expect(loadProcedureCidOptions('0303190019', '202611')).rejects.toThrow('posterior');
     expect(procedureService.getCidsForProcedure).not.toHaveBeenCalled();
   });
   it('não inventa opções quando o procedimento não existe ou a rede falha', async () => {
