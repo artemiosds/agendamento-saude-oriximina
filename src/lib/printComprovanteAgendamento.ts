@@ -1,4 +1,8 @@
 import { openPrintDocument } from "@/lib/printLayout";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { QRCodeSVG } from "qrcode.react";
+import { getPatientPortalLink } from "@/lib/patientPortalLink";
 
 export interface ComprovanteAgendamentoInput {
   id: string;
@@ -38,11 +42,29 @@ export function printComprovanteAgendamento(ag: ComprovanteAgendamentoInput) {
     : d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
   const codigo = (ag.id || "").replace(/-/g, "").slice(0, 8).toUpperCase();
   const emitido = new Date().toLocaleString("pt-BR");
+  const portalLink = getPatientPortalLink();
+  const portalQr = renderToStaticMarkup(createElement(QRCodeSVG, {
+    value: portalLink, size: 160, level: "H", marginSize: 2,
+    bgColor: "#ffffff", fgColor: "#000000",
+  }));
   const f = (label: string, value?: string) =>
     value ? `<div class="field"><div class="field-label">${esc(label)}</div><div class="field-value">${esc(value)}</div></div>` : "";
 
   const body = `
     <style>
+.receipt-portal { display:flex; align-items:center; gap:10px; max-width:520px; margin:7px auto 0; padding:7px 9px; border:1px solid #cbd5e1; border-radius:8px; background:#f8fafc; text-align:left; break-inside:avoid; page-break-inside:avoid; }
+.receipt-portal-qr { flex:0 0 28mm; width:28mm; height:28mm; padding:1.5mm; border:1px solid #e2e8f0; border-radius:5px; background:#fff; }
+.receipt-portal-qr svg { display:block; width:100%; height:100%; }
+.receipt-portal-title { font-size:11px; font-weight:800; color:#2A6F97; margin-bottom:3px; }
+.receipt-portal-copy { font-size:9px; line-height:1.25; color:#475569; }
+.receipt-portal-link { margin-top:4px; font-size:8px; line-height:1.2; overflow-wrap:anywhere; color:#1e293b; }
+@media print {
+  .receipt-portal { margin-top:6px !important; padding:5px 7px !important; gap:8px !important; }
+  .receipt-portal-qr { flex-basis:26mm !important; width:26mm !important; height:26mm !important; }
+  .receipt-portal-title { font-size:10px !important; }
+  .receipt-portal-copy { font-size:8px !important; }
+  .receipt-portal-link { font-size:7px !important; margin-top:2px !important; }
+}
 @media print {
   .doc-header { padding-bottom: 5px !important; margin-bottom: 6px !important; }
   .doc-header .logo-slot img { height: 54px !important; max-height: 54px !important; }
@@ -114,6 +136,14 @@ export function printComprovanteAgendamento(ag: ComprovanteAgendamentoInput) {
         <div style="font-size:11px;color:#64748b;">Código de conferência</div>
         <div class="receipt-code-value" style="font-family:monospace;font-size:18px;font-weight:700;letter-spacing:3px;">${esc(codigo)}</div>
         <div class="receipt-code-issued" style="font-size:10px;color:#94a3b8;margin-top:6px;">Emitido em ${esc(emitido)}</div>
+      </div>
+      <div class="receipt-portal">
+        <div class="receipt-portal-qr" aria-label="QR Code do Portal do Paciente">${portalQr}</div>
+        <div class="receipt-portal-info">
+          <div class="receipt-portal-title">Portal do Paciente</div>
+          <div class="receipt-portal-copy">Aponte a câmera do celular para consultar seus agendamentos e acompanhar sua posição na fila.</div>
+          <div class="receipt-portal-link">Ou acesse: ${esc(portalLink)}</div>
+        </div>
       </div>
     </div>`;
   return openPrintDocument("Comprovante de Agendamento", body, { Unidade: ag.unidadeNome || "" }, {

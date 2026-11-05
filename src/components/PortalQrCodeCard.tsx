@@ -9,20 +9,7 @@ import { Label } from '@/components/ui/label';
 import { QrCode, Copy, Printer, Download, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { openPrintDocument } from '@/lib/printLayout';
-
-const STORAGE_KEY = 'portal_qr_cartaz_v1';
-
-// Domínio oficial publicado (prioridade) e fallback no domínio Lovable.
-const PUBLISHED_ORIGIN = 'https://agendamento-saude-sms-oriximina.site';
-const LOVABLE_ORIGIN = 'https://agendamento-saude-oriximina.lovable.app';
-
-const defaultLink = () => {
-  const origin = typeof window !== 'undefined' && !window.location.hostname.includes('id-preview')
-    && !window.location.hostname.includes('localhost')
-    ? window.location.origin
-    : PUBLISHED_ORIGIN;
-  return `${origin}/portal`;
-};
+import { getDefaultPatientPortalLink, getPatientPortalLink, PORTAL_QR_STORAGE_KEY } from '@/lib/patientPortalLink';
 
 const DEFAULTS = {
   titulo: 'Acesse o Portal do Paciente pelo Celular',
@@ -34,25 +21,24 @@ const DEFAULTS = {
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const PortalQrCodeCard: React.FC = () => {
-  const [link, setLink] = useState(defaultLink());
+  const [link, setLink] = useState(getPatientPortalLink);
+  const [hydrated, setHydrated] = useState(false);
   const [form, setForm] = useState(DEFAULTS);
   const svgWrap = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-      if (saved) {
-        setForm({ ...DEFAULTS, ...saved.form });
-        // Migra link antigo (domínio Lovable) para o domínio oficial.
-        const oldLink = `${LOVABLE_ORIGIN}/portal`;
-        if (saved.link && saved.link !== oldLink) setLink(saved.link);
-      }
+      const saved = JSON.parse(localStorage.getItem(PORTAL_QR_STORAGE_KEY) || 'null');
+      if (saved) setForm({ ...DEFAULTS, ...saved.form });
+      setLink(getPatientPortalLink());
     } catch { /* ignore */ }
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ form, link }));
-  }, [form, link]);
+    if (!hydrated) return;
+    localStorage.setItem(PORTAL_QR_STORAGE_KEY, JSON.stringify({ form, link }));
+  }, [form, link, hydrated]);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -88,26 +74,30 @@ const PortalQrCodeCard: React.FC = () => {
     const passos = form.passos.split('\n').filter(Boolean).map(p => `<li>${esc(p.replace(/^\d+[.)]\s*/, ''))}</li>`).join('');
     const body = `
       <style>
-        .qr-cartaz{text-align:center;padding:4mm 6mm;}
-        .qr-cartaz h1{font-size:26pt;margin:6mm 0 4mm;color:#1f4f6d;line-height:1.15;}
-        .qr-cartaz .msg{font-size:14pt;margin:0 auto 8mm;max-width:160mm;line-height:1.4;}
-        .qr-cartaz .qr{display:inline-block;padding:5mm;border:2px solid #2A6F97;border-radius:6mm;}
-        .qr-cartaz .qr svg{width:85mm;height:85mm;display:block;}
-        .qr-cartaz .cam{font-size:13pt;font-weight:bold;margin:4mm 0 8mm;color:#2A6F97;}
-        .qr-cartaz ol{text-align:left;display:inline-block;font-size:14pt;line-height:1.7;margin:0 0 6mm;}
-        .qr-cartaz .url{font-family:monospace;font-size:11pt;margin:2mm 0 6mm;word-break:break-all;}
-        .qr-cartaz .rod{font-size:10.5pt;border-top:1px solid #ccc;padding-top:4mm;color:#444;}
+        .qr-cartaz{text-align:center;padding:0 4mm;}
+        .qr-cartaz h1{font-size:18pt;margin:2mm 0;color:#1f4f6d;line-height:1.15;}
+        .qr-cartaz .msg{font-size:10pt;margin:0 auto 3mm;max-width:160mm;line-height:1.25;}
+        .qr-cartaz .qr{display:inline-block;padding:2mm;border:1.5px solid #2A6F97;border-radius:3mm;}
+        .qr-cartaz .qr svg{width:54mm;height:54mm;display:block;}
+        .qr-cartaz .cam{font-size:10pt;font-weight:bold;margin:2mm 0 3mm;color:#2A6F97;}
+        .qr-cartaz .how{font-size:10pt;line-height:1.25;margin:0 0 1mm;}
+        .qr-cartaz ol{text-align:left;display:inline-block;font-size:10pt;line-height:1.3;margin:1mm 0 2mm;padding-left:6mm;}
+        .qr-cartaz .url{font-family:monospace;font-size:9pt;margin:1mm 0 3mm;word-break:break-all;}
+        .qr-cartaz .rod{font-size:9pt;border-top:1px solid #ccc;padding-top:2mm;color:#444;}
       </style>
       <div class="qr-cartaz">
         <h1>${esc(form.titulo)}</h1>
         <p class="msg">${esc(form.mensagem).replace(/\n/g, '<br/>')}</p>
         <div class="qr">${qr}</div>
         <div class="cam">Aponte a câmera do seu celular</div>
-        ${passos ? `<div><strong style="font-size:14pt">Como acessar:</strong><br/><ol>${passos}</ol></div>` : ''}
+        ${passos ? `<div><strong class="how">Como acessar:</strong><br/><ol>${passos}</ol></div>` : ''}
         <div class="url">Ou digite: ${esc(link)}</div>
         <div class="rod">${esc(form.rodape)}</div>
       </div>`;
-    await openPrintDocument('Portal do Paciente', body);
+    await openPrintDocument('Portal do Paciente', body, undefined, {
+      margens: { superior: 14, inferior: 20, esquerda: 16, direita: 16 },
+      tipografia: { fonte: 'Arial', tamanhoBase: 10, tamanhoTitulo: 12, espacamento: 1.1, alinhamento: 'center' },
+    });
   };
 
   return (
@@ -136,7 +126,7 @@ const PortalQrCodeCard: React.FC = () => {
               <Button onClick={imprimir}><Printer className="w-4 h-4 mr-2" />Imprimir cartaz A4</Button>
               <Button variant="outline" onClick={copiar}><Copy className="w-4 h-4 mr-2" />Copiar link</Button>
               <Button variant="outline" onClick={baixarPng}><Download className="w-4 h-4 mr-2" />Baixar QR Code</Button>
-              <Button variant="ghost" onClick={() => { setForm(DEFAULTS); setLink(defaultLink()); }}>
+              <Button variant="ghost" onClick={() => { setForm(DEFAULTS); setLink(getDefaultPatientPortalLink()); }}>
                 <RotateCcw className="w-4 h-4 mr-2" />Restaurar texto padrão
               </Button>
             </div>
