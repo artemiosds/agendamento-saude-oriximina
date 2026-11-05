@@ -2645,9 +2645,19 @@ const Agenda: React.FC = () => {
       const current = { is_pne: !!(quickPatient?.isPne ?? (quickPatient as any)?.is_pne), is_gestante: !!(quickPatient?.isGestante ?? (quickPatient as any)?.is_gestante), is_autista: !!(quickPatient?.isAutista ?? (quickPatient as any)?.is_autista) };
       const requested = { is_pne: current.is_pne || quickPriorityDraft.is_pne, is_gestante: current.is_gestante || quickPriorityDraft.is_gestante, is_autista: current.is_autista || quickPriorityDraft.is_autista };
       const changed = Object.keys(requested).some((key) => requested[key as keyof typeof requested] !== current[key as keyof typeof current]);
-      const savePriority = changed && quickPatient ? patientService.savePacienteCadastro(quickSelected.pacienteId, requested, "Check-in Expresso").then((row) => { applySavedPaciente(row); return row; }) : Promise.resolve(null);
-      const arrival = confirmCareArrival({ id: quickSelected.id, userId: user?.id || "", userName: user?.nome || "", unitId: quickSelected.unidadeId, expectedPatientId: quickSelected.pacienteId, arrivalTime: nowTimeBrazilStr().slice(0, 5) });
-      const [result] = await Promise.all([arrival, savePriority]);
+      const savePriority = changed && quickPatient
+        ? patientService.savePacienteCadastro(quickSelected.pacienteId, requested, "Check-in Expresso")
+            .then((row) => { applySavedPaciente(row); return row; })
+        : null;
+      const result = await confirmCareArrival({
+        id: quickSelected.id, userId: user?.id || "", userName: user?.nome || "", unitId: quickSelected.unidadeId,
+        expectedPatientId: quickSelected.pacienteId, arrivalTime: nowTimeBrazilStr().slice(0, 5),
+      });
+      // A gravação das prioridades foi iniciada em paralelo, mas nunca bloqueia a chegada.
+      if (savePriority) void savePriority.catch((error) => {
+        console.error("[Agenda] Chegada confirmada, mas não foi possível salvar a prioridade cadastral:", error);
+        toast.warning("Chegada confirmada. Não foi possível salvar a prioridade; confira o cadastro do paciente.");
+      });
       applyCareFlowAgendamentoUpdate(result.agendamento);
       const arrivalTime = String(result.fila?.hora_chegada || ""); if (arrivalTime) setArrivalMap((prev) => ({ ...prev, [quickSelected.id]: arrivalTime }));
       if (result.already_processed) toast.info("A chegada deste paciente já foi confirmada por outro terminal."); else toast.success("Chegada confirmada: " + patientName + " encaminhado para Triagem!" + (priorityLabels.length ? " Prioridade: " + priorityLabels.join(", ") + "." : ""));
