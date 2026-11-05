@@ -35,3 +35,40 @@ export function validateTriageVitals(form: TriageVitalInput) {
   }
   return { errors, valid: Object.keys(errors).length === 0, values: { peso, altura: altura == null ? null : Number(altura.toFixed(2)), temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, imc } };
 }
+
+export type VitalAlertLevel = 'attention' | 'urgent';
+export interface VitalAlert { field: 'pressaoArterial' | 'saturacaoOxigenio' | 'glicemia'; level: VitalAlertLevel; message: string }
+
+/**
+ * Screening prompts only (not diagnoses or Manchester decisions).
+ * Adult thresholds are intentionally conservative; age, pregnancy, baseline
+ * oxygenation, symptoms and measurement quality require professional review.
+ */
+export function getTriageVitalAlerts(input: Pick<TriageVitalInput, 'saturacaoOxigenio' | 'glicemia'> & { pressaoArterial: string }): VitalAlert[] {
+  const alerts: VitalAlert[] = [];
+  const pa = input.pressaoArterial.trim().match(/^(\d{2,3})\s*\/\s*(\d{2,3})$/);
+  if (pa) {
+    const systolic = Number(pa[1]);
+    const diastolic = Number(pa[2]);
+    if (systolic >= 180 || diastolic >= 110) {
+      alerts.push({ field: 'pressaoArterial', level: 'urgent', message: 'Pressão muito elevada: confira a medida e faça avaliação clínica imediata.' });
+    } else if (systolic < 90 || diastolic < 60) {
+      alerts.push({ field: 'pressaoArterial', level: 'urgent', message: 'Pressão baixa: confira a medida e avalie sintomas e condição clínica.' });
+    }
+  }
+  const spo2 = decimal(input.saturacaoOxigenio);
+  if (spo2 != null && Number.isFinite(spo2) && spo2 < 92) {
+    alerts.push({ field: 'saturacaoOxigenio', level: 'urgent', message: 'Saturação abaixo de 92%: confirme a leitura e avalie imediatamente o paciente.' });
+  } else if (spo2 != null && Number.isFinite(spo2) && spo2 < 95) {
+    alerts.push({ field: 'saturacaoOxigenio', level: 'attention', message: 'Saturação abaixo de 95%: confira a leitura e considere o contexto clínico e a saturação basal.' });
+  }
+  const glucose = decimal(input.glicemia);
+  if (glucose != null && Number.isFinite(glucose) && glucose < 54) {
+    alerts.push({ field: 'glicemia', level: 'urgent', message: 'Glicemia muito baixa: confirme a medida e siga o protocolo institucional de atendimento imediato.' });
+  } else if (glucose != null && Number.isFinite(glucose) && glucose < 70) {
+    alerts.push({ field: 'glicemia', level: 'urgent', message: 'Possível hipoglicemia: confirme a medida e avalie sintomas imediatamente.' });
+  } else if (glucose != null && Number.isFinite(glucose) && glucose > 250) {
+    alerts.push({ field: 'glicemia', level: 'attention', message: 'Glicemia elevada: avalie sintomas, contexto e necessidade de conduta conforme protocolo.' });
+  }
+  return alerts;
+}
