@@ -97,7 +97,7 @@ import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { patientService } from "@/services/patientService";
-import { getQuickAgePriority, getQuickCadastroPendencies, getQuickSelectionIndex, isQuickAppointmentInScope } from "@/lib/quickCheckin";
+import { getQuickAgePriority, getQuickCadastroPendencies, getQuickPriorityFlags, getQuickSelectionIndex, isQuickAppointmentInScope } from "@/lib/quickCheckin";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -2627,10 +2627,12 @@ const Agenda: React.FC = () => {
   const quickBirth = quickPatient?.dataNascimento || "";
   const quickAgePriority = getQuickAgePriority(quickPatient);
   const quickPendingFields = getQuickCadastroPendencies(quickPatient);
-  const quickStreet = quickPatient?.custom_data?.logradouro || quickPatient?.endereco || "Não informado";
-  const quickNeighborhood = quickPatient?.custom_data?.bairro || "Não informado";
-  const quickPhone = quickPatient?.telefone || "Não informado";
-  React.useEffect(() => { if (quickSelected) setQuickPriorityDraft({ is_pne: !!quickPatient?.isPne, is_gestante: !!quickPatient?.isGestante, is_autista: !!quickPatient?.isAutista }); }, [quickSelected?.id, quickSelected?.pacienteId, quickPatient]);
+  const quickExistingPriority = getQuickPriorityFlags(quickPatient);
+  const quickCustomData = quickPatient?.custom_data || {};
+  const quickStreet = quickCustomData.logradouro || (quickPatient as any)?.logradouro || quickPatient?.endereco || "Não informado";
+  const quickNeighborhood = quickCustomData.bairro || (quickPatient as any)?.bairro || "Não informado";
+  const quickPhone = quickPatient?.telefone || quickCustomData.telefone_principal || "Não informado";
+  React.useEffect(() => { if (quickSelected) setQuickPriorityDraft(quickExistingPriority); }, [quickSelected?.id, quickSelected?.pacienteId, quickPatient]);
   React.useEffect(() => { if (!quickCheckinOpen) return; const id = globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); return () => globalThis.clearTimeout(id); }, [quickCheckinOpen]);
   React.useEffect(() => { const f2 = (event: KeyboardEvent) => { if (event.key === "F2") { event.preventDefault(); setQuickCheckinOpen(true); globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); } }; globalThis.addEventListener("keydown", f2); return () => globalThis.removeEventListener("keydown", f2); }, []);
   const clearQuickSearch = () => { setQuickSearch(""); setQuickSelectedId(""); setQuickActiveIndex(-1); globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); };
@@ -2642,7 +2644,7 @@ const Agenda: React.FC = () => {
     const patientName = quickPatient?.nome || quickSelected.pacienteNome || "Paciente";
     const priorityLabels = [quickAgePriority.age !== null && quickAgePriority.age >= 60 ? (quickAgePriority.age >= 80 ? "Idoso 80+" : "Idoso 60+") : "", quickPriorityDraft.is_pne ? "Cadeirante/PNE" : "", quickPriorityDraft.is_gestante ? "Gestante" : "", quickPriorityDraft.is_autista ? "TEA/Autista" : ""].filter(Boolean);
     try {
-      const current = { is_pne: !!(quickPatient?.isPne ?? undefined), is_gestante: !!(quickPatient?.isGestante ?? undefined), is_autista: !!(quickPatient?.isAutista ?? undefined) };
+      const current = quickExistingPriority;
       const requested = { is_pne: current.is_pne || quickPriorityDraft.is_pne, is_gestante: current.is_gestante || quickPriorityDraft.is_gestante, is_autista: current.is_autista || quickPriorityDraft.is_autista };
       const changed = Object.keys(requested).some((key) => requested[key as keyof typeof requested] !== current[key as keyof typeof current]);
       const savePriority = changed && quickPatient
@@ -2759,9 +2761,9 @@ const Agenda: React.FC = () => {
                   <p><span className="text-muted-foreground">Atendimento:</span> {quickSelected.tipo || "Consulta"}</p>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2" aria-label="Prioridades e mobilidade">
-                  <Button type="button" size="sm" variant={quickPriorityDraft.is_pne ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_pne} disabled={!quickPatient || !!quickPatient.isPne} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_pne: !p.is_pne }))}>♿ Cadeirante / PNE</Button>
-                  <Button type="button" size="sm" variant={quickPriorityDraft.is_gestante ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_gestante} disabled={!quickPatient || !!quickPatient.isGestante} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_gestante: !p.is_gestante }))}>🤰 Gestante</Button>
-                  <Button type="button" size="sm" variant={quickPriorityDraft.is_autista ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_autista} disabled={!quickPatient || !!quickPatient.isAutista} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_autista: !p.is_autista }))}>🧩 TEA / Autista</Button>
+                  <Button type="button" size="sm" variant={quickPriorityDraft.is_pne ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_pne} disabled={!quickPatient || quickExistingPriority.is_pne} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_pne: !p.is_pne }))}>♿ Cadeirante / PNE</Button>
+                  <Button type="button" size="sm" variant={quickPriorityDraft.is_gestante ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_gestante} disabled={!quickPatient || quickExistingPriority.is_gestante} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_gestante: !p.is_gestante }))}>🤰 Gestante</Button>
+                  <Button type="button" size="sm" variant={quickPriorityDraft.is_autista ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_autista} disabled={!quickPatient || quickExistingPriority.is_autista} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_autista: !p.is_autista }))}>🧩 TEA / Autista</Button>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" onClick={() => void handleQuickArrival()} disabled={quickConfirming} className="bg-emerald-600 text-white hover:bg-emerald-700">
