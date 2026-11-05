@@ -2656,16 +2656,20 @@ const Agenda: React.FC = () => {
       const changed = Object.keys(requested).some((key) => requested[key as keyof typeof requested] && !persisted[key as keyof typeof persisted]);
       const savePriority = changed && quickPatient
         ? patientService.savePacienteCadastro(quickSelected.pacienteId, requested, "Check-in Expresso")
-            .then((row) => { applySavedPaciente(row); return row; })
+            .then((row) => { applySavedPaciente(row); return true; })
+            .catch((error) => {
+              console.error("[Agenda] Não foi possível salvar a prioridade cadastral:", error);
+              return false;
+            })
         : null;
       const result = await confirmCareArrival({
         id: quickSelected.id, userId: user?.id || "", userName: user?.nome || "", unitId: quickSelected.unidadeId,
         expectedPatientId: quickSelected.pacienteId, arrivalTime: nowTimeBrazilStr().slice(0, 5),
       });
-      // A gravação das prioridades foi iniciada em paralelo, mas nunca bloqueia a chegada.
-      if (savePriority) void savePriority.catch((error) => {
-        console.error("[Agenda] Chegada confirmada, mas não foi possível salvar a prioridade cadastral:", error);
-        toast.warning("Chegada confirmada. Não foi possível salvar a prioridade; confira o cadastro do paciente.");
+      // A gravação das prioridades é concorrente, com rejeição tratada desde o início,
+      // e nunca bloqueia a resposta da confirmação atômica de chegada.
+      if (savePriority) void savePriority.then((saved) => {
+        if (!saved) toast.warning("Chegada confirmada. Não foi possível salvar a prioridade; confira o cadastro do paciente.");
       });
       applyCareFlowAgendamentoUpdate(result.agendamento);
       const arrivalTime = String(result.fila?.hora_chegada || ""); if (arrivalTime) setArrivalMap((prev) => ({ ...prev, [quickSelected.id]: arrivalTime }));
