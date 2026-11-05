@@ -2618,7 +2618,7 @@ const Agenda: React.FC = () => {
       toast.error("Não foi possível carregar a agenda de hoje. Tente novamente.");
     });
   }, [quickCheckinOpen, quickToday, loadAgendaRange]);
-  const normalizeQuick = (value: unknown) => String(value || "").toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
+  const normalizeQuick = (value: unknown) => String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const quickAppointments = React.useMemo(() => agendamentos.filter((ag) => {
     if (ag.data !== quickToday || !["agendado", "confirmado"].includes(String(ag.status || "").toLowerCase())) return false;
     if (user?.usuario !== "admin.sms" && user?.unidadeId && ag.unidadeId !== user.unidadeId) return false;
@@ -2629,12 +2629,12 @@ const Agenda: React.FC = () => {
   const quickMatches = React.useMemo(() => {
     const term = normalizeQuick(quickSearch.trim());
     if (term.length < 2) return [];
-    const digits = term.replace(/\\D/g, "");
+    const digits = term.replace(/\D/g, "");
     return quickAppointments.filter((ag) => {
       const patient = pacienteById.get(ag.pacienteId);
       const nameMatch = normalizeQuick(patient?.nome || ag.pacienteNome).includes(term);
-      const cpf = String(patient?.cpf || "").replace(/\\D/g, "");
-      const cns = String(patient?.cns || "").replace(/\\D/g, "");
+      const cpf = String(patient?.cpf || "").replace(/\D/g, "");
+      const cns = String(patient?.cns || "").replace(/\D/g, "");
       const documentMatch = digits.length >= 3 && (cpf.includes(digits) || cns.includes(digits));
       return nameMatch || documentMatch;
     }).sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
