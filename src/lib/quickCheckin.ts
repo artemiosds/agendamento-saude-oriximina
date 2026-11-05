@@ -38,12 +38,22 @@ export function getQuickCadastroPendencies(patient: QuickCheckinPatient | null |
   ].filter(Boolean);
 }
 
+export function getQuickPriorityFlags(patient: QuickCheckinPatient | null | undefined) {
+  const custom = patient?.custom_data || patient?.customData || {};
+  return {
+    is_pne: !!(patient?.isPne ?? patient?.is_pne ?? custom.is_pne ?? custom.isPne),
+    is_gestante: !!(patient?.isGestante ?? patient?.is_gestante ?? custom.is_gestante ?? custom.isGestante),
+    is_autista: !!(patient?.isAutista ?? patient?.is_autista ?? custom.is_autista ?? custom.isAutista),
+  };
+}
+
 export function getQuickAgePriority(patient: QuickCheckinPatient | null | undefined, today = new Date()) {
+  const priorities = getQuickPriorityFlags(patient);
   return legalPriorityKey({
     dataNascimento: patient?.dataNascimento || patient?.data_nascimento || "",
-    isPne: !!(patient?.isPne ?? patient?.is_pne),
-    isGestante: !!(patient?.isGestante ?? patient?.is_gestante),
-    isAutista: !!(patient?.isAutista ?? patient?.is_autista),
+    isPne: priorities.is_pne,
+    isGestante: priorities.is_gestante,
+    isAutista: priorities.is_autista,
   }, false, today);
 }
 
