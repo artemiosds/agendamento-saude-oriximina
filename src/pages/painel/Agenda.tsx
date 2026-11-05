@@ -64,6 +64,7 @@ import {
   Pencil,
   ChevronDown,
   Printer,
+  Zap,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -93,6 +94,8 @@ import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/componen
 import { openPrintDocument } from "@/lib/printLayout";
 import { printComprovanteAgendamento } from "@/lib/printComprovanteAgendamento";
 import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/queries/queryKeys";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -2599,9 +2602,198 @@ const Agenda: React.FC = () => {
   const canAgendaDelete = can("agenda", "can_delete");
 
 
+  // Check-in expresso: busca somente os agendamentos de hoje e respeita o escopo da unidade.
+  const queryClient = useQueryClient();
+  const [quickCheckinOpen, setQuickCheckinOpen] = useState(false);
+  const [quickSearch, setQuickSearch] = useState("");
+  const [quickSelectedId, setQuickSelectedId] = useState("");
+  const [quickConfirming, setQuickConfirming] = useState(false);
+  const quickConfirmingRef = React.useRef(false);
+  const quickSearchRef = React.useRef<HTMLInputElement>(null);
+  const quickToday = todayLocalStr();
+  const normalizeQuick = (value: unknown) => String(value || "").toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
+  const quickAppointments = React.useMemo(() => agendamentos.filter((ag) => {
+    if (ag.data !== quickToday || !["agendado", "confirmado"].includes(String(ag.status || "").toLowerCase())) return false;
+    if (user?.usuario !== "admin.sms" && user?.unidadeId && ag.unidadeId !== user.unidadeId) return false;
+    if (user?.usuario !== "admin.sms" && unidadesVisiveis.length && !unidadesVisiveis.some((u) => u.id === ag.unidadeId)) return false;
+    if (isProfissional && ag.profissionalId !== user?.id) return false;
+    return true;
+  }), [agendamentos, quickToday, user?.usuario, user?.unidadeId, user?.id, isProfissional, unidadesVisiveis]);
+  const quickMatches = React.useMemo(() => {
+    const term = normalizeQuick(quickSearch.trim());
+    if (term.length < 2) return [];
+    const digits = term.replace(/\\D/g, "");
+    return quickAppointments.filter((ag) => {
+      const patient = pacienteById.get(ag.pacienteId);
+      const nameMatch = normalizeQuick(patient?.nome || ag.pacienteNome).includes(term);
+      const cpf = String(patient?.cpf || "").replace(/\\D/g, "");
+      const cns = String(patient?.cns || "").replace(/\\D/g, "");
+      const documentMatch = digits.length >= 3 && (cpf.includes(digits) || cns.includes(digits));
+      return nameMatch || documentMatch;
+    }).sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+  }, [quickSearch, quickAppointments, pacienteById]);
+  const quickSelected = quickMatches.find((ag) => ag.id === quickSelectedId) || (quickMatches.length === 1 ? quickMatches[0] : null);
+  const quickPatient = quickSelected ? pacienteById.get(quickSelected.pacienteId) : null;
+  const quickProfessional = quickSelected ? funcionarios.find((f) => f.id === quickSelected.profissionalId) : null;
+  const quickBirth = quickPatient?.dataNascimento || (quickPatient as any)?.data_nascimento || "";
+  const quickRace = quickPatient?.custom_data?.raca_cor || (quickPatient as any)?.racaCor || (quickPatient as any)?.raca_cor;
+  const quickNeighborhood = (quickPatient as any)?.bairro || quickPatient?.custom_data?.bairro;
+  const quickPhone = quickPatient?.telefone || (quickPatient as any)?.telefone_principal;
+  const quickPendingFields = [
+    !quickRace ? "Raça/Cor não informada" : "",
+    !quickNeighborhood ? "Bairro não informado" : "",
+    !quickPhone ? "Sem telefone" : "",
+    !quickPatient?.cns ? "CNS não informado" : "",
+  ].filter(Boolean);
+  React.useEffect(() => {
+    if (quickCheckinOpen) {
+      const id = window.setTimeout(() => quickSearchRef.current?.focus(), 50);
+      return () => window.clearTimeout(id);
+    }
+  }, [quickCheckinOpen]);
+  const handleQuickArrival = async () => {
+    if (!quickSelected || quickConfirmingRef.current) return;
+    if (quickSelected.data !== todayLocalStr() || !["agendado", "confirmado"].includes(String(quickSelected.status || "").toLowerCase())) {
+      toast.error("Este agendamento não está mais pendente de chegada. Atualize a busca.");
+      return;
+    }
+    if (user?.usuario !== "admin.sms" && user?.unidadeId && quickSelected.unidadeId !== user.unidadeId) {
+      toast.error("Agendamento fora da unidade autorizada.");
+      return;
+    }
+    quickConfirmingRef.current = true;
+    setQuickConfirming(true);
+    try {
+      const result = await confirmCareArrival({
+        id: quickSelected.id,
+        userId: user?.id || "",
+        userName: user?.nome || "",
+        unitId: quickSelected.unidadeId,
+        expectedPatientId: quickSelected.pacienteId,
+        arrivalTime: nowTimeBrazilStr().slice(0, 5),
+      });
+      applyCareFlowAgendamentoUpdate(result.agendamento);
+      const arrival = String(result.fila?.hora_chegada || "");
+      if (arrival) setArrivalMap((prev) => ({ ...prev, [quickSelected.id]: arrival }));
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.fila.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.atendimentos.all }),
+        refreshAgendamentos(),
+        refreshFila(),
+      ]);
+      if (result.already_processed) {
+        toast.info("A chegada deste paciente já foi confirmada por outro terminal.");
+      } else {
+        toast.success(`Chegada confirmada: ${quickSelected.pacienteNome} encaminhado para Triagem!`);
+      }
+      setQuickSearch("");
+      setQuickSelectedId("");
+      window.setTimeout(() => quickSearchRef.current?.focus(), 0);
+    } catch (error: any) {
+      console.error("[Agenda] Falha no check-in expresso:", error);
+      toast.error(error?.message || "Não foi possível confirmar a chegada. Tente novamente.");
+    } finally {
+      quickConfirmingRef.current = false;
+      setQuickConfirming(false);
+    }
+  };
+  const openQuickPatientConference = () => {
+    if (!quickSelected) return;
+    const prof = quickProfessional;
+    const unit = unidades.find((u) => u.id === quickSelected.unidadeId);
+    setConferenciaModal({
+      open: true,
+      pacienteId: quickSelected.pacienteId,
+      modo: "chegada",
+      agendamentoInfo: {
+        data: quickSelected.data,
+        hora: quickSelected.hora,
+        tipo: quickSelected.tipo,
+        profissionalNome: quickSelected.profissionalNome || prof?.nome || "",
+        profissionalEspecialidade: (prof as any)?.especialidade || prof?.profissao || "",
+        profissionalCbo: (prof as any)?.custom_data?.cbo || "",
+        unidadeNome: unit?.nomeExibicao || unit?.nome || "",
+      },
+      onConfirm: () => {
+        setPacientesConferidos((prev) => new Set(prev).add(quickSelected.pacienteId));
+      },
+    });
+  };
+
+
   return (
     <div className="space-y-4 animate-fade-in">
       <TriageReconciliationPanel />
+
+      <section className="rounded-2xl border border-primary/20 bg-card/80 p-3 shadow-sm backdrop-blur-xl sm:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Zap className="h-5 w-5" /></span>
+            <div>
+              <p className="font-semibold text-foreground">Check-in Expresso na Recepção</p>
+              <p className="text-xs text-muted-foreground">Localize o paciente de hoje por nome, CPF ou CNS e confirme a chegada.</p>
+            </div>
+          </div>
+          <Button type="button" variant={quickCheckinOpen ? "secondary" : "outline"} className="border-primary/30" onClick={() => setQuickCheckinOpen((open) => !open)}>
+            <UserCheck className="mr-2 h-4 w-4" /> {quickCheckinOpen ? "Fechar Check-in" : "⚡ Check-in Expresso"}
+          </Button>
+        </div>
+        {quickCheckinOpen && (
+          <div className="mt-3 space-y-3">
+            <Input
+              ref={quickSearchRef}
+              autoFocus
+              value={quickSearch}
+              onChange={(event) => { setQuickSearch(event.target.value); setQuickSelectedId(""); }}
+              onKeyDown={(event) => { if (event.key === "Enter" && quickSelected && !quickConfirming) { event.preventDefault(); void handleQuickArrival(); } }}
+              placeholder="Digite CPF, CNS ou Nome do Paciente agendado para hoje..."
+              className="h-12 text-base"
+              aria-label="Buscar paciente agendado para hoje"
+            />
+            {quickSearch.trim().length >= 2 && !quickSelected && (
+              <div className="max-h-56 overflow-y-auto rounded-xl border bg-background">
+                {quickMatches.length ? quickMatches.slice(0, 10).map((ag) => (
+                  <button key={ag.id} type="button" onClick={() => setQuickSelectedId(ag.id)} className="flex w-full items-center justify-between gap-3 border-b px-3 py-2.5 text-left last:border-0 hover:bg-muted/60">
+                    <span className="min-w-0"><span className="block truncate text-sm font-medium">{resolvePaciente(ag.pacienteId, ag.pacienteNome)}</span><span className="block text-xs text-muted-foreground">{ag.hora} · {ag.profissionalNome}</span></span>
+                    <span className="shrink-0 text-xs text-primary">Selecionar</span>
+                  </button>
+                )) : <p className="p-3 text-sm text-muted-foreground">Nenhum agendamento pendente encontrado para hoje nesta unidade.</p>}
+                {quickMatches.length > 10 && <p className="px-3 py-2 text-xs text-muted-foreground">Exibindo os 10 primeiros resultados. Refine a busca.</p>}
+              </div>
+            )}
+            {quickSelected && (
+              <div className="rounded-xl border bg-background p-3 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-base font-bold text-foreground">{resolvePaciente(quickSelected.pacienteId, quickSelected.pacienteNome)}</p>
+                    <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || (quickPatient as any)?.nome_mae || "Não informado"}</p>
+                    <p className="text-sm text-muted-foreground">Nascimento: {quickBirth ? `${String(quickBirth).split("-").reverse().join("/")} · ${calcularIdade(quickBirth)} anos` : "Não informado"}</p>
+                  </div>
+                  <Badge variant="outline" className={quickPendingFields.length ? "border-amber-500/50 bg-amber-500/10 text-amber-700" : "border-emerald-500/50 bg-emerald-500/10 text-emerald-700"}>
+                    {quickPendingFields.length ? `⚠ Pendência SUS: ${quickPendingFields.join(" | ")}` : "✓ Cadastro Completo"}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-1 text-sm sm:grid-cols-2">
+                  <p><span className="text-muted-foreground">Horário:</span> <strong>{quickSelected.hora}</strong></p>
+                  <p><span className="text-muted-foreground">Profissional:</span> <strong>{quickSelected.profissionalNome || quickProfessional?.nome || "Não informado"}</strong></p>
+                  <p><span className="text-muted-foreground">Especialidade:</span> {quickProfessional?.profissao || (quickProfessional as any)?.especialidade || quickProfessional?.cargo || "Não informada"}</p>
+                  <p><span className="text-muted-foreground">Atendimento:</span> {quickSelected.tipo || "Consulta"}</p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" onClick={() => void handleQuickArrival()} disabled={quickConfirming} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                    <Zap className="mr-2 h-4 w-4" /> {quickConfirming ? "Confirmando..." : "Confirmar Chegada Agora (Enter)"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={openQuickPatientConference}>
+                    <FileText className="mr-2 h-4 w-4" /> Conferência Completa / Atualizar Dados
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Agenda</h1>
