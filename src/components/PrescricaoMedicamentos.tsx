@@ -65,6 +65,7 @@ interface PrescricaoMedicamentosProps {
   profissionalId: string;
   pacienteId: string;
   unidadeId: string;
+  prontuarioAtualId?: string | null;
   value: MedicamentoPrescrito[];
   onChange: (meds: MedicamentoPrescrito[]) => void;
   pacienteNome?: string;
@@ -90,7 +91,7 @@ const CLASSES = [
 const VIAS = ["oral", "sublingual", "intramuscular", "intravenosa", "tópica", "retal", "inalatória", "nasal", "ocular"];
 
 const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
-  profissionalId, pacienteId, unidadeId, value, onChange,
+  profissionalId, pacienteId, unidadeId, prontuarioAtualId, value, onChange,
   pacienteNome, pacienteCpf, pacienteCns, dataAtendimento,
   profissionalNome, profissionalConselho, profissionalTipoConselho, profissionalUfConselho,
 }) => {
@@ -185,7 +186,7 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
     }
     setLoadingLastPrescription(true);
     try {
-      const { data, error } = await (supabase as any)
+      let historyQuery = (supabase as any)
         .from("prontuarios")
         .select("prescricao,data_atendimento,profissional_nome")
         .eq("paciente_id", pacienteId)
@@ -193,8 +194,9 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
         .not("prescricao", "is", null)
         .neq("prescricao", "")
         .order("data_atendimento", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+      if (prontuarioAtualId) historyQuery = historyQuery.neq("id", prontuarioAtualId);
+      const { data, error } = await historyQuery.maybeSingle();
       if (error) throw error;
       const medications = parsePreviousPrescription(data?.prescricao);
       if (!data || medications.length === 0) {
