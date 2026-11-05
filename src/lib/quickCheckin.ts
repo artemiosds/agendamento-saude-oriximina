@@ -4,8 +4,8 @@ import { legalPriorityKey, patientAge } from "@/lib/queuePriority";
 export function getQuickCadastroPendencies(patient: any): string[] {
   if (!patient) return ["Cadastro do paciente não carregado"];
   const custom = patient.custom_data || patient.customData || {};
-  const cpf = String(patient.cpf || "").replace(/\\D/g, "");
-  const cns = String(patient.cns || "").replace(/\\D/g, "");
+  const cpf = String(patient.cpf || "").replace(/\D/g, "");
+  const cns = String(patient.cns || "").replace(/\D/g, "");
   const birth = patient.dataNascimento || patient.data_nascimento || "";
   const sex = String(patient.sexo || custom.sexo || "").trim().toLowerCase();
   const normalizedSex = sex === "m" || sex === "masculino" ? "M" : sex === "f" || sex === "feminino" ? "F" : "";
@@ -24,7 +24,7 @@ export function getQuickCadastroPendencies(patient: any): string[] {
     String(race || "").trim() ? "" : "Raça/Cor",
     String(neighborhood || "").trim() ? "" : "Bairro",
     String(street || "").trim() ? "" : "Logradouro/Endereço",
-    String(phone || "").replace(/\\D/g, "").length >= 10 ? "" : "Telefone",
+    String(phone || "").replace(/\D/g, "").length >= 10 ? "" : "Telefone",
   ].filter(Boolean);
 }
 
