@@ -34,6 +34,7 @@ interface SoapFieldsAdaptiveProps {
   customOptionsWithId?: (campo: string) => CustomOptionWithId[];
   onAddCustomOption?: (campo: string, opcao: string) => void;
   onDeleteCustomOption?: (id: string) => void;
+  headerAction?: React.ReactNode;
 }
 
 const FIELD_LABELS: { key: keyof SoapValues; soapKey: string; label: string; placeholder: string }[] = [
@@ -57,6 +58,7 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
   customOptionsWithId,
   onAddCustomOption,
   onDeleteCustomOption,
+  headerAction,
 }) => {
   const options = React.useMemo(() => getSoapOptions(profissao), [profissao]);
   const isDropdownMode = React.useMemo(() => hasDropdownSoap(profissao), [profissao]);
@@ -153,7 +155,8 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
           Evolução SOAP
           {!soapEnabled && <Badge variant="secondary" className="text-xs">Desativado</Badge>}
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {headerAction}
           <span className="text-xs text-muted-foreground">Registrar SOAP</span>
           <Switch checked={soapEnabled} onCheckedChange={onToggleSoap} />
         </div>
