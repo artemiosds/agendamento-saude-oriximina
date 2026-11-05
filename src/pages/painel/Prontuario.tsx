@@ -880,6 +880,13 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
   const [soapErrors, setSoapErrors] = useState(false);
   const [soapEnabled, setSoapEnabled] = useState(true);
+  const [soapHistoryLoading, setSoapHistoryLoading] = useState(false);
+  const [soapHistoryConfirmOpen, setSoapHistoryConfirmOpen] = useState(false);
+  const [soapHistoryCandidate, setSoapHistoryCandidate] = useState<{
+    values: { soap_subjetivo: string; soap_objetivo: string; soap_avaliacao: string; soap_plano: string };
+    sourceLabel: string;
+    date: string;
+  } | null>(null);
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
   const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const soapRef = useRef<HTMLDivElement>(null);
@@ -3728,6 +3735,138 @@ const ProntuarioPage: React.FC = () => {
   const handleSoapChange = useCallback((field: keyof typeof soapValues, value: string) => {
     setForm(p => ((p as any)[field] === value ? p : { ...p, [field]: value }));
   }, []);
+  const normalizePreviousSoap = (source: any) => ({
+    soap_subjetivo: String(source?.soap_subjetivo ?? source?.subjetivo ?? ""),
+    soap_objetivo: String(source?.soap_objetivo ?? source?.objetivo ?? ""),
+    soap_avaliacao: String(source?.soap_avaliacao ?? source?.avaliacao ?? ""),
+    soap_plano: String(source?.soap_plano ?? source?.plano ?? ""),
+  });
+  const hasSoapContent = (values: { soap_subjetivo: string; soap_objetivo: string; soap_avaliacao: string; soap_plano: string }) =>
+    Object.values(values).some((value) => String(value || "").trim().length > 0);
+  const parseSessionSoap = (raw: unknown) => {
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (!parsed || typeof parsed !== "object") return null;
+      const values = normalizePreviousSoap(parsed);
+      return hasSoapContent(values) ? values : null;
+    } catch {
+      return null;
+    }
+  };
+  const applyPreviousSoap = (values: { soap_subjetivo: string; soap_objetivo: string; soap_avaliacao: string; soap_plano: string }) => {
+    const nextForm = { ...formRef.current, ...values };
+    formRef.current = nextForm;
+    setForm(nextForm);
+    setSoapEnabled(true);
+    setSoapErrors(false);
+  };
+
+  const handleLoadPreviousSoap = async () => {
+    const patientId = formRef.current.paciente_id;
+    const unitId = user?.unidadeId || "";
+    const professionalId = formRef.current.profissional_id || user?.id || "";
+    if (!patientId || !unitId || !professionalId) {
+      toast.error("Selecione um paciente e confirme a unidade e o profissional antes de recuperar a evolução.");
+      return;
+    }
+    setSoapHistoryLoading(true);
+    try {
+      let candidate: { values: { soap_subjetivo: string; soap_objetivo: string; soap_avaliacao: string; soap_plano: string }; sourceLabel: string; date: string } | null = null;
+
+      if (sessaoCycle?.id && sessaoCycle.patient_id === patientId) {
+        let sessionQuery = (supabase as any)
+          .from("treatment_sessions")
+          .select("id,appointment_id,clinical_notes,scheduled_date,session_number,professional_id")
+          .eq("cycle_id", sessaoCycle.id)
+          .eq("status", "realizada")
+          .order("session_number", { ascending: false })
+          .limit(1);
+        const currentSession = sessaoCycleSessions.find((session) =>
+          (formRef.current.agendamento_id && session.appointment_id === formRef.current.agendamento_id) ||
+          (session.scheduled_date && session.scheduled_date === formRef.current.data_atendimento && session.status !== "realizada")
+        );
+        if (currentSession?.session_number) {
+          sessionQuery = sessionQuery.lt("session_number", currentSession.session_number);
+        } else if (formRef.current.agendamento_id) {
+          sessionQuery = sessionQuery.neq("appointment_id", formRef.current.agendamento_id);
+        }
+        const { data: previousSession, error: sessionError } = await sessionQuery.maybeSingle();
+        if (sessionError) throw sessionError;
+        const sessionSoap = previousSession ? parseSessionSoap(previousSession.clinical_notes) : null;
+        if (sessionSoap) {
+          candidate = { values: sessionSoap, sourceLabel: `sessão ${previousSession.session_number} do ciclo`, date: String(previousSession.scheduled_date || "") };
+        } else if (previousSession?.appointment_id) {
+          const { data: linkedProntuario, error: linkedError } = await (supabase as any)
+            .from("prontuarios")
+            .select("soap_subjetivo,soap_objetivo,soap_avaliacao,soap_plano,data_atendimento")
+            .eq("agendamento_id", previousSession.appointment_id)
+            .eq("paciente_id", patientId)
+            .eq("unidade_id", unitId)
+            .limit(1)
+            .maybeSingle();
+          if (linkedError) throw linkedError;
+          if (linkedProntuario) {
+            const values = normalizePreviousSoap(linkedProntuario);
+            if (hasSoapContent(values)) candidate = { values, sourceLabel: `sessão ${previousSession.session_number} do ciclo`, date: String(linkedProntuario.data_atendimento || previousSession.scheduled_date || "") };
+          }
+        }
+      } else {
+        const { data: previousAttendance, error: attendanceError } = await (supabase as any)
+          .from("atendimentos")
+          .select("agendamento_id,data")
+          .eq("paciente_id", patientId)
+          .eq("profissional_id", professionalId)
+          .eq("unidade_id", unitId)
+          .eq("status", "finalizado")
+          .order("data", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (attendanceError) throw attendanceError;
+        if (previousAttendance?.agendamento_id) {
+          const { data: previousProntuario, error: prontuarioError } = await (supabase as any)
+            .from("prontuarios")
+            .select("soap_subjetivo,soap_objetivo,soap_avaliacao,soap_plano,data_atendimento")
+            .eq("agendamento_id", previousAttendance.agendamento_id)
+            .eq("paciente_id", patientId)
+            .eq("unidade_id", unitId)
+            .eq("profissional_id", professionalId)
+            .limit(1)
+            .maybeSingle();
+          if (prontuarioError) throw prontuarioError;
+          if (previousProntuario) {
+            const values = normalizePreviousSoap(previousProntuario);
+            if (hasSoapContent(values)) candidate = { values, sourceLabel: "atendimento ambulatorial anterior", date: String(previousProntuario.data_atendimento || previousAttendance.data || "") };
+          }
+        }
+      }
+
+      if (!candidate || !hasSoapContent(candidate.values)) {
+        toast.info("Nenhuma evolução SOAP anterior concluída foi encontrada para este paciente neste contexto.");
+        return;
+      }
+      if (formRef.current.paciente_id !== patientId) return;
+      setSoapHistoryCandidate(candidate);
+      if (hasSoapContent(normalizePreviousSoap(formRef.current))) {
+        setSoapHistoryConfirmOpen(true);
+      } else {
+        applyPreviousSoap(candidate.values);
+        toast.success("Evolução anterior recuperada com sucesso. Faça os ajustes do atendimento de hoje.");
+      }
+    } catch (error) {
+      console.error("[Prontuario] Falha ao recuperar evolução anterior:", error);
+      toast.error("Não foi possível recuperar a evolução anterior. Tente novamente.");
+    } finally {
+      setSoapHistoryLoading(false);
+    }
+  };
+
+  const confirmApplyPreviousSoap = () => {
+    if (!soapHistoryCandidate) return;
+    applyPreviousSoap(soapHistoryCandidate.values);
+    setSoapHistoryConfirmOpen(false);
+    toast.success("Evolução anterior recuperada com sucesso. Faça os ajustes do atendimento de hoje.");
+  };
+
   const handleClearSoapErrors = useCallback(() => setSoapErrors(false), []);
   const handleEspecialidadeChange = useCallback((key: string, val: string) => {
     setEspecialidadeFields(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
@@ -4273,6 +4412,12 @@ const ProntuarioPage: React.FC = () => {
                 onToggleSoap={setSoapEnabled}
                 highlightSOAP={sessaoHighlightSOAP}
                 soapRef={soapRef as React.RefObject<HTMLDivElement>}
+                headerAction={
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => { void handleLoadPreviousSoap(); }} disabled={soapHistoryLoading || !form.paciente_id}>
+                    {soapHistoryLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <History className="w-3.5 h-3.5 mr-1" />}
+                    Copiar da Sessão Anterior
+                  </Button>
+                }
                 customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
                 customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
                 onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, effectiveProfissao || '') : undefined}
@@ -5300,6 +5445,8 @@ const ProntuarioPage: React.FC = () => {
             {isProfBlocoVisible('prescricao') && (
             <PrescricaoMedicamentos
               profissionalId={user?.id || ""}
+              pacienteId={form.paciente_id}
+              unidadeId={user?.unidadeId || ""}
               value={listaPrescricao}
               onChange={setListaPrescricao}
               pacienteNome={form.paciente_nome}
@@ -5595,6 +5742,22 @@ const ProntuarioPage: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={soapHistoryConfirmOpen} onOpenChange={setSoapHistoryConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Substituir evolução SOAP atual?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Já existem anotações nesta sessão. Deseja substituir os quatro campos SOAP pela evolução de {soapHistoryCandidate?.sourceLabel || "sessão anterior"}?
+              O conteúdo atual só será substituído após sua confirmação.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter evolução atual</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmApplyPreviousSoap}>Substituir pela evolução anterior</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* PTS Dialog */}
       <Dialog open={ptsOpen} onOpenChange={setPtsOpen}>
