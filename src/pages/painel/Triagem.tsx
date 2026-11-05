@@ -1285,7 +1285,7 @@ const Triagem: React.FC = () => {
                 onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
               />
             )}
-            <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex items-center justify-between gap-2 border-t bg-background px-6 py-3">
+            <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex flex-wrap items-center justify-between gap-2 border-t bg-background px-6 py-3">
               <Button variant="outline" onClick={salvarRascunho} disabled={saving || !vitalValidation.valid}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4" /> Salvar Rascunho
               </Button>
@@ -1294,7 +1294,7 @@ const Triagem: React.FC = () => {
               </Button>
               <Button onClick={() => confirmarTriagem(false, true)} disabled={saving || !vitalValidation.valid}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FastForward className="mr-2 h-4 w-4" />}
-                Concluir e chamar próximo
+                Concluir e preparar próximo
               </Button>
             </div>
           </div>
