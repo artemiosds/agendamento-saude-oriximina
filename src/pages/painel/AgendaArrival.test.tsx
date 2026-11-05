@@ -175,8 +175,11 @@ describe('Check-in Expresso: recepção e teclado', () => {
     fireEvent.change(input, { target: { value: 'PACIENTE' } });
     await screen.findByText('PACIENTE TESTE DOIS');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(await screen.findByRole('button', { name: /Confirmar Chegada Agora/ })).toBeInTheDocument();
+    expect(screen.getByText('PACIENTE TESTE')).toBeInTheDocument();
     expect(f.rpc).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(f.rpc).toHaveBeenCalledTimes(1));
