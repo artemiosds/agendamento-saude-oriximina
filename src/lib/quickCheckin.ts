@@ -38,7 +38,7 @@ export function getQuickCadastroPendencies(patient: QuickCheckinPatient | null |
   ].filter(Boolean);
 }
 
-export function getQuickAgePriority(patient: any, today = new Date()) {
+export function getQuickAgePriority(patient: QuickCheckinPatient | null | undefined, today = new Date()) {
   return legalPriorityKey({
     dataNascimento: patient?.dataNascimento || patient?.data_nascimento || "",
     isPne: !!(patient?.isPne ?? patient?.is_pne),
