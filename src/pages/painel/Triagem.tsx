@@ -440,6 +440,8 @@ const Triagem: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ type: 'remove' | 'release'; item: Agendamento } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [loadingPreviousTriage, setLoadingPreviousTriage] = useState(false);
+  const [previousTriageDate, setPreviousTriageDate] = useState<string | null>(null);
 
   const handleRemoverDaTriagem = async (item: Agendamento) => {
     setActionLoading(true);
@@ -763,6 +765,57 @@ const Triagem: React.FC = () => {
     [pacientes, openingTriagemId, refreshFila, applyCareFlowAgendamentoUpdate, user?.id],
   );
 
+
+
+  const puxarDadosAnteriores = useCallback(async () => {
+    if (!selectedItem || loadingPreviousTriage) return;
+    setLoadingPreviousTriage(true);
+    try {
+      // Busca somente quando solicitado, limitado ao mesmo paciente e unidade.
+      const { data: agendamentosAnteriores, error: agError } = await supabase
+        .from('agendamentos')
+        .select('id')
+        .eq('paciente_id', selectedItem.pacienteId)
+        .eq('unidade_id', selectedItem.unidadeId)
+        .limit(300);
+      if (agError) throw agError;
+      const ids = (agendamentosAnteriores || []).map((item: { id: string }) => item.id);
+      if (!ids.length) {
+        toast.info('Não há triagem anterior registrada nesta unidade.');
+        return;
+      }
+      const { data, error } = await supabase
+        .from('triage_records')
+        .select('alergias,medicamentos,custom_data,confirmado_em,criado_em')
+        .in('agendamento_id', ids)
+        .not('confirmado_em', 'is', null)
+        .order('confirmado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        toast.info('Não há triagem anterior concluída nesta unidade.');
+        return;
+      }
+      const list = (value: unknown): string[] => Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string' && !!item.trim())
+        : [];
+      const historicalComorbidities = list((data.custom_data as Record<string, unknown> | null)?.comorbidades);
+      setForm(current => ({
+        ...current,
+        alergias: current.alergias.length ? current.alergias : list(data.alergias),
+        medicamentos: current.medicamentos.length ? current.medicamentos : list(data.medicamentos),
+        comorbidades: current.comorbidades.length ? current.comorbidades : historicalComorbidities,
+      }));
+      setPreviousTriageDate(data.confirmado_em || data.criado_em || null);
+      toast.success('Dados anteriores carregados nos campos vazios. Confira e confirme com o paciente.');
+    } catch (error) {
+      console.error('Erro ao buscar triagem anterior:', error);
+      toast.error('Não foi possível consultar a triagem anterior.');
+    } finally {
+      setLoadingPreviousTriage(false);
+    }
+  }, [selectedItem, loadingPreviousTriage]);
 
   const salvarRascunho = async () => {
     if (!selectedItem || saving) return;
@@ -1094,6 +1147,14 @@ const Triagem: React.FC = () => {
               />
             </div>
             <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">3. Histórico, Alergias e Medicamentos</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={puxarDadosAnteriores} disabled={loadingPreviousTriage || !selectedItem}>
+                {loadingPreviousTriage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
+                Puxar dados anteriores
+              </Button>
+              {previousTriageDate && <span className="text-xs text-muted-foreground">Última triagem: {new Date(previousTriageDate).toLocaleString('pt-BR')}</span>}
+            </div>
+            <p className="text-[11px] text-muted-foreground">Apenas alergias, medicamentos e comorbidades ainda não preenchidos serão importados. Confirme todas as informações com o paciente; registros antigos podem estar desatualizados.</p>
             <details className="group rounded-md border border-border p-2">
               <summary className="cursor-pointer select-none text-sm font-medium flex items-center justify-between">
                 <span>Sintomas nos últimos 30 dias{form.sintomas30Dias.length > 0 ? ` (${form.sintomas30Dias.length} selecionado${form.sintomas30Dias.length > 1 ? "s" : ""})` : ""}</span>
