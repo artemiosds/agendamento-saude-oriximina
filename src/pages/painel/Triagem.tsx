@@ -759,6 +759,7 @@ const Triagem: React.FC = () => {
         observacoes: "",
       });
       setCustomData({});
+      setPreviousTriageDate(null);
 
       setOpeningTriagemId(null);
     },
