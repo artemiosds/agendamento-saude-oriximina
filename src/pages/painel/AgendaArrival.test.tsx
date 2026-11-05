@@ -14,12 +14,12 @@ const f = vi.hoisted(() => ({
   update: vi.fn(), addQueue: vi.fn(), updateQueue: vi.fn(), refresh: vi.fn(), refreshQueue: vi.fn(),
   loadRange: vi.fn(), hydrate: vi.fn(), exceptions: vi.fn(), selected: vi.fn(),
   deleteRow: vi.fn(), log: vi.fn(), notify: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), rpc: vi.fn(), apply: vi.fn(),
-  createdPatient: vi.fn(), registrationMount: vi.fn(),
+  createdPatient: vi.fn(), registrationMount: vi.fn(), savedPatient: vi.fn(), savePatient: vi.fn(),
   setter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
   queueSetter: null as null | React.Dispatch<React.SetStateAction<any[]>>,
 }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: f.user }) }));
-vi.mock('@/contexts/PacientesContext', () => ({ usePacientes: () => ({ pacientes: f.patients, hydrateAgendaPatients: f.hydrate, applyCreatedPaciente: f.createdPatient }) }));
+vi.mock('@/contexts/PacientesContext', () => ({ usePacientes: () => ({ pacientes: f.patients, hydrateAgendaPatients: f.hydrate, applyCreatedPaciente: f.createdPatient, applySavedPaciente: f.savedPatient }) }));
 vi.mock('@/contexts/AgendamentosContext', () => ({ useAgendamentos: () => {
   const [agendamentos, set] = useState(f.rows); f.setter = set;
   return { agendamentos, updateAgendamento: f.update, refreshAgendamentos: f.refresh, applyCareFlowAgendamentoUpdate: f.apply,
@@ -43,8 +43,9 @@ vi.mock('@/hooks/useWebhookNotify', () => ({ useWebhookNotify: () => ({ notify: 
 vi.mock('@/hooks/useFilaAutomatica', () => ({ useFilaAutomatica: () => ({ handleVagaLiberada: vi.fn() }) }));
 vi.mock('@/hooks/useEnsurePortalAccess', () => ({ useEnsurePortalAccess: () => ({ ensurePortalAccess: vi.fn() }) }));
 vi.mock('@/lib/utils', async original => ({ ...await original<typeof import('@/lib/utils')>(), todayLocalStr: () => f.day }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: f.toastError, info: f.toastInfo } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: f.toastError, info: f.toastInfo, warning: vi.fn() } }));
 vi.mock('@/components/TriageReconciliationPanel', () => ({ default: () => null }));
+vi.mock('@/services/patientService', () => ({ patientService: { savePacienteCadastro: (...args: any[]) => f.savePatient(...args) } }));
 vi.mock('@/components/BuscaPaciente', () => ({ BuscaPaciente: ({onCadastrarNovo,value}:any) => <><output data-testid="patient-selected">{value}</output>{onCadastrarNovo && <button onClick={()=>onCadastrarNovo('MARIA')}>Cadastrar paciente teste</button>}</> }));
 vi.mock('@/components/agenda/CadastroPacienteNaAgenda',()=>({default:({termo,onSaved,onCancel}:any)=>{f.registrationMount();return <div><output>{termo}</output><button onClick={onCancel}>Voltar teste</button><button onClick={()=>onSaved({id:'new-patient',nome:'MARIA',unidade_id:'u1'})}>Salvar paciente teste</button></div>;}}));
 vi.mock('@/components/RegistrarFaltaModal', () => ({ RegistrarFaltaModal: () => null }));
@@ -89,6 +90,8 @@ import Agenda from './Agenda';
 
 beforeEach(() => {
   vi.clearAllMocks(); f.triage = true; f.globalTriage = null; f.readStatus = 'confirmado'; f.queryError = null;
+  f.patients = [{ id: 'p1', nome: 'PACIENTE TESTE', criadoEm: '', cpf: '', cns: '', isPne: false, isGestante: false, isAutista: false }];
+  f.savePatient.mockResolvedValue({ id: 'p1', nome: 'PACIENTE TESTE', is_pne: true }); f.savedPatient.mockReset();
   f.rows = [{ id: 'ag1', pacienteId: 'p1', pacienteNome: 'PACIENTE TESTE', profissionalId: 'prof1',
     profissionalNome: 'PROFISSIONAL TESTE', unidadeId: 'u1', data: f.day, hora: '08:00',
     status: 'confirmado', tipo: 'Consulta', origem: 'recepcao', observacoes: '', criadoEm: '' }];
@@ -137,6 +140,65 @@ describe('confirmação atômica de chegada na Agenda', () => {
     f.rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202' } });
     await confirmArrival(); expect(await screen.findByText(/operação segura ainda não está disponível/)).toBeInTheDocument();
     expect(f.update).not.toHaveBeenCalled(); expect(f.addQueue).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('Check-in Expresso: recepção e teclado', () => {
+  async function openQuickCheckin() {
+    render(<MemoryRouter><Agenda /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Check-in Expresso/ }));
+    return screen.getByRole('textbox', { name: 'Buscar paciente agendado para hoje' });
+  }
+
+  it('permite confirmar com cadastro incompleto e limpa a busca após a RPC', async () => {
+    const input = await openQuickCheckin();
+    fireEvent.change(input, { target: { value: 'PACIENTE' } });
+    expect(await screen.findByText(/Pendências Cadastrais Básicas/)).toBeInTheDocument();
+    const confirm = screen.getByRole('button', { name: /Confirmar Chegada Agora/ });
+    expect(confirm).toBeEnabled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(f.rpc).toHaveBeenCalledWith('confirmar_chegada_atendimento', expect.objectContaining({ p_agendamento_id: 'ag1' })));
+    await waitFor(() => expect(input).toHaveValue(''));
+  });
+
+  it('navega por ArrowDown e Enter para selecionar; Enter seguinte confirma', async () => {
+    f.patients = [
+      { id: 'p1', nome: 'PACIENTE TESTE', criadoEm: '', cpf: '', cns: '' },
+      { id: 'p2', nome: 'PACIENTE TESTE DOIS', criadoEm: '', cpf: '', cns: '' },
+    ];
+    f.rows = [
+      { id: 'ag1', pacienteId: 'p1', pacienteNome: 'PACIENTE TESTE', profissionalId: 'prof1', profissionalNome: 'PROFISSIONAL TESTE', unidadeId: 'u1', data: f.day, hora: '08:00', status: 'confirmado', tipo: 'Consulta', origem: 'recepcao', observacoes: '', criadoEm: '' },
+      { id: 'ag2', pacienteId: 'p2', pacienteNome: 'PACIENTE TESTE DOIS', profissionalId: 'prof1', profissionalNome: 'PROFISSIONAL TESTE', unidadeId: 'u1', data: f.day, hora: '08:30', status: 'confirmado', tipo: 'Consulta', origem: 'recepcao', observacoes: '', criadoEm: '' },
+    ];
+    const input = await openQuickCheckin();
+    fireEvent.change(input, { target: { value: 'PACIENTE' } });
+    await screen.findByText('PACIENTE TESTE DOIS');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByRole('button', { name: /Confirmar Chegada Agora/ })).toBeInTheDocument();
+    expect(f.rpc).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(f.rpc).toHaveBeenCalledTimes(1));
+  });
+
+  it('Escape limpa busca e desfaz o cartão selecionado', async () => {
+    const input = await openQuickCheckin();
+    fireEvent.change(input, { target: { value: 'PACIENTE' } });
+    expect(await screen.findByRole('button', { name: /Confirmar Chegada Agora/ })).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: 'Escape' });
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(screen.queryByRole('button', { name: /Confirmar Chegada Agora/ })).not.toBeInTheDocument();
+  });
+
+  it('grava atalho PNE sem apagar flags já existentes e mantém a RPC atômica', async () => {
+    const input = await openQuickCheckin();
+    fireEvent.change(input, { target: { value: 'PACIENTE' } });
+    const pne = await screen.findByRole('button', { name: /Cadeirante \/ PNE/ });
+    fireEvent.click(pne);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(f.rpc).toHaveBeenCalledTimes(1));
+    expect(f.savePatient).toHaveBeenCalledWith('p1', { is_pne: true, is_gestante: false, is_autista: false }, 'Check-in Expresso');
   });
 });
 
