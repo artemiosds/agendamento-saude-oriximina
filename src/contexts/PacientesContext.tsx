@@ -37,7 +37,7 @@ interface PacientesContextType {
 const PacientesContext = createContext<PacientesContextType | null>(null);
 
 const pacienteColumns =
-  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
+  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,sexo,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
 
 const mapPacienteRow = (p: any): Paciente => ({
   id: p.id,
@@ -83,7 +83,7 @@ const mapPacienteRow = (p: any): Paciente => ({
   transporte: p.transporte || "",
   turno_preferido: p.turno_preferido || "",
   especialidade_destino: p.especialidade_destino || "",
-  custom_data: p.custom_data || {},
+  custom_data: { ...(p.custom_data || {}), sexo: p.sexo || p.custom_data?.sexo || "" },
 });
 
 export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
