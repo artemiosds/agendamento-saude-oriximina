@@ -2611,6 +2611,13 @@ const Agenda: React.FC = () => {
   const quickConfirmingRef = React.useRef(false);
   const quickSearchRef = React.useRef<HTMLInputElement>(null);
   const quickToday = todayLocalStr();
+  React.useEffect(() => {
+    if (!quickCheckinOpen) return;
+    void loadAgendaRange(quickToday, quickToday).catch((error) => {
+      console.error("[Agenda] Não foi possível carregar os agendamentos de hoje para o check-in:", error);
+      toast.error("Não foi possível carregar a agenda de hoje. Tente novamente.");
+    });
+  }, [quickCheckinOpen, quickToday, loadAgendaRange]);
   const normalizeQuick = (value: unknown) => String(value || "").toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
   const quickAppointments = React.useMemo(() => agendamentos.filter((ag) => {
     if (ag.data !== quickToday || !["agendado", "confirmado"].includes(String(ag.status || "").toLowerCase())) return false;
@@ -2632,6 +2639,13 @@ const Agenda: React.FC = () => {
       return nameMatch || documentMatch;
     }).sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
   }, [quickSearch, quickAppointments, pacienteById]);
+  const quickPatientIdsKey = React.useMemo(() => [...new Set(quickAppointments.map((ag) => ag.pacienteId).filter(Boolean))].sort().join(","), [quickAppointments]);
+  React.useEffect(() => {
+    if (!quickCheckinOpen || !quickPatientIdsKey) return;
+    void hydrateAgendaPatients(quickPatientIdsKey.split(",")).catch((error) => {
+      console.error("[Agenda] Erro ao hidratar cadastros para check-in expresso:", error);
+    });
+  }, [quickCheckinOpen, quickPatientIdsKey, hydrateAgendaPatients]);
   const quickSelected = quickMatches.find((ag) => ag.id === quickSelectedId) || (quickMatches.length === 1 ? quickMatches[0] : null);
   const quickPatient = quickSelected ? pacienteById.get(quickSelected.pacienteId) : null;
   const quickProfessional = quickSelected ? funcionarios.find((f) => f.id === quickSelected.profissionalId) : null;
