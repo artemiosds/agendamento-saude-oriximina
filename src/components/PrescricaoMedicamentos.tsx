@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, X, Printer, Ban, Pill, Loader2 } from "lucide-react";
+import { Search, Plus, X, Printer, Ban, Pill, Loader2, History } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { loadDocumentConfig, type DocumentConfig } from "@/lib/printLayout";
@@ -62,6 +63,8 @@ interface MedicamentoPrescrito {
 
 interface PrescricaoMedicamentosProps {
   profissionalId: string;
+  pacienteId: string;
+  unidadeId: string;
   value: MedicamentoPrescrito[];
   onChange: (meds: MedicamentoPrescrito[]) => void;
   pacienteNome?: string;
@@ -87,7 +90,7 @@ const CLASSES = [
 const VIAS = ["oral", "sublingual", "intramuscular", "intravenosa", "tópica", "retal", "inalatória", "nasal", "ocular"];
 
 const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
-  profissionalId, value, onChange,
+  profissionalId, pacienteId, unidadeId, value, onChange,
   pacienteNome, pacienteCpf, pacienteCns, dataAtendimento,
   profissionalNome, profissionalConselho, profissionalTipoConselho, profissionalUfConselho,
 }) => {
@@ -99,6 +102,13 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
   const [savingNew, setSavingNew] = useState(false);
   const [selectedForDisable, setSelectedForDisable] = useState<Set<string>>(new Set());
   const [config, setConfig] = useState<DocumentConfig | null>(null);
+  const [loadingLastPrescription, setLoadingLastPrescription] = useState(false);
+  const [lastPrescriptionCandidate, setLastPrescriptionCandidate] = useState<{
+    medications: MedicamentoPrescrito[];
+    date: string;
+    professionalName: string;
+  } | null>(null);
+  const [lastPrescriptionDialogOpen, setLastPrescriptionDialogOpen] = useState(false);
 
   useEffect(() => {
     loadDocumentConfig().then(setConfig);
@@ -141,6 +151,92 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
     }
     return map;
   }, [availableMeds]);
+
+  const formatPrescriptionDate = (date: string) => {
+    if (!date) return "data não informada";
+    const parsed = new Date(`${date}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("pt-BR");
+  };
+
+  const parsePreviousPrescription = (raw: unknown): MedicamentoPrescrito[] => {
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const source = Array.isArray(parsed) ? parsed : (parsed as any)?.medicamentos;
+      if (!Array.isArray(source)) return [];
+      return source
+        .filter((item: any) => item && typeof item === "object" && String(item.nome || "").trim())
+        .map((item: any, index: number) => ({
+          id: String(item.id || `historico-${index}-${String(item.nome).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`),
+          nome: String(item.nome || "").trim(),
+          dosagem: String(item.dosagem || ""),
+          via: String(item.via || "oral"),
+          posologia: String(item.posologia || ""),
+          duracao: String(item.duracao || ""),
+        }));
+    } catch {
+      return [];
+    }
+  };
+
+  const handleLoadLastPrescription = async () => {
+    if (!pacienteId || !unidadeId) {
+      toast.error("Não foi possível identificar o paciente e a unidade para consultar a receita anterior.");
+      return;
+    }
+    setLoadingLastPrescription(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from("prontuarios")
+        .select("prescricao,data_atendimento,profissional_nome")
+        .eq("paciente_id", pacienteId)
+        .eq("unidade_id", unidadeId)
+        .not("prescricao", "is", null)
+        .neq("prescricao", "")
+        .order("data_atendimento", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      const medications = parsePreviousPrescription(data?.prescricao);
+      if (!data || medications.length === 0) {
+        toast.info("Nenhuma prescrição anterior encontrada para este paciente nesta unidade.");
+        return;
+      }
+      const candidate = {
+        medications,
+        date: String(data.data_atendimento || ""),
+        professionalName: String(data.profissional_nome || "profissional não identificado"),
+      };
+      setLastPrescriptionCandidate(candidate);
+      if (value.length > 0) {
+        setLastPrescriptionDialogOpen(true);
+      } else {
+        onChange(candidate.medications);
+        toast.success(`Receita anterior carregada (atendimento de ${formatPrescriptionDate(candidate.date)} por ${candidate.professionalName}). Revise antes de finalizar.`);
+      }
+    } catch (error) {
+      console.error("[PrescricaoMedicamentos] Falha ao buscar receita anterior:", error);
+      toast.error("Não foi possível consultar a última receita. Tente novamente.");
+    } finally {
+      setLoadingLastPrescription(false);
+    }
+  };
+
+  const applyPreviousPrescription = (mode: "replace" | "merge") => {
+    if (!lastPrescriptionCandidate) return;
+    if (mode === "replace") {
+      onChange(lastPrescriptionCandidate.medications);
+    } else {
+      const merged = new Map<string, MedicamentoPrescrito>();
+      value.forEach((item) => merged.set(item.id || item.nome.trim().toLowerCase(), item));
+      lastPrescriptionCandidate.medications.forEach((item) => {
+        const key = item.id || item.nome.trim().toLowerCase();
+        if (!merged.has(key)) merged.set(key, item);
+      });
+      onChange(Array.from(merged.values()));
+    }
+    setLastPrescriptionDialogOpen(false);
+    toast.success(`Receita anterior carregada (atendimento de ${formatPrescriptionDate(lastPrescriptionCandidate.date)} por ${lastPrescriptionCandidate.professionalName}). Revise antes de finalizar.`);
+  };
 
   const addMed = useCallback((med: MedicationType) => {
     if (value.some(v => v.id === med.id)) return;
@@ -291,7 +387,11 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
             Prescrição de Medicamentos
             {value.length > 0 && <Badge variant="secondary" className="text-xs">{value.length}</Badge>}
           </CardTitle>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => { void handleLoadLastPrescription(); }} disabled={loadingLastPrescription || !pacienteId || !unidadeId}>
+              {loadingLastPrescription ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <History className="w-3.5 h-3.5 mr-1" />}
+              Repetir Última Receita
+            </Button>
             {value.length > 0 && (
               <Button type="button" variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
@@ -480,6 +580,26 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
           </div>
         )}
       </CardContent>
+      <Dialog open={lastPrescriptionDialogOpen} onOpenChange={setLastPrescriptionDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Repetir última receita</DialogTitle>
+            <DialogDescription>
+              Já existem medicamentos neste atendimento. Como deseja aplicar a receita anterior?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <p className="font-medium">{lastPrescriptionCandidate?.medications.length || 0} medicamento(s) encontrados</p>
+            <p className="text-muted-foreground">
+              Atendimento de {formatPrescriptionDate(lastPrescriptionCandidate?.date || "")} por {lastPrescriptionCandidate?.professionalName || "profissional não identificado"}.
+            </p>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row">
+            <Button type="button" variant="outline" onClick={() => applyPreviousPrescription("merge")}>Mesclar com a lista atual</Button>
+            <Button type="button" onClick={() => applyPreviousPrescription("replace")}>Substituir lista atual</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
