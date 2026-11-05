@@ -34,7 +34,7 @@ import { compareLegalPriority, legalPriorityKey } from "@/lib/queuePriority";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { hasConfirmedTriage } from "@/lib/triageCompletion";
-import { sanitizeVitalInput, validateTriageVitals } from "@/lib/triageVitals";
+import { getTriageVitalAlerts, sanitizeVitalInput, validateTriageVitals } from "@/lib/triageVitals";
 import { differenceInMinutes } from "date-fns";
 import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
 import { EmptyState } from "@/components/EmptyState";
@@ -592,6 +592,7 @@ const Triagem: React.FC = () => {
   }, []);
 
   const vitalValidation = useMemo(() => validateTriageVitals(form), [form.peso, form.altura, form.temperatura, form.frequenciaCardiaca, form.saturacaoOxigenio, form.glicemia]);
+  const vitalAlerts = useMemo(() => getTriageVitalAlerts(form), [form.pressaoArterial, form.saturacaoOxigenio, form.glicemia]);
   const normalizarAlturaCm = (value: string) => validateTriageVitals({ ...form, altura: value }).values.altura;
   const calcularImcTriagem = (peso: string, altura: string) => {
     const result = validateTriageVitals({ ...form, peso, altura });
@@ -1024,6 +1025,17 @@ const Triagem: React.FC = () => {
               </div>
             </div>
             {!vitalValidation.valid && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{Object.values(vitalValidation.errors).map(message => <p key={message}>{message}</p>)}</div>}
+            {vitalAlerts.length > 0 && (
+              <div role="status" aria-live="polite" className="space-y-2">
+                {vitalAlerts.map((alert, index) => (
+                  <div key={`${alert.field}-${index}`} className={`rounded-lg border p-3 text-sm ${alert.level === 'urgent' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200'}`}>
+                    <p className="font-semibold">{alert.level === 'urgent' ? 'Atenção clínica prioritária' : 'Atenção aos sinais vitais'}</p>
+                    <p>{alert.message}</p>
+                  </div>
+                ))}
+                <p className="text-[11px] text-muted-foreground">Avisos de apoio: não substituem avaliação profissional, não definem diagnóstico e não alteram automaticamente a classificação Manchester. Considere idade, gestação, sintomas, condições prévias e protocolo da unidade.</p>
+              </div>
+            )}
             <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">2. Avaliação Clínica e Risco</h3>
             <div>
               <Label className="text-base font-semibold">Escala de Dor (010): {form.dor}</Label>
