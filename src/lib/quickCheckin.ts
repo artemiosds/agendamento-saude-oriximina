@@ -41,9 +41,9 @@ export function getQuickCadastroPendencies(patient: QuickCheckinPatient | null |
 export function getQuickPriorityFlags(patient: QuickCheckinPatient | null | undefined) {
   const custom = patient?.custom_data || patient?.customData || {};
   return {
-    is_pne: !!(patient?.isPne ?? patient?.is_pne ?? custom.is_pne ?? custom.isPne),
-    is_gestante: !!(patient?.isGestante ?? patient?.is_gestante ?? custom.is_gestante ?? custom.isGestante),
-    is_autista: !!(patient?.isAutista ?? patient?.is_autista ?? custom.is_autista ?? custom.isAutista),
+    is_pne: !!(patient?.isPne || patient?.is_pne || custom.is_pne || custom.isPne),
+    is_gestante: !!(patient?.isGestante || patient?.is_gestante || custom.is_gestante || custom.isGestante),
+    is_autista: !!(patient?.isAutista || patient?.is_autista || custom.is_autista || custom.isAutista),
   };
 }
 
