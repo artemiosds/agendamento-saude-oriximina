@@ -2624,13 +2624,13 @@ const Agenda: React.FC = () => {
   const quickSelected = quickMatches.find((ag) => ag.id === quickSelectedId) || (!quickSelectedId && quickMatches.length === 1 ? quickMatches[0] : null);
   const quickPatient = quickSelected ? pacienteById.get(quickSelected.pacienteId) : null;
   const quickProfessional = quickSelected ? funcionarios.find((f) => f.id === quickSelected.profissionalId) : null;
-  const quickBirth = quickPatient?.dataNascimento || quickPatient?.dataNascimento || "";
+  const quickBirth = quickPatient?.dataNascimento || "";
   const quickAgePriority = getQuickAgePriority(quickPatient);
   const quickPendingFields = getQuickCadastroPendencies(quickPatient);
-  const quickStreet = undefined || quickPatient?.custom_data?.logradouro || quickPatient?.endereco || "Não informado";
-  const quickNeighborhood = undefined || quickPatient?.custom_data?.bairro || "Não informado";
-  const quickPhone = quickPatient?.telefone || undefined || "Não informado";
-  React.useEffect(() => { if (quickSelected) setQuickPriorityDraft({ is_pne: !!(quickPatient?.isPne ?? undefined), is_gestante: !!(quickPatient?.isGestante ?? undefined), is_autista: !!(quickPatient?.isAutista ?? undefined) }); }, [quickSelected?.id, quickSelected?.pacienteId, quickPatient]);
+  const quickStreet = quickPatient?.custom_data?.logradouro || quickPatient?.endereco || "Não informado";
+  const quickNeighborhood = quickPatient?.custom_data?.bairro || "Não informado";
+  const quickPhone = quickPatient?.telefone || "Não informado";
+  React.useEffect(() => { if (quickSelected) setQuickPriorityDraft({ is_pne: !!quickPatient?.isPne, is_gestante: !!quickPatient?.isGestante, is_autista: !!quickPatient?.isAutista }); }, [quickSelected?.id, quickSelected?.pacienteId, quickPatient]);
   React.useEffect(() => { if (!quickCheckinOpen) return; const id = globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); return () => globalThis.clearTimeout(id); }, [quickCheckinOpen]);
   React.useEffect(() => { const f2 = (event: KeyboardEvent) => { if (event.key === "F2") { event.preventDefault(); setQuickCheckinOpen(true); globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); } }; globalThis.addEventListener("keydown", f2); return () => globalThis.removeEventListener("keydown", f2); }, []);
   const clearQuickSearch = () => { setQuickSearch(""); setQuickSelectedId(""); setQuickActiveIndex(-1); globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); };
@@ -2740,7 +2740,7 @@ const Agenda: React.FC = () => {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-base font-bold text-foreground">{resolvePaciente(quickSelected.pacienteId, quickSelected.pacienteNome)}</p>
-                    <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || undefined || "Não informado"}</p>
+                    <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || "Não informado"}</p>
                     <p className="text-sm text-muted-foreground">Nascimento: {quickBirth ? `${String(quickBirth).split("-").reverse().join("/")} · ${calcularIdade(quickBirth)} anos` : "Não informado"}</p>
                     <p className="text-sm text-muted-foreground">Endereço: {quickStreet} · {quickNeighborhood}</p>
                     <p className="text-sm text-muted-foreground">Telefone: {quickPhone}</p>
