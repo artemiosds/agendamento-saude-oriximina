@@ -3811,7 +3811,7 @@ const ProntuarioPage: React.FC = () => {
           }
         }
       } else {
-        const { data: previousAttendance, error: attendanceError } = await (supabase as any)
+        let attendanceQuery = (supabase as any)
           .from("atendimentos")
           .select("agendamento_id,data")
           .eq("paciente_id", patientId)
@@ -3819,8 +3819,11 @@ const ProntuarioPage: React.FC = () => {
           .eq("unidade_id", unitId)
           .eq("status", "finalizado")
           .order("data", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(1);
+        if (formRef.current.agendamento_id) {
+          attendanceQuery = attendanceQuery.neq("agendamento_id", formRef.current.agendamento_id);
+        }
+        const { data: previousAttendance, error: attendanceError } = await attendanceQuery.maybeSingle();
         if (attendanceError) throw attendanceError;
         if (previousAttendance?.agendamento_id) {
           const { data: previousProntuario, error: prontuarioError } = await (supabase as any)
@@ -5447,6 +5450,7 @@ const ProntuarioPage: React.FC = () => {
               profissionalId={user?.id || ""}
               pacienteId={form.paciente_id}
               unidadeId={user?.unidadeId || ""}
+              prontuarioAtualId={editId}
               value={listaPrescricao}
               onChange={setListaPrescricao}
               pacienteNome={form.paciente_nome}
