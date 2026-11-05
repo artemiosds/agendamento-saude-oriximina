@@ -200,6 +200,20 @@ describe('Check-in Expresso: recepção e teclado', () => {
     await waitFor(() => expect(f.rpc).toHaveBeenCalledTimes(1));
     expect(f.savePatient).toHaveBeenCalledWith('p1', { is_pne: true, is_gestante: false, is_autista: false }, 'Check-in Expresso');
   });
+
+  it('impede duas confirmações concorrentes do mesmo cartão', async () => {
+    let release: ((value: any) => void) | undefined;
+    f.rpc.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const input = await openQuickCheckin();
+    fireEvent.change(input, { target: { value: 'PACIENTE' } });
+    await screen.findByRole('button', { name: /Confirmar Chegada Agora/ });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(f.rpc).toHaveBeenCalledTimes(1));
+    release?.({ data: { already_processed: false, status: 'confirmado_chegada', agendamento: { id: 'ag1', status: 'confirmado_chegada' }, fila: { hora_chegada: '08:00' } }, error: null });
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(f.rpc).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Agenda: diálogo único de exclusão', () => {
