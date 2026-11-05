@@ -2783,7 +2783,6 @@ const Agenda: React.FC = () => {
                   <div className="min-w-0">
                     <p className="text-base font-bold text-foreground">{resolvePaciente(quickSelected.pacienteId, quickSelected.pacienteNome)}</p>
                     <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || "Não informado"}</p>
-                     <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || "Não informado"}</p>
                      {quickCpf && <p className="text-sm text-muted-foreground">CPF: {quickCpf.length === 11 ? quickCpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : quickPatient?.cpf}</p>}
                      {quickCns && <p className="text-sm text-muted-foreground">CNS: {formatCNS(quickCns)}</p>}
                     <p className="text-sm text-muted-foreground">Nascimento: {quickBirth ? `${String(quickBirth).split("-").reverse().join("/")} · ${calcularIdade(quickBirth)} anos` : "Não informado"}</p>
