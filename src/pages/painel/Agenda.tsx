@@ -2759,9 +2759,9 @@ const Agenda: React.FC = () => {
                   <p><span className="text-muted-foreground">Atendimento:</span> {quickSelected.tipo || "Consulta"}</p>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2" aria-label="Prioridades e mobilidade">
-                  <Button type="button" size="sm" variant={quickPriorityDraft.is_pne ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_pne} disabled={!!(quickPatient?.isPne ?? undefined)} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_pne: !p.is_pne }))}>♿ Cadeirante / PNE</Button>
-                  <Button type="button" size="sm" variant={quickPriorityDraft.is_gestante ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_gestante} disabled={!!(quickPatient?.isGestante ?? undefined)} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_gestante: !p.is_gestante }))}>🤰 Gestante</Button>
-                  <Button type="button" size="sm" variant={quickPriorityDraft.is_autista ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_autista} disabled={!!(quickPatient?.isAutista ?? undefined)} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_autista: !p.is_autista }))}>🧩 TEA / Autista</Button>
+                  <Button type="button" size="sm" variant={quickPriorityDraft.is_pne ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_pne} disabled={!quickPatient || !!quickPatient.isPne} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_pne: !p.is_pne }))}>♿ Cadeirante / PNE</Button>
+                  <Button type="button" size="sm" variant={quickPriorityDraft.is_gestante ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_gestante} disabled={!quickPatient || !!quickPatient.isGestante} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_gestante: !p.is_gestante }))}>🤰 Gestante</Button>
+                  <Button type="button" size="sm" variant={quickPriorityDraft.is_autista ? "default" : "outline"} aria-pressed={quickPriorityDraft.is_autista} disabled={!quickPatient || !!quickPatient.isAutista} onClick={() => setQuickPriorityDraft((p) => ({ ...p, is_autista: !p.is_autista }))}>🧩 TEA / Autista</Button>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" onClick={() => void handleQuickArrival()} disabled={quickConfirming} className="bg-emerald-600 text-white hover:bg-emerald-700">
