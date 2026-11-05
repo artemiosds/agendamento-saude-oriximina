@@ -9,6 +9,7 @@ import { treatmentCycleWriter, loadTreatmentCycleSnapshot } from "@/services/tre
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { cn, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
+import ChamarPacienteButton from "@/components/ChamarPacienteButton";
 // Failed secondary chunks must never unmount the editor with unsaved text.
 class SecondaryPanelBoundary extends React.Component<{ children: React.ReactNode; onClose?: () => void }, { failed: boolean }> {
   state = { failed: false };
@@ -508,6 +509,37 @@ const ProntuarioPage: React.FC = () => {
     const ag = agendamentos.find((a: any) => a.id === form.agendamento_id);
     return ag && ag.status === 'em_atendimento';
   }, [activeAtendimento, form.agendamento_id, agendamentos]);
+
+  // Dados do agendamento atual para oferecer chamada independente no prontuário.
+  const currentAppointmentForCall = useMemo(() => {
+    const appointmentId = activeAtendimento?.agendamentoId || form.agendamento_id;
+    return appointmentId
+      ? (agendamentos.find((appointment: any) => appointment.id === appointmentId) as any) || null
+      : null;
+  }, [activeAtendimento?.agendamentoId, form.agendamento_id, agendamentos]);
+  const callUnitId = String(
+    currentAppointmentForCall?.unidadeId ||
+    currentAppointmentForCall?.unidade_id ||
+    user?.unidadeId ||
+    "",
+  );
+  const callRoomId = currentAppointmentForCall?.salaId ||
+    currentAppointmentForCall?.sala_id ||
+    user?.salaId ||
+    "";
+  const callRoomName = String(
+    currentAppointmentForCall?.salaNome ||
+    currentAppointmentForCall?.sala_nome ||
+    salas.find((room: any) => room.id === callRoomId && room.unidadeId === callUnitId && room.ativo)?.nome ||
+    "",
+  );
+  const callProfessionalName = String(
+    form.profissional_nome ||
+    currentAppointmentForCall?.profissionalNome ||
+    currentAppointmentForCall?.profissional_nome ||
+    user?.nome ||
+    "",
+  );
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const triagemRequestRef = useRef(0);
   const [showHistorico, setShowHistorico] = useState(false);
@@ -5602,6 +5634,17 @@ const ProntuarioPage: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
+                {form.paciente_id && callUnitId && (
+                  <ChamarPacienteButton
+                    unidadeId={callUnitId}
+                    pacienteNome={form.paciente_nome || currentAppointmentForCall?.pacienteNome || currentAppointmentForCall?.paciente_nome || "Paciente"}
+                    profissionalNome={callProfessionalName}
+                    defaultLocal={callRoomName || undefined}
+                    priorizarSalaPadrao={!!callRoomName}
+                    buttonLabel="Chamar Paciente"
+                    className="border border-[#2A6F97] bg-[#EAF3F8] text-[#1B4D6B] hover:bg-[#D8EAF4] hover:text-[#153F58] focus-visible:ring-[#2A6F97]"
+                  />
+                )}
                 {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
                   <Button
                     type="button"
