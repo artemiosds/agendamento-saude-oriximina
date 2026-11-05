@@ -2,6 +2,7 @@ import { validateCNS } from "@/lib/cnsUtils";
 import { legalPriorityKey, patientAge } from "@/lib/queuePriority";
 
 export interface QuickCheckinPatient {
+  nome?: string | null;
   cpf?: string | null; cns?: string | null; dataNascimento?: string | null; data_nascimento?: string | null;
   sexo?: string | null; nomeMae?: string | null; nome_mae?: string | null; telefone?: string | null;
   telefone_principal?: string | null; endereco?: string | null; logradouro?: string | null; bairro?: string | null;
