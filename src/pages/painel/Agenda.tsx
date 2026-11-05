@@ -2646,7 +2646,14 @@ const Agenda: React.FC = () => {
     try {
       const current = quickExistingPriority;
       const requested = { is_pne: current.is_pne || quickPriorityDraft.is_pne, is_gestante: current.is_gestante || quickPriorityDraft.is_gestante, is_autista: current.is_autista || quickPriorityDraft.is_autista };
-      const changed = Object.keys(requested).some((key) => requested[key as keyof typeof requested] !== current[key as keyof typeof current]);
+      // Canonicalize flags already present only in custom_data into the native columns
+      // consumed by the triage context, without ever clearing a previously true flag.
+      const persisted = {
+        is_pne: !!((quickPatient as any)?.is_pne || quickPatient?.isPne),
+        is_gestante: !!((quickPatient as any)?.is_gestante || quickPatient?.isGestante),
+        is_autista: !!((quickPatient as any)?.is_autista || quickPatient?.isAutista),
+      };
+      const changed = Object.keys(requested).some((key) => requested[key as keyof typeof requested] && !persisted[key as keyof typeof persisted]);
       const savePriority = changed && quickPatient
         ? patientService.savePacienteCadastro(quickSelected.pacienteId, requested, "Check-in Expresso")
             .then((row) => { applySavedPaciente(row); return row; })
