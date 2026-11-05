@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getQuickAgePriority, getQuickCadastroPendencies, getQuickSelectionIndex, isQuickAppointmentInScope } from "./quickCheckin";
+import { getQuickAgePriority, getQuickCadastroPendencies, getQuickPriorityFlags, getQuickSelectionIndex, isQuickAppointmentInScope } from "./quickCheckin";
 
 describe("Check-in Expresso", () => {
   it("informa pendências cadastrais sem transformar a validação em condição de confirmação", () => {
@@ -13,6 +13,16 @@ describe("Check-in Expresso", () => {
     const today = new Date(2026, 10, 5);
     expect(getQuickAgePriority({ dataNascimento: "1966-11-05" }, today).age).toBe(60);
     expect(getQuickAgePriority({ dataNascimento: "1946-11-05" }, today).tier).toBe(0);
+  });
+
+  it("preserva prioridades existentes nos formatos do banco e do contexto", () => {
+    expect(getQuickPriorityFlags({
+      is_pne: true,
+      custom_data: { is_gestante: true, is_autista: true },
+    })).toEqual({ is_pne: true, is_gestante: true, is_autista: true });
+    expect(getQuickAgePriority({
+      customData: { is_pne: true, isGestante: false, isAutista: true },
+    }).tier).toBe(2);
   });
 
   it("navega pelos resultados sem ultrapassar os limites da lista", () => {
