@@ -222,6 +222,25 @@ describe('Check-in Expresso: recepção e teclado', () => {
     expect(f.savePatient).not.toHaveBeenCalled();
   });
 
+  it('converte prioridade histórica de custom_data para os campos nativos consumidos pela Triagem', async () => {
+    f.patients = [{
+      id: 'p1', nome: 'PACIENTE TESTE', criadoEm: '', cpf: '', cns: '',
+      isPne: false, is_pne: false, isGestante: false, is_gestante: false,
+      isAutista: false, is_autista: false,
+      custom_data: { is_pne: true },
+    }];
+    const input = await openQuickCheckin();
+    fireEvent.change(input, { target: { value: 'PACIENTE' } });
+    const pne = await screen.findByRole('button', { name: /Cadeirante \/ PNE/ });
+    expect(pne).toHaveAttribute('aria-pressed', 'true');
+    expect(pne).toBeDisabled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(f.rpc).toHaveBeenCalledTimes(1));
+    expect(f.savePatient).toHaveBeenCalledWith('p1', {
+      is_pne: true, is_gestante: false, is_autista: false,
+    }, 'Check-in Expresso');
+  });
+
   it('impede duas confirmações concorrentes do mesmo cartão', async () => {
     let release: ((value: any) => void) | undefined;
     f.rpc.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
