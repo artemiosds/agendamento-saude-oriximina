@@ -201,6 +201,24 @@ describe('Check-in Expresso: recepção e teclado', () => {
     expect(f.savePatient).toHaveBeenCalledWith('p1', { is_pne: true, is_gestante: false, is_autista: false }, 'Check-in Expresso');
   });
 
+  it('mantém PNE, gestante e TEA já cadastrados sem permitir desmarcação no balcão', async () => {
+    f.patients = [{ id: 'p1', nome: 'PACIENTE TESTE', criadoEm: '', cpf: '', cns: '', isPne: true, isGestante: true, isAutista: true }];
+    const input = await openQuickCheckin();
+    fireEvent.change(input, { target: { value: 'PACIENTE' } });
+    const pne = await screen.findByRole('button', { name: /Cadeirante \/ PNE/ });
+    const gestante = screen.getByRole('button', { name: /Gestante/ });
+    const tea = screen.getByRole('button', { name: /TEA \/ Autista/ });
+    expect(pne).toBeDisabled();
+    expect(gestante).toBeDisabled();
+    expect(tea).toBeDisabled();
+    expect(pne).toHaveAttribute('aria-pressed', 'true');
+    expect(gestante).toHaveAttribute('aria-pressed', 'true');
+    expect(tea).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(f.rpc).toHaveBeenCalledTimes(1));
+    expect(f.savePatient).not.toHaveBeenCalled();
+  });
+
   it('impede duas confirmações concorrentes do mesmo cartão', async () => {
     let release: ((value: any) => void) | undefined;
     f.rpc.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
