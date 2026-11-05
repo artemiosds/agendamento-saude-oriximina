@@ -17,8 +17,9 @@ describe("Check-in Expresso", () => {
 
   it("preserva prioridades existentes nos formatos do banco e do contexto", () => {
     expect(getQuickPriorityFlags({
-      is_pne: true,
-      custom_data: { is_gestante: true, is_autista: true },
+      isPne: false,
+      is_pne: false,
+      custom_data: { is_pne: true, is_gestante: true, is_autista: true },
     })).toEqual({ is_pne: true, is_gestante: true, is_autista: true });
     expect(getQuickAgePriority({
       customData: { is_pne: true, isGestante: false, isAutista: true },
