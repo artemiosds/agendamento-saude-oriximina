@@ -5467,7 +5467,7 @@ const ProntuarioPage: React.FC = () => {
                 {canFinalize ? (
                   <Button
                     onClick={handleFinalizarAtendimento}
-                    disabled={saving || finalizing}
+                    disabled={saving}
                     className="bg-success hover:bg-success/90 text-success-foreground min-w-[200px]"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
