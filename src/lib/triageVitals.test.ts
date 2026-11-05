@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeVitalInput, validateTriageVitals } from './triageVitals';
+import { getTriageVitalAlerts, sanitizeVitalInput, validateTriageVitals } from './triageVitals';
 const blank = { peso: '', altura: '', temperatura: '', frequenciaCardiaca: '', saturacaoOxigenio: '', glicemia: '' };
 describe('sinais vitais antes da gravação', () => {
   it.each(['63000', '9999', '400.01', '0.49', '-1', 'NaN', '1e3'])('rejeita peso %s sem presumir gramas', peso => {
@@ -28,5 +28,26 @@ describe('sinais vitais antes da gravação', () => {
     expect(Object.keys(result.errors)).toHaveLength(4);
     expect(validateTriageVitals({ ...blank, peso: '63kg' }).valid).toBe(false);
     expect(sanitizeVitalInput('63,0')).toBe('63.0');
+  });
+});
+
+describe('alertas de apoio à avaliação clínica (sem alterar Manchester)', () => {
+  const blankAlerts = { pressaoArterial: '', saturacaoOxigenio: '', glicemia: '' };
+  it('identifica pressão muito elevada e hipotensão', () => {
+    expect(getTriageVitalAlerts({ ...blankAlerts, pressaoArterial: '180/90' })[0]?.level).toBe('urgent');
+    expect(getTriageVitalAlerts({ ...blankAlerts, pressaoArterial: '120/110' })[0]?.level).toBe('urgent');
+    expect(getTriageVitalAlerts({ ...blankAlerts, pressaoArterial: '85/55' })[0]?.message).toContain('Pressão baixa');
+  });
+  it('diferencia saturação de atenção e urgência', () => {
+    expect(getTriageVitalAlerts({ ...blankAlerts, saturacaoOxigenio: '94' })[0]?.level).toBe('attention');
+    expect(getTriageVitalAlerts({ ...blankAlerts, saturacaoOxigenio: '91' })[0]?.level).toBe('urgent');
+  });
+  it('sinaliza hipoglicemia e hiperglicemia sem alertar valores usuais', () => {
+    expect(getTriageVitalAlerts({ ...blankAlerts, glicemia: '60' })[0]?.level).toBe('urgent');
+    expect(getTriageVitalAlerts({ ...blankAlerts, glicemia: '251' })[0]?.level).toBe('attention');
+    expect(getTriageVitalAlerts({ ...blankAlerts, glicemia: '100' })).toHaveLength(0);
+  });
+  it('ignora pressão incompleta e valores não numéricos', () => {
+    expect(getTriageVitalAlerts({ ...blankAlerts, pressaoArterial: '180', saturacaoOxigenio: 'abc', glicemia: 'abc' })).toHaveLength(0);
   });
 });
