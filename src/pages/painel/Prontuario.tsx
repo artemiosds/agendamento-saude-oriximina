@@ -39,7 +39,7 @@ import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,7 +56,7 @@ import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical, ChevronRight, Calendar, User, MapPin, Target, CalendarClock, Eraser, ListFilter } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send, FlaskConical, ChevronRight, Calendar, User, MapPin, Target, CalendarClock, Eraser, ListFilter, Megaphone, UserCheck, PhoneCall, UserX } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
@@ -101,6 +101,7 @@ import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { solicitarChamada, getLocalSalvo, setLocalSalvo } from "@/lib/painelChamadas";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -410,7 +411,7 @@ const ProntuarioPage: React.FC = () => {
   const { user, isGlobalAdmin } = useAuth();
   const { can } = usePermissions();
   const { pacientes } = usePacientes();
-  const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate } = useAgendamentos();
+  const { agendamentos, updateAgendamento, refreshAgendamentos, addAtendimento, addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate } = useAgendamentos();
   const { unidades, funcionarios, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
   const sessionOperations = useMemo(() => createTreatmentSessionOperations({
     client: supabase as unknown as TreatmentOperationRpcClient,
@@ -492,6 +493,13 @@ const ProntuarioPage: React.FC = () => {
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
     null,
   );
+  const [finalizing, setFinalizing] = useState(false);
+  const [proximoPacienteFila, setProximoPacienteFila] = useState<any | null>(null);
+  const [transicaoFaltaConfirmada, setTransicaoFaltaConfirmada] = useState(false);
+  const [transicaoBusy, setTransicaoBusy] = useState(false);
+  const [transicaoChamadaBusy, setTransicaoChamadaBusy] = useState(false);
+  const [transicaoSala, setTransicaoSala] = useState("");
+  const transicaoLockRef = useRef(false);
 
   // Computed: can we finalize this appointment? Based on agendamento status, not just activeAtendimento
   const canFinalize = useMemo(() => {
@@ -2662,12 +2670,143 @@ const ProntuarioPage: React.FC = () => {
   }, [dialogOpen]);
   // ============ END AUTOSAVE ============
 
-  const handleFinalizarAtendimento = async () => {
+  const enviarChamadaDaEsteira = async (agendamento: any, sala: string, reenvio = false) => {
+    const unidadeId = user?.unidadeId || agendamento?.unidade_id || "";
+    const local = String(sala || "").trim();
+    if (!unidadeId || !local) {
+      toast.warning("Informe uma sala ou consultório válido para chamar o paciente.");
+      return false;
+    }
+
+    setTransicaoChamadaBusy(true);
+    try {
+      const salaPadrao = salas.find((item: any) => item.id === user?.salaId && item.unidadeId === unidadeId)?.nome || user?.salaId || "";
+      setLocalSalvo(local, unidadeId, salaPadrao || local);
+      const resultado = await solicitarChamada(unidadeId, {
+        pacienteNome: agendamento.paciente_nome || agendamento.pacienteNome || "",
+        local,
+        profissionalNome: user?.nome || form.profissional_nome || agendamento.profissional_nome || "",
+      });
+
+      if (resultado === "recebida") {
+        toast.success(reenvio ? "Chamada reenviada para o Painel da TV." : "TV confirmou o recebimento da chamada.");
+        return true;
+      }
+      if (resultado === "recebida_sem_audio") {
+        toast.warning("TV recebeu a chamada, mas o som está inativo. Confira o painel.");
+        return true;
+      }
+      if (resultado === "ocupado") {
+        toast.warning("Painel com fila cheia. A chamada não foi incluída. Tente novamente.");
+        return false;
+      }
+      if (resultado === "nao_confirmada") {
+        toast.warning("A TV não confirmou o recebimento. Confira a conexão antes de tentar novamente.");
+        return false;
+      }
+      toast.error("Não foi possível enviar a chamada. O atendimento anterior continua finalizado.");
+      return false;
+    } catch (error) {
+      console.error("[Prontuario] Falha ao chamar paciente na TV:", error);
+      toast.error("Falha ao enviar a chamada. O atendimento anterior continua finalizado.");
+      return false;
+    } finally {
+      setTransicaoChamadaBusy(false);
+    }
+  };
+
+  const localizarProximoPaciente = async () => {
+    const unidadeId = user?.unidadeId || "";
+    const profissionalId = user?.id || form.profissional_id || "";
+    const hoje = todayLocalStr();
+
+    if (!unidadeId || !profissionalId) {
+      toast.error("Não foi possível identificar o profissional ou a unidade para consultar a fila.");
+      navigate("/painel/agenda", { replace: true });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("agendamentos" as any)
+        .select("id,paciente_id,paciente_nome,unidade_id,sala_id,profissional_id,profissional_nome,data,hora,status,tipo")
+        .eq("data", hoje)
+        .eq("unidade_id", unidadeId)
+        .eq("profissional_id", profissionalId)
+        .eq("status", "apto_atendimento")
+        .order("hora", { ascending: true });
+
+      if (error) throw error;
+      const candidatos = (data || []) as any[];
+      if (candidatos.length === 0) {
+        toast.info("Atendimento finalizado! Não há pacientes aguardando com status Apto Atendimento no momento.");
+        navigate("/painel/agenda", { replace: true });
+        return;
+      }
+
+      const ids = candidatos.map((item) => item.id);
+      const [triagemResult, chegadaResult] = await Promise.all([
+        supabase.from("triage_records").select("agendamento_id,classificacao_risco").in("agendamento_id", ids),
+        supabase.from("fila_espera" as any).select("id,hora_chegada").in("id", ids),
+      ]);
+
+      const riscoPorAgendamento = new Map<string, string>();
+      (triagemResult.data || []).forEach((item: any) => {
+        riscoPorAgendamento.set(item.agendamento_id, String(item.classificacao_risco || ""));
+      });
+      const chegadaPorAgendamento = new Map<string, string>();
+      (chegadaResult.data || []).forEach((item: any) => {
+        if (item.hora_chegada) chegadaPorAgendamento.set(item.id, String(item.hora_chegada));
+      });
+
+      const pesoManchester = (value: string) => {
+        const risco = String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        if (risco.includes("vermelho")) return 0;
+        if (risco.includes("laranja")) return 1;
+        if (risco.includes("amarelo")) return 2;
+        if (risco.includes("verde")) return 3;
+        if (risco.includes("azul")) return 4;
+        return 5;
+      };
+      candidatos.sort((a, b) => {
+        const risco = pesoManchester(riscoPorAgendamento.get(a.id) || "") - pesoManchester(riscoPorAgendamento.get(b.id) || "");
+        if (risco !== 0) return risco;
+        const chegadaA = chegadaPorAgendamento.get(a.id) || a.hora || "99:99";
+        const chegadaB = chegadaPorAgendamento.get(b.id) || b.hora || "99:99";
+        return chegadaA.localeCompare(chegadaB) || String(a.hora || "").localeCompare(String(b.hora || ""));
+      });
+
+      const proximo = candidatos[0];
+      const salaCadastro = salas.find((item: any) =>
+        item.id === user?.salaId && item.unidadeId === unidadeId && item.ativo
+      );
+      const salaSalva = getLocalSalvo(unidadeId, salaCadastro?.nome || user?.salaId || "") ||
+        getLocalSalvo(unidadeId, user?.salaId || "") ||
+        getLocalSalvo(unidadeId, "");
+      const salaInicial = String(salaCadastro?.nome || salaSalva || "").trim();
+
+      setProximoPacienteFila(proximo);
+      setTransicaoFaltaConfirmada(false);
+      setTransicaoSala(salaInicial);
+      if (salaInicial) {
+        await enviarChamadaDaEsteira(proximo, salaInicial, false);
+      } else {
+        toast.warning("Paciente localizado. Informe a sala ou consultório para enviar a chamada à TV.");
+      }
+    } catch (error) {
+      console.error("[Prontuario] Não foi possível localizar o próximo paciente:", error);
+      toast.error("Atendimento finalizado, mas não foi possível consultar a fila. Você pode continuar pela Agenda.");
+      navigate("/painel/agenda", { replace: true });
+    }
+  };
+
+  const handleFinalizarAtendimento = async (chamarProximo = false) => {
     if (finalizingRef.current) {
       console.warn("[handleFinalizarAtendimento] Finalização já em curso — clique duplo ignorado.");
       return;
     }
     finalizingRef.current = true;
+    setFinalizing(true);
     try {
       const saved = await handleSave(undefined, true);
       if (!saved) return;
@@ -2737,13 +2876,142 @@ const ProntuarioPage: React.FC = () => {
     localStorage.removeItem(`timer_${agendamentoId}`);
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
-    navigate("/painel/agenda", { replace: true });
+    if (chamarProximo) {
+      await localizarProximoPaciente();
+    } else {
+      navigate("/painel/agenda", { replace: true });
+    }
     } catch (error) {
       console.error("[Prontuario] Falha inesperada ao finalizar atendimento:", error);
       toast.error("Não foi possível concluir todas as gravações. O prontuário permanece disponível para conferir e tentar novamente.");
     } finally {
       finalizingRef.current = false;
+      setFinalizing(false);
     }
+  };
+
+  const handlePacienteEntrouNaEsteira = async () => {
+    const ag = proximoPacienteFila;
+    if (!ag || transicaoLockRef.current) return;
+    transicaoLockRef.current = true;
+    setTransicaoBusy(true);
+    const horaInicio = nowTimeBrazilStr(new Date());
+    const profissionalId = ag.profissional_id || user?.id || "";
+    const profissionalNome = ag.profissional_nome || user?.nome || "";
+    try {
+      await updateAgendamento(ag.id, { status: "em_atendimento" as any });
+      try {
+        await addAtendimento({
+          id: crypto.randomUUID(),
+          agendamentoId: ag.id,
+          pacienteId: ag.paciente_id,
+          pacienteNome: ag.paciente_nome,
+          profissionalId,
+          profissionalNome,
+          unidadeId: ag.unidade_id || user?.unidadeId || "",
+          salaId: ag.sala_id || user?.salaId || "",
+          setor: user?.setor || "",
+          procedimento: ag.tipo || "",
+          observacoes: "",
+          data: ag.data,
+          horaInicio,
+          horaFim: "",
+          status: "em_atendimento",
+        });
+      } catch (error) {
+        try { await updateAgendamento(ag.id, { status: "apto_atendimento" as any }); }
+        catch (rollbackError) { console.error("[Prontuario] Falha ao restaurar status do próximo paciente:", rollbackError); }
+        throw error;
+      }
+
+      localStorage.setItem("timer_" + ag.id, JSON.stringify({
+        agendamentoId: ag.id,
+        horaInicio,
+        tempoLimite: user?.tempoAtendimento || 30,
+        startTimestamp: Date.now(),
+      }));
+      logAction({
+        acao: "atendimento_iniciado",
+        entidade: "atendimento",
+        entidadeId: ag.id,
+        modulo: "atendimento",
+        user,
+        detalhes: {
+          paciente_nome: ag.paciente_nome,
+          hora_inicio: horaInicio,
+          unidade: ag.unidade_id || user?.unidadeId || "",
+          sala: ag.sala_id || user?.salaId || "",
+          origem: "esteira_finalizar_e_chamar_proximo",
+        },
+      });
+
+      const params = new URLSearchParams({
+        pacienteId: ag.paciente_id,
+        pacienteNome: ag.paciente_nome,
+        agendamentoId: ag.id,
+        horaInicio,
+        data: ag.data,
+        tipo: ag.tipo || "",
+      });
+      setProximoPacienteFila(null);
+      setTransicaoFaltaConfirmada(false);
+      setDialogOpen(false);
+      initializedRef.current = false;
+      navigate("/painel/prontuario?" + params.toString(), { replace: true });
+      toast.success("Atendimento iniciado! Prontuário do próximo paciente aberto.");
+      void refreshAgendamentos().catch((error) => console.error("[Prontuario] Falha ao atualizar Agenda:", error));
+    } catch (error) {
+      console.error("[Prontuario] Não foi possível iniciar o próximo atendimento:", error);
+      toast.error("Não foi possível iniciar este atendimento. O paciente permanece na fila para nova tentativa.");
+    } finally {
+      transicaoLockRef.current = false;
+      setTransicaoBusy(false);
+    }
+  };
+
+  const handleMarcarFaltaNaEsteira = async () => {
+    const ag = proximoPacienteFila;
+    if (!ag || transicaoLockRef.current) return;
+    transicaoLockRef.current = true;
+    setTransicaoBusy(true);
+    try {
+      await updateAgendamento(ag.id, { status: "falta" as any });
+      await logAction({
+        acao: "paciente_faltou",
+        entidade: "agendamento",
+        entidadeId: ag.id,
+        modulo: "atendimento",
+        user,
+        detalhes: {
+          paciente_nome: ag.paciente_nome,
+          profissional_id: ag.profissional_id || user?.id || "",
+          unidade_id: ag.unidade_id || user?.unidadeId || "",
+          motivo: "Paciente ausente na chamada do consultório",
+          origem: "esteira_finalizar_e_chamar_proximo",
+        },
+      });
+      await refreshAgendamentos();
+      setTransicaoFaltaConfirmada(true);
+      toast.success("Falta registrada no agendamento e na auditoria.");
+    } catch (error) {
+      console.error("[Prontuario] Falha ao registrar falta na esteira:", error);
+      toast.error("Não foi possível registrar a falta. O agendamento não foi avançado.");
+    } finally {
+      transicaoLockRef.current = false;
+      setTransicaoBusy(false);
+    }
+  };
+
+  const handleChamarProximoAposFalta = async () => {
+    setProximoPacienteFila(null);
+    setTransicaoFaltaConfirmada(false);
+    await localizarProximoPaciente();
+  };
+
+  const handleVoltarDaEsteira = () => {
+    setProximoPacienteFila(null);
+    setTransicaoFaltaConfirmada(false);
+    navigate("/painel/agenda", { replace: true });
   };
 
   // Dedicated handler: register session only (no close)
@@ -5199,12 +5467,23 @@ const ProntuarioPage: React.FC = () => {
                 {canFinalize ? (
                   <Button
                     onClick={handleFinalizarAtendimento}
-                    disabled={saving}
+                    disabled={saving || finalizing}
                     className="bg-success hover:bg-success/90 text-success-foreground min-w-[200px]"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Finalizar Prontuário
                   </Button>
+                  {Boolean(activeAtendimento?.agendamentoId || form.agendamento_id) && (
+                    <Button
+                      type="button"
+                      onClick={() => { void handleFinalizarAtendimento(true); }}
+                      disabled={saving || finalizing}
+                      className="bg-sky-600 hover:bg-sky-700 text-white min-w-[220px]"
+                    >
+                      {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Megaphone className="w-4 h-4 mr-2" />}
+                      Finalizar e Chamar Próximo
+                    </Button>
+                  )}
                 ) : (
                   <Button
                     onClick={() => { void handleSave(); }}
@@ -5217,6 +5496,101 @@ const ProntuarioPage: React.FC = () => {
                 )}
               </div>
             </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Esteira clínica: chamada, entrada e falta auditada do próximo paciente */}
+      <Dialog
+        open={!!proximoPacienteFila}
+        onOpenChange={(open) => {
+          if (!open && !transicaoBusy && !transicaoChamadaBusy) handleVoltarDaEsteira();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Megaphone className="h-5 w-5 text-sky-600" />
+              {transicaoFaltaConfirmada ? "Falta registrada" : "Esteira de Atendimento"}
+            </DialogTitle>
+            <DialogDescription>
+              {transicaoFaltaConfirmada
+                ? "O paciente foi marcado como falta no agendamento e no histórico de auditoria."
+                : "O atendimento anterior foi finalizado. Confirme a entrada do próximo paciente ou controle a chamada."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {proximoPacienteFila && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {transicaoFaltaConfirmada ? "Paciente ausente" : "Chamando paciente"}
+                </p>
+                <p className="text-lg font-semibold">{proximoPacienteFila.paciente_nome}</p>
+                <p className="text-sm text-muted-foreground">
+                  {transicaoFaltaConfirmada
+                    ? "A falta foi registrada. Você pode chamar o próximo da fila."
+                    : transicaoSala
+                      ? "Chamando " + proximoPacienteFila.paciente_nome + " para " + transicaoSala
+                      : "Informe a sala ou consultório para enviar a chamada à TV."}
+                </p>
+              </div>
+
+              {!transicaoFaltaConfirmada && (
+                <div className="space-y-2">
+                  <Label htmlFor="esteira-sala">Sala / consultório</Label>
+                  <Input
+                    id="esteira-sala"
+                    value={transicaoSala}
+                    onChange={(event) => setTransicaoSala(event.target.value)}
+                    placeholder="Ex.: Consultório 2"
+                    disabled={transicaoBusy || transicaoChamadaBusy}
+                  />
+                </div>
+              )}
+
+              {transicaoFaltaConfirmada ? (
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                  <Button variant="outline" onClick={handleVoltarDaEsteira} disabled={transicaoBusy}>
+                    Voltar para a Agenda
+                  </Button>
+                  <Button onClick={() => { void handleChamarProximoAposFalta(); }} disabled={transicaoBusy || transicaoChamadaBusy}>
+                    <Megaphone className="h-4 w-4 mr-2" />
+                    Chamar Próximo
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => { void handlePacienteEntrouNaEsteira(); }}
+                    disabled={transicaoBusy || transicaoChamadaBusy}
+                  >
+                    {transicaoBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserCheck className="h-4 w-4 mr-2" />}
+                    Paciente Entrou / Iniciar Atendimento
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => { void enviarChamadaDaEsteira(proximoPacienteFila, transicaoSala, true); }}
+                    disabled={transicaoBusy || transicaoChamadaBusy || !transicaoSala.trim()}
+                  >
+                    {transicaoChamadaBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PhoneCall className="h-4 w-4 mr-2" />}
+                    Chamar Novamente na TV
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => { void handleMarcarFaltaNaEsteira(); }}
+                    disabled={transicaoBusy || transicaoChamadaBusy}
+                  >
+                    {transicaoBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserX className="h-4 w-4 mr-2" />}
+                    Não Compareceu / Marcar Falta
+                  </Button>
+                  <Button variant="ghost" onClick={handleVoltarDaEsteira} disabled={transicaoBusy || transicaoChamadaBusy}>
+                    Voltar para a Agenda
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
