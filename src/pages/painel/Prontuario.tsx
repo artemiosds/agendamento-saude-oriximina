@@ -5465,8 +5465,9 @@ const ProntuarioPage: React.FC = () => {
                   </Button>
                 )}
                 {canFinalize ? (
+                  <>
                   <Button
-                    onClick={handleFinalizarAtendimento}
+                    onClick={() => { void handleFinalizarAtendimento(false); }}
                     disabled={saving}
                     className="bg-success hover:bg-success/90 text-success-foreground min-w-[200px]"
                   >
@@ -5484,6 +5485,7 @@ const ProntuarioPage: React.FC = () => {
                       Finalizar e Chamar Próximo
                     </Button>
                   )}
+                  </>
                 ) : (
                   <Button
                     onClick={() => { void handleSave(); }}
