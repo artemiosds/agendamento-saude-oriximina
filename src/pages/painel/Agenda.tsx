@@ -2611,6 +2611,8 @@ const Agenda: React.FC = () => {
   const [quickSelectedId, setQuickSelectedId] = useState("");
   const [quickActiveIndex, setQuickActiveIndex] = useState(-1);
   const [quickConfirming, setQuickConfirming] = useState(false);
+  const [quickRegistrationOpen, setQuickRegistrationOpen] = useState(false);
+  const [quickRegistrationTerm, setQuickRegistrationTerm] = useState("");
   const [quickPriorityDraft, setQuickPriorityDraft] = useState({ is_pne: false, is_gestante: false, is_autista: false });
   const quickConfirmingRef = React.useRef(false);
   const quickSearchRef = React.useRef<HTMLInputElement>(null);
@@ -2632,6 +2634,9 @@ const Agenda: React.FC = () => {
   const quickStreet = quickCustomData.logradouro || (quickPatient as any)?.logradouro || quickPatient?.endereco || "Não informado";
   const quickNeighborhood = quickCustomData.bairro || (quickPatient as any)?.bairro || "Não informado";
   const quickPhone = quickPatient?.telefone || quickCustomData.telefone_principal || "Não informado";
+  const quickCpf = String(quickPatient?.cpf || "").replace(/\D/g, "");
+  const quickCns = String(quickPatient?.cns || "").replace(/\D/g, "");
+  const quickRegistrationUnitId = user?.unidadeId || unidadesVisiveis[0]?.id || "";
   React.useEffect(() => { if (quickSelected) setQuickPriorityDraft(quickExistingPriority); }, [quickSelected?.id, quickSelected?.pacienteId, quickPatient]);
   React.useEffect(() => { if (!quickCheckinOpen) return; const id = globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); return () => globalThis.clearTimeout(id); }, [quickCheckinOpen]);
   React.useEffect(() => { const f2 = (event: KeyboardEvent) => { if (event.key === "F2") { event.preventDefault(); setQuickCheckinOpen(true); globalThis.setTimeout(() => quickSearchRef.current?.focus(), 0); } }; globalThis.addEventListener("keydown", f2); return () => globalThis.removeEventListener("keydown", f2); }, []);
@@ -2737,23 +2742,50 @@ const Agenda: React.FC = () => {
               className="h-12 text-base"
               aria-label="Buscar paciente agendado para hoje"
             />
-            {quickSearch.trim().length >= 2 && !quickSelected && (
+            {quickSearch.trim().length >= 2 && !quickSelected && !quickRegistrationOpen && (
               <div className="max-h-56 overflow-y-auto rounded-xl border bg-background">
                 {quickMatches.length ? quickMatches.slice(0, 10).map((ag, index) => (
                   <button key={ag.id} type="button" onClick={() => { setQuickSelectedId(ag.id); setQuickActiveIndex(-1); }} className={"flex w-full items-center justify-between gap-3 border-b px-3 py-2.5 text-left last:border-0 hover:bg-muted/60 " + (quickActiveIndex === index ? "bg-accent ring-2 ring-inset ring-primary" : "")} aria-selected={quickActiveIndex === index}>
                     <span className="min-w-0"><span className="block truncate text-sm font-medium">{resolvePaciente(ag.pacienteId, ag.pacienteNome)}</span><span className="block text-xs text-muted-foreground">{ag.hora} · {ag.profissionalNome}</span></span>
                     <span className="shrink-0 text-xs text-primary">Selecionar</span>
                   </button>
-                )) : <p className="p-3 text-sm text-muted-foreground">Nenhum agendamento pendente encontrado para hoje nesta unidade.</p>}
+                )) : <div className="space-y-2 p-3">
+
+                  <p className="text-sm text-muted-foreground">Nenhum agendamento pendente encontrado para hoje nesta unidade.</p>
+
+                  {can("pacientes", "can_create") && <Button type="button" size="sm" variant="outline" disabled={!quickRegistrationUnitId} onClick={() => { setQuickRegistrationTerm(quickSearch.trim()); setQuickRegistrationOpen(true); }}><Plus className="mr-2 h-4 w-4" /> Cadastrar paciente (se ainda não estiver cadastrado)</Button>}
+
+                </div>}
                 {quickMatches.length > 10 && <p className="px-3 py-2 text-xs text-muted-foreground">Exibindo os 10 primeiros resultados. Refine a busca.</p>}
               </div>
             )}
+            {quickRegistrationOpen && (
+
+              <div className="rounded-xl border bg-background p-3">
+
+                <PatientRegistrationBoundary onBack={() => setQuickRegistrationOpen(false)}>
+
+                  <React.Suspense fallback={<p role="status" className="p-3 text-sm">Carregando cadastro completo…</p>}>
+
+                    <CadastroPacienteNaAgenda termo={quickRegistrationTerm} unidadeId={quickRegistrationUnitId} onBusyChange={() => {}} onCancel={() => setQuickRegistrationOpen(false)} onSaved={(row) => { applyCreatedPaciente(row); setQuickRegistrationOpen(false); setQuickSearch(""); setQuickSelectedId(""); setQuickActiveIndex(-1); toast.success("Paciente cadastrado. Para confirmar a chegada, faça primeiro um agendamento."); }} />
+
+                  </React.Suspense>
+
+                </PatientRegistrationBoundary>
+
+              </div>
+
+            )}
+
             {quickSelected && (
               <div className="rounded-xl border bg-background p-3 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-base font-bold text-foreground">{resolvePaciente(quickSelected.pacienteId, quickSelected.pacienteNome)}</p>
                     <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || "Não informado"}</p>
+                     <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || "Não informado"}</p>
+                     {quickCpf && <p className="text-sm text-muted-foreground">CPF: {quickCpf.length === 11 ? quickCpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : quickPatient?.cpf}</p>}
+                     {quickCns && <p className="text-sm text-muted-foreground">CNS: {formatCNS(quickCns)}</p>}
                     <p className="text-sm text-muted-foreground">Nascimento: {quickBirth ? `${String(quickBirth).split("-").reverse().join("/")} · ${calcularIdade(quickBirth)} anos` : "Não informado"}</p>
                     <p className="text-sm text-muted-foreground">Endereço: {quickStreet} · {quickNeighborhood}</p>
                     <p className="text-sm text-muted-foreground">Telefone: {quickPhone}</p>
