@@ -442,6 +442,8 @@ const Triagem: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [loadingPreviousTriage, setLoadingPreviousTriage] = useState(false);
   const [previousTriageDate, setPreviousTriageDate] = useState<string | null>(null);
+  const [confirmStableRoutine, setConfirmStableRoutine] = useState(false);
+  const [nextPatientToCall, setNextPatientToCall] = useState<Agendamento | null>(null);
 
   const handleRemoverDaTriagem = async (item: Agendamento) => {
     setActionLoading(true);
@@ -848,7 +850,7 @@ const Triagem: React.FC = () => {
     }
   };
 
-  const confirmarTriagem = async (encaminharEnfermagem: boolean) => {
+  const confirmarTriagem = async (encaminharEnfermagem: boolean, chamarProximo = false) => {
     if (!selectedItem || saving) return;
     if (!vitalValidation.valid) { toast.error(Object.values(vitalValidation.errors)[0]); return; }
     setSaving(true);
@@ -874,6 +876,16 @@ const Triagem: React.FC = () => {
       applyCareFlowAgendamentoUpdate(result.agendamento);
       if (result.already_processed) toast.info('Esta triagem já foi concluída por outro terminal. A fila foi atualizada.');
       else toast.success(encaminharEnfermagem ? 'Encaminhado para enfermagem!' : 'Encaminhado diretamente!');
+      if (chamarProximo && !result.already_processed) {
+        const proximo = filaOrdenada.find(item => item.filaId !== selectedItem.filaId);
+        if (proximo) setNextPatientToCall(proximo);
+        else {
+          setNextPatientToCall(null);
+          toast.info('Triagem concluída. Não há outro paciente aguardando na fila.');
+        }
+      } else {
+        setNextPatientToCall(null);
+      }
       setDialogOpen(false);
       setSelectedItem(null);
 
@@ -933,6 +945,28 @@ const Triagem: React.FC = () => {
         subtitle={`${filaFiltrada.length} paciente(s) aguardando triagem`}
       />
       <TriageReconciliationPanel />
+      {nextPatientToCall && (
+        <Card className="border border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-primary">Próximo paciente na fila de triagem</p>
+              <p className="font-semibold">{resolvePaciente(nextPatientToCall.pacienteId, nextPatientToCall.pacienteNome)}</p>
+              <p className="text-xs text-muted-foreground">Ordem calculada pela prioridade legal e, em seguida, pelo horário de chegada. Confirme a sala antes de enviar à TV.</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <ChamarPacienteButton
+                unidadeId={nextPatientToCall.unidadeId}
+                pacienteNome={resolvePaciente(nextPatientToCall.pacienteId, nextPatientToCall.pacienteNome)}
+                profissionalNome={nextPatientToCall.profissionalNome}
+                defaultLocal="Sala de Triagem"
+                buttonLabel="Chamar próximo na TV"
+                className="border border-[#2A6F97] bg-[#EAF3F8] text-[#1B4D6B] hover:bg-[#D8EAF4] hover:text-[#153F58] dark:border-sky-400 dark:bg-slate-900 dark:text-sky-200"
+              />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setNextPatientToCall(null)}>Fechar</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div role="group" aria-label="Filtrar triagem por profissão" className="flex min-w-0 max-w-full overflow-x-auto no-scrollbar gap-2 pb-1">
         {[['todos', 'Todos'], ...Object.entries(TRIAGE_CATEGORY_LABELS).filter(([key]) => especialidadesFila.contagens.has(key))].map(([key, label]) => (
           <Button key={key} type="button" variant={filtroEspecialidade === key ? 'default' : 'outline'}
@@ -1091,6 +1125,17 @@ const Triagem: React.FC = () => {
               </div>
             )}
             <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">2. Avaliação Clínica e Risco</h3>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Rotina estável</p>
+                  <p className="text-xs text-muted-foreground">Atalho apenas para avaliação confirmada pelo profissional. Não preenche sinais vitais.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" className="border-emerald-600/40 text-emerald-700 dark:text-emerald-300" onClick={() => setConfirmStableRoutine(true)}>
+                  Confirmar rotina estável
+                </Button>
+              </div>
+            </div>
             <div>
               <Label className="text-base font-semibold">Escala de Dor (010): {form.dor}</Label>
               <Slider value={[form.dor]} onValueChange={(v) => setForm((p) => ({ ...p, dor: v[0] }))} max={10} min={0} step={1} className="mt-2" />
@@ -1247,10 +1292,35 @@ const Triagem: React.FC = () => {
               <Button variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving || !vitalValidation.valid}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Seguir sem Enfermagem
               </Button>
+              <Button onClick={() => confirmarTriagem(false, true)} disabled={saving || !vitalValidation.valid}>
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FastForward className="mr-2 h-4 w-4" />}
+                Concluir e chamar próximo
+              </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={confirmStableRoutine} onOpenChange={setConfirmStableRoutine}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar avaliação de rotina estável?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ao confirmar, a ficha marcará dor 0 e classificação Manchester verde. Faça isso somente após avaliar o paciente e confirmar que ele nega dor e atende aos critérios clínicos de baixa urgência. Pressão, peso, temperatura, frequência cardíaca, saturação e glicemia permanecerão sem preenchimento até serem medidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setForm(current => ({ ...current, dor: 0, classificacaoRisco: 'verde' }));
+              setConfirmStableRoutine(false);
+              toast.success('Avaliação estável selecionada. Confira a ficha antes de concluir.');
+            }}>
+              Confirmo a avaliação
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!confirmAction} onOpenChange={(o) => !o && !actionLoading && setConfirmAction(null)}>
         <AlertDialogContent>
