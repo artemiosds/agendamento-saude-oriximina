@@ -21,9 +21,9 @@ export function getQuickCadastroPendencies(patient: QuickCheckinPatient | null |
   const normalizedSex = sex === "m" || sex === "masculino" ? "M" : sex === "f" || sex === "feminino" ? "F" : "";
   const race = custom.raca_cor || custom.racaCor || patient.raca_cor || patient.racaCor;
   const neighborhood = patient.bairro || custom.bairro;
-  const street = patient.logradouro || custom.logradouro || patient.endereco;
-  const phone = patient.telefone || patient.telefone_principal || custom.telefone_principal;
-  const mother = patient.nomeMae || patient.nome_mae;
+  const street = patient.logradouro || custom.logradouro || patient.endereco || custom.endereco;
+  const phone = patient.telefone || patient.telefone_principal || custom.telefone_principal || custom.telefone;
+  const mother = patient.nomeMae || patient.nome_mae || custom.nome_mae || custom.nomeMae;
 
   return [
     cpf.length === 11 ? "" : "CPF",
