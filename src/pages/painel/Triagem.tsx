@@ -776,18 +776,16 @@ const Triagem: React.FC = () => {
 
 
   const puxarDadosAnteriores = useCallback(async (itemArg?: Agendamento, silent = false) => {
-    const currentSelected = selectedItemState;
-    const target = itemArg || currentSelected;
+    const target = itemArg || selectedItem;
     if (!target || loadingPreviousTriage) return;
-    const selectedItem = target;
     setLoadingPreviousTriage(true);
     try {
       // Busca somente quando solicitado, limitado ao mesmo paciente e unidade.
       const { data: agendamentosAnteriores, error: agError } = await supabase
         .from('agendamentos')
         .select('id')
-        .eq('paciente_id', selectedItem.pacienteId)
-        .eq('unidade_id', selectedItem.unidadeId)
+        .eq('paciente_id', target.pacienteId)
+        .eq('unidade_id', target.unidadeId)
         .limit(300);
       if (agError) throw agError;
       const ids = (agendamentosAnteriores || []).map((item: { id: string }) => item.id);
@@ -809,7 +807,7 @@ const Triagem: React.FC = () => {
         return;
       }
       // Se o profissional já trocou de paciente, descarta o resultado.
-      if (activeTriageIdRef.current !== selectedItem.id) return;
+      if (activeTriageIdRef.current !== target.id) return;
       const list = (value: unknown): string[] => Array.isArray(value)
         ? value.filter((item): item is string => typeof item === 'string' && !!item.trim())
         : [];
