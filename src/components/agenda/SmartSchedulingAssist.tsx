@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAgendamentos } from '@/contexts/AgendamentosContext';
@@ -41,6 +41,9 @@ export function SmartSchedulingAssist({ paciente, profissionalId, profissionalNo
     return () => { alive = false; };
   }, [paciente?.id]);
 
+  // Cálculos de vagas usam valores adiados: a tela responde ao clique primeiro.
+  const profDeferred = useDeferredValue(profissionalId);
+  const dateDeferred = useDeferredValue(date);
   const cycleProf = cycles.find((c) => c.professional_id === profissionalId);
 
   const conflitos = useMemo(() => {
@@ -59,20 +62,20 @@ export function SmartSchedulingAssist({ paciente, profissionalId, profissionalNo
 
   // Próximas 3 datas com vaga (busca limitada: no máximo 60 datas avaliadas, só quando há profissional)
   const proximas = useMemo(() => {
-    if (!profissionalId || !unidadeId) return [] as { d: string; h: string; livres: number }[];
+    if (!profDeferred || !unidadeId) return [] as { d: string; h: string; livres: number }[];
     const out: { d: string; h: string; livres: number }[] = [];
-    const datas = getAvailableDates(profissionalId, unidadeId).filter((d) => d > date).slice(0, 60);
+    const datas = getAvailableDates(profDeferred, unidadeId).filter((d) => d > dateDeferred).slice(0, 60);
     for (const d of datas) {
-      const slots = getAvailableSlots(profissionalId, unidadeId, d, false, null);
+      const slots = getAvailableSlots(profDeferred, unidadeId, d, false, null);
       if (slots.length > 0) {
-        const turnos = getTurnoInfo(profissionalId, unidadeId, d);
+        const turnos = getTurnoInfo(profDeferred, unidadeId, d);
         const livres = turnos.length > 0 ? turnos.reduce((s, t) => s + Math.max(0, t.vagasLivresInternas), 0) : slots.length;
         out.push({ d, h: slots[0], livres });
         if (out.length >= 3) break;
       }
     }
     return out;
-  }, [getAvailableDates, getAvailableSlots, getTurnoInfo, profissionalId, unidadeId, date, agendamentos]);
+  }, [getAvailableDates, getAvailableSlots, getTurnoInfo, profDeferred, unidadeId, dateDeferred, agendamentos]);
 
   if (!paciente) return null;
   const cadastroOk = !!(paciente.cns && paciente.cpf && paciente.telefone && paciente.dataNascimento);
