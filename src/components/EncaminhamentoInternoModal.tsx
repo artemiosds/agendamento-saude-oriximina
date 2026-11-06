@@ -114,7 +114,11 @@ const EncaminhamentoInternoModal: React.FC<Props> = ({ open, onOpenChange, pacie
       ].join('\n');
 
       // 1) Save document snapshot in storage (mirrors existing encaminhamentos pattern)
-      const targetProfId = profDestino?.id || `especialidade:${especialidade}`;
+      // Storage keys reject ":" and accents; keep a safe, stable folder per specialty.
+      const especialidadeSlug = especialidade
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const targetProfId = profDestino?.id || `esp_${especialidadeSlug || 'geral'}`;
       const result = await salvarEncaminhamento({
         paciente_id: paciente.id,
         paciente_nome: paciente.nome,
