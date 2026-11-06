@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({
   day: '2026-10-22', empty: [] as any[], rows: [] as any[], queue: [] as any[],
   complete: new Set(['2026-10-22']),
-  patients: [{ id: 'p1', nome: 'PACIENTE TESTE', criadoEm: '', cpf: '', cns: '' }],
+  patients: [{ id: 'p1', nome: 'PACIENTE TESTE', criadoEm: '', cpf: '', cns: '' }] as Array<Record<string, unknown>>,
   units: [{ id: 'u1', nome: 'UNIDADE TESTE' }],
   professionals: [{ id: 'prof1', nome: 'PROFISSIONAL TESTE', unidadeId: 'u1' }],
   user: { id: 'admin', usuario: 'admin.sms', role: 'master', unidadeId: 'u1', nome: 'TESTE' },

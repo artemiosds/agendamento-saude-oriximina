@@ -80,6 +80,7 @@ import { useEnsurePortalAccess } from "@/hooks/useEnsurePortalAccess";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
+import { SmartSchedulingAssist } from "@/components/agenda/SmartSchedulingAssist";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
@@ -2910,6 +2911,18 @@ const Agenda: React.FC = () => {
                     )}
                     {newAg.pacienteId && pacientesConferidos.has(newAg.pacienteId) && (
                       <p className="text-xs text-success">✓ Dados conferidos</p>
+                    )}
+                    {newAg.pacienteId && (
+                      <SmartSchedulingAssist
+                        paciente={pacienteById.get(newAg.pacienteId)}
+                        profissionalId={newAg.profissionalId}
+                        profissionalNome={profissionais.find(p => p.id === newAg.profissionalId)?.nome}
+                        unidadeId={selectedProfUnit}
+                        date={selectedDate}
+                        hora={newAg.hora}
+                        onSetTipo={(tipo) => setNewAg((p) => ({ ...p, tipo }))}
+                        onGoToDate={(d, h) => { selectAgendaDate(d); setNewAg((p) => ({ ...p, hora: h || '' })); }}
+                      />
                     )}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
