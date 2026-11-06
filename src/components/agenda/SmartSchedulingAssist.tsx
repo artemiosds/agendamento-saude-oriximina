@@ -26,7 +26,7 @@ const DIAS = ['', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', '
 
 /** Assistente informativo: nunca bloqueia o agendamento. */
 export function SmartSchedulingAssist({ paciente, profissionalId, profissionalNome, unidadeId, date, hora, onSetTipo, onGoToDate }: Props) {
-  const { getTurnoInfo, getNextAvailableSlots } = useOperacional();
+  const { getTurnoInfo, getAvailableDates, getAvailableSlots } = useOperacional();
   const { agendamentos } = useAgendamentos();
   const [cycles, setCycles] = useState<CycleInfo[]>([]);
 
@@ -57,14 +57,22 @@ export function SmartSchedulingAssist({ paciente, profissionalId, profissionalNo
     return { total, ocupadas, livres: Math.max(0, total - ocupadas) };
   }, [getTurnoInfo, agendamentos, profissionalId, unidadeId, date]);
 
-  const sugestao = useMemo(() => {
-    if (!profissionalId || !unidadeId) return null;
-    if (capacidade && capacidade.livres > 0) return null;
-    const next = getNextAvailableSlots(profissionalId, unidadeId, date, 6).find((s) => !s.startsWith(date));
-    if (!next) return null;
-    const [d, h] = next.split(' ');
-    return { d, h };
-  }, [capacidade, getNextAvailableSlots, profissionalId, unidadeId, date]);
+  // Próximas 3 datas com vaga (busca limitada: no máximo 60 datas avaliadas, só quando há profissional)
+  const proximas = useMemo(() => {
+    if (!profissionalId || !unidadeId) return [] as { d: string; h: string; livres: number }[];
+    const out: { d: string; h: string; livres: number }[] = [];
+    const datas = getAvailableDates(profissionalId, unidadeId).filter((d) => d > date).slice(0, 60);
+    for (const d of datas) {
+      const slots = getAvailableSlots(profissionalId, unidadeId, d, false, null);
+      if (slots.length > 0) {
+        const turnos = getTurnoInfo(profissionalId, unidadeId, d);
+        const livres = turnos.length > 0 ? turnos.reduce((s, t) => s + Math.max(0, t.vagasLivresInternas), 0) : slots.length;
+        out.push({ d, h: slots[0], livres });
+        if (out.length >= 3) break;
+      }
+    }
+    return out;
+  }, [getAvailableDates, getAvailableSlots, getTurnoInfo, profissionalId, unidadeId, date, agendamentos]);
 
   if (!paciente) return null;
   const cadastroOk = !!(paciente.cns && paciente.cpf && paciente.telefone && paciente.dataNascimento);
@@ -115,10 +123,26 @@ export function SmartSchedulingAssist({ paciente, profissionalId, profissionalNo
         </p>
       )}
 
-      {sugestao && (
-        <Button type="button" size="sm" variant="secondary" className="h-7 text-xs" onClick={() => onGoToDate(sugestao.d, sugestao.h)}>
-          <Lightbulb className="w-3.5 h-3.5 mr-1" />Próxima vaga livre: {DIAS[isoDayOfWeek(sugestao.d)]} {fmt(sugestao.d)} às {sugestao.h}
-        </Button>
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <label className="text-xs text-muted-foreground" htmlFor="smart-ag-data">Data do agendamento:</label>
+        <input
+          id="smart-ag-data"
+          type="date"
+          value={date}
+          onChange={(e) => e.target.value && onGoToDate(e.target.value)}
+          className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+        />
+      </div>
+
+      {profissionalId && proximas.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5 text-primary" />Próximas vagas:</span>
+          {proximas.map((p) => (
+            <Button key={p.d} type="button" size="sm" variant="secondary" className="h-7 text-xs" onClick={() => onGoToDate(p.d, p.h)}>
+              {DIAS[isoDayOfWeek(p.d)].slice(0, 3)} {fmt(p.d).slice(0, 5)} • {p.livres} vaga{p.livres === 1 ? '' : 's'}
+            </Button>
+          ))}
+        </div>
       )}
     </div>
   );
