@@ -2,7 +2,8 @@ import { normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
 import type { User } from "@/types";
 import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
 import { startCareTriage, saveCareTriageDraft, completeCareTriage } from "@/services/careFlowService";
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { getTriagePendingFields } from "@/lib/triagePending";
 import { PageHeader } from '@/components/ui/page-header';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { usePacientes } from "@/contexts/PacientesContext";
@@ -444,6 +445,8 @@ const Triagem: React.FC = () => {
   const [previousTriageDate, setPreviousTriageDate] = useState<string | null>(null);
   const [confirmStableRoutine, setConfirmStableRoutine] = useState(false);
   const [nextPatientToCall, setNextPatientToCall] = useState<Agendamento | null>(null);
+  const activeTriageIdRef = useRef<string | null>(null);
+  const autoLoadHistoryRef = useRef<Agendamento | null>(null);
 
   const handleRemoverDaTriagem = async (item: Agendamento) => {
     setActionLoading(true);
@@ -762,6 +765,8 @@ const Triagem: React.FC = () => {
       });
       setCustomData({});
       setPreviousTriageDate(null);
+      activeTriageIdRef.current = ag.id;
+      autoLoadHistoryRef.current = ag;
 
       setOpeningTriagemId(null);
     },
@@ -770,21 +775,22 @@ const Triagem: React.FC = () => {
 
 
 
-  const puxarDadosAnteriores = useCallback(async () => {
-    if (!selectedItem || loadingPreviousTriage) return;
+  const puxarDadosAnteriores = useCallback(async (itemArg?: Agendamento, silent = false) => {
+    const target = itemArg || selectedItem;
+    if (!target || loadingPreviousTriage) return;
     setLoadingPreviousTriage(true);
     try {
       // Busca somente quando solicitado, limitado ao mesmo paciente e unidade.
       const { data: agendamentosAnteriores, error: agError } = await supabase
         .from('agendamentos')
         .select('id')
-        .eq('paciente_id', selectedItem.pacienteId)
-        .eq('unidade_id', selectedItem.unidadeId)
+        .eq('paciente_id', target.pacienteId)
+        .eq('unidade_id', target.unidadeId)
         .limit(300);
       if (agError) throw agError;
       const ids = (agendamentosAnteriores || []).map((item: { id: string }) => item.id);
       if (!ids.length) {
-        toast.info('Não há triagem anterior registrada nesta unidade.');
+        if (!silent) toast.info('Não há triagem anterior registrada nesta unidade.');
         return;
       }
       const { data, error } = await supabase
@@ -797,9 +803,11 @@ const Triagem: React.FC = () => {
         .maybeSingle();
       if (error) throw error;
       if (!data) {
-        toast.info('Não há triagem anterior concluída nesta unidade.');
+        if (!silent) toast.info('Não há triagem anterior concluída nesta unidade.');
         return;
       }
+      // Se o profissional já trocou de paciente, descarta o resultado.
+      if (activeTriageIdRef.current !== target.id) return;
       const list = (value: unknown): string[] => Array.isArray(value)
         ? value.filter((item): item is string => typeof item === 'string' && !!item.trim())
         : [];
@@ -811,14 +819,25 @@ const Triagem: React.FC = () => {
         comorbidades: current.comorbidades.length ? current.comorbidades : historicalComorbidities,
       }));
       setPreviousTriageDate(data.confirmado_em || data.criado_em || null);
-      toast.success('Dados anteriores carregados nos campos vazios. Confira e confirme com o paciente.');
+      if (!silent) toast.success('Dados anteriores carregados nos campos vazios. Confira e confirme com o paciente.');
     } catch (error) {
       console.error('Erro ao buscar triagem anterior:', error);
-      toast.error('Não foi possível consultar a triagem anterior.');
+      if (!silent) toast.error('Não foi possível consultar a triagem anterior.');
     } finally {
       setLoadingPreviousTriage(false);
     }
   }, [selectedItem, loadingPreviousTriage]);
+
+  // Carrega automaticamente o histórico (alergias, medicamentos, comorbidades)
+  // assim que a ficha abre — somente nos campos vazios, sem avisos intrusivos.
+  useEffect(() => {
+    const pendingItem = autoLoadHistoryRef.current;
+    if (!dialogOpen || !pendingItem || selectedItem?.id !== pendingItem.id) return;
+    autoLoadHistoryRef.current = null;
+    void puxarDadosAnteriores(pendingItem, true);
+  }, [dialogOpen, selectedItem, puxarDadosAnteriores]);
+
+  const pendingFields = useMemo(() => getTriagePendingFields(form), [form.pressaoArterial, form.peso, form.temperatura, form.saturacaoOxigenio, form.queixaPrincipal, form.classificacaoRisco]);
 
   const salvarRascunho = async () => {
     if (!selectedItem || saving) return;
@@ -1194,11 +1213,11 @@ const Triagem: React.FC = () => {
             </div>
             <h3 className="border-b pb-1 pt-2 text-sm font-semibold text-primary">3. Histórico, Alergias e Medicamentos</h3>
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={puxarDadosAnteriores} disabled={loadingPreviousTriage || !selectedItem}>
+              <Button type="button" variant="outline" size="sm" onClick={() => puxarDadosAnteriores()} disabled={loadingPreviousTriage || !selectedItem}>
                 {loadingPreviousTriage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
                 Puxar dados anteriores
               </Button>
-              {previousTriageDate && <span className="text-xs text-muted-foreground">Última triagem: {new Date(previousTriageDate).toLocaleString('pt-BR')}</span>}
+              {previousTriageDate && <Badge variant="outline" className="border-primary/40 text-xs text-primary">✓ Histórico importado da triagem de {new Date(previousTriageDate).toLocaleDateString('pt-BR')} — confirme com o paciente</Badge>}
             </div>
             <p className="text-[11px] text-muted-foreground">Apenas alergias, medicamentos e comorbidades ainda não preenchidos serão importados. Confirme todas as informações com o paciente; registros antigos podem estar desatualizados.</p>
             <details className="group rounded-md border border-border p-2">
@@ -1284,6 +1303,14 @@ const Triagem: React.FC = () => {
                 values={customData}
                 onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
               />
+            )}
+            {pendingFields.length > 0 && (
+              <div role="status" className="flex flex-wrap items-center gap-1 rounded-md border border-dashed border-border p-2">
+                <span className="text-[11px] text-muted-foreground">Ainda não registrado (opcional, não impede concluir):</span>
+                {pendingFields.map(f => (
+                  <Badge key={f} variant="outline" className="text-[11px] font-normal text-muted-foreground">{f} pendente</Badge>
+                ))}
+              </div>
             )}
             <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex flex-wrap items-center justify-between gap-2 border-t bg-background px-6 py-3">
               <Button variant="outline" onClick={salvarRascunho} disabled={saving || !vitalValidation.valid}>
