@@ -25,6 +25,7 @@ import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import { getCodigoIbge } from "@/lib/municipiosIbge";
 import StructuredOciForm from '@/components/documents/StructuredOciForm';
+const RichTextEditor = React.lazy(() => import('@/components/editor/RichTextEditor'));
 import {
   buildOciAddress,
   createEmptyOciData,
@@ -1223,7 +1224,19 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               <Separator />
 
 
-              {/* Conteúdo editável removido a pedido — documento é gerado no padrão institucional */}
+              {!(isOciStructured && ociData) && (
+                <details className="rounded-lg border p-3">
+                  <summary className="cursor-pointer text-[13px] font-bold">
+                    Editar texto (estilo Word: justificar, negrito, itálico, alinhamentos)
+                  </summary>
+                  <p className="text-xs text-muted-foreground my-2">
+                    Faça os ajustes finais aqui. Se alterar os campos acima depois, o texto é gerado novamente.
+                  </p>
+                  <React.Suspense fallback={<div className="text-xs text-muted-foreground">Carregando editor...</div>}>
+                    <RichTextEditor content={conteudoFinal} onChange={setConteudoFinal} />
+                  </React.Suspense>
+                </details>
+              )}
 
               {/* Preview */}
               <div className="space-y-1.5">
