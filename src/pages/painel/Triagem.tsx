@@ -444,6 +444,8 @@ const Triagem: React.FC = () => {
   const [previousTriageDate, setPreviousTriageDate] = useState<string | null>(null);
   const [confirmStableRoutine, setConfirmStableRoutine] = useState(false);
   const [nextPatientToCall, setNextPatientToCall] = useState<Agendamento | null>(null);
+  const activeTriageIdRef = useRef<string | null>(null);
+  const autoLoadHistoryRef = useRef<Agendamento | null>(null);
 
   const handleRemoverDaTriagem = async (item: Agendamento) => {
     setActionLoading(true);
@@ -762,6 +764,8 @@ const Triagem: React.FC = () => {
       });
       setCustomData({});
       setPreviousTriageDate(null);
+      activeTriageIdRef.current = ag.id;
+      autoLoadHistoryRef.current = ag;
 
       setOpeningTriagemId(null);
     },
@@ -770,8 +774,10 @@ const Triagem: React.FC = () => {
 
 
 
-  const puxarDadosAnteriores = useCallback(async () => {
-    if (!selectedItem || loadingPreviousTriage) return;
+  const puxarDadosAnteriores = useCallback(async (itemArg?: Agendamento, silent = false) => {
+    const target = itemArg || selectedItem;
+    if (!target || loadingPreviousTriage) return;
+    const selectedItem = target;
     setLoadingPreviousTriage(true);
     try {
       // Busca somente quando solicitado, limitado ao mesmo paciente e unidade.
@@ -784,7 +790,7 @@ const Triagem: React.FC = () => {
       if (agError) throw agError;
       const ids = (agendamentosAnteriores || []).map((item: { id: string }) => item.id);
       if (!ids.length) {
-        toast.info('Não há triagem anterior registrada nesta unidade.');
+        if (!silent) toast.info('Não há triagem anterior registrada nesta unidade.');
         return;
       }
       const { data, error } = await supabase
@@ -797,9 +803,11 @@ const Triagem: React.FC = () => {
         .maybeSingle();
       if (error) throw error;
       if (!data) {
-        toast.info('Não há triagem anterior concluída nesta unidade.');
+        if (!silent) toast.info('Não há triagem anterior concluída nesta unidade.');
         return;
       }
+      // Se o profissional já trocou de paciente, descarta o resultado.
+      if (activeTriageIdRef.current !== selectedItem.id) return;
       const list = (value: unknown): string[] => Array.isArray(value)
         ? value.filter((item): item is string => typeof item === 'string' && !!item.trim())
         : [];
@@ -811,10 +819,10 @@ const Triagem: React.FC = () => {
         comorbidades: current.comorbidades.length ? current.comorbidades : historicalComorbidities,
       }));
       setPreviousTriageDate(data.confirmado_em || data.criado_em || null);
-      toast.success('Dados anteriores carregados nos campos vazios. Confira e confirme com o paciente.');
+      if (!silent) toast.success('Dados anteriores carregados nos campos vazios. Confira e confirme com o paciente.');
     } catch (error) {
       console.error('Erro ao buscar triagem anterior:', error);
-      toast.error('Não foi possível consultar a triagem anterior.');
+      if (!silent) toast.error('Não foi possível consultar a triagem anterior.');
     } finally {
       setLoadingPreviousTriage(false);
     }
