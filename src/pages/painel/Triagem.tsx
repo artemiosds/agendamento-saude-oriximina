@@ -776,7 +776,8 @@ const Triagem: React.FC = () => {
 
 
   const puxarDadosAnteriores = useCallback(async (itemArg?: Agendamento, silent = false) => {
-    const target = itemArg || selectedItem;
+    const currentSelected = selectedItemState;
+    const target = itemArg || currentSelected;
     if (!target || loadingPreviousTriage) return;
     const selectedItem = target;
     setLoadingPreviousTriage(true);
