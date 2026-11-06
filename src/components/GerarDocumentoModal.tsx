@@ -1293,7 +1293,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               )}
               <Button
                 onClick={handleSignAndFinalize}
-                disabled={salvando || (isEncaminhamento && !profDestinoId) || !ociReady}
+                disabled={salvando || !ociReady}
                 className="gap-1.5"
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}

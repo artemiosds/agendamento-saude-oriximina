@@ -64,6 +64,13 @@
       "when": 1793278869468,
       "tag": "0008_treatment_professional_resolution",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793976475714,
+      "tag": "0009_documentos_status_anexado",
+      "breakpoints": true
     }
   ]
 }

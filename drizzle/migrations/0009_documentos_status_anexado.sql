@@ -1,0 +1,2 @@
+ALTER TABLE public.documentos_gerados DROP CONSTRAINT IF EXISTS documentos_gerados_status_check;
+ALTER TABLE public.documentos_gerados ADD CONSTRAINT documentos_gerados_status_check CHECK (status = ANY (ARRAY['rascunho'::text, 'assinado'::text, 'cancelado'::text, 'anexado'::text, 'gerado'::text]));
