@@ -283,6 +283,11 @@ button:active:not(:disabled) {
   transform: scaleX(1);
 }
 
+/* Campos de texto longo: parágrafos justificados (padrão documento) */
+textarea {
+  text-align: justify;
+}
+
 /* Input focus glow — enhanced */
 input:focus-visible,
 textarea:focus-visible,

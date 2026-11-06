@@ -208,6 +208,13 @@ const RichTextEditor: React.FC<Props> = ({ content, onChange, placeholder, class
     },
   });
 
+  // Sincroniza conteúdo externo (ex.: documento regenerado) sem perder o cursor durante a digitação
+  React.useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content || '', { emitUpdate: false } as any);
+    }
+  }, [content, editor]);
+
   const insertVariable = useCallback(
     (tag: string) => {
       if (!editor) return;
