@@ -706,6 +706,18 @@ const Agenda: React.FC = () => {
       .replace(/[\u0300-\u036f]/g, "");
   };
 
+  const [novoAgProfOpen, setNovoAgProfOpen] = useState(false);
+  const profissionaisAgrupadosNovoAg = React.useMemo(() => Object.entries(
+    [...profissionais]
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+      .reduce((acc, p) => {
+        const cat = p.profissao || p.cargo || "Outros";
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(p);
+        return acc;
+      }, {} as Record<string, typeof profissionais>)
+  ), [profissionais]);
+
   const profissionaisFiltradosBusca = React.useMemo(() => {
     let list = profissionaisVisiveis.filter((p) => {
       if (filterUnit !== "all" && p.unidadeId !== filterUnit) return false;
@@ -2928,7 +2940,7 @@ const Agenda: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Profissional</Label>
-                      <Popover>
+                      <Popover open={novoAgProfOpen} onOpenChange={setNovoAgProfOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
@@ -2948,23 +2960,15 @@ const Agenda: React.FC = () => {
                             <CommandInput placeholder="Buscar profissional..." className="h-9" />
                             <CommandList className="max-h-[300px]">
                               <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
-                              {Object.entries(
-                                profissionais
-                                  .sort((a, b) => a.nome.localeCompare(b.nome))
-                                  .reduce((acc, p) => {
-                                    const cat = p.profissao || p.cargo || "Outros";
-                                    if (!acc[cat]) acc[cat] = [];
-                                    acc[cat].push(p);
-                                    return acc;
-                                  }, {} as Record<string, typeof profissionais>)
-                              ).map(([categoria, lista]) => (
+                              {profissionaisAgrupadosNovoAg.map(([categoria, lista]) => (
                                 <CommandGroup key={categoria} heading={categoria}>
                                   {lista.map((p) => (
                                     <CommandItem
                                       key={p.id}
                                       value={`${p.id} ${p.nome} ${p.profissao || ''}`}
                                       onSelect={() => {
-                                        setNewAg((prev) => ({ ...prev, profissionalId: p.id }));
+                                        setNovoAgProfOpen(false);
+                                        React.startTransition(() => setNewAg((prev) => ({ ...prev, profissionalId: p.id })));
                                       }}
                                       className="flex items-center justify-between cursor-pointer py-2"
                                     >
