@@ -174,8 +174,8 @@ const DocumentosHistorico: React.FC<Props> = ({ pacienteId, pacienteNome }) => {
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handlePrint(d)} title="Imprimir">
                     <Printer className="w-3.5 h-3.5" />
                   </Button>
-                  {d.status === 'assinado' && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setCancelDoc(d)} title="Cancelar">
+                  {d.status !== 'cancelado' && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setCancelDoc(d)} title="Excluir / Cancelar (com motivo)">
                       <XCircle className="w-3.5 h-3.5" />
                     </Button>
                   )}
