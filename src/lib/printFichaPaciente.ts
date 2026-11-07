@@ -4,6 +4,7 @@
  * Configurações → Impressão de Documentos. Fiel ao preview e ao PDF.
  */
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from './printLayout';
+import { getBrandSync } from '@/hooks/useBrand';
 
 interface FichaPacienteData {
   paciente: {
@@ -186,7 +187,7 @@ export async function printFichaPaciente(data: FichaPacienteData): Promise<void>
 
     <div class="signature" style="margin-top: 40px;">
       <div style="margin-bottom: 30px; color:#475569; font-size:10pt;">
-        Oriximiná — PA, ____ / ____ / ________
+        ${getBrandSync().cidadeUf}, ____ / ____ / ________
       </div>
       <div class="signature-line"></div>
       <div class="name">Assinatura do Responsável</div>

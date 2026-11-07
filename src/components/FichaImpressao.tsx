@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Printer, Loader2 } from 'lucide-react';
 import { loadDocumentConfig, printViaIframe, buildDocumentShell, type DocumentConfig } from '@/lib/printLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { getBrandSync } from '@/hooks/useBrand';
 
 
 
@@ -294,7 +295,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
   <!-- ASSINATURA -->
   <div class="signature" style="margin-top: 30px;">
     <div style="font-size: 10pt; color: #475569; margin-bottom: 20px;">
-      Oriximiná &mdash; PA, ____/____/________
+      ${getBrandSync().cidadeUf}, ____/____/________
     </div>
     <div class="signature-line"></div>
     <div class="name">${!somentePessoais ? 'Profissional Responsável' : 'Responsável pelo Cadastro'}</div>

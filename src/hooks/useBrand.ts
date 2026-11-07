@@ -11,12 +11,21 @@ export interface Brand {
   titulo: string;
   subtitulo: string;
   logoUrl: string;
+  /** Cidade/UF usada em locais e datas de documentos impressos. */
+  cidadeUf: string;
+  /** Linha de unidade nos carimbos impressos. */
+  unidadeCarimbo: string;
+  /** Prefeitura/instituição mantenedora (capas de relatório). */
+  mantenedora: string;
 }
 
 export const DEFAULT_BRAND: Brand = {
   titulo: 'SMS Oriximiná',
   subtitulo: 'Secretaria Municipal de Saúde',
   logoUrl: logoSms,
+  cidadeUf: 'Oriximiná — PA',
+  unidadeCarimbo: 'CER II — Oriximiná/PA',
+  mantenedora: 'Prefeitura Municipal de Oriximiná — PA',
 };
 
 const CACHE_KEY = 'brand_cache_v1';
@@ -26,6 +35,9 @@ export function resolveBrand(inst: any): Brand {
     titulo: (inst?.marcaTitulo || '').trim() || DEFAULT_BRAND.titulo,
     subtitulo: (inst?.marcaSubtitulo || '').trim() || DEFAULT_BRAND.subtitulo,
     logoUrl: (inst?.logoUrl || '').trim() || DEFAULT_BRAND.logoUrl,
+    cidadeUf: (inst?.marcaCidadeUf || '').trim() || DEFAULT_BRAND.cidadeUf,
+    unidadeCarimbo: (inst?.marcaUnidadeCarimbo || '').trim() || DEFAULT_BRAND.unidadeCarimbo,
+    mantenedora: (inst?.marcaMantenedora || '').trim() || DEFAULT_BRAND.mantenedora,
   };
 }
 
@@ -59,4 +71,9 @@ export function useBrand(): Brand {
   }, [brand.titulo]);
 
   return brand;
+}
+
+/** Leitura síncrona para geradores de impressão (fora de componentes React). */
+export function getBrandSync(): Brand {
+  return readCache();
 }
