@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useLicense } from '@/hooks/useLicense';
+import { useAuth } from '@/contexts/AuthContext';
 import { LICENSE_MODULES, LicenseState } from '@/lib/licenseModules';
 
 const ConfigLicencaModulos: React.FC = () => {
@@ -14,7 +15,17 @@ const ConfigLicencaModulos: React.FC = () => {
   const [saving, setSaving] = useState(false);
   useEffect(() => setDraft(license), [license]);
 
+  const { user } = useAuth();
+  const isOwner = user?.usuario === 'admin.sms';
   const changed = LICENSE_MODULES.some(m => draft[m.id] !== license[m.id]);
+
+  if (!isOwner) {
+    return (
+      <Card><CardContent className="p-5">
+        <p className="text-sm text-muted-foreground">Somente o administrador global do sistema pode gerenciar licenças e módulos.</p>
+      </CardContent></Card>
+    );
+  }
 
   const handleSave = async () => {
     if (motivo.trim().length < 5) { toast.error('Informe o motivo da alteração.'); return; }
