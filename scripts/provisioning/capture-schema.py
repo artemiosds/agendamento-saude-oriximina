@@ -49,9 +49,11 @@ QUERIES = {
     'policies': """SELECT schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
       FROM pg_policies WHERE schemaname='public' OR (schemaname='storage' AND tablename='objects')
       ORDER BY schemaname,tablename,policyname""",
-    'table_grants': """SELECT table_name,grantee,privilege_type FROM information_schema.table_privileges
-      WHERE table_schema='public' AND grantee IN ('anon','authenticated','service_role')
-      ORDER BY table_name,grantee,privilege_type""",
+    'table_grants': """SELECT c.relname AS table_name,r.rolname AS grantee,a.privilege_type
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      CROSS JOIN LATERAL aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a
+      JOIN pg_roles r ON r.oid=a.grantee WHERE n.nspname='public' AND c.relkind IN ('r','v','m')
+      AND r.rolname IN ('anon','authenticated','service_role') ORDER BY c.relname,r.rolname,a.privilege_type""",
     'enums': """SELECT t.typname AS name,jsonb_agg(e.enumlabel ORDER BY e.enumsortorder) AS labels
       FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace JOIN pg_enum e ON e.enumtypid=t.oid
       WHERE n.nspname='public' GROUP BY t.typname ORDER BY t.typname""",
