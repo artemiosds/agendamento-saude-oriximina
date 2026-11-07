@@ -1,2 +1,3 @@
 - Treatment sessions: a DB trigger blocks two active (not cancelada/remarcada) sessions of the same cycle on the same date; existing duplicates are left for human review, never auto-fixed.
 - SaaS client registry lives in system_config id='saas_clientes'; restrictive RLS + is_global_owner() lock it (and id='licenca' writes) to admin.sms — commercial control must not depend on UI hiding.
+- New-client provisioning artifacts are generated from read-only schema metadata, never application rows or historical migrations; installation is blocked on nonempty targets and remains unapproved until isolated restore tests pass.
