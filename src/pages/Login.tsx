@@ -22,6 +22,7 @@ const Login: React.FC = () => {
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const brand = useBrand();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
