@@ -85,6 +85,7 @@ const HistoricoTriagem            = lazyRetry(() => import("./pages/painel/Histo
 const RelatorioAlta               = lazyRetry(() => import("./pages/painel/RelatorioAlta"));
 const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
+const SaasGestao                  = lazyRetry(() => import("./pages/painel/SaasGestao"));
 const MonitoramentoSistema        = lazyRetry(() => import("./pages/painel/MonitoramentoSistema"));
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
 
@@ -239,6 +240,7 @@ const App = () => (
                     <Route path="multiprofissional" element={<ModuleRoute modulo="atendimento"><AvaliacaoMultiprofissional /></ModuleRoute>} />
                     <Route path="configuracoes" element={<ModuleRoute modulo="usuarios" masterOnly><Configuracoes /></ModuleRoute>} />
                     <Route path="permissoes" element={<ModuleRoute modulo="usuarios" masterOnly><Permissoes /></ModuleRoute>} />
+                    <Route path="saas-gestao" element={<ModuleRoute modulo="usuarios" masterOnly><SaasGestao /></ModuleRoute>} />
                     <Route path="configuracoes-avancadas" element={<ModuleRoute modulo="usuarios" masterOnly><ConfiguracoesAvancadas /></ModuleRoute>} />
                     <Route path="monitoramento" element={<ModuleRoute modulo="monitoramento_sistema"><MonitoramentoSistema /></ModuleRoute>} />
                     <Route path="alta" element={<ModuleRoute modulo="prontuario"><RelatorioAlta /></ModuleRoute>} />
