@@ -34,6 +34,55 @@ export interface SaasCliente {
   modulos: LicenseState;
   observacoes: string;
   historico: HistoricoItem[];
+  // Institucional
+  codigoIbge: string;
+  endereco: string;
+  slug: string;
+  // Comercial
+  plano: PlanoId;
+  mensalidade: number;
+  diaVencimento: number;
+  emailFinanceiro: string;
+  contatoFinanceiro: string;
+  limiteUsuarios: number;
+}
+
+export type PlanoId = 'basico' | 'profissional' | 'enterprise';
+export const PLANOS: { id: PlanoId; label: string; descricao: string; limiteUsuarios: number; modulos: LicenseState }[] = [
+  { id: 'basico', label: 'Básico', descricao: 'Agenda, pacientes e prontuário.', limiteUsuarios: 10,
+    modulos: { faturamento_sus: false, reabilitacao: false, triagem: false, regulacao: false } },
+  { id: 'profissional', label: 'Profissional', descricao: 'Básico + Faturamento SUS/BPA-I e Triagem.', limiteUsuarios: 20,
+    modulos: { faturamento_sus: true, reabilitacao: false, triagem: true, regulacao: false } },
+  { id: 'enterprise', label: 'Enterprise', descricao: 'Todos os módulos, incluindo CER II/PTS e Regulação.', limiteUsuarios: 100,
+    modulos: { faturamento_sus: true, reabilitacao: true, triagem: true, regulacao: true } },
+];
+
+/** Gera identificador interno a partir do nome. */
+export function gerarSlug(nome: string): string {
+  return (nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+}
+
+/** MRR: soma das mensalidades dos clientes ativos e não vencidos. */
+export function calcularMrr(clientes: SaasCliente[], hoje = new Date()): number {
+  return clientes.reduce((s, c) => {
+    const d = diasParaVencer(c, hoje);
+    if (c.status !== 'ativo' || (d !== null && d < 0)) return s;
+    return s + (Number(c.mensalidade) || 0);
+  }, 0);
+}
+
+/** Clientes que exigem atenção: demonstração vencendo em até 7 dias, vencidos ou suspensos. */
+export function clientesAtencao(clientes: SaasCliente[], hoje = new Date()): { cliente: SaasCliente; motivo: string }[] {
+  const out: { cliente: SaasCliente; motivo: string }[] = [];
+  for (const c of clientes) {
+    if (c.status === 'cancelado') continue;
+    const d = diasParaVencer(c, hoje);
+    if (c.status === 'suspenso') out.push({ cliente: c, motivo: 'Bloqueado por pendência' });
+    else if (d !== null && d < 0) out.push({ cliente: c, motivo: `Vencido há ${-d} dia(s)` });
+    else if (c.status === 'demonstracao' && d !== null && d <= 7) out.push({ cliente: c, motivo: `Demonstração termina em ${d} dia(s)` });
+  }
+  return out;
 }
 
 export function novoCliente(): SaasCliente {
@@ -42,6 +91,8 @@ export function novoCliente(): SaasCliente {
     responsavel: '', email: '', telefone: '', status: 'demonstracao',
     inicio: new Date().toISOString().slice(0, 10), vencimento: '',
     modulos: { ...DEFAULT_LICENSE }, observacoes: '', historico: [],
+    codigoIbge: '', endereco: '', slug: '', plano: 'profissional', mensalidade: 0, diaVencimento: 10,
+    emailFinanceiro: '', contatoFinanceiro: '', limiteUsuarios: 20,
   };
 }
 
@@ -73,6 +124,12 @@ export function validarCliente(c: SaasCliente): string[] {
   if (c.uf && !/^[A-Z]{2}$/.test(c.uf)) erros.push('UF deve ter 2 letras.');
   if (c.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)) erros.push('E-mail inválido.');
   if (c.vencimento && c.inicio && c.vencimento < c.inicio) erros.push('Vencimento anterior ao início.');
+  if (c.codigoIbge && !/^\d{7}$/.test(c.codigoIbge)) erros.push('Código IBGE deve ter 7 dígitos.');
+  if (c.emailFinanceiro && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.emailFinanceiro)) erros.push('E-mail financeiro inválido.');
+  if (c.slug && !/^[a-z0-9-]{3,40}$/.test(c.slug)) erros.push('Identificador interno: use letras minúsculas, números e hífen.');
+  if (!(Number(c.mensalidade) >= 0)) erros.push('Mensalidade inválida.');
+  if (!(c.diaVencimento >= 1 && c.diaVencimento <= 28)) erros.push('Dia de vencimento deve ser entre 1 e 28.');
+  if (!(c.limiteUsuarios >= 1)) erros.push('Limite de usuários deve ser ao menos 1.');
   if (c.status === 'ativo' && !Object.values(c.modulos).some(Boolean)) erros.push('Cliente ativo precisa de ao menos um módulo.');
   return erros;
 }
@@ -99,7 +156,9 @@ export function gerarPacoteInstalacao(c: SaasCliente, hoje = new Date()) {
     versao: 1,
     gerado_em: hoje.toISOString(),
     cliente_id: c.id,
-    licenca: { modulos: licencaEfetiva(c, hoje), status: c.status, vencimento: c.vencimento || null },
+    identificador: c.slug || gerarSlug(c.nomeCurto || c.nome),
+    licenca: { modulos: licencaEfetiva(c, hoje), status: c.status, vencimento: c.vencimento || null, plano: c.plano, limite_usuarios: c.limiteUsuarios },
+    municipio: { nome: c.cidade, uf: c.uf, codigo_ibge: c.codigoIbge || null },
     marca: {
       marcaTitulo: c.nomeCurto || c.nome,
       marcaSubtitulo: TIPO_LABEL[c.tipo],
