@@ -4659,6 +4659,7 @@ export type Database = {
         Returns: boolean
       }
       is_external_professional: { Args: never; Returns: boolean }
+      is_global_owner: { Args: never; Returns: boolean }
       is_master_for_careness: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
       is_whatsapp_24h_window_open: {
