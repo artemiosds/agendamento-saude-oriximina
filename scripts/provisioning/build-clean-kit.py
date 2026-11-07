@@ -78,6 +78,9 @@ def build(metadata: Path, destination: Path):
                 role = 'PUBLIC' if g['grantee'] == 'PUBLIC' else quote(g['grantee'])
                 sql.append(f"GRANT {g['privilege_type']} ON FUNCTION {signature} TO {role};")
     for c in data['constraints']:
+        # Constraint triggers are emitted once from pg_get_triggerdef, not ALTER TABLE.
+        if c['type'] == 't':
+            continue
         sql.append(f"ALTER TABLE public.{quote(c['table_name'])} ADD CONSTRAINT {quote(c['name'])} {c['definition']};")
     sql.extend(x['definition'].rstrip(';') + ';' for x in data['indexes'])
     for v in data['views']:
