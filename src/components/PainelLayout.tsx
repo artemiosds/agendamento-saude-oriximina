@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
 import { useBrand } from '@/hooks/useBrand';
+import { useLicense } from '@/hooks/useLicense';
+import { isPathLicensed } from '@/lib/licenseModules';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
@@ -125,6 +127,7 @@ const PainelLayout: React.FC = () => {
   const { user, logout, isGlobalAdmin } = useAuth();
   const { unidades } = useOperacional();
   const brand = useBrand();
+  const { license } = useLicense();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
@@ -151,6 +154,7 @@ const PainelLayout: React.FC = () => {
   };
 
   const isItemVisible = (item: MenuItem): boolean => {
+    if (!isPathLicensed(item.to, license)) return false;
     // roles_master_only: accessible by any master (global or unit)
     if (item.roles_master_only) return isMaster;
     if (item.hide_from_master && isMaster) return false;
@@ -165,7 +169,7 @@ const PainelLayout: React.FC = () => {
         .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
         .filter(g => g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isMaster, can, permLoading]
+    [isMaster, can, permLoading, license]
   );
 
   // Collapsed groups state (persisted locally)
@@ -327,7 +331,9 @@ const PainelLayout: React.FC = () => {
               <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
             </div>
           }>
-            <Outlet />
+            {isPathLicensed(location.pathname, license) ? <Outlet /> : (
+              <div className="py-20 text-center text-muted-foreground">Este módulo não está ativo nesta instalação.</div>
+            )}
           </Suspense>
         </main>
       </div>
