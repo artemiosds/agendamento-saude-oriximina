@@ -1,9 +1,9 @@
+import { getBrandSync } from '@/hooks/useBrand';
 /**
  * Electronic signature utility for clinical documents.
  * Generates SHA-256 hash and signature block HTML.
  */
 import { getPublicIp } from '@/lib/clientInfo';
-import { getBrandSync } from '@/hooks/useBrand';
 
 export interface SignatureData {
   documentId: string;

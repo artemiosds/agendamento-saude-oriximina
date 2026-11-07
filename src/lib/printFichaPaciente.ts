@@ -1,10 +1,10 @@
+import { getBrandSync } from '@/hooks/useBrand';
 /**
  * Ficha Cadastral do Paciente — usa o padrão institucional global
  * (cabeçalho com 3 logos + bloco institucional + rodapé) configurado em
  * Configurações → Impressão de Documentos. Fiel ao preview e ao PDF.
  */
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from './printLayout';
-import { getBrandSync } from '@/hooks/useBrand';
 
 interface FichaPacienteData {
   paciente: {

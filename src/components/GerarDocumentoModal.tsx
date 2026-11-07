@@ -1,3 +1,4 @@
+import { getBrandSync } from '@/hooks/useBrand';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,7 +36,6 @@ import {
   type OciTemplateMeta,
 } from '@/lib/ociDocument';
 import {
-import { getBrandSync } from '@/hooks/useBrand';
   competenciaFromDate,
   resolveProfessionalCboReliable,
 } from '@/lib/sigtapClinicalValidation';

@@ -1,3 +1,4 @@
+import { getBrandSync } from '@/hooks/useBrand';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { usePacientes } from '@/contexts/PacientesContext';
@@ -33,7 +34,6 @@ import RelatorioCareniaProfissional from '@/components/reports/RelatorioCareniaP
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
 import { normalizeSexo } from '@/lib/utils/sexo-normalization';
-import { getBrandSync } from '@/hooks/useBrand';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
