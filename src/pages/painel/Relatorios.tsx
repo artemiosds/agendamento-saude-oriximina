@@ -1,3 +1,4 @@
+import { getBrandSync } from '@/hooks/useBrand';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { usePacientes } from '@/contexts/PacientesContext';
@@ -1847,7 +1848,7 @@ ${dataRows}
         return arr;
       };
 
-      doc.setProperties({ title, subject: 'Relatório SMS Oriximiná' });
+      doc.setProperties({ title, subject: 'Relatório ' + getBrandSync().titulo });
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.text(title, 14, 14);
@@ -2325,7 +2326,7 @@ ${dataRows}
       });
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      doc.setProperties({ title: 'Mapa de Atendimentos', subject: 'Relatório SMS Oriximiná' });
+      doc.setProperties({ title: 'Mapa de Atendimentos', subject: 'Relatório ' + getBrandSync().titulo });
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.text('SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ', 14, 13);
@@ -2821,9 +2822,9 @@ ${dataRows}
         '<li><a href="#report-section-' + (index + 1) + '">' + (index + 1) + '. ' + escapeHtml(section.title) + '</a></li>'
       ).join('');
       const bodyHtml =
-        '<section class="report-cover"><div><p class="institution">Prefeitura Municipal de Oriximiná — PA</p><p class="institution">Secretaria Municipal de Saúde</p><p class="institution">Centro Especializado em Reabilitação — CER II</p></div>' +
+        '<section class="report-cover"><div><p class="institution">' + escapeHtml(getBrandSync().mantenedora) + '</p><p class="institution">Secretaria Municipal de Saúde</p><p class="institution">Centro Especializado em Reabilitação — CER II</p></div>' +
           '<div><h1>' + escapeHtml(esc.titulo) + '</h1><p>Unidade: <strong>' + escapeHtml(esc.un) + '</strong></p><p>Período: <strong>' + escapeHtml(esc.periodo) + '</strong></p><p>Classificação: ' + (restrictedAnnex ? 'Gerencial + Anexo Operacional Restrito' : 'Gerencial — dados agregados') + '</p></div>' +
-          '<div><p>Oriximiná — Pará</p><p>' + escapeHtml(emitida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })) + '</p><p>ID: ' + escapeHtml(reportId) + '</p></div></section>' +
+          '<div><p>' + escapeHtml(getBrandSync().cidadeUf) + '</p><p>' + escapeHtml(emitida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })) + '</p><p>ID: ' + escapeHtml(reportId) + '</p></div></section>' +
         '<section class="report-title-page"><p class="institution">' + escapeHtml(responsavelNome) + '</p><div><h2>' + escapeHtml(esc.titulo) + '</h2><p>Relatório Gerencial Institucional referente a ' + escapeHtml(esc.periodo) + ', com filtros e limites descritos no próprio documento.</p></div><p>Responsável pela emissão: ' + escapeHtml(responsavelNome + (responsavelCargo ? ' — ' + responsavelCargo : '')) + '</p><p>Emitido em ' + escapeHtml(emitidaLabel) + ' · ' + escapeHtml(reportId) + '</p></section>' +
         '<section class="report-toc"><h2>Sumário</h2><ol>' + tocHtml + '</ol><p class="report-note">Sumário navegável com seções geradas a partir do conteúdo incluído. A paginação do documento aparece no rodapé; números fixos de página não são estimados.</p></section>' +
         '<div class="report-body">' + reportSections.map((section, index) =>
@@ -2884,7 +2885,7 @@ ${dataRows}
           Center('Período: ' + esc.periodo, 24),
           Center(restrictedAnnex ? 'Gerencial + Anexo Operacional Restrito' : 'Gerencial — dados agregados', 22),
           ...Array.from({ length: 7 }, () => new Paragraph({ children: [new TextRun('')] })),
-          Center('Oriximiná — Pará', 24, true),
+          Center(getBrandSync().cidadeUf, 24, true),
           Center(emitida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase(), 24, true),
           Center('ID: ' + reportId, 18),
           PageBreakP(),
@@ -2901,7 +2902,7 @@ ${dataRows}
           ...Array.from({ length: 5 }, () => new Paragraph({ children: [new TextRun('')] })),
           Center('Responsável pela emissão: ' + responsavelNome + (responsavelCargo ? ' — ' + responsavelCargo : ''), 22),
           Center('Emitido em ' + emitidaLabel + ' · ' + reportId, 20),
-          Center('Oriximiná — Pará', 24, true),
+          Center(getBrandSync().cidadeUf, 24, true),
           PageBreakP(),
           Center('SUMÁRIO', 28, true),
           new TableOfContents('Sumário', { hyperlink: true, headingStyleRange: '1-1', pageNumbersEntryLevelsRange: '1-1' }),

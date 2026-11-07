@@ -1,3 +1,4 @@
+import { getBrandSync } from '@/hooks/useBrand';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -258,7 +259,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       return `<div class="carimbo-digital" style="display:inline-block;border:1px solid #1e293b;border-radius:6px;padding:8px 14px;text-align:center;font-size:12px;line-height:1.4;">
         <div style="font-weight:700;">${nome}</div>
         ${consName ? `<div>${consName} ${consNum}${consUf ? '/' + consUf : ''}</div>` : ''}
-        <div style="font-size:10px;color:#64748b;">${unidade || 'CER II — Oriximiná/PA'}</div>
+        <div style="font-size:10px;color:#64748b;">${unidade || getBrandSync().unidadeCarimbo}</div>
       </div>`;
     }
     if (carimbo.tipo === 'imagem' && carimbo.imagem_url) {
@@ -269,7 +270,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       <div>${carimbo.conselho} ${carimbo.numero_registro}${carimbo.uf ? '-' + carimbo.uf : ''}</div>
       ${carimbo.especialidade ? `<div>${carimbo.especialidade}</div>` : ''}
       ${carimbo.cargo ? `<div>${carimbo.cargo}</div>` : ''}
-      <div style="font-size:10px;color:#64748b;">CER II — Oriximiná/PA</div>
+      <div style="font-size:10px;color:#64748b;">${getBrandSync().unidadeCarimbo}</div>
     </div>`;
   })();
 

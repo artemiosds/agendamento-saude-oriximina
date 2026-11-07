@@ -1,3 +1,4 @@
+import { getBrandSync } from '@/hooks/useBrand';
 /**
  * Ficha Cadastral do Paciente — usa o padrão institucional global
  * (cabeçalho com 3 logos + bloco institucional + rodapé) configurado em
@@ -186,7 +187,7 @@ export async function printFichaPaciente(data: FichaPacienteData): Promise<void>
 
     <div class="signature" style="margin-top: 40px;">
       <div style="margin-bottom: 30px; color:#475569; font-size:10pt;">
-        Oriximiná — PA, ____ / ____ / ________
+        ${getBrandSync().cidadeUf}, ____ / ____ / ________
       </div>
       <div class="signature-line"></div>
       <div class="name">Assinatura do Responsável</div>
