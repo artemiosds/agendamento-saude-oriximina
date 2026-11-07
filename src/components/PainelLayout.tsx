@@ -26,6 +26,7 @@ type MenuItem = {
   icon: React.ElementType;
   modulo: ModuleName | null;
   roles_master_only?: boolean;
+  owner_only?: boolean;
   hide_from_master?: boolean;
 };
 
@@ -104,6 +105,7 @@ const menuGroups: MenuGroup[] = [
       { to: '/painel/configuracoes',           label: 'Configurações',     icon: Settings,    modulo: null, roles_master_only: true },
       { to: '/painel/permissoes',              label: 'Permissões',        icon: Lock,        modulo: null, roles_master_only: true },
       { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,    modulo: null, roles_master_only: true },
+      { to: '/painel/saas-gestao',             label: 'Painel Central',    icon: Building2,   modulo: null, owner_only: true },
     ],
   },
 ];
@@ -155,6 +157,7 @@ const PainelLayout: React.FC = () => {
 
   const isItemVisible = (item: MenuItem): boolean => {
     if (!isPathLicensed(item.to, license)) return false;
+    if (item.owner_only) return isGlobalAdmin;
     // roles_master_only: accessible by any master (global or unit)
     if (item.roles_master_only) return isMaster;
     if (item.hide_from_master && isMaster) return false;
