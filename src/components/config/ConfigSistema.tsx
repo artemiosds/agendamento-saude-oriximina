@@ -103,6 +103,8 @@ const ConfigSistema: React.FC = () => {
             <div><Label>Telefone</Label><Input value={config.instituicao.telefone} onChange={e => setConfig(p => ({ ...p, instituicao: { ...p.instituicao, telefone: e.target.value } }))} onBlur={() => save(config)} /></div>
             <div className="sm:col-span-2"><Label>Endereço</Label><Input value={config.instituicao.endereco} onChange={e => setConfig(p => ({ ...p, instituicao: { ...p.instituicao, endereco: e.target.value } }))} onBlur={() => save(config)} /></div>
             <div><Label>E-mail institucional</Label><Input value={config.instituicao.email} onChange={e => setConfig(p => ({ ...p, instituicao: { ...p.instituicao, email: e.target.value } }))} onBlur={() => save(config)} /></div>
+            <div><Label>Nome curto (login e menu)</Label><Input value={(config.instituicao as any).marcaTitulo || ''} onChange={e => setConfig(p => ({ ...p, instituicao: { ...p.instituicao, marcaTitulo: e.target.value } as any }))} onBlur={() => save(config)} placeholder="SMS Oriximiná" /></div>
+            <div><Label>Subtítulo (login e menu)</Label><Input value={(config.instituicao as any).marcaSubtitulo || ''} onChange={e => setConfig(p => ({ ...p, instituicao: { ...p.instituicao, marcaSubtitulo: e.target.value } as any }))} onBlur={() => save(config)} placeholder="Secretaria Municipal de Saúde" /></div>
             <div><Label>Logo URL</Label><Input value={config.instituicao.logoUrl} onChange={e => setConfig(p => ({ ...p, instituicao: { ...p.instituicao, logoUrl: e.target.value } }))} onBlur={() => save(config)} placeholder="URL PNG/JPG" /></div>
           </div>
         </CardContent>

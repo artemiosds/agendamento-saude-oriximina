@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { lovable } from "@/integrations/lovable/index";
 import logoSms from "@/assets/logo-sms.jpeg";
+import { useBrand } from "@/hooks/useBrand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ const Login: React.FC = () => {
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const brand = useBrand();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -198,9 +200,9 @@ const Login: React.FC = () => {
         <Card className="shadow-elevated border-0">
           <CardContent className="p-8">
             <div className="text-center mb-8">
-              <img src={logoSms} alt="SMS Oriximiná" className="w-20 h-20 mx-auto rounded-2xl object-cover mb-4 shadow-md" />
-              <h1 className="text-2xl font-bold font-display text-foreground">SMS Oriximiná</h1>
-              <p className="text-muted-foreground text-sm mt-1">Secretaria Municipal de Saúde</p>
+              <img src={brand.logoUrl} alt={brand.titulo} className="w-20 h-20 mx-auto rounded-2xl object-cover mb-4 shadow-md" onError={(e) => { (e.currentTarget as HTMLImageElement).src = logoSms; }} />
+              <h1 className="text-2xl font-bold font-display text-foreground">{brand.titulo}</h1>
+              <p className="text-muted-foreground text-sm mt-1">{brand.subtitulo}</p>
               <div className="mt-3 px-4 py-2 bg-amber-50 border border-amber-300 rounded-lg">
                 <p className="text-amber-700 text-sm font-bold text-center">🔒 Acesso Somente para Funcionários</p>
               </div>

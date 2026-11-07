@@ -14,6 +14,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
+import { useBrand } from '@/hooks/useBrand';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
@@ -123,6 +124,7 @@ const roleLabels: Record<string, string> = {
 const PainelLayout: React.FC = () => {
   const { user, logout, isGlobalAdmin } = useAuth();
   const { unidades } = useOperacional();
+  const brand = useBrand();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
@@ -133,10 +135,10 @@ const PainelLayout: React.FC = () => {
 
   // Resolve display name for the current user's unit
   const unitDisplayName = useMemo(() => {
-    if (isGlobalAdmin) return 'SMS Oriximiná';
+    if (isGlobalAdmin) return brand.titulo;
     const userUnit = unidades.find(u => u.id === user?.unidadeId);
     return userUnit?.nomeExibicao || userUnit?.nome || 'Sistema';
-  }, [isGlobalAdmin, unidades, user?.unidadeId]);
+  }, [isGlobalAdmin, unidades, user?.unidadeId, brand.titulo]);
 
   // Auto-close sidebar on route change (mobile)
   React.useEffect(() => {
@@ -202,10 +204,10 @@ const PainelLayout: React.FC = () => {
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
-          <img src={logoSms} alt="SMS Oriximiná" className="w-10 h-10 rounded-xl object-cover ring-2 ring-sidebar-primary/20" />
+          <img src={brand.logoUrl} alt={brand.titulo} className="w-10 h-10 rounded-xl object-cover ring-2 ring-sidebar-primary/20" onError={(e) => { (e.currentTarget as HTMLImageElement).src = logoSms; }} />
           <div>
             <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight truncate max-w-[160px]">{unitDisplayName}</h2>
-            <p className="text-xs text-sidebar-foreground/60">Oriximiná</p>
+            <p className="text-xs text-sidebar-foreground/60 truncate max-w-[160px]">{isGlobalAdmin ? brand.subtitulo : brand.titulo}</p>
           </div>
         </div>
 
