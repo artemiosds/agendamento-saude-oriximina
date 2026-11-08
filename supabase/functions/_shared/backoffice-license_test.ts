@@ -26,7 +26,7 @@ const stable = (value: unknown): string => {
 };
 
 async function createFixture() {
-  const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair;
   const publicKey = await crypto.subtle.exportKey("raw", pair.publicKey);
   const keyId = "oriximina-test-key";
   const payload = {
