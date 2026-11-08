@@ -88,9 +88,46 @@ def assert_source_is_tenant_neutral(data):
         )
     return {'status': 'passed', 'scanned_surfaces': sorted(data.keys())}
 
+
+REQUIRED_METADATA = frozenset((
+    'tables', 'constraints', 'indexes', 'functions', 'function_grants',
+    'triggers', 'policies', 'table_grants', 'enums', 'sequences',
+    'extensions', 'views', 'buckets',
+))
+
+def assert_metadata_complete(data):
+    missing = REQUIRED_METADATA - data.keys()
+    unexpected = data.keys() - REQUIRED_METADATA
+    if missing or unexpected:
+        raise ValueError('Metadata inventory mismatch: missing=' + ','.join(sorted(missing))
+                         + '; unexpected=' + ','.join(sorted(unexpected)))
+    if any(not isinstance(rows, list) for rows in data.values()):
+        raise ValueError('Metadata inventories must be lists')
+
+def assert_safe_exposure(data):
+    # Definer functions can bypass RLS. Preserve no anonymous execute grant blindly.
+    for function in data['functions']:
+        if re.search(r'\bSECURITY\s+DEFINER\b', function['definition'], re.I):
+            grants = [grant for grant in data['function_grants']
+                      if (grant['name'], grant['arguments']) ==
+                         (function['name'], function['arguments'])]
+            if any(grant['grantee'] in ('PUBLIC', 'anon') for grant in grants):
+                raise ValueError('Public SECURITY DEFINER function requires review: ' + function['name'])
+    for view in data['views']:
+        options = [re.sub(r'\s+', '', item).lower() for item in (view.get('reloptions') or [])]
+        if view['kind'] != 'v' or 'security_invoker=true' not in options:
+            raise ValueError('View requires security_invoker review: ' + view['name'])
+    for grant in data['table_grants']:
+        if grant['grantee'] in ('anon', 'authenticated') and grant['privilege_type'] in ('TRUNCATE', 'TRIGGER'):
+            raise ValueError('Table privilege outside row security requires review: ' + grant['table_name'])
+
+
 def build(metadata: Path, destination: Path):
-    destination.mkdir(parents=True, exist_ok=True)
+    if destination.exists() and any(destination.iterdir()):
+        raise ValueError('Destination directory must be empty; never mix kit versions')
     data = {p.stem: json.loads(p.read_text()) for p in metadata.glob('*.json')}
+    assert_metadata_complete(data)
+    assert_safe_exposure(data)
     security = assert_public_tables_have_rls(data)
     neutrality = assert_source_is_tenant_neutral(data)
     if data['sequences']:
@@ -177,6 +214,7 @@ def build(metadata: Path, destination: Path):
             sql.append(f"ALTER TABLE {quote(t['schema_name'])}.{quote(t['table_name'])} {mode} TRIGGER {quote(t['name'])};")
     sql.append('COMMIT;')
     storage_sql.append('COMMIT;')
+    destination.mkdir(parents=True, exist_ok=True)
     (destination/'01-estrutura-CANDIDATO-BLOQUEADO.sql').write_text('\n\n'.join(sql))
     (destination/'02-politicas-arquivos-CANDIDATO-BLOQUEADO.sql').write_text('\n\n'.join(storage_sql))
     (destination/'buckets-a-criar.json').write_text(json.dumps(data['buckets'],ensure_ascii=False,indent=2))

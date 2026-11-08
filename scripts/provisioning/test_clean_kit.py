@@ -83,5 +83,54 @@ class CleanDefaultsTest(unittest.TestCase):
         result = kit.assert_source_is_tenant_neutral(metadata)
         self.assertEqual(result['status'], 'passed')
 
+
+class KitReviewTest(unittest.TestCase):
+    def metadata(self):
+        return {key: [] for key in kit.REQUIRED_METADATA}
+
+    def test_incomplete_or_extra_metadata_is_refused(self):
+        for data in ({}, {**self.metadata(), 'patients': []},
+                     {**self.metadata(), 'tables': {}}):
+            with self.subTest(data=data):
+                with self.assertRaises(ValueError):
+                    kit.assert_metadata_complete(data)
+
+    def test_public_definer_function_is_refused(self):
+        data = self.metadata()
+        data['functions'] = [{'name': 'privileged', 'arguments': '',
+                              'definition': 'CREATE FUNCTION privileged() SECURITY DEFINER'}]
+        for role in ('PUBLIC', 'anon'):
+            data['function_grants'] = [{'name': 'privileged', 'arguments': '', 'grantee': role}]
+            with self.assertRaisesRegex(ValueError, 'SECURITY DEFINER'):
+                kit.assert_safe_exposure(data)
+        data['function_grants'] = [{'name': 'privileged', 'arguments': '', 'grantee': 'authenticated'}]
+        kit.assert_safe_exposure(data)
+
+    def test_owner_rights_view_is_refused(self):
+        data = self.metadata()
+        data['views'] = [{'name': 'report', 'kind': 'v', 'reloptions': None}]
+        with self.assertRaisesRegex(ValueError, 'security_invoker'):
+            kit.assert_safe_exposure(data)
+        data['views'][0]['reloptions'] = ['security_invoker=true']
+        kit.assert_safe_exposure(data)
+
+    def test_privileges_that_bypass_row_security_are_refused(self):
+        for privilege in ('TRUNCATE', 'TRIGGER'):
+            data = self.metadata()
+            data['table_grants'] = [{'table_name': 'sample', 'grantee': 'authenticated',
+                                    'privilege_type': privilege}]
+            with self.assertRaisesRegex(ValueError, 'outside row security'):
+                kit.assert_safe_exposure(data)
+
+    def test_existing_output_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root)/'kit'
+            output.mkdir()
+            sentinel = output/'approved.sql'
+            sentinel.write_text('do not replace')
+            with self.assertRaisesRegex(ValueError, 'must be empty'):
+                kit.build(Path(root)/'missing', output)
+            self.assertEqual(sentinel.read_text(), 'do not replace')
+
 if __name__ == '__main__':
     unittest.main()

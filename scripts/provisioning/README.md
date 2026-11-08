@@ -40,3 +40,13 @@ python -m unittest scripts/provisioning/test_clean_kit.py scripts/provisioning/t
 - Fazer teste ponta a ponta em uma prefeitura piloto independente.
 
 Até que esses itens sejam implementados e homologados, não chamar o pacote de instalador pronto nem executar o SQL candidato em produção.
+
+## Revisão adicional do pacote
+
+O gerador exige os 13 inventários esperados, todos em formato de lista, e recusa arquivos JSON adicionais. Um diretório de saída não vazio nunca é sobrescrito, evitando misturar versões e checksums de pacotes distintos.
+
+Também são recusadas funções SECURITY DEFINER com execução concedida a PUBLIC/anon, views sem security_invoker=true e privilégios TRUNCATE/TRIGGER para anon/authenticated. Essas verificações exigem revisão do candidato; não corrigem nem modificam o banco de origem.
+
+Conferência somente de metadados em 08/11/2026: profession_careness_mapping_state está sem RLS, mas não foram encontrados grants de tabela para anon/authenticated. Quatro funções SECURITY DEFINER fazem referência a ela. A ausência de RLS impede o pacote pelo critério conservador do gerador; não comprova exposição pública da tabela. É necessário revisar a política do destino e testar as quatro funções antes de homologar. Nenhuma alteração foi aplicada à origem.
+
+Os testes unitários do gerador validam essas barreiras. Eles não equivalem a uma restauração da estrutura completa nem à homologação Auth/Storage/Realtime.
