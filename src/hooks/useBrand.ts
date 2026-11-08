@@ -17,6 +17,11 @@ export interface Brand {
   unidadeCarimbo: string;
   /** Prefeitura/instituição mantenedora (capas de relatório). */
   mantenedora: string;
+  /** Dados públicos de contato da instalação; nunca presumidos para outro município. */
+  enderecoPublico: string;
+  horarioPublico: string;
+  telefonePublico: string;
+  corPrimaria: string;
 }
 
 const tenantEnv = import.meta.env as unknown as Record<string, string | undefined>;
@@ -30,6 +35,12 @@ export const DEFAULT_BRAND: Brand = {
   cidadeUf: tenantEnv.VITE_TENANT_CITY_UF?.trim() || 'Oriximiná — PA',
   unidadeCarimbo: tenantEnv.VITE_TENANT_STAMP_UNIT?.trim() || 'CER II — Oriximiná/PA',
   mantenedora: tenantEnv.VITE_TENANT_MAINTAINER?.trim() || 'Prefeitura Municipal de Oriximiná — PA',
+  enderecoPublico: tenantEnv.VITE_TENANT_PUBLIC_ADDRESS?.trim() || 'RUA BARÃO DO RIO BRANCO, Nº 2336 CENTRO, CEP: 68270-000',
+  horarioPublico: tenantEnv.VITE_TENANT_PUBLIC_HOURS?.trim() || 'Seg a Sex: 08:00 às 18:00',
+  telefonePublico: tenantEnv.VITE_TENANT_PUBLIC_PHONE?.trim() || '(93) 99109-3163',
+  corPrimaria: /^#[0-9A-Fa-f]{6}$/.test(tenantEnv.VITE_TENANT_PRIMARY_COLOR || '')
+    ? tenantEnv.VITE_TENANT_PRIMARY_COLOR!
+    : '#2A6F97',
 };
 
 const CACHE_KEY = 'brand_cache_v1';
@@ -42,6 +53,12 @@ export function resolveBrand(inst: any): Brand {
     cidadeUf: (inst?.marcaCidadeUf || '').trim() || DEFAULT_BRAND.cidadeUf,
     unidadeCarimbo: (inst?.marcaUnidadeCarimbo || '').trim() || DEFAULT_BRAND.unidadeCarimbo,
     mantenedora: (inst?.marcaMantenedora || '').trim() || DEFAULT_BRAND.mantenedora,
+    enderecoPublico: (inst?.marcaEnderecoPublico || '').trim() || DEFAULT_BRAND.enderecoPublico,
+    horarioPublico: (inst?.marcaHorarioPublico || '').trim() || DEFAULT_BRAND.horarioPublico,
+    telefonePublico: (inst?.marcaTelefonePublico || '').trim() || DEFAULT_BRAND.telefonePublico,
+    corPrimaria: /^#[0-9A-Fa-f]{6}$/.test(inst?.marcaCorPrimaria || '')
+      ? inst.marcaCorPrimaria
+      : DEFAULT_BRAND.corPrimaria,
   };
 }
 
