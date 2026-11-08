@@ -14,6 +14,8 @@ class CleanDefaultsTest(unittest.TestCase):
     def test_candidate_refuses_execution_and_nonempty_destination(self):
         metadata = {key: [] for key in ('tables','constraints','indexes','functions','function_grants',
             'triggers','policies','table_grants','enums','sequences','extensions','views','buckets')}
+        metadata['tables'] = [{'name': 'sample', 'rls': True, 'force_rls': False, 'columns': []}]
+        metadata['table_grants'] = [{'table_name': 'sample', 'grantee': 'anon', 'privilege_type': 'SELECT'}]
         with tempfile.TemporaryDirectory() as root:
             source = Path(root)/'metadata'
             source.mkdir()
