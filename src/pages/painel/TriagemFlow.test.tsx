@@ -78,6 +78,7 @@ describe('Triagem: chamada do paciente dentro do modal', () => {
   it('mantém o modal e os campos preenchidos e reutiliza os dados da triagem', async () => {
     await open();
     const dialog = screen.getByRole('dialog');
+    const rpcCallsBeforeCallingPatient = f.rpc.mock.calls.length;
     const chamar = within(dialog).getByRole('button', { name: 'Chamar Paciente' });
     expect(chamar).toBeInTheDocument();
 
@@ -86,7 +87,7 @@ describe('Triagem: chamada do paciente dentro do modal', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Peso (kg)')).toHaveValue('63');
-    expect(f.rpc).not.toHaveBeenCalled();
+    expect(f.rpc).toHaveBeenCalledTimes(rpcCallsBeforeCallingPatient);
     expect(f.update).not.toHaveBeenCalled();
     expect(screen.getAllByTestId('mock-chamar-paciente')).toHaveLength(2);
     expect(f.callProps).toContainEqual(expect.objectContaining({

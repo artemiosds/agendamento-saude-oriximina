@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const f = vi.hoisted(() => ({
@@ -104,8 +105,12 @@ beforeEach(() => {
   f.updateQueue.mockReset().mockImplementation(async (id, patch) => { f.queueSetter?.(rows => rows.map(a => a.id === id ? { ...a, ...patch } : a)); });
 });
 afterEach(cleanup);
+function renderAgenda() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}><MemoryRouter><Agenda /></MemoryRouter></QueryClientProvider>);
+}
 async function confirmArrival() {
-  render(<MemoryRouter><Agenda /></MemoryRouter>);
+  renderAgenda();
   fireEvent.click(await screen.findByRole('button', { name: 'Chegada teste' }));
   fireEvent.click(screen.getByRole('button', { name: 'Confirmar teste' }));
 }
@@ -146,7 +151,7 @@ describe('confirmação atômica de chegada na Agenda', () => {
 
 describe('Check-in Expresso: recepção e teclado', () => {
   async function openQuickCheckin() {
-    render(<MemoryRouter><Agenda /></MemoryRouter>);
+    renderAgenda();
     fireEvent.click(await screen.findByRole('button', { name: /Check-in Expresso/ }));
     return screen.getByRole('textbox', { name: 'Buscar paciente agendado para hoje' });
   }

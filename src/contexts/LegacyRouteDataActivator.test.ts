@@ -16,9 +16,8 @@ describe("A1.1 route data activation", () => {
     });
   });
 
-  it("activates both legacy datasets for the other operational routes", () => {
+  it("activates both legacy datasets for routes that still use both global stores", () => {
     for (const pathname of [
-      "/painel/pacientes",
       "/painel/fila",
       "/painel/prontuario",
       "/painel/triagem",
@@ -28,6 +27,10 @@ describe("A1.1 route data activation", () => {
         agendamentos: true,
       });
     }
+  });
+
+  it("loads the patient list through its dedicated activator, not the legacy global patient store", () => {
+    expect(getLegacyRouteDataNeeds("/painel/pacientes")).toEqual({ pacientes: false, agendamentos: true });
   });
 
   it("loads only appointments for Treatments; patients are hydrated by visible cycle", () => {

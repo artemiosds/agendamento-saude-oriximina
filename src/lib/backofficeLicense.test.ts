@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { webcrypto } from 'node:crypto';
+
+const originalCrypto = globalThis.crypto;
+beforeAll(() => Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto }));
+afterAll(() => Object.defineProperty(globalThis, 'crypto', { configurable: true, value: originalCrypto }));
 import {
   mapBackofficeModules,
   verifyBackofficeLicenseStatus,

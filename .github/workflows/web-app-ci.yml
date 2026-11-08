@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  web:
+  web-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,11 +25,29 @@ jobs:
       - name: Reconcile package lock from the reviewed manifest
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
-      - name: Install reconciled dependencies
+      - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
       - name: Run application tests
         run: npm test
+
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Reconcile package lock from the reviewed manifest
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
 
       - name: Build production bundle
         run: npm run build

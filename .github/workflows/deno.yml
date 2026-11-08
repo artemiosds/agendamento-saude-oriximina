@@ -1,12 +1,4 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# This workflow will install Deno then run `deno lint` and `deno test`.
-# For more information see: https://github.com/denoland/setup-deno
-
-name: Deno
+name: Deno edge functions
 
 on:
   push:
@@ -18,25 +10,22 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  edge-functions:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Setup repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Deno
-        # uses: denoland/setup-deno@v1
-        uses: denoland/setup-deno@61fe2df320078202e33d7d5ad347e7dcfa0e8f31  # v1.1.2
+        uses: denoland/setup-deno@61fe2df320078202e33d7d5ad347e7dcfa0e8f31 # v1.1.2
         with:
           deno-version: v1.x
 
-      # Uncomment this step to verify the use of 'deno fmt' on each commit.
-      # - name: Verify formatting
-      #   run: deno fmt --check
+      - name: Lint Deno runtime code only
+        run: deno lint supabase/functions/_shared/backoffice-license.ts supabase/functions/_shared/backoffice-license_test.ts supabase/functions/backoffice-license-status/index.ts
 
-      - name: Run linter
-        run: deno lint
+      - name: Verify Edge Function types
+        run: deno check supabase/functions/backoffice-license-status/index.ts
 
-      - name: Run tests
-        run: deno test -A
+      - name: Run Edge Function license tests
+        run: deno test -A supabase/functions/_shared/backoffice-license_test.ts

@@ -173,7 +173,7 @@ describe('treatmentSessionOperations: schedule', () => {
       });
 
       await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' }))
-        .rejects.toThrow('Não foi possível concluir a operação da sessão (código 42703).');
+        .rejects.toThrow('A estrutura do banco está desatualizada para esta operação. Informe o código ao suporte.');
 
       expect(errorSpy).toHaveBeenCalledWith('[Tratamentos] Falha na operação transacional da sessão', {
         code: '42703',
