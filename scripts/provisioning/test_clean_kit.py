@@ -35,5 +35,27 @@ class CleanDefaultsTest(unittest.TestCase):
     def test_neutral_clinical_default_is_preserved(self):
         self.assertEqual(kit.clean_default({'name':'status','type':'text','default':"'rascunho'::text"}), "'rascunho'::text")
 
+    def test_source_tenant_reference_in_trigger_blocks_the_kit(self):
+        metadata = {'triggers': [{'definition': "CREATE TRIGGER x EXECUTE PROCEDURE public.fn('Oriximiná')"}]}
+        with self.assertRaisesRegex(ValueError, 'tenant-specific values'):
+            kit.assert_source_is_tenant_neutral(metadata)
+
+    def test_source_project_reference_in_policy_blocks_the_kit(self):
+        metadata = {'policies': [{'qual': "project_ref = 'ygbgywglxsshkkoiriul'"}]}
+        with self.assertRaisesRegex(ValueError, 'tenant-specific values'):
+            kit.assert_source_is_tenant_neutral(metadata)
+
+    def test_private_key_material_blocks_the_kit(self):
+        metadata = {'functions': [{'definition': '-----BEGIN PRIVATE KEY-----'}]}
+        with self.assertRaisesRegex(ValueError, 'tenant-specific values'):
+            kit.assert_source_is_tenant_neutral(metadata)
+
+    def test_safe_defaults_are_neutralized_before_reference_scan(self):
+        metadata = {'tables': [{'name': 'settings', 'columns': [
+            {'name': 'tenant_url', 'type': 'text', 'default': "'https://oriximina.example'::text"}
+        ]}]}
+        result = kit.assert_source_is_tenant_neutral(metadata)
+        self.assertEqual(result['status'], 'passed')
+
 if __name__ == '__main__':
     unittest.main()

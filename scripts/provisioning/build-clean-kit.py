@@ -21,9 +21,57 @@ def clean_default(column):
         return None
     return value
 
+TENANT_REFERENCE_PATTERNS = (
+    ('tenant_oriximina', re.compile(r'or[ií]ximin|sms-oriximina|gestao-saude-sms-oriximina|agendamento-saude-oriximina', re.I)),
+    ('source_supabase_project', re.compile(r'ygbgywglxsshkkoiriul', re.I)),
+    ('tenant_domain', re.compile(r'(?:oriximina\\.pa\\.gov\\.br|gestao-saude-sms-oriximina\\.vercel\\.app)', re.I)),
+)
+SECRET_PATTERNS = (
+    ('supabase_secret_key', re.compile(r'\\bsb_secret_[A-Za-z0-9_-]{12,}', re.I)),
+    ('jwt_or_service_token', re.compile(r'\\beyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}\\.', re.I)),
+    ('private_key', re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----', re.I)),
+    ('credential_assignment', re.compile(r'''(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|senha)\\s*[:=]\\s*["'][^"']{8,}["']''', re.I)),
+)
+
+def _walk_strings(value, location='metadata'):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from _walk_strings(key, f'{location}.<key>')
+            yield from _walk_strings(child, f'{location}.{key}')
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _walk_strings(child, f'{location}[{index}]')
+    elif isinstance(value, str):
+        yield location, value
+
+def assert_source_is_tenant_neutral(data):
+    """Reject tenant-specific references and credentials across every copied schema surface."""
+    prepared = json.loads(json.dumps(data))
+    # Values that are safe to neutralize only when they are column defaults.
+    for table in prepared.get('tables', []):
+        for column in table.get('columns', []):
+            column['default'] = clean_default(column)
+
+    findings = []
+    for location, value in _walk_strings(prepared):
+        for label, pattern in TENANT_REFERENCE_PATTERNS + SECRET_PATTERNS:
+            if pattern.search(value):
+                findings.append(f'{label} at {location}')
+        if re.search(r'https?://[^\\s\'"]+', value, re.I):
+            findings.append(f'hardcoded_url at {location}')
+    if findings:
+        preview = '; '.join(findings[:20])
+        remainder = f'; and {len(findings) - 20} more' if len(findings) > 20 else ''
+        raise ValueError(
+            'Clean-install kit blocked: tenant-specific values or credentials must be externalized first: '
+            + preview + remainder
+        )
+    return {'status': 'passed', 'scanned_surfaces': sorted(data.keys())}
+
 def build(metadata: Path, destination: Path):
     destination.mkdir(parents=True, exist_ok=True)
     data = {p.stem: json.loads(p.read_text()) for p in metadata.glob('*.json')}
+    neutrality = assert_source_is_tenant_neutral(data)
     if data['sequences']:
         raise ValueError('Sequence dependencies require manual review')
     sql = [
@@ -112,7 +160,7 @@ def build(metadata: Path, destination: Path):
     (destination/'02-politicas-arquivos-CANDIDATO-BLOQUEADO.sql').write_text('\n\n'.join(storage_sql))
     (destination/'buckets-a-criar.json').write_text(json.dumps(data['buckets'],ensure_ascii=False,indent=2))
     inventory = {'status':'bloqueado_aguardando_homologacao', 'captura':'somente metadados; sem linhas de aplicação',
-        'quantidades': {key:len(value) for key,value in data.items()}, 'defaults_neutralizados':sanitized,
+        'quantidades': {key:len(value) for key,value in data.items()}, 'defaults_neutralizados':sanitized, 'neutralidade':neutrality,
         'tabelas_sem_rls':[t['name'] for t in data['tables'] if not t['rls']],
         'pre_requisitos_nao_replicados':['Auth gerenciado', 'Storage gerenciado', 'Realtime gerenciado', 'extensões gerenciadas',
             '29 funções de aplicação: revisar código e configurar serviços próprios', 'catálogos oficiais: importar de fonte oficial',

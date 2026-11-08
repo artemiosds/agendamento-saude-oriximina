@@ -19,13 +19,17 @@ export interface Brand {
   mantenedora: string;
 }
 
+const tenantEnv = import.meta.env as unknown as Record<string, string | undefined>;
+
 export const DEFAULT_BRAND: Brand = {
-  titulo: 'SMS Oriximiná',
-  subtitulo: 'Secretaria Municipal de Saúde',
-  logoUrl: logoSms,
-  cidadeUf: 'Oriximiná — PA',
-  unidadeCarimbo: 'CER II — Oriximiná/PA',
-  mantenedora: 'Prefeitura Municipal de Oriximiná — PA',
+  // Sem variáveis de instalação, preserva exatamente a identidade oficial de Oriximiná.
+  // Instalações novas recebem sua identidade pelo manifesto de provisionamento.
+  titulo: tenantEnv.VITE_TENANT_NAME?.trim() || 'SMS Oriximiná',
+  subtitulo: tenantEnv.VITE_TENANT_SUBTITLE?.trim() || 'Secretaria Municipal de Saúde',
+  logoUrl: tenantEnv.VITE_TENANT_LOGO_URL?.trim() || logoSms,
+  cidadeUf: tenantEnv.VITE_TENANT_CITY_UF?.trim() || 'Oriximiná — PA',
+  unidadeCarimbo: tenantEnv.VITE_TENANT_STAMP_UNIT?.trim() || 'CER II — Oriximiná/PA',
+  mantenedora: tenantEnv.VITE_TENANT_MAINTAINER?.trim() || 'Prefeitura Municipal de Oriximiná — PA',
 };
 
 const CACHE_KEY = 'brand_cache_v1';

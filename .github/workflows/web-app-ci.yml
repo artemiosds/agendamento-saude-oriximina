@@ -22,8 +22,11 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Install locked dependencies
-        run: npm ci
+      - name: Reconcile package lock from the reviewed manifest
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Install reconciled dependencies
+        run: npm ci --no-audit --no-fund
 
       - name: Run application tests
         run: npm test
