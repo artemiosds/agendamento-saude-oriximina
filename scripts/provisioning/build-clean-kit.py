@@ -51,7 +51,7 @@ def assert_public_tables_have_rls(data):
     if not isinstance(tables, list) or not tables:
         raise ValueError('Clean-install kit blocked: public table inventory is missing or empty')
     unsafe = [
-        table.get('name', '<unnamed>')
+        table.get('name', '<unnamed>') if isinstance(table, dict) else '<invalid-entry>'
         for table in tables
         if not isinstance(table, dict) or table.get('rls') is not True
     ]
