@@ -1,0 +1,35 @@
+name: Clean installation structural acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/provisioning/**'
+      - 'provisioning/candidates/**'
+      - '.github/workflows/clean-install-acceptance.yml'
+  pull_request:
+    paths:
+      - 'scripts/provisioning/**'
+      - 'provisioning/candidates/**'
+      - '.github/workflows/clean-install-acceptance.yml'
+permissions:
+  contents: read
+jobs:
+  structural-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test candidate generation and target-only hardening
+        run: python -m unittest discover -s scripts/provisioning -p 'test_*.py'
+      - name: Install disposable PostgreSQL
+        run: npm install --prefix "$RUNNER_TEMP/clean-kit-pg" --no-audit --no-fund @electric-sql/pglite@0.5.15
+      - name: Restore complete captured schema in memory
+        run: |
+          node scripts/provisioning/restore-full-kit.mjs provisioning/candidates/2026-11-08 "$RUNNER_TEMP/clean-kit-pg/node_modules/@electric-sql/pglite/dist/index.js" "$RUNNER_TEMP/clean-kit-report"
+          python -m json.tool "$RUNNER_TEMP/clean-kit-report/restore-result.json"

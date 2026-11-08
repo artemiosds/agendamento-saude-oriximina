@@ -1,4 +1,5 @@
 """Build a non-executable, review-only schema kit from metadata (no tenant rows)."""
+import csv
 import hashlib
 import json
 import re
@@ -115,11 +116,23 @@ def assert_safe_exposure(data):
                 raise ValueError('Public SECURITY DEFINER function requires review: ' + function['name'])
     for view in data['views']:
         options = [re.sub(r'\s+', '', item).lower() for item in (view.get('reloptions') or [])]
-        if view['kind'] != 'v' or 'security_invoker=true' not in options:
+        if view['kind'] != 'v' or not any(option in ('security_invoker=true', 'security_invoker=on', 'security_invoker=1') for option in options):
             raise ValueError('View requires security_invoker review: ' + view['name'])
     for grant in data['table_grants']:
         if grant['grantee'] in ('anon', 'authenticated') and grant['privilege_type'] in ('TRUNCATE', 'TRIGGER'):
             raise ValueError('Table privilege outside row security requires review: ' + grant['table_name'])
+
+
+
+def policy_roles(value):
+    """Accept JSON arrays and legacy PostgreSQL name[] text without character iteration."""
+    if isinstance(value, str):
+        if not value.startswith('{') or not value.endswith('}'):
+            raise ValueError('Invalid policy roles')
+        value = next(csv.reader([value[1:-1]], escapechar='\\'))
+    if not isinstance(value, list) or not value or any(not isinstance(role, str) or not role for role in value):
+        raise ValueError('Policy roles must be a nonempty list')
+    return value
 
 
 def build(metadata: Path, destination: Path):
@@ -139,6 +152,7 @@ def build(metadata: Path, destination: Path):
         "DO $guard$ BEGIN RAISE EXCEPTION 'Instalação bloqueada: homologação em ambiente isolado pendente'; END $guard$;",
         # A second independent gate remains useful even after a reviewed release removes the first.
         "DO $empty$ BEGIN IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','v','m')) THEN RAISE EXCEPTION 'Destino não vazio: instalação recusada'; END IF; END $empty$;",
+        'SET LOCAL search_path = public, extensions;',
         'SET LOCAL check_function_bodies = false;',
     ]
     for extension in data['extensions']:
@@ -201,7 +215,7 @@ def build(metadata: Path, destination: Path):
         "DO $guard$ BEGIN RAISE EXCEPTION 'Políticas bloqueadas: revisão e buckets do destino pendentes'; END $guard$;"]
     for p in data['policies']:
         statement = f"CREATE POLICY {quote(p['policyname'])} ON {quote(p['schemaname'])}.{quote(p['tablename'])} AS {p['permissive']} FOR {p['cmd']} TO "
-        statement += ', '.join('PUBLIC' if role == 'public' else quote(role) for role in p['roles'])
+        statement += ', '.join('PUBLIC' if role == 'public' else quote(role) for role in policy_roles(p['roles']))
         if p['qual']:
             statement += f" USING ({p['qual']})"
         if p['with_check']:

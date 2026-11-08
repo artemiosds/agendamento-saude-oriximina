@@ -61,3 +61,18 @@ node scripts/provisioning/restore-smoke.mjs /tmp/clean-kit-tests/node_modules/@e
 ```
 
 O teste gera exclusivamente uma tabela sintética sem dados, valida o bloqueio original, libera somente a cópia sintética em memória, confere rollback, restauração vazia, RLS, negativa de escrita e recusa de reinstalação. Não aceita metadados de cliente nem conexão remota. Aprovado em 08/11/2026. Não substitui a homologação da estrutura completa, Auth, Storage, Realtime ou isolamento funcional entre unidades.
+
+## Restauração integral do candidato capturado
+
+O candidato versionado em provisioning/candidates/2026-11-08 contém somente estrutura, políticas e metadados de buckets; não contém registros de aplicação. Seus SQL continuam bloqueados para instalação.
+
+```bash
+npm install --prefix /tmp/clean-kit-postgres --no-audit --no-fund @electric-sql/pglite@0.5.15
+node scripts/provisioning/restore-full-kit.mjs provisioning/candidates/2026-11-08 /tmp/clean-kit-postgres/node_modules/@electric-sql/pglite/dist/index.js /tmp/clean-kit-report
+```
+
+O script verifica os hashes do manifesto e usa somente PostgreSQL em memória, sem parâmetro de conexão remota. A barreira SQL é removida apenas da cópia em memória para o teste. O candidato versionado permanece bloqueado.
+
+Para gerar nova cópia de destino, primeiro use prepare-target-metadata.py com o diretório de captura e uma saída vazia; depois use build-clean-kit.py nessa saída. Mudança nas quatro funções internas revisadas exige nova análise dos hashes. O preparador não conecta a bancos.
+
+Evidências e limites: docs/homologacao-estrutura-integral.md. A estrutura real passou no teste local; os serviços gerenciados e os fluxos de negócio continuam com homologação pendente.

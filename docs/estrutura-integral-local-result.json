@@ -1,0 +1,1 @@
+{"tables":80,"functions":115,"functionDefinitionsRevalidated":true,"constraints":152,"indexes":198,"triggers":52,"views":1,"policies":240,"allRls":true,"allEmptyBeforeFixtures":true,"storagePolicies":true,"rollback":true,"appointmentUnitIsolation":true,"managedAuth":"local_emulation","cloudServicesValidated":false,"fullRestoreRollback":true}

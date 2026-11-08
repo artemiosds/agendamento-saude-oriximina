@@ -132,5 +132,23 @@ class KitReviewTest(unittest.TestCase):
                 kit.build(Path(root)/'missing', output)
             self.assertEqual(sentinel.read_text(), 'do not replace')
 
+
+class FullCaptureCompatibilityTest(unittest.TestCase):
+    def test_legacy_postgres_role_array(self):
+        self.assertEqual(kit.policy_roles('{anon,authenticated}'), ['anon','authenticated'])
+        self.assertEqual(kit.policy_roles('{public}'), ['public'])
+        self.assertEqual(kit.policy_roles(['authenticated']), ['authenticated'])
+
+    def test_invalid_or_empty_roles_fail_closed(self):
+        for roles in ('authenticated','{}',[],None):
+            with self.subTest(roles=roles):
+                with self.assertRaises((ValueError,StopIteration)):
+                    kit.policy_roles(roles)
+
+    def test_postgres_on_is_valid_security_invoker(self):
+        data = {key: [] for key in kit.REQUIRED_METADATA}
+        data['views'] = [{'name':'safe_view','kind':'v','reloptions':['security_invoker=on']}]
+        kit.assert_safe_exposure(data)
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,74 @@
+[
+  {
+    "allowed_mime_types": null,
+    "file_size_limit": null,
+    "id": "carimbos",
+    "name": "carimbos",
+    "public": true
+  },
+  {
+    "allowed_mime_types": null,
+    "file_size_limit": null,
+    "id": "database_export_07_11_26",
+    "name": "database_export_07_11_26",
+    "public": false
+  },
+  {
+    "allowed_mime_types": null,
+    "file_size_limit": null,
+    "id": "database_export_20_08_26",
+    "name": "database_export_20_08_26",
+    "public": false
+  },
+  {
+    "allowed_mime_types": [
+      "image/png",
+      "image/jpeg",
+      "image/webp"
+    ],
+    "file_size_limit": 2097152,
+    "id": "document-logos",
+    "name": "document-logos",
+    "public": true
+  },
+  {
+    "allowed_mime_types": null,
+    "file_size_limit": null,
+    "id": "encaminhamentos",
+    "name": "encaminhamentos",
+    "public": false
+  },
+  {
+    "allowed_mime_types": null,
+    "file_size_limit": 104857600,
+    "id": "painel-videos",
+    "name": "painel-videos",
+    "public": false
+  },
+  {
+    "allowed_mime_types": [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ],
+    "file_size_limit": 10485760,
+    "id": "patient-documents",
+    "name": "patient-documents",
+    "public": false
+  },
+  {
+    "allowed_mime_types": null,
+    "file_size_limit": null,
+    "id": "referral-attachments",
+    "name": "referral-attachments",
+    "public": false
+  },
+  {
+    "allowed_mime_types": null,
+    "file_size_limit": null,
+    "id": "sms",
+    "name": "sms",
+    "public": false
+  }
+]

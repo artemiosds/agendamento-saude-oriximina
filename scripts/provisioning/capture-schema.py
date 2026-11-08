@@ -46,7 +46,7 @@ QUERIES = {
       JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace
       WHERE NOT t.tgisinternal AND (n.nspname='public' OR (n.nspname='auth' AND c.relname='users' AND pn.nspname='public'))
       ORDER BY n.nspname,c.relname,t.tgname""",
-    'policies': """SELECT schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
+    'policies': """SELECT schemaname,tablename,policyname,permissive,to_jsonb(roles) AS roles,cmd,qual,with_check
       FROM pg_policies WHERE schemaname='public' OR (schemaname='storage' AND tablename='objects')
       ORDER BY schemaname,tablename,policyname""",
     'table_grants': """SELECT c.relname AS table_name,r.rolname AS grantee,a.privilege_type
