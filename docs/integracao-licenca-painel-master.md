@@ -47,3 +47,15 @@ A consulta central não usa cache local offline; falha de rede bloqueia os quatr
 6. Só depois da homologação, alterar a flag VITE_BACKOFFICE_LICENSE_ENABLED para true.
 
 Esta alteração prepara o código no repositório; não implanta Edge Functions, não configura Secrets, não publica build e não ativa bloqueio central em produção.
+
+## Vinculação da instalação e revalidação
+
+A consulta central exige também os seguintes valores no runtime da Edge Function, obtidos do cadastro autorizado do destino:
+- BACKOFFICE_CLIENT_ID
+- BACKOFFICE_INSTALLATION_ID
+- BACKOFFICE_INSTALLATION_ENVIRONMENT
+- BACKOFFICE_INSTALLATION_DOMAIN
+
+O código LIC-, cliente, instalação, ambiente e domínio precisam coincidir exatamente com o snapshot assinado. Configuração incompleta nega a consulta central. O navegador reconsulta a cada 60 segundos e ao voltar à aba, sem consultas sobrepostas. Isso não substitui autorização comercial nas operações do backend.
+
+Essas mudanças não configuram Secrets nem implantam a função automaticamente. A flag central permanece opt-in. Instalação limpa, enforcement no banco/Edge Functions, provisionamento e demonstração ainda exigem implementação e homologação independentes.

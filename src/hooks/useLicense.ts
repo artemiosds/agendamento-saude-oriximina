@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { DEFAULT_LICENSE, LicenseState, normalizeLicense } from '@/lib/licenseModules';
+import { DEFAULT_LICENSE, type LicenseState, normalizeLicense } from '@/lib/licenseModules';
 
 const CACHE_KEY = 'license_cache_v1';
 // A ativação central é deliberadamente opt-in: manter false preserva o licenciamento atual.
@@ -55,8 +55,11 @@ export function useLicense() {
 
   useEffect(() => {
     let alive = true;
+    let checking = false;
 
     const load = async () => {
+      if (!alive || checking) return;
+      checking = true;
       try {
         if (!CENTRAL_LICENSE_ENABLED) {
           const { data, error } = await supabase
@@ -117,12 +120,22 @@ export function useLicense() {
           setStatus('local');
         }
       } finally {
+        checking = false;
         if (alive) setLoading(false);
       }
     };
 
     void load();
-    return () => { alive = false; };
+    const refreshVisible = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    const timer = CENTRAL_LICENSE_ENABLED ? window.setInterval(() => void load(), 60_000) : undefined;
+    if (CENTRAL_LICENSE_ENABLED) document.addEventListener('visibilitychange', refreshVisible);
+    return () => {
+      alive = false;
+      if (timer !== undefined) window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshVisible);
+    };
   }, []);
 
   return { license, loading, source, status };
