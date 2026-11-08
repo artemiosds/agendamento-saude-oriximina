@@ -26,6 +26,24 @@ class CleanDefaultsTest(unittest.TestCase):
             self.assertIn("c.relkind IN ('r','v','m')",sql)
             self.assertIn("RAISE EXCEPTION 'Destino não vazio:",sql)
 
+    def test_public_table_without_confirmed_rls_blocks_kit(self):
+        data = {'tables': [
+            {'name': 'patients', 'rls': True},
+            {'name': 'appointments', 'rls': False},
+        ]}
+        with self.assertRaisesRegex(ValueError, 'without confirmed RLS'):
+            kit.assert_public_tables_have_rls(data)
+
+    def test_all_public_tables_with_rls_pass_security_gate(self):
+        data = {'tables': [
+            {'name': 'patients', 'rls': True},
+            {'name': 'appointments', 'rls': True},
+        ]}
+        self.assertEqual(
+            kit.assert_public_tables_have_rls(data),
+            {'status': 'passed', 'tables_checked': 2},
+        )
+
     def test_integration_secret_default_is_not_copied(self):
         self.assertEqual(kit.clean_default({'name':'evolution_api_key','type':'text','default':"'credential-test'::text"}), "''::text")
 
