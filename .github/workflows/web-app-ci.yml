@@ -64,4 +64,4 @@ jobs:
           python-version: "3.12"
 
       - name: Test clean-install kit safety gates
-        run: python -m unittest scripts/provisioning/test_clean_kit.py
+        run: python -m unittest scripts/provisioning/test_clean_kit.py scripts/provisioning/test_tenant_config.py
