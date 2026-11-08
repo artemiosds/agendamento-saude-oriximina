@@ -65,7 +65,10 @@ export function useLicense() {
             .eq('id', 'licenca')
             .maybeSingle();
           if (error) throw error;
-          const modules = normalizeLicense((data?.configuracoes as any)?.modulos);
+          const settings = data?.configuracoes && typeof data.configuracoes === 'object' && !Array.isArray(data.configuracoes)
+            ? (data.configuracoes as Record<string, unknown>)
+            : null;
+          const modules = normalizeLicense(settings?.modulos);
           if (!alive) return;
           setLicense(modules);
           setSource('local');
