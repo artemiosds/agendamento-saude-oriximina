@@ -24,13 +24,13 @@ def clean_default(column):
 TENANT_REFERENCE_PATTERNS = (
     ('tenant_oriximina', re.compile(r'or[ií]ximin|sms-oriximina|gestao-saude-sms-oriximina|agendamento-saude-oriximina', re.I)),
     ('source_supabase_project', re.compile(r'ygbgywglxsshkkoiriul', re.I)),
-    ('tenant_domain', re.compile(r'(?:oriximina\\.pa\\.gov\\.br|gestao-saude-sms-oriximina\\.vercel\\.app)', re.I)),
+    ('tenant_domain', re.compile(r'(?:oriximina\.pa\.gov\.br|gestao-saude-sms-oriximina\.vercel\.app)', re.I)),
 )
 SECRET_PATTERNS = (
-    ('supabase_secret_key', re.compile(r'\\bsb_secret_[A-Za-z0-9_-]{12,}', re.I)),
-    ('jwt_or_service_token', re.compile(r'\\beyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}\\.', re.I)),
+    ('supabase_secret_key', re.compile(r'\bsb_secret_[A-Za-z0-9_-]{12,}', re.I)),
+    ('jwt_or_service_token', re.compile(r'\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.', re.I)),
     ('private_key', re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----', re.I)),
-    ('credential_assignment', re.compile(r'''(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|senha)\\s*[:=]\\s*["'][^"']{8,}["']''', re.I)),
+    ('credential_assignment', re.compile(r'''(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|senha)\s*[:=]\s*["'][^"']{8,}["']''', re.I)),
 )
 
 def _walk_strings(value, location='metadata'):
@@ -57,7 +57,7 @@ def assert_source_is_tenant_neutral(data):
         for label, pattern in TENANT_REFERENCE_PATTERNS + SECRET_PATTERNS:
             if pattern.search(value):
                 findings.append(f'{label} at {location}')
-        if re.search(r'https?://[^\\s\'"]+', value, re.I):
+        if re.search(r'https?://[^\s\'"]+', value, re.I):
             findings.append(f'hardcoded_url at {location}')
     if findings:
         preview = '; '.join(findings[:20])
