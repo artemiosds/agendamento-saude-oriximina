@@ -47,10 +47,13 @@ def _walk_strings(value, location='metadata'):
 
 def assert_public_tables_have_rls(data):
     """Fail closed: never prepare a tenant schema with an unprotected public table."""
+    tables = data.get('tables')
+    if not isinstance(tables, list) or not tables:
+        raise ValueError('Clean-install kit blocked: public table inventory is missing or empty')
     unsafe = [
         table.get('name', '<unnamed>')
-        for table in data.get('tables', [])
-        if table.get('rls') is not True
+        for table in tables
+        if not isinstance(table, dict) or table.get('rls') is not True
     ]
     if unsafe:
         preview = ', '.join(unsafe[:20])
@@ -59,7 +62,7 @@ def assert_public_tables_have_rls(data):
             'Clean-install kit blocked: public tables without confirmed RLS: '
             + preview + remainder
         )
-    return {'status': 'passed', 'tables_checked': len(data.get('tables', []))}
+    return {'status': 'passed', 'tables_checked': len(tables)}
 
 def assert_source_is_tenant_neutral(data):
     """Reject tenant-specific references and credentials across every copied schema surface."""
