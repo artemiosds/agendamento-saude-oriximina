@@ -37,12 +37,19 @@ serve(async (req) => {
   const publishableKey = Deno.env.get("BACKOFFICE_SUPABASE_PUBLISHABLE_KEY") || "";
   const licenseCode = Deno.env.get("BACKOFFICE_LICENSE_CODE") || "";
   const trustedKeysRaw = Deno.env.get("BACKOFFICE_LICENSE_TRUSTED_KEYS_JSON") || "";
+  const expected = {
+    license_code: licenseCode,
+    client_id: Deno.env.get("BACKOFFICE_CLIENT_ID") || "",
+    installation_id: Deno.env.get("BACKOFFICE_INSTALLATION_ID") || "",
+    environment: Deno.env.get("BACKOFFICE_INSTALLATION_ENVIRONMENT") || "",
+    domain: Deno.env.get("BACKOFFICE_INSTALLATION_DOMAIN") || "",
+  };
   const configured = [backofficeUrl, publishableKey, licenseCode, trustedKeysRaw].some(Boolean);
 
   // Antes da ativação explícita, o sistema mantém a configuração local atual.
   if (!configured) return json({ mode: "legacy" });
   if (!backofficeUrl || !publishableKey || publishableKey.startsWith("sb_secret_") ||
-      !/^LIC-[A-F0-9]{32}$/.test(licenseCode) || !trustedKeysRaw) {
+      !/^LIC-[A-F0-9]{32}$/.test(licenseCode) || !trustedKeysRaw || Object.values(expected).some(value => !value)) {
     return json({ mode: "backoffice", status: "configuration_error", modules: DENIED_MODULES });
   }
 
@@ -77,7 +84,7 @@ serve(async (req) => {
       return json({ mode: "backoffice", status: "unavailable", modules: DENIED_MODULES });
     }
     const envelope = await response.json() as BackofficeLicenseEnvelope;
-    const verified = await verifyBackofficeLicenseStatus(envelope, trustedKeys);
+    const verified = await verifyBackofficeLicenseStatus(envelope, trustedKeys, undefined, expected);
     // Somente escopo mínimo é devolvido ao navegador; snapshot e assinatura ficam no servidor.
     return json({
       mode: "backoffice",

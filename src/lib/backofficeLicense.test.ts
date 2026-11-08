@@ -116,3 +116,18 @@ describe('integração da licença assinada do Painel Master', () => {
     expect(result.reason).toBe('escopo_incompativel');
   });
 });
+
+describe('vinculação ao destino confiável', () => {
+  it('aceita o destino e rejeita licença válida de outra instalação', async () => {
+    const f = await fixture();
+    const expected = { license_code: f.payload.license_code, client_id: f.payload.client_id,
+      installation_id: f.payload.installation_id, environment: f.payload.environment, domain: f.payload.domain };
+    const keys = { [f.keyId]: f.publicKeyB64 };
+    expect((await verifyBackofficeLicenseStatus(f.response, keys, '2026-11-08', expected)).status).toBe('valid');
+    for (const key of Object.keys(expected)) {
+      const result = await verifyBackofficeLicenseStatus(f.response, keys, '2026-11-08', { ...expected, [key]: 'outro-destino' });
+      expect(result.reason).toBe('instalacao_incompativel');
+      expect(Object.values(result.modules).every(value => !value)).toBe(true);
+    }
+  });
+});

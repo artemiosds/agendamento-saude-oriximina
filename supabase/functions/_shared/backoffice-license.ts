@@ -1,3 +1,11 @@
+export type ExpectedInstallation = {
+  license_code: string;
+  client_id: string;
+  installation_id: string;
+  environment: string;
+  domain: string;
+};
+
 export type LegacyLicenseModule = 'faturamento_sus' | 'reabilitacao' | 'triagem' | 'regulacao';
 export type LegacyLicenseState = Record<LegacyLicenseModule, boolean>;
 
@@ -71,6 +79,7 @@ export async function verifyBackofficeLicenseStatus(
   response: BackofficeLicenseEnvelope,
   trustedPublicKeys: Readonly<Record<string, string>>,
   today: string = new Date().toISOString().slice(0, 10),
+  expected?: ExpectedInstallation,
 ): Promise<BackofficeLicenseCheck> {
   const validUntil = isIsoDate(response.valid_until) ? response.valid_until : today;
   if (response.status_active !== true) {
@@ -91,6 +100,10 @@ export async function verifyBackofficeLicenseStatus(
       payload.license_code !== response.license_code || payload.valid_from !== response.valid_from ||
       payload.valid_until !== response.valid_until) {
     return { status: 'invalid', reason: 'envelope_incompativel', validUntil, modules: DENIED };
+  }
+
+  if (expected && Object.entries(expected).some(([key, value]) => !value || payload[key] !== value)) {
+    return { status: 'invalid', reason: 'instalacao_incompativel', validUntil, modules: DENIED };
   }
 
   const keyId = response.key_id;
