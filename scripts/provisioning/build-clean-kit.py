@@ -88,7 +88,8 @@ def assert_source_is_tenant_neutral(data):
 def build(metadata: Path, destination: Path):
     destination.mkdir(parents=True, exist_ok=True)
     data = {p.stem: json.loads(p.read_text()) for p in metadata.glob('*.json')}
-    security = assert_public_tables_have_rls(data)\n    neutrality = assert_source_is_tenant_neutral(data)
+    security = assert_public_tables_have_rls(data)
+    neutrality = assert_source_is_tenant_neutral(data)
     if data['sequences']:
         raise ValueError('Sequence dependencies require manual review')
     sql = [
