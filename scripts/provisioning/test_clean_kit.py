@@ -150,5 +150,23 @@ class FullCaptureCompatibilityTest(unittest.TestCase):
         data['views'] = [{'name':'safe_view','kind':'v','reloptions':['security_invoker=on']}]
         kit.assert_safe_exposure(data)
 
+
+class ReproducibleCandidateTest(unittest.TestCase):
+    def test_crlf_function_bodies_generate_lf_bytes_and_matching_digest(self):
+        import hashlib
+        metadata={key:[] for key in kit.REQUIRED_METADATA}
+        metadata['tables']=[{'name':'sample','rls':True,'force_rls':False,'columns':[]}]
+        metadata['table_grants']=[{'table_name':'sample','grantee':'authenticated','privilege_type':'SELECT'}]
+        metadata['functions']=[{'name':'sample_fn','arguments':'','definition':'CREATE FUNCTION public.sample_fn() RETURNS integer LANGUAGE sql AS $ SELECT 1 $;'+chr(13)+chr(10)}]
+        with tempfile.TemporaryDirectory() as root:
+            source=Path(root)/'metadata';source.mkdir()
+            for name,rows in metadata.items():
+                (source/(name+'.json')).write_text(json.dumps(rows))
+            output=Path(root)/'kit'
+            result=kit.build(source,output)
+            raw=(output/'01-estrutura-CANDIDATO-BLOQUEADO.sql').read_bytes()
+            self.assertNotIn(bytes([13]),raw)
+            self.assertEqual(result['sha256']['01-estrutura-CANDIDATO-BLOQUEADO.sql'],hashlib.sha256(raw).hexdigest())
+
 if __name__ == '__main__':
     unittest.main()

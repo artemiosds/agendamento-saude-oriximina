@@ -45,3 +45,7 @@ Auth e storage.objects foram emulados no teste; buckets reais, Storage API, Real
 O isolamento local verificado é o de agendamentos; outros módulos e acessos de profissionais externos/pacientes exigem seus próprios cenários. Não declarar o SaaS concluído.
 
 A integração contínua executa o mesmo teste completo sem Secrets, sem rede para bancos e sem conexão com Oriximiná.
+
+## Reprodutibilidade no checkout
+
+O primeiro CI identificou mistura de CRLF e LF em corpos de funções capturados, causando divergência do hash após normalização no transporte. O gerador agora escreve todos os artefatos em bytes UTF-8 com SQL normalizado para LF; o manifesto foi regenerado e o diretório de candidatos é protegido contra conversão de finais de linha pelo Git. O teste de regressão confirma que corpos CRLF geram bytes LF e hash correspondente. A checagem de integridade permanece obrigatória.

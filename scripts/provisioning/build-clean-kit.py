@@ -229,9 +229,9 @@ def build(metadata: Path, destination: Path):
     sql.append('COMMIT;')
     storage_sql.append('COMMIT;')
     destination.mkdir(parents=True, exist_ok=True)
-    (destination/'01-estrutura-CANDIDATO-BLOQUEADO.sql').write_text('\n\n'.join(sql))
-    (destination/'02-politicas-arquivos-CANDIDATO-BLOQUEADO.sql').write_text('\n\n'.join(storage_sql))
-    (destination/'buckets-a-criar.json').write_text(json.dumps(data['buckets'],ensure_ascii=False,indent=2))
+    (destination/'01-estrutura-CANDIDATO-BLOQUEADO.sql').write_bytes('\n\n'.join(sql).replace('\r\n','\n').replace('\r','\n').encode('utf-8'))
+    (destination/'02-politicas-arquivos-CANDIDATO-BLOQUEADO.sql').write_bytes('\n\n'.join(storage_sql).replace('\r\n','\n').replace('\r','\n').encode('utf-8'))
+    (destination/'buckets-a-criar.json').write_bytes(json.dumps(data['buckets'],ensure_ascii=False,indent=2).encode('utf-8'))
     inventory = {'status':'bloqueado_aguardando_homologacao', 'captura':'somente metadados; sem linhas de aplicação',
         'quantidades': {key:len(value) for key,value in data.items()}, 'defaults_neutralizados':sanitized, 'neutralidade':neutrality, 'seguranca_rls':security,
         'tabelas_sem_rls':[t['name'] for t in data['tables'] if not t['rls']],
@@ -241,7 +241,7 @@ def build(metadata: Path, destination: Path):
             'marca pública inicial e logo ainda possuem fallback de Oriximiná', 'limites de usuários e licença entre instalações não homologados'],
         'tabelas':[t['name'] for t in data['tables']],
         'sha256': {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in destination.iterdir() if p.is_file()}}
-    (destination/'manifesto.json').write_text(json.dumps(inventory,ensure_ascii=False,indent=2))
+    (destination/'manifesto.json').write_bytes(json.dumps(inventory,ensure_ascii=False,indent=2).encode('utf-8'))
     return inventory
 
 if __name__ == '__main__':
