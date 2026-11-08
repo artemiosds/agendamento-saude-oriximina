@@ -34,6 +34,12 @@ class CleanDefaultsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'without confirmed RLS'):
             kit.assert_public_tables_have_rls(data)
 
+    def test_missing_or_empty_table_inventory_blocks_kit(self):
+        for data in ({}, {'tables': []}):
+            with self.subTest(data=data):
+                with self.assertRaisesRegex(ValueError, 'inventory is missing or empty'):
+                    kit.assert_public_tables_have_rls(data)
+
     def test_all_public_tables_with_rls_pass_security_gate(self):
         data = {'tables': [
             {'name': 'patients', 'rls': True},
