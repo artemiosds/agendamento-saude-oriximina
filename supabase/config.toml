@@ -1,5 +1,8 @@
 project_id = "ygbgywglxsshkkoiriul"
 
+[functions.backoffice-license-status]
+verify_jwt = true
+
 [functions.whatsapp-webhook-receiver]
 verify_jwt = false
 

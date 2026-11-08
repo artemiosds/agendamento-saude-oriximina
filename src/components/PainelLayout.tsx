@@ -129,7 +129,7 @@ const PainelLayout: React.FC = () => {
   const { user, logout, isGlobalAdmin } = useAuth();
   const { unidades } = useOperacional();
   const brand = useBrand();
-  const { license } = useLicense();
+  const { license, loading: licenseLoading, source: licenseSource, status: licenseStatus } = useLicense();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
@@ -156,7 +156,7 @@ const PainelLayout: React.FC = () => {
   };
 
   const isItemVisible = (item: MenuItem): boolean => {
-    if (!isPathLicensed(item.to, license)) return false;
+    if (licenseLoading || !isPathLicensed(item.to, license)) return false;
     if (item.owner_only) return isGlobalAdmin;
     // roles_master_only: accessible by any master (global or unit)
     if (item.roles_master_only) return isMaster;
@@ -172,7 +172,7 @@ const PainelLayout: React.FC = () => {
         .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
         .filter(g => g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isMaster, can, permLoading, license]
+    [isMaster, can, permLoading, license, licenseLoading]
   );
 
   // Collapsed groups state (persisted locally)
@@ -327,6 +327,11 @@ const PainelLayout: React.FC = () => {
         </header>
 
         <WhatsappPausedBanner />
+        {!licenseLoading && licenseSource !== 'local' && licenseStatus !== 'valid' && (
+          <div role="alert" className="mx-3 mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            A licença central não foi validada. Os módulos licenciados permanecem bloqueados até a consulta ser regularizada.
+          </div>
+        )}
 
         <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto safe-bottom">
           <Suspense fallback={
@@ -334,7 +339,9 @@ const PainelLayout: React.FC = () => {
               <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
             </div>
           }>
-            {isPathLicensed(location.pathname, license) ? <Outlet /> : (
+            {licenseLoading ? (
+              <div className="py-20 text-center text-muted-foreground">Validando licença e módulos autorizados…</div>
+            ) : isPathLicensed(location.pathname, license) ? <Outlet /> : (
               <div className="py-20 text-center text-muted-foreground">Este módulo não está ativo nesta instalação.</div>
             )}
           </Suspense>

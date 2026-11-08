@@ -39,7 +39,6 @@ import ConfigImpressaoDocumentos from '@/components/config/ConfigImpressaoDocume
 import ConfigEspecialidades from '@/components/config/ConfigEspecialidades';
 import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
 import ConfigSistema from '@/components/config/ConfigSistema';
-import ConfigLicencaModulos from '@/components/config/ConfigLicencaModulos';
 import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
 import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
 import ConfigSistemasIntegrados from '@/components/config/ConfigSistemasIntegrados';
@@ -61,7 +60,6 @@ const TABS = [
   
   { id: 'integracoes', label: 'Sistemas Integrados', icon: Network, globalOnly: false },
   { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
-  { id: 'licenca', label: 'Licença e Módulos', icon: ShieldAlert, globalOnly: true },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -1100,9 +1098,6 @@ const Configuracoes: React.FC = () => {
 
       case 'sistema':
         return <ConfigSistema />;
-
-      case 'licenca':
-        return <ConfigLicencaModulos />;
 
       default:
         return null;

@@ -15,4 +15,14 @@ describe('licenciamento de módulos', () => {
   it('desligar Reabilitação bloqueia PTS', () => {
     expect(isPathLicensed('/painel/pts', normalizeLicense({ reabilitacao: false }))).toBe(false);
   });
+  it('preserva caminhos não gerenciados pelo licenciamento legado', () => {
+    const lic = normalizeLicense({ faturamento_sus: false, triagem: false });
+    expect(isPathLicensed('/painel/agenda', lic)).toBe(true);
+    expect(isPathLicensed('/painel/prontuario', lic)).toBe(true);
+  });
+  it('bloqueia acesso direto por URL aos grupos desativados', () => {
+    const lic = normalizeLicense({ regulacao: false, reabilitacao: false });
+    expect(isPathLicensed('/painel/fila', lic)).toBe(false);
+    expect(isPathLicensed('/painel/pts/', lic)).toBe(false);
+  });
 });
