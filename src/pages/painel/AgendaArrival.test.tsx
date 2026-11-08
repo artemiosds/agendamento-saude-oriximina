@@ -263,7 +263,7 @@ describe('Check-in Expresso: recepção e teclado', () => {
 
 describe('Agenda: diálogo único de exclusão', () => {
   it('abre com nome e horário corretos, cancela sem gravação e confirma pelo handler auditado existente', async () => {
-    render(<MemoryRouter><Agenda /></MemoryRouter>);
+    renderAgenda();
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir teste' }));
     expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
     expect(screen.getByRole('alertdialog')).toHaveTextContent('PACIENTE TESTE às 08:00');
@@ -286,7 +286,7 @@ describe('cadastro dentro do mesmo diálogo da Agenda',()=>{
    vi.stubGlobal('ResizeObserver',class {observe(){} unobserve(){} disconnect(){}});
    const originalScroll=HTMLElement.prototype.scrollIntoView;HTMLElement.prototype.scrollIntoView=vi.fn();
    try {
-    render(<MemoryRouter><Agenda /></MemoryRouter>);
+    renderAgenda();
     expect(f.registrationMount).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole('button',{name:'Novo Agendamento'})[0]);
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
