@@ -31,6 +31,7 @@ import {
 import { motion } from "framer-motion";
 import logoSms from "@/assets/logo-sms-transparente.png";
 import heroAtendimento from "@/assets/hero-atendimento.webp";
+import { useBrand } from "@/hooks/useBrand";
 
 const services = [
   { icon: Stethoscope, title: "Clínica Geral", desc: "Consultas médicas gerais" },
@@ -47,22 +48,23 @@ const services = [
 ];
 
 const Home: React.FC = () => {
+  const brand = useBrand();
   return (
     <div className="min-h-screen bg-[#edf3f8]">
       <header className="border-b border-[#2A6F97]/20 border-t-4 border-t-[#2A6F97] bg-white shadow-sm">
         <div className="container mx-auto flex flex-wrap items-center justify-between gap-5 px-6 py-4 sm:px-10 lg:px-16">
-          <Link to="/" className="flex min-w-0 items-center gap-3" aria-label="SMS Oriximiná — página inicial">
+          <Link to="/" className="flex min-w-0 items-center gap-3" aria-label={brand.titulo + " — página inicial"}>
             <img
-              src={logoSms}
-              alt="Logo oficial SMS Oriximiná"
+              src={brand.logoUrl}
+              alt={brand.titulo}
               width={96}
               height={96}
               className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24"
             />
             <span className="min-w-0 text-base font-semibold leading-snug text-foreground sm:text-lg">
-              Prefeitura de Oriximiná
+              {brand.mantenedora}
               <span className="mt-1 block text-sm font-normal text-muted-foreground sm:text-base">
-                Secretaria Municipal de Saúde
+                {brand.subtitulo}
               </span>
             </span>
           </Link>
@@ -157,7 +159,7 @@ const Home: React.FC = () => {
             className="max-w-xl lg:w-[48%]"
           >
             <p className="mb-5 inline-flex rounded-full border border-sky-200/40 bg-white/10 px-4 py-2 text-sm font-semibold text-sky-100">
-              Saúde pública de Oriximiná
+              {brand.titulo}
             </p>
             <h1 className="text-3xl md:text-5xl font-bold font-display leading-tight mb-4 text-balance">
               Sua saúde, mais perto de você.
@@ -226,14 +228,14 @@ const Home: React.FC = () => {
               <MapPin className="w-6 h-6 text-primary shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-foreground">Endereço</h3>
-                <p className="text-sm text-muted-foreground">RUA BARÃO DO RIO BRANCO, Nº 2336 CENTRO, CEP: 68270-000</p>
+                <p className="text-sm text-muted-foreground">{brand.enderecoPublico}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Clock className="w-6 h-6 text-primary shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-foreground">Horário</h3>
-                <p className="text-sm text-muted-foreground">Seg a Sex: 08:00 às 18:00</p>
+                <p className="text-sm text-muted-foreground">{brand.horarioPublico}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -241,9 +243,9 @@ const Home: React.FC = () => {
               <div>
                 <h3 className="font-semibold text-foreground">Contato</h3>
                 <p className="text-sm text-muted-foreground">
-                  (93) 99109-3163
+                  {brand.telefonePublico}
                   <br />
-                  WhatsApp: (93) 99109-3163
+                  WhatsApp: {brand.telefonePublico}
                 </p>
               </div>
             </div>
@@ -253,7 +255,7 @@ const Home: React.FC = () => {
 
       {/* Footer */}
       <footer className="bg-[#123c57] text-slate-200 text-center py-8 text-sm">
-        SMS Oriximiná © {new Date().getFullYear()} — Secretaria Municipal de Saúde
+        {brand.titulo} © {new Date().getFullYear()} — {brand.subtitulo}
         <nav aria-label="Acessos institucionais" className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-2 px-4">
           <a href="#contato" className="underline-offset-4 hover:text-white hover:underline">
             Informações ao Cidadão
