@@ -44,6 +44,23 @@ def _walk_strings(value, location='metadata'):
     elif isinstance(value, str):
         yield location, value
 
+
+def assert_public_tables_have_rls(data):
+    """Fail closed: never prepare a tenant schema with an unprotected public table."""
+    unsafe = [
+        table.get('name', '<unnamed>')
+        for table in data.get('tables', [])
+        if table.get('rls') is not True
+    ]
+    if unsafe:
+        preview = ', '.join(unsafe[:20])
+        remainder = f', and {len(unsafe) - 20} more' if len(unsafe) > 20 else ''
+        raise ValueError(
+            'Clean-install kit blocked: public tables without confirmed RLS: '
+            + preview + remainder
+        )
+    return {'status': 'passed', 'tables_checked': len(data.get('tables', []))}
+
 def assert_source_is_tenant_neutral(data):
     """Reject tenant-specific references and credentials across every copied schema surface."""
     prepared = json.loads(json.dumps(data))
@@ -71,7 +88,7 @@ def assert_source_is_tenant_neutral(data):
 def build(metadata: Path, destination: Path):
     destination.mkdir(parents=True, exist_ok=True)
     data = {p.stem: json.loads(p.read_text()) for p in metadata.glob('*.json')}
-    neutrality = assert_source_is_tenant_neutral(data)
+    security = assert_public_tables_have_rls(data)\n    neutrality = assert_source_is_tenant_neutral(data)
     if data['sequences']:
         raise ValueError('Sequence dependencies require manual review')
     sql = [
@@ -160,7 +177,7 @@ def build(metadata: Path, destination: Path):
     (destination/'02-politicas-arquivos-CANDIDATO-BLOQUEADO.sql').write_text('\n\n'.join(storage_sql))
     (destination/'buckets-a-criar.json').write_text(json.dumps(data['buckets'],ensure_ascii=False,indent=2))
     inventory = {'status':'bloqueado_aguardando_homologacao', 'captura':'somente metadados; sem linhas de aplicação',
-        'quantidades': {key:len(value) for key,value in data.items()}, 'defaults_neutralizados':sanitized, 'neutralidade':neutrality,
+        'quantidades': {key:len(value) for key,value in data.items()}, 'defaults_neutralizados':sanitized, 'neutralidade':neutrality, 'seguranca_rls':security,
         'tabelas_sem_rls':[t['name'] for t in data['tables'] if not t['rls']],
         'pre_requisitos_nao_replicados':['Auth gerenciado', 'Storage gerenciado', 'Realtime gerenciado', 'extensões gerenciadas',
             '29 funções de aplicação: revisar código e configurar serviços próprios', 'catálogos oficiais: importar de fonte oficial',
