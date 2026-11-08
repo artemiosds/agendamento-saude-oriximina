@@ -50,3 +50,14 @@ Também são recusadas funções SECURITY DEFINER com execução concedida a PUB
 Conferência somente de metadados em 08/11/2026: profession_careness_mapping_state está sem RLS, mas não foram encontrados grants de tabela para anon/authenticated. Quatro funções SECURITY DEFINER fazem referência a ela. A ausência de RLS impede o pacote pelo critério conservador do gerador; não comprova exposição pública da tabela. É necessário revisar a política do destino e testar as quatro funções antes de homologar. Nenhuma alteração foi aplicada à origem.
 
 Os testes unitários do gerador validam essas barreiras. Eles não equivalem a uma restauração da estrutura completa nem à homologação Auth/Storage/Realtime.
+
+## Restauração estrutural em PostgreSQL descartável
+
+Teste reproduzível com Node e Python, usando PGlite 0.5.15 instalado em diretório temporário:
+
+```bash
+npm install --prefix /tmp/clean-kit-tests --no-audit --no-fund @electric-sql/pglite@0.5.15
+node scripts/provisioning/restore-smoke.mjs /tmp/clean-kit-tests/node_modules/@electric-sql/pglite/dist/index.js
+```
+
+O teste gera exclusivamente uma tabela sintética sem dados, valida o bloqueio original, libera somente a cópia sintética em memória, confere rollback, restauração vazia, RLS, negativa de escrita e recusa de reinstalação. Não aceita metadados de cliente nem conexão remota. Aprovado em 08/11/2026. Não substitui a homologação da estrutura completa, Auth, Storage, Realtime ou isolamento funcional entre unidades.
