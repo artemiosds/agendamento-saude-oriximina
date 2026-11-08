@@ -105,7 +105,6 @@ const menuGroups: MenuGroup[] = [
       { to: '/painel/configuracoes',           label: 'Configurações',     icon: Settings,    modulo: null, roles_master_only: true },
       { to: '/painel/permissoes',              label: 'Permissões',        icon: Lock,        modulo: null, roles_master_only: true },
       { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,    modulo: null, roles_master_only: true },
-      { to: '/painel/saas-gestao',             label: 'Painel Central',    icon: Building2,   modulo: null, owner_only: true },
     ],
   },
 ];
