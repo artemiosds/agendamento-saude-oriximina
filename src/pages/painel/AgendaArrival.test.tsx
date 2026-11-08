@@ -292,7 +292,7 @@ describe('cadastro dentro do mesmo diálogo da Agenda',()=>{
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
     fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('combobox')[0]);
     fireEvent.click((await screen.findAllByRole('option'))[0]);
-    fireEvent.keyDown(document.activeElement || document.body,{key:'Escape'});
+    await waitFor(()=>expect(within(screen.getByRole('dialog')).getAllByRole('combobox')[0]).toHaveTextContent('PROFISSIONAL TESTE'));
     const time=screen.getByRole('dialog').querySelector('input[type="time"]')!;
     fireEvent.change(time,{target:{value:'09:30'}});
     fireEvent.click(screen.getByText('Cadastrar paciente teste'));
