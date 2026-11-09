@@ -68,6 +68,8 @@ CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FO
 
     def test_lovable_cloud_adapter_fails_closed_when_trigger_is_ambiguous(self):
         source = """CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
  RETURNS trigger LANGUAGE plpgsql AS $function$
 BEGIN
@@ -79,7 +81,7 @@ CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FO
 CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION moddatetime('atualizado_em');
 """
         with self.assertRaisesRegex(ValueError, 'exactly one'):
-            pilot.adapt_sql_for_lovable_cloud(source)
+            pilot.adapt_sql_for_lovable_cloud(source, pilot.PREINSTALLED_EXTENSIONS)
 
 
     def test_release_builds_pilot_sql_with_cloud_adapter_and_empty_guard(self):
@@ -96,7 +98,6 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "public";
 CREATE EXTENSION IF NOT EXISTS "unaccent" WITH SCHEMA "public";
 DO $guard$ BEGIN RAISE EXCEPTION 'Instalação bloqueada: homologação em ambiente isolado pendente'; END $guard$;
 DO $empty$ BEGIN IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','v','m')) THEN RAISE EXCEPTION 'Destino não vazio: instalação recusada'; END IF; END $empty$;
-CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
  RETURNS trigger LANGUAGE plpgsql AS $function$
 BEGIN
