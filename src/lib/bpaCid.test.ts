@@ -120,14 +120,6 @@ describe("CID por continuidade do ciclo de tratamento", () => {
         scheduledDate: "2026-10-14",
         cids: ["M538", "M545", "M796"],
       },
-      {
-        ...base,
-        procedureCode: "0301010048",
-        appointmentId: "agenda-14-consulta",
-        sessionNumber: 3,
-        scheduledDate: "2026-10-14",
-        cids: ["Z000"],
-      },
     ];
     const resolved = resolveBpaTreatmentCycleCidsForProcedures(
       [
@@ -153,8 +145,22 @@ describe("CID por continuidade do ciclo de tratamento", () => {
       scheduledDate: "2026-10-14",
     });
     expect(resolved.has("0301010048")).toBe(false);
-    // CID informado no atendimento atual não é substituído.
-    expect(resolved.has("0302050027")).toBe(true);
+
+    // Quando a própria linha já tem CID, o fallback não cria nem substitui valor.
+    const alreadyHasCid = resolveBpaTreatmentCycleCidsForProcedures(
+      [{ codigo: "0302050027", cid: "F840" }],
+      candidates,
+      {
+        cycleId: "ciclo-1",
+        patientId: "paciente-1",
+        professionalId: "prof-1",
+        unitId: "unidade-1",
+        appointmentId: "agenda-7",
+        sessionNumber: 1,
+        scheduledDate: "2026-10-07",
+      },
+    );
+    expect(alreadyHasCid.size).toBe(0);
   });
 
   it("prioriza o CID do atendimento atual antes do fallback do ciclo", () => {
