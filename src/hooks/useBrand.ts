@@ -2,11 +2,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import logoSms from '@/assets/logo-sms.jpeg';
 
-/**
- * Marca dinâmica (white-label). Lê config_sistema.instituicao em system_config.
- * Padrão = identidade de Oriximiná, usada sempre que nada for cadastrado.
- * A tela de login (sem sessão) usa a última marca guardada neste dispositivo.
- */
 export interface Brand {
   titulo: string;
   subtitulo: string;
@@ -24,41 +19,65 @@ export interface Brand {
   corPrimaria: string;
 }
 
-const tenantEnv = import.meta.env as unknown as Record<string, string | undefined>;
+export type TenantBrandEnvironment = Record<string, string | undefined>;
 
-export const DEFAULT_BRAND: Brand = {
-  // Sem variáveis de instalação, preserva exatamente a identidade oficial de Oriximiná.
-  // Instalações novas recebem sua identidade pelo manifesto de provisionamento.
-  titulo: tenantEnv.VITE_TENANT_NAME?.trim() || 'SMS Oriximiná',
-  subtitulo: tenantEnv.VITE_TENANT_SUBTITLE?.trim() || 'Secretaria Municipal de Saúde',
-  logoUrl: tenantEnv.VITE_TENANT_LOGO_URL?.trim() || logoSms,
-  cidadeUf: tenantEnv.VITE_TENANT_CITY_UF?.trim() || 'Oriximiná — PA',
-  unidadeCarimbo: tenantEnv.VITE_TENANT_STAMP_UNIT?.trim() || 'CER II — Oriximiná/PA',
-  mantenedora: tenantEnv.VITE_TENANT_MAINTAINER?.trim() || 'Prefeitura Municipal de Oriximiná — PA',
-  enderecoPublico: tenantEnv.VITE_TENANT_PUBLIC_ADDRESS?.trim() || 'RUA BARÃO DO RIO BRANCO, Nº 2336 CENTRO, CEP: 68270-000',
-  horarioPublico: tenantEnv.VITE_TENANT_PUBLIC_HOURS?.trim() || 'Seg a Sex: 08:00 às 18:00',
-  telefonePublico: tenantEnv.VITE_TENANT_PUBLIC_PHONE?.trim() || '(93) 99109-3163',
-  corPrimaria: /^#[0-9A-Fa-f]{6}$/.test(tenantEnv.VITE_TENANT_PRIMARY_COLOR || '')
-    ? tenantEnv.VITE_TENANT_PRIMARY_COLOR!
-    : '#2A6F97',
-};
+function envText(env: TenantBrandEnvironment, key: string): string {
+  return env[key]?.trim() || '';
+}
 
-const CACHE_KEY = 'brand_cache_v1';
+/**
+ * Produz a marca inicial por modo de instalação.
+ * O modo legado preserva os defaults oficiais de Oriximiná.
+ * Instalações independentes nunca recebem logo, endereço, telefone ou município de Oriximiná.
+ */
+export function buildDefaultBrand(env: TenantBrandEnvironment, legacyLogoUrl: string): Brand {
+  const independent = envText(env, 'VITE_TENANT_MODE').toLowerCase() === 'independent';
+  const primary = envText(env, 'VITE_TENANT_PRIMARY_COLOR');
+
+  return {
+    titulo: envText(env, 'VITE_TENANT_NAME') || (independent ? 'Gestão Saúde' : 'SMS Oriximiná'),
+    subtitulo: envText(env, 'VITE_TENANT_SUBTITLE') || 'Secretaria Municipal de Saúde',
+    logoUrl: envText(env, 'VITE_TENANT_LOGO_URL') || (independent ? '' : legacyLogoUrl),
+    cidadeUf: envText(env, 'VITE_TENANT_CITY_UF') || (independent ? '' : 'Oriximiná — PA'),
+    unidadeCarimbo: envText(env, 'VITE_TENANT_STAMP_UNIT') || (independent ? '' : 'CER II — Oriximiná/PA'),
+    mantenedora: envText(env, 'VITE_TENANT_MAINTAINER') || (
+      independent ? 'Secretaria Municipal de Saúde' : 'Prefeitura Municipal de Oriximiná — PA'
+    ),
+    enderecoPublico: envText(env, 'VITE_TENANT_PUBLIC_ADDRESS') || (
+      independent ? '' : 'RUA BARÃO DO RIO BRANCO, Nº 2336 CENTRO, CEP: 68270-000'
+    ),
+    horarioPublico: envText(env, 'VITE_TENANT_PUBLIC_HOURS') || (
+      independent ? '' : 'Seg a Sex: 08:00 às 18:00'
+    ),
+    telefonePublico: envText(env, 'VITE_TENANT_PUBLIC_PHONE') || (
+      independent ? '' : '(93) 99109-3163'
+    ),
+    corPrimaria: /^#[0-9A-Fa-f]{6}$/.test(primary) ? primary : '#2A6F97',
+  };
+}
+
+const tenantEnv = import.meta.env as unknown as TenantBrandEnvironment;
+export const DEFAULT_BRAND: Brand = buildDefaultBrand(tenantEnv, logoSms);
+
+const tenantCacheNamespace = envText(tenantEnv, 'VITE_TENANT_ID')
+  || (envText(tenantEnv, 'VITE_TENANT_MODE').toLowerCase() === 'independent' ? 'independent' : 'oriximina-legacy');
+const CACHE_KEY = `brand_cache_v2:${tenantCacheNamespace}`;
 
 export function resolveBrand(inst: any): Brand {
+  const value = (key: string) => typeof inst?.[key] === 'string' ? inst[key].trim() : '';
+  const color = value('marcaCorPrimaria');
+
   return {
-    titulo: (inst?.marcaTitulo || '').trim() || DEFAULT_BRAND.titulo,
-    subtitulo: (inst?.marcaSubtitulo || '').trim() || DEFAULT_BRAND.subtitulo,
-    logoUrl: (inst?.logoUrl || '').trim() || DEFAULT_BRAND.logoUrl,
-    cidadeUf: (inst?.marcaCidadeUf || '').trim() || DEFAULT_BRAND.cidadeUf,
-    unidadeCarimbo: (inst?.marcaUnidadeCarimbo || '').trim() || DEFAULT_BRAND.unidadeCarimbo,
-    mantenedora: (inst?.marcaMantenedora || '').trim() || DEFAULT_BRAND.mantenedora,
-    enderecoPublico: (inst?.marcaEnderecoPublico || '').trim() || DEFAULT_BRAND.enderecoPublico,
-    horarioPublico: (inst?.marcaHorarioPublico || '').trim() || DEFAULT_BRAND.horarioPublico,
-    telefonePublico: (inst?.marcaTelefonePublico || '').trim() || DEFAULT_BRAND.telefonePublico,
-    corPrimaria: /^#[0-9A-Fa-f]{6}$/.test(inst?.marcaCorPrimaria || '')
-      ? inst.marcaCorPrimaria
-      : DEFAULT_BRAND.corPrimaria,
+    titulo: value('marcaTitulo') || DEFAULT_BRAND.titulo,
+    subtitulo: value('marcaSubtitulo') || DEFAULT_BRAND.subtitulo,
+    logoUrl: value('logoUrl') || DEFAULT_BRAND.logoUrl,
+    cidadeUf: value('marcaCidadeUf') || DEFAULT_BRAND.cidadeUf,
+    unidadeCarimbo: value('marcaUnidadeCarimbo') || DEFAULT_BRAND.unidadeCarimbo,
+    mantenedora: value('marcaMantenedora') || DEFAULT_BRAND.mantenedora,
+    enderecoPublico: value('marcaEnderecoPublico') || DEFAULT_BRAND.enderecoPublico,
+    horarioPublico: value('marcaHorarioPublico') || DEFAULT_BRAND.horarioPublico,
+    telefonePublico: value('marcaTelefonePublico') || DEFAULT_BRAND.telefonePublico,
+    corPrimaria: /^#[0-9A-Fa-f]{6}$/.test(color) ? color : DEFAULT_BRAND.corPrimaria,
   };
 }
 
@@ -66,7 +85,9 @@ function readCache(): Brand {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (raw) return { ...DEFAULT_BRAND, ...JSON.parse(raw) };
-  } catch { /* ignore */ }
+  } catch {
+    // Ignore unavailable or invalid local cache.
+  }
   return DEFAULT_BRAND;
 }
 
@@ -78,13 +99,23 @@ export function useBrand(): Brand {
     (async () => {
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) return;
-      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const b = resolveBrand((data?.configuracoes as any)?.config_sistema?.instituicao);
+      const { data } = await supabase
+        .from('system_config')
+        .select('configuracoes')
+        .eq('id', 'default')
+        .maybeSingle();
+      const resolved = resolveBrand((data?.configuracoes as any)?.config_sistema?.instituicao);
       if (!alive) return;
-      setBrand(b);
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(b)); } catch { /* ignore */ }
+      setBrand(resolved);
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(resolved));
+      } catch {
+        // Branding remains available in memory when storage is disabled.
+      }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
