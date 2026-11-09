@@ -431,6 +431,7 @@ const UnidadesSalas: React.FC = () => {
                     <SelectContent>{[10,15,20,30,45].map(n => <SelectItem key={n} value={String(n)}>{n} minutos</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                <div><Label>Prazo padrão para resultado (dias)</Label><Input type="number" min="0" max="90" value={roomForm.config.prazoResultadoDias} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, prazoResultadoDias: Math.min(90, Math.max(0, Number(e.target.value) || 0)) } }))} /><p className="text-xs text-muted-foreground mt-1">Use 0 quando a previsão for definida pela equipe no momento do exame.</p></div>
                 <div className="flex items-center justify-between"><Label>Exige preparo prévio?</Label><Switch checked={roomForm.config.exigePreparo} onCheckedChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, exigePreparo: v } }))} /></div>
                 {roomForm.config.exigePreparo && <div><Label>Instruções de preparo</Label><Textarea rows={3} value={roomForm.config.instrucoesPreparo} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, instrucoesPreparo: e.target.value } }))} placeholder="Descreva jejum, documentos e exames anteriores..." /></div>}
                 <div><Label>Exige Contraste?</Label>
