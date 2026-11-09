@@ -83,7 +83,7 @@ UPDATE public.agendamentos_externos SET status = 'cancelado'
   WHERE id = substring((SELECT id FROM public.test_ids WHERE label = 'owner') FROM 4)::uuid;
 UPDATE public.quotas_externas SET vagas_usadas = 0 WHERE id = '77777777-7777-4777-8777-777777777777';
 DO $$ BEGIN
-  IF (SELECT status FROM public.agendamentos WHERE id = (SELECT id FROM public.test_ids WHERE label = 'owner')) <> 'pendente'
+  IF (SELECT status FROM public.agendamentos WHERE id = (SELECT id FROM public.test_ids WHERE label = 'owner')) <> 'confirmado'
      OR (SELECT vagas_usadas FROM public.quotas_externas WHERE id = '77777777-7777-4777-8777-777777777777') <> 2 THEN
     RAISE EXCEPTION 'Direct update bypassed the protected ledger';
   END IF;
@@ -136,7 +136,7 @@ SELECT public.expect_failure(
   'SELECT public.cancel_external_appointment((SELECT id FROM public.test_ids WHERE label = ''full''), ''Teste de rollback'')',
   'test_rollback');
 DO $$ BEGIN
-  IF (SELECT status FROM public.agendamentos WHERE id = (SELECT id FROM public.test_ids WHERE label = 'full')) <> 'pendente'
+  IF (SELECT status FROM public.agendamentos WHERE id = (SELECT id FROM public.test_ids WHERE label = 'full')) <> 'confirmado'
      OR (SELECT vagas_usadas FROM public.quotas_externas WHERE id = '88888888-8888-4888-8888-888888888888') <> 1 THEN
     RAISE EXCEPTION 'Audit failure left a partial cancellation';
   END IF;
