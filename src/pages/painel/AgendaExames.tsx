@@ -171,6 +171,22 @@ export default function AgendaExames() {
         toast.error("Informe a conclusão e o CRM do médico laudista antes de liberar.");
         return;
       }
+      if (String(user?.role || "").toLowerCase() !== "profissional") {
+        toast.error("Somente profissional de saúde habilitado pode liberar laudo.");
+        return;
+      }
+      let professionalQuery = (supabase as any).from("funcionarios").select("tipo_conselho,numero_conselho,uf_conselho").eq("ativo", true);
+      professionalQuery = (user as any)?.authUserId
+        ? professionalQuery.eq("auth_user_id", (user as any).authUserId)
+        : professionalQuery.eq("id", user?.id || "");
+      const { data: professional, error: professionalError } = await professionalQuery.maybeSingle();
+      const registeredCrm = professional?.tipo_conselho && String(professional.tipo_conselho).toUpperCase().includes("CRM")
+        ? `${professional.numero_conselho || ""}/${professional.uf_conselho || ""}`.replace(/\/$/, "")
+        : "";
+      if (professionalError || !registeredCrm || registeredCrm.toLowerCase() !== laudo.crm.trim().toLowerCase()) {
+        toast.error("O CRM informado deve corresponder ao registro profissional ativo no cadastro do sistema.");
+        return;
+      }
     }
     const now = new Date().toISOString();
     const history = Array.isArray(row.custom_data?.historico_status) ? row.custom_data.historico_status : [];
@@ -230,7 +246,7 @@ export default function AgendaExames() {
   };
 
   const canWorkUnit = isGlobalAdmin || !!user?.unidadeId && user.unidadeId === selectedUnit;
-  const canWriteReport = canWorkUnit && ["master", "profissional", "gestao", "coordenador"].includes(String(user?.role || "").toLowerCase());
+  const canWriteReport = canWorkUnit && String(user?.role || "").toLowerCase() === "profissional";
 
   return (
     <div className="space-y-6">
