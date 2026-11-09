@@ -2663,14 +2663,22 @@ const Agenda: React.FC = () => {
     [],
   );
   const handleComprovanteRef = React.useRef<(ag: any) => void>(() => {});
-  handleComprovanteRef.current = (ag: any) => {
+  handleComprovanteRef.current = async (ag: any) => {
     const p: any = (pacienteById as any)?.get ? (pacienteById as any).get(ag.pacienteId) : (pacienteById as any)?.[ag.pacienteId];
     const u: any = unidades.find((x: any) => x.id === ag.unidadeId);
-    printComprovanteAgendamento({
-      id: ag.id, data: ag.data, hora: ag.hora, tipo: ag.tipo, status: ag.status,
+    const saved = ag.customData && typeof ag.customData === "object" ? ag.customData : {};
+    const diagnostic = saved.sala_tipo === "aparelho_diagnostico";
+    const room = salas.find((x: any) => x.id === ag.salaId);
+    const resultDays = Number(saved.prazo_resultado_dias) || 0;
+    const resultDate = resultDays > 0 ? new Date(new Date(`${ag.data}T12:00:00`).getTime() + resultDays * 86400000).toLocaleDateString("pt-BR") : "";
+    await printComprovanteAgendamento({
+      id: ag.id, data: ag.data, hora: ag.hora, tipo: diagnostic ? (saved.exame_nome || "Exame diagnóstico") : ag.tipo, status: ag.status,
       profissionalNome: ag.profissionalNome,
       pacienteNome: p?.nome || ag.pacienteNome, pacienteCpf: p?.cpf, pacienteCns: p?.cns,
       unidadeNome: u?.nome, unidadeEndereco: u?.endereco, unidadeTelefone: u?.telefone,
+      diagnostico: diagnostic, salaNome: room?.nome,
+      preparoInstrucoes: diagnostic && saved.exige_preparo ? saved.preparo_instrucoes : "",
+      previsaoResultado: resultDate,
     });
   };
   const stableComprovante = React.useCallback((ag: any) => handleComprovanteRef.current(ag), []);
