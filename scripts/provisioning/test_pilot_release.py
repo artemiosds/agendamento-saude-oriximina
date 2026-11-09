@@ -23,5 +23,53 @@ class PilotReleaseTest(unittest.TestCase):
         for changes in ({'auth_users':False},{'storage_objects':False},{'available_extensions':[]},{'provider':'external'}):
             with self.assertRaises(ValueError):
                 pilot.validate_preflight({**self.preflight(),**changes})
+
+    def test_lovable_cloud_adapter_replaces_only_reviewed_moddatetime_trigger(self):
+        source = """CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    NEW.atualizado_em = now();
+    RETURN NEW;
+END;
+$function$;
+CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION moddatetime('atualizado_em');
+"""
+        adapted = pilot.adapt_sql_for_lovable_cloud(source)
+        self.assertNotIn('CREATE EXTENSION IF NOT EXISTS "moddatetime"', adapted)
+        self.assertNotIn('moddatetime(', adapted)
+        self.assertIn('FUNCTION update_updated_at_column()', adapted)
+        self.assertIn('NEW.atualizado_em = now();', adapted)
+
+    def test_lovable_cloud_adapter_fails_closed_when_trigger_helper_changes(self):
+        source = """CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+ RETURNS trigger LANGUAGE plpgsql AS $function$
+BEGIN
+    RETURN NEW;
+END;
+$function$;
+CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION moddatetime('atualizado_em');
+"""
+        with self.assertRaisesRegex(ValueError, 'does not update'):
+            pilot.adapt_sql_for_lovable_cloud(source)
+
+    def test_lovable_cloud_adapter_fails_closed_when_trigger_is_ambiguous(self):
+        source = """CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+ RETURNS trigger LANGUAGE plpgsql AS $function$
+BEGIN
+    NEW.atualizado_em = now();
+    RETURN NEW;
+END;
+$function$;
+CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION moddatetime('atualizado_em');
+CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION moddatetime('atualizado_em');
+"""
+        with self.assertRaisesRegex(ValueError, 'exactly one'):
+            pilot.adapt_sql_for_lovable_cloud(source)
+
 if __name__=='__main__':
     unittest.main()
