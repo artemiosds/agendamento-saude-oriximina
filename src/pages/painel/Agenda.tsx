@@ -94,7 +94,7 @@ import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteMo
 import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
 import { openPrintDocument } from "@/lib/printLayout";
 import { printComprovanteAgendamento } from "@/lib/printComprovanteAgendamento";
-import { getAvailableDiagnosticSlots, getDiagnosticRoomConfig, type DiagnosticRoomConfig } from "@/lib/diagnosticExams";
+import { getAvailableDiagnosticSlots, getDiagnosticRoomConfig, type DiagnosticRoomConfig, type DiagnosticExamConfig } from "@/lib/diagnosticExams";
 import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
@@ -415,6 +415,7 @@ const Agenda: React.FC = () => {
     obs: "",
   });
   const [diagnosticRoomConfig, setDiagnosticRoomConfig] = useState<DiagnosticRoomConfig | null>(null);
+  const [selectedDiagnosticExamId, setSelectedDiagnosticExamId] = useState("");
   const [diagnosticRoomAppointments, setDiagnosticRoomAppointments] = useState<any[]>([]);
   const [diagnosticRoomLoading, setDiagnosticRoomLoading] = useState(false);
   const [detalheOpen, setDetalheOpen] = useState(false);
@@ -778,6 +779,7 @@ const Agenda: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setDiagnosticRoomConfig(null);
+    setSelectedDiagnosticExamId("");
     setDiagnosticRoomAppointments([]);
     if (!dialogOpen || !newAg.salaId || !diagnosticUnitId) return;
     const loadDiagnosticRoom = async () => {
@@ -788,6 +790,7 @@ const Agenda: React.FC = () => {
         const config = getDiagnosticRoomConfig(unitRow?.custom_data, newAg.salaId);
         if (cancelled) return;
         setDiagnosticRoomConfig(config);
+        setSelectedDiagnosticExamId(config?.exames[0]?.id || "");
         setNewAg((prev) => ({ ...prev, tipo: config ? "Exame" : (prev.tipo === "Exame" ? "Consulta" : prev.tipo), hora: "" }));
         if (!config) return;
         const { data: appointments, error: appointmentsError } = await (supabase as any).from("agendamentos")
@@ -804,9 +807,13 @@ const Agenda: React.FC = () => {
     void loadDiagnosticRoom();
     return () => { cancelled = true; };
   }, [dialogOpen, newAg.salaId, diagnosticUnitId, selectedDate]);
+  const selectedDiagnosticExam = useMemo<DiagnosticExamConfig | null>(
+    () => diagnosticRoomConfig?.exames.find(exam => exam.id === selectedDiagnosticExamId) || null,
+    [diagnosticRoomConfig, selectedDiagnosticExamId],
+  );
   const diagnosticSlots = useMemo(
-    () => diagnosticRoomConfig ? getAvailableDiagnosticSlots(diagnosticRoomConfig, diagnosticRoomAppointments) : [],
-    [diagnosticRoomConfig, diagnosticRoomAppointments],
+    () => diagnosticRoomConfig && selectedDiagnosticExam ? getAvailableDiagnosticSlots({ ...diagnosticRoomConfig, duracaoSlot: selectedDiagnosticExam.duracaoSlot }, diagnosticRoomAppointments) : [],
+    [diagnosticRoomConfig, selectedDiagnosticExam, diagnosticRoomAppointments],
   );
   const isDiagnosticBooking = !!diagnosticRoomConfig;
 
@@ -1276,7 +1283,7 @@ const Agenda: React.FC = () => {
       toast.error("Informe um horário válido (HH:MM).");
       return;
     }
-    if (isDiagnosticBooking && (!diagnosticSlots.includes(newAg.hora) || diagnosticRoomLoading)) {
+    if (isDiagnosticBooking && (!selectedDiagnosticExam || !diagnosticSlots.includes(newAg.hora) || diagnosticRoomLoading)) {
       toast.error("Selecione um horário livre do aparelho diagnóstico.");
       return;
     }
@@ -1506,15 +1513,16 @@ const Agenda: React.FC = () => {
       hora: newAg.hora,
       status: "confirmado" as const,
       tipo: newAg.tipo,
-      observacoes: isDiagnosticBooking ? (diagnosticRoomConfig?.exigePreparo ? diagnosticRoomConfig.instrucoesPreparo : "") : newAg.obs,
+      observacoes: isDiagnosticBooking ? (selectedDiagnosticExam?.exigePreparo ? selectedDiagnosticExam.instrucoesPreparo : "") : newAg.obs,
       ...(isDiagnosticBooking ? { customData: {
         sala_tipo: "aparelho_diagnostico",
-        exame_nome: diagnosticRoomConfig?.tipoExame || "Exame diagnóstico",
-        preparo_instrucoes: diagnosticRoomConfig?.exigePreparo ? diagnosticRoomConfig.instrucoesPreparo : "",
-        exige_preparo: diagnosticRoomConfig?.exigePreparo || false,
-        exige_contraste: diagnosticRoomConfig?.exigeContraste || "nao",
-        duracao_slot_minutos: diagnosticRoomConfig?.duracaoSlot || 15,
-        prazo_resultado_dias: diagnosticRoomConfig?.prazoResultadoDias || 0,
+        exame_id: selectedDiagnosticExam?.id || "",
+        exame_nome: selectedDiagnosticExam?.tipoExame || "Exame diagnóstico",
+        preparo_instrucoes: selectedDiagnosticExam?.exigePreparo ? selectedDiagnosticExam.instrucoesPreparo : "",
+        exige_preparo: selectedDiagnosticExam?.exigePreparo || false,
+        exige_contraste: selectedDiagnosticExam?.exigeContraste || "nao",
+        duracao_slot_minutos: selectedDiagnosticExam?.duracaoSlot || 15,
+        prazo_resultado_dias: selectedDiagnosticExam?.prazoResultadoDias || 0,
         status_exame: "agendado",
         historico_status: [{ status: "agendado", em: new Date().toISOString(), por: user?.id || "" }],
       } } : {}),
@@ -3094,7 +3102,7 @@ const Agenda: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>}
-                  {isDiagnosticBooking && <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950"><strong>{diagnosticRoomConfig?.tipoExame}</strong><p className="text-xs mt-1">Agendamento por aparelho • slot de {diagnosticRoomConfig?.duracaoSlot} minutos. O responsável selecionado será registrado no agendamento.</p>{diagnosticRoomConfig?.exigePreparo && <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2"><strong>Preparo cadastrado pela unidade</strong><p className="mt-1 whitespace-pre-wrap">{diagnosticRoomConfig.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme antes de agendar."}</p></div>}</div>}
+                  {isDiagnosticBooking && <div className="space-y-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950"><Label>Exame a agendar *</Label><Select value={selectedDiagnosticExamId} onValueChange={value => { setSelectedDiagnosticExamId(value); setNewAg(prev => ({ ...prev, hora: "" })); }}><SelectTrigger><SelectValue placeholder="Selecione o exame" /></SelectTrigger><SelectContent>{diagnosticRoomConfig?.exames.map(exam => <SelectItem key={exam.id} value={exam.id}>{exam.tipoExame}</SelectItem>)}</SelectContent></Select><strong>{selectedDiagnosticExam?.tipoExame || "Selecione um exame"}</strong><p className="text-xs">Agendamento por aparelho • slot de {selectedDiagnosticExam?.duracaoSlot || "—"} minutos. O responsável selecionado será registrado no agendamento.</p>{selectedDiagnosticExam?.exigePreparo && <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2"><strong>Preparo cadastrado pela unidade</strong><p className="mt-1 whitespace-pre-wrap">{selectedDiagnosticExam.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme antes de agendar."}</p></div>}<p className="text-xs">Contraste: {selectedDiagnosticExam?.exigeContraste || "—"} • Prazo de resultado: {selectedDiagnosticExam?.prazoResultadoDias || 0} dia(s)</p></div>}
                   <div>
                     <Label>{isDiagnosticBooking ? "Horários disponíveis do aparelho" : isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
                     {!isDiagnosticBooking && newAg.profissionalId && (
