@@ -14,7 +14,8 @@ import { toast } from 'sonner';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { supabase } from '@/integrations/supabase/client';
-import { DEFAULT_DIAGNOSTIC_ROOM_CONFIG, normalizeDiagnosticRoomConfig, type DiagnosticRoomConfig } from '@/lib/diagnosticExams';
+import { DEFAULT_DIAGNOSTIC_ROOM_CONFIG, DIAGNOSTIC_EXAM_CATALOG, createDiagnosticExamConfig, normalizeDiagnosticRoomConfig, type DiagnosticRoomConfig } from '@/lib/diagnosticExams';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -136,8 +137,8 @@ const UnidadesSalas: React.FC = () => {
 
   const handleSaveRoom = async () => {
     if (!roomForm.nome.trim() || !roomForm.unidadeId) return;
-    if (roomForm.config.finalidade === 'aparelho_diagnostico' && !roomForm.config.tipoExame.trim()) {
-      toast.error('Informe o tipo de exame do aparelho.');
+    if (roomForm.config.finalidade === 'aparelho_diagnostico' && !roomForm.config.exames.length) {
+      toast.error('Selecione pelo menos um exame para esta sala.');
       return;
     }
     const roomId = editRoomId || `s${Date.now()}`;
@@ -313,8 +314,8 @@ const UnidadesSalas: React.FC = () => {
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {diagnosticConfig ? (
                           <>
-                            <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800">Aparelho: {diagnosticConfig.tipoExame || 'Exame diagnóstico'}</span>
-                            <span className="text-xs text-muted-foreground">{diagnosticConfig.duracaoSlot} min por slot</span>
+                            <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800">Aparelho / Exames: {diagnosticConfig.exames.length}</span>
+                            <span className="text-xs text-muted-foreground">{diagnosticConfig.exames.map(exam => exam.tipoExame).join(', ')}</span>
                           </>
                         ) : (
                           <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">Consultório</span>
@@ -422,30 +423,51 @@ const UnidadesSalas: React.FC = () => {
             </div>
             {roomForm.config.finalidade === 'aparelho_diagnostico' && (
               <div className="space-y-3 rounded-lg border p-3">
-                <div><Label>Tipo de Exame / Aparelho *</Label>
-                  <Input value={roomForm.config.tipoExame} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, tipoExame: e.target.value } }))} placeholder="Ex.: Tomografia, ECG, Ultrassonografia, Raio-X" />
-                </div>
-                <div><Label>Duração do Slot</Label>
-                  <Select value={String(roomForm.config.duracaoSlot)} onValueChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, duracaoSlot: Number(v) } }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{[10,15,20,30,45].map(n => <SelectItem key={n} value={String(n)}>{n} minutos</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div><Label>Prazo padrão para resultado (dias)</Label><Input type="number" min="0" max="90" value={roomForm.config.prazoResultadoDias} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, prazoResultadoDias: Math.min(90, Math.max(0, Number(e.target.value) || 0)) } }))} /><p className="text-xs text-muted-foreground mt-1">Use 0 quando a previsão for definida pela equipe no momento do exame.</p></div>
-                <div className="flex items-center justify-between"><Label>Exige preparo prévio?</Label><Switch checked={roomForm.config.exigePreparo} onCheckedChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, exigePreparo: v } }))} /></div>
-                {roomForm.config.exigePreparo && <div><Label>Instruções de preparo</Label><Textarea rows={3} value={roomForm.config.instrucoesPreparo} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, instrucoesPreparo: e.target.value } }))} placeholder="Descreva jejum, documentos e exames anteriores..." /></div>}
-                <div><Label>Exige Contraste?</Label>
-                  <Select value={roomForm.config.exigeContraste} onValueChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, exigeContraste: v as DiagnosticRoomConfig['exigeContraste'] } }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-                      <SelectItem value="nao">Não</SelectItem><SelectItem value="sim">Sim</SelectItem><SelectItem value="opcional">Opcional</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2">
+                  <Label>Exames disponíveis nesta sala *</Label>
+                  <p className="text-xs text-muted-foreground">Marque todos os exames realizados neste aparelho. Cada um terá duração, preparo e prazo próprios.</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {DIAGNOSTIC_EXAM_CATALOG.map(item => {
+                      const selected = roomForm.config.exames.some(exam => exam.tipoExame === item.label);
+                      return <label key={item.label} className="flex items-center gap-2 rounded-md border p-2 text-sm cursor-pointer">
+                        <Checkbox checked={selected} onCheckedChange={checked => setRoomForm(prev => {
+                          const exames = checked
+                            ? [...prev.config.exames, createDiagnosticExamConfig(item.label)]
+                            : prev.config.exames.filter(exam => exam.tipoExame !== item.label);
+                          return { ...prev, config: { ...prev.config, exames } };
+                        })} />
+                        <span>{item.label}</span>
+                      </label>;
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md border p-2">
+                    <Checkbox checked={roomForm.config.exames.some(exam => !DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === exam.tipoExame))} onCheckedChange={checked => setRoomForm(prev => ({
+                      ...prev,
+                      config: { ...prev.config, exames: checked
+                        ? [...prev.config.exames, createDiagnosticExamConfig('')]
+                        : prev.config.exames.filter(exam => DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === exam.tipoExame)) }
+                    }))} />
+                    <span className="text-sm font-medium">Outro — cadastrar manualmente</span>
+                  </div>
+                  {roomForm.config.exames.map((exam, index) => (
+                    <div key={exam.id} className="space-y-3 rounded-md border bg-background p-3">
+                      <div className="flex items-center justify-between gap-2"><strong className="text-sm">{exam.tipoExame || 'Novo exame personalizado'}</strong><Button type="button" size="sm" variant="ghost" onClick={() => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.filter(item => item.id !== exam.id) } }))}><X className="h-4 w-4" /> Remover</Button></div>
+                      {!DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === exam.tipoExame) && <div><Label>Nome do exame *</Label><Input value={exam.tipoExame} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, tipoExame: e.target.value } : item) } }))} placeholder="Digite o nome do exame" /></div>}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div><Label>Duração do slot</Label><Select value={String(exam.duracaoSlot)} onValueChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, duracaoSlot: Number(v) } : item) } }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[10,15,20,30,45].map(n => <SelectItem key={n} value={String(n)}>{n} minutos</SelectItem>)}</SelectContent></Select></div>
+                        <div><Label>Prazo do resultado (dias)</Label><Input type="number" min="0" max="90" value={exam.prazoResultadoDias} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, prazoResultadoDias: Math.min(90, Math.max(0, Number(e.target.value) || 0)) } : item) } }))} /></div>
+                      </div>
+                      <div className="flex items-center justify-between"><Label>Exige preparo prévio?</Label><Switch checked={exam.exigePreparo} onCheckedChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, exigePreparo: v } : item) } }))} /></div>
+                      {exam.exigePreparo && <div><Label>Instruções de preparo</Label><Textarea rows={3} value={exam.instrucoesPreparo} onChange={e => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, instrucoesPreparo: e.target.value } : item) } }))} placeholder="Preencha as orientações oficiais da unidade para este exame." /></div>}
+                      <div><Label>Exige contraste?</Label><Select value={exam.exigeContraste} onValueChange={v => setRoomForm(prev => ({ ...prev, config: { ...prev.config, exames: prev.config.exames.map(item => item.id === exam.id ? { ...item, exigeContraste: v as DiagnosticRoomConfig['exigeContraste'] } : item) } }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="nao">Não</SelectItem><SelectItem value="sim">Sim</SelectItem><SelectItem value="opcional">Opcional</SelectItem></SelectContent></Select></div>
+                    </div>
+                  ))}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Início da agenda</Label><Input type="time" value={roomForm.config.horarioInicio || '07:00'} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, horarioInicio: e.target.value } }))} /></div>
                   <div><Label>Fim da agenda</Label><Input type="time" value={roomForm.config.horarioFim || '17:00'} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, horarioFim: e.target.value } }))} /></div>
                 </div>
-                <p className="text-xs text-muted-foreground">Esta configuração é exclusiva desta sala e fica armazenada no custom_data da unidade. Consultórios comuns permanecem inalterados.</p>
+                <p className="text-xs text-muted-foreground">Os horários de funcionamento são compartilhados pela sala; cada exame selecionado mantém duração, preparo, contraste e prazo independentes. Consultórios comuns permanecem inalterados.</p>
               </div>
             )}
             <Button onClick={handleSaveRoom} className="w-full gradient-primary text-primary-foreground">{editRoomId ? 'Salvar' : 'Criar'}</Button>
