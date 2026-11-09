@@ -1,5 +1,5 @@
 import { avisarVideoAtualizado } from '@/lib/painelChamadas';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,31 @@ const UnidadesSalas: React.FC = () => {
   const [editRoomId, setEditRoomId] = useState<string | null>(null);
   const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } as DiagnosticRoomConfig });
+  const [roomConfigs, setRoomConfigs] = useState<Record<string, DiagnosticRoomConfig>>({});
+  const [roomFilter, setRoomFilter] = useState<'todas' | 'consultorios' | 'aparelhos'>('todas');
+
+  // Carrega as configurações persistidas por unidade para identificar os aparelhos nos cartões.
+  useEffect(() => {
+    let cancelled = false;
+    const loadRoomConfigs = async () => {
+      if (unidades.length === 0) { setRoomConfigs({}); return; }
+      const { data, error } = await supabase.from('unidades' as any).select('id,custom_data');
+      if (error || cancelled) return;
+      const next: Record<string, DiagnosticRoomConfig> = {};
+      (data || []).forEach((unit: any) => {
+        const configuredRooms = unit.custom_data?.salas_exames;
+        if (!configuredRooms || typeof configuredRooms !== 'object') return;
+        Object.entries(configuredRooms).forEach(([roomId, value]: [string, any]) => {
+          if (value?.finalidade === 'aparelho_diagnostico') {
+            next[roomId] = normalizeDiagnosticRoomConfig(value);
+          }
+        });
+      });
+      if (!cancelled) setRoomConfigs(next);
+    };
+    void loadRoomConfigs();
+    return () => { cancelled = true; };
+  }, [unidades]);
 
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const enviarLogo = async (file: File) => {
@@ -63,7 +88,15 @@ const UnidadesSalas: React.FC = () => {
       setCustomData(cd);
     } catch (e) { /* ignore */ }
   };
-  const openNewRoom = () => { setEditRoomId(null); setRoomForm({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } }); setRoomDialog(true); };
+  const openNewRoom = (finalidade: DiagnosticRoomConfig['finalidade'] = 'consultorio_clinico') => {
+    setEditRoomId(null);
+    setRoomForm({
+      nome: '',
+      unidadeId: '',
+      config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG, finalidade },
+    });
+    setRoomDialog(true);
+  };
   const openEditRoom = async (s: typeof salas[0]) => {
     setEditRoomId(s.id);
     setRoomForm({ nome: s.nome, unidadeId: s.unidadeId, config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } });
@@ -127,6 +160,15 @@ const UnidadesSalas: React.FC = () => {
       await addSala({ id: roomId, nome: roomForm.nome.trim(), unidadeId: roomForm.unidadeId, ativo: true });
       toast.success('Sala criada!');
     }
+    setRoomConfigs(prev => {
+      const next = { ...prev };
+      if (roomForm.config.finalidade === 'aparelho_diagnostico') {
+        next[roomId] = normalizeDiagnosticRoomConfig(roomForm.config);
+      } else {
+        delete next[roomId];
+      }
+      return next;
+    });
     setRoomDialog(false);
   };
 
@@ -240,20 +282,44 @@ const UnidadesSalas: React.FC = () => {
 
       {/* Salas */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><DoorOpen className="w-5 h-5" />Salas / Consultórios</h2>
-          <Button size="sm" onClick={openNewRoom} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Sala</Button>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><DoorOpen className="w-5 h-5" />Salas / Consultórios</h2>
+            <p className="text-xs text-muted-foreground mt-1">{salas.length} sala(s) cadastrada(s) • {Object.keys(roomConfigs).length} aparelho(s) diagnóstico(s)</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => openNewRoom('aparelho_diagnostico')} className="border-violet-300 text-violet-700 hover:bg-violet-50">
+              <Plus className="w-4 h-4 mr-1" />Novo Aparelho
+            </Button>
+            <Button size="sm" onClick={() => openNewRoom('consultorio_clinico')} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Sala</Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Filtrar salas por finalidade">
+          <Button size="sm" variant={roomFilter === 'todas' ? 'default' : 'outline'} onClick={() => setRoomFilter('todas')}>Todas ({salas.length})</Button>
+          <Button size="sm" variant={roomFilter === 'consultorios' ? 'default' : 'outline'} onClick={() => setRoomFilter('consultorios')}>Consultórios ({salas.length - Object.keys(roomConfigs).filter(id => salas.some(s => s.id === id)).length})</Button>
+          <Button size="sm" variant={roomFilter === 'aparelhos' ? 'default' : 'outline'} onClick={() => setRoomFilter('aparelhos')}>Aparelhos / Exames ({salas.filter(s => !!roomConfigs[s.id]).length})</Button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {salas.map(s => {
+          {salas.filter(s => roomFilter === 'todas' || (roomFilter === 'aparelhos' ? !!roomConfigs[s.id] : !roomConfigs[s.id])).map(s => {
             const unidade = unidades.find(u => u.id === s.unidadeId);
+            const diagnosticConfig = roomConfigs[s.id];
             return (
               <Card key={s.id} className="shadow-card border-0">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="min-w-0">
                       <h3 className="font-semibold text-foreground">{s.nome}</h3>
                       <p className="text-sm text-muted-foreground">{unidade?.nome}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {diagnosticConfig ? (
+                          <>
+                            <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800">Aparelho: {diagnosticConfig.tipoExame || 'Exame diagnóstico'}</span>
+                            <span className="text-xs text-muted-foreground">{diagnosticConfig.duracaoSlot} min por slot</span>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">Consultório</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-1">
                       <Button size="icon" variant="ghost" onClick={() => openEditRoom(s)}><Pencil className="w-4 h-4" /></Button>
