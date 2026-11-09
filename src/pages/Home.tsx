@@ -21,6 +21,7 @@ import {
   UserCheck,
   ChevronDown,
   Ear,
+  Building2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,7 +30,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
-import logoSms from "@/assets/logo-sms-transparente.png";
 import heroAtendimento from "@/assets/hero-atendimento.webp";
 import { useBrand } from "@/hooks/useBrand";
 
@@ -49,18 +49,29 @@ const services = [
 
 const Home: React.FC = () => {
   const brand = useBrand();
+  const hasContactInfo = Boolean(brand.enderecoPublico || brand.horarioPublico || brand.telefonePublico);
+  const tenantStyles = { ["--tenant-primary" as string]: brand.corPrimaria } as React.CSSProperties;
   return (
-    <div className="min-h-screen bg-[#edf3f8]">
-      <header className="border-b border-[#2A6F97]/20 border-t-4 border-t-[#2A6F97] bg-white shadow-sm">
+    <div className="min-h-screen bg-[#edf3f8]" style={tenantStyles}>
+      <header className="border-b border-slate-200 border-t-4 border-t-[var(--tenant-primary)] bg-white shadow-sm">
         <div className="container mx-auto flex flex-wrap items-center justify-between gap-5 px-6 py-4 sm:px-10 lg:px-16">
           <Link to="/" className="flex min-w-0 items-center gap-3" aria-label={brand.titulo + " — página inicial"}>
-            <img
-              src={brand.logoUrl}
-              alt={brand.titulo}
-              width={96}
-              height={96}
-              className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24"
-            />
+            {brand.logoUrl ? (
+              <img
+                src={brand.logoUrl}
+                alt={brand.titulo}
+                width={96}
+                height={96}
+                className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24"
+              />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-white ring-1 ring-slate-200 sm:h-24 sm:w-24"
+              >
+                <Building2 className="h-10 w-10 text-[var(--tenant-primary)]" />
+              </div>
+            )}
             <span className="min-w-0 text-base font-semibold leading-snug text-foreground sm:text-lg">
               {brand.mantenedora}
               <span className="mt-1 block text-sm font-normal text-muted-foreground sm:text-base">
@@ -74,13 +85,13 @@ const Home: React.FC = () => {
           >
             <a
               href="#servicos"
-              className="inline-flex min-h-12 items-center font-medium text-slate-600 hover:text-[#2A6F97]"
+              className="inline-flex min-h-12 items-center font-medium text-slate-600 hover:text-[var(--tenant-primary)]"
             >
               Serviços
             </a>
             <a
               href="#contato"
-              className="inline-flex min-h-12 items-center font-medium text-slate-600 hover:text-[#2A6F97]"
+              className="inline-flex min-h-12 items-center font-medium text-slate-600 hover:text-[var(--tenant-primary)]"
             >
               Contato
             </a>
@@ -88,7 +99,7 @@ const Home: React.FC = () => {
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  className="h-12 gap-2 rounded-xl border-[#2A6F97] bg-[#eaf3f9] px-4 text-base font-semibold text-[#164563] shadow-sm hover:bg-[#d8eaf5] sm:px-5"
+                  className="h-12 gap-2 rounded-xl border-[var(--tenant-primary)] bg-[#eaf3f9] px-4 text-base font-semibold text-[#164563] shadow-sm hover:bg-[#d8eaf5] sm:px-5"
                 >
                   <Shield className="h-5 w-5" aria-hidden="true" />
                   Área Restrita
@@ -206,10 +217,10 @@ const Home: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
             >
-              <Card className="h-full rounded-2xl border border-slate-200 border-t-4 border-t-[#2A6F97] bg-white shadow-sm hover:border-t-[#164563] hover:shadow-lg transition-[box-shadow,border-color] duration-200 text-center">
+              <Card className="h-full rounded-2xl border border-slate-200 border-t-4 border-t-[var(--tenant-primary)] bg-white shadow-sm hover:border-t-[#164563] hover:shadow-lg transition-[box-shadow,border-color] duration-200 text-center">
                 <CardContent className="p-6 sm:px-4 sm:py-7">
-                  <div className="w-16 h-16 rounded-2xl bg-[#e5f0f7] ring-1 ring-[#2A6F97]/15 flex items-center justify-center mx-auto mb-5">
-                    <s.icon className="w-7 h-7 text-[#2A6F97]" />
+                  <div className="w-16 h-16 rounded-2xl bg-[#e5f0f7] ring-1 ring-slate-200 flex items-center justify-center mx-auto mb-5">
+                    <s.icon className="w-7 h-7 text-[var(--tenant-primary)]" />
                   </div>
                   <h3 className="mb-2 text-lg font-semibold font-display text-[#123c57]">{s.title}</h3>
                   <p className="text-sm leading-relaxed text-slate-600">{s.desc}</p>
@@ -221,7 +232,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* Info */}
-      <section id="contato" className="scroll-mt-6 border-t border-[#2A6F97]/15 bg-white">
+      <section id="contato" className="scroll-mt-6 border-t border-[var(--tenant-primary)]/15 bg-white">
         <div className="container mx-auto px-6 py-16 sm:px-10 lg:px-16">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-start gap-3">
