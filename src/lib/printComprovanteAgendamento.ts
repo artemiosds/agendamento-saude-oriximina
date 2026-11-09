@@ -17,6 +17,11 @@ export interface ComprovanteAgendamentoInput {
   unidadeNome?: string;
   unidadeEndereco?: string;
   unidadeTelefone?: string;
+  salaNome?: string;
+  diagnostico?: boolean;
+  preparoInstrucoes?: string;
+  observacaoPreparo?: string;
+  previsaoResultado?: string;
 }
 
 const esc = (v: unknown) =>
@@ -86,6 +91,8 @@ export function printComprovanteAgendamento(ag: ComprovanteAgendamentoInput) {
   .receipt-consult-type { font-size: 15px !important; margin-top: 1px !important; }
   .receipt-guidance { margin-top: 8px !important; padding: 7px 9px !important; font-size: 10.5px !important; line-height: 1.25 !important; break-inside: avoid !important; page-break-inside: avoid !important; }
   .receipt-guidance ul { margin: 4px 0 0 15px !important; line-height: 1.25 !important; }
+  .receipt-exam-preparation { margin-top: 8px !important; padding: 9px !important; break-inside: avoid !important; page-break-inside: avoid !important; }
+  .receipt-handwritten { min-height: 17mm !important; }
   .receipt-guidance li { margin: 0 !important; padding: 0 !important; }
   .receipt-orientations-heading { margin-top: 5px !important; }
   .receipt-code { margin-top: 8px !important; padding-top: 6px !important; break-inside: avoid !important; page-break-inside: avoid !important; }
@@ -108,14 +115,22 @@ export function printComprovanteAgendamento(ag: ComprovanteAgendamentoInput) {
         </div>
       </div>
       <div class="receipt-consultation" style="border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
-        <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#64748b;font-weight:700;">Consulta</div>
+        <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#64748b;font-weight:700;">${ag.diagnostico ? "Exame diagnóstico" : "Consulta"}</div>
         <div class="receipt-consult-type" style="font-size:16px;font-weight:700;margin-top:2px;">${esc(ag.tipo || "Atendimento")}</div>
-        <div style="font-size:14px;margin-top:4px;"><strong>Profissional:</strong> ${esc(ag.profissionalNome || "—")}</div>
+        ${ag.diagnostico && ag.salaNome ? `<div style="font-size:13px;margin-top:3px;"><strong>Aparelho / Sala:</strong> ${esc(ag.salaNome)}</div>` : ""}
+        <div style="font-size:14px;margin-top:4px;"><strong>Responsável:</strong> ${esc(ag.profissionalNome || "—")}</div>
+        ${ag.diagnostico && ag.previsaoResultado ? `<div style="font-size:12px;margin-top:3px;"><strong>Previsão do resultado:</strong> ${esc(ag.previsaoResultado)}</div>` : ""}
         ${ag.status ? `<div style="font-size:13px;margin-top:2px;"><strong>Situação:</strong> ${esc(STATUS_LABEL[ag.status] || ag.status)}</div>` : ""}
       </div>
       ${f("Unidade", ag.unidadeNome)}
       ${f("Endereço", ag.unidadeEndereco)}
       ${f("Telefone da unidade", ag.unidadeTelefone)}
+      ${ag.diagnostico ? `<div class="receipt-exam-preparation" style="margin-top:12px;padding:12px;border:2px solid #b45309;background:#fffbeb;border-radius:9px;font-size:12px;line-height:1.45;">
+        <div style="font-size:12px;font-weight:900;letter-spacing:.4px;color:#92400e;">PREPARO PARA O EXAME</div>
+        ${ag.preparoInstrucoes ? `<div style="margin-top:7px;white-space:pre-wrap;">${esc(ag.preparoInstrucoes)}</div>` : `<div style="margin-top:7px;font-weight:700;">A unidade não cadastrou preparo prévio para este exame. Confirme as orientações com a equipe responsável.</div>`}
+        ${ag.observacaoPreparo ? `<div style="margin-top:7px;white-space:pre-wrap;"><strong>Orientação complementar:</strong> ${esc(ag.observacaoPreparo)}</div>` : ""}
+        <div class="receipt-handwritten" style="margin-top:8px;min-height:13mm;border-top:1px dashed #d6a34b;padding-top:5px;color:#78350f;"><strong>Observações / complemento manual:</strong><br/>________________________________________________________<br/>________________________________________________________</div>
+      </div>` : ""}
       <div class="receipt-guidance" style="margin-top:14px;padding:10px 12px;background:#f1f5f9;border-radius:8px;font-size:12px;line-height:1.5;">
         <strong>Documentos obrigatórios para o atendimento:</strong>
         <ul style="margin:6px 0 0 18px;padding:0;">
@@ -141,7 +156,7 @@ export function printComprovanteAgendamento(ag: ComprovanteAgendamentoInput) {
         <div class="receipt-portal-qr" aria-label="QR Code do Portal do Paciente">${portalQr}</div>
         <div class="receipt-portal-info">
           <div class="receipt-portal-title">Portal do Paciente</div>
-          <div class="receipt-portal-copy">Aponte a câmera do celular para consultar seus agendamentos e acompanhar sua posição na fila.</div>
+          <div class="receipt-portal-copy">Aponte a câmera do celular para consultar seus agendamentos${ag.diagnostico ? " e acompanhar a previsão e liberação do resultado" : " e acompanhar sua posição na fila"}.</div>
           <div class="receipt-portal-link">Ou acesse: ${esc(portalLink)}</div>
         </div>
       </div>
