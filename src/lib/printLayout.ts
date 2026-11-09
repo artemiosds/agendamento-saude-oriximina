@@ -824,7 +824,7 @@ export function printViaIframe(html: string): void {
       printed = true;
       try {
         const win = iframe.contentWindow;
-        if (!win) { cleanup(); return; }
+        if (!win) { cleanup(); printViaWindowFallback(html); return; }
         const doc = iframe.contentDocument as any;
         try { if (doc?.fonts?.ready) await doc.fonts.ready; } catch {}
         await new Promise<void>(resolve => win.requestAnimationFrame(() => win.requestAnimationFrame(() => resolve())));
@@ -833,8 +833,10 @@ export function printViaIframe(html: string): void {
         const afterprint = () => { cleanup(); try { win.removeEventListener('afterprint', afterprint); } catch {} };
         try { win.addEventListener('afterprint', afterprint); } catch {}
         setTimeout(cleanup, 30_000);
-      } catch {
+      } catch (err) {
+        console.error('[printViaIframe] falha no iframe, usando janela:', err);
         cleanup();
+        printViaWindowFallback(html);
       }
     };
 
@@ -860,5 +862,25 @@ export function printViaIframe(html: string): void {
     setTimeout(triggerPrint, 6000);
   } catch (err) {
     console.error('[printViaIframe] erro:', err);
+    printViaWindowFallback(html);
+  }
+}
+
+/** Fallback: abre o documento em uma nova janela e dispara a impressão. */
+function printViaWindowFallback(html: string): void {
+  try {
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('O navegador bloqueou a janela de impressão. Permita pop-ups para este site e tente novamente.');
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    const go = () => { try { w.focus(); w.print(); } catch {} };
+    if (w.document.readyState === 'complete') setTimeout(go, 300);
+    else w.addEventListener('load', () => setTimeout(go, 300), { once: true });
+  } catch (err) {
+    console.error('[printViaWindowFallback] erro:', err);
   }
 }
