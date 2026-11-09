@@ -5,6 +5,8 @@ import {
   getDiagnosticRoomConfig,
   isDiagnosticAppointment,
   normalizeDiagnosticRoomConfig,
+  createDiagnosticExamConfig,
+  DIAGNOSTIC_EXAM_CATALOG,
 } from "./diagnosticExams";
 
 describe("diagnostic room configuration", () => {
@@ -22,6 +24,27 @@ describe("diagnostic room configuration", () => {
     expect(config?.tipoExame).toBe("Tomografia");
     expect(config?.duracaoSlot).toBe(30);
     expect(config?.prazoResultadoDias).toBe(0);
+  });
+
+  it("preserves a legacy single-exam room as a one-item exam list", () => {
+    const config = normalizeDiagnosticRoomConfig({ finalidade: "aparelho_diagnostico", tipoExame: "Tomografia", duracaoSlot: 30, exigePreparo: true, instrucoesPreparo: "Orientação antiga" });
+    expect(config.exames).toHaveLength(1);
+    expect(config.exames[0]).toMatchObject({ tipoExame: "Tomografia", duracaoSlot: 30, exigePreparo: true, instrucoesPreparo: "Orientação antiga" });
+  });
+
+  it("keeps multiple exam configurations independent", () => {
+    const config = normalizeDiagnosticRoomConfig({ finalidade: "aparelho_diagnostico", horarioInicio: "07:00", horarioFim: "17:00", exames: [
+      { id: "rx", tipoExame: "Radiografia (Raio-X)", duracaoSlot: 10, exigePreparo: false },
+      { id: "tc", tipoExame: "Tomografia Computadorizada", duracaoSlot: 45, exigePreparo: true, instrucoesPreparo: "Orientação da unidade", exigeContraste: "opcional", prazoResultadoDias: 4 },
+    ] });
+    expect(config.exames).toHaveLength(2);
+    expect(config.exames[0].duracaoSlot).toBe(10);
+    expect(config.exames[1]).toMatchObject({ duracaoSlot: 45, exigePreparo: true, instrucoesPreparo: "Orientação da unidade", exigeContraste: "opcional", prazoResultadoDias: 4 });
+  });
+
+  it("provides a standardized catalog and allows a custom exam entry", () => {
+    expect(DIAGNOSTIC_EXAM_CATALOG.some(item => item.label === "Tomografia Computadorizada")).toBe(true);
+    expect(createDiagnosticExamConfig("Exame personalizado").tipoExame).toBe("Exame personalizado");
   });
 
   it("normalizes invalid slot durations and unsafe values", () => {
