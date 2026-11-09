@@ -7,7 +7,6 @@
   "storage_objects": true,
   "realtime_publication": true,
   "available_extensions": [
-    "moddatetime",
     "pg_trgm",
     "pgcrypto",
     "unaccent",
