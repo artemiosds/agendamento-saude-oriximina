@@ -1522,7 +1522,7 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
-    if (masterOverrideReason || carencyOverrideReason) {
+    if ((masterOverrideReason || carencyOverrideReason) && !isDiagnosticBooking) {
       await addAgendamentoTransactionally(agData, async (normalized) => {
         const { error } = await supabase.rpc("create_internal_appointment_with_policy_override" as any, {
           p_payload: {
