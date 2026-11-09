@@ -118,8 +118,7 @@ const AgendamentoExterno: React.FC = () => {
 
       const { data: appts } = await supabase.from("agendamentos").select("*")
         .eq("agendado_por_externo", extUser.id)
-        .order("data", { ascending: false })
-        .order("data", { ascending: true });
+        .order("data", { ascending: false });
       setMyAppointments(appts || []);
     } catch (err) {
       console.error(err);
