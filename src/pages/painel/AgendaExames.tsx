@@ -64,6 +64,7 @@ export default function AgendaExames() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
   const [patientId, setPatientId] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [slot, setSlot] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -106,9 +107,13 @@ export default function AgendaExames() {
     const term = patientSearch.trim();
     if (term.length < 3) { setPatients([]); return; }
     const timer = setTimeout(async () => {
-      const { data, error } = await (supabase as any).from("pacientes").select("id,nome,cpf,telefone,email")
-        .or(`nome.ilike.%${term.replace(/[%_,]/g, " ")}%,cpf.ilike.%${term.replace(/\D/g, "")}%`)
-        .limit(8);
+      const safeTerm = term.replace(/[%_,()]/g, " ").trim();
+      const digits = term.replace(/\D/g, "");
+      let patientQuery = (supabase as any).from("pacientes").select("id,nome,cpf,telefone,email");
+      patientQuery = digits.length >= 3
+        ? patientQuery.or(`nome.ilike.%${safeTerm}%,cpf.ilike.%${digits}%`)
+        : patientQuery.ilike("nome", `%${safeTerm}%`);
+      const { data, error } = await patientQuery.limit(8);
       if (!active) return;
       if (error) { toast.error("Falha na busca de pacientes."); return; }
       setPatients((data || []) as Patient[]);
@@ -129,8 +134,8 @@ export default function AgendaExames() {
       toast.error("Selecione paciente, sala e horário.");
       return;
     }
-    const patient = patients.find(p => p.id === patientId);
-    if (!patient) { toast.error("Selecione novamente o paciente."); return; }
+    const patient = selectedPatient;
+    if (!patient || patient.id !== patientId) { toast.error("Selecione novamente o paciente."); return; }
     setSaving(true);
     const id = crypto.randomUUID();
     const custom = {
@@ -159,7 +164,7 @@ export default function AgendaExames() {
       user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
       detalhes: { sala_id: selectedRoom, exame: roomConfig.tipoExame, data: date, hora: slot },
     });
-    setPatientId(""); setPatientSearch(""); setSlot("");
+    setPatientId(""); setSelectedPatient(null); setPatientSearch(""); setSlot("");
     toast.success("Exame agendado.");
     await loadRows();
   };
@@ -293,8 +298,8 @@ export default function AgendaExames() {
           <CardContent className="space-y-3">
             <div className="grid gap-3 md:grid-cols-3">
               <div className="md:col-span-2"><Label>Buscar paciente (nome ou CPF)</Label>
-                <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" value={patientSearch} onChange={e => { setPatientSearch(e.target.value); setPatientId(""); }} placeholder="Digite ao menos 3 caracteres" /></div>
-                {patients.length > 0 && <div className="mt-1 max-h-40 overflow-y-auto rounded-md border">{patients.map(p => <button key={p.id} type="button" onClick={() => { setPatientId(p.id); setPatientSearch(`${p.nome}${p.cpf ? " — "+p.cpf : ""}`); setPatients([]); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">{p.nome} <span className="text-muted-foreground">{p.cpf || ""}</span></button>)}</div>}
+                <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" value={patientSearch} onChange={e => { setPatientSearch(e.target.value); setPatientId(""); setSelectedPatient(null); }} placeholder="Digite ao menos 3 caracteres" /></div>
+                {patients.length > 0 && <div className="mt-1 max-h-40 overflow-y-auto rounded-md border">{patients.map(p => <button key={p.id} type="button" onClick={() => { setPatientId(p.id); setSelectedPatient(p); setPatientSearch(`${p.nome}${p.cpf ? " — "+p.cpf : ""}`); setPatients([]); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">{p.nome} <span className="text-muted-foreground">{p.cpf || ""}</span></button>)}</div>}
               </div>
               <div><Label>Horário disponível</Label><Select value={slot} onValueChange={setSlot}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{slots.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
             </div>
