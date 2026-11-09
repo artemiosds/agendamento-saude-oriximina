@@ -788,8 +788,8 @@ const Agenda: React.FC = () => {
         const config = getDiagnosticRoomConfig(unitRow?.custom_data, newAg.salaId);
         if (cancelled) return;
         setDiagnosticRoomConfig(config);
+        setNewAg((prev) => ({ ...prev, tipo: config ? "Exame" : (prev.tipo === "Exame" ? "Consulta" : prev.tipo), hora: "" }));
         if (!config) return;
-        setNewAg((prev) => ({ ...prev, tipo: "Exame", hora: "" }));
         const { data: appointments, error: appointmentsError } = await (supabase as any).from("agendamentos")
           .select("id,hora,status,custom_data").eq("unidade_id", diagnosticUnitId)
           .eq("sala_id", newAg.salaId).eq("data", selectedDate);
@@ -3014,7 +3014,7 @@ const Agenda: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Profissional</Label>
+                      <Label>{isDiagnosticBooking ? "Responsável pelo exame" : "Profissional"}</Label>
                       <Popover open={novoAgProfOpen} onOpenChange={setNovoAgProfOpen}>
                         <PopoverTrigger asChild>
                           <Button
@@ -3097,7 +3097,7 @@ const Agenda: React.FC = () => {
                   {isDiagnosticBooking && <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950"><strong>{diagnosticRoomConfig?.tipoExame}</strong><p className="text-xs mt-1">Agendamento por aparelho • slot de {diagnosticRoomConfig?.duracaoSlot} minutos. O responsável selecionado será registrado no agendamento.</p>{diagnosticRoomConfig?.exigePreparo && <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2"><strong>Preparo cadastrado pela unidade</strong><p className="mt-1 whitespace-pre-wrap">{diagnosticRoomConfig.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme antes de agendar."}</p></div>}</div>}
                   <div>
                     <Label>{isDiagnosticBooking ? "Horários disponíveis do aparelho" : isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
-                    {newAg.profissionalId && (
+                    {!isDiagnosticBooking && newAg.profissionalId && (
                       <div className="space-y-2">
                         <SlotInfoBadge
                           profissionalId={newAg.profissionalId}
@@ -3277,7 +3277,7 @@ const Agenda: React.FC = () => {
                   <Button
                     onClick={() => createLock.run(handleCreate)}
                     className="w-full gradient-primary text-primary-foreground"
-                    disabled={createLock.isLocked || !newAg.hora || !newAgTimeAllowed || !newAg.pacienteId || !newAg.profissionalId}
+                    disabled={createLock.isLocked || diagnosticRoomLoading || !newAg.hora || !newAgTimeAllowed || !newAg.pacienteId || !newAg.profissionalId}
                   >
                     {createLock.isLocked ? "Agendando..." : "Agendar"}
                   </Button>
