@@ -1856,7 +1856,8 @@ const BpaExportar: React.FC = () => {
       // Mantém vínculo entre sessões do mesmo ciclo para recuperar CID ausente
       // sem misturar tratamentos, pacientes, profissionais ou unidades.
       const sigtapPorSessaoTratamento = new Map<string, string[]>();
-      const cidPorSessaoTratamento = new Map<string, { cids: string[]; sessionNumber: number | null; scheduledDate: string }>();
+      const cidCandidatosPorCiclo = new Map<string, Array<any>>();
+      const sessaoMetaPorAgendamento = new Map<string, any>();
       const prontuarioPorAgendamento = new Map<string, any>(
         (prontuarios || []).filter((p: any) => p?.agendamento_id && p?.id)
           .map((p: any) => [String(p.agendamento_id), p]),
@@ -1913,6 +1914,17 @@ const BpaExportar: React.FC = () => {
           // Só sessões realizadas, com prontuário vinculado ao agendamento e CID explícito,
           // podem fornecer diagnóstico de referência para outra sessão do mesmo ciclo.
           const appointmentId = String(s.appointment_id || "");
+          if (appointmentId) {
+            sessaoMetaPorAgendamento.set(appointmentId, {
+              cycleId: String(s.cycle_id || ""),
+              patientId: String(s.patient_id),
+              professionalId: String(s.professional_id),
+              unitId: String(cycle.unit_id),
+              appointmentId,
+              sessionNumber: Number(s.session_number) > 0 ? Number(s.session_number) : null,
+              scheduledDate: String(s.scheduled_date).slice(0, 10),
+            });
+          }
           const linkedProntuario = appointmentId ? prontuarioPorAgendamento.get(appointmentId) : null;
           if (linkedProntuario && String(s.status).toLowerCase() === "realizada") {
             const procedureCids = (sigtapItensPorProntuario.get(String(linkedProntuario.id)) || [])
@@ -1921,11 +1933,16 @@ const BpaExportar: React.FC = () => {
             const explicit = resolveBpaCidDetails({ prontuario: linkedProntuario });
             const sourceCids = procedureCids.length ? procedureCids : [explicit.cid, ...explicit.adicionais].filter(Boolean);
             if (sourceCids.length) {
-              cidPorSessaoTratamento.set([appointmentId, somenteNumeros(code)].join("|"), {
-                cids: sourceCids,
-                sessionNumber: Number(s.session_number) > 0 ? Number(s.session_number) : null,
-                scheduledDate: String(s.scheduled_date).slice(0, 10),
+              const candidateKey = [String(s.cycle_id), somenteNumeros(code)].join("|");
+              const candidates = cidCandidatosPorCiclo.get(candidateKey) || [];
+              candidates.push({
+                cycleId: String(s.cycle_id), procedureCode: String(code),
+                patientId: String(s.patient_id), professionalId: String(s.professional_id),
+                unitId: String(cycle.unit_id), appointmentId,
+                sessionNumber: s.session_number, scheduledDate: String(s.scheduled_date).slice(0, 10),
+                status: String(s.status), cids: sourceCids,
               });
+              cidCandidatosPorCiclo.set(candidateKey, candidates);
             }
           }
         });
@@ -2729,9 +2746,14 @@ const BpaExportar: React.FC = () => {
                   )
                 : undefined;
               const cidProducaoLinha = resolucaoCid?.cid || "";
-              const cidCiclo = pront.agendamento_id
-                ? cidPorSessaoTratamento.get([String(pront.agendamento_id), somenteNumeros(procEntry.codigo)].join("|"))
-                : undefined;
+              const sessaoAtual = pront.agendamento_id ? sessaoMetaPorAgendamento.get(String(pront.agendamento_id)) : undefined;
+              const codigoCidCiclo = somenteNumeros(procEntry.codigo);
+              const cidCiclo = sessaoAtual
+                ? resolveBpaTreatmentCycleCid(
+                    cidCandidatosPorCiclo.get([sessaoAtual.cycleId, codigoCidCiclo].join("|")) || [],
+                    { ...sessaoAtual, procedureCode: codigoCidCiclo },
+                  )
+                : null;
               const cidResolvido = ehTecnicoEnfermagem
                 ? { cid: "", adicionais: [] as string[] }
                 : resolveBpaCidDetails({
