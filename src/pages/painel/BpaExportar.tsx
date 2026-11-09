@@ -1900,15 +1900,16 @@ const BpaExportar: React.FC = () => {
         // exportação mensal consegue aproveitar uma referência clínica de outro mês.
         const sessoesCicloRows: any[] = [];
         for (let i = 0; i < cycleIds.length; i += 500) {
-          const { data: rows, error } = await (supabase as any)
+          // A consulta pode retornar milhares de sessões para os ciclos da competência.
+          // Pagina explicitamente para não truncar em 1.000 linhas (limite padrão do PostgREST)
+          // e perder justamente as sessões históricas que contêm o CID de referência.
+          sessoesCicloRows.push(...await fetchAllRowsBpa<any>(() => (supabase as any)
             .from("treatment_sessions")
             .select("id, cycle_id, patient_id, professional_id, appointment_id, session_number, scheduled_date, status, procedure_done")
             .in("cycle_id", cycleIds.slice(i, i + 500))
             .in("status", ["realizada", "falta", "paciente_faltou"])
             .order("session_number", { ascending: true })
-            .order("scheduled_date", { ascending: true });
-          if (error) throw error;
-          sessoesCicloRows.push(...(rows || []));
+            .order("scheduled_date", { ascending: true })));
         }
         const sessoes = sessoesCicloRows.filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
 
