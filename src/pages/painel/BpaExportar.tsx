@@ -1859,8 +1859,17 @@ const BpaExportar: React.FC = () => {
       const cidCandidatosPorCiclo = new Map<string, Array<any>>();
       const sessaoMetaPorAgendamento = new Map<string, any>();
       const prontuarioPorAgendamento = new Map<string, any>();
-      (prontuarios || []).forEach((p: any) => {
+      // A exportação pode filtrar prontuários por bloco/turno. Esses filtros
+      // selecionam o que será exportado, mas não podem remover uma sessão válida
+      // usada apenas como referência de CID no mesmo ciclo de tratamento.
+      (prontuariosOriginais || []).forEach((p: any) => {
         if (p?.agendamento_id && p?.id) prontuarioPorAgendamento.set(String(p.agendamento_id), p);
+      });
+      // Preserva também registros sintéticos/currentes que não existam na consulta
+      // original, sem substituir um prontuário clínico já vinculado.
+      (prontuarios || []).forEach((p: any) => {
+        const id = String(p?.agendamento_id || "");
+        if (id && p?.id && !prontuarioPorAgendamento.has(id)) prontuarioPorAgendamento.set(id, p);
       });
       try {
         const sessoesRows: any[] = [];
