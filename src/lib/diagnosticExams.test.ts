@@ -21,10 +21,13 @@ describe("diagnostic room configuration", () => {
     }, "room-1");
     expect(config?.tipoExame).toBe("Tomografia");
     expect(config?.duracaoSlot).toBe(30);
+    expect(config?.prazoResultadoDias).toBe(0);
   });
 
   it("normalizes invalid slot durations and unsafe values", () => {
     expect(normalizeDiagnosticRoomConfig({ finalidade: "aparelho_diagnostico", duracaoSlot: 13 }).duracaoSlot).toBe(15);
+    expect(normalizeDiagnosticRoomConfig({ prazoResultadoDias: 3 }).prazoResultadoDias).toBe(3);
+    expect(normalizeDiagnosticRoomConfig({ prazoResultadoDias: 120 }).prazoResultadoDias).toBe(0);
     expect(normalizeDiagnosticRoomConfig({ exigePreparo: "yes", exigeContraste: "maybe" })).toMatchObject({
       exigePreparo: false,
       exigeContraste: "nao",
@@ -53,6 +56,7 @@ describe("diagnostic slots", () => {
 
   it("recognizes only exam appointments tagged as diagnostic-room bookings", () => {
     expect(isDiagnosticAppointment({ tipo: "exame", custom_data: { sala_tipo: "aparelho_diagnostico" } })).toBe(true);
+    expect(isDiagnosticAppointment({ tipo: "Exame", custom_data: { sala_tipo: "aparelho_diagnostico" } })).toBe(true);
     expect(isDiagnosticAppointment({ tipo: "consulta", custom_data: { sala_tipo: "aparelho_diagnostico" } })).toBe(false);
   });
 });
