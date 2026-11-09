@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractBpaCidCodes, resolveBpaCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid, resolveBpaTreatmentCycleCidsForProcedures } from "./bpaCid";
+import { extractBpaCidCodes, resolveBpaCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid, resolveBpaTreatmentCycleCidsForProcedures, resolveBpaSamePatientProcedureCidsForProcedures } from "./bpaCid";
 
 describe("CID estruturado sem perda de vínculo", () => {
   it("lê listas, objetos e JSON e prioriza o diagnóstico marcado", () => {
@@ -173,5 +173,40 @@ describe("CID por continuidade do ciclo de tratamento", () => {
   it("só usa o CID do ciclo quando as fontes do atendimento atual estão vazias", () => {
     expect(resolveBpaCidDetails({ treatmentCycleCid: ["F840", "F82"] }))
       .toEqual({ cid: "F840", adicionais: ["F82"] });
+  });
+});
+
+
+describe("CID por mesmo paciente e mesmo SIGTAP em outra data", () => {
+  const target = { patientId: "paciente-1", appointmentId: "agenda-alvo", scheduledDate: "2026-10-06" };
+  const candidates = [
+    { patientId: "paciente-1", procedureCode: "0302050019", appointmentId: "agenda-08", scheduledDate: "2026-10-08", status: "finalizado", cids: ["S721"] },
+    { patientId: "paciente-1", procedureCode: "0302050027", appointmentId: "agenda-08", scheduledDate: "2026-10-08", status: "finalizado", cids: ["M549"] },
+    { patientId: "paciente-2", procedureCode: "0302050019", appointmentId: "agenda-outro-paciente", scheduledDate: "2026-10-07", status: "finalizado", cids: ["F840"] },
+    { patientId: "paciente-1", procedureCode: "0301010048", appointmentId: "agenda-outro-procedimento", scheduledDate: "2026-10-07", status: "finalizado", cids: ["F840"] },
+    { patientId: "paciente-1", procedureCode: "0302050019", appointmentId: "agenda-falta", scheduledDate: "2026-10-07", status: "falta", cids: ["M545"] },
+    { patientId: "paciente-1", procedureCode: "0302050019", appointmentId: "agenda-sem-cid", scheduledDate: "2026-10-09", status: "finalizado", cids: [] },
+  ];
+
+  it("aproveita somente mesmo paciente, mesmo SIGTAP e data diferente", () => {
+    const result = resolveBpaSamePatientProcedureCidsForProcedures([
+      { codigo: "0302050019", cid: "" },
+      { codigo: "0302050027", cid: "" },
+      { codigo: "0301010048", cid: "" },
+      { codigo: "0302050019", cid: "M545" },
+    ], candidates, target);
+    expect(result.get("0302050019")?.cids).toEqual(["S721"]);
+    expect(result.get("0302050027")?.cids).toEqual(["M549"]);
+    expect(result.has("0301010048")).toBe(false);
+    expect(result.get("0302050019")?.scheduledDate).toBe("2026-10-08");
+  });
+
+  it("não substitui CID existente nem aproveita atendimento do mesmo dia", () => {
+    const result = resolveBpaSamePatientProcedureCidsForProcedures([
+      { codigo: "0302050019", cid: "M545" },
+    ], [
+      { patientId: "paciente-1", procedureCode: "0302050019", appointmentId: "agenda-mesmo-dia", scheduledDate: "2026-10-06", status: "finalizado", cids: ["S721"] },
+    ], target);
+    expect(result.size).toBe(0);
   });
 });
