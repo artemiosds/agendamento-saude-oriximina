@@ -42,11 +42,13 @@ export const whatsappService = {
     data_consulta?: string;
     hora_consulta?: string;
     observacoes?: string;
+    mensagem_custom?: string;
   }) {
     return invokeWhatsApp({
       tipo: params.tipo,
       telefone_direto: params.telefone,
       paciente_nome_direto: params.paciente_nome,
+      mensagem_custom: params.mensagem_custom,
       dados_direto: {
         profissional: params.profissional || '',
         unidade: params.unidade || '',
