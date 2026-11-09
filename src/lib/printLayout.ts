@@ -778,7 +778,13 @@ export async function openPrintDocument(
   meta?: Record<string, string>,
   configOverride?: Partial<DocumentConfig>,
 ): Promise<void> {
-  const config = await loadDocumentConfig();
+  let config: DocumentConfig;
+  try {
+    config = await loadDocumentConfig();
+  } catch (err) {
+    console.error('[openPrintDocument] configuração indisponível, usando padrão:', err);
+    config = { ...DEFAULT_CONFIG };
+  }
   const merged = configOverride ? { ...config, ...configOverride } as DocumentConfig : config;
   printViaIframe(buildDocumentShell(title, body, merged, meta));
 }
