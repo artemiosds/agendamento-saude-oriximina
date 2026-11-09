@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDefaultBrand, resolveBrand } from './useBrand';
+import { buildDefaultBrand, DEFAULT_BRAND, resolveBrand } from './useBrand';
 
 describe('tenant white-label defaults', () => {
   it('preserves the existing Oriximiná branding when tenant mode is not configured', () => {
@@ -71,6 +71,6 @@ describe('tenant white-label defaults', () => {
     const brand = resolveBrand({ marcaTitulo: 'Unidade Teste' });
 
     expect(brand.titulo).toBe('Unidade Teste');
-    expect(brand.logoUrl).toBeTruthy();
+    expect(brand.logoUrl).toBe(DEFAULT_BRAND.logoUrl);
   });
 });
