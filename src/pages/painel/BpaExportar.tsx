@@ -54,7 +54,7 @@ import {
 import { resolveBpaHeaderDocument } from "@/lib/bpaHeaderSource";
 import { normalizeBpaPhone } from "@/lib/bpaPhoneNormalization";
 import { parseBpaDate as parseDataSegura } from "@/lib/bpaDate";
-import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid } from "@/lib/bpaCid";
+import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid, resolveBpaTreatmentCycleCidsForProcedures } from "@/lib/bpaCid";
 import { includeBpaProductionResolution, loadBpaEntitiesByIds } from "@/lib/bpaSourceLoading";
 
 
@@ -2524,11 +2524,51 @@ const BpaExportar: React.FC = () => {
             servico: servicoValidacao,
             classificacao: classificacaoValidacao,
           };
-          const validacaoProcs = validarListaProcedimentosBpaI(codigosParaExportar.map(p => ({ ...p, cid: extrairCodigoCid(p.cid) })), validacaoCtxLinha);
-
+          // Recupera o CID do mesmo ciclo ANTES da validação SIGTAP × CBO.
+          // Antes, a validação inicial recebia a linha sem CID e podia rejeitá-la
+          // antes de o fallback por ciclo ser executado no momento da serialização.
+          // O alvo e cada candidato continuam restritos ao mesmo ciclo/paciente/
+          // profissional/unidade e ao mesmo código SIGTAP.
+          const sessaoAtualParaCid = pront.agendamento_id
+            ? sessaoMetaPorAgendamento.get(String(pront.agendamento_id))
+            : undefined;
+          const candidatosDoCicloAtual = sessaoAtualParaCid
+            ? [...cidCandidatosPorCiclo.entries()]
+                .filter(([key]) => key.startsWith(`${sessaoAtualParaCid.cycleId}|`))
+                .flatMap(([, candidates]) => candidates)
+            : [];
+          const cidCicloPorCodigo = sessaoAtualParaCid
+            ? resolveBpaTreatmentCycleCidsForProcedures(
+                codigosParaExportar,
+                candidatosDoCicloAtual,
+                sessaoAtualParaCid,
+              )
+            : new Map();
+          const codigosParaValidar = codigosParaExportar.map((candidate) => {
+            const codigo = somenteNumeros(candidate.codigo);
+            const cidExistente = extrairCodigoCid(candidate.cid);
+            if (cidExistente) return { ...candidate, cid: cidExistente };
+            const cidCiclo = cidCicloPorCodigo.get(codigo);
+            return cidCiclo?.cids?.[0]
+              ? { ...candidate, cid: cidCiclo.cids[0] }
+              : { ...candidate, cid: "" };
+          });
+          const validacaoProcs = validarListaProcedimentosBpaI(
+            codigosParaValidar,
+            validacaoCtxLinha,
+          );
 
           const codigosValidados = validacaoProcs.validos.map((r) => {
-            const original = codigosParaExportar.find((c) => c.codigo === r.codigo && (c.cid || "") === r.cid);
+            // Mantém no registro de origem a distinção entre CID já salvo e CID
+            // recuperado do ciclo. O segundo é reaplicado no resolver final para
+            // preservar também os CIDs adicionais da sessão de referência.
+            const original = codigosParaExportar.find((c) =>
+              c.codigo === r.codigo &&
+              (
+                extrairCodigoCid(c.cid) === r.cid ||
+                (!extrairCodigoCid(c.cid) && cidCicloPorCodigo.get(somenteNumeros(c.codigo))?.cids?.[0] === r.cid)
+              )
+            );
             return original || { codigo: r.codigo, origem: r.origem, cid: r.cid };
           });
           resumoIntegridade.totalProcedimentosValidos += codigosValidados.length;
@@ -2833,14 +2873,8 @@ const BpaExportar: React.FC = () => {
                   )
                 : undefined;
               const cidProducaoLinha = resolucaoCid?.cid || "";
-              const sessaoAtual = pront.agendamento_id ? sessaoMetaPorAgendamento.get(String(pront.agendamento_id)) : undefined;
               const codigoCidCiclo = somenteNumeros(procEntry.codigo);
-              const cidCiclo = sessaoAtual
-                ? resolveBpaTreatmentCycleCid(
-                    cidCandidatosPorCiclo.get([sessaoAtual.cycleId, codigoCidCiclo].join("|")) || [],
-                    { ...sessaoAtual, procedureCode: codigoCidCiclo },
-                  )
-                : null;
+              const cidCiclo = cidCicloPorCodigo.get(codigoCidCiclo) || null;
               const cidInputBase = {
                 procedureCid: sigtapVinculadoItens.filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo)).map(item => item.cid).filter(Boolean).concat(procEntry.cid || []),
                 productionCid: cidProducaoLinha,
