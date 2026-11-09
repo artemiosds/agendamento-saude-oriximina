@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractBpaCidCodes, resolveBpaCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid } from "./bpaCid";
+import { extractBpaCidCodes, resolveBpaCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid, resolveBpaTreatmentCycleCidsForProcedures } from "./bpaCid";
 
 describe("CID estruturado sem perda de vínculo", () => {
   it("lê listas, objetos e JSON e prioriza o diagnóstico marcado", () => {
@@ -109,6 +109,52 @@ describe("CID por continuidade do ciclo de tratamento", () => {
       { ...base, appointmentId: "agenda-7", sessionNumber: 7, cids: ["F840"] },
     ], target);
     expect(result).toBeNull();
+  });
+
+  it("recupera CID antes da validação apenas para o mesmo SIGTAP no ciclo do paciente", () => {
+    const candidates = [
+      {
+        ...base,
+        appointmentId: "agenda-14",
+        sessionNumber: 3,
+        scheduledDate: "2026-10-14",
+        cids: ["M538", "M545", "M796"],
+      },
+      {
+        ...base,
+        procedureCode: "0301010048",
+        appointmentId: "agenda-14-consulta",
+        sessionNumber: 3,
+        scheduledDate: "2026-10-14",
+        cids: ["Z000"],
+      },
+    ];
+    const resolved = resolveBpaTreatmentCycleCidsForProcedures(
+      [
+        { codigo: "0302050027", cid: "" },
+        { codigo: "0301010048", cid: "" },
+        { codigo: "0302050027", cid: "F840" },
+      ],
+      candidates,
+      {
+        cycleId: "ciclo-1",
+        patientId: "paciente-1",
+        professionalId: "prof-1",
+        unitId: "unidade-1",
+        appointmentId: "agenda-7",
+        sessionNumber: 1,
+        scheduledDate: "2026-10-07",
+      },
+    );
+
+    expect(resolved.get("0302050027")).toEqual({
+      cids: ["M538", "M545", "M796"],
+      sessionNumber: 3,
+      scheduledDate: "2026-10-14",
+    });
+    expect(resolved.has("0301010048")).toBe(false);
+    // CID informado no atendimento atual não é substituído.
+    expect(resolved.has("0302050027")).toBe(true);
   });
 
   it("prioriza o CID do atendimento atual antes do fallback do ciclo", () => {
