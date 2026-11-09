@@ -54,7 +54,7 @@ import {
 import { resolveBpaHeaderDocument } from "@/lib/bpaHeaderSource";
 import { normalizeBpaPhone } from "@/lib/bpaPhoneNormalization";
 import { parseBpaDate as parseDataSegura } from "@/lib/bpaDate";
-import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid, resolveBpaTreatmentCycleCidsForProcedures } from "@/lib/bpaCid";
+import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid, resolveBpaTreatmentCycleCidsForProcedures, resolveBpaSamePatientProcedureCidsForProcedures } from "@/lib/bpaCid";
 import { includeBpaProductionResolution, loadBpaEntitiesByIds } from "@/lib/bpaSourceLoading";
 
 
@@ -1879,6 +1879,7 @@ const BpaExportar: React.FC = () => {
       // sem misturar tratamentos, pacientes, profissionais ou unidades.
       const sigtapPorSessaoTratamento = new Map<string, string[]>();
       const cidCandidatosPorCiclo = new Map<string, Array<any>>();
+      const cidCandidatosMesmoPaciente: Array<any> = [];
       const sessaoMetaPorAgendamento = new Map<string, any>();
       const prontuarioPorAgendamento = new Map<string, any>();
       // A exportação pode filtrar prontuários por bloco/turno. Esses filtros
@@ -2000,6 +2001,32 @@ const BpaExportar: React.FC = () => {
             sigtapItensPorProntuario.set(String(r.prontuario_id), items);
           }
         });
+
+        // Fallback solicitado para o PDF: se faltar CID, permite aproveitar
+        // somente de outro dia do MESMO paciente e do MESMO SIGTAP.
+        // A fonte precisa ser outro prontuário finalizado com CID vinculado
+        // individualmente ao procedimento; não depende de haver ciclo na sessão-alvo.
+        cidCandidatosMesmoPaciente.length = 0;
+        for (const prontuarioFonte of prontuarioPorAgendamento.values()) {
+          const appointmentIdFonte = String(prontuarioFonte?.agendamento_id || "");
+          const patientIdFonte = String(prontuarioFonte?.paciente_id || "");
+          const dateFonte = String(prontuarioFonte?.data_atendimento || "").slice(0, 10);
+          if (!appointmentIdFonte || !patientIdFonte || !dateFonte ||
+              String(prontuarioFonte?.status || "").toLowerCase() !== "finalizado") continue;
+          const itensFonte = sigtapItensPorProntuario.get(String(prontuarioFonte.id)) || [];
+          for (const itemFonte of itensFonte) {
+            const cidsFonte = extrairCodigosCid(itemFonte.cid);
+            if (!cidsFonte.length) continue;
+            cidCandidatosMesmoPaciente.push({
+              patientId: patientIdFonte,
+              procedureCode: somenteNumeros(itemFonte.codigo),
+              appointmentId: appointmentIdFonte,
+              scheduledDate: dateFonte,
+              status: String(prontuarioFonte.status),
+              cids: cidsFonte,
+            });
+          }
+        }
 
         const procIdsSessao = sessoes.map((s: any) => s.procedure_done).filter(Boolean);
         etapaConsultaSessoes = "resolução dos códigos SIGTAP das sessões";
@@ -2593,13 +2620,24 @@ const BpaExportar: React.FC = () => {
                 sessaoAtualParaCid,
               )
             : new Map();
+          const cidMesmoPacientePorCodigo = resolveBpaSamePatientProcedureCidsForProcedures(
+            codigosParaExportar,
+            cidCandidatosMesmoPaciente,
+            {
+              patientId: String(pront.paciente_id || ""),
+              appointmentId: String(pront.agendamento_id || pront.id || ""),
+              scheduledDate: String(pront.data_atendimento || "").slice(0, 10),
+            },
+          );
           const codigosParaValidar = codigosParaExportar.map((candidate) => {
             const codigo = somenteNumeros(candidate.codigo);
             const cidExistente = extrairCodigoCid(candidate.cid);
             if (cidExistente) return { ...candidate, cid: cidExistente };
             const cidCiclo = cidCicloPorCodigo.get(codigo);
-            return cidCiclo?.cids?.[0]
-              ? { ...candidate, cid: cidCiclo.cids[0] }
+            const cidMesmoPaciente = cidMesmoPacientePorCodigo.get(codigo);
+            const cidReferencia = cidCiclo || cidMesmoPaciente;
+            return cidReferencia?.cids?.[0]
+              ? { ...candidate, cid: cidReferencia.cids[0] }
               : { ...candidate, cid: "" };
           });
           const validacaoProcs = validarListaProcedimentosBpaI(
@@ -2615,7 +2653,7 @@ const BpaExportar: React.FC = () => {
               c.codigo === r.codigo &&
               (
                 extrairCodigoCid(c.cid) === r.cid ||
-                (!extrairCodigoCid(c.cid) && cidCicloPorCodigo.get(somenteNumeros(c.codigo))?.cids?.[0] === r.cid)
+                (!extrairCodigoCid(c.cid) && (cidCicloPorCodigo.get(somenteNumeros(c.codigo))?.cids?.[0] === r.cid || cidMesmoPacientePorCodigo.get(somenteNumeros(c.codigo))?.cids?.[0] === r.cid))
               )
             );
             return original || { codigo: r.codigo, origem: r.origem, cid: r.cid };
@@ -2923,7 +2961,7 @@ const BpaExportar: React.FC = () => {
                 : undefined;
               const cidProducaoLinha = resolucaoCid?.cid || "";
               const codigoCidCiclo = somenteNumeros(procEntry.codigo);
-              const cidCiclo = cidCicloPorCodigo.get(codigoCidCiclo) || null;
+              const cidCiclo = cidCicloPorCodigo.get(codigoCidCiclo) || cidMesmoPacientePorCodigo.get(codigoCidCiclo) || null;
               const cidInputBase = {
                 procedureCid: sigtapVinculadoItens.filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo)).map(item => item.cid).filter(Boolean).concat(procEntry.cid || []),
                 productionCid: cidProducaoLinha,
@@ -2936,7 +2974,7 @@ const BpaExportar: React.FC = () => {
                 ? { cid: "", adicionais: [] as string[] }
                 : resolveBpaCidDetails({ ...cidInputBase, treatmentCycleCid: cidCiclo?.cids });
               if (cidCiclo && !String(cidAntesDoCiclo.cid || "").trim() && !ehTecnicoEnfermagem) {
-                warnings.push(`${ident} (${data_atend}): CID recuperado automaticamente da sessão ${cidCiclo.sessionNumber ?? "do mesmo ciclo"} (${cidCiclo.scheduledDate}) do mesmo tratamento.`);
+                warnings.push(`${ident} (${data_atend}): CID aproveitado de outro atendimento do mesmo paciente e SIGTAP (${cidCiclo.scheduledDate}).`);
               }
               const cidBrutoLinha = cidResolvido.cid;
               let cidBrutoFinal = cidBrutoLinha;
