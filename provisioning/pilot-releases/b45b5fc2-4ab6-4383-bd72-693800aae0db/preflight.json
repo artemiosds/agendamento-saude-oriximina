@@ -8,8 +8,10 @@
   "realtime_publication": true,
   "available_extensions": [
     "pg_trgm",
+    "unaccent"
+  ],
+  "installed_extensions": [
     "pgcrypto",
-    "unaccent",
     "uuid-ossp"
   ]
 }
