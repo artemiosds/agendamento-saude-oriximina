@@ -54,7 +54,7 @@ import {
 import { resolveBpaHeaderDocument } from "@/lib/bpaHeaderSource";
 import { normalizeBpaPhone } from "@/lib/bpaPhoneNormalization";
 import { parseBpaDate as parseDataSegura } from "@/lib/bpaDate";
-import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails } from "@/lib/bpaCid";
+import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid } from "@/lib/bpaCid";
 import { includeBpaProductionResolution, loadBpaEntitiesByIds } from "@/lib/bpaSourceLoading";
 
 
@@ -1853,11 +1853,14 @@ const BpaExportar: React.FC = () => {
       }
 
       // === Fallback profundo via sessões/ciclos de tratamento ===
-      // Alguns atendimentos de ciclo ficam na agenda/prontuário, mas o
-      // procedimento executado do dia está em treatment_sessions.procedure_done.
-      // Indexamos por paciente+profissional+data para reaproveitar somente no
-      // atendimento correspondente, sem alterar o fluxo de geração.
+      // Mantém vínculo entre sessões do mesmo ciclo para recuperar CID ausente
+      // sem misturar tratamentos, pacientes, profissionais ou unidades.
       const sigtapPorSessaoTratamento = new Map<string, string[]>();
+      const cidPorSessaoTratamento = new Map<string, { cids: string[]; sessionNumber: number | null; scheduledDate: string }>();
+      const prontuarioPorAgendamento = new Map<string, any>(
+        (prontuarios || []).filter((p: any) => p?.agendamento_id && p?.id)
+          .map((p: any) => [String(p.agendamento_id), p]),
+      );
       try {
         const sessoesRows: any[] = [];
         for (let i = 0; i < pacienteIds.length; i += 500) {
@@ -1865,7 +1868,7 @@ const BpaExportar: React.FC = () => {
           sessoesRows.push(...await fetchAllRowsBpa<any>(() => {
             let q = (supabase as any)
               .from("treatment_sessions")
-              .select("id, cycle_id, patient_id, professional_id, scheduled_date, status, procedure_done")
+              .select("id, cycle_id, patient_id, professional_id, appointment_id, session_number, scheduled_date, status, procedure_done")
               .in("patient_id", batch)
               .gte("scheduled_date", startDate)
               .lte("scheduled_date", endDate)
@@ -1905,6 +1908,25 @@ const BpaExportar: React.FC = () => {
           if (!lista.includes(code)) {
             lista.push(code);
             sigtapPorSessaoTratamento.set(key, lista);
+          }
+
+          // Só sessões realizadas, com prontuário vinculado ao agendamento e CID explícito,
+          // podem fornecer diagnóstico de referência para outra sessão do mesmo ciclo.
+          const appointmentId = String(s.appointment_id || "");
+          const linkedProntuario = appointmentId ? prontuarioPorAgendamento.get(appointmentId) : null;
+          if (linkedProntuario && String(s.status).toLowerCase() === "realizada") {
+            const procedureCids = (sigtapItensPorProntuario.get(String(linkedProntuario.id)) || [])
+              .filter((item) => somenteNumeros(item.codigo) === somenteNumeros(code))
+              .flatMap((item) => extrairCodigosCid(item.cid));
+            const explicit = resolveBpaCidDetails({ prontuario: linkedProntuario });
+            const sourceCids = procedureCids.length ? procedureCids : [explicit.cid, ...explicit.adicionais].filter(Boolean);
+            if (sourceCids.length) {
+              cidPorSessaoTratamento.set([appointmentId, somenteNumeros(code)].join("|"), {
+                cids: sourceCids,
+                sessionNumber: Number(s.session_number) > 0 ? Number(s.session_number) : null,
+                scheduledDate: String(s.scheduled_date).slice(0, 10),
+              });
+            }
           }
         });
       } catch (e) {
@@ -2707,9 +2729,22 @@ const BpaExportar: React.FC = () => {
                   )
                 : undefined;
               const cidProducaoLinha = resolucaoCid?.cid || "";
+              const cidCiclo = pront.agendamento_id
+                ? cidPorSessaoTratamento.get([String(pront.agendamento_id), somenteNumeros(procEntry.codigo)].join("|"))
+                : undefined;
               const cidResolvido = ehTecnicoEnfermagem
                 ? { cid: "", adicionais: [] as string[] }
-                : resolveBpaCidDetails({ procedureCid: sigtapVinculadoItens.filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo)).map(item => item.cid).filter(Boolean).concat(procEntry.cid || []), productionCid: cidProducaoLinha, prontuario: pront, paciente: pac, ptsCid: cidPtsDoAtendimento(pront) });
+                : resolveBpaCidDetails({
+                    procedureCid: sigtapVinculadoItens.filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo)).map(item => item.cid).filter(Boolean).concat(procEntry.cid || []),
+                    productionCid: cidProducaoLinha,
+                    prontuario: pront,
+                    paciente: pac,
+                    ptsCid: cidPtsDoAtendimento(pront),
+                    treatmentCycleCid: cidCiclo?.cids,
+                  });
+              if (cidCiclo && !String(cidResolvido.cid || "").trim() && !ehTecnicoEnfermagem) {
+                warnings.push(`${ident} (${data_atend}): CID recuperado da sessão ${cidCiclo.sessionNumber ?? "do mesmo ciclo"} (${cidCiclo.scheduledDate}) do mesmo tratamento.`);
+              }
               const cidBrutoLinha = cidResolvido.cid;
               let cidBrutoFinal = cidBrutoLinha;
               if (cidResolvido.adicionais.length) warnings.push(`${ident}: procedimento ${proc} possui múltiplos CIDs. CID selecionado: ${cidBrutoLinha}; adicionais: ${cidResolvido.adicionais.join(", ")}. Confira a indicação de principal no registro de origem.`);
