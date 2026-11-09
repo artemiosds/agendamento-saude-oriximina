@@ -118,7 +118,7 @@ const AgendamentoExterno: React.FC = () => {
 
       const { data: appts } = await supabase.from("agendamentos").select("*")
         .eq("agendado_por_externo", extUser.id)
-        .in("status", ["pendente", "confirmado", "confirmado_chegada"])
+        .order("data", { ascending: false })
         .order("data", { ascending: true });
       setMyAppointments(appts || []);
     } catch (err) {
@@ -252,9 +252,12 @@ const AgendamentoExterno: React.FC = () => {
   // ── Patient search ──
   const handlePatientSearch = async () => {
     if (!patientSearch.trim()) return;
-    const { data } = await supabase.from("pacientes").select("*")
-      .or(`nome.ilike.%${patientSearch}%,cpf.ilike.%${patientSearch}%,cns.ilike.%${patientSearch}%`)
-      .limit(20);
+    if (!selectedUnidade) { toast.error("Selecione a unidade antes de pesquisar."); return; }
+    const { data, error } = await supabase.rpc("external_patient_search" as any, {
+      p_query: patientSearch.trim(),
+      p_unidade_id: selectedUnidade,
+    } as any);
+    if (error) { toast.error(error.message || "Erro ao pesquisar pacientes."); return; }
     setPatientResults(data || []);
   };
 
@@ -268,7 +271,7 @@ const AgendamentoExterno: React.FC = () => {
     setPatientForm({
       nome: p.nome || "", cpf: p.cpf || "", cns: p.cns || "", data_nascimento: p.data_nascimento || "",
       telefone: p.telefone || "", email: p.email || "", endereco: p.endereco || "",
-      nome_mae: p.nome_mae || "", municipio: p.municipio || "", observacoes: p.observacoes || "",
+      nome_mae: p.nome_mae || "", municipio: p.municipio || "", observacoes: "",
     });
     setIsEditingPatient(true);
     setPatientDialogOpen(true);
@@ -279,23 +282,25 @@ const AgendamentoExterno: React.FC = () => {
     setSavingPatient(true);
     try {
       if (isEditingPatient && selectedPatient) {
-        const { error } = await supabase.from("pacientes").update({
-          nome: patientForm.nome, cpf: patientForm.cpf, cns: patientForm.cns,
-          data_nascimento: patientForm.data_nascimento, telefone: patientForm.telefone,
-          email: patientForm.email, endereco: patientForm.endereco, nome_mae: patientForm.nome_mae,
-          municipio: patientForm.municipio, observacoes: patientForm.observacoes,
-        }).eq("id", selectedPatient.id);
+        if (!selectedPatient.can_edit) throw new Error("Este paciente está vinculado a outra unidade e pode ser consultado, mas não editado por aqui.");
+        const { data, error } = await supabase.rpc("external_update_patient" as any, {
+          p_paciente_id: selectedPatient.id, p_unidade_id: selectedUnidade,
+          p_nome: patientForm.nome, p_cpf: patientForm.cpf, p_cns: patientForm.cns,
+          p_data_nascimento: patientForm.data_nascimento, p_telefone: patientForm.telefone,
+          p_endereco: patientForm.endereco, p_nome_mae: patientForm.nome_mae,
+          p_municipio: patientForm.municipio,
+        } as any);
         if (error) throw error;
-        setSelectedPatient({ ...selectedPatient, ...patientForm });
-        toast.success("Paciente atualizado!");
+        setSelectedPatient(data);
+        toast.success("Dados cadastrais atualizados!");
       } else {
-        const id = `pac_${Date.now()}`;
-        const { data, error } = await supabase.from("pacientes").insert({
-          id, nome: patientForm.nome, cpf: patientForm.cpf, cns: patientForm.cns,
-          data_nascimento: patientForm.data_nascimento, telefone: patientForm.telefone,
-          email: patientForm.email, endereco: patientForm.endereco, nome_mae: patientForm.nome_mae,
-          municipio: patientForm.municipio, observacoes: patientForm.observacoes,
-        }).select().single();
+        const { data, error } = await supabase.rpc("external_create_patient" as any, {
+          p_unidade_id: selectedUnidade, p_nome: patientForm.nome, p_cpf: patientForm.cpf,
+          p_cns: patientForm.cns, p_data_nascimento: patientForm.data_nascimento,
+          p_telefone: patientForm.telefone, p_email: patientForm.email,
+          p_endereco: patientForm.endereco, p_nome_mae: patientForm.nome_mae,
+          p_municipio: patientForm.municipio,
+        } as any);
         if (error) throw error;
         setSelectedPatient(data);
         toast.success("Paciente cadastrado!");
@@ -350,11 +355,11 @@ const AgendamentoExterno: React.FC = () => {
     setPrintingId(appointment.id);
     try {
       // Patient identity is loaded only for this professional's own appointment.
-      const { data: patient, error: patientError } = await supabase
-        .from("pacientes")
-        .select("nome, cpf, cns")
-        .eq("id", appointment.paciente_id)
-        .maybeSingle();
+      const { data: patientData, error: patientError } = await supabase.rpc(
+        "external_patient_receipt_details" as any,
+        { p_agendamento_id: appointment.id } as any
+      );
+      const patient = patientData as any;
 
       if (patientError) {
         console.warn("[AgendamentoExterno] Não foi possível carregar CPF/CNS para o comprovante:", patientError);
@@ -655,7 +660,7 @@ const AgendamentoExterno: React.FC = () => {
                             </p>
                           </div>
                           <div className="flex gap-1">
-                            <Button size="icon" variant="ghost" onClick={() => openEditPatient(selectedPatient)} title="Editar"><Pencil className="w-4 h-4" /></Button>
+                            {selectedPatient.can_edit && <Button size="icon" variant="ghost" onClick={() => openEditPatient(selectedPatient)} title="Editar dados cadastrais"><Pencil className="w-4 h-4" /></Button>}
                             <Button size="icon" variant="ghost" onClick={() => { setSelectedPatient(null); setPatientSearch(""); }} title="Remover"><X className="w-4 h-4" /></Button>
                           </div>
                         </div>
@@ -750,6 +755,12 @@ const AgendamentoExterno: React.FC = () => {
                           🩺 {a.profissional_nome} — 📅 {format(new Date(a.data + "T12:00:00"), "dd/MM/yyyy")} às {a.hora}
                         </p>
                         <Badge variant="outline" className="mt-1.5 capitalize">{a.status.replace(/_/g, ' ')}</Badge>
+                        {["aguardando_triagem", "aguardando_atendimento", "apto_atendimento", "em_atendimento"].includes(a.status) && (
+                          <p className="text-xs text-muted-foreground mt-1">Atendimento em andamento na unidade.</p>
+                        )}
+                        {a.status === "concluido" && (
+                          <p className="text-xs text-muted-foreground mt-1">Atendimento concluído.</p>
+                        )}
                         {a.status === "pendente" && (
                           <p className="text-xs text-muted-foreground mt-1">
                             Aguardando confirmação de chegada pela recepção no dia do atendimento.
@@ -767,9 +778,11 @@ const AgendamentoExterno: React.FC = () => {
                           {printingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                           Imprimir comprovante
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={() => handleCancel(a.id)} disabled={!!cancellingId} className="shrink-0">
-                          {cancellingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cancelar"}
-                        </Button>
+                        {["pendente", "confirmado", "confirmado_chegada"].includes(a.status) && (
+                          <Button variant="destructive" size="sm" onClick={() => handleCancel(a.id)} disabled={!!cancellingId} className="shrink-0">
+                            {cancellingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cancelar"}
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -796,13 +809,13 @@ const AgendamentoExterno: React.FC = () => {
               <div><Label>Data Nascimento</Label><Input type="date" value={patientForm.data_nascimento} onChange={e => setPatientForm(p => ({ ...p, data_nascimento: e.target.value }))} /></div>
               <div><Label>Telefone</Label><Input value={patientForm.telefone} onChange={e => setPatientForm(p => ({ ...p, telefone: e.target.value }))} /></div>
             </div>
-            <div><Label>E-mail</Label><Input type="email" value={patientForm.email} onChange={e => setPatientForm(p => ({ ...p, email: e.target.value }))} /></div>
+            <div><Label>E-mail</Label><Input type="email" disabled={isEditingPatient} value={patientForm.email} onChange={e => setPatientForm(p => ({ ...p, email: e.target.value }))} /></div>
             <div><Label>Endereço</Label><Input value={patientForm.endereco} onChange={e => setPatientForm(p => ({ ...p, endereco: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Nome da Mãe</Label><Input value={patientForm.nome_mae} onChange={e => setPatientForm(p => ({ ...p, nome_mae: e.target.value }))} /></div>
               <div><Label>Município</Label><Input value={patientForm.municipio} onChange={e => setPatientForm(p => ({ ...p, municipio: e.target.value }))} /></div>
             </div>
-            <div><Label>Observações</Label><Input value={patientForm.observacoes} onChange={e => setPatientForm(p => ({ ...p, observacoes: e.target.value }))} /></div>
+            {!isEditingPatient && <p className="text-xs text-muted-foreground">O cadastro externo registra somente dados demográficos e de contato. Informações clínicas e observações devem ser registradas no prontuário pela equipe autorizada.</p>}
             <Button onClick={handleSavePatient} disabled={savingPatient} className="w-full bg-primary text-primary-foreground">
               {savingPatient && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {isEditingPatient ? "Salvar Alterações" : "Cadastrar Paciente"}
