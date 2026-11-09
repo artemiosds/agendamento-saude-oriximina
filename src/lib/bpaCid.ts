@@ -152,7 +152,7 @@ export function resolveBpaTreatmentCycleCidsForProcedures(
 
   for (const procedure of procedures) {
     if (String(procedure.cid ?? "").trim()) continue;
-    const procedureCode = String(procedure.codigo ?? "").replace(/\\D/g, "");
+    const procedureCode = String(procedure.codigo ?? "").replace(/\D/g, "");
     if (!procedureCode || resolutions.has(procedureCode)) continue;
 
     const resolution = resolveBpaTreatmentCycleCid(candidates, {
