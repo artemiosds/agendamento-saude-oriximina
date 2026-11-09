@@ -16,6 +16,8 @@ export interface DiagnosticRoomConfig {
   exigeContraste: DiagnosticContrast;
   horarioInicio?: string;
   horarioFim?: string;
+  /** Dias corridos configurados pela unidade; zero deixa a previsão para a recepção. */
+  prazoResultadoDias: number;
 }
 
 export interface DiagnosticAppointmentSnapshot {
@@ -34,6 +36,7 @@ export const DEFAULT_DIAGNOSTIC_ROOM_CONFIG: DiagnosticRoomConfig = {
   exigeContraste: "nao",
   horarioInicio: "07:00",
   horarioFim: "17:00",
+  prazoResultadoDias: 0,
 };
 
 export const DIAGNOSTIC_SLOT_DURATIONS = [10, 15, 20, 30, 45] as const;
@@ -41,6 +44,7 @@ export const DIAGNOSTIC_SLOT_DURATIONS = [10, 15, 20, 30, 45] as const;
 export function normalizeDiagnosticRoomConfig(value: unknown): DiagnosticRoomConfig {
   const raw = value && typeof value === "object" ? value as Record<string, any> : {};
   const duration = Number(raw.duracaoSlot);
+  const resultDays = Number(raw.prazoResultadoDias);
   const contrast = ["sim", "nao", "opcional"].includes(raw.exigeContraste) ? raw.exigeContraste : "nao";
   return {
     finalidade: raw.finalidade === "aparelho_diagnostico" ? "aparelho_diagnostico" : "consultorio_clinico",
@@ -51,6 +55,7 @@ export function normalizeDiagnosticRoomConfig(value: unknown): DiagnosticRoomCon
     exigeContraste: contrast,
     horarioInicio: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(raw.horarioInicio || "")) ? raw.horarioInicio : "07:00",
     horarioFim: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(raw.horarioFim || "")) ? raw.horarioFim : "17:00",
+    prazoResultadoDias: Number.isInteger(resultDays) && resultDays >= 0 && resultDays <= 90 ? resultDays : 0,
   };
 }
 
@@ -64,7 +69,7 @@ export function getDiagnosticRoomConfig(unitCustomData: unknown, roomId: string)
 
 export function isDiagnosticAppointment(row: { tipo?: string | null; custom_data?: unknown }): boolean {
   const data = row.custom_data && typeof row.custom_data === "object" ? row.custom_data as Record<string, any> : {};
-  return row.tipo === "exame" && data.sala_tipo === "aparelho_diagnostico";
+  return String(row.tipo || "").toLowerCase() === "exame" && data.sala_tipo === "aparelho_diagnostico";
 }
 
 function toMinutes(value: string): number {
