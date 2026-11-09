@@ -3,6 +3,7 @@ set -euo pipefail
 
 psql -X -v ON_ERROR_STOP=1 -f tests/sql/external_quota_schema.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20260928010000_external_quota_atomic_booking.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261109133000_confirm_authorized_external_appointments.sql
 psql -X -v ON_ERROR_STOP=1 -f tests/sql/external_quota_integration.sql
 
 # Two independent sessions compete for the last quota vacancy.
