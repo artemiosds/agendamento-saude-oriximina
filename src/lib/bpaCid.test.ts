@@ -78,6 +78,19 @@ describe("CID por continuidade do ciclo de tratamento", () => {
     expect(result).toEqual({ cids: ["M758", "M759"], sessionNumber: 6, scheduledDate: "2026-10-22" });
   });
 
+  it("recupera CID entre competências diferentes quando o ciclo é o mesmo", () => {
+    const result = resolveBpaTreatmentCycleCid([
+      { ...base, appointmentId: "agenda-outubro", sessionNumber: 8, scheduledDate: "2026-10-29", cids: ["M758", "M751"] },
+      { ...base, appointmentId: "agenda-novembro", sessionNumber: 9, scheduledDate: "2026-11-03", cids: ["M759"] },
+    ], {
+      ...base,
+      appointmentId: "agenda-novembro-alvo",
+      sessionNumber: 10,
+      scheduledDate: "2026-11-05",
+    });
+    expect(result).toEqual({ cids: ["M759"], sessionNumber: 9, scheduledDate: "2026-11-03" });
+  });
+
   it("pode recuperar de uma sessão posterior quando as primeiras sessões não têm CID", () => {
     const result = resolveBpaTreatmentCycleCid([
       { ...base, appointmentId: "agenda-4", sessionNumber: 4, scheduledDate: "2026-10-15", cids: ["M758", "M759", "M755"] },
