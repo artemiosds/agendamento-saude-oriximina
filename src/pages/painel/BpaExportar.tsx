@@ -1939,9 +1939,15 @@ const BpaExportar: React.FC = () => {
           if (p?.agendamento_id && p?.id) prontuarioPorAgendamento.set(String(p.agendamento_id), p);
         });
 
-        // Busca também os CIDs de procedimento registrados nesses prontuários
-        // históricos, preservando a associação procedimento × CID.
-        const prontIdsCicloExtras = [...new Set(prontuariosCicloExtras.map((p: any) => String(p.id || "")).filter(Boolean))];
+        // Busca os CIDs de TODOS os prontuários de referência do ciclo que ainda
+        // não tiveram seus procedimentos carregados na seleção exportável. Isso
+        // inclui sessões da competência ocultadas apenas por bloco/turno, além das
+        // sessões históricas fora do mês, preservando procedimento × CID.
+        const prontIdsJaCarregados = new Set(prontIdsAll.map((id: any) => String(id)));
+        const prontIdsCicloExtras = [...new Set([
+          ...prontuariosCicloExtras.map((p: any) => String(p.id || "")),
+          ...Array.from(prontuarioPorAgendamento.values()).map((p: any) => String(p?.id || "")),
+        ].filter((id) => id && !prontIdsJaCarregados.has(id)))];
         const ppRowsCicloExtras: any[] = [];
         for (let i = 0; i < prontIdsCicloExtras.length; i += 300) {
           const batch = prontIdsCicloExtras.slice(i, i + 300);
