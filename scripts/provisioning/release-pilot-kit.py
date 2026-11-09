@@ -66,7 +66,11 @@ def adapt_sql_for_lovable_cloud(sql, installed_extensions=None):
     if helper_start < 0 or sql.find(helper, helper_start + len(helper)) >= 0:
         raise ValueError("Reviewed update_updated_at_column trigger function is missing or ambiguous")
 
-    helper_end = sql.find("$function$;", helper_start)
+    body_marker = "AS $function$"
+    body_start = sql.find(body_marker, helper_start)
+    if body_start < 0:
+        raise ValueError("Reviewed update_updated_at_column trigger function has no function body")
+    helper_end = sql.find("$function$", body_start + len(body_marker))
     helper_definition = sql[helper_start:helper_end] if helper_end >= 0 else ""
     if "NEW.atualizado_em = now();" not in helper_definition:
         raise ValueError("Reviewed trigger helper does not update procedimentos.atualizado_em")
