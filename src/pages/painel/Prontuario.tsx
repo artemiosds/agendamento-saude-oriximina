@@ -3634,7 +3634,7 @@ const ProntuarioPage: React.FC = () => {
         : calculateTotalSessions(cycleForm.frequency, cycleForm.duration_months, cycleForm.weekdays);
 
       const blockedRanges = buildBlockedRanges(bloqueios, user?.id || '', user?.unidadeId || '');
-      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, totalSessions, blockedRanges, new Set(getAvailableDates(user?.id || "", user?.unidadeId || "")));
+      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, totalSessions, blockedRanges);
       const endDate = calcEndDateFromSessions(sessionDates);
 
       if (skippedCount > 0) {
