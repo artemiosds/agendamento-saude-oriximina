@@ -34,6 +34,7 @@ interface AgendamentoData {
   profissional_nome: string;
   unidade_id: string;
   observacoes: string;
+  origem?: string;
   custom_data?: Record<string, any>;
 }
 
@@ -204,10 +205,25 @@ const PortalPaciente: React.FC = () => {
   const handleCancelar = async (agId: string) => {
     if (!perms.cancelar) { toast.error('Cancelamento pelo portal desativado. Procure a unidade.'); return; }
     try {
-      await (supabase as any).from('agendamentos').update({ status: 'cancelado' }).eq('id', agId);
+      const appointment = agendamentos.find(a => a.id === agId);
+      if (!appointment) { toast.error('Agendamento não encontrado. Atualize a página e tente novamente.'); return; }
+      if (appointment.origem === 'externo') {
+        const { error } = await (supabase as any).rpc('cancel_external_appointment', {
+          p_agendamento_id: agId,
+          p_motivo: 'Cancelamento solicitado pelo próprio paciente no Portal do Paciente',
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from('agendamentos')
+          .update({ status: 'cancelado' }).eq('id', agId);
+        if (error) throw error;
+      }
       setAgendamentos(prev => prev.map(a => a.id === agId ? { ...a, status: 'cancelado' } : a));
-      toast.success('Agendamento cancelado.');
-    } catch { toast.error('Erro ao cancelar.'); }
+      toast.success('Agendamento cancelado com sucesso.');
+    } catch (error: any) {
+      console.error('[PortalPaciente] Erro ao cancelar agendamento:', error);
+      toast.error(error?.message || 'Não foi possível cancelar o agendamento. Tente novamente ou procure a unidade.');
+    }
   };
 
   const getUnidadeNome = (id: string) => unidades.find(u => u.id === id)?.nome || '';
