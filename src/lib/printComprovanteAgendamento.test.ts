@@ -9,6 +9,30 @@ import { printComprovanteAgendamento } from "./printComprovanteAgendamento";
 beforeEach(() => vi.clearAllMocks());
 
 describe("comprovante de agendamento em uma página A4", () => {
+  it("mostra preparo destacado e espaço manual apenas para exames diagnósticos", async () => {
+    await printComprovanteAgendamento({
+      id: "EXAME-TESTE",
+      data: "2026-11-18",
+      hora: "09:30",
+      tipo: "Tomografia Computadorizada",
+      status: "confirmado",
+      profissionalNome: "RESPONSÁVEL DE TESTE",
+      pacienteNome: "PACIENTE DE TESTE",
+      unidadeNome: "UNIDADE DE TESTE",
+      diagnostico: true,
+      salaNome: "Tomógrafo - Sala 02",
+      preparoInstrucoes: "Preparo definido e aprovado pela unidade.",
+      observacaoPreparo: "Trazer exames anteriores.",
+      previsaoResultado: "20/11/2026",
+    });
+    const [, body] = vi.mocked(openPrintDocument).mock.calls[0] as unknown as [string, string];
+    expect(body).toContain("PREPARO PARA O EXAME");
+    expect(body).toContain("Preparo definido e aprovado pela unidade.");
+    expect(body).toContain("Observações / complemento manual");
+    expect(body).toContain("Tomógrafo - Sala 02");
+    expect(body).toContain("20/11/2026");
+  });
+
   it("usa layout compacto específico sem remover as informações obrigatórias", async () => {
     await printComprovanteAgendamento({
       id: "AGTESTE1",
