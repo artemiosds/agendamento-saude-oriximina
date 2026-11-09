@@ -148,6 +148,8 @@ const calcularIdadeMeses = (dataNasc: any, dataAtendimento: any): number | null 
 // filtro e da produção. Helper único usado nas varreduras da exportação.
 const PAGE_SIZE_BPA = 1000;
 const BPA_CYCLE_QUERY_BATCH = 100;
+// IDs sintéticos de agenda/triagem não são chaves UUID de prontuários clínicos.
+const UUID_REGEX_BPA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const formatBpaQueryError = (error: any): string => {
   if (error === null || error === undefined) return "Erro sem detalhes retornados pela API.";
   if (typeof error === "string") return error;
@@ -376,9 +378,8 @@ const extrairTodosSigtapDoProntuario = (pront: any): Array<{ codigo: string; cam
 
 
 const resolverCodigosSigtapPorProcedimentoId = async (procedimentoIds: any[]): Promise<Map<string, string>> => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const entradas = [...new Set(procedimentoIds.map((id) => String(id || "").trim()).filter(Boolean))];
-  const ids = entradas.filter((id) => uuidRegex.test(id));
+  const ids = entradas.filter((id) => UUID_REGEX_BPA.test(id));
   const codigoPorProcId = new Map<string, string>();
   const BATCH = 100;
 
@@ -1825,8 +1826,11 @@ const BpaExportar: React.FC = () => {
       // prontuario_procedimentos -> procedimentos.codigo_sigtap, sem espelhar em
       // custom_data. Carregamos isso para evitar falso "SIGTAP ausente".
       const prontIdsAll = prontuarios
-        .map((p: any) => p.id)
-        .filter((id: any) => id && !String(id).startsWith("triagem:") && !String(id).startsWith("agenda:"));
+        .map((p: any) => String(p?.id || "").trim())
+        // Somente prontuários clínicos reais podem consultar prontuario_procedimentos.
+        // Registros virtuais agenda:/triagem: continuam disponíveis no fluxo BPA,
+        // mas nunca são enviados ao filtro UUID do banco.
+        .filter((id: string) => UUID_REGEX_BPA.test(id));
       const sigtapItensPorProntuario = new Map<string, Array<{ codigo: string; cid?: string }>>();
       const sigtapPorProntuario = new Map<string, string[]>();
       if (prontIdsAll.length > 0) {
@@ -1968,9 +1972,11 @@ const BpaExportar: React.FC = () => {
         // sessões históricas fora do mês, preservando procedimento × CID.
         const prontIdsJaCarregados = new Set(prontIdsAll.map((id: any) => String(id)));
         const prontIdsCicloExtras = [...new Set([
-          ...prontuariosCicloExtras.map((p: any) => String(p.id || "")),
-          ...Array.from(prontuarioPorAgendamento.values()).map((p: any) => String(p?.id || "")),
-        ].filter((id) => id && !prontIdsJaCarregados.has(id)))];
+          ...prontuariosCicloExtras.map((p: any) => String(p?.id || "").trim()),
+          ...Array.from(prontuarioPorAgendamento.values()).map((p: any) => String(p?.id || "").trim()),
+        ].filter((id) =>
+          UUID_REGEX_BPA.test(id) && !prontIdsJaCarregados.has(id)
+        ))];
         const ppRowsCicloExtras: any[] = [];
         for (let i = 0; i < prontIdsCicloExtras.length; i += BPA_CYCLE_QUERY_BATCH) {
           const batch = prontIdsCicloExtras.slice(i, i + BPA_CYCLE_QUERY_BATCH);
