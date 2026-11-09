@@ -375,9 +375,13 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
 
   const loadUnidades = useCallback(async () => {
     try {
-      let query = supabase.from("unidades" as any).select("id,nome,nome_exibicao,endereco,telefone,whatsapp,ativo");
+      let query = supabase.from("unidades" as any).select("id,nome,nome_exibicao,endereco,telefone,whatsapp,ativo,custom_data");
       if (!isGlobalAdmin && userUnidadeId) query = query.eq("id", userUnidadeId);
       const { data, error } = await query;
+      if (data && !error) {
+        const own = (data as any[]).find((u: any) => u.id === userUnidadeId);
+        setActiveUnitLogo(own?.custom_data?.logo_url);
+      }
       if (data && !error)
         setUnidades(
           data.map((u: any) => ({

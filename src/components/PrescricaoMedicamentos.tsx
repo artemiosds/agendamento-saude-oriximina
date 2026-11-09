@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { loadDocumentConfig, type DocumentConfig } from "@/lib/printLayout";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.webp';
+import { getActiveUnitLogo, resolveUnitLogo } from '@/lib/unitLogo';
 
 interface MedicationType {
   id: string;
@@ -308,7 +309,7 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
     if (!config) { toast.error("Carregando configurações..."); return; }
 
     const logoLeft = config.logoEsquerda || logoSmsFallback;
-    const logoRight = config.logoDireita || logoCerFallback;
+    const logoRight = resolveUnitLogo(getActiveUnitLogo(), config.logoDireita, logoCerFallback);
     const logoCentral = config.mostrarLogoCentral && config.logoCentral 
       ? `<div style="text-align:center;margin-bottom:8px;"><img src="${config.logoCentral}" style="max-height:50px;max-width:150px;object-fit:contain;" /></div>` 
       : '';
