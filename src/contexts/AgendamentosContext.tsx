@@ -72,7 +72,7 @@ const priorityRank: Record<string, number> = {
 };
 
 const agendamentoColumns =
-  "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,agendado_por_externo,google_event_id,sync_status,criado_em,criado_por";
+  "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,agendado_por_externo,google_event_id,sync_status,criado_em,criado_por,custom_data";
 
 const mapAgendamentoRow = (a: any): Agendamento => ({
   id: a.id,
@@ -95,6 +95,7 @@ const mapAgendamentoRow = (a: any): Agendamento => ({
   criadoEm: a.criado_em || "",
   criadoPor: a.criado_por || "",
   horaChegada: a.hora_chegada || "",
+  customData: a.custom_data && typeof a.custom_data === "object" ? a.custom_data : {},
 });
 
 const dateKeysBetween = (startDate: string, endDate: string) => {
@@ -597,6 +598,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
           criadoEm: row.criado_em || "",
           criadoPor: row.criado_por || "",
           horaChegada: row.hora_chegada || "",
+          customData: row.custom_data && typeof row.custom_data === "object" ? row.custom_data : {},
         }),
       );
     },
@@ -682,6 +684,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
           sync_status: normalized.syncStatus || "pendente",
           criado_por: normalized.criadoPor || "",
           prioridade_perfil: "normal",
+          ...(normalized.customData ? { custom_data: normalized.customData } : {}),
         } as any);
         if (error) {
           console.error("Error adding agendamento:", error);
@@ -706,6 +709,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
       if (data.salaId !== undefined) dbData.sala_id = data.salaId;
       if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada;
+      if (data.customData !== undefined) dbData.custom_data = data.customData;
       if (data.profissionalId !== undefined)
         dbData.profissional_id = data.profissionalId;
       if (data.profissionalNome !== undefined)
