@@ -1440,11 +1440,11 @@ const Agenda: React.FC = () => {
     }
 
     // Server-side slot availability check da grade clínica; aparelhos usam slots da sala.
+    let masterOverrideReason = "";
     if (!isDiagnosticBooking) {
     // Apenas MASTER pode forçar capacidade; indisponibilidade, bloqueios e
     // horários fora da grade continuam sendo restrições obrigatórias.
     const canOverride = user?.role === "master";
-    let masterOverrideReason = "";
     
     try {
       const { data: slotCheck, error: slotCheckError } = await supabase.rpc("check_internal_slot_availability" as any, {

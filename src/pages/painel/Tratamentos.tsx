@@ -1006,7 +1006,6 @@ const Tratamentos: React.FC = () => {
       // Generate and validate the complete date plan before the atomic database write.
       const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(
         newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges,
-        new Set(getAvailableDates(newCycle.professional_id, targetUnitId)),
       );
       const endDate = calcEndDateFromSessions(sessionDates);
 
