@@ -94,6 +94,7 @@ import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteMo
 import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
 import { openPrintDocument } from "@/lib/printLayout";
 import { printComprovanteAgendamento } from "@/lib/printComprovanteAgendamento";
+import { getAvailableDiagnosticSlots, getDiagnosticRoomConfig, type DiagnosticRoomConfig } from "@/lib/diagnosticExams";
 import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
@@ -413,6 +414,9 @@ const Agenda: React.FC = () => {
     tipo: "Consulta",
     obs: "",
   });
+  const [diagnosticRoomConfig, setDiagnosticRoomConfig] = useState<DiagnosticRoomConfig | null>(null);
+  const [diagnosticRoomAppointments, setDiagnosticRoomAppointments] = useState<any[]>([]);
+  const [diagnosticRoomLoading, setDiagnosticRoomLoading] = useState(false);
   const [detalheOpen, setDetalheOpen] = useState(false);
   const [detalheAg, setDetalheAg] = useState<(typeof agendamentos)[0] | null>(null);
 
@@ -769,6 +773,43 @@ const Agenda: React.FC = () => {
   }, [selectedDate, disponibilidades]);
 
   const selectedProfUnit = profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || "";
+  const selectedDiagnosticRoom = salas.find((s) => s.id === newAg.salaId);
+  const diagnosticUnitId = selectedDiagnosticRoom?.unidadeId || selectedProfUnit;
+  useEffect(() => {
+    let cancelled = false;
+    setDiagnosticRoomConfig(null);
+    setDiagnosticRoomAppointments([]);
+    if (!dialogOpen || !newAg.salaId || !diagnosticUnitId) return;
+    const loadDiagnosticRoom = async () => {
+      setDiagnosticRoomLoading(true);
+      try {
+        const { data: unitRow, error: unitError } = await (supabase as any).from("unidades").select("custom_data").eq("id", diagnosticUnitId).maybeSingle();
+        if (unitError) throw unitError;
+        const config = getDiagnosticRoomConfig(unitRow?.custom_data, newAg.salaId);
+        if (cancelled) return;
+        setDiagnosticRoomConfig(config);
+        if (!config) return;
+        setNewAg((prev) => ({ ...prev, tipo: "Exame", hora: "" }));
+        const { data: appointments, error: appointmentsError } = await (supabase as any).from("agendamentos")
+          .select("id,hora,status,custom_data").eq("unidade_id", diagnosticUnitId)
+          .eq("sala_id", newAg.salaId).eq("data", selectedDate);
+        if (appointmentsError) throw appointmentsError;
+        if (!cancelled) setDiagnosticRoomAppointments(appointments || []);
+      } catch (error) {
+        if (!cancelled) toast.error("Não foi possível carregar a agenda do aparelho.");
+      } finally {
+        if (!cancelled) setDiagnosticRoomLoading(false);
+      }
+    };
+    void loadDiagnosticRoom();
+    return () => { cancelled = true; };
+  }, [dialogOpen, newAg.salaId, diagnosticUnitId, selectedDate]);
+  const diagnosticSlots = useMemo(
+    () => diagnosticRoomConfig ? getAvailableDiagnosticSlots(diagnosticRoomConfig, diagnosticRoomAppointments) : [],
+    [diagnosticRoomConfig, diagnosticRoomAppointments],
+  );
+  const isDiagnosticBooking = !!diagnosticRoomConfig;
+
 
   const newAgTurnoInfo = React.useMemo(() => {
     if (!newAg.profissionalId || !selectedProfUnit) return [];
