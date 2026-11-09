@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { openPrintDocument } from '@/lib/printLayout';
 import { printComprovanteAgendamento } from '@/lib/printComprovanteAgendamento';
+import { auditService } from '@/services/auditService';
 import { PORTAL_PERMISSOES_PADRAO, type PortalPermissoes } from '@/types';
 import DadosPacienteBlocos, { deserializeDadosPaciente, serializeDadosPaciente, emptyDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 
