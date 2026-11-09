@@ -1331,6 +1331,10 @@ const Agenda: React.FC = () => {
       return;
     }
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
+    if (isDiagnosticBooking && selectedDiagnosticRoom?.unidadeId !== prof?.unidadeId) {
+      toast.error("O responsável selecionado deve pertencer à mesma unidade do aparelho.");
+      return;
+    }
 
     if (!pac && newAg.pacienteId) {
       const { data, error } = await (supabase as any)
@@ -1528,6 +1532,7 @@ const Agenda: React.FC = () => {
             data: normalized.data, hora: normalized.hora, status: normalized.status, tipo: normalized.tipo,
             observacoes: normalized.observacoes, origem: normalized.origem,
             criado_por: normalized.criadoPor || "current",
+            ...(normalized.customData ? { custom_data: normalized.customData } : {}),
           },
           p_override_reason: [masterOverrideReason, carencyOverrideReason].filter(Boolean).join(" | "),
           p_bypass_careness: Boolean(carencyOverrideReason),
