@@ -22,6 +22,7 @@ import {
   isDiagnosticAppointment,
   type DiagnosticExamStatus,
   type DiagnosticRoomConfig,
+  type DiagnosticExamConfig,
 } from "@/lib/diagnosticExams";
 
 type ExamRow = {
@@ -58,6 +59,7 @@ export default function AgendaExames() {
   const { unidades, salas } = useOperacional();
   const [selectedUnit, setSelectedUnit] = useState(user?.unidadeId || "");
   const [selectedRoom, setSelectedRoom] = useState("");
+  const [selectedExamId, setSelectedExamId] = useState("");
   const [date, setDate] = useState(dateToday());
   const [unitMetadata, setUnitMetadata] = useState<Record<string, any>>({});
   const [rows, setRows] = useState<ExamRow[]>([]);
@@ -79,6 +81,11 @@ export default function AgendaExames() {
   const roomConfig = useMemo<DiagnosticRoomConfig | null>(
     () => selectedRoom ? getDiagnosticRoomConfig(unitMetadata, selectedRoom) : null,
     [unitMetadata, selectedRoom],
+  );
+
+  const selectedExam = useMemo<DiagnosticExamConfig | null>(
+    () => roomConfig?.exames.find(exam => exam.id === selectedExamId) || null,
+    [roomConfig, selectedExamId],
   );
 
   const loadUnitMetadata = useCallback(async () => {
@@ -125,12 +132,12 @@ export default function AgendaExames() {
     id: r.id, hora: r.hora, status: r.status, custom_data: r.custom_data,
   })), [rows]);
   const slots = useMemo(
-    () => roomConfig ? getAvailableDiagnosticSlots(roomConfig, occupied) : [],
-    [roomConfig, occupied],
+    () => roomConfig && selectedExam ? getAvailableDiagnosticSlots({ ...roomConfig, duracaoSlot: selectedExam.duracaoSlot }, occupied) : [],
+    [roomConfig, selectedExam, occupied],
   );
 
   const createExam = async () => {
-    if (!roomConfig || !patientId || !slot || !selectedUnit || !selectedRoom) {
+    if (!roomConfig || !selectedExam || !patientId || !slot || !selectedUnit || !selectedRoom) {
       toast.error("Selecione paciente, sala e horário.");
       return;
     }
@@ -140,11 +147,13 @@ export default function AgendaExames() {
     const id = crypto.randomUUID();
     const custom = {
       sala_tipo: "aparelho_diagnostico",
-      exame_nome: roomConfig.tipoExame,
-      preparo_instrucoes: roomConfig.exigePreparo ? roomConfig.instrucoesPreparo : "",
-      exige_preparo: roomConfig.exigePreparo,
-      exige_contraste: roomConfig.exigeContraste,
-      duracao_slot_minutos: roomConfig.duracaoSlot,
+      exame_id: selectedExam.id,
+      exame_nome: selectedExam.tipoExame,
+      preparo_instrucoes: selectedExam.exigePreparo ? selectedExam.instrucoesPreparo : "",
+      exige_preparo: selectedExam.exigePreparo,
+      exige_contraste: selectedExam.exigeContraste,
+      duracao_slot_minutos: selectedExam.duracaoSlot,
+      prazo_resultado_dias: selectedExam.prazoResultadoDias,
       status_exame: "agendado",
       historico_status: [{ status: "agendado", em: new Date().toISOString(), por: user?.id || "" }],
     };
@@ -153,7 +162,7 @@ export default function AgendaExames() {
       unidade_id: selectedUnit, sala_id: selectedRoom, setor_id: "",
       profissional_id: user?.id || "", profissional_nome: user?.nome || "Equipe de Diagnóstico",
       data: date, hora: slot, status: "confirmado", tipo: "exame",
-      observacoes: roomConfig.exigePreparo ? roomConfig.instrucoesPreparo : "",
+      observacoes: selectedExam.exigePreparo ? selectedExam.instrucoesPreparo : "",
       origem: "recepcao", criado_por: user?.id || "", custom_data: custom,
     });
     setSaving(false);
@@ -162,7 +171,7 @@ export default function AgendaExames() {
       acao: "agendamento_exame_diagnostico", modulo: "exames_diagnosticos", entidade: "agendamentos",
       entidadeId: id, pacienteId: patient.id, pacienteNome: patient.nome, unidadeId: selectedUnit,
       user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
-      detalhes: { sala_id: selectedRoom, exame: roomConfig.tipoExame, data: date, hora: slot },
+      detalhes: { sala_id: selectedRoom, exame: selectedExam.tipoExame, data: date, hora: slot },
     });
     setPatientId(""); setSelectedPatient(null); setPatientSearch(""); setSlot("");
     toast.success("Exame agendado.");
@@ -286,7 +295,7 @@ export default function AgendaExames() {
           <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
           <SelectContent>{visibleUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
         </Select></div>
-        <div><Label>Aparelho / Sala</Label><Select value={selectedRoom} onValueChange={setSelectedRoom}>
+        <div><Label>Aparelho / Sala</Label><Select value={selectedRoom} onValueChange={value => { setSelectedRoom(value); setSelectedExamId(""); setSlot(""); }}>
           <SelectTrigger><SelectValue placeholder="Selecione o aparelho" /></SelectTrigger>
           <SelectContent>{rooms.filter(r => getDiagnosticRoomConfig(unitMetadata, r.id)).map(r => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}</SelectContent>
         </Select></div>
@@ -294,8 +303,9 @@ export default function AgendaExames() {
       </CardContent></Card>
 
       {roomConfig ? <>
-        <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Novo agendamento — {roomConfig.tipoExame}</CardTitle></CardHeader>
+        <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Novo agendamento — {selectedExam?.tipoExame || "Selecione o exame"}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
+            <div><Label>Tipo de exame *</Label><Select value={selectedExamId} onValueChange={value => { setSelectedExamId(value); setSlot(""); }}><SelectTrigger><SelectValue placeholder="Selecione o exame" /></SelectTrigger><SelectContent>{roomConfig.exames.map(exam => <SelectItem key={exam.id} value={exam.id}>{exam.tipoExame}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="md:col-span-2"><Label>Buscar paciente (nome ou CPF)</Label>
                 <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" value={patientSearch} onChange={e => { setPatientSearch(e.target.value); setPatientId(""); setSelectedPatient(null); }} placeholder="Digite ao menos 3 caracteres" /></div>
@@ -303,9 +313,9 @@ export default function AgendaExames() {
               </div>
               <div><Label>Horário disponível</Label><Select value={slot} onValueChange={setSlot}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{slots.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            {roomConfig.exigePreparo && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>Orientações obrigatórias de preparo</strong><p className="mt-1 whitespace-pre-wrap">{roomConfig.instrucoesPreparo}</p></div>}
-            <p className="text-xs text-muted-foreground">Duração: {roomConfig.duracaoSlot} min • Contraste: {roomConfig.exigeContraste}</p>
-            <Button onClick={createExam} disabled={saving || !patientId || !slot}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Agendar exame</Button>
+            {selectedExam?.exigePreparo && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>Orientações de preparo — {selectedExam.tipoExame}</strong><p className="mt-1 whitespace-pre-wrap">{selectedExam.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme com a equipe antes do agendamento."}</p></div>}
+            <p className="text-xs text-muted-foreground">Duração: {selectedExam?.duracaoSlot || "—"} min • Contraste: {selectedExam?.exigeContraste || "—"} • Resultado: {selectedExam?.prazoResultadoDias || 0} dia(s)</p>
+            <Button onClick={createExam} disabled={saving || !patientId || !slot || !selectedExam}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Agendar exame</Button>
           </CardContent>
         </Card>
 
@@ -314,7 +324,7 @@ export default function AgendaExames() {
             {loading ? <div className="py-6 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div> : rows.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum exame agendado para esta data.</p> : rows.map(row => {
               const status = String(row.custom_data?.status_exame || "agendado");
               return <div key={row.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong>{row.hora}</strong><Badge variant={statusTone[status] as any || "secondary"}>{getDiagnosticStatusLabel(status)}</Badge></div><p className="font-medium">{row.paciente_nome}</p><p className="text-xs text-muted-foreground">{row.custom_data?.exame_nome || roomConfig.tipoExame}</p></div>
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong>{row.hora}</strong><Badge variant={statusTone[status] as any || "secondary"}>{getDiagnosticStatusLabel(status)}</Badge></div><p className="font-medium">{row.paciente_nome}</p><p className="text-xs text-muted-foreground">{row.custom_data?.exame_nome || "Exame diagnóstico"}</p></div>
                 <div className="flex flex-wrap gap-2">
                   {status === "agendado" && <Button size="sm" variant="outline" onClick={() => void changeStatus(row, "paciente_chegou")}>Paciente chegou</Button>}
                   {status === "paciente_chegou" && <Button size="sm" onClick={() => void changeStatus(row, "exame_realizado_em_laudo")}>Exame realizado</Button>}
