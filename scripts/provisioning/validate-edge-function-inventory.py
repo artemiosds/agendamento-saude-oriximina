@@ -71,7 +71,7 @@ def main() -> None:
     manifest = validate_inventory(Path(sys.argv[1]))
     payload = json.dumps(manifest, ensure_ascii=False, indent=2)
     if len(sys.argv) == 3:
-        Path(sys.argv[2]).write_text(payload + "\\n", encoding="utf-8")
+        Path(sys.argv[2]).write_text(payload + "\n", encoding="utf-8")
     print(payload)
 
 
