@@ -8,7 +8,7 @@ export async function getPublicIp(): Promise<string> {
 
   fetchPromise = (async () => {
     try {
-      const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
+      const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(1500) });
       const data = await res.json();
       cachedIp = data.ip || 'IP não disponível';
     } catch {
