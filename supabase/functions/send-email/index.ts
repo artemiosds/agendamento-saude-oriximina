@@ -34,6 +34,21 @@ interface EmailPayload {
 }
 
 const emailTemplates: Record<string, { subject: string; body: (p: EmailPayload) => string }> = {
+  laudo_liberado: {
+    subject: "Laudo de exame disponível no Portal do Paciente",
+    body: (p) => `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8fafc;border-radius:12px;">
+        <div style="background:#2A6F97;color:#fff;padding:18px;border-radius:8px 8px 0 0;text-align:center;"><h2 style="margin:0;">Laudo disponível</h2></div>
+        <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;">
+          <p>Olá <strong>${p.paciente_nome}</strong>,</p>
+          <p>O laudo do seu exame <strong>${p.tipo_atendimento}</strong> realizado em ${p.data_consulta} já foi liberado.</p>
+          <p>Entre no Portal do Paciente com seu acesso para consultar o laudo. Se precisar de ajuda, procure a recepção da unidade.</p>
+          <p><strong>Unidade:</strong> ${p.unidade}</p>
+          <p style="font-size:12px;color:#64748b;">Esta mensagem não contém informações clínicas do laudo.</p>
+        </div>
+      </div>`,
+  },
+
   novo_agendamento: {
     subject: "✅ Confirmação de Agendamento - SMS Oriximiná",
     body: (p) => `
