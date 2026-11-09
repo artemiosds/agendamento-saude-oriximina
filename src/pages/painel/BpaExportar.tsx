@@ -2620,6 +2620,7 @@ const BpaExportar: React.FC = () => {
                 sessaoAtualParaCid,
               )
             : new Map();
+          // Aplica o fallback de outro dia apenas quando paciente e SIGTAP coincidirem.
           const cidMesmoPacientePorCodigo = resolveBpaSamePatientProcedureCidsForProcedures(
             codigosParaExportar,
             cidCandidatosMesmoPaciente,
