@@ -218,7 +218,17 @@ export default function AgendaExames() {
       detalhes: { status_anterior: current, status_novo: next, crm: next === "laudo_liberado" ? laudo.crm : undefined },
     });
     if (next === "laudo_liberado") {
-      const { data: patient } = await (supabase as any).from("pacientes").select("telefone").eq("id", row.paciente_id).maybeSingle();
+      const { data: patient } = await (supabase as any).from("pacientes").select("telefone,email").eq("id", row.paciente_id).maybeSingle();
+      if (patient?.email) {
+        const { error: emailError } = await supabase.functions.invoke("send-email", { body: {
+          evento: "laudo_liberado", paciente_nome: row.paciente_nome, email: patient.email,
+          telefone: patient.telefone || "", data_consulta: row.data,
+          hora_consulta: row.hora, unidade: unidades.find(u => u.id === selectedUnit)?.nome || "",
+          profissional: user?.nome || "", tipo_atendimento: row.custom_data?.exame_nome || "Exame diagnóstico",
+          status_agendamento: "laudo_liberado", id_agendamento: row.id,
+        } });
+        if (emailError) toast.warning("Laudo liberado, mas o e-mail não foi confirmado.");
+      }
       if (patient?.telefone) {
         const message = `Olá, ${row.paciente_nome}. Seu laudo do exame de ${row.custom_data?.exame_nome || "diagnóstico"} realizado na unidade ${unidades.find(u => u.id === selectedUnit)?.nome || ""} já está disponível. Acesse o Portal do Paciente ou procure a recepção.`;
         const sent = await whatsappService.sendDirect({
