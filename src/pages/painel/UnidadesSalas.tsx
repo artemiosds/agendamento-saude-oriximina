@@ -14,6 +14,9 @@ import { toast } from 'sonner';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { supabase } from '@/integrations/supabase/client';
+import { DEFAULT_DIAGNOSTIC_ROOM_CONFIG, normalizeDiagnosticRoomConfig, type DiagnosticRoomConfig } from '@/lib/diagnosticExams';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 
 const UnidadesSalas: React.FC = () => {
   const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useOperacional();
@@ -24,7 +27,7 @@ const UnidadesSalas: React.FC = () => {
   const [editUnitId, setEditUnitId] = useState<string | null>(null);
   const [editRoomId, setEditRoomId] = useState<string | null>(null);
   const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' });
-  const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '' });
+  const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } as DiagnosticRoomConfig });
 
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const enviarLogo = async (file: File) => {
@@ -60,8 +63,15 @@ const UnidadesSalas: React.FC = () => {
       setCustomData(cd);
     } catch (e) { /* ignore */ }
   };
-  const openNewRoom = () => { setEditRoomId(null); setRoomForm({ nome: '', unidadeId: '' }); setRoomDialog(true); };
-  const openEditRoom = (s: typeof salas[0]) => { setEditRoomId(s.id); setRoomForm({ nome: s.nome, unidadeId: s.unidadeId }); setRoomDialog(true); };
+  const openNewRoom = () => { setEditRoomId(null); setRoomForm({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } }); setRoomDialog(true); };
+  const openEditRoom = async (s: typeof salas[0]) => {
+    setEditRoomId(s.id);
+    setRoomForm({ nome: s.nome, unidadeId: s.unidadeId, config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } });
+    setRoomDialog(true);
+    const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', s.unidadeId).maybeSingle();
+    const custom = ((data as any)?.custom_data || {}) as Record<string, any>;
+    setRoomForm(p => ({ ...p, config: normalizeDiagnosticRoomConfig(custom.salas_exames?.[s.id]) }));
+  };
 
   const handleSaveUnit = async () => {
     if (!unitForm.nome) return;
@@ -91,13 +101,30 @@ const UnidadesSalas: React.FC = () => {
     setUnitDialog(false);
   };
 
-  const handleSaveRoom = () => {
-    if (!roomForm.nome || !roomForm.unidadeId) return;
+  const handleSaveRoom = async () => {
+    if (!roomForm.nome.trim() || !roomForm.unidadeId) return;
+    if (roomForm.config.finalidade === 'aparelho_diagnostico' && !roomForm.config.tipoExame.trim()) {
+      toast.error('Informe o tipo de exame do aparelho.');
+      return;
+    }
+    const roomId = editRoomId || `s${Date.now()}`;
+    const { data: unitRow, error: readError } = await supabase.from('unidades' as any).select('custom_data').eq('id', roomForm.unidadeId).maybeSingle();
+    if (readError || !unitRow) { toast.error('Não foi possível carregar a configuração da unidade.'); return; }
+    const custom = { ...(((unitRow as any).custom_data || {}) as Record<string, any>) };
+    const roomConfigs = { ...(custom.salas_exames || {}) };
+    if (roomForm.config.finalidade === 'aparelho_diagnostico') {
+      roomConfigs[roomId] = normalizeDiagnosticRoomConfig(roomForm.config);
+    } else {
+      delete roomConfigs[roomId];
+    }
+    custom.salas_exames = roomConfigs;
+    const { error: saveConfigError } = await supabase.from('unidades' as any).update({ custom_data: custom }).eq('id', roomForm.unidadeId);
+    if (saveConfigError) { toast.error('Não foi possível salvar a configuração da sala.'); return; }
     if (editRoomId) {
-      updateSala(editRoomId, roomForm);
+      await updateSala(editRoomId, { nome: roomForm.nome.trim(), unidadeId: roomForm.unidadeId });
       toast.success('Sala atualizada!');
     } else {
-      addSala({ id: `s${Date.now()}`, nome: roomForm.nome, unidadeId: roomForm.unidadeId, ativo: true });
+      await addSala({ id: roomId, nome: roomForm.nome.trim(), unidadeId: roomForm.unidadeId, ativo: true });
       toast.success('Sala criada!');
     }
     setRoomDialog(false);
@@ -317,6 +344,43 @@ const UnidadesSalas: React.FC = () => {
                 <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Finalidade da Sala</Label>
+              <Select value={roomForm.config.finalidade} onValueChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, finalidade: v as DiagnosticRoomConfig['finalidade'] } }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="consultorio_clinico">Consultório Clínico (Padrão)</SelectItem>
+                  <SelectItem value="aparelho_diagnostico">Aparelho / Exame Diagnóstico</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {roomForm.config.finalidade === 'aparelho_diagnostico' && (
+              <div className="space-y-3 rounded-lg border p-3">
+                <div><Label>Tipo de Exame / Aparelho *</Label>
+                  <Input value={roomForm.config.tipoExame} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, tipoExame: e.target.value } }))} placeholder="Ex.: Tomografia, ECG, Ultrassonografia, Raio-X" />
+                </div>
+                <div><Label>Duração do Slot</Label>
+                  <Select value={String(roomForm.config.duracaoSlot)} onValueChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, duracaoSlot: Number(v) } }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{[10,15,20,30,45].map(n => <SelectItem key={n} value={String(n)}>{n} minutos</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between"><Label>Exige preparo prévio?</Label><Switch checked={roomForm.config.exigePreparo} onCheckedChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, exigePreparo: v } }))} /></div>
+                {roomForm.config.exigePreparo && <div><Label>Instruções de preparo</Label><Textarea rows={3} value={roomForm.config.instrucoesPreparo} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, instrucoesPreparo: e.target.value } }))} placeholder="Descreva jejum, documentos e exames anteriores..." /></div>}
+                <div><Label>Exige Contraste?</Label>
+                  <Select value={roomForm.config.exigeContraste} onValueChange={v => setRoomForm(p => ({ ...p, config: { ...p.config, exigeContraste: v as DiagnosticRoomConfig['exigeContraste'] } }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
+                      <SelectItem value="nao">Não</SelectItem><SelectItem value="sim">Sim</SelectItem><SelectItem value="opcional">Opcional</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Início da agenda</Label><Input type="time" value={roomForm.config.horarioInicio || '07:00'} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, horarioInicio: e.target.value } }))} /></div>
+                  <div><Label>Fim da agenda</Label><Input type="time" value={roomForm.config.horarioFim || '17:00'} onChange={e => setRoomForm(p => ({ ...p, config: { ...p.config, horarioFim: e.target.value } }))} /></div>
+                </div>
+                <p className="text-xs text-muted-foreground">Esta configuração é exclusiva desta sala e fica armazenada no custom_data da unidade. Consultórios comuns permanecem inalterados.</p>
+              </div>
+            )}
             <Button onClick={handleSaveRoom} className="w-full gradient-primary text-primary-foreground">{editRoomId ? 'Salvar' : 'Criar'}</Button>
           </div>
         </DialogContent>
