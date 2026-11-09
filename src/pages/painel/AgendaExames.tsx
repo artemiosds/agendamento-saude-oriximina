@@ -107,6 +107,10 @@ export default function AgendaExames() {
   }, [selectedUnit, selectedRoom, date]);
 
   useEffect(() => { void loadUnitMetadata(); }, [loadUnitMetadata]);
+  useEffect(() => {
+    if (!selectedRoom || !roomConfig) { setSelectedExamId(""); return; }
+    if (!roomConfig.exames.some(exam => exam.id === selectedExamId)) setSelectedExamId(roomConfig.exames[0]?.id || "");
+  }, [selectedRoom, roomConfig, selectedExamId]);
   useEffect(() => { void loadRows(); }, [loadRows]);
 
   useEffect(() => {
