@@ -3029,7 +3029,7 @@ const Agenda: React.FC = () => {
                     </div>
                     <div>
                       <Label>Sala</Label>
-                      <Select value={newAg.salaId} onValueChange={(v) => setNewAg((p) => ({ ...p, salaId: v }))}>
+                      <Select value={newAg.salaId} onValueChange={(v) => setNewAg((p) => ({ ...p, salaId: v, hora: "" }))}>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione" />
                         </SelectTrigger>
@@ -3043,7 +3043,7 @@ const Agenda: React.FC = () => {
                       </Select>
                     </div>
                   </div>
-                  <div>
+                  {!isDiagnosticBooking && <div>
                     <Label>Tipo</Label>
                     <Select value={newAg.tipo} onValueChange={(v) => setNewAg((p) => ({ ...p, tipo: v }))}>
                       <SelectTrigger>
@@ -3059,9 +3059,10 @@ const Agenda: React.FC = () => {
                         <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
+                  </div>}
+                  {isDiagnosticBooking && <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950"><strong>{diagnosticRoomConfig?.tipoExame}</strong><p className="text-xs mt-1">Agendamento por aparelho • slot de {diagnosticRoomConfig?.duracaoSlot} minutos. O responsável selecionado será registrado no agendamento.</p>{diagnosticRoomConfig?.exigePreparo && <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2"><strong>Preparo cadastrado pela unidade</strong><p className="mt-1 whitespace-pre-wrap">{diagnosticRoomConfig.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme antes de agendar."}</p></div>}</div>}
                   <div>
-                    <Label>{isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
+                    <Label>{isDiagnosticBooking ? "Horários disponíveis do aparelho" : isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
                     {newAg.profissionalId && (
                       <div className="space-y-2">
                         <SlotInfoBadge
@@ -3073,7 +3074,12 @@ const Agenda: React.FC = () => {
                         />
                       </div>
                     )}
-                    {isTurnoMode ? (
+                    {isDiagnosticBooking ? (
+                      <div className="mt-2 space-y-2">
+                        {diagnosticRoomLoading ? <p className="text-xs text-muted-foreground">Carregando horários do aparelho...</p> : diagnosticSlots.length ? <div className="grid grid-cols-4 gap-2">{diagnosticSlots.map(slot => <Button key={slot} size="sm" variant={newAg.hora === slot ? "default" : "outline"} onClick={() => setNewAg(p => ({ ...p, hora: slot }))}>{slot}</Button>)}</div> : <p className="text-xs text-warning">Não há horários livres para este aparelho nesta data.</p>}
+                        <p className="text-xs text-muted-foreground">A duração do exame e a disponibilidade da sala controlam os horários. Não é aplicada a grade comum do profissional.</p>
+                      </div>
+                    ) : isTurnoMode ? (
                       /* === TURNO MODE: show turno cards === */
                       <div className="space-y-2 mt-2">
                         {newAgTurnoInfo.map((t) => {
