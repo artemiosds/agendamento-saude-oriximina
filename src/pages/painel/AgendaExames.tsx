@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
 import { auditService } from "@/services/auditService";
+import { generateSignature } from "@/lib/documentSignature";
 import { whatsappService } from "@/services/whatsappService";
 import {
   canTransitionDiagnosticExam,
@@ -166,6 +167,7 @@ export default function AgendaExames() {
   const changeStatus = async (row: ExamRow, next: DiagnosticExamStatus) => {
     const current = String(row.custom_data?.status_exame || "agendado");
     if (!canTransitionDiagnosticExam(current, next)) { toast.error("Transição de status não permitida."); return; }
+    let signatureData: Awaited<ReturnType<typeof generateSignature>> | null = null;
     if (next === "laudo_liberado") {
       if (!laudoRow || laudoRow.id !== row.id || !laudo.conclusao.trim() || !laudo.crm.trim()) {
         toast.error("Informe a conclusão e o CRM do médico laudista antes de liberar.");
@@ -187,6 +189,14 @@ export default function AgendaExames() {
         toast.error("O CRM informado deve corresponder ao registro profissional ativo no cadastro do sistema.");
         return;
       }
+      signatureData = await generateSignature(
+        [row.custom_data?.exame_nome || "Exame diagnóstico", laudo.descricao, laudo.hipotese, laudo.conclusao, row.paciente_id, row.data, row.hora].join("|"),
+        user?.id || "",
+        user?.nome || "",
+        "CRM",
+        String(professional.numero_conselho || ""),
+        String(professional.uf_conselho || ""),
+      );
     }
     const now = new Date().toISOString();
     const history = Array.isArray(row.custom_data?.historico_status) ? row.custom_data.historico_status : [];
@@ -201,6 +211,7 @@ export default function AgendaExames() {
           hipotese: laudo.hipotese,
           concluido_por_nome: user?.nome || "",
           crm_registro: laudo.crm,
+          assinatura_eletronica: signatureData,
           liberado_em: now,
           profissional_id: user?.id || "",
         },
