@@ -147,6 +147,24 @@ const calcularIdadeMeses = (dataNasc: any, dataAtendimento: any): number | null 
 // registros — e profissionais (ex.: técnicos de enfermagem) desaparecem do
 // filtro e da produção. Helper único usado nas varreduras da exportação.
 const PAGE_SIZE_BPA = 1000;
+const BPA_CYCLE_QUERY_BATCH = 100;
+const formatBpaQueryError = (error: any): string => {
+  if (error === null || error === undefined) return "Erro sem detalhes retornados pela API.";
+  if (typeof error === "string") return error;
+  const parts: string[] = [];
+  const message = error instanceof Error ? error.message : error.message || error.error_description || error.error;
+  if (message) parts.push(String(message));
+  if (error.details) parts.push(`Detalhes: ${String(error.details)}`);
+  if (error.hint) parts.push(`Orientação: ${String(error.hint)}`);
+  if (error.code) parts.push(`Código: ${String(error.code)}`);
+  if (error.status) parts.push(`HTTP: ${String(error.status)}`);
+  if (parts.length) return parts.join(" | ");
+  try {
+    return JSON.stringify(error) || "Erro sem mensagem legível retornada pela API.";
+  } catch {
+    return "Erro sem mensagem legível retornada pela API.";
+  }
+};
 async function fetchAllRowsBpa<T = any>(build: () => any): Promise<T[]> {
   const out: T[] = [];
   for (let offset = 0; ; offset += PAGE_SIZE_BPA) {
@@ -362,7 +380,7 @@ const resolverCodigosSigtapPorProcedimentoId = async (procedimentoIds: any[]): P
   const entradas = [...new Set(procedimentoIds.map((id) => String(id || "").trim()).filter(Boolean))];
   const ids = entradas.filter((id) => uuidRegex.test(id));
   const codigoPorProcId = new Map<string, string>();
-  const BATCH = 500;
+  const BATCH = 100;
 
   entradas.forEach((entrada) => {
     const code = sigtapCodigoExibicao(entrada);
@@ -1871,10 +1889,12 @@ const BpaExportar: React.FC = () => {
         const id = String(p?.agendamento_id || "");
         if (id && p?.id && !prontuarioPorAgendamento.has(id)) prontuarioPorAgendamento.set(id, p);
       });
+      let etapaConsultaSessoes = "preparação da consulta";
       try {
         const sessoesRows: any[] = [];
-        for (let i = 0; i < pacienteIds.length; i += 500) {
-          const batch = pacienteIds.slice(i, i + 500);
+        for (let i = 0; i < pacienteIds.length; i += BPA_CYCLE_QUERY_BATCH) {
+          const batch = pacienteIds.slice(i, i + BPA_CYCLE_QUERY_BATCH);
+          etapaConsultaSessoes = `consulta das sessões da competência (lote ${Math.floor(i / BPA_CYCLE_QUERY_BATCH) + 1}, ${batch.length} pacientes)`;
           sessoesRows.push(...await fetchAllRowsBpa<any>(() => {
             let q = (supabase as any)
               .from("treatment_sessions")
@@ -1894,11 +1914,12 @@ const BpaExportar: React.FC = () => {
         const cycleIds = [...new Set(sessoesDaCompetencia.map((s: any) => s.cycle_id).filter(Boolean))] as string[];
         const cycleMap = new Map<string, any>();
         if (cycleIds.length > 0) {
-          for (let i = 0; i < cycleIds.length; i += 500) {
+          for (let i = 0; i < cycleIds.length; i += BPA_CYCLE_QUERY_BATCH) {
+            etapaConsultaSessoes = `leitura dos ciclos de tratamento (lote ${Math.floor(i / BPA_CYCLE_QUERY_BATCH) + 1})`;
             const { data: cyclesRows, error } = await (supabase as any)
               .from("treatment_cycles")
               .select("id, patient_id, professional_id, unit_id")
-              .in("id", cycleIds.slice(i, i + 500));
+              .in("id", cycleIds.slice(i, i + BPA_CYCLE_QUERY_BATCH));
             if (error) throw error;
             (cyclesRows || []).forEach((c: any) => cycleMap.set(String(c.id), c));
           }
@@ -1908,14 +1929,15 @@ const BpaExportar: React.FC = () => {
         // inclusive sessões em competências anteriores e posteriores. Assim a
         // exportação mensal consegue aproveitar uma referência clínica de outro mês.
         const sessoesCicloRows: any[] = [];
-        for (let i = 0; i < cycleIds.length; i += 500) {
+        for (let i = 0; i < cycleIds.length; i += BPA_CYCLE_QUERY_BATCH) {
           // A consulta pode retornar milhares de sessões para os ciclos da competência.
           // Pagina explicitamente para não truncar em 1.000 linhas (limite padrão do PostgREST)
           // e perder justamente as sessões históricas que contêm o CID de referência.
+          etapaConsultaSessoes = `leitura de todas as sessões dos ciclos (lote ${Math.floor(i / BPA_CYCLE_QUERY_BATCH) + 1})`;
           sessoesCicloRows.push(...await fetchAllRowsBpa<any>(() => (supabase as any)
             .from("treatment_sessions")
             .select("id, cycle_id, patient_id, professional_id, appointment_id, session_number, scheduled_date, status, procedure_done")
-            .in("cycle_id", cycleIds.slice(i, i + 500))
+            .in("cycle_id", cycleIds.slice(i, i + BPA_CYCLE_QUERY_BATCH))
             .in("status", ["realizada", "falta", "paciente_faltou"])
             .order("session_number", { ascending: true })
             .order("scheduled_date", { ascending: true })));
@@ -1927,8 +1949,9 @@ const BpaExportar: React.FC = () => {
         const appointmentIdsCiclo = [...new Set(sessoes.map((s: any) => String(s.appointment_id || "")).filter(Boolean))];
         const appointmentsSemProntuario = appointmentIdsCiclo.filter((id) => !prontuarioPorAgendamento.has(id));
         const prontuariosCicloExtras: any[] = [];
-        for (let i = 0; i < appointmentsSemProntuario.length; i += 300) {
-          const batch = appointmentsSemProntuario.slice(i, i + 300);
+        for (let i = 0; i < appointmentsSemProntuario.length; i += BPA_CYCLE_QUERY_BATCH) {
+          const batch = appointmentsSemProntuario.slice(i, i + BPA_CYCLE_QUERY_BATCH);
+          etapaConsultaSessoes = `leitura dos prontuários das sessões de referência (lote ${Math.floor(i / BPA_CYCLE_QUERY_BATCH) + 1})`;
           prontuariosCicloExtras.push(...await fetchAllRowsBpa<any>(() => (supabase as any)
             .from("prontuarios")
             .select("*")
@@ -1949,8 +1972,9 @@ const BpaExportar: React.FC = () => {
           ...Array.from(prontuarioPorAgendamento.values()).map((p: any) => String(p?.id || "")),
         ].filter((id) => id && !prontIdsJaCarregados.has(id)))];
         const ppRowsCicloExtras: any[] = [];
-        for (let i = 0; i < prontIdsCicloExtras.length; i += 300) {
-          const batch = prontIdsCicloExtras.slice(i, i + 300);
+        for (let i = 0; i < prontIdsCicloExtras.length; i += BPA_CYCLE_QUERY_BATCH) {
+          const batch = prontIdsCicloExtras.slice(i, i + BPA_CYCLE_QUERY_BATCH);
+          etapaConsultaSessoes = `leitura dos procedimentos vinculados aos prontuários de referência (lote ${Math.floor(i / BPA_CYCLE_QUERY_BATCH) + 1})`;
           ppRowsCicloExtras.push(...await fetchAllRowsBpa<any>(() => (supabase as any)
             .from("prontuario_procedimentos")
             .select("id, prontuario_id, procedimento_id, cids_selecionados")
@@ -1958,6 +1982,7 @@ const BpaExportar: React.FC = () => {
             .order("id", { ascending: true })));
         }
         const procIdsCicloExtras = [...new Set(ppRowsCicloExtras.map((r: any) => r.procedimento_id).filter(Boolean))];
+        etapaConsultaSessoes = "resolução dos códigos SIGTAP dos prontuários de referência";
         const codigoPorProcCicloExtras = await resolverCodigosSigtapPorProcedimentoId(procIdsCicloExtras);
         ppRowsCicloExtras.forEach((r: any) => {
           const code = codigoPorProcCicloExtras.get(String(r.procedimento_id));
@@ -1971,6 +1996,7 @@ const BpaExportar: React.FC = () => {
         });
 
         const procIdsSessao = sessoes.map((s: any) => s.procedure_done).filter(Boolean);
+        etapaConsultaSessoes = "resolução dos códigos SIGTAP das sessões";
         const codigoPorProcSessao = await resolverCodigosSigtapPorProcedimentoId(procIdsSessao);
         sessoes.forEach((s: any) => {
           const cycle = s.cycle_id ? cycleMap.get(String(s.cycle_id)) : null;
@@ -2049,7 +2075,9 @@ const BpaExportar: React.FC = () => {
           }
         });
       } catch (e) {
-        throw new Error(`Falha ao consultar sessões realizadas para o BPA-I: ${e instanceof Error ? e.message : String(e)}`);
+        const detalhe = formatBpaQueryError(e);
+        console.error("[BPA-Exportar] falha na consulta das sessões/ciclos:", etapaConsultaSessoes, detalhe);
+        throw new Error(`Falha ao consultar sessões realizadas para o BPA-I. Etapa: ${etapaConsultaSessoes}. ${detalhe}`);
       }
 
       // BPA-Produção auxilia na resolução; a Exportar só usa procedimentos
