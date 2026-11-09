@@ -2754,18 +2754,19 @@ const BpaExportar: React.FC = () => {
                     { ...sessaoAtual, procedureCode: codigoCidCiclo },
                   )
                 : null;
+              const cidInputBase = {
+                procedureCid: sigtapVinculadoItens.filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo)).map(item => item.cid).filter(Boolean).concat(procEntry.cid || []),
+                productionCid: cidProducaoLinha,
+                prontuario: pront,
+                paciente: pac,
+                ptsCid: cidPtsDoAtendimento(pront),
+              };
+              const cidAntesDoCiclo = ehTecnicoEnfermagem ? { cid: "", adicionais: [] as string[] } : resolveBpaCidDetails(cidInputBase);
               const cidResolvido = ehTecnicoEnfermagem
                 ? { cid: "", adicionais: [] as string[] }
-                : resolveBpaCidDetails({
-                    procedureCid: sigtapVinculadoItens.filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo)).map(item => item.cid).filter(Boolean).concat(procEntry.cid || []),
-                    productionCid: cidProducaoLinha,
-                    prontuario: pront,
-                    paciente: pac,
-                    ptsCid: cidPtsDoAtendimento(pront),
-                    treatmentCycleCid: cidCiclo?.cids,
-                  });
-              if (cidCiclo && !String(cidResolvido.cid || "").trim() && !ehTecnicoEnfermagem) {
-                warnings.push(`${ident} (${data_atend}): CID recuperado da sessão ${cidCiclo.sessionNumber ?? "do mesmo ciclo"} (${cidCiclo.scheduledDate}) do mesmo tratamento.`);
+                : resolveBpaCidDetails({ ...cidInputBase, treatmentCycleCid: cidCiclo?.cids });
+              if (cidCiclo && !String(cidAntesDoCiclo.cid || "").trim() && !ehTecnicoEnfermagem) {
+                warnings.push(`${ident} (${data_atend}): CID recuperado automaticamente da sessão ${cidCiclo.sessionNumber ?? "do mesmo ciclo"} (${cidCiclo.scheduledDate}) do mesmo tratamento.`);
               }
               const cidBrutoLinha = cidResolvido.cid;
               let cidBrutoFinal = cidBrutoLinha;
