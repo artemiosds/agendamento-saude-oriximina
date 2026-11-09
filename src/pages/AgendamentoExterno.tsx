@@ -13,12 +13,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { LogOut, Search, Plus, CalendarDays, Clock, User, Loader2, CheckCircle, X, Pencil, Building2, AlertCircle, CalendarCheck, BarChart3 } from "lucide-react";
+import { LogOut, Search, Plus, CalendarDays, Clock, User, Loader2, CheckCircle, X, Pencil, Building2, AlertCircle, CalendarCheck, BarChart3, Printer } from "lucide-react";
 import { format } from "date-fns";
 import { CalendarioDisponibilidade, type DayInfo } from "@/components/CalendarioDisponibilidade";
 import { todayLocalStr } from "@/lib/utils";
 import { isQuotaConfigurationUsable, quotaAllowsSlot } from "@/lib/externalQuota";
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
+import { printComprovanteAgendamento } from "@/lib/printComprovanteAgendamento";
 
 interface ExternalUser {
   id: string;
@@ -85,6 +86,8 @@ const AgendamentoExterno: React.FC = () => {
   // Scheduling
   const [scheduling, setScheduling] = useState(false);
   const [cancellingId, setCancellingId] = useState("");
+  const [printingId, setPrintingId] = useState("");
+  const [activeTab, setActiveTab] = useState("agendar");
   const [myAppointments, setMyAppointments] = useState<any[]>([]);
 
   // ── Auth check ──
@@ -327,17 +330,59 @@ const AgendamentoExterno: React.FC = () => {
       } as any);
       if (error) throw error;
 
-      toast.success("Agendamento realizado com sucesso!");
       setSelectedHora("");
       setSelectedDate("");
       setSelectedPatient(null);
       setPatientSearch("");
       setPatientResults([]);
       await loadData();
+      setActiveTab("meus");
+      toast.success("Agendamento registrado! Você já pode imprimir o comprovante em Meus Agendamentos.");
     } catch (err: any) {
       toast.error(err.message || "Erro ao agendar.");
     }
     setScheduling(false);
+  };
+
+  // ── Print appointment receipt ──
+  const handlePrintReceipt = async (appointment: any) => {
+    if (printingId) return;
+    setPrintingId(appointment.id);
+    try {
+      // Patient identity is loaded only for this professional's own appointment.
+      const { data: patient, error: patientError } = await supabase
+        .from("pacientes")
+        .select("nome, cpf, cns")
+        .eq("id", appointment.paciente_id)
+        .maybeSingle();
+
+      if (patientError) {
+        console.warn("[AgendamentoExterno] Não foi possível carregar CPF/CNS para o comprovante:", patientError);
+      }
+
+      const unit = unidades.find((item) => item.id === appointment.unidade_id);
+      const professional = professionals.find((item) => item.id === appointment.profissional_id);
+
+      await printComprovanteAgendamento({
+        id: appointment.id,
+        data: appointment.data,
+        hora: appointment.hora,
+        tipo: appointment.tipo || "Consulta",
+        status: appointment.status,
+        profissionalNome: appointment.profissional_nome || professional?.nome,
+        pacienteNome: patient?.nome || appointment.paciente_nome,
+        pacienteCpf: patient?.cpf || undefined,
+        pacienteCns: patient?.cns || undefined,
+        unidadeNome: unit?.nome,
+        unidadeEndereco: unit?.endereco,
+        unidadeTelefone: unit?.telefone,
+      });
+    } catch (err) {
+      console.error("[AgendamentoExterno] Erro ao gerar comprovante:", err);
+      toast.error("Não foi possível gerar o comprovante. Tente novamente.");
+    } finally {
+      setPrintingId("");
+    }
   };
 
   // ── Cancel appointment ──
@@ -390,7 +435,7 @@ const AgendamentoExterno: React.FC = () => {
       </header>
 
       <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
-        <Tabs defaultValue="agendar">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full grid grid-cols-2">
             <TabsTrigger value="agendar" className="gap-1.5">
               <CalendarDays className="w-4 h-4" /> Novo Agendamento
@@ -705,10 +750,27 @@ const AgendamentoExterno: React.FC = () => {
                           🩺 {a.profissional_nome} — 📅 {format(new Date(a.data + "T12:00:00"), "dd/MM/yyyy")} às {a.hora}
                         </p>
                         <Badge variant="outline" className="mt-1.5 capitalize">{a.status.replace(/_/g, ' ')}</Badge>
+                        {a.status === "pendente" && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Aguardando confirmação de chegada pela recepção no dia do atendimento.
+                          </p>
+                        )}
                       </div>
-                      <Button variant="destructive" size="sm" onClick={() => handleCancel(a.id)} disabled={!!cancellingId} className="shrink-0">
-                        {cancellingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cancelar"}
-                      </Button>
+                      <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handlePrintReceipt(a)}
+                          disabled={printingId === a.id}
+                          className="gap-1.5"
+                        >
+                          {printingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                          Imprimir comprovante
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleCancel(a.id)} disabled={!!cancellingId} className="shrink-0">
+                          {cancellingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cancelar"}
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
