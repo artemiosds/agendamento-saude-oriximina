@@ -1,0 +1,16 @@
+{
+  "project_id": "b45b5fc2-4ab6-4383-bd72-693800aae0db",
+  "provider": "lovable_cloud",
+  "purpose": "homologacao",
+  "public_relations": 0,
+  "auth_users": true,
+  "storage_objects": true,
+  "realtime_publication": true,
+  "available_extensions": [
+    "moddatetime",
+    "pg_trgm",
+    "pgcrypto",
+    "unaccent",
+    "uuid-ossp"
+  ]
+}
