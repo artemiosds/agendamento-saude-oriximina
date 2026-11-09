@@ -412,7 +412,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     const m = modelos.find(x => x.id === id);
     if (m) {
       // Pre-fill type-specific defaults
-      const tipo = m.tipo.toLowerCase();
+      const tipo = `${m.tipo || ''} ${m.nome || ''}`.toLowerCase();
       const defaults: Record<string, string> = {};
       if (tipo.includes('atestado')) {
         defaults.dias_afastamento = '1';
@@ -452,7 +452,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   useEffect(() => {
     const m = modelos.find(x => x.id === selectedId);
     if (!m) return;
-    const tLower = m.tipo.toLowerCase();
+    const tLower = `${m.tipo || ''} ${m.nome || ''}`.toLowerCase();
     let base = m.conteudo;
     // Só cai no HTML embutido se o template estiver vazio (retrocompatibilidade).
     // Se o Master salvou um conteúdo próprio no "Editar template", ele SEMPRE prevalece.
@@ -486,7 +486,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     selected.nome.trim().toUpperCase().startsWith('OCI ')
   );
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
-  const tipoLower = selected?.tipo.toLowerCase() || '';
+  const tipoLower = selected ? `${selected.tipo || ''} ${selected.nome || ''}`.toLowerCase() : '';
 
   useEffect(() => {
     if (!selected || !isOciStructured) {
@@ -780,7 +780,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       if (isOciStructured) {
         printViaIframe(buildOciPrintShell(body));
       } else {
-        openPrintDocument(selected.tipo, body, {
+        openPrintDocument(selected.nome || selected.tipo, body, {
           'Paciente': paciente?.nome || '',
           'CPF': paciente?.cpf || '',
           'Data': hoje,
@@ -838,7 +838,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       const config = await loadDocumentConfig();
       const fullHtml = isOciStructured
         ? buildOciPrintShell(body)
-        : buildDocumentShell(selected.tipo, body, config, {
+        : buildDocumentShell(selected.nome || selected.tipo, body, config, {
             'Paciente': paciente?.nome || '',
             'CPF': paciente?.cpf || '',
             'Data': hoje,
@@ -1248,7 +1248,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                       dangerouslySetInnerHTML={{
                         __html: isOciStructured && ociData
                           ? renderOciDocument(ociData, docConfig, selectedMeta)
-                          : buildInstitutionalCSS(docConfig) + '<div class="doc-page">' + docHeader(selected.tipo, docConfig) +
+                          : buildInstitutionalCSS(docConfig) + '<div class="doc-page">' + docHeader(selected.nome || selected.tipo, docConfig) +
                             '<div class="doc-content content-block doc-abnt"><div class="abnt-text">' +
                             normalizeForAbntPrint(stripConditionalBlocks(conteudoFinal.replace(/\n/g, '<br/>'), paciente?.data_nascimento || pacienteExtra?.data_nascimento)) +
                             '</div>' +
