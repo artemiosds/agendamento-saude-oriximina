@@ -44,7 +44,99 @@ export type BpaCidInput = {
   paciente?: any;
   /** CID(s) do PTS do paciente — usado só quando o prontuário não traz CID. */
   ptsCid?: unknown;
+  /** CID(s) de outra sessão realizada do mesmo ciclo e procedimento, usado apenas como último fallback. */
+  treatmentCycleCid?: unknown;
 };
+
+export interface BpaTreatmentCycleCidCandidate {
+  cycleId: string;
+  procedureCode: string;
+  patientId: string;
+  professionalId: string;
+  unitId: string;
+  appointmentId: string;
+  sessionNumber?: number | string | null;
+  scheduledDate?: string | null;
+  status: string;
+  cids: unknown;
+}
+
+export type BpaTreatmentCycleCidTarget = Pick<
+  BpaTreatmentCycleCidCandidate,
+  "cycleId" | "procedureCode" | "patientId" | "professionalId" | "unitId" | "appointmentId" | "sessionNumber" | "scheduledDate"
+>;
+
+export interface BpaTreatmentCycleCidResolution {
+  cids: string[];
+  sessionNumber: number | null;
+  scheduledDate: string;
+}
+
+/**
+ * Recupera o CID apenas de outra sessão REALIZADA do mesmo paciente, profissional,
+ * unidade, ciclo e código SIGTAP. Entre referências igualmente próximas, prefere
+ * a sessão anterior; nunca usa falta, outro ciclo ou outro procedimento.
+ */
+export function resolveBpaTreatmentCycleCid(
+  candidates: readonly BpaTreatmentCycleCidCandidate[],
+  target: BpaTreatmentCycleCidTarget,
+): BpaTreatmentCycleCidResolution | null {
+  const normalizeCode = (value: unknown) => String(value ?? "").replace(/\D/g, "");
+  const targetNumber = Number(target.sessionNumber);
+  const hasTargetNumber = Number.isFinite(targetNumber) && targetNumber > 0;
+  const targetDate = String(target.scheduledDate ?? "").slice(0, 10);
+  const targetTime = targetDate ? Date.parse(`${targetDate}T00:00:00Z`) : NaN;
+
+  const valid = candidates.flatMap((candidate) => {
+    if (
+      candidate.status?.trim().toLowerCase() !== "realizada" ||
+      candidate.cycleId !== target.cycleId ||
+      normalizeCode(candidate.procedureCode) !== normalizeCode(target.procedureCode) ||
+      candidate.patientId !== target.patientId ||
+      candidate.professionalId !== target.professionalId ||
+      candidate.unitId !== target.unitId ||
+      candidate.appointmentId === target.appointmentId
+    ) return [];
+
+    const cids = extractBpaCidCodes(candidate.cids);
+    if (!cids.length) return [];
+    const number = Number(candidate.sessionNumber);
+    const hasNumber = Number.isFinite(number) && number > 0;
+    const date = String(candidate.scheduledDate ?? "").slice(0, 10);
+    const time = date ? Date.parse(`${date}T00:00:00Z`) : NaN;
+    const distance = hasTargetNumber && hasNumber
+      ? Math.abs(number - targetNumber)
+      : Number.isFinite(targetTime) && Number.isFinite(time)
+        ? Math.abs(time - targetTime)
+        : Number.POSITIVE_INFINITY;
+    const isPrevious = hasTargetNumber && hasNumber
+      ? number < targetNumber
+      : Number.isFinite(targetTime) && Number.isFinite(time) && time < targetTime;
+    return [{ candidate, cids, number: hasNumber ? number : null, date, time, distance, isPrevious }];
+  });
+
+  valid.sort((a, b) => {
+    if (a.distance !== b.distance) return a.distance - b.distance;
+    if (a.isPrevious !== b.isPrevious) return a.isPrevious ? -1 : 1;
+    if (a.isPrevious && b.isPrevious) {
+      if (a.number !== null && b.number !== null && a.number !== b.number) return b.number - a.number;
+      if (Number.isFinite(a.time) && Number.isFinite(b.time) && a.time !== b.time) return b.time - a.time;
+    } else {
+      if (a.number !== null && b.number !== null && a.number !== b.number) return a.number - b.number;
+      if (Number.isFinite(a.time) && Number.isFinite(b.time) && a.time !== b.time) return a.time - b.time;
+    }
+    return a.candidate.appointmentId.localeCompare(b.candidate.appointmentId);
+  });
+
+  const selected = valid[0];
+  return selected
+    ? {
+        cids: selected.cids,
+        sessionNumber: selected.number,
+        scheduledDate: selected.date,
+      }
+    : null;
+}
 
 export function resolveBpaCidDetails(input: BpaCidInput) {
   const pront = input.prontuario || {};
@@ -79,6 +171,7 @@ export function resolveBpaCidDetails(input: BpaCidInput) {
     dados.cid10,
     dados.cid_principal,
     input.ptsCid,
+    input.treatmentCycleCid,
     patient.cid,
     patient.cid10,
     patientData.cid,
