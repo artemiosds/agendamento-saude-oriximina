@@ -208,7 +208,7 @@ export default function AgendaExames() {
         const sent = await whatsappService.sendDirect({
           tipo: "laudo_liberado", telefone: patient.telefone, paciente_nome: row.paciente_nome,
           unidade: unidades.find(u => u.id === selectedUnit)?.nome || "", unidade_id: selectedUnit,
-          observacoes: message,
+          observacoes: message, mensagem_custom: message,
         });
         if (sent.error) toast.warning("Laudo liberado, mas a notificação WhatsApp não foi confirmada.");
       }
