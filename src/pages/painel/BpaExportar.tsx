@@ -1987,37 +1987,49 @@ const BpaExportar: React.FC = () => {
             });
           }
 
-          // procedure_done pode conter a descrição, não o código. Se o prontuário
-          // tiver um único procedimento vinculado, essa associação é segura.
-          const code = codigoPorProcSessao.get(String(s.procedure_done)) || (linkedCodes.length === 1 ? linkedCodes[0] : "");
-          if (!code) return;
+          // O campo procedure_done pode conter uma descrição concatenada de vários
+          // procedimentos. A fonte mais precisa é prontuario_procedimentos, que mantém
+          // o vínculo individual procedimento_id × cids_selecionados.
+          const codeFallback = codigoPorProcSessao.get(String(s.procedure_done)) || (linkedCodes.length === 1 ? linkedCodes[0] : "");
+          const sessionCodes = [...new Set([
+            ...linkedItems.map((item) => somenteNumeros(item.codigo)).filter(Boolean),
+            somenteNumeros(codeFallback),
+          ].filter(Boolean))];
+          if (!sessionCodes.length) return;
           const key = [String(s.patient_id), String(s.professional_id), String(cycle.unit_id), String(s.scheduled_date).slice(0, 10)].join("|");
           const lista = sigtapPorSessaoTratamento.get(key) || [];
-          if (!lista.includes(code)) {
-            lista.push(code);
-            sigtapPorSessaoTratamento.set(key, lista);
-          }
+          sessionCodes.forEach((code) => {
+            if (!lista.includes(code)) lista.push(code);
+          });
+          sigtapPorSessaoTratamento.set(key, lista);
 
-          // Só sessões realizadas, com prontuário exatamente vinculado e CID explícito,
-          // podem fornecer diagnóstico de referência para outra sessão do mesmo ciclo.
+          // Só sessões realizadas, com prontuário exatamente vinculado e CID explícito
+          // no item daquele procedimento podem fornecer referência a outra sessão.
           if (prontuarioVinculadoValido && String(s.status).toLowerCase() === "realizada") {
-            const procedureCids = linkedItems
-              .filter((item) => somenteNumeros(item.codigo) === somenteNumeros(code))
-              .flatMap((item) => extrairCodigosCid(item.cid));
             const explicit = resolveBpaCidDetails({ prontuario: linkedProntuario });
-            const sourceCids = procedureCids.length ? procedureCids : [explicit.cid, ...explicit.adicionais].filter(Boolean);
-            if (sourceCids.length) {
-              const candidateKey = [String(s.cycle_id), somenteNumeros(code)].join("|");
+            sessionCodes.forEach((code) => {
+              const procedureCids = linkedItems
+                .filter((item) => somenteNumeros(item.codigo) === code)
+                .flatMap((item) => extrairCodigosCid(item.cid));
+              // CID geral do prontuário só é reaproveitado quando há um único
+              // procedimento SIGTAP vinculado; nunca é copiado entre procedimentos.
+              const sourceCids = procedureCids.length
+                ? procedureCids
+                : sessionCodes.length === 1
+                  ? [explicit.cid, ...explicit.adicionais].filter(Boolean)
+                  : [];
+              if (!sourceCids.length) return;
+              const candidateKey = [String(s.cycle_id), code].join("|");
               const candidates = cidCandidatosPorCiclo.get(candidateKey) || [];
               candidates.push({
-                cycleId: String(s.cycle_id), procedureCode: String(code),
+                cycleId: String(s.cycle_id), procedureCode: code,
                 patientId: String(s.patient_id), professionalId: String(s.professional_id),
                 unitId: String(cycle.unit_id), appointmentId,
                 sessionNumber: s.session_number, scheduledDate: String(s.scheduled_date).slice(0, 10),
                 status: String(s.status), cids: sourceCids,
               });
               cidCandidatosPorCiclo.set(candidateKey, candidates);
-            }
+            });
           }
         });
       } catch (e) {
