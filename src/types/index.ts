@@ -190,6 +190,7 @@ export interface Agendamento {
   criadoEm: string;
   criadoPor: string;
   horaChegada?: string;
+  customData?: Record<string, any>;
   // Campos para agendamento online com anexo
   attachmentUrl?: string;
   attachmentName?: string;
