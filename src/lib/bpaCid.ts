@@ -216,10 +216,10 @@ export function resolveBpaSamePatientProcedureCidsForProcedures(
   const resolutions = new Map<string, BpaTreatmentCycleCidResolution>();
   for (const procedure of procedures) {
     if (String(procedure.cid ?? "").trim()) continue;
-    const code = String(procedure.codigo ?? "").replace(/\\D/g, "");
+    const code = String(procedure.codigo ?? "").replace(/\D/g, "");
     if (!code || resolutions.has(code)) continue;
     const resolution = resolveBpaSamePatientProcedureCid(
-      candidates.filter((candidate) => String(candidate.procedureCode ?? "").replace(/\\D/g, "") === code),
+      candidates.filter((candidate) => String(candidate.procedureCode ?? "").replace(/\D/g, "") === code),
       target,
     );
     if (resolution) resolutions.set(code, resolution);
