@@ -33,6 +33,7 @@ interface AgendamentoData {
   profissional_nome: string;
   unidade_id: string;
   observacoes: string;
+  custom_data?: Record<string, any>;
 }
 
 interface FilaData {
@@ -470,6 +471,7 @@ const PortalPaciente: React.FC = () => {
     const agDate = new Date(a.data + 'T23:59:59');
     return agDate >= new Date() && !['cancelado', 'falta'].includes(a.status);
   });
+  const examesPaciente = agendamentos.filter(a => a.tipo === 'exame' && a.custom_data?.sala_tipo === 'aparelho_diagnostico');
   const pastAgendamentos = agendamentos.filter(a => {
     const agDate = new Date(a.data + 'T23:59:59');
     return agDate < new Date() || ['cancelado', 'concluido', 'falta'].includes(a.status);
@@ -501,10 +503,38 @@ const PortalPaciente: React.FC = () => {
             {perms.verFila && <TabsTrigger value="fila" className="text-xs sm:text-sm">
               <List className="w-4 h-4 mr-1 hidden sm:inline" /> Fila ({fila.length})
             </TabsTrigger>}
+            <TabsTrigger value="exames" className="text-xs sm:text-sm"><FileText className="w-4 h-4 mr-1 hidden sm:inline" /> Meus Exames ({examesPaciente.length})</TabsTrigger>
             <TabsTrigger value="dados" className="text-xs sm:text-sm">
               <UserCog className="w-4 h-4 mr-1 hidden sm:inline" /> Meus Dados
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="exames" className="space-y-3">
+            {examesPaciente.length === 0 ? (
+              <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">Você ainda não possui exames diagnósticos agendados.</CardContent></Card>
+            ) : examesPaciente.map(exame => {
+              const examStatus = exame.custom_data?.status_exame || "agendado";
+              const laudo = exame.custom_data?.laudo;
+              const statusText: Record<string, string> = { agendado: "Agendado", paciente_chegou: "Paciente chegou", exame_realizado_em_laudo: "Em análise técnica", laudo_liberado: "Laudo pronto para consulta", cancelado: "Cancelado" };
+              return <Card key={exame.id} className="shadow-card border-0"><CardContent className="p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2"><strong>{exame.custom_data?.exame_nome || "Exame diagnóstico"}</strong><span className="text-xs rounded-full bg-primary/10 px-2 py-1 text-primary">{statusText[examStatus] || "Em processamento"}</span></div>
+                <p className="text-sm text-muted-foreground">{new Date(exame.data + "T12:00:00").toLocaleDateString("pt-BR")} às {exame.hora} • {getUnidadeNome(exame.unidade_id)}</p>
+                {examStatus === "laudo_liberado" && laudo ? (
+                  <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                    <p className="text-sm font-semibold">Laudo liberado</p>
+                    {laudo.descricao && <p className="text-sm whitespace-pre-wrap"><strong>Descrição:</strong> {laudo.descricao}</p>}
+                    {laudo.hipotese && <p className="text-sm whitespace-pre-wrap"><strong>Impressão:</strong> {laudo.hipotese}</p>}
+                    <p className="text-sm whitespace-pre-wrap"><strong>Conclusão:</strong> {laudo.conclusao}</p>
+                    <p className="text-xs text-muted-foreground">Laudista: {laudo.concluido_por_nome || "—"} • CRM: {laudo.crm_registro || "—"} • Liberado em {laudo.liberado_em ? new Date(laudo.liberado_em).toLocaleString("pt-BR") : "—"}</p>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      void auditService.log({ acao: "visualizacao_laudo_exame_portal", modulo: "portal_paciente", entidade: "agendamentos", entidadeId: exame.id, agendamentoId: exame.id, pacienteId: paciente?.id, pacienteNome: paciente?.nome, unidadeId: exame.unidade_id, tipoEvento: "visualizacao", detalhes: { origem: "portal_paciente" } });
+                      openPrintDocument("Laudo de Exame Diagnóstico", `<div><h2>${String(exame.custom_data?.exame_nome || "Exame").replace(/[&<>]/g, "")}</h2><p><strong>Paciente:</strong> ${String(paciente?.nome || "").replace(/[&<>]/g, "")}</p><p><strong>Data:</strong> ${new Date(exame.data + "T12:00:00").toLocaleDateString("pt-BR")} às ${exame.hora}</p><h3>Descrição</h3><p>${String(laudo.descricao || "—").replace(/[&<>]/g, "")}</p><h3>Impressão</h3><p>${String(laudo.hipotese || "—").replace(/[&<>]/g, "")}</p><h3>Conclusão</h3><p>${String(laudo.conclusao || "—").replace(/[&<>]/g, "")}</p><p>Laudista: ${String(laudo.concluido_por_nome || "").replace(/[&<>]/g, "")} — CRM: ${String(laudo.crm_registro || "").replace(/[&<>]/g, "")}</p></div>`, { Unidade: getUnidadeNome(exame.unidade_id) });
+                    }}><FileText className="mr-1 h-4 w-4" /> Visualizar / Imprimir laudo</Button>
+                  </div>
+                ) : <p className="text-xs text-muted-foreground">O laudo ficará disponível nesta área após a liberação pelo profissional responsável.</p>}
+              </CardContent></Card>;
+            })}
+          </TabsContent>
 
           <TabsContent value="dados" className="space-y-3">
             <Card className="shadow-card border-0">
