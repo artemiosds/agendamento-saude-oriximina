@@ -617,7 +617,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
       const userRole = authUser?.role || "";
       const rolesToBlock = ["recepcao", "gestao", "coordenador"];
 
-      if (rolesToBlock.includes(userRole)) {
+      if (rolesToBlock.includes(userRole) && ag.customData?.sala_tipo !== "aparelho_diagnostico") {
         const turnos = getTurnoInfo(ag.profissionalId, ag.unidadeId, ag.data);
         const meuTurno = turnos.find(
           (t) => ag.hora >= t.horaInicio && ag.hora < t.horaFim,
