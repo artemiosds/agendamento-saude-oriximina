@@ -27,6 +27,29 @@ jobs:
           node-version: '24'
       - name: Test candidate generation and target-only hardening
         run: python -m unittest discover -s scripts/provisioning -p 'test_*.py'
+      - name: Generate and verify the real Lovable Cloud pilot release
+        run: |
+          python scripts/provisioning/release-pilot-kit.py provisioning/candidates/2026-11-08 provisioning/pilot-releases/b45b5fc2-4ab6-4383-bd72-693800aae0db/preflight.json "$RUNNER_TEMP/pilot-release"
+          python - "$RUNNER_TEMP/pilot-release" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          root = Path(sys.argv[1])
+          sql = (root / "01-estrutura-PILOTO.sql").read_text()
+          release = json.loads((root / "release.json").read_text())
+          assert "Destino não vazio: instalação recusada" in sql
+          assert "Instalação bloqueada: homologação" not in sql
+          assert "moddatetime(" not in sql
+          assert 'CREATE EXTENSION IF NOT EXISTS "moddatetime"' not in sql
+          assert 'CREATE EXTENSION IF NOT EXISTS "pgcrypto"' not in sql
+          assert 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"' not in sql
+          assert 'CREATE EXTENSION IF NOT EXISTS "pg_trgm"' in sql
+          assert 'CREATE EXTENSION IF NOT EXISTS "unaccent"' in sql
+          assert release["project_id"] == "b45b5fc2-4ab6-4383-bd72-693800aae0db"
+          assert release["empty_guard_preserved"] is True
+          assert release["production_release"] is False
+          print("PASS: real pilot release hash, Cloud extension compatibility and empty-target guard")
+          PY
       - name: Install disposable PostgreSQL
         run: npm install --prefix "$RUNNER_TEMP/clean-kit-pg" --no-audit --no-fund @electric-sql/pglite@0.5.15
       - name: Restore complete captured schema in memory
