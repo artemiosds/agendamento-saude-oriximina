@@ -176,7 +176,23 @@ BEGIN
   v_digits := regexp_replace(v_query, '[^0-9]', '', 'g');
 
   RETURN QUERY
-  SELECT p.id, p.nome, p.cpf, p.cns, p.data_nascimento, p.telefone,
+  SELECT p.id, p.nome,
+    CASE WHEN (p.unidade_id = p_unidade_id OR EXISTS (
+      SELECT 1 FROM public.agendamentos a
+      WHERE a.paciente_id = p.id AND a.unidade_id = p_unidade_id
+    )) THEN p.cpf ELSE NULL END,
+    CASE WHEN (p.unidade_id = p_unidade_id OR EXISTS (
+      SELECT 1 FROM public.agendamentos a
+      WHERE a.paciente_id = p.id AND a.unidade_id = p_unidade_id
+    )) THEN p.cns ELSE NULL END,
+    CASE WHEN (p.unidade_id = p_unidade_id OR EXISTS (
+      SELECT 1 FROM public.agendamentos a
+      WHERE a.paciente_id = p.id AND a.unidade_id = p_unidade_id
+    )) THEN p.data_nascimento ELSE NULL END,
+    CASE WHEN (p.unidade_id = p_unidade_id OR EXISTS (
+      SELECT 1 FROM public.agendamentos a
+      WHERE a.paciente_id = p.id AND a.unidade_id = p_unidade_id
+    )) THEN p.telefone ELSE NULL END,
     CASE WHEN (p.unidade_id = p_unidade_id OR EXISTS (
       SELECT 1 FROM public.agendamentos a
       WHERE a.paciente_id = p.id AND a.unidade_id = p_unidade_id
