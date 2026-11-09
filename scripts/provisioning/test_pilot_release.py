@@ -108,7 +108,12 @@ CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FO
                 (root / name).write_bytes(payload)
                 hashes[name] = hashlib.sha256(payload).hexdigest()
             (root / "manifesto.json").write_text(json.dumps({"sha256": hashes}))
-            evidence = pilot.release(root, self.preflight(), output)
+            original_structure_sha = pilot.STRUCTURE_SHA256
+            pilot.STRUCTURE_SHA256 = hashes[pilot.STRUCTURE]
+            try:
+                evidence = pilot.release(root, self.preflight(), output)
+            finally:
+                pilot.STRUCTURE_SHA256 = original_structure_sha
             released = (output / "01-estrutura-PILOTO.sql").read_text()
             self.assertIn("Destino não vazio: instalação recusada", released)
             self.assertNotIn("Instalação bloqueada: homologação", released)
