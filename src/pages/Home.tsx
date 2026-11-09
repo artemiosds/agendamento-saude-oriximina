@@ -232,38 +232,46 @@ const Home: React.FC = () => {
       </section>
 
       {/* Info */}
-      <section id="contato" className="scroll-mt-6 border-t border-[var(--tenant-primary)]/15 bg-white">
-        <div className="container mx-auto px-6 py-16 sm:px-10 lg:px-16">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="flex items-start gap-3">
-              <MapPin className="w-6 h-6 text-primary shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-foreground">Endereço</h3>
-                <p className="text-sm text-muted-foreground">{brand.enderecoPublico}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Clock className="w-6 h-6 text-primary shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-foreground">Horário</h3>
-                <p className="text-sm text-muted-foreground">{brand.horarioPublico}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Phone className="w-6 h-6 text-primary shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-foreground">Contato</h3>
-                <p className="text-sm text-muted-foreground">
-                  {brand.telefonePublico}
-                  <br />
-                  WhatsApp: {brand.telefonePublico}
-                </p>
-              </div>
+      {hasContactInfo && (
+        <section id="contato" className="scroll-mt-6 border-t border-slate-200 bg-white">
+          <div className="container mx-auto px-6 py-16 sm:px-10 lg:px-16">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              {brand.enderecoPublico && (
+                <div className="flex items-start gap-3">
+                  <MapPin className="mt-0.5 h-6 w-6 shrink-0 text-primary" />
+                  <div>
+                    <h3 className="font-semibold text-foreground">Endereço</h3>
+                    <p className="text-sm text-muted-foreground">{brand.enderecoPublico}</p>
+                  </div>
+                </div>
+              )}
+              {brand.horarioPublico && (
+                <div className="flex items-start gap-3">
+                  <Clock className="mt-0.5 h-6 w-6 shrink-0 text-primary" />
+                  <div>
+                    <h3 className="font-semibold text-foreground">Horário</h3>
+                    <p className="text-sm text-muted-foreground">{brand.horarioPublico}</p>
+                  </div>
+                </div>
+              )}
+              {brand.telefonePublico && (
+                <div className="flex items-start gap-3">
+                  <Phone className="mt-0.5 h-6 w-6 shrink-0 text-primary" />
+                  <div>
+                    <h3 className="font-semibold text-foreground">Contato</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {brand.telefonePublico}
+                      <br />
+                      WhatsApp: {brand.telefonePublico}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      </section>
-
+        </section>
+      )}
+      
       {/* Footer */}
       <footer className="bg-[#123c57] text-slate-200 text-center py-8 text-sm">
         {brand.titulo} © {new Date().getFullYear()} — {brand.subtitulo}
