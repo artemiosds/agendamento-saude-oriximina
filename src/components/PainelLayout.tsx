@@ -49,6 +49,7 @@ const menuGroups: MenuGroup[] = [
     title: 'Agenda e Recepção',
     items: [
       { to: '/painel/agenda',       label: 'Agenda',          icon: Calendar,      modulo: 'agenda' },
+      { to: '/painel/exames',       label: 'Exames Diagnósticos', icon: FileText, modulo: 'agenda' },
       { to: '/painel/fila',         label: 'Fila de Espera',  icon: ListOrdered,   modulo: 'fila' },
       { to: '/painel/pacientes',    label: 'Pacientes',       icon: Users,         modulo: 'pacientes' },
       { to: '/painel/faltosos',     label: 'Faltosos',        icon: Users,         modulo: 'pacientes' },
