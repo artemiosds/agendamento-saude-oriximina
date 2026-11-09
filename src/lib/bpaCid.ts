@@ -165,6 +165,68 @@ export function resolveBpaTreatmentCycleCidsForProcedures(
   return resolutions;
 }
 
+export interface BpaSamePatientProcedureCidCandidate {
+  patientId: string;
+  procedureCode: string;
+  appointmentId: string;
+  scheduledDate: string;
+  status: string;
+  cids: unknown;
+}
+
+/**
+ * Fallback específico da conferência BPA-I: usa CID de outro dia somente
+ * quando paciente e código SIGTAP são exatamente os mesmos. A fonte deve
+ * ser um prontuário finalizado e conter CID vinculado ao procedimento.
+ */
+export function resolveBpaSamePatientProcedureCid(
+  candidates: readonly BpaSamePatientProcedureCidCandidate[],
+  target: { patientId: string; appointmentId: string; scheduledDate: string },
+): BpaTreatmentCycleCidResolution | null {
+  const targetDate = String(target.scheduledDate || "").slice(0, 10);
+  const targetTime = targetDate ? Date.parse(`${targetDate}T00:00:00Z`) : NaN;
+  const valid = candidates.flatMap((candidate) => {
+    const date = String(candidate.scheduledDate || "").slice(0, 10);
+    if (
+      candidate.patientId !== target.patientId ||
+      candidate.appointmentId === target.appointmentId ||
+      date === targetDate ||
+      candidate.status?.trim().toLowerCase() !== "finalizado"
+    ) return [];
+    const cids = extractBpaCidCodes(candidate.cids);
+    if (!cids.length) return [];
+    const time = date ? Date.parse(`${date}T00:00:00Z`) : NaN;
+    if (!Number.isFinite(time) || !Number.isFinite(targetTime)) return [];
+    return [{ candidate, cids, date, time, distance: Math.abs(time - targetTime), previous: time < targetTime }];
+  });
+  valid.sort((a, b) =>
+    a.distance - b.distance ||
+    Number(b.previous) - Number(a.previous) ||
+    a.candidate.appointmentId.localeCompare(b.candidate.appointmentId)
+  );
+  const selected = valid[0];
+  return selected ? { cids: selected.cids, sessionNumber: null, scheduledDate: selected.date } : null;
+}
+
+export function resolveBpaSamePatientProcedureCidsForProcedures(
+  procedures: readonly { codigo: string; cid?: unknown }[],
+  candidates: readonly BpaSamePatientProcedureCidCandidate[],
+  target: { patientId: string; appointmentId: string; scheduledDate: string },
+): Map<string, BpaTreatmentCycleCidResolution> {
+  const resolutions = new Map<string, BpaTreatmentCycleCidResolution>();
+  for (const procedure of procedures) {
+    if (String(procedure.cid ?? "").trim()) continue;
+    const code = String(procedure.codigo ?? "").replace(/\\D/g, "");
+    if (!code || resolutions.has(code)) continue;
+    const resolution = resolveBpaSamePatientProcedureCid(
+      candidates.filter((candidate) => String(candidate.procedureCode ?? "").replace(/\\D/g, "") === code),
+      target,
+    );
+    if (resolution) resolutions.set(code, resolution);
+  }
+  return resolutions;
+}
+
 export function resolveBpaCidDetails(input: BpaCidInput) {
   const pront = input.prontuario || {};
   const clinical = pront.custom_data || {};
