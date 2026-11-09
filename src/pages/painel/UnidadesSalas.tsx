@@ -26,6 +26,24 @@ const UnidadesSalas: React.FC = () => {
   const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '' });
 
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const enviarLogo = async (file: File) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast.error('Use PNG, JPG ou WEBP.'); return; }
+    if (file.size > 3 * 1024 * 1024) { toast.error('A imagem deve ter até 3 MB.'); return; }
+    setEnviandoLogo(true);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const path = `unidades/logo-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('document-logos').upload(path, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      const { data } = supabase.storage.from('document-logos').getPublicUrl(path);
+      setCustomData(p => ({ ...p, logo_url: data.publicUrl }));
+      toast.success('Logo carregada. Clique em Salvar para gravar.');
+    } catch (e: any) {
+      toast.error('Não foi possível enviar a logo: ' + (e?.message || 'erro'));
+    } finally { setEnviandoLogo(false); }
+  };
+
   const onlyDigits = (v: string) => (v || '').replace(/\D/g, '').slice(0, 7);
 
   const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' }); setCustomData({}); setUnitDialog(true); };
@@ -251,6 +269,29 @@ const UnidadesSalas: React.FC = () => {
               />
               <p className="text-[11px] text-muted-foreground mt-1">
                 7 dígitos. Usado na produção do BPA-I (SIA/SUS) como CNES do estabelecimento.
+              </p>
+            </div>
+            <div>
+              <Label>Logo da unidade (documentos impressos)</Label>
+              <div className="flex items-center gap-3 mt-1">
+                {customData.logo_url ? (
+                  <img src={customData.logo_url} alt="Logo da unidade" className="h-14 w-14 object-contain rounded border bg-background" />
+                ) : (
+                  <div className="h-14 w-14 rounded border border-dashed flex items-center justify-center text-[10px] text-muted-foreground">Sem logo</div>
+                )}
+                <label className="inline-flex">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={enviandoLogo}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) enviarLogo(f); e.target.value = ''; }} />
+                  <span className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border cursor-pointer hover:bg-muted">
+                    {enviandoLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}Enviar logo
+                  </span>
+                </label>
+                {customData.logo_url && (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setCustomData(p => { const n = { ...p }; delete n.logo_url; return n; })}><X className="w-4 h-4 mr-1" />Remover</Button>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Sai no lado direito do cabeçalho dos documentos emitidos por profissionais desta unidade. Sem logo, usa a logo oficial do município. Clique em Salvar para gravar.
               </p>
             </div>
             {customConfig.fields.length > 0 && (

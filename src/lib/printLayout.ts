@@ -7,6 +7,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.webp';
+import { getActiveUnitLogo, resolveUnitLogo } from '@/lib/unitLogo';
 
 export interface DocumentTypography {
   fonte: string;          // 'Arial' | 'Times New Roman' | 'Calibri' | 'Inter'
@@ -600,7 +601,7 @@ export const institutionalCSS = buildInstitutionalCSS();
 export function docHeader(title: string, config: DocumentConfig, extraRight?: string): string {
   const slots = config.logosConfig;
   const logoLeftUrl = resolveLogoUrl(config.logoEsquerda, logoSmsFallback);
-  const logoRightUrl = resolveLogoUrl(config.logoDireita, logoCerFallback);
+  const logoRightUrl = resolveUnitLogo(getActiveUnitLogo(), config.logoDireita, logoCerFallback);
   const logoCenterUrl = config.logoCentral;
 
   const logosEnabled = config.mostrarLogos !== false;
