@@ -8,7 +8,7 @@ class PilotReleaseTest(unittest.TestCase):
     def preflight(self):
         return {'project_id':pilot.PILOT_PROJECT,'provider':'lovable_cloud','purpose':'homologacao',
           'public_relations':0,'auth_users':True,'storage_objects':True,
-          'available_extensions':sorted(pilot.REQUIRED_EXTENSIONS)}
+          'available_extensions':sorted(pilot.REQUIRED_EXTENSIONS), 'installed_extensions':sorted(pilot.PREINSTALLED_EXTENSIONS)}
     def test_valid_pilot_preflight(self):
         pilot.validate_preflight(self.preflight())
     def test_rejects_oriximina_and_every_other_project(self):
@@ -26,6 +26,10 @@ class PilotReleaseTest(unittest.TestCase):
 
     def test_lovable_cloud_adapter_replaces_only_reviewed_moddatetime_trigger(self):
         source = """CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "public";
+CREATE EXTENSION IF NOT EXISTS "unaccent" WITH SCHEMA "public";
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -37,14 +41,20 @@ END;
 $function$;
 CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION moddatetime('atualizado_em');
 """
-        adapted = pilot.adapt_sql_for_lovable_cloud(source)
+        adapted = pilot.adapt_sql_for_lovable_cloud(source, pilot.PREINSTALLED_EXTENSIONS)
         self.assertNotIn('CREATE EXTENSION IF NOT EXISTS "moddatetime"', adapted)
         self.assertNotIn('moddatetime(', adapted)
+        self.assertNotIn('CREATE EXTENSION IF NOT EXISTS "pgcrypto"', adapted)
+        self.assertNotIn('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"', adapted)
+        self.assertIn('CREATE EXTENSION IF NOT EXISTS "pg_trgm"', adapted)
+        self.assertIn('CREATE EXTENSION IF NOT EXISTS "unaccent"', adapted)
         self.assertIn('FUNCTION update_updated_at_column()', adapted)
         self.assertIn('NEW.atualizado_em = now();', adapted)
 
     def test_lovable_cloud_adapter_fails_closed_when_trigger_helper_changes(self):
         source = """CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
  RETURNS trigger LANGUAGE plpgsql AS $function$
 BEGIN
@@ -54,7 +64,7 @@ $function$;
 CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FOR EACH ROW EXECUTE FUNCTION moddatetime('atualizado_em');
 """
         with self.assertRaisesRegex(ValueError, 'does not update'):
-            pilot.adapt_sql_for_lovable_cloud(source)
+            pilot.adapt_sql_for_lovable_cloud(source, pilot.PREINSTALLED_EXTENSIONS)
 
     def test_lovable_cloud_adapter_fails_closed_when_trigger_is_ambiguous(self):
         source = """CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
@@ -79,6 +89,11 @@ CREATE TRIGGER handle_updated_at_procedimentos BEFORE UPDATE ON procedimentos FO
         from pathlib import Path
 
         source_sql = """-- candidate
+CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "public";
+CREATE EXTENSION IF NOT EXISTS "unaccent" WITH SCHEMA "public";
 DO $guard$ BEGIN RAISE EXCEPTION 'Instalação bloqueada: homologação em ambiente isolado pendente'; END $guard$;
 DO $empty$ BEGIN IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','v','m')) THEN RAISE EXCEPTION 'Destino não vazio: instalação recusada'; END IF; END $empty$;
 CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA "extensions";
