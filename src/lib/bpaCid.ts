@@ -138,6 +138,33 @@ export function resolveBpaTreatmentCycleCid(
     : null;
 }
 
+/**
+ * Resolve CIDs de procedimentos sem CID antes da validação final do BPA-I.
+ * Só considera outra sessão realizada com o mesmo ciclo, paciente, profissional,
+ * unidade e código SIGTAP. Um CID já informado no procedimento nunca é substituído.
+ */
+export function resolveBpaTreatmentCycleCidsForProcedures(
+  procedures: readonly { codigo: string; cid?: unknown }[],
+  candidates: readonly BpaTreatmentCycleCidCandidate[],
+  target: Omit<BpaTreatmentCycleCidTarget, "procedureCode">,
+): Map<string, BpaTreatmentCycleCidResolution> {
+  const resolutions = new Map<string, BpaTreatmentCycleCidResolution>();
+
+  for (const procedure of procedures) {
+    if (String(procedure.cid ?? "").trim()) continue;
+    const procedureCode = String(procedure.codigo ?? "").replace(/\\D/g, "");
+    if (!procedureCode || resolutions.has(procedureCode)) continue;
+
+    const resolution = resolveBpaTreatmentCycleCid(candidates, {
+      ...target,
+      procedureCode,
+    });
+    if (resolution) resolutions.set(procedureCode, resolution);
+  }
+
+  return resolutions;
+}
+
 export function resolveBpaCidDetails(input: BpaCidInput) {
   const pront = input.prontuario || {};
   const clinical = pront.custom_data || {};
