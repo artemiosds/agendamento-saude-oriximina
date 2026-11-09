@@ -1858,10 +1858,10 @@ const BpaExportar: React.FC = () => {
       const sigtapPorSessaoTratamento = new Map<string, string[]>();
       const cidCandidatosPorCiclo = new Map<string, Array<any>>();
       const sessaoMetaPorAgendamento = new Map<string, any>();
-      const prontuarioPorAgendamento = new Map<string, any>(
-        (prontuarios || []).filter((p: any) => p?.agendamento_id && p?.id)
-          .map((p: any) => [String(p.agendamento_id), p]),
-      );
+      const prontuarioPorAgendamento = new Map<string, any>();
+      (prontuarios || []).forEach((p: any) => {
+        if (p?.agendamento_id && p?.id) prontuarioPorAgendamento.set(String(p.agendamento_id), p);
+      });
       try {
         const sessoesRows: any[] = [];
         for (let i = 0; i < pacienteIds.length; i += 500) {
