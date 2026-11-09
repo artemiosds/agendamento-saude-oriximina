@@ -376,12 +376,13 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 px-2 text-xs"
+              className="h-8 px-2 text-xs gap-1.5"
               onClick={() => onImprimirComprovante(ag)}
-              title="Imprimir Comprovante de Agendamento"
-              aria-label="Imprimir Comprovante de Agendamento"
+              title={ag.customData?.sala_tipo === "aparelho_diagnostico" ? "Imprimir comprovante do exame com preparo" : "Imprimir Comprovante de Agendamento"}
+              aria-label={ag.customData?.sala_tipo === "aparelho_diagnostico" ? "Imprimir comprovante do exame com preparo" : "Imprimir Comprovante de Agendamento"}
             >
               <Ticket className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{ag.customData?.sala_tipo === "aparelho_diagnostico" ? "Comprovante do exame" : "Comprovante"}</span>
             </Button>
           )}
           {/* Botão individual de aviso — MASTER e RECEPCAO */}
