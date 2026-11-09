@@ -62,6 +62,7 @@ const PainelTV                    = lazyRetry(() => import("./pages/PainelTV"));
 const PainelLayout                = lazyRetry(() => import("./components/PainelLayout"));
 const Dashboard                   = lazyRetry(() => import("./pages/painel/Dashboard"));
 const Agenda                      = lazyRetry(() => import("./pages/painel/Agenda"));
+const AgendaExames                 = lazyRetry(() => import("./pages/painel/AgendaExames"));
 const FilaEspera                  = lazyRetry(() => import("./pages/painel/FilaEspera"));
 const Pacientes                   = lazyRetry(() => import("./pages/painel/Pacientes"));
 const Atendimentos                = lazyRetry(() => import("./pages/painel/Atendimentos"));
@@ -217,6 +218,7 @@ const App = () => (
                   >
                     <Route index element={<Dashboard />} />
                     <Route path="agenda" element={<ModuleRoute modulo="agenda"><Agenda /></ModuleRoute>} />
+                    <Route path="exames" element={<ModuleRoute modulo="agenda"><AgendaExames /></ModuleRoute>} />
                     <Route path="fila" element={<ModuleRoute modulo="fila"><FilaEspera /></ModuleRoute>} />
                     <Route path="pacientes" element={<ModuleRoute modulo="pacientes"><Pacientes /></ModuleRoute>} />
                     <Route path="atualizacao-cadastral" element={<ModuleRoute modulo="pacientes"><AtualizacaoCadastral /></ModuleRoute>} />
