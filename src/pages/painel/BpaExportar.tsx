@@ -1881,8 +1881,8 @@ const BpaExportar: React.FC = () => {
             return q;
           }));
         }
-        const sessoes = (sessoesRows || []).filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
-        const cycleIds = [...new Set(sessoes.map((s: any) => s.cycle_id).filter(Boolean))] as string[];
+        const sessoesDaCompetencia = (sessoesRows || []).filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
+        const cycleIds = [...new Set(sessoesDaCompetencia.map((s: any) => s.cycle_id).filter(Boolean))] as string[];
         const cycleMap = new Map<string, any>();
         if (cycleIds.length > 0) {
           for (let i = 0; i < cycleIds.length; i += 500) {
@@ -1895,6 +1895,65 @@ const BpaExportar: React.FC = () => {
           }
         }
 
+        // Amplia a leitura para TODAS as sessões dos ciclos encontrados no período,
+        // inclusive sessões em competências anteriores e posteriores. Assim a
+        // exportação mensal consegue aproveitar uma referência clínica de outro mês.
+        const sessoesCicloRows: any[] = [];
+        for (let i = 0; i < cycleIds.length; i += 500) {
+          const { data: rows, error } = await (supabase as any)
+            .from("treatment_sessions")
+            .select("id, cycle_id, patient_id, professional_id, appointment_id, session_number, scheduled_date, status, procedure_done")
+            .in("cycle_id", cycleIds.slice(i, i + 500))
+            .in("status", ["realizada", "falta", "paciente_faltou"])
+            .order("session_number", { ascending: true })
+            .order("scheduled_date", { ascending: true });
+          if (error) throw error;
+          sessoesCicloRows.push(...(rows || []));
+        }
+        const sessoes = sessoesCicloRows.filter((s: any) => s?.patient_id && s?.professional_id && s?.scheduled_date);
+
+        // Carrega os prontuários vinculados às sessões do ciclo fora da competência.
+        // A consulta é restrita aos agendamentos desses ciclos, não ao cadastro inteiro.
+        const appointmentIdsCiclo = [...new Set(sessoes.map((s: any) => String(s.appointment_id || "")).filter(Boolean))];
+        const appointmentsSemProntuario = appointmentIdsCiclo.filter((id) => !prontuarioPorAgendamento.has(id));
+        const prontuariosCicloExtras: any[] = [];
+        for (let i = 0; i < appointmentsSemProntuario.length; i += 300) {
+          const batch = appointmentsSemProntuario.slice(i, i + 300);
+          prontuariosCicloExtras.push(...await fetchAllRowsBpa<any>(() => (supabase as any)
+            .from("prontuarios")
+            .select("*")
+            .in("agendamento_id", batch)
+            .order("data_atendimento", { ascending: true })));
+        }
+        prontuariosCicloExtras.forEach((p: any) => {
+          if (p?.agendamento_id && p?.id) prontuarioPorAgendamento.set(String(p.agendamento_id), p);
+        });
+
+        // Busca também os CIDs de procedimento registrados nesses prontuários
+        // históricos, preservando a associação procedimento × CID.
+        const prontIdsCicloExtras = [...new Set(prontuariosCicloExtras.map((p: any) => String(p.id || "")).filter(Boolean))];
+        const ppRowsCicloExtras: any[] = [];
+        for (let i = 0; i < prontIdsCicloExtras.length; i += 300) {
+          const batch = prontIdsCicloExtras.slice(i, i + 300);
+          ppRowsCicloExtras.push(...await fetchAllRowsBpa<any>(() => (supabase as any)
+            .from("prontuario_procedimentos")
+            .select("id, prontuario_id, procedimento_id, cids_selecionados")
+            .in("prontuario_id", batch)
+            .order("id", { ascending: true })));
+        }
+        const procIdsCicloExtras = [...new Set(ppRowsCicloExtras.map((r: any) => r.procedimento_id).filter(Boolean))];
+        const codigoPorProcCicloExtras = await resolverCodigosSigtapPorProcedimentoId(procIdsCicloExtras);
+        ppRowsCicloExtras.forEach((r: any) => {
+          const code = codigoPorProcCicloExtras.get(String(r.procedimento_id));
+          if (!code) return;
+          const items = sigtapItensPorProntuario.get(String(r.prontuario_id)) || [];
+          const cid = extrairCodigosCid(r.cids_selecionados).join(" / ");
+          if (!items.some((item) => item.codigo === code && (item.cid || "") === cid)) {
+            items.push({ codigo: code, cid });
+            sigtapItensPorProntuario.set(String(r.prontuario_id), items);
+          }
+        });
+
         const procIdsSessao = sessoes.map((s: any) => s.procedure_done).filter(Boolean);
         const codigoPorProcSessao = await resolverCodigosSigtapPorProcedimentoId(procIdsSessao);
         sessoes.forEach((s: any) => {
@@ -1904,23 +1963,18 @@ const BpaExportar: React.FC = () => {
           if (formData.unidade_id !== "all" && cycle?.unit_id && cycle.unit_id !== formData.unidade_id) return;
           const appointmentId = String(s.appointment_id || "");
           const linkedProntuario = appointmentId ? prontuarioPorAgendamento.get(appointmentId) : null;
-          const linkedItems = linkedProntuario
+          const prontuarioVinculadoValido = !!linkedProntuario &&
+            String(linkedProntuario.paciente_id || "") === String(s.patient_id) &&
+            String(linkedProntuario.profissional_id || "") === String(s.professional_id) &&
+            String(linkedProntuario.unidade_id || "") === String(cycle.unit_id) &&
+            String(linkedProntuario.data_atendimento || "").slice(0, 10) === String(s.scheduled_date).slice(0, 10);
+          const linkedItems = prontuarioVinculadoValido
             ? (sigtapItensPorProntuario.get(String(linkedProntuario.id)) || [])
             : [];
           const linkedCodes = [...new Set(linkedItems.map((item) => somenteNumeros(item.codigo)).filter(Boolean))];
-          // procedure_done pode conter a descrição, não o código. Se o prontuário
-          // da sessão tiver exatamente um SIGTAP vinculado, ele é a referência segura.
-          const code = codigoPorProcSessao.get(String(s.procedure_done)) || (linkedCodes.length === 1 ? linkedCodes[0] : "");
-          if (!code) return;
-          const key = [String(s.patient_id), String(s.professional_id), String(cycle.unit_id), String(s.scheduled_date).slice(0, 10)].join("|");
-          const lista = sigtapPorSessaoTratamento.get(key) || [];
-          if (!lista.includes(code)) {
-            lista.push(code);
-            sigtapPorSessaoTratamento.set(key, lista);
-          }
 
-          // Só sessões realizadas, com prontuário vinculado ao agendamento e CID explícito,
-          // podem fornecer diagnóstico de referência para outra sessão do mesmo ciclo.
+          // A sessão-alvo mantém seus metadados mesmo quando procedure_done é texto
+          // ou não resolve sozinho; o procedimento da linha do BPA fará o match final.
           if (appointmentId) {
             sessaoMetaPorAgendamento.set(appointmentId, {
               cycleId: String(s.cycle_id || ""),
@@ -1932,7 +1986,21 @@ const BpaExportar: React.FC = () => {
               scheduledDate: String(s.scheduled_date).slice(0, 10),
             });
           }
-          if (linkedProntuario && String(s.status).toLowerCase() === "realizada") {
+
+          // procedure_done pode conter a descrição, não o código. Se o prontuário
+          // tiver um único procedimento vinculado, essa associação é segura.
+          const code = codigoPorProcSessao.get(String(s.procedure_done)) || (linkedCodes.length === 1 ? linkedCodes[0] : "");
+          if (!code) return;
+          const key = [String(s.patient_id), String(s.professional_id), String(cycle.unit_id), String(s.scheduled_date).slice(0, 10)].join("|");
+          const lista = sigtapPorSessaoTratamento.get(key) || [];
+          if (!lista.includes(code)) {
+            lista.push(code);
+            sigtapPorSessaoTratamento.set(key, lista);
+          }
+
+          // Só sessões realizadas, com prontuário exatamente vinculado e CID explícito,
+          // podem fornecer diagnóstico de referência para outra sessão do mesmo ciclo.
+          if (prontuarioVinculadoValido && String(s.status).toLowerCase() === "realizada") {
             const procedureCids = linkedItems
               .filter((item) => somenteNumeros(item.codigo) === somenteNumeros(code))
               .flatMap((item) => extrairCodigosCid(item.cid));
