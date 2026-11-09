@@ -1276,6 +1276,10 @@ const Agenda: React.FC = () => {
       toast.error("Informe um horário válido (HH:MM).");
       return;
     }
+    if (isDiagnosticBooking && (!diagnosticSlots.includes(newAg.hora) || diagnosticRoomLoading)) {
+      toast.error("Selecione um horário livre do aparelho diagnóstico.");
+      return;
+    }
     // Conferência obrigatória do paciente antes do agendamento
     if (!pacientesConferidos.has(newAg.pacienteId)) {
       toast.error("Confira os dados do paciente antes de agendar.");
@@ -1288,7 +1292,7 @@ const Agenda: React.FC = () => {
         agendamentoInfo: {
           data: selectedDate,
           hora: newAg.hora,
-          tipo: newAg.tipo,
+          tipo: isDiagnosticBooking ? "exame" : newAg.tipo,
           profissionalNome: profSel?.nome || "",
           profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
@@ -1411,7 +1415,8 @@ const Agenda: React.FC = () => {
       }
     }
 
-    // Conflito de horário com o mesmo profissional: alerta e permite com confirmação.
+    // Conflito de horário do profissional não substitui a ocupação do aparelho.
+    if (!isDiagnosticBooking) {
     const conflitoHorario = agendamentos.find((a) =>
       a.profissionalId === newAg.profissionalId && a.data === selectedDate
       && (a.hora || "").slice(0, 5) === newAg.hora.slice(0, 5)
@@ -1421,7 +1426,10 @@ const Agenda: React.FC = () => {
       if (!ok) return;
     }
 
-    // Server-side slot availability check
+    }
+
+    // Server-side slot availability check da grade clínica; aparelhos usam slots da sala.
+    if (!isDiagnosticBooking) {
     // Apenas MASTER pode forçar capacidade; indisponibilidade, bloqueios e
     // horários fora da grade continuam sendo restrições obrigatórias.
     const canOverride = user?.role === "master";
@@ -1477,6 +1485,8 @@ const Agenda: React.FC = () => {
       return;
     }
 
+    }
+
     const unidade = unidades.find((u) => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
     const agData = {
@@ -1492,7 +1502,18 @@ const Agenda: React.FC = () => {
       hora: newAg.hora,
       status: "confirmado" as const,
       tipo: newAg.tipo,
-      observacoes: newAg.obs,
+      observacoes: isDiagnosticBooking ? (diagnosticRoomConfig?.exigePreparo ? diagnosticRoomConfig.instrucoesPreparo : "") : newAg.obs,
+      ...(isDiagnosticBooking ? { customData: {
+        sala_tipo: "aparelho_diagnostico",
+        exame_nome: diagnosticRoomConfig?.tipoExame || "Exame diagnóstico",
+        preparo_instrucoes: diagnosticRoomConfig?.exigePreparo ? diagnosticRoomConfig.instrucoesPreparo : "",
+        exige_preparo: diagnosticRoomConfig?.exigePreparo || false,
+        exige_contraste: diagnosticRoomConfig?.exigeContraste || "nao",
+        duracao_slot_minutos: diagnosticRoomConfig?.duracaoSlot || 15,
+        prazo_resultado_dias: diagnosticRoomConfig?.prazoResultadoDias || 0,
+        status_exame: "agendado",
+        historico_status: [{ status: "agendado", em: new Date().toISOString(), por: user?.id || "" }],
+      } } : {}),
       origem: "recepcao" as const,
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
