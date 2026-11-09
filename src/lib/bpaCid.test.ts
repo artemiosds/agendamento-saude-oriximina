@@ -93,7 +93,7 @@ describe("CID por continuidade do ciclo de tratamento", () => {
       { ...base, appointmentId: "agenda-outro-ciclo", cycleId: "ciclo-2", sessionNumber: 6, cids: ["F840"] },
       { ...base, appointmentId: "agenda-outro-proc", procedureCode: "0301010072", sessionNumber: 6, cids: ["F840"] },
       { ...base, appointmentId: "agenda-outro-paciente", patientId: "paciente-2", sessionNumber: 6, cids: ["F840"] },
-      { ...base, appointmentId: "agenda-atual", sessionNumber: 7, cids: ["F840"] },
+      { ...base, appointmentId: "agenda-7", sessionNumber: 7, cids: ["F840"] },
     ], target);
     expect(result).toBeNull();
   });
