@@ -4572,6 +4572,56 @@ export type Database = {
         }
         Returns: Json
       }
+      external_create_patient: {
+        Args: {
+          p_cns?: string
+          p_cpf?: string
+          p_data_nascimento?: string
+          p_email?: string
+          p_endereco?: string
+          p_municipio?: string
+          p_nome: string
+          p_nome_mae?: string
+          p_telefone?: string
+          p_unidade_id: string
+        }
+        Returns: Json
+      }
+      external_patient_receipt_details: {
+        Args: { p_agendamento_id: string }
+        Returns: Json
+      }
+      external_patient_search: {
+        Args: { p_query: string; p_unidade_id: string }
+        Returns: {
+          can_edit: boolean
+          cns: string
+          cpf: string
+          data_nascimento: string
+          email: string
+          endereco: string
+          id: string
+          municipio: string
+          nome: string
+          nome_mae: string
+          telefone: string
+        }[]
+      }
+      external_update_patient: {
+        Args: {
+          p_cns?: string
+          p_cpf?: string
+          p_data_nascimento?: string
+          p_endereco?: string
+          p_municipio?: string
+          p_nome: string
+          p_nome_mae?: string
+          p_paciente_id: string
+          p_telefone?: string
+          p_unidade_id: string
+        }
+        Returns: Json
+      }
       get_atendimentos_pendentes_master: {
         Args: { p_minutos?: number; p_unidade_id?: string }
         Returns: {
