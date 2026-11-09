@@ -137,8 +137,8 @@ const UnidadesSalas: React.FC = () => {
 
   const handleSaveRoom = async () => {
     if (!roomForm.nome.trim() || !roomForm.unidadeId) return;
-    if (roomForm.config.finalidade === 'aparelho_diagnostico' && !roomForm.config.exames.length) {
-      toast.error('Selecione pelo menos um exame para esta sala.');
+    if (roomForm.config.finalidade === 'aparelho_diagnostico' && (!roomForm.config.exames.length || roomForm.config.exames.some(exam => !exam.tipoExame.trim()))) {
+      toast.error('Selecione pelo menos um exame e informe o nome dos exames personalizados.');
       return;
     }
     const roomId = editRoomId || `s${Date.now()}`;
