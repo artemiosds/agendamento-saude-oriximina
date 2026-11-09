@@ -1902,7 +1902,15 @@ const BpaExportar: React.FC = () => {
           if (!cycle?.unit_id || String(cycle.patient_id) !== String(s.patient_id) ||
               String(cycle.professional_id) !== String(s.professional_id)) return;
           if (formData.unidade_id !== "all" && cycle?.unit_id && cycle.unit_id !== formData.unidade_id) return;
-          const code = codigoPorProcSessao.get(String(s.procedure_done));
+          const appointmentId = String(s.appointment_id || "");
+          const linkedProntuario = appointmentId ? prontuarioPorAgendamento.get(appointmentId) : null;
+          const linkedItems = linkedProntuario
+            ? (sigtapItensPorProntuario.get(String(linkedProntuario.id)) || [])
+            : [];
+          const linkedCodes = [...new Set(linkedItems.map((item) => somenteNumeros(item.codigo)).filter(Boolean))];
+          // procedure_done pode conter a descrição, não o código. Se o prontuário
+          // da sessão tiver exatamente um SIGTAP vinculado, ele é a referência segura.
+          const code = codigoPorProcSessao.get(String(s.procedure_done)) || (linkedCodes.length === 1 ? linkedCodes[0] : "");
           if (!code) return;
           const key = [String(s.patient_id), String(s.professional_id), String(cycle.unit_id), String(s.scheduled_date).slice(0, 10)].join("|");
           const lista = sigtapPorSessaoTratamento.get(key) || [];
@@ -1913,7 +1921,6 @@ const BpaExportar: React.FC = () => {
 
           // Só sessões realizadas, com prontuário vinculado ao agendamento e CID explícito,
           // podem fornecer diagnóstico de referência para outra sessão do mesmo ciclo.
-          const appointmentId = String(s.appointment_id || "");
           if (appointmentId) {
             sessaoMetaPorAgendamento.set(appointmentId, {
               cycleId: String(s.cycle_id || ""),
@@ -1925,9 +1932,8 @@ const BpaExportar: React.FC = () => {
               scheduledDate: String(s.scheduled_date).slice(0, 10),
             });
           }
-          const linkedProntuario = appointmentId ? prontuarioPorAgendamento.get(appointmentId) : null;
           if (linkedProntuario && String(s.status).toLowerCase() === "realizada") {
-            const procedureCids = (sigtapItensPorProntuario.get(String(linkedProntuario.id)) || [])
+            const procedureCids = linkedItems
               .filter((item) => somenteNumeros(item.codigo) === somenteNumeros(code))
               .flatMap((item) => extrairCodigosCid(item.cid));
             const explicit = resolveBpaCidDetails({ prontuario: linkedProntuario });
