@@ -694,14 +694,31 @@ const Tratamentos: React.FC = () => {
   }, [agendarSessaoTarget]);
 
   // Silent background refresh on realtime changes — no loading spinner
-  const silentRefresh = useCallback(() => {
+  const silentRefresh = useCallback((affectsDetail: boolean) => {
     loadData(true);
-    if (selectedCycle) loadSessionsForCycle(selectedCycle, true);
+    if (selectedCycle && affectsDetail) loadSessionsForCycle(selectedCycle, true);
   }, [loadData, loadSessionsForCycle, selectedCycle]);
 
   useRealtimeSubscription({
     tables: ['agendamentos', 'treatment_sessions', 'treatment_cycles'],
     onchange: silentRefresh,
+    affectsDetail: (table, row, old) => {
+      if (!selectedCycle) return false;
+      const id = row.id ?? old.id;
+      if (!id) return true;
+      if (table === 'treatment_cycles') return id === selectedCycle.id;
+      const ownSessions = sessions.filter(session => session.cycle_id === selectedCycle.id);
+      if (table === 'treatment_sessions') {
+        return row.cycle_id === selectedCycle.id || old.cycle_id === selectedCycle.id ||
+          ownSessions.some(session => session.id === id) ||
+          appointmentClaims.some(claim => claim.id === id) ||
+          (typeof row.appointment_id === 'string' && !!appointmentByIdMap[row.appointment_id]);
+      }
+      return (typeof id === 'string' && !!appointmentByIdMap[id]) ||
+        ownSessions.some(session => session.appointment_id === id) ||
+        [row, old].some(record => record.paciente_id === selectedCycle.patient_id &&
+          record.profissional_id === selectedCycle.professional_id && record.unidade_id === selectedCycle.unit_id);
+    },
     enabled: true,
     debounceMs: 400,
   });
