@@ -8,6 +8,17 @@ const cycle = { id: 'cycle', patient_id: 'patient', professional_id: 'profession
 const dates = ['2027-01-04', '2027-01-11', '2027-01-18', '2027-01-25', '2027-02-01', '2027-02-08', '2027-02-15'];
 
 describe('gravação transacional de plano', () => {
+  it('envia os dias clínicos ao servidor sem criar agendamento no cliente', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { cycle, registered_sessions: 7 }, error: null });
+    const weekdays = [1, 6];
+    await createTreatmentCycleWriter({ rpc }).create({ ...cycle, frequency: '2x_semana', custom_data: { weekdays } }, dates);
+    expect(rpc).toHaveBeenCalledWith('save_treatment_cycle_plan', {
+      p_cycle: expect.objectContaining({ custom_data: { weekdays } }),
+      p_dates: dates,
+      p_reason: null,
+      p_expected_total: 0,
+    });
+  });
   it('grava sete sessões em uma chamada, confirmando a contagem do servidor', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: { cycle, registered_sessions: 7 }, error: null });
     expect(await createTreatmentCycleWriter({ rpc }).create(cycle, dates)).toEqual(cycle);

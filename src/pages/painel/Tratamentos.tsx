@@ -56,7 +56,7 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { addDaysToDateStr, cn, isoDayOfWeek, todayLocalStr } from "@/lib/utils";
 import { isTimeWithinTurnWindow } from "@/lib/appointmentTimeSelection";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generatePendingTreatmentPlan, calcEndDateFromSessions, buildBlockedRanges, isInvalidSessionDate } from "@/lib/treatmentSessionGenerator";
 import { treatmentCycleWriter, assertStoredTreatmentCycle, loadTreatmentCycleSnapshot } from "@/services/treatmentCycleService";
 import { deleteTreatmentCycle } from "@/services/treatmentCycleDeletion";
 import { validateTreatmentCycle, assertTreatmentSessionChange } from "@/lib/treatmentCycleIntegrity";
@@ -91,6 +91,7 @@ interface TreatmentCycle {
   created_at: string;
   updated_at: string;
   pts_id: string | null;
+  custom_data?: { weekdays?: number[] } | null;
   // Lightweight stats from server-side RPC
   pending_ag?: number;
   faltas?: number;
@@ -1038,13 +1039,16 @@ const Tratamentos: React.FC = () => {
       if (!targetUnitId) throw new Error("Selecione a unidade do profissional antes de gerar o plano.");
       const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, targetUnitId);
       // Generate and validate the complete date plan before the atomic database write.
-      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(
+      const { dates: sessionDates, skippedCount, conflictedDates } = generatePendingTreatmentPlan(
         newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges,
       );
       const endDate = calcEndDateFromSessions(sessionDates);
 
       if (skippedCount > 0) {
         toast.info(`${skippedCount} sessão(ões) foram realocadas por feriados, bloqueios ou indisponibilidade da agenda.`);
+      }
+      if (conflictedDates.length) {
+        toast.info(`${conflictedDates.length} sessão(ões) têm conflito de calendário e aguardam organização pela recepção. Nenhuma vaga foi reservada.`);
       }
 
       const cycleData = await treatmentCycleWriter.create({
@@ -1063,6 +1067,7 @@ const Tratamentos: React.FC = () => {
           clinical_notes: newCycle.clinical_notes,
           created_by: user?.id || "",
           pts_id: newCycle.pts_id || null,
+          custom_data: isWeekdayFrequency(newCycle.frequency) ? { weekdays: [...newCycle.weekdays].sort((a, b) => a - b) } : {},
       }, sessionDates);
 
       await logAction({
@@ -1597,6 +1602,7 @@ const Tratamentos: React.FC = () => {
     const estaLivreNoLote = (data: string, hora: string) =>
       !(horariosUsadosLote[data] && horariosUsadosLote[data].has(hora));
     const bloqueiosDoCiclo = buildBlockedRanges(bloqueios, cycle.professional_id, cycle.unit_id);
+    const allowSaturday = Array.isArray(cycle.custom_data?.weekdays) && cycle.custom_data.weekdays.includes(6);
 
     /**
      * Mantém ESTRITAMENTE a data planejada da sessão (dias da semana do ciclo).
@@ -1609,7 +1615,7 @@ const Tratamentos: React.FC = () => {
       profId: string,
       unidadeId: string,
     ): { data: string; hora: string; encaixe: boolean } | null => {
-      if (isInvalidSessionDate(dataSugerida, bloqueiosDoCiclo)) return null;
+      if (isInvalidSessionDate(dataSugerida, bloqueiosDoCiclo, allowSaturday)) return null;
       const slots = getAvailableSlots(profId, unidadeId, dataSugerida);
       const slotLivre = slots.find((s) => estaLivreNoLote(dataSugerida, s));
       if (slotLivre) return { data: dataSugerida, hora: slotLivre, encaixe: false };
@@ -1635,7 +1641,7 @@ const Tratamentos: React.FC = () => {
       for (const sess of pendentes) {
         try {
           // Um registro semelhante precisa de revisão explícita; não vinculamos histórico automaticamente.
-          const originalDateValida = !isInvalidSessionDate(sess.scheduled_date, bloqueiosDoCiclo);
+          const originalDateValida = !isInvalidSessionDate(sess.scheduled_date, bloqueiosDoCiclo, allowSaturday);
           const { data: existente, error: checkErr } = originalDateValida ? await supabase
             .from("agendamentos")
             .select("id, hora, status")
@@ -1903,6 +1909,10 @@ const Tratamentos: React.FC = () => {
         const dow = d.getDay();
         return dow === 0 ? 7 : dow;
       }))].sort((a, b) => a - b);
+      const savedWeekdays = (freshCycle.custom_data && typeof freshCycle.custom_data === 'object' && !Array.isArray(freshCycle.custom_data)
+        ? (freshCycle.custom_data as { weekdays?: unknown }).weekdays : undefined);
+      const plannedWeekdays = Array.isArray(savedWeekdays) && savedWeekdays.every(day => Number.isInteger(day) && day >= 1 && day <= 6)
+        ? savedWeekdays as number[] : weekdaysFromExisting;
 
       // Find last existing session date as start for new sessions
       const lastSessionDate = existingSessions.length > 0
@@ -1914,10 +1924,10 @@ const Tratamentos: React.FC = () => {
       const startForNew = nextDay.toISOString().split('T')[0];
 
       const blockedRanges = buildBlockedRanges(bloqueios, freshCycle.professional_id, freshCycle.unit_id);
-      const { dates: newDates, skippedCount } = generateSessionDatesWithInfo(
+      const { dates: newDates, skippedCount, conflictedDates } = generatePendingTreatmentPlan(
         startForNew,
         freshCycle.frequency,
-        weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [],
+        plannedWeekdays,
         extensionForm.new_sessions,
         blockedRanges,
       );
@@ -1925,6 +1935,7 @@ const Tratamentos: React.FC = () => {
       if (skippedCount > 0) {
         toast.info(`${skippedCount} sessão(ões) da extensão foram realocadas devido a feriados ou bloqueios.`);
       }
+      if (conflictedDates.length) toast.info(`${conflictedDates.length} sessão(ões) da extensão aguardam revisão de calendário pela recepção.`);
 
       const newEndDate = newDates.length > 0 ? newDates[newDates.length - 1] : selectedCycle.end_date_predicted || new Date().toISOString().split('T')[0];
 
@@ -3679,7 +3690,7 @@ const Tratamentos: React.FC = () => {
                       const previewUnitId = newCycle.unit_id || previewProfessional?.unidadeId || "";
                       const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, previewUnitId);
                       try {
-                        const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total, ranges);
+                        const { dates } = generatePendingTreatmentPlan(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total, ranges);
                         return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
                       } catch {
                         return 'Sem datas válidas no limite de busca';
@@ -3690,6 +3701,17 @@ const Tratamentos: React.FC = () => {
                 <div className="text-xs text-muted-foreground">
                   Status inicial das sessões: Aguardando Agendamento
                 </div>
+                {(() => {
+                  if (!newCycle.start_date || !newCycle.professional_id) return null;
+                  const previewProfessional = profissionais.find((professional) => professional.id === newCycle.professional_id);
+                  const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id || previewProfessional?.unidadeId || "");
+                  try {
+                    const { conflictedDates } = generatePendingTreatmentPlan(newCycle.start_date, newCycle.frequency, newCycle.weekdays, newCycle.total_sessions, ranges);
+                    return conflictedDates.length ? <p className="text-amber-700 dark:text-amber-400" role="status">{conflictedDates.length} sessão(ões) têm bloqueio de calendário. O ciclo poderá ser salvo e a recepção precisará revisar essas datas antes de agendar.</p> : null;
+                  } catch {
+                    return null;
+                  }
+                })()}
               </div>
 
 

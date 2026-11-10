@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { buildBlockedRanges, generateSessionDatesWithInfo } from './treatmentSessionGenerator';
+import { buildBlockedRanges, generateSessionDatesWithInfo, generatePendingTreatmentPlan } from './treatmentSessionGenerator';
+
+describe('plano pendente com decisão clínica preservada', () => {
+  it('inclui sábado escolhido em seis sessões semanais sem acrescentar domingo', () => {
+    const dates = generateSessionDatesWithInfo('2030-01-07', '6x_semana', [1, 2, 3, 4, 5, 6], 12).dates;
+    expect(dates).toHaveLength(12);
+    expect(dates.some(date => new Date(date + 'T12:00:00').getDay() === 6)).toBe(true);
+    expect(dates.every(date => new Date(date + 'T12:00:00').getDay() !== 0)).toBe(true);
+  });
+
+  it('planeja todas as sessões mesmo com bloqueio prolongado e informa os conflitos', () => {
+    const result = generatePendingTreatmentPlan('2030-01-07', '1x_semana', [1], 6, [{ start: '2030-01-01', end: '2040-12-31' }]);
+    expect(result.dates).toHaveLength(6);
+    expect(result.conflictedDates).toEqual(result.dates);
+  });
+});
 
 describe('buildBlockedRanges', () => {
   it('excludes partial-hour blocks but keeps full-day and untimed blocks', () => {

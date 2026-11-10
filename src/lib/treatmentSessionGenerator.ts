@@ -87,9 +87,10 @@ export function isWeekend(dateStr: string): boolean {
  * Centralized rule: a date is INVALID for a treatment session if it is
  * a weekend OR falls in any blocked range (holiday/professional/unit block).
  */
-export function isInvalidSessionDate(dateStr: string, blockedRanges: BlockedRange[]): boolean {
+export function isInvalidSessionDate(dateStr: string, blockedRanges: BlockedRange[], allowSaturday = false): boolean {
   if (!dateStr) return false;
-  return isWeekend(dateStr) || isDateBlocked(dateStr, blockedRanges);
+  const day = new Date(dateStr + 'T12:00:00').getDay();
+  return day === 0 || (day === 6 && !allowSaturday) || isDateBlocked(dateStr, blockedRanges);
 }
 
 export interface BlockedRange {
@@ -122,11 +123,11 @@ function calendarDaysInclusive(from: Date, through: Date): number {
   const b = Date.UTC(through.getFullYear(), through.getMonth(), through.getDate());
   return Math.max(0, Math.floor((b - a) / 86400000) + 1);
 }
-function assertCompleteSessionPlan(dates: string[], total: number, blocked: BlockedRange[], available?: ReadonlySet<string>): void {
+function assertCompleteSessionPlan(dates: string[], total: number, blocked: BlockedRange[], available?: ReadonlySet<string>, allowSaturday = false): void {
   if (dates.length !== total) throw new Error(`Geração incompleta: ${total} sessões previstas, mas apenas ${dates.length} datas válidas encontradas dentro do limite seguro. Confira disponibilidade, folgas e bloqueios. Nenhum plano foi salvo.`);
   const seen = new Set<string>();
   for (const date of dates) {
-    if (seen.has(date) || isInvalidSessionDate(date, blocked) || (available !== undefined && !available.has(date))) {
+    if (seen.has(date) || isInvalidSessionDate(date, blocked, allowSaturday) || (available !== undefined && !available.has(date))) {
       throw new Error('O plano contém datas repetidas, bloqueadas ou indisponíveis. Nenhum plano foi salvo.');
     }
     seen.add(date);
@@ -180,7 +181,7 @@ function findNextValidDate(
   for (let i = 0; i < maxAttempts; i++) {
     const dow = d.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
-    if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
+    if (dow !== 0 && sortedDays.includes(mappedDow)) {
       const dateStr = toDateOnlyString(d);
       if (!isDateBlocked(dateStr, blockedRanges) && (!availableDates || availableDates.has(dateStr))) {
         return { date: new Date(d), skipped };
@@ -291,11 +292,11 @@ export function generateSessionDatesWithInfo(
 
   // Weekly-based: iterate day by day from start, pick matching weekdays
   if (weekdays.length === 0) {
-    weekdays = [start.getDay() === 0 ? 1 : start.getDay()];
+    weekdays = [start.getDay() === 0 || start.getDay() === 6 ? 1 : start.getDay()];
   }
 
-  // Filter out weekends from requested weekdays (Sat=6, Sun=7)
-  const sortedDays = [...weekdays].filter((d) => d >= 1 && d <= 5).sort((a, b) => a - b);
+  // Saturday is selected explicitly. Sunday is never included automatically.
+  const sortedDays = [...weekdays].filter((d) => d >= 1 && d <= 6).sort((a, b) => a - b);
   if (sortedDays.length === 0) sortedDays.push(1, 2, 3, 4, 5);
 
   const current = new Date(start);
@@ -306,7 +307,7 @@ export function generateSessionDatesWithInfo(
   while (count < totalSessions && iter < maxIterations) {
     const dow = current.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
-    if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
+    if (dow !== 0 && sortedDays.includes(mappedDow)) {
       const dateStr = toDateOnlyString(current);
       if (!isDateBlocked(dateStr, blockedRanges) && (!availableDates || availableDates.has(dateStr))) {
         dates.push(dateStr);
@@ -322,8 +323,29 @@ export function generateSessionDatesWithInfo(
   if (dates.length !== totalSessions) {
     throw new Error(`Geração incompleta: ${totalSessions} sessões previstas, mas apenas ${dates.length} datas disponíveis. Confira a disponibilidade da agenda. Nenhum plano foi salvo.`);
   }
-  assertCompleteSessionPlan(dates, totalSessions, blockedRanges, availableDates);
+  assertCompleteSessionPlan(dates, totalSessions, blockedRanges, availableDates, sortedDays.includes(6));
   return { dates, skippedCount: totalSkipped };
+}
+
+/** Keep the clinical plan pending when calendar blocks cover the entire search horizon. */
+export function generatePendingTreatmentPlan(
+  startDate: string,
+  frequency: string,
+  weekdays: number[],
+  totalSessions: number,
+  blockedRanges: BlockedRange[],
+): GenerateSessionResult & { conflictedDates: string[] } {
+  let result: GenerateSessionResult;
+  try {
+    result = generateSessionDatesWithInfo(startDate, frequency, weekdays, totalSessions, blockedRanges);
+  } catch (error) {
+    if (!(error instanceof Error) || !/Geração incompleta|Não foi possível gerar todas as sessões/.test(error.message)) throw error;
+    result = generateSessionDatesWithInfo(startDate, frequency, weekdays, totalSessions);
+  }
+  return {
+    ...result,
+    conflictedDates: result.dates.filter((date) => isDateBlocked(date, blockedRanges)),
+  };
 }
 
 /**
