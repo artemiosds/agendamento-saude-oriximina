@@ -6,24 +6,31 @@ type TableName = 'agendamentos' | 'fila_espera' | 'atendimentos' | 'prontuarios'
 
 interface UseRealtimeOptions {
   tables: TableName[];
-  onchange: () => void;
+  onchange: (affectsDetail: boolean) => void;
+  affectsDetail?: (table: TableName, row: Record<string, unknown>, old: Record<string, unknown>) => boolean;
   enabled?: boolean;
   debounceMs?: number;
 }
 
-export function useRealtimeSubscription({ tables, onchange, enabled = true, debounceMs = 300 }: UseRealtimeOptions) {
+export function useRealtimeSubscription({ tables, onchange, affectsDetail, enabled = true, debounceMs = 300 }: UseRealtimeOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const onchangeRef = useRef(onchange);
   onchangeRef.current = onchange;
+  const filterRef = useRef(affectsDetail);
+  filterRef.current = affectsDetail;
 
   useEffect(() => {
     if (!enabled || tables.length === 0) return;
 
-    const debouncedHandler = () => {
+    let detailChanged = false;
+    const debouncedHandler = (relevant: boolean) => {
+      detailChanged ||= relevant;
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
-        onchangeRef.current();
+        const relevant = detailChanged;
+        detailChanged = false;
+        onchangeRef.current(relevant);
       }, debounceMs);
     };
 
@@ -34,7 +41,8 @@ export function useRealtimeSubscription({ tables, onchange, enabled = true, debo
       channel = channel.on(
         'postgres_changes' as any,
         { event: '*', schema: 'public', table },
-        debouncedHandler,
+        (event: { new?: Record<string, unknown>; old?: Record<string, unknown> }) =>
+          debouncedHandler(filterRef.current?.(table, event.new || {}, event.old || {}) ?? true),
       );
     });
 
