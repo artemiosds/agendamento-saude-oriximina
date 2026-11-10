@@ -528,7 +528,11 @@ const Tratamentos: React.FC = () => {
       const cyclesData = (rpcData?.cycles || []) as TreatmentCycle[];
       setCycles(cyclesData);
       setTotalCycles(rpcData?.total || 0);
-      setSelectedCycle((current) => (current ? cyclesData.find((cycle) => cycle.id === current.id) || current : current));
+      setSelectedCycle((current) => {
+        if (!current) return current;
+        const updated = cyclesData.find((cycle) => cycle.id === current.id);
+        return updated && JSON.stringify(updated) !== JSON.stringify(current) ? updated : current;
+      });
     } catch (err: any) {
       if (!isCurrentRequest()) return;
       console.error("Error loading treatments:", err);
@@ -537,6 +541,8 @@ const Tratamentos: React.FC = () => {
       if (isCurrentRequest()) setLoading(false);
     }
   }, [user, restrictTreatmentUnit, currentPage, filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm]);
+
+  const sessionRefreshRef = React.useRef({ scope: '', startedAt: 0, verified: false });
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
@@ -547,7 +553,10 @@ const Tratamentos: React.FC = () => {
       isRequestCurrent(loadSessionsRequestsRef.current, requestId, requestScope, sessionsScopeRef.current, pageMountedRef.current) &&
       selectedCycleIdRef.current === cycle.id;
     if (!isCurrentRequest()) return;
-    setLinkLookup({ cycleId: cycle.id, status: 'loading' });
+    const previous = sessionRefreshRef.current;
+    const keepVisible = silent && previous.scope === requestScope && previous.verified;
+    sessionRefreshRef.current = { scope: requestScope, startedAt: Date.now(), verified: keepVisible };
+    if (!keepVisible) setLinkLookup({ cycleId: cycle.id, status: 'loading' });
     try {
       const [sData, eData] = await Promise.all([
         treatmentService.getSessions(cycle.id),
@@ -626,9 +635,12 @@ const Tratamentos: React.FC = () => {
       setSessions(prev => [...prev.filter(s => s.cycle_id !== cycle.id), ...sessionsData]);
       setExtensions(prev => [...prev.filter(x => x.cycle_id !== cycle.id), ...((eData.data || []) as TreatmentExtension[])]);
       setLoadedSessionsCycleId(cycle.id);
+      sessionRefreshRef.current.verified = true;
       setLinkLookup({ cycleId: cycle.id, status: 'ready' });
     } catch (err) {
       if (!isCurrentRequest()) return;
+      sessionRefreshRef.current.verified = false;
+      sessionRefreshRef.current.startedAt = 0;
       setLinkLookup({ cycleId: cycle.id, status: 'error' });
       console.error("Error loading cycle sessions:", err);
       if (!silent) toast.error("Erro ao carregar sessões do ciclo.");
@@ -696,7 +708,12 @@ const Tratamentos: React.FC = () => {
 
   // Reload the selected cycle on focus as a fallback when realtime was disconnected.
   useEffect(() => {
-    const refresh = () => { if (selectedCycle && !document.hidden) void loadSessionsForCycle(selectedCycle, true); };
+    const refresh = () => {
+      if (!selectedCycle || document.hidden) return;
+      const last = sessionRefreshRef.current;
+      if (last.scope === sessionsScopeRef.current && Date.now() - last.startedAt < 15_000) return;
+      void loadSessionsForCycle(selectedCycle, true);
+    };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
