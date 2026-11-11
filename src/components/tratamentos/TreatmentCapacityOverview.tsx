@@ -158,7 +158,7 @@ export default function TreatmentCapacityOverview() {
         );
 
         const unitNameById = new Map(
-          unidadesVisiveis.map((unit) => [String(unit.id), String(unit.nome || unit.nomeExibicao || unit.id)]),
+          unidadesVisiveis.map((unit) => [String(unit.id), String(unit.nome || unit.nomeExibicao || unit.id)] as const),
         );
 
         if (targetStaff.length === 0) {
@@ -239,7 +239,7 @@ export default function TreatmentCapacityOverview() {
           activePairs.has(String(cycle.professional_id) + "|" + String(cycle.unit_id)),
         );
         const cycleById = new Map<string, any>(
-          relevantCycles.map((cycle) => [String(cycle.id), cycle]),
+          relevantCycles.map((cycle) => [String(cycle.id), cycle] as const),
         );
         const cycleIds = relevantCycles.map((cycle) => String(cycle.id));
         const sessionRows: any[] = [];
