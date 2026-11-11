@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
-import logoSms from '@/assets/logo-sms.jpeg';
+import logoSms from '@/assets/logo-sms-transparente.png';
 import { useBrand } from '@/hooks/useBrand';
 import { useLicense } from '@/hooks/useLicense';
 import { isPathLicensed } from '@/lib/licenseModules';

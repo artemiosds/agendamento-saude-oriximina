@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import logoSms from "@/assets/logo-sms.jpeg";
+import logoSms from "@/assets/logo-sms-transparente.png";
 
 type AuthorizationDetails = {
   authorization_id: string;
