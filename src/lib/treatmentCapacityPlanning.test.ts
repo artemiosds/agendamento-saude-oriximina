@@ -61,8 +61,6 @@ describe("planejamento de capacidade real para tratamentos", () => {
     expect(result.professionals[0].nextWindows[0].label).not.toContain("08:30");
   });
 
-  it("calcula turnos usando somente o horário inicial que a Agenda realmente oferece", () => {
-
   it("soma turnos independentes da mesma data sem misturar ocupação entre faixas", () => {
     const input = baseInput();
     input.availabilities = [
@@ -88,7 +86,9 @@ describe("planejamento de capacidade real para tratamentos", () => {
   });
 
 
-    const input = baseInput();
+  it("calcula turnos usando somente o horário inicial que a Agenda realmente oferece", () => {
+
+const input = baseInput();
     input.availabilities = [{
       ...input.availabilities[0],
       weekdays: [3],
