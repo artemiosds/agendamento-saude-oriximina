@@ -145,6 +145,15 @@ function dateAgeInDays(date: string | null | undefined, today: string): number |
   return Math.max(0, Math.floor((end - start) / 86400000));
 }
 
+function isDemandProjectedWithinPeriod(session: PendingTreatmentSessionInput, endDate: string): boolean {
+  // Sessions without a planned date (or with an invalid date) remain backlog.
+  // Valid future dates after the selected horizon must not consume current capacity.
+  if (!session.scheduledDate) return true;
+  const scheduledDate = String(session.scheduledDate).slice(0, 10);
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(scheduledDate)) return true;
+  return scheduledDate <= endDate;
+}
+
 function scheduleKey(row: CapacityPlanningAvailabilityInput): string {
   return row.startTime.slice(0, 5) + "|" + row.endTime.slice(0, 5);
 }
@@ -397,7 +406,8 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
       session.professionalId === professional.id &&
       session.unitId === professional.unitId &&
       session.status === "pendente_agendamento" &&
-      !session.appointmentId,
+      !session.appointmentId &&
+      isDemandProjectedWithinPeriod(session, input.endDate),
     ).length;
     const confirmedOccupancy = input.appointments.filter((appointment) =>
       appointment.professionalId === professional.id &&
@@ -447,7 +457,11 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
 
   const pendingByProfessional = new Map<string, number>();
   input.pendingSessions.forEach((session) => {
-    if (session.status !== "pendente_agendamento" || session.appointmentId) return;
+    if (
+      session.status !== "pendente_agendamento" ||
+      session.appointmentId ||
+      !isDemandProjectedWithinPeriod(session, input.endDate)
+    ) return;
     const key = session.professionalId + "|" + session.unitId;
     pendingByProfessional.set(key, (pendingByProfessional.get(key) || 0) + 1);
   });
