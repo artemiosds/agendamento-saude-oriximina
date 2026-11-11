@@ -294,8 +294,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   const PAGE_DIMS = { A4: [210, 297], A5: [148, 210], Letter: [216, 279], Legal: [216, 356] } as const;
   const [pageW, pageH] = orientation === 'portrait' ? PAGE_DIMS[pageSize] : [PAGE_DIMS[pageSize][1], PAGE_DIMS[pageSize][0]];
 
-  const editor = useEditor({
-    extensions: [
+  const editorExtensions = useMemo(() => [
       StarterKit.configure({ dropcursor: false }),
       Underline,
       TextStyleExt,
@@ -308,7 +307,14 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
       SubMark, SupMark, PageBreakNode, SpacerNode, TextBoxNode,
       VariableMark,
       ConditionalMark,
-    ],
+    ], []);
+
+  const safeHTML = (ed: any): string => {
+    try { return ed && !ed.isDestroyed && ed.schema ? ed.getHTML() : ''; } catch { return ''; }
+  };
+
+  const editor = useEditor({
+    extensions: editorExtensions,
     content: '<p></p>',
     editorProps: {
       attributes: {
@@ -460,7 +466,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
     if (!nome.trim()) { toast.error('Informe o nome do documento'); return; }
     if (!editor || editor.isDestroyed) return;
     setSaving(true);
-    const html = normalizeTemplateAliases(editor.getHTML());
+    const html = normalizeTemplateAliases(safeHTML(editor));
     const { data, error } = await (supabase as any).rpc('save_document_template', {
       p_template_id: templateId || null,
       p_nome: nome.trim(),
@@ -516,7 +522,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   // -------- Preview --------
   const renderPreview = (): string => {
     if (!editor || editor.isDestroyed) return '';
-    let html = applyExampleValues(editor.getHTML());
+    let html = applyExampleValues(safeHTML(editor));
     html = html.replace(/\{\{([\w_]+)\}\}/g, (_m, k) => {
       const manual = camposManuais.find(f => f.key === k);
       if (manual) {
