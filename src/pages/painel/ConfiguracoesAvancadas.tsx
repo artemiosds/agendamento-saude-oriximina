@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { normalizePhone, formatPhoneForDisplay, applyPhoneMask } from "@/lib/phoneUtils";
 import { Link } from "react-router-dom";
+import { RecoveryPackageBuilder } from "@/components/painel/RecoveryPackageBuilder";
 import {
   Clock, ClipboardList, MessageSquare, Users, DoorOpen,
   CalendarOff, FileDown, Database, FlaskConical, ExternalLink,
@@ -464,12 +465,12 @@ const DadosSection: React.FC = () => {
   };
 
   const generateBackup = async () => {
-    if (!confirm("⚠️ Você está prestes a gerar um backup completo do sistema. Isso pode demorar alguns segundos. Deseja continuar?")) {
+    if (!confirm("Esta exportação auxiliar não contém uma cópia integral e restaurável do banco. Para recuperação, use a exportação nativa do Lovable Cloud. Deseja baixar a exportação auxiliar mesmo assim?")) {
       return;
     }
 
-    setExporting("full_backup");
-    const t = toast.loading("Preparando backup completo...");
+    setExporting("auxiliary_export");
+    const t = toast.loading("Preparando exportação auxiliar...");
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -496,7 +497,7 @@ const DadosSection: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       
-      toast.success("✅ Backup gerado e baixado com sucesso!", { id: t });
+      toast.info("Exportação auxiliar baixada. Este ZIP não é um backup completo nem permite restauração integral.", { id: t });
     } catch (err: any) {
       console.error(err);
       toast.error(`❌ Erro: ${err.message}`, { id: t });
@@ -508,7 +509,7 @@ const DadosSection: React.FC = () => {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup e Exportação do Sistema</CardTitle>
           <div className="flex gap-2">
             <Button 
@@ -518,7 +519,7 @@ const DadosSection: React.FC = () => {
               disabled={!!exporting}
             >
               <FileDown className="h-4 w-4 mr-2" />
-              {exporting === "full_backup" ? "Processando Backup..." : "Gerar Backup Completo (.zip)"}
+              {exporting === "auxiliary_export" ? "Exportando..." : "Baixar exportação auxiliar"}
             </Button>
           </div>
         </div>
@@ -538,21 +539,28 @@ const DadosSection: React.FC = () => {
           ))}
         </div>
 
-        
         <div className="space-y-4">
-          <div className="p-4 bg-muted rounded-lg border border-dashed">
-            <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
-              <ClipboardList className="h-4 w-4" /> O que está incluído no Backup Completo:
-            </h4>
-            <ul className="text-xs space-y-1 text-muted-foreground grid grid-cols-1 sm:grid-cols-2">
-              <li>• Todas as tabelas do banco de dados (JSON/CSV)</li>
-              <li>• Estrutura e metadados das tabelas</li>
-              <li>• Lista de usuários e permissões (Auth)</li>
-              <li>• Manifesto de arquivos e documentos (Storage)</li>
-              <li>• Configurações de prontuário e WhatsApp</li>
-              <li>• Template de variáveis de ambiente (Secrets)</li>
-              <li>• Guia de restauração passo-a-passo</li>
-            </ul>
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+            <strong>Para recuperar todos os dados, use a exportação nativa do Lovable Cloud.</strong> A exportação auxiliar desta página pode omitir registros e não inclui a estrutura completa do banco ou as contas de autenticação. Não a utilize como único backup.
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3 rounded-lg border p-4">
+              <h4 className="font-semibold">1. Recuperar no Lovable Cloud</h4>
+              <p className="text-sm text-muted-foreground">Em More → Database → Manage → Backups, escolha um backup diário anterior ao problema. A restauração substitui o banco atual e não recupera arquivos do Storage.</p>
+              <p className="text-xs text-muted-foreground">Antes de restaurar, preserve uma exportação do estado atual e confirme a data do backup. A ação deve ser feita por um administrador autorizado no Lovable.</p>
+              <Button variant="outline" asChild><a href="https://lovable.dev/projects/b31da743-ec3e-4875-9ddb-7d95bdbcdbae" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Abrir projeto no Lovable</a></Button>
+            </div>
+            <div className="space-y-3 rounded-lg border p-4">
+              <h4 className="font-semibold">2. Exportar para recuperação ou migração</h4>
+              <p className="text-sm text-muted-foreground">No Lovable: More → Database → Manage → Settings → Export project data. Baixe o arquivo PostgreSQL .backup em More → Storage. Baixe também todos os arquivos dos buckets e uma cópia do código no GitHub.</p>
+              <p className="text-xs text-muted-foreground">A exportação nativa inclui estrutura, dados e contas, mas não os arquivos do Storage, segredos, configurações dos provedores de login ou código das funções. Guarde uma cópia fora do Lovable.</p>
+              <Button variant="outline" asChild><a href="https://github.com/artemiosds/agendamento-saude-oriximina" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Abrir repositório</a></Button>
+            </div>
+          </div>
+          <RecoveryPackageBuilder />
+          <div className="rounded-lg border p-4 text-sm">
+            <h4 className="font-semibold">3. Migrar para Supabase próprio</h4>
+            <p className="mt-2 text-muted-foreground">Restaure o .backup com pg_restore em um projeto de teste, resolvendo conflitos com os schemas gerenciados. Reenvie os arquivos aos buckets, implante as funções do repositório e reconfigure autenticação, chaves e integrações. Confira tabelas, vínculos, login e arquivos antes de mudar o endereço do sistema. O .backup não é um script para colar no SQL Editor.</p>
           </div>
 
           <div className="space-y-2">
@@ -574,7 +582,7 @@ const DadosSection: React.FC = () => {
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
           <div className="text-xs text-amber-800">
-            <strong>Segurança Máxima:</strong> O backup contém informações sensíveis de pacientes e clínica. Apenas perfis Master podem gerar este arquivo. Mantenha o arquivo gerado em local seguro e criptografado.
+            <strong>Dados sensíveis:</strong> Os pacotes contêm informações de pacientes. O ZIP criado no navegador não é criptografado. Armazene-o em local criptografado e com acesso restrito. Somente uma restauração testada comprova a recuperação.
           </div>
         </div>
       </CardContent>
