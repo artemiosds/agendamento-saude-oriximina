@@ -18,8 +18,8 @@ describe("localizarVagas", () => {
     expect(classifyCardAvailability(["nao_carregado", "com_vagas"])).toBe("avaliacao_disponivel");
   });
   it("profissão não reconhecida não é compatível nem consigo mesma", () => {
-    expect(strictSpecialtyOf("Terapia Ocupacional")).toBeNull();
-    expect(isStrictlyCompatible("Terapia Ocupacional", "Terapia Ocupacional")).toBe(false);
+    expect(strictSpecialtyOf("Profissão Inventada")).toBeNull();
+    expect(isStrictlyCompatible("Profissão Inventada", "Profissão Inventada")).toBe(false);
     expect(isStrictlyCompatible("Fonoaudiologia", "")).toBe(false);
     expect(isStrictlyCompatible("Fonoaudiologia", "Fisioterapeuta")).toBe(false);
     expect(isStrictlyCompatible("Fonoaudiologia", "Fonoaudióloga")).toBe(true);
