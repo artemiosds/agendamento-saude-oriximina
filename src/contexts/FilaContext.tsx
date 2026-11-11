@@ -16,6 +16,7 @@ import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { setFilaSnapshot } from "@/contexts/_filaBridge";
 import type { Agendamento, FilaEspera } from "@/types";
+import { filaEntryMatchesProfession } from "@/lib/filaSpecialtyMatch";
 
 /**
  * FilaContext — Fase 5 (Passo 3.1): dono próprio de `fila`, loader,
@@ -106,7 +107,9 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
-  const { logAction } = useOperacional();
+  const { logAction, funcionarios } = useOperacional();
+  const funcionariosRef = useRef(funcionarios);
+  funcionariosRef.current = funcionarios;
   const { addAgendamento } = useAgendamentos();
   const isGlobalAdmin = authUser?.usuario === "admin.sms";
   const userUnidadeId = authUser?.unidadeId || "";
@@ -296,7 +299,11 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
           (f) =>
             f.status === "aguardando" &&
             f.unidadeId === unidadeId &&
-            (!f.profissionalId || f.profissionalId === profissionalId),
+            filaEntryMatchesProfession(
+              f,
+              profissionalId,
+              funcionariosRef.current?.find((fn) => fn.id === profissionalId)?.profissao,
+            ),
         )
         .sort((a, b) => {
           const aRank = priorityRank[a.prioridade] ?? 99;
