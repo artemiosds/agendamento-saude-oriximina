@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { verifyRecoveryPackage, type RecoveryVerification } from "@/lib/verifyRecoveryPackage";
 
 // A browser ZIP keeps its input and output in memory. Larger exports need an offline archiver.
 const MAX_BROWSER_BYTES = 300 * 1024 * 1024;
@@ -20,6 +21,9 @@ export function RecoveryPackageBuilder() {
   const [source, setSource] = useState<File | null>(null);
   const [storageConfirmed, setStorageConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [packageFile, setPackageFile] = useState<File | null>(null);
+  const [verification, setVerification] = useState<RecoveryVerification | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     storageFolderInput.current?.setAttribute("webkitdirectory", "");
@@ -89,6 +93,19 @@ export function RecoveryPackageBuilder() {
     }
   };
 
+  const checkPackage = async () => {
+    if (!packageFile) return;
+    setVerifying(true);
+    setVerification(null);
+    try {
+      setVerification(await verifyRecoveryPackage(packageFile));
+    } catch (error) {
+      setVerification({ valid: false, checkedFiles: 0, storageFiles: 0, buckets: 0, problems: [error instanceof Error ? error.message : "Não foi possível ler o pacote."] });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
     <div className="space-y-4 rounded-lg border p-4">
       <h4 className="font-semibold">Montar pacote de recuperação no seu computador</h4>
@@ -101,6 +118,21 @@ export function RecoveryPackageBuilder() {
       <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={storageConfirmed} onChange={event => setStorageConfirmed(event.target.checked)} /> Conferi que a pasta selecionada contém os arquivos de todos os buckets usados pelo projeto.</label>
       <Button onClick={createPackage} disabled={busy || !database || !source || !storage.length || !storageConfirmed}>{busy ? "Verificando arquivos..." : "Baixar pacote ZIP com manifesto"}</Button>
       <p className="text-xs text-muted-foreground">Limite de 300 MB para evitar travamentos no navegador. O ZIP não é criptografado e não restaura automaticamente no Lovable.</p>
+      <div className="space-y-3 border-t pt-4">
+        <h4 className="font-semibold">Verificar um pacote de recuperação</h4>
+        <p className="text-sm text-muted-foreground">Selecione o ZIP montado acima. A conferência é local e compara os arquivos com os hashes do manifesto. Ela não acessa o banco nem prova que todos os arquivos do Storage foram incluídos.</p>
+        <Label htmlFor="recovery-verify-file">Pacote ZIP para conferência</Label>
+        <Input id="recovery-verify-file" type="file" accept=".zip" onChange={event => { setPackageFile(event.target.files?.[0] ?? null); setVerification(null); }} />
+        <Button variant="outline" onClick={checkPackage} disabled={!packageFile || verifying}>{verifying ? "Conferindo integridade..." : "Verificar pacote"}</Button>
+        {verification && (
+          <div role="status" aria-live="polite" className={`rounded-md border p-3 text-sm ${verification.valid ? "border-green-300 bg-green-50 text-green-950" : "border-red-300 bg-red-50 text-red-950"}`}>
+            <strong>{verification.valid ? "Pacote íntegro — restauração ainda não testada" : "Pacote incompleto ou inválido"}</strong>
+            <p>{verification.checkedFiles} arquivo(s) conferido(s), {verification.storageFiles} arquivo(s) do Storage em {verification.buckets} bucket(s) declarados.</p>
+            {verification.problems.length > 0 && <ul className="mt-2 list-disc pl-5">{verification.problems.map((problem, index) => <li key={`${index}-${problem}`}>{problem}</li>)}</ul>}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">A correspondência com os dados reais e a recuperação de contas só podem ser confirmadas por uma restauração em ambiente isolado. Segredos e provedores de login não estão no pacote.</p>
+      </div>
     </div>
   );
 }
