@@ -24,6 +24,7 @@ import {
 } from "@/lib/treatmentCapacityAnalytics";
 import {
   buildTreatmentCapacityPlan,
+  getTreatmentCycleForecastDays,
   buildTreatmentCycleFeasibility,
   type CapacityPlanningAppointmentInput,
   type CapacityPlanningAvailabilityInput,
@@ -38,7 +39,7 @@ import TreatmentDemandScenario from "@/components/tratamentos/TreatmentDemandSce
 import type { TreatmentDemandScenarioGroupInput } from "@/lib/treatmentDemandScenario";
 
 const PAGE_SIZE = 1000;
-const CYCLE_FORECAST_DAYS = 365;
+const CYCLE_FORECAST_MAX_DAYS = 3650;
 const CYCLE_WEEKDAYS = [{ value: 1, label: "Seg" }, { value: 2, label: "Ter" }, { value: 3, label: "Qua" }, { value: 4, label: "Qui" }, { value: 5, label: "Sex" }, { value: 6, label: "Sáb" }];
 const FREQUENCY_WEEKDAY_COUNT: Record<string, number> = { "1x_semana": 1, "2x_semana": 2, "3x_semana": 3, "4x_semana": 4, "5x_semana": 5, "6x_semana": 6 };
 const ACTIVE_CYCLE_STATUSES = ["em_andamento", "ativo", "aguardando_vaga", "em_fila", "concluido"];
@@ -142,8 +143,14 @@ export default function TreatmentCapacityOverview() {
       const horizon = Number(periodDays);
       const endDate = addDaysToDateStr(today, horizon - 1);
       const periodDates = Array.from({ length: horizon }, (_, index) => addDaysToDateStr(today, index));
-      const cycleEndDate = addDaysToDateStr(today, CYCLE_FORECAST_DAYS - 1);
-      const cyclePeriodDates = Array.from({ length: CYCLE_FORECAST_DAYS }, (_, index) => addDaysToDateStr(today, index));
+      const cycleForecastDays = getTreatmentCycleForecastDays(
+        today,
+        cycleSimulationStart,
+        cycleSimulationFrequency,
+        Number(cycleSimulationSessions),
+      );
+      const cycleEndDate = addDaysToDateStr(today, Math.min(CYCLE_FORECAST_MAX_DAYS, cycleForecastDays) - 1);
+      const cyclePeriodDates = Array.from({ length: Math.min(CYCLE_FORECAST_MAX_DAYS, cycleForecastDays) }, (_, index) => addDaysToDateStr(today, index));
 
       try {
         const availabilityRows = await fetchAllPages<any>((from, to) => {
@@ -469,7 +476,7 @@ export default function TreatmentCapacityOverview() {
 
     void run();
     return () => { cancelled = true; };
-  }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission]);
+  }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission, cycleSimulationStart, cycleSimulationFrequency, cycleSimulationSessions]);
 
   const professionalOptions = useMemo(() => {
     if (!snapshot) return [];
