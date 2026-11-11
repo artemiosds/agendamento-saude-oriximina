@@ -3,6 +3,7 @@ import { recoverMissingTreatmentAppointments } from "@/services/treatmentAppoint
 import { treatmentDateChangeReason } from "@/lib/treatmentDateChangeReason";
 import { TreatmentAgendaAlignmentButton } from "@/components/tratamentos/TreatmentAgendaAlignmentButton";
 import { TreatmentCyclePendingPanel } from "@/components/tratamentos/TreatmentCyclePendingPanel";
+import TreatmentCapacityOverview from "@/components/tratamentos/TreatmentCapacityOverview";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { isSessionFalta } from "@/lib/sessionFalta";
 import { usePacientes } from "@/contexts/PacientesContext";
@@ -3325,6 +3326,8 @@ const Tratamentos: React.FC = () => {
       </div>
 
       {isMaster && <label className="flex items-center gap-2 text-sm"><Checkbox checked={integrityOnly} onCheckedChange={(value) => { setIntegrityOnly(value === true); setCurrentPage(1); }} />Pendências de integridade</label>}
+      {(isMaster || canManageFull || user?.role === "gestao" || user?.role === "coordenador") && <TreatmentCapacityOverview />}
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
