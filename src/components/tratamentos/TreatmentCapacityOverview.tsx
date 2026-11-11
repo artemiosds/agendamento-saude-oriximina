@@ -255,7 +255,7 @@ export default function TreatmentCapacityOverview() {
         const fetchQueue = (term: string) => fetchAllPages<any>((from, to) => {
           let query = supabase
             .from("fila_espera" as any)
-            .select("id,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original,custom_data")
+            .select("id,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original")
             .eq("status", "apto_atendimento")
             .or("especialidade_destino.ilike.%" + term + "%,setor.ilike.%" + term + "%");
           if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
@@ -343,7 +343,8 @@ export default function TreatmentCapacityOverview() {
           destinationProfession: row.especialidade_destino ? String(row.especialidade_destino) : null,
           sector: row.setor ? String(row.setor) : null,
           requestDate: row.data_solicitacao_original ? String(row.data_solicitacao_original) : null,
-          cboCode: extractExplicitCboCode(row.custom_data, String(row.especialidade_destino || "")),
+          // FilaEspera salva apenas a profissão em especialidade_destino; não há CBO de destino explícito neste fluxo.
+          cboCode: null,
         }));
 
         const nextSnapshot = buildTreatmentCapacitySnapshot({
@@ -518,7 +519,7 @@ export default function TreatmentCapacityOverview() {
                   <div><p className="text-xs text-muted-foreground">Atribuições compatíveis por CBO</p><p className="font-semibold tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueAssignedCompatible) : "—"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Atribuições incompatíveis</p><p className="font-semibold tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueAssignedIncompatible) : "—"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Atribuições não confirmáveis</p><p className="font-semibold tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueAssignedUnconfirmable) : "—"}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Solicitações sem CBO</p><p className="font-semibold tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueWithoutCbo) : "—"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Solicitações sem CBO de destino</p><p className="font-semibold tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueWithoutCbo) : "—"}</p></div>
                   <div className="col-span-2 border-t border-border/60 pt-2">
                     <p className="text-xs text-muted-foreground">Espera com data original válida</p>
                     <p className="font-semibold">{row.averageWaitDays === null ? "Sem base de datas válida" : "Média de " + formatNumber(row.averageWaitDays) + " dia(s) • Mais antiga: " + formatNumber(row.oldestWaitDays || 0) + " dia(s)"}</p>
@@ -563,7 +564,7 @@ export default function TreatmentCapacityOverview() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Leitura gerencial: vagas programadas são a soma de vagas_por_dia na grade, após bloqueios integrais. Não representam horários livres. Bloqueios parciais são sinalizados separadamente; quotas externas, sobreposições de faixas e capacidade interna livre ainda não são deduzidas. Agendamentos ocupantes seguem a regra atual do sistema. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. CBO ausente ou divergente nunca é tratado como compatível.
+            Leitura gerencial: vagas programadas são a soma de vagas_por_dia na grade, após bloqueios integrais. Não representam horários livres. Bloqueios parciais são sinalizados separadamente; quotas externas, sobreposições de faixas e capacidade interna livre ainda não são deduzidas. Agendamentos ocupantes seguem a regra atual do sistema. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. O fluxo atual grava a profissão de destino, mas não o CBO selecionado; por isso as atribuições da fila não são declaradas compatíveis por CBO. Não inferimos o CBO a partir do usuário que cadastrou a solicitação.
           </p>
           <p className="text-xs text-muted-foreground">
             A capacidade considera o período selecionado; as sessões pendentes e as solicitações aptas representam o estoque atual de demanda, independentemente desse horizonte.
