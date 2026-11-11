@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || function () {};
+(Element.prototype as any).hasPointerCapture = (Element.prototype as any).hasPointerCapture || (() => false);
+(Element.prototype as any).releasePointerCapture = (Element.prototype as any).releasePointerCapture || (() => {});
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 const loaded = new Set<string>();
