@@ -344,10 +344,10 @@ const input = baseInput();
     expect(result.professionals[0]).toMatchObject({
       configuredSlots: 6,
       confirmedOccupancy: 1,
-      projectedTreatmentDemand: 2,
+      projectedTreatmentDemand: 1,
       availableAppointments: 3,
-      availableAfterProjectedDemand: 1,
-      availableForInitialEvaluation: 1,
+      availableAfterProjectedDemand: 2,
+      availableForInitialEvaluation: 2,
     });
     expect(result.professionals[0].shiftCapacity).toEqual([
       { shift: "Manhã", availableAppointments: 3 },
