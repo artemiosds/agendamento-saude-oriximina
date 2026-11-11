@@ -546,9 +546,13 @@ const DadosSection: React.FC = () => {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-3 rounded-lg border p-4">
               <h4 className="font-semibold">1. Recuperar no Lovable Cloud</h4>
-              <p className="text-sm text-muted-foreground">Em More → Database → Manage → Backups, escolha um backup diário anterior ao problema. A restauração substitui o banco atual e não recupera arquivos do Storage.</p>
-              <p className="text-xs text-muted-foreground">Antes de restaurar, preserve uma exportação do estado atual e confirme a data do backup. A ação deve ser feita por um administrador autorizado no Lovable.</p>
-              <Button variant="outline" asChild><a href="https://lovable.dev/projects/b31da743-ec3e-4875-9ddb-7d95bdbcdbae" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Abrir projeto no Lovable</a></Button>
+              <p className="text-sm text-muted-foreground">No editor do Lovable, siga <strong>More → Database → Manage → Backups</strong> e escolha um backup diário anterior ao problema. A restauração substitui o banco atual, inclusive os registros de autenticação; contas e senhas armazenadas acompanham o banco daquele dia. Alterações e usuários criados depois desse ponto são perdidos. Provedores externos e sessões de login exigem conferência separada.</p>
+              <p className="text-sm text-muted-foreground">O backup diário <strong>não restaura arquivos do Storage</strong>. Se houver arquivos perdidos, recupere-os da cópia externa e reenvie aos mesmos buckets e caminhos em More → Storage; confira permissões, vínculos e abertura dos documentos. Caso a estrutura restaurada contenha metadados de arquivos ausentes, planeje a reposição com suporte técnico antes de sobrescrever algo.</p>
+              <p className="text-xs text-muted-foreground">Antes de restaurar, preserve uma exportação do estado atual e confirme a data do backup. O link do projeto abre o editor; o Lovable não documenta um link direto estável para a aba Backups.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" asChild><a href="https://lovable.dev/projects/b31da743-ec3e-4875-9ddb-7d95bdbcdbae" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Abrir editor do projeto</a></Button>
+                <Button variant="outline" asChild><a href="https://docs.lovable.dev/features/database-backups#restore-a-daily-backup" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Ver instruções de restauração</a></Button>
+              </div>
             </div>
             <div className="space-y-3 rounded-lg border p-4">
               <h4 className="font-semibold">2. Exportar para recuperação ou migração</h4>
