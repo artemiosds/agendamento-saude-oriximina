@@ -1870,7 +1870,7 @@ const FilaEspera: React.FC = () => {
                   value={form.profissionalId || "none"}
                   onValueChange={(v) => {
                     const professionalId = v === "none" ? "" : v;
-                    setForm((p) => ({ ...p, profissionalId, cboDestino: resolveProfessionalCbo(professionalId) }));
+                    setForm((p) => ({ ...p, profissionalId: professionalId, cboDestino: resolveProfessionalCbo(professionalId) }));
                   }}
                 >
                   <SelectTrigger>
@@ -2135,7 +2135,7 @@ const FilaEspera: React.FC = () => {
                       value={importForm.profissionalId || "none"}
                       onValueChange={(v) => {
                         const professionalId = v === "none" ? "" : v;
-                        setImportForm((p) => ({ ...p, profissionalId, cboDestino: resolveProfessionalCbo(professionalId) }));
+                        setImportForm((p) => ({ ...p, profissionalId: professionalId, cboDestino: resolveProfessionalCbo(professionalId) }));
                       }}
                     >
                       <SelectTrigger>
