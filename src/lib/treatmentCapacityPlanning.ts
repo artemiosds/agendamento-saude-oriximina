@@ -308,12 +308,29 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
       if (freeAppointments <= 0) continue;
       totalFree += freeAppointments;
       totalOpenWindows += availableStarts.length;
-      windows.push({
-        date,
-        label: availableStarts.slice(0, 4).map(toTime).join(", ") + (availableStarts.length > 4 ? "…" : ""),
-        shift: shiftForMinute(availableStarts[0]),
-        freeAppointments,
-      });
+
+      // Split a continuous availability band at morning/afternoon/evening boundaries.
+      // This prevents a band crossing noon from being reported as morning-only.
+      const startsByShift = new Map<"Manhã" | "Tarde" | "Noite", number[]>();
+      for (const minute of availableStarts) {
+        const shift = shiftForMinute(minute);
+        const starts = startsByShift.get(shift) || [];
+        starts.push(minute);
+        startsByShift.set(shift, starts);
+      }
+      let remainingFree = freeAppointments;
+      for (const shift of ["Manhã", "Tarde", "Noite"] as const) {
+        const starts = startsByShift.get(shift) || [];
+        if (!starts.length || remainingFree <= 0) continue;
+        const shiftFree = Math.min(starts.length, remainingFree);
+        windows.push({
+          date,
+          label: starts.slice(0, 4).map(toTime).join(", ") + (starts.length > 4 ? "…" : ""),
+          shift,
+          freeAppointments: shiftFree,
+        });
+        remainingFree -= shiftFree;
+      }
     } else {
       if (inTurn.length >= row.vacanciesPerDay || isSlotBlockedAt(dateBlocks, start)) continue;
       totalFree += capacity.vagasInternasLivres;
