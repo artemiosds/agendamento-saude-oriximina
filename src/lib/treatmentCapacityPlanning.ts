@@ -150,7 +150,7 @@ function isDemandProjectedWithinPeriod(session: PendingTreatmentSessionInput, en
   // Valid future dates after the selected horizon must not consume current capacity.
   if (!session.scheduledDate) return true;
   const scheduledDate = String(session.scheduledDate).slice(0, 10);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(scheduledDate)) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) return true;
   return scheduledDate <= endDate;
 }
 
