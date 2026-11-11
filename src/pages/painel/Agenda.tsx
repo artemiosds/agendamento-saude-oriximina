@@ -2955,7 +2955,7 @@ const Agenda: React.FC = () => {
                   </Button>
                 )}
                 
-                {!isProfissional && (
+                {(user?.role === "master" || user?.role === "recepcao") && can("agenda", "can_create") && (
                   <LocalizarVagasPanel
                     profissionais={profissionais}
                     unidades={unidadesVisiveis}
