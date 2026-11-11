@@ -3709,8 +3709,17 @@ const Tratamentos: React.FC = () => {
                   const previewProfessional = profissionais.find((professional) => professional.id === newCycle.professional_id);
                   const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id || previewProfessional?.unidadeId || "");
                   try {
-                    const { conflictedDates } = generatePendingTreatmentPlan(newCycle.start_date, newCycle.frequency, newCycle.weekdays, newCycle.total_sessions, ranges);
-                    return conflictedDates.length ? <p className="text-amber-700 dark:text-amber-400" role="status">{conflictedDates.length} sessão(ões) têm bloqueio de calendário. O ciclo poderá ser salvo e a recepção precisará revisar essas datas antes de agendar.</p> : null;
+                    const { dates, skippedCount, conflictedDates } = generatePendingTreatmentPlan(newCycle.start_date, newCycle.frequency, newCycle.weekdays, newCycle.total_sessions, ranges);
+                    if (!dates.length) return null;
+                    const br = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
+                    return (
+                      <div className="mt-2 rounded-md border border-primary/30 bg-primary/5 p-2 space-y-1 text-xs" role="status" aria-label="Simulação do ciclo">
+                        <p className="font-semibold text-primary">Simulação (apenas orientativa — não reserva vagas)</p>
+                        <p>1ª sessão: <strong>{br(dates[0])}</strong> · Última: <strong>{br(dates[dates.length - 1])}</strong> · {dates.length} sessão(ões)</p>
+                        {skippedCount > 0 && <p className="text-muted-foreground">{skippedCount} data(s) pulada(s) por feriado, bloqueio ou folga.</p>}
+                        {conflictedDates.length > 0 && <p className="text-amber-700 dark:text-amber-400">{conflictedDates.length} sessão(ões) com bloqueio de calendário ({conflictedDates.slice(0, 5).map(br).join(", ")}{conflictedDates.length > 5 ? "…" : ""}). O ciclo pode ser salvo; essas datas precisarão de revisão antes de agendar.</p>}
+                      </div>
+                    );
                   } catch {
                     return null;
                   }
