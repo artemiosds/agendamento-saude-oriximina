@@ -1,7 +1,7 @@
 import { statusOcupaVaga } from "./appointmentCapacity";
 import { isoDayOfWeek } from "./utils";
 
-export type TreatmentCapacitySpecialty = "Fisioterapia" | "Fonoaudiologia";
+export type TreatmentCapacitySpecialty = string;
 
 export interface CapacityProfessionalInput {
   id: string;
@@ -116,8 +116,6 @@ export interface TreatmentCapacitySnapshot {
   queueRowsOutsideTargetSpecialties: number;
 }
 
-const SPECIALTIES: TreatmentCapacitySpecialty[] = ["Fisioterapia", "Fonoaudiologia"];
-
 export function normalizeCapacityText(value: string): string {
   return String(value || "")
     .normalize("NFD")
@@ -127,10 +125,18 @@ export function normalizeCapacityText(value: string): string {
 }
 
 export function classifyTreatmentCapacitySpecialty(value: string): TreatmentCapacitySpecialty | null {
-  const normalized = normalizeCapacityText(value);
+  const original = String(value || "").trim().replace(/\s+/g, " ");
+  const normalized = normalizeCapacityText(original);
+  if (!normalized) return null;
   if (normalized === "fisio" || normalized.includes("fisioterap")) return "Fisioterapia";
   if (normalized === "fono" || normalized.includes("fonoaud")) return "Fonoaudiologia";
-  return null;
+  if (normalized.includes("psicolog") || normalized === "psicologia") return "Psicologia";
+  if (normalized.includes("nutric") || normalized === "nutricao") return "Nutrição";
+  if (normalized.includes("assistente social") || normalized === "servico social") return "Serviço Social";
+  if (normalized.includes("enferm")) return "Enfermagem";
+  if (normalized.includes("medic")) return "Medicina";
+  if (normalized.includes("odont")) return "Odontologia";
+  return original;
 }
 
 export function extractExplicitCboCode(customData: unknown, destination = ""): string | null {
@@ -226,6 +232,9 @@ export function buildTreatmentCapacitySnapshot(input: {
       const dayBlocks = input.blocks.filter((block) =>
         blockAppliesToProfessional(block, professional.id, professional.unitId, date),
       );
+      configuredSlots += dailyRows.reduce((sum, availability) =>
+        sum + Math.max(0, Number(availability.vacanciesPerDay) || 0), 0);
+
       if (dayBlocks.some(isWholeDayBlock)) {
         blockedDays += 1;
         wholeDayBlockedDates.add(date);
@@ -233,8 +242,6 @@ export function buildTreatmentCapacitySnapshot(input: {
       }
 
       scheduledDays += 1;
-      configuredSlots += dailyRows.reduce((sum, availability) =>
-        sum + Math.max(0, Number(availability.vacanciesPerDay) || 0), 0);
       if (dailyRows.length > 1) multipleWindowDays += 1;
       if (dayBlocks.length > 0) partialBlockDays += 1;
     }
@@ -307,7 +314,15 @@ export function buildTreatmentCapacitySnapshot(input: {
     };
   });
 
-  const specialties: SpecialtyCapacitySummary[] = SPECIALTIES.map((specialty) => {
+  const specialtyValues = new Set<TreatmentCapacitySpecialty>([
+    ...professionalRows.map((row) => row.specialty),
+    ...input.queueDemand
+      .map((row) => getQueueSpecialty(row))
+      .filter((value): value is TreatmentCapacitySpecialty => value !== null),
+  ]);
+  const specialties: SpecialtyCapacitySummary[] = [...specialtyValues].sort((a, b) =>
+    a.localeCompare(b, "pt-BR"),
+  ).map((specialty) => {
     const rows = professionalRows.filter((row) => row.specialty === specialty);
     const queueRows = input.queueDemand.filter((row) => getQueueSpecialty(row) === specialty);
     const ages = queueRows

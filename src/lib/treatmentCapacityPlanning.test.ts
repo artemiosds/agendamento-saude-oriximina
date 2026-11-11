@@ -302,4 +302,32 @@ describe("planejamento de capacidade real para tratamentos", () => {
     });
   });
 
+
+  it("separa capacidade configurada, ocupação, demanda projetada e vaga para avaliação inicial", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"];
+    input.appointments = [
+      { professionalId: "p1", unitId: "u1", date: "2026-11-11", time: "08:00", status: "confirmado", origin: "recepcao" },
+    ];
+    input.pendingSessions = [
+      { professionalId: "p1", unitId: "u1", status: "pendente_agendamento", scheduledDate: "2026-11-12", appointmentId: null },
+      { professionalId: "p1", unitId: "u1", status: "pendente_agendamento", scheduledDate: null, appointmentId: null },
+    ];
+
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0]).toMatchObject({
+      configuredSlots: 6,
+      confirmedOccupancy: 1,
+      projectedTreatmentDemand: 2,
+      availableAppointments: 3,
+      availableAfterProjectedDemand: 1,
+      availableForInitialEvaluation: 1,
+      fullTreatmentStatus: "não confirmável",
+    });
+    expect(result.professionals[0].shiftCapacity).toEqual([
+      { shift: "Manhã", availableAppointments: 3 },
+    ]);
+    expect(result.professionals[0].fullTreatmentMessage).toContain("frequência");
+  });
+
 });

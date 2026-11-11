@@ -1,5 +1,5 @@
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
-import { classifyTreatmentCapacitySpecialty, type CapacityProfessionalInput, type CapacityAvailabilityInput, type CapacityAppointmentInput, type CapacityBlockInput, type PendingTreatmentSessionInput, type QueueDemandInput } from "@/lib/treatmentCapacityAnalytics";
+import { classifyTreatmentCapacitySpecialty, type TreatmentCapacitySpecialty, type CapacityProfessionalInput, type CapacityAvailabilityInput, type CapacityAppointmentInput, type CapacityBlockInput, type PendingTreatmentSessionInput, type QueueDemandInput } from "@/lib/treatmentCapacityAnalytics";
 import { calculateExternalCapacity, classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable, quotaMatchesAvailability, type ExternalQuotaWindow } from "@/lib/externalQuota";
 import { isoDayOfWeek } from "@/lib/utils";
 
@@ -33,13 +33,27 @@ export interface CapacityPlanningInput {
 export interface CapacityWindow {
   date: string;
   label: string;
+  shift: "Manhã" | "Tarde" | "Noite";
   freeAppointments: number;
+}
+
+export interface CapacityShiftSummary {
+  shift: "Manhã" | "Tarde" | "Noite";
+  availableAppointments: number;
 }
 
 export interface ProfessionalCapacityPlan {
   professionalId: string;
   unitId: string;
-  specialty: "Fisioterapia" | "Fonoaudiologia";
+  specialty: TreatmentCapacitySpecialty;
+  configuredSlots: number;
+  confirmedOccupancy: number;
+  projectedTreatmentDemand: number;
+  availableForInitialEvaluation: number;
+  availableAfterProjectedDemand: number;
+  fullTreatmentStatus: "não confirmável";
+  fullTreatmentMessage: string;
+  shiftCapacity: CapacityShiftSummary[];
   availableAppointments: number;
   openWindows: number;
   availableDates: number;
@@ -52,7 +66,7 @@ export interface ProfessionalCapacityPlan {
 }
 
 export interface TreatmentDemandSuggestion {
-  specialty: "Fisioterapia" | "Fonoaudiologia";
+  specialty: TreatmentCapacitySpecialty;
   unitId: string;
   unitName: string;
   unassignedDemand: number;
@@ -89,6 +103,12 @@ function toMinutes(value: string | null | undefined): number | null {
 function toTime(value: number): string {
   const safe = Math.max(0, Math.min(1439, value));
   return String(Math.floor(safe / 60)).padStart(2, "0") + ":" + String(safe % 60).padStart(2, "0");
+}
+
+function shiftForMinute(minute: number): "Manhã" | "Tarde" | "Noite" {
+  if (minute < 12 * 60) return "Manhã";
+  if (minute < 18 * 60) return "Tarde";
+  return "Noite";
 }
 
 function blockAppliesToProfessional(block: CapacityBlockInput, professionalId: string, unitId: string, date: string): boolean {
@@ -292,6 +312,7 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
       windows.push({
         date,
         label: availableStarts.slice(0, 4).map(toTime).join(", ") + (availableStarts.length > 4 ? "…" : ""),
+        shift: shiftForMinute(availableStarts[0]),
         freeAppointments,
       });
     } else {
@@ -301,6 +322,7 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
       windows.push({
         date,
         label: row.startTime.slice(0, 5),
+        shift: shiftForMinute(start),
         freeAppointments: capacity.vagasInternasLivres,
       });
     }
@@ -326,10 +348,22 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
     let sameDayExternalReserved = 0;
     let reviewDays = 0;
     let blockedDays = 0;
+    let configuredSlots = 0;
     const availableDates = new Set<string>();
     const nextWindows: CapacityWindow[] = [];
+    const shiftTotals = new Map<"Manhã" | "Tarde" | "Noite", number>();
 
     for (const date of input.periodDates) {
+      const dayRows = input.availabilities.filter((row) =>
+        row.professionalId === professional.id &&
+        row.unitId === professional.unitId &&
+        date >= row.startDate &&
+        date <= row.endDate &&
+        row.weekdays.includes(isoDayOfWeek(date)),
+      );
+      configuredSlots += dayRows.reduce((sum, row) =>
+        sum + Math.max(0, Number(row.vacanciesPerDay) || 0), 0);
+
       const day = getDailyPlan(input, professional, date);
       availableAppointments += day.freeAppointments;
       openWindows += day.openWindows;
@@ -337,13 +371,25 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
       if (day.review) reviewDays += 1;
       if (day.blocked) blockedDays += 1;
       if (day.freeAppointments > 0) availableDates.add(date);
-      if (day.freeAppointments > 0 && nextWindows.length < 8) {
-        for (const window of day.windows) {
-          if (nextWindows.length >= 8) break;
-          nextWindows.push(window);
-        }
+      for (const window of day.windows) {
+        shiftTotals.set(window.shift, (shiftTotals.get(window.shift) || 0) + window.freeAppointments);
+        if (nextWindows.length < 8) nextWindows.push(window);
       }
     }
+
+    const projectedTreatmentDemand = input.pendingSessions.filter((session) =>
+      session.professionalId === professional.id &&
+      session.unitId === professional.unitId &&
+      session.status === "pendente_agendamento" &&
+      !session.appointmentId,
+    ).length;
+    const confirmedOccupancy = input.appointments.filter((appointment) =>
+      appointment.professionalId === professional.id &&
+      appointment.unitId === professional.unitId &&
+      input.periodDates.includes(appointment.date) &&
+      statusOcupaVaga(appointment.status),
+    ).length;
+    const availableAfterProjectedDemand = Math.max(0, availableAppointments - projectedTreatmentDemand);
 
     const periodQuotas = input.externalQuotas.filter((quota) =>
       quota.profissional_interno_id === professional.id &&
@@ -357,10 +403,22 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
     const periodQuotaRemaining = periodQuotas.reduce((sum, quota) =>
       sum + Math.max(0, Number(quota.vagas_total) - Number(quota.vagas_usadas)), 0);
 
+    const shiftCapacity: CapacityShiftSummary[] = (["Manhã", "Tarde", "Noite"] as const)
+      .map((shift) => ({ shift, availableAppointments: shiftTotals.get(shift) || 0 }))
+      .filter((row) => row.availableAppointments > 0);
+
     return [{
       professionalId: professional.id,
       unitId: professional.unitId,
       specialty,
+      configuredSlots,
+      confirmedOccupancy,
+      projectedTreatmentDemand,
+      availableForInitialEvaluation: availableAfterProjectedDemand,
+      availableAfterProjectedDemand,
+      fullTreatmentStatus: "não confirmável" as const,
+      fullTreatmentMessage: "Uma vaga isolada comprova apenas espaço para uma avaliação inicial. Para confirmar um ciclo completo, é necessário simular o plano individual com frequência, quantidade de sessões e dias escolhidos.",
+      shiftCapacity,
       availableAppointments,
       openWindows,
       availableDates: availableDates.size,
@@ -381,7 +439,7 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
   });
 
   const demandGroups = new Map<string, {
-    specialty: "Fisioterapia" | "Fonoaudiologia";
+    specialty: TreatmentCapacitySpecialty;
     unitId: string;
     unitName: string;
     cboCode: string | null;

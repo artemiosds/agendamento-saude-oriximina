@@ -6,12 +6,14 @@ import {
 } from "./treatmentCapacityAnalytics";
 
 describe("tratamento: capacidade e demanda — leitura gerencial", () => {
-  it("identifica Fisioterapia e Fonoaudiologia sem classificar outras profissões", () => {
+  it("normaliza as profissões usadas em Tratamentos sem restringir a capacidade a duas áreas", () => {
     expect(classifyTreatmentCapacitySpecialty("Fisioterapeuta")).toBe("Fisioterapia");
     expect(classifyTreatmentCapacitySpecialty("FISIOTERAPIA")).toBe("Fisioterapia");
     expect(classifyTreatmentCapacitySpecialty("Fonoaudióloga")).toBe("Fonoaudiologia");
-    expect(classifyTreatmentCapacitySpecialty("Nutricionista")).toBeNull();
-    expect(classifyTreatmentCapacitySpecialty("Psicóloga")).toBeNull();
+    expect(classifyTreatmentCapacitySpecialty("Nutricionista")).toBe("Nutrição");
+    expect(classifyTreatmentCapacitySpecialty("Psicóloga")).toBe("Psicologia");
+    expect(classifyTreatmentCapacitySpecialty("Médico")).toBe("Medicina");
+    expect(classifyTreatmentCapacitySpecialty("Assistente Social")).toBe("Serviço Social");
   });
 
   it("lê CBO somente quando está explicitamente cadastrado", () => {
@@ -20,7 +22,7 @@ describe("tratamento: capacidade e demanda — leitura gerencial", () => {
     expect(extractExplicitCboCode({}, "Fisioterapeuta")).toBeNull();
   });
 
-  it("soma grade configurada, respeita bloqueio integral e não conta cancelamento/falta como ocupação", () => {
+  it("mantém a capacidade configurada mesmo nos dias integralmente bloqueados e separa a capacidade operacional", () => {
     const result = buildTreatmentCapacitySnapshot({
       today: "2026-11-10",
       periodDates: ["2026-11-10", "2026-11-11"],
@@ -38,7 +40,7 @@ describe("tratamento: capacidade e demanda — leitura gerencial", () => {
       queueDemand: [],
     });
     expect(result.professionals).toHaveLength(1);
-    expect(result.professionals[0].configuredSlots).toBe(8);
+    expect(result.professionals[0].configuredSlots).toBe(16);
     expect(result.professionals[0].scheduledDays).toBe(1);
     expect(result.professionals[0].blockedDays).toBe(1);
     expect(result.professionals[0].occupiedAppointments).toBe(1);
