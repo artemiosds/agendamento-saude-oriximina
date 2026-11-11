@@ -171,7 +171,9 @@ function blockAppliesToProfessional(block: CapacityBlockInput, professionalId: s
 }
 
 function isWholeDayBlock(block: CapacityBlockInput): boolean {
-  return block.allDay === true || !block.startTime || !block.endTime;
+  // Keep the same meaning as the live Agenda: only an explicit all-day
+  // block closes every time. Missing partial boundaries use the Agenda defaults.
+  return block.allDay === true;
 }
 
 function blockAppliesToAppointment(block: CapacityBlockInput, appointment: CapacityAppointmentInput): boolean {
@@ -179,7 +181,9 @@ function blockAppliesToAppointment(block: CapacityBlockInput, appointment: Capac
   if (isWholeDayBlock(block)) return true;
   if (!appointment.time) return false;
   const time = appointment.time.slice(0, 5);
-  return time >= String(block.startTime).slice(0, 5) && time < String(block.endTime).slice(0, 5);
+  const start = String(block.startTime || "00:00").slice(0, 5);
+  const end = String(block.endTime || "23:59").slice(0, 5);
+  return time >= start && time < end;
 }
 
 function getQueueSpecialty(row: QueueDemandInput): TreatmentCapacitySpecialty | null {
