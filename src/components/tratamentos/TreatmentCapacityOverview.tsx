@@ -14,6 +14,7 @@ import { addDaysToDateStr, isoDayOfWeek, todayLocalStr } from "@/lib/utils";
 import {
   buildTreatmentCapacitySnapshot,
   classifyTreatmentCapacitySpecialty,
+  isTreatmentSchedulingDemand,
   extractExplicitCboCode,
   type CapacityBlockInput,
   type CapacityProfessionalInput,
@@ -42,7 +43,7 @@ const PAGE_SIZE = 1000;
 const CYCLE_FORECAST_MAX_DAYS = 3650;
 const CYCLE_WEEKDAYS = [{ value: 1, label: "Seg" }, { value: 2, label: "Ter" }, { value: 3, label: "Qua" }, { value: 4, label: "Qui" }, { value: 5, label: "Sex" }, { value: 6, label: "Sáb" }];
 const FREQUENCY_WEEKDAY_COUNT: Record<string, number> = { "1x_semana": 1, "2x_semana": 2, "3x_semana": 3, "4x_semana": 4, "5x_semana": 5, "6x_semana": 6 };
-const ACTIVE_CYCLE_STATUSES = ["em_andamento", "ativo", "aguardando_vaga", "em_fila", "concluido"];
+const ACTIVE_CYCLE_STATUSES = ["em_andamento", "ativo", "aguardando_vaga", "em_fila"];
 
 async function fetchAllPages<T>(createQuery: (from: number, to: number) => any): Promise<T[]> {
   const all: T[] = [];
@@ -322,8 +323,8 @@ export default function TreatmentCapacityOverview() {
         const fetchQueue = (term: string) => fetchAllPages<any>((from, to) => {
           let query = supabase
             .from("fila_espera" as any)
-            .select("id,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original,custom_data")
-            .eq("status", "apto_atendimento")
+            .select("id,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original,custom_data,status,origem_cadastro")
+            .in("status", ["apto_atendimento", "aguardando_agendamento_interno"])
             .or("especialidade_destino.ilike.%" + term + "%,setor.ilike.%" + term + "%");
           if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
           return query.range(from, to);
@@ -342,12 +343,16 @@ export default function TreatmentCapacityOverview() {
             const queueResults = await Promise.all(queueTerms.map((term) => fetchQueue(term)));
             const uniqueQueue = new Map<string, any>();
             queueResults.flat().forEach((row) => uniqueQueue.set(String(row.id), row));
-            queueRows = [...uniqueQueue.values()];
+            queueRows = [...uniqueQueue.values()].filter((row) => isTreatmentSchedulingDemand({
+              id: String(row.id), unitId: String(row.unidade_id || ""),
+              destinationProfession: row.especialidade_destino,
+              sector: row.setor, status: row.status, origin: row.origem_cadastro,
+            }));
             nextQueueReadStatus = "available";
           } catch (queueError: any) {
             nextQueueWarning = queueError?.message
-              ? "A fila apta não pôde ser consultada: " + queueError.message
-              : "A fila apta não pôde ser consultada. Os indicadores de fila serão exibidos como não disponíveis.";
+              ? "A demanda para agendamento não pôde ser consultada: " + queueError.message
+              : "A demanda para agendamento não pôde ser consultada. Os indicadores de fila serão exibidos como não disponíveis.";
           }
         } else {
           nextQueueWarning = "Seu perfil não possui permissão de leitura da fila. Os indicadores de fila não serão exibidos.";
@@ -417,6 +422,8 @@ export default function TreatmentCapacityOverview() {
           sector: row.setor ? String(row.setor) : null,
           requestDate: row.data_solicitacao_original ? String(row.data_solicitacao_original) : null,
           cboCode: extractExplicitCboCode(row.custom_data),
+          status: String(row.status || ""),
+          origin: row.origem_cadastro ? String(row.origem_cadastro) : null,
         }));
 
         const capacityInput: CapacityPlanningInput = {
@@ -660,6 +667,12 @@ export default function TreatmentCapacityOverview() {
   const totalAppointments = visibleSpecialties.reduce((sum, row) => sum + row.occupiedAppointments, 0);
   const totalPendingSessions = visibleSpecialties.reduce((sum, row) => sum + row.pendingSessions, 0);
   const totalQueueDemand = visibleSpecialties.reduce((sum, row) => sum + row.queueDemand, 0);
+  const totalInternalQueueDemand = queueDemandRows.filter((row) =>
+    row.status === "aguardando_agendamento_interno" &&
+    (specialtyFilter === "all" || classifyTreatmentCapacitySpecialty(row.destinationProfession || "") === specialtyFilter) &&
+    (unitFilter === "all" || row.unitId === unitFilter) &&
+    (professionalFilter === "all" || !row.professionalId || professionalFilter.startsWith(row.professionalId + "|")),
+  ).length;
   const totalAvailableAfterDemand = visibleProfessionalPlans.reduce((sum, row) => sum + row.availableAfterProjectedDemand, 0);
 
   return (
@@ -785,9 +798,9 @@ export default function TreatmentCapacityOverview() {
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Users className="h-4 w-4" /><span className="text-xs">Solicitações aptas na fila</span></div>
+                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Users className="h-4 w-4" /><span className="text-xs">Demanda para agendamento</span></div>
                 <p className="text-2xl font-bold tabular-nums">{queueReadStatus === "available" ? formatNumber(totalQueueDemand) : "—"}</p>
-                <p className="text-xs text-muted-foreground">Backlog apto_atendimento, separado da fila operacional</p>
+                <p className="text-xs text-muted-foreground">Aptos e encaminhamentos internos; {queueReadStatus === "available" ? formatNumber(totalInternalQueueDemand) : "—"} aguardando agendamento interno. Sem chamar a fila operacional.</p>
               </CardContent>
             </Card>
             <Card>

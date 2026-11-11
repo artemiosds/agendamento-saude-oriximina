@@ -206,6 +206,7 @@ const Pacientes: React.FC = () => {
     unidadeId: "",
     profissionalId: "",
     especialidadeDestino: "",
+    cboDestino: "",
     prioridade: "normal",
     observacoes: "",
     descricaoClinica: "",
@@ -760,6 +761,7 @@ const Pacientes: React.FC = () => {
       unidadeId: "",
       profissionalId: "",
       especialidadeDestino: "",
+      cboDestino: "",
       prioridade: "normal",
       observacoes: "",
       descricaoClinica: "",
@@ -788,6 +790,9 @@ const Pacientes: React.FC = () => {
         unidadeId: filaForm.unidadeId,
         profissionalId: filaDirecionamento === "profissao" ? "" : filaForm.profissionalId,
         especialidadeDestino: filaDirecionamento === "profissao" ? filaForm.especialidadeDestino : "",
+        customData: filaDirecionamento === "profissao" && filaForm.cboDestino
+          ? { cbo_destino: filaForm.cboDestino }
+          : {},
         setor: "",
         prioridade: filaForm.prioridade as any,
         status: "aguardando",
@@ -1051,6 +1056,7 @@ const Pacientes: React.FC = () => {
                       ...p,
                       profissionalId: v === "profissao" ? "" : p.profissionalId,
                       especialidadeDestino: v === "profissional" ? "" : p.especialidadeDestino,
+                      cboDestino: "",
                     }));
                   }}
                 >
@@ -1090,7 +1096,9 @@ const Pacientes: React.FC = () => {
                   <ProfissaoCboSelect
                     profissionais={profissionais}
                     value={filaForm.especialidadeDestino}
+                    cboValue={filaForm.cboDestino}
                     onChange={(value) => setFilaForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))}
+                    onCboChange={(code) => setFilaForm((p) => ({ ...p, cboDestino: code || "" }))}
                     placeholder="Qualquer profissão ou selecione uma profissão"
                   />
                   <p className="mt-1 text-xs text-muted-foreground">

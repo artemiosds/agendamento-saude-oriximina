@@ -55,6 +55,22 @@ export interface QueueDemandInput {
   sector?: string | null;
   requestDate?: string | null;
   cboCode?: string | null;
+  status?: string;
+  origin?: string | null;
+}
+
+/** Only explicit Fisio/Fono destinations belong to the internal scheduling view. */
+export function isTreatmentSchedulingDemand(row: QueueDemandInput): boolean {
+  const destination = classifyTreatmentCapacitySpecialty(row.destinationProfession || "");
+  const target = destination === "Fisioterapia" || destination === "Fonoaudiologia";
+  if (row.status === "aguardando_agendamento_interno") {
+    return target && row.origin === "encaminhamento_interno";
+  }
+  if (row.status !== "apto_atendimento") return false;
+  if (target) return true;
+  // Preserve the existing read-only coverage of other professions.
+  const sector = classifyTreatmentCapacitySpecialty(row.sector || "");
+  return sector !== "Fisioterapia" && sector !== "Fonoaudiologia";
 }
 
 export interface ProfessionalCapacitySummary {

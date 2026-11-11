@@ -3,6 +3,7 @@ import {
   buildTreatmentCapacitySnapshot,
   classifyTreatmentCapacitySpecialty,
   extractExplicitCboCode,
+  isTreatmentSchedulingDemand,
 } from "./treatmentCapacityAnalytics";
 
 describe("tratamento: capacidade e demanda — leitura gerencial", () => {
@@ -78,7 +79,18 @@ describe("tratamento: capacidade e demanda — leitura gerencial", () => {
       pendingSessions: [],
       queueDemand: [],
     });
-    expect(result.professionals[0].appointmentsWithoutAvailableSchedule).toBe(0);
+    // A Agenda treats a missing partial end as 23:59, so 10:30 remains blocked.
+    expect(result.professionals[0].appointmentsWithoutAvailableSchedule).toBe(1);
+  });
+
+  it("isola demanda Fisio/Fono por destino explícito e origem sem chamar Triagem", () => {
+    const row = { id: "1", unitId: "u1", destinationProfession: "Fonoaudiologia" };
+    expect(isTreatmentSchedulingDemand({ ...row, status: "apto_atendimento" })).toBe(true);
+    expect(isTreatmentSchedulingDemand({ ...row, status: "aguardando_agendamento_interno", origin: "encaminhamento_interno" })).toBe(true);
+    expect(isTreatmentSchedulingDemand({ ...row, status: "aguardando_agendamento_interno", origin: "normal" })).toBe(false);
+    expect(isTreatmentSchedulingDemand({ ...row, status: "aguardando" })).toBe(false);
+    expect(isTreatmentSchedulingDemand({ id: "2", unitId: "u1", sector: "Fisioterapia", status: "apto_atendimento" })).toBe(false);
+    expect(isTreatmentSchedulingDemand({ id: "3", unitId: "u1", destinationProfession: "Nutrição", status: "apto_atendimento" })).toBe(true);
   });
 
   it("mantém sessões pendentes sem vínculo como demanda e separa datas vencidas e não informadas", () => {
