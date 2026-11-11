@@ -3,10 +3,9 @@ import { buildTreatmentCapacityPlan, type CapacityPlanningInput } from "./treatm
 
 const baseInput = (): CapacityPlanningInput => ({
   today: "2026-11-10",
-  nowTime: "07:00",
   endDate: "2026-11-11",
   periodDates: ["2026-11-11"],
-  professionals: [{ id: "p1", name: "Profissional A", profession: "Fisioterapeuta", unitId: "u1" }],
+  professionals: [{ id: "p1", name: "Profissional A", profession: "Fisioterapeuta", unitId: "u1", cboCode: "223605", appointmentDurationMinutes: 30 }],
   availabilities: [{
     professionalId: "p1",
     unitId: "u1",
@@ -17,7 +16,6 @@ const baseInput = (): CapacityPlanningInput => ({
     startTime: "08:00",
     endTime: "10:00",
     vacanciesPerHour: 2,
-    durationMinutes: 30,
   }],
   appointments: [],
   blocks: [],
@@ -63,7 +61,7 @@ describe("planejamento de capacidade real para tratamentos", () => {
     expect(result.professionals[0].nextWindows[0].label).not.toContain("08:30");
   });
 
-  it("calcula turnos como faixas e divide a faixa em torno de bloqueios parciais", () => {
+  it("calcula turnos usando somente o horário inicial que a Agenda realmente oferece", () => {
     const input = baseInput();
     input.availabilities = [{
       ...input.availabilities[0],
@@ -72,7 +70,6 @@ describe("planejamento de capacidade real para tratamentos", () => {
       startTime: "08:00",
       endTime: "12:00",
       vacanciesPerHour: 0,
-      durationMinutes: 0,
     }];
     input.appointments = [
       { professionalId: "p1", unitId: "u1", date: "2026-11-11", time: "08:30", status: "confirmado", origin: "recepcao" },
@@ -100,7 +97,7 @@ describe("planejamento de capacidade real para tratamentos", () => {
       sameDayExternalReserved: 2,
       availableDates: 1,
     });
-    expect(result.professionals[0].nextWindows.map((window) => window.label)).toEqual(["08:00–09:00", "10:00–12:00"]);
+    expect(result.professionals[0].nextWindows.map((window) => window.label)).toEqual(["08:00"]);
   });
 
   it("conta quota de período uma única vez e não a desconta de cada dia", () => {
@@ -164,9 +161,9 @@ describe("planejamento de capacidade real para tratamentos", () => {
       unassignedDemand: 3,
       oldestWaitDays: 9,
       professionalId: "p1",
-      availableAppointments: 6,
+      availableAppointments: 4,
       pendingSessions: 1,
-      residualCapacity: 5,
+      residualCapacity: 3,
       suggestedForReview: 3,
     });
   });
@@ -207,6 +204,86 @@ describe("planejamento de capacidade real para tratamentos", () => {
 
     const result = buildTreatmentCapacityPlan(input);
     expect(result.professionals[0]).toMatchObject({ availableAppointments: 0, blockedDays: 1, reviewDays: 0 });
+  });
+
+  it("usa o tempo de atendimento do profissional para gerar os inícios dos horários", () => {
+    const input = baseInput();
+    input.professionals[0].appointmentDurationMinutes = 45;
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0].nextWindows[0].label).toBe("08:00, 08:45, 09:30");
+    expect(result.professionals[0].openWindows).toBe(3);
+  });
+
+  it("um bloqueio que cobre o início do turno remove o horário do turno", () => {
+    const input = baseInput();
+    input.availabilities = [{
+      ...input.availabilities[0],
+      weekdays: [3],
+      vacanciesPerDay: 5,
+      startTime: "08:00",
+      endTime: "12:00",
+      vacanciesPerHour: 0,
+    }];
+    input.blocks = [{
+      startDate: "2026-11-11", endDate: "2026-11-11", unitId: "u1",
+      allDay: false, startTime: "07:30", endTime: "08:30",
+    }];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0]).toMatchObject({ availableAppointments: 0, openWindows: 0 });
+  });
+
+  it("restringe a sugestão ao CBO explícito da fila e do profissional", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"];
+    input.professionals.push({
+      id: "p2", name: "Profissional B", profession: "Fisioterapeuta",
+      unitId: "u1", cboCode: "223606", appointmentDurationMinutes: 30,
+    });
+    input.availabilities.push({
+      ...input.availabilities[0],
+      professionalId: "p2",
+      weekdays: [3],
+    });
+    input.queueDemand = [
+      { id: "q1", unitId: "u1", destinationProfession: "Fisioterapia", requestDate: "2026-11-01", cboCode: "223605" },
+    ];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.suggestions).toHaveLength(1);
+    expect(result.suggestions[0]).toMatchObject({
+      professionalId: "p1",
+      cboStatus: "compatível",
+      unassignedDemand: 1,
+    });
+  });
+
+  it("não conta vagas horárias maiores que os inícios de horário realmente livres", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"];
+    input.blocks = [{
+      startDate: "2026-11-11", endDate: "2026-11-11", unitId: "u1",
+      allDay: false, startTime: "08:00", endTime: "08:30",
+    }];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0]).toMatchObject({
+      availableAppointments: 3,
+      openWindows: 3,
+    });
+  });
+
+  it("não soma recomendações de candidatos acima da demanda sem profissional", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"];
+    input.professionals.push({
+      id: "p2", name: "Profissional B", profession: "Fisioterapeuta",
+      unitId: "u1", cboCode: "223605", appointmentDurationMinutes: 30,
+    });
+    input.availabilities.push({ ...input.availabilities[0], professionalId: "p2", weekdays: [3] });
+    input.queueDemand = [
+      { id: "q1", unitId: "u1", destinationProfession: "Fisioterapia", requestDate: "2026-11-01", cboCode: null },
+      { id: "q2", unitId: "u1", destinationProfession: "Fisioterapia", requestDate: "2026-11-02", cboCode: null },
+    ];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.suggestions.reduce((sum, row) => sum + row.suggestedForReview, 0)).toBe(2);
   });
 
 });

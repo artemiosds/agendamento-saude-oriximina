@@ -232,6 +232,7 @@ export interface FilaEspera {
   dataSolicitacaoOriginal?: string;
   origemCadastro?: "normal" | "demanda_reprimida";
   especialidadeDestino?: string;
+  customData?: Record<string, unknown> | null;
 }
 
 export interface Atendimento {

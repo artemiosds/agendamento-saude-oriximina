@@ -23,30 +23,40 @@ const norm = (s: string) =>
 
 /** Monta a lista de profissões (com CBO quando cadastrado) a partir dos profissionais visíveis. */
 export function buildProfissaoOptions(profissionais: FuncionarioLike[]): ProfissaoCboOption[] {
-  const map = new Map<string, ProfissaoCboOption>();
+  const map = new Map<string, { option: ProfissaoCboOption; cboCodes: Set<string>; missingCbo: boolean }>();
   for (const p of profissionais) {
     const profissao = (p.profissao || "").trim();
     if (!profissao) continue;
     const cd = (p.customData || (p as any).custom_data || {}) as Record<string, any>;
-    const cbo = (cd.cbo_codigo || "").toString().trim();
+    const cbo = (cd.cbo_codigo || "").toString().trim().toUpperCase();
     const key = norm(profissao);
     const existing = map.get(key);
     if (existing) {
-      existing.total += 1;
-      if (!existing.cboCodigo && cbo) {
-        existing.cboCodigo = cbo;
-        existing.label = `${existing.value} • CBO ${cbo}`;
-      }
+      existing.option.total += 1;
+      if (cbo) existing.cboCodes.add(cbo);
+      else existing.missingCbo = true;
     } else {
       map.set(key, {
-        value: profissao,
-        label: cbo ? `${profissao} • CBO ${cbo}` : profissao,
-        cboCodigo: cbo || undefined,
-        total: 1,
+        option: { value: profissao, label: profissao, total: 1 },
+        cboCodes: new Set(cbo ? [cbo] : []),
+        missingCbo: !cbo,
       });
     }
   }
-  return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value, "pt-BR"));
+
+  return Array.from(map.values()).map(({ option, cboCodes, missingCbo }) => {
+    if (cboCodes.size === 1 && !missingCbo) {
+      option.cboCodigo = [...cboCodes][0];
+      option.label = option.value + " • CBO " + option.cboCodigo;
+    } else if (cboCodes.size > 1) {
+      option.cboCodigo = undefined;
+      option.label = option.value + " • CBO múltiplos";
+    } else if (missingCbo && cboCodes.size === 1) {
+      option.cboCodigo = undefined;
+      option.label = option.value + " • CBO não confirmado";
+    }
+    return option;
+  }).sort((a, b) => a.value.localeCompare(b.value, "pt-BR"));
 }
 
 /** Rótulo amigável para uma profissão de destino já salva. */
@@ -62,6 +72,7 @@ interface Props {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  onCboChange?: (code: string | null) => void;
 }
 
 const ProfissaoCboSelect: React.FC<Props> = ({
@@ -70,11 +81,21 @@ const ProfissaoCboSelect: React.FC<Props> = ({
   onChange,
   placeholder = "Selecione a profissão",
   disabled = false,
+  onCboChange,
 }) => {
   const options = useMemo(() => buildProfissaoOptions(profissionais), [profissionais]);
 
   return (
-    <Select value={value || "none"} onValueChange={(v) => onChange(v === "none" ? "" : v)} disabled={disabled}>
+    <Select
+      value={value || "none"}
+      onValueChange={(v) => {
+        const selected = v === "none" ? "" : v;
+        onChange(selected);
+        const option = options.find((item) => norm(item.value) === norm(selected));
+        onCboChange?.(option?.cboCodigo || null);
+      }}
+      disabled={disabled}
+    >
       <SelectTrigger>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

@@ -213,6 +213,14 @@ const FilaEspera: React.FC = () => {
     return map;
   }, [funcionarios]);
 
+  const resolveProfessionalCbo = (professionalId: string): string => {
+    if (!professionalId) return "";
+    const professional = employeeMap.get(professionalId);
+    const custom = professional?.customData || (professional as any)?.custom_data || {};
+    const value = custom.cbo_codigo;
+    return value === null || value === undefined ? "" : String(value).trim().toUpperCase();
+  };
+
   const resolvePaciente = useCallback(
     (pacienteId: string, fallbackNome?: string): string => {
       return pacienteMap.get(pacienteId)?.nome || fallbackNome || "Paciente não encontrado";
@@ -293,6 +301,7 @@ const FilaEspera: React.FC = () => {
     unidadeId: "",
     profissionalId: "",
     especialidadeDestino: "",
+    cboDestino: "",
     tipo: "primeira_consulta",
     dataSolicitacaoOriginal: "",
     descricaoClinica: "",
@@ -317,6 +326,7 @@ const FilaEspera: React.FC = () => {
     descricaoClinica: "",
     cid: "",
     especialidadeDestino: "",
+    cboDestino: "",
   });
   /** "profissional" = profissional individual | "profissao" = aberto por profissão/CBO */
   const [modoDirecionamento, setModoDirecionamento] = useState<"profissional" | "profissao">("profissional");
@@ -599,6 +609,7 @@ const FilaEspera: React.FC = () => {
       descricaoClinica: "",
       cid: "",
       especialidadeDestino: "",
+    cboDestino: "",
     });
     setModoDirecionamento("profissional");
     setCriarPaciente(false);
@@ -633,6 +644,7 @@ const FilaEspera: React.FC = () => {
       descricaoClinica: f.descricaoClinica || "",
       cid: f.cid || "",
       especialidadeDestino: (f as any).especialidadeDestino || "",
+      cboDestino: String(f.customData?.cbo_destino || ""),
     });
     setModoDirecionamento(
       !f.profissionalId && (f as any).especialidadeDestino ? "profissao" : "profissional",
@@ -732,6 +744,7 @@ const FilaEspera: React.FC = () => {
       return;
     }
     const newId = `f${Date.now()}`;
+    const destinationCbo = form.cboDestino;
     await addToFila({
       id: newId,
       pacienteId,
@@ -739,6 +752,7 @@ const FilaEspera: React.FC = () => {
       unidadeId: form.unidadeId,
       profissionalId: modoDirecionamento === "profissao" ? "" : form.profissionalId,
       especialidadeDestino: modoDirecionamento === "profissao" ? form.especialidadeDestino : "",
+      customData: destinationCbo ? { cbo_destino: destinationCbo } : {},
       setor: form.setor,
       prioridade: form.prioridade as any,
       status: "aguardando",
@@ -803,11 +817,18 @@ const FilaEspera: React.FC = () => {
       return;
     }
     if (editId) {
+      const currentFilaRow = fila.find((row) => row.id === editId);
+      const destinationCbo = form.cboDestino;
+      const customData = { ...(currentFilaRow?.customData || {}) };
+      if (destinationCbo) customData.cbo_destino = destinationCbo;
+      else delete customData.cbo_destino;
+      const { cboDestino: _cboDestino, ...formData } = form;
       await updateFila(editId, {
-        ...form,
+        ...formData,
         prioridade: form.prioridade as any,
         profissionalId: modoDirecionamento === "profissao" ? "" : form.profissionalId,
         especialidadeDestino: modoDirecionamento === "profissao" ? form.especialidadeDestino : "",
+        customData,
       });
       toast.success("Registro atualizado!");
       setDialogOpen(false);
@@ -917,6 +938,7 @@ const FilaEspera: React.FC = () => {
         sortableDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       }
       const newId = `f${Date.now()}`;
+      const destinationCbo = importForm.cboDestino;
       await addToFila({
         id: newId,
         pacienteId,
@@ -925,6 +947,7 @@ const FilaEspera: React.FC = () => {
         profissionalId: importDirecionamento === "profissao" ? "" : importForm.profissionalId,
         especialidadeDestino:
           importDirecionamento === "profissao" ? importForm.especialidadeDestino : "",
+        customData: destinationCbo ? { cbo_destino: destinationCbo } : {},
         setor: "",
         prioridade: importForm.prioridade as any,
         status: "aguardando",
@@ -1302,6 +1325,7 @@ const FilaEspera: React.FC = () => {
                     unidadeId: "",
                     profissionalId: "",
                     especialidadeDestino: "",
+    cboDestino: "",
                     tipo: "primeira_consulta",
                     dataSolicitacaoOriginal: "",
                     descricaoClinica: "",
@@ -1826,6 +1850,7 @@ const FilaEspera: React.FC = () => {
                     ...p,
                     profissionalId: v === "profissao" ? "" : p.profissionalId,
                     especialidadeDestino: v === "profissional" ? "" : p.especialidadeDestino,
+                    cboDestino: "",
                   }));
                 }}
               >
@@ -1843,7 +1868,10 @@ const FilaEspera: React.FC = () => {
                 <Label>Profissional (opcional)</Label>
                 <Select
                   value={form.profissionalId || "none"}
-                  onValueChange={(v) => setForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                  onValueChange={(v) => {
+                    const professionalId = v === "none" ? "" : v;
+                    setForm((p) => ({ ...p, profissionalId, cboDestino: resolveProfessionalCbo(professionalId) }));
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
@@ -1866,6 +1894,7 @@ const FilaEspera: React.FC = () => {
                   profissionais={profissionais}
                   value={form.especialidadeDestino}
                   onChange={(value) => setForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))}
+                  onCboChange={(code) => setForm((p) => ({ ...p, cboDestino: code || "" }))}
                   placeholder="Qualquer profissão ou selecione uma profissão"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -2086,6 +2115,7 @@ const FilaEspera: React.FC = () => {
                         ...p,
                         profissionalId: v === "profissao" ? "" : p.profissionalId,
                         especialidadeDestino: v === "profissional" ? "" : p.especialidadeDestino,
+                    cboDestino: "",
                       }));
                     }}
                   >
@@ -2103,7 +2133,10 @@ const FilaEspera: React.FC = () => {
                     <Label>Profissional Desejado</Label>
                     <Select
                       value={importForm.profissionalId || "none"}
-                      onValueChange={(v) => setImportForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+                      onValueChange={(v) => {
+                        const professionalId = v === "none" ? "" : v;
+                        setImportForm((p) => ({ ...p, profissionalId, cboDestino: resolveProfessionalCbo(professionalId) }));
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione" />
@@ -2128,6 +2161,7 @@ const FilaEspera: React.FC = () => {
                       onChange={(value) =>
                         setImportForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))
                       }
+                      onCboChange={(code) => setImportForm((p) => ({ ...p, cboDestino: code || "" }))}
                       placeholder="Qualquer profissão ou selecione uma profissão"
                     />
                     <p className="mt-1 text-xs text-muted-foreground">

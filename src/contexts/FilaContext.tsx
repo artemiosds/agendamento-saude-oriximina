@@ -74,7 +74,7 @@ const STATUS_OPERACIONAIS = [
 const STATUS_OPERACIONAIS_SET = new Set<string>(STATUS_OPERACIONAIS);
 
 const FILA_COLUMNS =
-  "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
+  "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino,custom_data";
 
 const mapFilaRow = (f: any): FilaEspera => ({
   id: f.id,
@@ -98,6 +98,7 @@ const mapFilaRow = (f: any): FilaEspera => ({
   dataSolicitacaoOriginal: f.data_solicitacao_original || "",
   origemCadastro: f.origem_cadastro || "normal",
   especialidadeDestino: f.especialidade_destino || "",
+  customData: f.custom_data && typeof f.custom_data === "object" && !Array.isArray(f.custom_data) ? f.custom_data : {},
 });
 
 export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -184,6 +185,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
         data_solicitacao_original: f.dataSolicitacaoOriginal || "",
         origem_cadastro: f.origemCadastro || "normal",
         especialidade_destino: f.especialidadeDestino || "",
+        custom_data: f.customData || {},
       } as any);
       if (!error) {
         setFila((prev) => [...prev, f]);
@@ -234,6 +236,7 @@ export const FilaSliceProvider: React.FC<{ children: React.ReactNode }> = ({
       if (data.setor !== undefined) dbData.setor = data.setor;
       if ((data as any).especialidadeDestino !== undefined)
         dbData.especialidade_destino = (data as any).especialidadeDestino;
+      if (data.customData !== undefined) dbData.custom_data = data.customData || {};
       const query = supabase.from("fila_espera" as any).update(dbData).eq("id", id);
       const { data: updatedRows, error } = throwOnError
         ? await query.select("id")

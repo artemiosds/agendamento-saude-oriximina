@@ -136,7 +136,7 @@ export function classifyTreatmentCapacitySpecialty(value: string): TreatmentCapa
 export function extractExplicitCboCode(customData: unknown, destination = ""): string | null {
   if (customData && typeof customData === "object" && !Array.isArray(customData)) {
     const record = customData as Record<string, unknown>;
-    const value = record.cbo_codigo;
+    const value = record.cbo_codigo ?? record.cbo_destino;
     if ((typeof value === "string" || typeof value === "number") && String(value).trim()) {
       return String(value).trim().toUpperCase();
     }

@@ -7,7 +7,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { addDaysToDateStr, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
+import { addDaysToDateStr, todayLocalStr } from "@/lib/utils";
 import {
   buildTreatmentCapacitySnapshot,
   classifyTreatmentCapacitySpecialty,
@@ -22,6 +22,7 @@ import {
   buildTreatmentCapacityPlan,
   type CapacityPlanningAppointmentInput,
   type CapacityPlanningAvailabilityInput,
+  type CapacityPlanningProfessionalInput,
   type TreatmentCapacityPlan,
 } from "@/lib/treatmentCapacityPlanning";
 import type { ExternalQuotaWindow } from "@/lib/externalQuota";
@@ -143,7 +144,7 @@ export default function TreatmentCapacityOverview() {
             const rows = await fetchAllPages<any>((from, to) => {
               let query = supabase
                 .from("funcionarios" as any)
-                .select("id,nome,profissao,role,unidade_id,ativo,custom_data")
+                .select("id,nome,profissao,role,unidade_id,ativo,tempo_atendimento,custom_data")
                 .eq("ativo", true)
                 .eq("role", "profissional");
               if (group) query = query.in("id", group);
@@ -287,7 +288,7 @@ export default function TreatmentCapacityOverview() {
         const fetchQueue = (term: string) => fetchAllPages<any>((from, to) => {
           let query = supabase
             .from("fila_espera" as any)
-            .select("id,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original")
+            .select("id,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original,custom_data")
             .eq("status", "apto_atendimento")
             .or("especialidade_destino.ilike.%" + term + "%,setor.ilike.%" + term + "%");
           if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
@@ -317,13 +318,14 @@ export default function TreatmentCapacityOverview() {
           nextQueueWarning = "Seu perfil não possui permissão de leitura da fila. Os indicadores de fila não serão exibidos.";
         }
 
-        const professionals: CapacityProfessionalInput[] = [...targetPairs.values()].map(({ staff, unitId }) => ({
+        const professionals: CapacityPlanningProfessionalInput[] = [...targetPairs.values()].map(({ staff, unitId }) => ({
           id: String(staff.id),
           name: String(staff.nome || "Profissional sem nome"),
           profession: String(staff.profissao || ""),
           unitId,
           unitName: unitNameById.get(unitId) || unitId,
           cboCode: extractExplicitCboCode(staff.custom_data),
+          appointmentDurationMinutes: Math.max(15, Number(staff.tempo_atendimento) || 30),
         }));
 
         const availabilities: CapacityPlanningAvailabilityInput[] = availabilityRows
@@ -339,7 +341,6 @@ export default function TreatmentCapacityOverview() {
             startTime: String(row.hora_inicio || ""),
             endTime: String(row.hora_fim || ""),
             vacanciesPerHour: Math.max(0, Number(row.vagas_por_hora) || 0),
-            durationMinutes: Math.max(0, Number(row.duracao_consulta) || 0) || 30,
           }));
 
         const appointments: CapacityPlanningAppointmentInput[] = appointmentRows.map((row) => ({
@@ -380,13 +381,11 @@ export default function TreatmentCapacityOverview() {
           destinationProfession: row.especialidade_destino ? String(row.especialidade_destino) : null,
           sector: row.setor ? String(row.setor) : null,
           requestDate: row.data_solicitacao_original ? String(row.data_solicitacao_original) : null,
-          // FilaEspera salva apenas a profissão em especialidade_destino; não há CBO de destino explícito neste fluxo.
-          cboCode: null,
+          cboCode: extractExplicitCboCode(row.custom_data),
         }));
 
         const nextCapacityPlan = buildTreatmentCapacityPlan({
           today,
-          nowTime: nowTimeBrazilStr(),
           endDate,
           periodDates,
           professionals,
@@ -786,7 +785,7 @@ export default function TreatmentCapacityOverview() {
                     <td className="px-3 py-3">{row.unitName}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.configuredSlots)}<p className="text-xs text-muted-foreground">{formatNumber(row.scheduledDays)} dia(s) programado(s) • {formatNumber(row.multipleWindowDays)} com múltiplas faixas</p></td>
                     <td className="px-3 py-3 text-right tabular-nums">{capacityPlan ? formatNumber(planByProfessional.get(row.professionalId + "|" + row.unitId)?.availableAppointments || 0) : "—"}</td>
-                    <td className="px-3 py-3 text-right text-xs">{(planByProfessional.get(row.professionalId + "|" + row.unitId)?.nextWindows || []).map((window) => <div key={window.date + window.label}>{window.date}: {window.label} ({formatNumber(window.freeAppointments)})</div>)}</td>
+                    <td className="px-3 py-3 text-right text-xs">{(planByProfessional.get(row.professionalId + "|" + row.unitId)?.nextWindows || []).map((window) => <div key={window.date + window.label}>{window.date}: {window.label} ({formatNumber(typeof window.freeAppointments === "number" ? formatNumber(window.freeAppointments) : "—")})</div>)}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.occupiedAppointments)}{row.appointmentsWithoutAvailableSchedule > 0 && <p className="text-xs text-amber-600">{formatNumber(row.appointmentsWithoutAvailableSchedule)} sem grade ou dentro de bloqueio</p>}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.pendingSessions)}<p className="text-xs text-muted-foreground">{formatNumber(row.pendingUndated)} sem data • {formatNumber(row.pendingOverdue)} vencida(s)</p>{row.pendingWithAppointmentLink > 0 && <p className="text-xs text-amber-600">{formatNumber(row.pendingWithAppointmentLink)} pendente(s) com vínculo</p>}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{queueReadStatus === "available" ? formatNumber(row.assignedQueueDemand) : "—"}</td>
@@ -802,7 +801,7 @@ export default function TreatmentCapacityOverview() {
             <div className="space-y-3 rounded-lg border border-border p-3">
               <div>
                 <h3 className="font-semibold text-foreground">Sugestões para organizar a demanda</h3>
-                <p className="text-xs text-muted-foreground">Alternativas para avaliação da gestão. Não atribuem pacientes, não alteram a fila e não criam agendamentos. O CBO de destino não está gravado na solicitação, portanto a comparação por CBO permanece não confirmável.</p>
+                <p className="text-xs text-muted-foreground">Alternativas para avaliação da gestão. Não atribuem pacientes, não alteram a fila e não criam agendamentos. O CBO é comparado somente quando foi explicitamente registrado no destino; solicitações antigas sem esse metadado permanecem não comparáveis.</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full text-left text-sm">
@@ -843,7 +842,7 @@ export default function TreatmentCapacityOverview() {
           )}
 
           <p className="text-xs text-muted-foreground">
-            Leitura gerencial: capacidade interna livre é uma estimativa por grade horária, limite diário e por hora, agendamentos ocupantes, bloqueios integrais/parciais e reservas externas de data específica. Cotas externas de período são exibidas separadamente como saldo; não são descontadas repetidamente de cada dia. Sobreposição de faixas ou múltiplas grades horárias no mesmo dia suspende o cálculo daquele dia e exige revisão. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. As sugestões são agrupadas por unidade e profissão, usam apenas capacidade residual depois das sessões pendentes e nunca atribuem pacientes ou agendam automaticamente. A solicitação da fila não registra CBO de destino; compatibilidade por CBO permanece não comparável.
+            Leitura gerencial: capacidade interna livre é uma estimativa por grade horária, limite diário e por hora, agendamentos ocupantes, bloqueios integrais/parciais e reservas externas de data específica. Cotas externas de período são exibidas separadamente como saldo; não são descontadas repetidamente de cada dia. Sobreposição de faixas ou múltiplas grades horárias no mesmo dia suspende o cálculo daquele dia e exige revisão. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. As sugestões são agrupadas por unidade e profissão, usam apenas capacidade residual depois das sessões pendentes e nunca atribuem pacientes ou agendam automaticamente. Novos direcionamentos registram o CBO de destino quando selecionado no formulário. Registros históricos sem esse metadado permanecem não comparáveis; nenhum CBO é preenchido retroativamente por suposição.
           </p>
           <p className="text-xs text-muted-foreground">
             A capacidade considera o período selecionado; as sessões pendentes e as solicitações aptas representam o estoque atual de demanda, independentemente desse horizonte.

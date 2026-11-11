@@ -1,13 +1,16 @@
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import { classifyTreatmentCapacitySpecialty, type CapacityProfessionalInput, type CapacityAvailabilityInput, type CapacityAppointmentInput, type CapacityBlockInput, type PendingTreatmentSessionInput, type QueueDemandInput } from "@/lib/treatmentCapacityAnalytics";
-import { classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable, quotaMatchesAvailability, type ExternalQuotaWindow } from "@/lib/externalQuota";
+import { calculateExternalCapacity, classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable, quotaMatchesAvailability, type ExternalQuotaWindow } from "@/lib/externalQuota";
 import { isoDayOfWeek } from "@/lib/utils";
+
+export interface CapacityPlanningProfessionalInput extends CapacityProfessionalInput {
+  appointmentDurationMinutes?: number | null;
+}
 
 export interface CapacityPlanningAvailabilityInput extends CapacityAvailabilityInput {
   startTime: string;
   endTime: string;
   vacanciesPerHour: number;
-  durationMinutes?: number | null;
 }
 
 export interface CapacityPlanningAppointmentInput extends CapacityAppointmentInput {
@@ -16,10 +19,9 @@ export interface CapacityPlanningAppointmentInput extends CapacityAppointmentInp
 
 export interface CapacityPlanningInput {
   today: string;
-  nowTime?: string | null;
   endDate: string;
   periodDates: string[];
-  professionals: CapacityProfessionalInput[];
+  professionals: CapacityPlanningProfessionalInput[];
   availabilities: CapacityPlanningAvailabilityInput[];
   appointments: CapacityPlanningAppointmentInput[];
   blocks: CapacityBlockInput[];
@@ -61,7 +63,7 @@ export interface TreatmentDemandSuggestion {
   pendingSessions: number;
   residualCapacity: number;
   suggestedForReview: number;
-  cboStatus: "não comparável";
+  cboStatus: "compatível" | "não comparável";
   message: string;
 }
 
@@ -102,36 +104,17 @@ function isWholeDayBlock(block: CapacityBlockInput): boolean {
   return block.allDay === true || !block.startTime || !block.endTime;
 }
 
-function overlapping(a: MinuteRange, b: MinuteRange): boolean {
-  return a.start < b.end && b.start < a.end;
+function isSlotBlockedAt(blocks: CapacityBlockInput[], time: number): boolean {
+  return blocks.some((block) => {
+    if (isWholeDayBlock(block)) return true;
+    const start = toMinutes(block.startTime) ?? 0;
+    const end = toMinutes(block.endTime) ?? 1439;
+    return time >= start && time < end;
+  });
 }
 
-function subtractBlockedRanges(start: number, end: number, blocks: CapacityBlockInput[], date: string): MinuteRange[] {
-  const cuts = blocks
-    .filter((block) => date >= block.startDate && date <= block.endDate && !isWholeDayBlock(block))
-    .map((block) => ({
-      start: toMinutes(block.startTime) ?? start,
-      end: toMinutes(block.endTime) ?? end,
-    }))
-    .map((range) => ({ start: Math.max(start, range.start), end: Math.min(end, range.end) }))
-    .filter((range) => range.start < range.end)
-    .sort((a, b) => a.start - b.start);
-
-  const merged: MinuteRange[] = [];
-  for (const range of cuts) {
-    const last = merged[merged.length - 1];
-    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
-    else merged.push({ ...range });
-  }
-
-  const free: MinuteRange[] = [];
-  let cursor = start;
-  for (const range of merged) {
-    if (range.start > cursor) free.push({ start: cursor, end: range.start });
-    cursor = Math.max(cursor, range.end);
-  }
-  if (cursor < end) free.push({ start: cursor, end });
-  return free;
+function overlapping(a: MinuteRange, b: MinuteRange): boolean {
+  return a.start < b.end && b.start < a.end;
 }
 
 function dateAgeInDays(date: string | null | undefined, today: string): number | null {
@@ -147,7 +130,7 @@ function scheduleKey(row: CapacityPlanningAvailabilityInput): string {
   return row.startTime.slice(0, 5) + "|" + row.endTime.slice(0, 5);
 }
 
-function getDailyPlan(input: CapacityPlanningInput, professional: CapacityProfessionalInput, date: string) {
+function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanningProfessionalInput, date: string) {
   const activeRows = input.availabilities.filter((row) =>
     row.professionalId === professional.id &&
     row.unitId === professional.unitId &&
@@ -194,8 +177,7 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityProfes
   }));
   const invalid = parsedRows.some(({ row, start, end }) =>
     start === null || end === null || start >= end ||
-    row.vacanciesPerDay < 0 || row.vacanciesPerHour < 0 ||
-    (row.vacanciesPerHour > 0 && Number(row.durationMinutes ?? 30) <= 0),
+    row.vacanciesPerDay < 0 || row.vacanciesPerHour < 0,
   );
   if (invalid) {
     return { freeAppointments: 0, openWindows: 0, reserved: 0, review: true, blocked: false, windows: [] as CapacityWindow[] };
@@ -233,7 +215,6 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityProfes
   let totalReserved = 0;
   let review = overlapIndexes.size > 0;
   const windows: CapacityWindow[] = [];
-  const now = date === input.today ? toMinutes(input.nowTime) : null;
 
   for (let index = 0; index < parsedRows.length; index++) {
     if (overlapIndexes.has(index)) continue;
@@ -245,14 +226,7 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityProfes
       const time = toMinutes(appointment.time);
       return time !== null && time >= start && time < end;
     });
-    // The official internal capacity check counts the whole day for hourly availability,
-    // but only the selected shift for a turn-based availability.
-    const capacityAppointments = row.vacanciesPerHour > 0 ? dayAppointments : inTurn;
-    const externalAppointments = capacityAppointments.filter((appointment) => appointment.origin === "externo").length;
-    const internalAppointments = capacityAppointments.length - externalAppointments;
-    const sameDayQuotas = input.externalQuotas.filter((quota) =>
-      quota.periodo_inicio === date &&
-      quota.periodo_fim === date &&
+    const externalQuotas = dateQuotas.filter((quota) =>
       quotaMatchesAvailability(quota, {
         profissionalId: professional.id,
         unidadeId: professional.unitId,
@@ -261,44 +235,57 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityProfes
         horaFim: row.endTime,
       }, activeRows.length),
     );
-    const requestedReservation = sameDayQuotas.reduce((sum, quota) => sum + Math.max(0, Number(quota.vagas_total) || 0), 0);
-    const reserved = Math.min(Math.max(0, Number(row.vacanciesPerDay) || 0), requestedReservation);
-    totalReserved += reserved;
-    if (requestedReservation > row.vacanciesPerDay) review = true;
 
-    const dailyInternalRemaining = Math.max(0, row.vacanciesPerDay - reserved - internalAppointments);
-    const dailyTotalRemaining = Math.max(0, row.vacanciesPerDay - internalAppointments - externalAppointments);
-    const internalCapacityRemaining = Math.min(dailyInternalRemaining, dailyTotalRemaining);
-    if (internalCapacityRemaining <= 0) continue;
+    const capacityAppointments = row.vacanciesPerHour > 0 ? dayAppointments : inTurn;
+    const externalCount = capacityAppointments.filter((appointment) => appointment.origin === "externo").length;
+    const internalCount = capacityAppointments.length - externalCount;
+    const capacity = calculateExternalCapacity({
+      capacidadeTotal: row.vacanciesPerDay,
+      reservasConfiguradas: externalQuotas.map((quota) => quota.vagas_total),
+      ocupacaoExterna: externalCount,
+      ocupacaoInterna: internalCount,
+    });
+    const requestedReservation = externalQuotas.reduce((sum, quota) =>
+      sum + Math.max(0, Number(quota.vagas_total) || 0), 0,
+    );
+    totalReserved += Math.min(Math.max(0, Number(row.vacanciesPerDay) || 0), requestedReservation);
+    if (capacity.conflitoReserva) review = true;
+    if (capacity.vagasInternasLivres <= 0) continue;
 
     if (row.vacanciesPerHour > 0) {
-      const duration = Number(row.durationMinutes || 30);
-      const availableStarts: number[] = [];
-      const availableByHour = new Map<number, number>();
-      for (let minute = start; minute + duration <= end; minute += duration) {
-        if (now !== null && minute < now) continue;
-
-        const hasBlock = dateBlocks.some((block) => {
-          if (isWholeDayBlock(block)) return true;
-          const blockStart = toMinutes(block.startTime);
-          const blockEnd = toMinutes(block.endTime);
-          return blockStart !== null && blockEnd !== null && minute >= blockStart && minute < blockEnd;
-        });
-        if (hasBlock) continue;
-
-        const hour = Math.floor(minute / 60);
-        const hourCount = dayAppointments.filter((appointment) => {
-          const appointmentMinute = toMinutes(appointment.time);
-          return appointmentMinute !== null && Math.floor(appointmentMinute / 60) === hour;
-        }).length;
-        const hourRemaining = Math.max(0, row.vacanciesPerHour - hourCount);
-        if (hourRemaining <= 0) continue;
-        availableStarts.push(minute);
-        if (!availableByHour.has(hour)) availableByHour.set(hour, hourRemaining);
+      if (dayAppointments.length >= row.vacanciesPerDay) continue;
+      const duration = Math.max(15, Number(professional.appointmentDurationMinutes) || 30);
+      const hourCounts = new Map<number, number>();
+      const slotCounts = new Map<number, number>();
+      for (const appointment of dayAppointments) {
+        const appointmentMinute = toMinutes(appointment.time);
+        if (appointmentMinute === null) continue;
+        const hour = Math.floor(appointmentMinute / 60);
+        hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
+        slotCounts.set(appointmentMinute, (slotCounts.get(appointmentMinute) || 0) + 1);
       }
 
-      const hourlyCapacityRemaining = [...availableByHour.values()].reduce((sum, remaining) => sum + remaining, 0);
-      const freeAppointments = Math.min(internalCapacityRemaining, hourlyCapacityRemaining);
+      const availableStarts: number[] = [];
+      const availableByHour = new Map<number, number>();
+      const availableStartsByHour = new Map<number, number>();
+      // The live Agenda uses tempo_atendimento and starts at the configured beginning.
+      for (let minute = start; minute < end; minute += duration) {
+        const hour = Math.floor(minute / 60);
+        const hourCount = hourCounts.get(hour) || 0;
+        const slotCount = slotCounts.get(minute) || 0;
+        if (isSlotBlockedAt(dateBlocks, minute)) continue;
+        if (hourCount >= row.vacanciesPerHour || slotCount >= row.vacanciesPerHour) continue;
+        availableStarts.push(minute);
+        availableStartsByHour.set(hour, (availableStartsByHour.get(hour) || 0) + 1);
+        if (!availableByHour.has(hour)) {
+          availableByHour.set(hour, Math.max(0, row.vacanciesPerHour - hourCount));
+        }
+      }
+
+      const hourlyCapacityRemaining = [...availableByHour.entries()].reduce((sum, [hour, remaining]) =>
+        sum + Math.min(remaining, availableStartsByHour.get(hour) || 0), 0,
+      );
+      const freeAppointments = Math.min(capacity.vagasInternasLivres, hourlyCapacityRemaining, availableStarts.length);
       if (freeAppointments <= 0) continue;
       totalFree += freeAppointments;
       totalOpenWindows += availableStarts.length;
@@ -308,19 +295,14 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityProfes
         freeAppointments,
       });
     } else {
-      let openRanges = subtractBlockedRanges(start, end, dateBlocks, date);
-      if (now !== null) openRanges = openRanges
-        .map((range) => ({ start: Math.max(range.start, now), end: range.end }))
-        .filter((range) => range.start < range.end);
-      if (openRanges.length === 0) continue;
-      const freeAppointments = internalCapacityRemaining;
-      totalFree += freeAppointments;
-      totalOpenWindows += openRanges.length;
-      openRanges.forEach((range) => windows.push({
+      if (inTurn.length >= row.vacanciesPerDay || isSlotBlockedAt(dateBlocks, start)) continue;
+      totalFree += capacity.vagasInternasLivres;
+      totalOpenWindows += 1;
+      windows.push({
         date,
-        label: toTime(range.start) + "–" + toTime(range.end),
-        freeAppointments,
-      }));
+        label: row.startTime.slice(0, 5),
+        freeAppointments: capacity.vagasInternasLivres,
+      });
     }
   }
 
@@ -402,13 +384,15 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
     specialty: "Fisioterapia" | "Fonoaudiologia";
     unitId: string;
     unitName: string;
+    cboCode: string | null;
     rows: QueueDemandInput[];
   }>();
   for (const row of input.queueDemand) {
     const specialty = classifyTreatmentCapacitySpecialty(row.destinationProfession || "") ||
       classifyTreatmentCapacitySpecialty(row.sector || "");
     if (!specialty) continue;
-    const key = row.unitId + "|" + specialty;
+    const cboCode = row.cboCode?.trim().toUpperCase() || null;
+    const key = row.unitId + "|" + specialty + "|" + (cboCode || "sem-cbo");
     const current = demandGroups.get(key) || {
       specialty,
       unitId: row.unitId,
@@ -416,6 +400,7 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
         professional.unitId === row.unitId &&
         classifyTreatmentCapacitySpecialty(professional.profession) === specialty,
       )?.unitName || row.unitId,
+      cboCode,
       rows: [],
     };
     current.rows.push(row);
@@ -431,7 +416,14 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
       .filter((age): age is number => age !== null);
     const oldestWaitDays = oldestAges.length ? Math.max(...oldestAges) : null;
     const candidates = professionals
-      .filter((plan) => plan.unitId === group.unitId && plan.specialty === group.specialty)
+      .filter((plan) => {
+        if (plan.unitId !== group.unitId || plan.specialty !== group.specialty) return false;
+        if (!group.cboCode) return true;
+        const professional = input.professionals.find((candidate) =>
+          candidate.id === plan.professionalId && candidate.unitId === plan.unitId,
+        );
+        return professional?.cboCode?.trim().toUpperCase() === group.cboCode;
+      })
       .map((plan) => {
         const base = input.professionals.find((professional) =>
           professional.id === plan.professionalId && professional.unitId === plan.unitId,
@@ -459,18 +451,25 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
         unassignedDemand: unassigned.length,
         oldestWaitDays,
         professionalId: null,
-        professionalName: "Sem capacidade residual no período",
+        professionalName: candidates.length === 0 ? "Nenhum profissional compatível" : "Sem capacidade residual no período",
         availableAppointments: 0,
         pendingSessions: 0,
         residualCapacity: 0,
         suggestedForReview: 0,
-        cboStatus: "não comparável",
-        message: "Não há capacidade residual calculada após considerar as sessões pendentes. Avaliar a grade e os bloqueios; nenhuma alteração será feita automaticamente.",
+        cboStatus: group.cboCode && candidates.length > 0 ? "compatível" : "não comparável",
+        message: candidates.length === 0
+          ? group.cboCode
+            ? "Nenhum profissional ativo com o CBO de destino informado foi encontrado nesta unidade."
+            : "Nenhum profissional candidato foi encontrado para esta especialidade e unidade."
+          : "Os profissionais com compatibilidade registrada não possuem capacidade residual após considerar as sessões pendentes. Avaliar a grade sem alterar a fila.",
       });
       continue;
     }
 
+    let remainingDemand = unassigned.length;
     for (const candidate of candidates) {
+      const suggestedForReview = Math.min(remainingDemand, candidate.residualCapacity);
+      remainingDemand = Math.max(0, remainingDemand - suggestedForReview);
       suggestions.push({
         specialty: group.specialty,
         unitId: group.unitId,
@@ -482,11 +481,13 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
         availableAppointments: candidate.plan.availableAppointments,
         pendingSessions: candidate.pendingSessions,
         residualCapacity: candidate.residualCapacity,
-        suggestedForReview: Math.min(unassigned.length, candidate.residualCapacity),
-        cboStatus: "não comparável",
+        suggestedForReview,
+        cboStatus: group.cboCode ? "compatível" : "não comparável",
         message: candidate.residualCapacity > 0
-          ? "Candidato para avaliação da equipe, considerando capacidade livre após as sessões pendentes. CBO de destino não armazenado: compatibilidade não comparável. Não representa atribuição ou agendamento."
-          : "Sem capacidade residual após as sessões pendentes; avaliar a grade sem alterar a fila. CBO de destino não armazenado: compatibilidade não comparável.",
+          ? group.cboCode
+            ? "Candidato para avaliação da equipe, com CBO de destino explícito e correspondente ao CBO do profissional. Não representa atribuição ou agendamento."
+            : "Candidato para avaliação da equipe, considerando capacidade livre após as sessões pendentes. CBO de destino não registrado: compatibilidade não comparável. Não representa atribuição ou agendamento."
+          : "Sem capacidade residual após as sessões pendentes; avaliar a grade sem alterar a fila.",
       });
     }
   }
