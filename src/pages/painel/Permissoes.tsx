@@ -690,7 +690,6 @@ const Permissoes: React.FC = () => {
                 {group.modules.map((modulo) => {
                 const row = getPerfilRow(modulo);
                 const isUnidade = unidadeScope !== "" && row?.unidade_id === unidadeScope;
-                const activeCount = row ? ACTIONS.filter((a) => row[a]).length : 0;
                 return (
                   <AccordionItem key={modulo} value={modulo} className="border rounded-lg px-4">
                     <AccordionTrigger className="hover:no-underline">
@@ -796,7 +795,6 @@ const Permissoes: React.FC = () => {
                   const override = getUserOverrideRow(modulo);
                   const base = getUserBaseRow(modulo);
                   const effective = getUserEffectiveRow(modulo);
-                  const activeCount = ACTIONS.filter((a) => effective[a]).length;
                   return (
                     <AccordionItem key={modulo} value={modulo} className="border rounded-lg px-4">
                       <AccordionTrigger className="hover:no-underline">
