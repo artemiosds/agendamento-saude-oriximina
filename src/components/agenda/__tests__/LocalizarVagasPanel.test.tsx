@@ -64,6 +64,20 @@ describe("LocalizarVagasPanel (integração)", () => {
     const box = await screen.findByTestId("pendentes-totais");
     expect(box.textContent).toContain("Informação não disponível");
   });
+  it("explica capacidade favorável e pendências antigas sem misturar os avisos", async () => {
+    await abrirEBuscar({
+      loadAgendaRange: async (start, end) => {
+        for (let date = start; date <= end; date = addDaysToDateStr(date, 1)) loaded.add(date);
+      },
+      getAvailableSlots: () => ["08:00"],
+    });
+
+    const estimate = await screen.findByTestId("continuity-estimate");
+    expect(estimate.textContent).toContain("Capacidade favorável para as sessões datadas neste período");
+    expect(screen.getByTestId("continuity-review").textContent)
+      .toContain("sessões vencidas ou sem data que precisam ser organizadas antes de confirmar a continuidade");
+  });
+
   it("desempenho: 30 dias x 40 profissionais em menos de 1,5 s", async () => {
     const many = Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, nome: `Fono ${i}`, profissao: "Fonoaudiologia", role: "profissional", unidadeId: "u1", ativo: true }));
     const start = todayLocalStr();

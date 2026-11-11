@@ -241,9 +241,11 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
                     </div>
                   ))}
                   {naoCarregados > 0 && <p className="text-xs text-muted-foreground">{naoCarregados} dia(s) ainda não carregado(s) — não significa sem vaga.</p>}
-                  <p className="text-xs">{continuityLabel[r.continuity.estimate]}
+                  <p className="text-xs" data-testid="continuity-estimate">{r.continuity.estimate === "estimada_favoravel" && r.continuity.precisaRevisao
+                    ? "Capacidade favorável para as sessões datadas neste período"
+                    : continuityLabel[r.continuity.estimate]}
                     {r.continuity.estimate !== "nao_confirmada" && r.continuity.naoDistribuivel ? ` · ${r.continuity.naoDistribuivel} sessão(ões) não cabem nos horários livres do próprio dia (${r.continuity.diasEmConflito.map(fmt).join(", ")})` : ""}</p>
-                  {r.continuity.precisaRevisao && <p className="text-xs text-warning">Revisão necessária: há sessões vencidas ou sem data, que não foram descontadas da capacidade futura.</p>}
+                  {r.continuity.precisaRevisao && <p className="text-xs text-warning" data-testid="continuity-review">Revisão necessária: há sessões vencidas ou sem data que precisam ser organizadas antes de confirmar a continuidade.</p>}
                   <p className="text-[11px] text-muted-foreground">A estimativa não reserva horários nem garante a continuidade do tratamento.</p>
                   <p className="text-xs text-muted-foreground">{r.pending ? `Pendentes nesta unidade: ${pendLine(r.pending)}` : "Pendentes: informação não disponível"}
                     {r.pending && r.pending.semData ? " — sessões sem data não entram na estimativa." : ""}</p>
