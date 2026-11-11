@@ -40,11 +40,13 @@ import { buildSharedPatientsSummary, type SharedPatientsSummary } from "@/lib/sh
 import TreatmentDemandScenario from "@/components/tratamentos/TreatmentDemandScenario";
 import type { TreatmentDemandScenarioGroupInput } from "@/lib/treatmentDemandScenario";
 
+import { ACTIVE_TREATMENT_CYCLE_STATUSES } from "@/lib/treatmentCycleStatus";
+
 const PAGE_SIZE = 1000;
 const CYCLE_FORECAST_MAX_DAYS = 3650;
 const CYCLE_WEEKDAYS = [{ value: 1, label: "Seg" }, { value: 2, label: "Ter" }, { value: 3, label: "Qua" }, { value: 4, label: "Qui" }, { value: 5, label: "Sex" }, { value: 6, label: "Sáb" }];
 const FREQUENCY_WEEKDAY_COUNT: Record<string, number> = { "1x_semana": 1, "2x_semana": 2, "3x_semana": 3, "4x_semana": 4, "5x_semana": 5, "6x_semana": 6 };
-const ACTIVE_CYCLE_STATUSES = ["em_andamento", "ativo", "aguardando_vaga", "em_fila"];
+const ACTIVE_CYCLE_STATUSES: string[] = [...ACTIVE_TREATMENT_CYCLE_STATUSES];
 
 async function fetchAllPages<T>(createQuery: (from: number, to: number) => any): Promise<T[]> {
   const all: T[] = [];
