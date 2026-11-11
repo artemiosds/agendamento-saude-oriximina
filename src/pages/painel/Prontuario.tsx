@@ -88,6 +88,7 @@ import type { TreatmentDischargeResult } from "@/services/treatmentDischargeServ
 const HistoricoClinico = React.lazy(() => import("@/components/HistoricoClinico").then(module => ({ default: module.HistoricoClinico })));
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import LocalErrorBoundary from "@/components/LocalErrorBoundary";
 const DocumentosHistorico = React.lazy(() => import("@/components/DocumentosHistorico"));
 
 import SolicitacaoExames from "@/components/SolicitacaoExames";
@@ -6368,6 +6369,7 @@ const ProntuarioPage: React.FC = () => {
 
       {/* Modal Gerar Documento Clínico */}
       {docModalOpen && (
+        <LocalErrorBoundary label="o gerador de documentos" onReset={() => setDocModalOpen(false)}>
         <GerarDocumentoModal
           open={docModalOpen}
           onOpenChange={setDocModalOpen}
@@ -6379,10 +6381,12 @@ const ProntuarioPage: React.FC = () => {
           unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
           dataAtendimento={new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
         />
+        </LocalErrorBoundary>
       )}
 
       {/* Modal Gerar Documento — aberto pelo painel lateral do prontuário em edição */}
       {painelDocOpen && form.paciente_id && (
+        <LocalErrorBoundary label="o gerador de documentos" onReset={() => setPainelDocOpen(false)}>
         <GerarDocumentoModal
           open={painelDocOpen}
           onOpenChange={(o) => {
@@ -6397,6 +6401,7 @@ const ProntuarioPage: React.FC = () => {
           unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
           dataAtendimento={new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
         />
+        </LocalErrorBoundary>
       )}
 
       {/* Modal Encaminhamento Interno */}

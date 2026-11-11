@@ -484,9 +484,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const [editorAberto, setEditorAberto] = useState(false);
   const isOciStructured = !!selected && (
     selectedMeta.structured_type === 'OCI' ||
-    selected.nome.trim().toUpperCase().startsWith('OCI ')
+    (selected.nome || '').trim().toUpperCase().startsWith('OCI ')
   );
-  const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
+  const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes((selected.tipo || '').toLowerCase());
   const tipoLower = selected ? `${selected.tipo || ''} ${selected.nome || ''}`.toLowerCase() : '';
 
   useEffect(() => {
@@ -774,7 +774,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       });
 
       // Print
-      const tplMeta = (selected.blocos_clinicos as any) || {};
+      const tplMeta = (selected?.blocos_clinicos as any) || {};
       const printOverride = tplMeta && typeof tplMeta === 'object' && 'mostrar_logos' in tplMeta
         ? { mostrarLogos: tplMeta.mostrar_logos !== false }
         : undefined;
@@ -1126,7 +1126,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
             <>
               <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold break-words">{selected.nome}</div>
+                  <div className="text-sm font-semibold break-words">{selected?.nome}</div>
                   <div className="flex items-center gap-2 mt-1">
                     <Badge variant="outline" className="text-xs">{classifyModel(selected)}</Badge>
                     <span className="text-xs text-muted-foreground">{selected.tipo}</span>
