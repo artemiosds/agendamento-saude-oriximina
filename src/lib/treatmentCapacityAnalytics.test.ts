@@ -65,6 +65,22 @@ describe("tratamento: capacidade e demanda — leitura gerencial", () => {
     expect(result.professionals[0].appointmentsWithoutAvailableSchedule).toBe(1);
   });
 
+  it("usa o limite padrão da Agenda quando um bloqueio parcial não informa hora final", () => {
+    const result = buildTreatmentCapacitySnapshot({
+      today: "2026-11-10",
+      periodDates: ["2026-11-10"],
+      professionals: [{ id: "p1", name: "Profissional A", profession: "Fisioterapeuta", unitId: "u1" }],
+      availabilities: [{ professionalId: "p1", unitId: "u1", startDate: "2026-11-01", endDate: "2026-11-30", weekdays: [2], vacanciesPerDay: 8 }],
+      appointments: [
+        { professionalId: "p1", unitId: "u1", date: "2026-11-10", time: "10:30", status: "confirmado" },
+      ],
+      blocks: [{ startDate: "2026-11-10", endDate: "2026-11-10", unitId: "u1", allDay: false, startTime: "08:00" }],
+      pendingSessions: [],
+      queueDemand: [],
+    });
+    expect(result.professionals[0].appointmentsWithoutAvailableSchedule).toBe(0);
+  });
+
   it("mantém sessões pendentes sem vínculo como demanda e separa datas vencidas e não informadas", () => {
     const result = buildTreatmentCapacitySnapshot({
       today: "2026-11-10",
