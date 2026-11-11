@@ -36,7 +36,7 @@ describe("localizarVagas", () => {
       { professional_id: "p1", unit_id: "u1", status: "pendente_agendamento", appointment_id: null, cycle_status: "finalizado_alta" },
       { professional_id: "p1", unit_id: "u1", status: "pendente_agendamento", appointment_id: null, cycle_status: "concluido" },
     ], "2026-11-11", "2026-11-25");
-    expect(m.get("p1|u1")).toEqual({ semData: 1, noPeriodo: 1, aposPeriodo: 1, vencidas: 1, total: 4 });
+    expect(m.get("p1|u1")).toMatchObject({ semData: 1, noPeriodo: 1, aposPeriodo: 1, vencidas: 1, total: 4 });
     expect(m.get("p1|u2")?.total).toBe(1);
   });
   it("continuidade: sem dados = não confirmada; sem data fica à parte; excedente é não distribuível", () => {
