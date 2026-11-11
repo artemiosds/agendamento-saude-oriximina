@@ -123,7 +123,7 @@ export default function TreatmentCapacityOverview() {
         const availabilityRows = await fetchAllPages<any>((from, to) => {
           let query = supabase
             .from("disponibilidades" as any)
-            .select("id,profissional_id,unidade_id,data_inicio,data_fim,dias_semana,vagas_por_dia")
+            .select("id,profissional_id,unidade_id,data_inicio,data_fim,hora_inicio,hora_fim,dias_semana,vagas_por_hora,vagas_por_dia,duracao_consulta")
             .gte("data_fim", today)
             .lte("data_inicio", endDate);
           if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
