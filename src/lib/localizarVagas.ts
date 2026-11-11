@@ -1,4 +1,5 @@
-import { classifyTreatmentCapacitySpecialty } from "@/lib/treatmentCapacityAnalytics";
+import { classifyTreatmentCapacitySpecialty, normalizeCapacityText } from "@/lib/treatmentCapacityAnalytics";
+import { ACTIVE_TREATMENT_CYCLE_STATUSES } from "@/lib/treatmentCycleStatus";
 
 /**
  * Regras puras da busca "Localizar Vagas" da Agenda.
@@ -15,7 +16,7 @@ export function classifyDayAvailability(args: { loadError: boolean; dayLoaded: b
 
 /** Especialidades efetivamente reconhecidas pelo classificador oficial. */
 export const KNOWN_SPECIALTIES = [
-  "Fisioterapia", "Fonoaudiologia", "Psicologia", "Nutrição", "Serviço Social", "Enfermagem", "Medicina", "Odontologia",
+  "Fisioterapia", "Fonoaudiologia", "Psicologia", "Nutrição", "Serviço Social", "Enfermagem", "Medicina", "Odontologia", "Terapia Ocupacional",
 ] as const;
 const KNOWN = new Set<string>(KNOWN_SPECIALTIES);
 
@@ -23,6 +24,9 @@ const KNOWN = new Set<string>(KNOWN_SPECIALTIES);
 export function strictSpecialtyOf(profissao?: string | null): string | null {
   const value = String(profissao || "").trim();
   if (!value) return null;
+  const n = normalizeCapacityText(value);
+  // Variações explícitas de Terapia Ocupacional (o classificador oficial não a reconhece).
+  if (n.includes("terapia ocupacional") || n.includes("terapeuta ocupacional") || n === "to") return "Terapia Ocupacional";
   const s = classifyTreatmentCapacitySpecialty(value);
   return s && KNOWN.has(s) ? s : null;
 }
@@ -48,7 +52,7 @@ export function classifyCardAvailability(states: readonly DayAvailabilityState[]
   return "sem_vaga_periodo";
 }
 
-export const ACTIVE_CYCLE_STATUSES = ["em_andamento"] as const;
+export const ACTIVE_CYCLE_STATUSES = ACTIVE_TREATMENT_CYCLE_STATUSES;
 
 export interface PendingSessionRow {
   status?: string | null;
@@ -59,8 +63,8 @@ export interface PendingSessionRow {
   unit_id?: string | null;
 }
 
-export interface PendingBreakdown { semData: number; noPeriodo: number; aposPeriodo: number; vencidas: number; total: number }
-const emptyBreakdown = (): PendingBreakdown => ({ semData: 0, noPeriodo: 0, aposPeriodo: 0, vencidas: 0, total: 0 });
+export interface PendingBreakdown { semData: number; noPeriodo: number; aposPeriodo: number; vencidas: number; total: number; porData?: Record<string, number> }
+export const emptyBreakdown = (): PendingBreakdown => ({ semData: 0, noPeriodo: 0, aposPeriodo: 0, vencidas: 0, total: 0, porData: {} });
 
 function isCountablePending(r: PendingSessionRow): boolean {
   return r.status === "pendente_agendamento" && !r.appointment_id
@@ -71,7 +75,7 @@ function addTo(b: PendingBreakdown, r: PendingSessionRow, start: string, end: st
   const d = String(r.scheduled_date || "").slice(0, 10);
   if (!d) b.semData++;
   else if (d < start) b.vencidas++;
-  else if (d <= end) b.noPeriodo++;
+  else if (d <= end) { b.noPeriodo++; b.porData = b.porData || {}; b.porData[d] = (b.porData[d] || 0) + 1; }
   else b.aposPeriodo++;
   b.total++;
 }
@@ -131,8 +135,44 @@ export function totalsByUnitSpecialty(items: ReadonlyArray<{ unitId: string; spe
     const key = `${it.unitId}|${it.specialty}`;
     const cur = map.get(key) || { unitId: it.unitId, specialty: it.specialty, total: emptyBreakdown() };
     if (!it.pending || !cur.total) cur.total = null;
-    else for (const k of Object.keys(cur.total) as (keyof PendingBreakdown)[]) cur.total[k] += it.pending[k];
+    else for (const k of ["semData", "noPeriodo", "aposPeriodo", "vencidas", "total"] as const) cur.total[k] += it.pending[k];
     map.set(key, cur);
   }
   return [...map.values()];
+}
+
+export interface DailyContinuityResult {
+  estimate: ContinuityEstimate;
+  /** Sessões com data no período que excedem os horários livres do próprio dia. */
+  naoDistribuivel: number | null;
+  /** Datas em que a demanda do dia supera a capacidade do mesmo profissional/unidade. */
+  diasEmConflito: string[];
+  semData: number | null;
+  vencidas: number | null;
+  /** Vencidas/sem data exigem revisão: não são descontadas da capacidade futura. */
+  precisaRevisao: boolean;
+}
+
+/**
+ * Estimativa por DIA (nunca garantia, não reserva horário).
+ * Demanda de cada data no período x horários livres desse mesmo dia retornados pela Agenda.
+ * Vencidas e sem data ficam separadas e não são abatidas da capacidade.
+ */
+export function estimateContinuityByDay(args: {
+  freeSlotsByDate: Record<string, number> | null; pending: PendingBreakdown | null; allDaysLoaded: boolean;
+}): DailyContinuityResult {
+  const base = { semData: args.pending?.semData ?? null, vencidas: args.pending?.vencidas ?? null };
+  if (!args.allDaysLoaded || !args.freeSlotsByDate || !args.pending || (args.pending.noPeriodo > 0 && !args.pending.porData)) {
+    return { estimate: "nao_confirmada", naoDistribuivel: null, diasEmConflito: [], ...base, precisaRevisao: false };
+  }
+  const diasEmConflito: string[] = [];
+  let excesso = 0;
+  for (const [date, demanda] of Object.entries(args.pending.porData || {})) {
+    const livres = args.freeSlotsByDate[date];
+    if (livres === undefined) return { estimate: "nao_confirmada", naoDistribuivel: null, diasEmConflito: [], ...base, precisaRevisao: false };
+    if (demanda > livres) { diasEmConflito.push(date); excesso += demanda - livres; }
+  }
+  diasEmConflito.sort();
+  const precisaRevisao = args.pending.vencidas > 0 || args.pending.semData > 0;
+  return { estimate: excesso > 0 ? "comprometida" : "estimada_favoravel", naoDistribuivel: excesso, diasEmConflito, ...base, precisaRevisao };
 }
