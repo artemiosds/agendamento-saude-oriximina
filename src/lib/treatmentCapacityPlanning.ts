@@ -380,10 +380,7 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
       session.professionalId === professional.id &&
       session.unitId === professional.unitId &&
       session.status === "pendente_agendamento" &&
-      !session.appointmentId &&
-      !!session.scheduledDate &&
-      session.scheduledDate >= input.today &&
-      session.scheduledDate <= input.endDate,
+      !session.appointmentId,
     ).length;
     const confirmedOccupancy = input.appointments.filter((appointment) =>
       appointment.professionalId === professional.id &&
@@ -433,13 +430,7 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
 
   const pendingByProfessional = new Map<string, number>();
   input.pendingSessions.forEach((session) => {
-    if (
-      session.status !== "pendente_agendamento" ||
-      session.appointmentId ||
-      !session.scheduledDate ||
-      session.scheduledDate < input.today ||
-      session.scheduledDate > input.endDate
-    ) return;
+    if (session.status !== "pendente_agendamento" || session.appointmentId) return;
     const key = session.professionalId + "|" + session.unitId;
     pendingByProfessional.set(key, (pendingByProfessional.get(key) || 0) + 1);
   });
