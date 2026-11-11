@@ -5,9 +5,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { addDaysToDateStr, todayLocalStr } from "@/lib/utils";
+import { addDaysToDateStr, isoDayOfWeek, todayLocalStr } from "@/lib/utils";
 import {
   buildTreatmentCapacitySnapshot,
   classifyTreatmentCapacitySpecialty,
@@ -21,9 +24,13 @@ import {
 } from "@/lib/treatmentCapacityAnalytics";
 import {
   buildTreatmentCapacityPlan,
+  buildTreatmentCycleFeasibility,
   type CapacityPlanningAppointmentInput,
   type CapacityPlanningAvailabilityInput,
+  type CapacityPlanningInput,
   type CapacityPlanningProfessionalInput,
+  type TreatmentCycleFeasibilityResult,
+  type TreatmentCycleShiftFilter,
   type TreatmentCapacityPlan,
 } from "@/lib/treatmentCapacityPlanning";
 import type { ExternalQuotaWindow } from "@/lib/externalQuota";
@@ -31,6 +38,9 @@ import TreatmentDemandScenario from "@/components/tratamentos/TreatmentDemandSce
 import type { TreatmentDemandScenarioGroupInput } from "@/lib/treatmentDemandScenario";
 
 const PAGE_SIZE = 1000;
+const CYCLE_FORECAST_DAYS = 365;
+const CYCLE_WEEKDAYS = [{ value: 1, label: "Seg" }, { value: 2, label: "Ter" }, { value: 3, label: "Qua" }, { value: 4, label: "Qui" }, { value: 5, label: "Sex" }, { value: 6, label: "Sáb" }];
+const FREQUENCY_WEEKDAY_COUNT: Record<string, number> = { "1x_semana": 1, "2x_semana": 2, "3x_semana": 3, "4x_semana": 4, "5x_semana": 5, "6x_semana": 6 };
 const ACTIVE_CYCLE_STATUSES = ["em_andamento", "ativo", "aguardando_vaga", "em_fila", "concluido"];
 
 async function fetchAllPages<T>(createQuery: (from: number, to: number) => any): Promise<T[]> {
@@ -76,6 +86,13 @@ export default function TreatmentCapacityOverview() {
   useEffect(() => { setProfessionalFilter("all"); }, [unitFilter, specialtyFilter]);
   const [snapshot, setSnapshot] = useState<TreatmentCapacitySnapshot | null>(null);
   const [capacityPlan, setCapacityPlan] = useState<TreatmentCapacityPlan | null>(null);
+  const [cycleCapacityInput, setCycleCapacityInput] = useState<CapacityPlanningInput | null>(null);
+  const [cycleSimulationProfessional, setCycleSimulationProfessional] = useState("");
+  const [cycleSimulationFrequency, setCycleSimulationFrequency] = useState("1x_semana");
+  const [cycleSimulationSessions, setCycleSimulationSessions] = useState("10");
+  const [cycleSimulationStart, setCycleSimulationStart] = useState(todayLocalStr());
+  const [cycleSimulationWeekdays, setCycleSimulationWeekdays] = useState<number[]>([isoDayOfWeek(todayLocalStr())]);
+  const [cycleSimulationShift, setCycleSimulationShift] = useState<TreatmentCycleShiftFilter>("qualquer");
   const [queueDemandRows, setQueueDemandRows] = useState<QueueDemandInput[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -124,6 +141,8 @@ export default function TreatmentCapacityOverview() {
       const horizon = Number(periodDays);
       const endDate = addDaysToDateStr(today, horizon - 1);
       const periodDates = Array.from({ length: horizon }, (_, index) => addDaysToDateStr(today, index));
+      const cycleEndDate = addDaysToDateStr(today, CYCLE_FORECAST_DAYS - 1);
+      const cyclePeriodDates = Array.from({ length: CYCLE_FORECAST_DAYS }, (_, index) => addDaysToDateStr(today, index));
 
       try {
         const availabilityRows = await fetchAllPages<any>((from, to) => {
@@ -131,7 +150,7 @@ export default function TreatmentCapacityOverview() {
             .from("disponibilidades" as any)
             .select("id,profissional_id,unidade_id,data_inicio,data_fim,hora_inicio,hora_fim,dias_semana,vagas_por_hora,vagas_por_dia,duracao_consulta")
             .gte("data_fim", today)
-            .lte("data_inicio", endDate);
+            .lte("data_inicio", cycleEndDate);
           if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
           if (user?.role === "profissional" && user?.id) query = query.eq("profissional_id", user.id);
           return query.range(from, to);
@@ -214,7 +233,7 @@ export default function TreatmentCapacityOverview() {
                   .select("profissional_id,unidade_id,data,hora,status,origem")
                   .in("profissional_id", ids)
                   .gte("data", today)
-                  .lte("data", endDate);
+                  .lte("data", cycleEndDate);
                 if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
                 return query.range(from, to);
               }));
@@ -224,7 +243,7 @@ export default function TreatmentCapacityOverview() {
           fetchAllPages<any>((from, to) => supabase
             .from("bloqueios" as any)
             .select("data_inicio,data_fim,unidade_id,profissional_id,dia_inteiro,hora_inicio,hora_fim")
-            .lte("data_inicio", endDate)
+            .lte("data_inicio", cycleEndDate)
             .gte("data_fim", today)
             .range(from, to)),
           (async () => {
@@ -236,7 +255,7 @@ export default function TreatmentCapacityOverview() {
                   .select("id,profissional_interno_id,unidade_id,periodo_inicio,periodo_fim,turno,horario_inicio,horario_fim,dia_semana,ativo,vagas_total,vagas_usadas")
                   .eq("ativo", true)
                   .in("profissional_interno_id", ids)
-                  .lte("periodo_inicio", endDate)
+                  .lte("periodo_inicio", cycleEndDate)
                   .gte("periodo_fim", today);
                 if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
                 return query.range(from, to);
@@ -391,6 +410,10 @@ export default function TreatmentCapacityOverview() {
           cboCode: extractExplicitCboCode(row.custom_data),
         }));
 
+        const capacityInput: CapacityPlanningInput = {
+          today, endDate, periodDates, professionals, availabilities, appointments,
+          blocks, externalQuotas: quotaRows as ExternalQuotaWindow[], pendingSessions, queueDemand,
+        };
         const nextCapacityPlan = buildTreatmentCapacityPlan({
           today,
           endDate,
@@ -403,6 +426,9 @@ export default function TreatmentCapacityOverview() {
           pendingSessions,
           queueDemand,
         });
+        const nextCycleCapacityInput: CapacityPlanningInput = {
+          ...capacityInput, endDate: cycleEndDate, periodDates: cyclePeriodDates,
+        };
 
         const nextSnapshot = buildTreatmentCapacitySnapshot({
           today,
@@ -418,6 +444,7 @@ export default function TreatmentCapacityOverview() {
         if (!cancelled && requestRef.current === requestId) {
           setSnapshot(nextSnapshot);
           setCapacityPlan(nextCapacityPlan);
+          setCycleCapacityInput(nextCycleCapacityInput);
           setQueueDemandRows(nextQueueReadStatus === "available" ? queueDemand : []);
           setQueueReadStatus(nextQueueReadStatus);
           setQueueWarning(nextQueueWarning);
@@ -447,6 +474,20 @@ export default function TreatmentCapacityOverview() {
       specialtyFilter === "all" || row.specialty === specialtyFilter,
     );
   }, [snapshot, specialtyFilter]);
+
+  useEffect(() => {
+    if (!cycleCapacityInput?.professionals.length) { setCycleSimulationProfessional(""); return; }
+    const keys = new Set(cycleCapacityInput.professionals.map((row) => row.id + "|" + row.unitId));
+    if (!keys.has(cycleSimulationProfessional)) setCycleSimulationProfessional(cycleCapacityInput.professionals[0].id + "|" + cycleCapacityInput.professionals[0].unitId);
+  }, [cycleCapacityInput, cycleSimulationProfessional]);
+
+  const cycleSimulationResult = useMemo<TreatmentCycleFeasibilityResult | null>(() => {
+    if (!cycleCapacityInput || !cycleSimulationProfessional) return null;
+    const [professionalId, unitId] = cycleSimulationProfessional.split("|");
+    return buildTreatmentCycleFeasibility({ ...cycleCapacityInput, professionalId, unitId, startDate: cycleSimulationStart, frequency: cycleSimulationFrequency, weekdays: cycleSimulationWeekdays, totalSessions: Number(cycleSimulationSessions), shift: cycleSimulationShift });
+  }, [cycleCapacityInput, cycleSimulationProfessional, cycleSimulationStart, cycleSimulationFrequency, cycleSimulationWeekdays, cycleSimulationSessions, cycleSimulationShift]);
+
+  const toggleCycleWeekday = (weekday: number, checked: boolean) => setCycleSimulationWeekdays((current) => checked ? [...new Set([...current, weekday])].sort((a, b) => a - b) : current.filter((day) => day !== weekday));
 
   const visibleProfessionals = useMemo(() => {
     return professionalOptions.filter((row) =>
@@ -746,6 +787,20 @@ export default function TreatmentCapacityOverview() {
                 <p className="text-xs text-muted-foreground">Vagas livres estimadas após ocupação e sessões pendentes de tratamentos</p>
               </CardContent>
             </Card>
+          </div>
+
+
+          <div className="space-y-4 rounded-lg border border-border p-4" aria-label="Simulação de tratamento completo">
+            <div><h3 className="font-semibold text-foreground">Verificar capacidade para tratamento completo</h3><p className="text-sm text-muted-foreground">Simula todas as sessões conforme frequência, dias escolhidos, turno, horários livres, bloqueios, agendamentos e sessões pendentes com data. Janela máxima de 365 dias. Não reserva vagas nem cria agendamentos.</p></div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="space-y-1"><Label>Profissional</Label><Select value={cycleSimulationProfessional} onValueChange={setCycleSimulationProfessional}><SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger><SelectContent>{(cycleCapacityInput?.professionals || []).map((row) => <SelectItem key={row.id + "|" + row.unitId} value={row.id + "|" + row.unitId}>{row.name} · {row.unitName}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label>Frequência</Label><Select value={cycleSimulationFrequency} onValueChange={setCycleSimulationFrequency}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1x_semana">1 vez por semana</SelectItem><SelectItem value="2x_semana">2 vezes por semana</SelectItem><SelectItem value="3x_semana">3 vezes por semana</SelectItem><SelectItem value="4x_semana">4 vezes por semana</SelectItem><SelectItem value="5x_semana">5 vezes por semana</SelectItem><SelectItem value="6x_semana">6 vezes por semana</SelectItem><SelectItem value="mensal">Mensal</SelectItem><SelectItem value="manual">Manual (semanal)</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label htmlFor="cycle-simulation-sessions">Quantidade de sessões</Label><Input id="cycle-simulation-sessions" type="number" min={1} max={200} value={cycleSimulationSessions} onChange={(event) => setCycleSimulationSessions(event.target.value)} /></div>
+              <div className="space-y-1"><Label htmlFor="cycle-simulation-start">Data inicial</Label><Input id="cycle-simulation-start" type="date" min={cycleCapacityInput?.today || todayLocalStr()} max={cycleCapacityInput?.endDate} value={cycleSimulationStart} onChange={(event) => setCycleSimulationStart(event.target.value)} /></div>
+              <div className="space-y-1"><Label>Turno</Label><Select value={cycleSimulationShift} onValueChange={(value) => setCycleSimulationShift(value as TreatmentCycleShiftFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="qualquer">Qualquer turno</SelectItem><SelectItem value="Manhã">Manhã</SelectItem><SelectItem value="Tarde">Tarde</SelectItem><SelectItem value="Noite">Noite</SelectItem></SelectContent></Select></div>
+            </div>
+            {FREQUENCY_WEEKDAY_COUNT[cycleSimulationFrequency] && <div className="space-y-2"><Label>Dias da semana ({cycleSimulationWeekdays.length}/{FREQUENCY_WEEKDAY_COUNT[cycleSimulationFrequency]})</Label><div className="flex flex-wrap gap-4">{CYCLE_WEEKDAYS.map((day) => <label key={day.value} className="flex items-center gap-2 text-sm"><Checkbox checked={cycleSimulationWeekdays.includes(day.value)} onCheckedChange={(checked) => toggleCycleWeekday(day.value, checked === true)} />{day.label}</label>)}</div></div>}
+            {cycleSimulationResult && <div className="rounded-md border border-border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{cycleSimulationResult.status === "confirmável" ? "Capacidade encontrada para o ciclo completo" : cycleSimulationResult.status === "revisão" ? "Necessita revisão" : cycleSimulationResult.status === "insuficiente" ? "Capacidade insuficiente" : "Revise os dados"}</p><span className="text-sm tabular-nums">{cycleSimulationResult.feasibleSessions}/{cycleSimulationResult.requestedSessions} sessões</span></div><p className="mt-1 text-sm">{cycleSimulationResult.message}</p>{cycleSimulationResult.dates.length > 0 && <div className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 lg:grid-cols-3">{cycleSimulationResult.dates.slice(0, 12).map((row) => <div key={row.date} className="rounded border border-border/60 px-2 py-1">{row.date.split("-").reverse().join("/")} · {row.shiftLabels.join(" | ")}</div>)}</div>}</div>}
           </div>
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
