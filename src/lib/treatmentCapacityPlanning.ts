@@ -4,6 +4,38 @@ import { calculateExternalCapacity, classifyExternalQuotaForAvailabilities, isQu
 import { isoDayOfWeek } from "@/lib/utils";
 import { buildBlockedRanges, generateSessionDatesWithInfo, getMaxWeekdays, isWeekdayFrequency } from "@/lib/treatmentSessionGenerator";
 
+export const MAX_TREATMENT_CYCLE_FORECAST_DAYS = 3650;
+
+export function getTreatmentCycleForecastDays(
+  today: string,
+  startDate: string,
+  frequency: string,
+  totalSessions: number,
+): number {
+  const safeSessions = Number.isInteger(totalSessions) ? Math.max(1, Math.min(200, totalSessions)) : 1;
+  const todayMs = Date.parse(String(today).slice(0, 10) + "T00:00:00Z");
+  const startMs = Date.parse(String(startDate).slice(0, 10) + "T00:00:00Z");
+  const startOffset = Number.isFinite(todayMs) && Number.isFinite(startMs)
+    ? Math.max(0, Math.ceil((startMs - todayMs) / 86400000))
+    : 0;
+
+  let plannedDays: number;
+  if (frequency === "mensal") {
+    plannedDays = safeSessions * 31;
+  } else if (frequency === "manual") {
+    plannedDays = Math.max(1, safeSessions - 1) * 7;
+  } else {
+    const match = String(frequency).match(/^([1-6])x_semana$/);
+    const sessionsPerWeek = match ? Number(match[1]) : 1;
+    plannedDays = Math.ceil(safeSessions / sessionsPerWeek) * 7;
+  }
+
+  // A one-year buffer lets the simulation move sessions around recorded blocks
+  // and non-working days without fetching an unbounded amount of history.
+  const requested = Math.max(365, startOffset + plannedDays + 365);
+  return Math.min(MAX_TREATMENT_CYCLE_FORECAST_DAYS, requested);
+}
+
 export interface CapacityPlanningProfessionalInput extends CapacityProfessionalInput {
   appointmentDurationMinutes?: number | null;
 }
