@@ -479,7 +479,7 @@ const Auditoria: React.FC = () => {
   const [filterEventoGrupo, setFilterEventoGrupo] = useState('');
 
   const isMaster = user?.role === 'master';
-  const canAccess = can('relatorios', 'can_view') || isMaster;
+  const canAccess = can('logs_auditoria', 'can_view') || isMaster;
 
   const loadLogs = useCallback(async () => {
     setLoading(true);

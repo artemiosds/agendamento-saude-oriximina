@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { resolveModulePermission, type PermissionSourceRow } from '@/lib/permissionResolution';
+import { resolveWithParent, PERMISSION_PARENT, type PermissionSourceRow } from '@/lib/permissionResolution';
 
 export type ModuleName =
   | 'dashboard'
@@ -236,7 +236,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       // Buscar permissões de perfil (unidade específica + global como fallback)
       const { data: perfilData, error: perfilErr } = await supabase
         .from('permissoes')
-        .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
+        .select('perfil, modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
         .in('perfil', profileKeys)
         .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
 
@@ -264,12 +264,13 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       // Ações explícitas prevalecem; NULL herda a próxima origem disponível.
       const map: Partial<PermissionsMap> = {};
       ALL_MODULES.forEach((m) => {
-        map[m] = resolveModulePermission({
+        const parent = PERMISSION_PARENT[m] as ModuleName | undefined;
+        map[m] = resolveWithParent({
           modulo: m, unidadeId, perfil: role, rawRole,
           perfilRows: (perfilData ?? []) as PermissionSourceRow[],
           userRows: (userOverrides ?? []) as PermissionSourceRow[],
           defaults: getDefaultModulePermission(role, m),
-        });
+        }, parent ? getDefaultModulePermission(role, parent) : undefined);
       });
       setPermissions(buildFullMap(map));
 

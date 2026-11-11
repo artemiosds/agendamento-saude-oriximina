@@ -46,3 +46,35 @@ export function resolveModulePermission({
   }
   return effective;
 }
+
+/**
+ * Sub-pages that used to follow a parent module. While a sub-page has no rule of
+ * its own (profile or individual), it keeps inheriting the parent, so nobody
+ * loses access; once the Master saves a rule for it, that rule wins.
+ */
+export const PERMISSION_PARENT: Record<string, string> = {
+  historico_triagem: 'triagem',
+  faltosos: 'pacientes',
+  pts: 'prontuario',
+  relatorio_alta: 'prontuario',
+  bpa_exportar: 'relatorios',
+  avaliacao_multi: 'atendimento',
+  avaliacao_enfermagem: 'enfermagem',
+  unidades_salas: 'usuarios',
+  disponibilidade: 'usuarios',
+  feriados_bloqueios: 'agenda',
+  logs_auditoria: 'relatorios',
+};
+
+export function hasOwnRule(modulo: string, rows: PermissionSourceRow[]): boolean {
+  return rows.some((row) => row.modulo === modulo);
+}
+
+/** Same as resolveModulePermission, but falls back to the parent module when the sub-page has no rule. */
+export function resolveWithParent(input: ResolutionInput, parentDefaults?: ModulePermission): ModulePermission {
+  const parent = PERMISSION_PARENT[input.modulo];
+  if (parent && !hasOwnRule(input.modulo, input.perfilRows) && !hasOwnRule(input.modulo, input.userRows ?? [])) {
+    return resolveModulePermission({ ...input, modulo: parent, defaults: parentDefaults ?? input.defaults });
+  }
+  return resolveModulePermission(input);
+}

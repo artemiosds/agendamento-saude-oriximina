@@ -108,19 +108,12 @@ const MODULE_GROUPS: { label: string; modules: ModuleName[] }[] = [
 
 // These switches had no independent route guard. Explain their real access
 // dependency instead of allowing an administrator to save an ineffective rule.
+// Sub-pages without a rule of their own show (and inherit) the parent module's rule.
+const SUBMODULE_HINT = (m: ModuleName) => PERMISSION_PARENT[m]
+  ? `Enquanto não houver regra própria, segue ${MODULO_LABELS[PERMISSION_PARENT[m] as ModuleName]}. Ao alterar aqui, passa a ter regra própria.`
+  : "";
 const ROUTE_DEPENDENCIES: Partial<Record<ModuleName, string>> = {
   dashboard: "O Dashboard está disponível a usuários autenticados; esta regra não controla sua abertura.",
-  faltosos: "A página depende da permissão Visualizar em Pacientes.",
-  historico_triagem: "A página depende da permissão Visualizar em Triagem.",
-  avaliacao_enfermagem: "A página depende da permissão Visualizar em Enfermagem.",
-  pts: "A página depende de Visualizar em Prontuário e de Visualizar em Gestão de Tratamentos.",
-  avaliacao_multi: "A página depende de Visualizar em Atendimentos; algumas ações exigem Executar em Enfermagem.",
-  relatorio_alta: "A página depende da permissão Visualizar em Prontuário.",
-  bpa_exportar: "A página depende da permissão Visualizar em Relatórios.",
-  unidades_salas: "A página depende da permissão Visualizar em Funcionários.",
-  disponibilidade: "A página depende da permissão Visualizar em Funcionários.",
-  feriados_bloqueios: "A página depende da permissão Visualizar em Agenda.",
-  logs_auditoria: "A página depende da permissão Visualizar em Relatórios.",
   configuracoes: "Acesso exclusivo do perfil Master; esta regra não concede acesso a outros perfis.",
   permissoes: "Acesso exclusivo do perfil Master; esta regra não concede acesso a outros perfis.",
   configuracoes_avancadas: "Acesso exclusivo do perfil Master; esta regra não concede acesso a outros perfis.",
@@ -334,6 +327,15 @@ const Permissoes: React.FC = () => {
 
   // ===== Helpers Perfil =====
   const getPerfilRow = (modulo: ModuleName): PermRow | undefined => {
+    const own = getOwnPerfilRow(modulo);
+    const parent = PERMISSION_PARENT[modulo] as ModuleName | undefined;
+    if (own || !parent) return own;
+    const p = getOwnPerfilRow(parent);
+    if (p) return { ...p, id: undefined, modulo };
+    const d = getDefaultModulePermission(normalizeRoleKey(selectedPerfil), parent);
+    return { perfil: normalizeRoleKey(selectedPerfil), modulo, unidade_id: unidadeScope, ...d };
+  };
+  const getOwnPerfilRow = (modulo: ModuleName): PermRow | undefined => {
     // prefere unidade específica, fallback global
     const perfilKey = normalizeRoleKey(selectedPerfil);
     return perfilRows.find((r) => r.perfil === perfilKey && r.modulo === modulo && r.unidade_id === unidadeScope)
@@ -409,12 +411,12 @@ const Permissoes: React.FC = () => {
 
   const getUserEffectiveRow = (modulo: ModuleName): ModulePermission => selectedUserRoleKey === "master"
     ? { can_view: true, can_create: true, can_edit: true, can_delete: true, can_execute: true }
-    : resolveModulePermission({
+    : resolveWithParent({
         modulo, unidadeId: unidadeScope, perfil: selectedUserRoleKey,
         rawRole: funcionarios.find((f) => f.id === selectedUserId)?.role,
         perfilRows: userBaseRows as PermissionSourceRow[], userRows: userRows as PermissionSourceRow[],
         defaults: getDefaultModulePermission(selectedUserRoleKey, modulo),
-      });
+      }, PERMISSION_PARENT[modulo] ? getDefaultModulePermission(selectedUserRoleKey, PERMISSION_PARENT[modulo] as ModuleName) : undefined);
 
   const toggleUser = async (modulo: ModuleName, action: keyof ModulePermission) => {
     if (!selectedUserId || savingLock.current || ROUTE_DEPENDENCIES[modulo] || (isUnitMaster && selectedUnidade !== user?.unidadeId)) return;
@@ -703,9 +705,10 @@ const Permissoes: React.FC = () => {
                     </AccordionTrigger>
                     <AccordionContent>
                       {ROUTE_DEPENDENCIES[modulo] && <p className="text-sm text-muted-foreground py-2">{ROUTE_DEPENDENCIES[modulo]}</p>}
+                      {SUBMODULE_HINT(modulo) && <p className="text-xs text-muted-foreground">{SUBMODULE_HINT(modulo)}</p>}
                       {!ROUTE_DEPENDENCIES[modulo] && <div className="py-2"><PresetButtons target="perfil" modulos={[modulo]} /></div>}
-                      {modulo === "agenda" && <p className="text-xs text-muted-foreground">Inclui o acesso à página Exames Diagnósticos e Feriados/Bloqueios.</p>}
-                      {modulo === "usuarios" && <p className="text-xs text-muted-foreground">Inclui Unidades/Salas e Disponibilidade; Acessos ao Portal exige também perfil Master.</p>}
+                      {modulo === "agenda" && <p className="text-xs text-muted-foreground">Inclui o acesso à página Exames Diagnósticos.</p>}
+                      {modulo === "usuarios" && <p className="text-xs text-muted-foreground">Acessos ao Portal exige também perfil Master.</p>}
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
                         {ACTIONS.map((action) => {
                           const k = `perfil-${modulo}-${action}`;
@@ -813,6 +816,7 @@ const Permissoes: React.FC = () => {
                       </AccordionTrigger>
                       <AccordionContent>
                         {ROUTE_DEPENDENCIES[modulo] && <p className="text-sm text-muted-foreground py-2">{ROUTE_DEPENDENCIES[modulo]}</p>}
+                        {SUBMODULE_HINT(modulo) && <p className="text-xs text-muted-foreground">{SUBMODULE_HINT(modulo)}</p>}
                         {!ROUTE_DEPENDENCIES[modulo] && selectedUserRoleKey !== "master" && <div className="py-2"><PresetButtons target="user" modulos={[modulo]} /></div>}
                         {selectedUserRoleKey === "master" && <p className="text-sm text-muted-foreground py-2">Master tem acesso total independentemente destas exceções.</p>}
                         {!ROUTE_DEPENDENCIES[modulo] && selectedUserRoleKey !== "master" && <p className="text-xs text-muted-foreground py-1">Ao criar uma exceção, as cinco ações deste módulo ficam definidas para o funcionário.</p>}
