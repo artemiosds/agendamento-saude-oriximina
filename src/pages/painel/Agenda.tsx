@@ -81,6 +81,7 @@ import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { SmartSchedulingAssist } from "@/components/agenda/SmartSchedulingAssist";
+import { LocalizarVagasPanel } from "@/components/agenda/LocalizarVagasPanel";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
@@ -2954,6 +2955,23 @@ const Agenda: React.FC = () => {
                   </Button>
                 )}
                 
+                {!isProfissional && (
+                  <LocalizarVagasPanel
+                    profissionais={profissionais}
+                    unidades={unidadesVisiveis}
+                    getAvailableSlots={getAvailableSlots}
+                    loadAgendaRange={(a, b) => loadAgendaRange(a, b)}
+                    onPick={(profId, date, hora) => {
+                      const prof = profissionais.find((p) => p.id === profId);
+                      // Revalida o horário com a regra oficial da Agenda antes de abrir o modal.
+                      const ainda = prof ? getAvailableSlots(profId, prof.unidadeId, date, false, null).includes(hora) : false;
+                      setSelectedDate(date);
+                      setNewAg((prev) => ({ ...prev, profissionalId: profId, hora: ainda ? hora : "" }));
+                      if (!ainda) toast.warning("Esse horário não está mais livre. Escolha outro no formulário.");
+                      setDialogOpen(true);
+                    }}
+                  />
+                )}
                 <Dialog
                   open={dialogOpen}
                   onOpenChange={(open) => {

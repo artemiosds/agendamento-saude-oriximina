@@ -5,4 +5,4 @@
 - [x] Incluir barreira contra aplicação em ambiente existente e verificações de integridade.
 - [x] Documentar provisionamento, catálogos oficiais e homologação pendente em ambiente isolado.
 - [x] Validar sintaxe, testes e arquivo compactado sem publicar nem modificar o banco atual.
-- [ ] Homologar restauração e fluxos reais: bloqueado pela ausência de novo ambiente isolado autorizado; revisar funções, marca inicial, integrações e catálogos oficiais no destino antes de liberar instalador.- [ ] Localizar Vagas na Agenda (plano aguardando aprovação, com 4 correções técnicas)
+- [ ] Homologar restauração e fluxos reais: bloqueado pela ausência de novo ambiente isolado autorizado; revisar funções, marca inicial, integrações e catálogos oficiais no destino antes de liberar instalador.- [x] Localizar Vagas na Agenda (falta teste no navegador logado)
