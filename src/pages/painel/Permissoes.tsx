@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ModuleName, ModulePermission } from "@/contexts/PermissionsContext";
+import { getDefaultModulePermission, ModuleName, ModulePermission } from "@/contexts/PermissionsContext";
+import { resolveModulePermission, type PermissionSourceRow } from "@/lib/permissionResolution";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,35 +58,6 @@ const getRoleQueryKeys = (value: string) => {
   return Array.from(new Set([key, raw, ...legacyAliases].filter(Boolean)));
 };
 
-const MODULOS: ModuleName[] = [
-  "dashboard",
-  "agenda",
-  "fila",
-  "pacientes",
-  "faltosos",
-  "atendimento",
-  "tratamento",
-  "prontuario",
-  "triagem",
-  "historico_triagem",
-  "enfermagem",
-  "avaliacao_enfermagem",
-  "pts",
-  "avaliacao_multi",
-  "relatorio_alta",
-  "relatorios",
-  "bpa_exportar",
-  "encaminhamento",
-  "usuarios",
-  "unidades_salas",
-  "disponibilidade",
-  "feriados_bloqueios",
-  "logs_auditoria",
-  "monitoramento_sistema",
-  "configuracoes",
-  "permissoes",
-  "configuracoes_avancadas",
-];
 const MODULO_LABELS: Record<ModuleName, string> = {
   dashboard: "Dashboard",
   agenda: "Agenda",
@@ -123,6 +96,34 @@ const ACTION_LABELS: Record<keyof ModulePermission, string> = {
   can_execute: "Executar",
 };
 
+const MODULE_GROUPS: { label: string; modules: ModuleName[] }[] = [
+  { label: "Agenda e recepção", modules: ["agenda", "fila", "pacientes", "faltosos", "atendimento"] },
+  { label: "Assistência e clínica", modules: ["tratamento", "prontuario", "triagem", "historico_triagem", "enfermagem", "avaliacao_enfermagem", "pts", "avaliacao_multi", "relatorio_alta"] },
+  { label: "Documentos e regulação", modules: ["relatorios", "bpa_exportar", "encaminhamento"] },
+  { label: "Gestão da unidade", modules: ["usuarios", "unidades_salas", "disponibilidade", "feriados_bloqueios", "logs_auditoria", "monitoramento_sistema"] },
+  { label: "Administração", modules: ["dashboard", "configuracoes", "permissoes", "configuracoes_avancadas"] },
+];
+
+// These switches had no independent route guard. Explain their real access
+// dependency instead of allowing an administrator to save an ineffective rule.
+const ROUTE_DEPENDENCIES: Partial<Record<ModuleName, string>> = {
+  dashboard: "O Dashboard está disponível a usuários autenticados; esta regra não controla sua abertura.",
+  faltosos: "A página depende da permissão Visualizar em Pacientes.",
+  historico_triagem: "A página depende da permissão Visualizar em Triagem.",
+  avaliacao_enfermagem: "A página depende da permissão Visualizar em Enfermagem.",
+  pts: "A página depende de Visualizar em Prontuário e de Visualizar em Gestão de Tratamentos.",
+  avaliacao_multi: "A página depende de Visualizar em Atendimentos; algumas ações exigem Executar em Enfermagem.",
+  relatorio_alta: "A página depende da permissão Visualizar em Prontuário.",
+  bpa_exportar: "A página depende da permissão Visualizar em Relatórios.",
+  unidades_salas: "A página depende da permissão Visualizar em Funcionários.",
+  disponibilidade: "A página depende da permissão Visualizar em Funcionários.",
+  feriados_bloqueios: "A página depende da permissão Visualizar em Agenda.",
+  logs_auditoria: "A página depende da permissão Visualizar em Relatórios.",
+  configuracoes: "Acesso exclusivo do perfil Master; esta regra não concede acesso a outros perfis.",
+  permissoes: "Acesso exclusivo do perfil Master; esta regra não concede acesso a outros perfis.",
+  configuracoes_avancadas: "Acesso exclusivo do perfil Master; esta regra não concede acesso a outros perfis.",
+};
+
 interface PermRow {
   id?: string;
   perfil: string;
@@ -133,6 +134,14 @@ interface PermRow {
   can_edit: boolean;
   can_delete: boolean;
   can_execute: boolean;
+  can_print?: boolean | null;
+  can_export?: boolean | null;
+  can_attach?: boolean | null;
+  can_sign?: boolean | null;
+  can_approve?: boolean | null;
+  can_cancel?: boolean | null;
+  can_configure?: boolean | null;
+  granular_actions?: Json | null;
 }
 
 interface UserPermRow {
@@ -140,22 +149,32 @@ interface UserPermRow {
   user_id: string;
   modulo: string;
   unidade_id: string;
-  can_view: boolean;
-  can_create: boolean;
-  can_edit: boolean;
-  can_delete: boolean;
-  can_execute: boolean;
+  can_view: boolean | null;
+  can_create: boolean | null;
+  can_edit: boolean | null;
+  can_delete: boolean | null;
+  can_execute: boolean | null;
+  can_print?: boolean | null;
+  can_export?: boolean | null;
+  can_attach?: boolean | null;
+  can_sign?: boolean | null;
+  can_approve?: boolean | null;
+  can_cancel?: boolean | null;
+  can_configure?: boolean | null;
+  granular_actions?: Json | null;
 }
 
 interface UnidadeOption { id: string; nome: string; }
 interface FuncOption { id: string; nome: string; usuario: string; role: string; unidade_id: string; }
 
 const Permissoes: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user, isUnitMaster, isGlobalAdmin } = useAuth();
 
   // Estado global
   const [unidades, setUnidades] = useState<UnidadeOption[]>([]);
-  const [selectedUnidade, setSelectedUnidade] = useState<string>("");
+  const [selectedUnidade, setSelectedUnidade] = useState<string>(isUnitMaster ? user?.unidadeId || "" : "");
+  const unidadeScope = selectedUnidade === "__global__" ? "" : selectedUnidade;
+  const [moduleSearch, setModuleSearch] = useState("");
   const [tab, setTab] = useState("perfil");
 
   // Aba Perfil
@@ -171,30 +190,40 @@ const Permissoes: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const savingLock = useRef(false);
+
+  const visibleGroups = useMemo(() => MODULE_GROUPS.map((group) => ({
+    ...group,
+    modules: group.modules.filter((modulo) => MODULO_LABELS[modulo].toLowerCase().includes(moduleSearch.toLowerCase().trim())),
+  })).filter((group) => group.modules.length > 0), [moduleSearch]);
 
   // Carregar unidades + funcionarios
   useEffect(() => {
     (async () => {
+      const unitsQuery = supabase.from("unidades").select("id, nome, ativo").eq("ativo", true).order("nome");
+      const staffQuery = supabase.from("funcionarios").select("id, nome, usuario, role, unidade_id").eq("ativo", true).order("nome");
       const [u, f] = await Promise.all([
-        supabase.from("unidades").select("id, nome, ativo").eq("ativo", true).order("nome"),
-        supabase.from("funcionarios").select("id, nome, usuario, role, unidade_id").eq("ativo", true).order("nome"),
+        isUnitMaster ? unitsQuery.eq("id", user?.unidadeId || "") : unitsQuery,
+        isUnitMaster ? staffQuery.eq("unidade_id", user?.unidadeId || "") : staffQuery,
       ]);
-      const ulist = (u.data || []).map((x: any) => ({ id: x.id, nome: x.nome }));
+      if (u.error || f.error) toast.error("Não foi possível carregar unidades ou funcionários.");
+      const ulist = (u.data || []).map((x) => ({ id: x.id, nome: x.nome }));
       setUnidades(ulist);
-      if (!selectedUnidade && ulist.length > 0) setSelectedUnidade(ulist[0].id);
+      if (isUnitMaster) setSelectedUnidade(user?.unidadeId || "");
+      else setSelectedUnidade((current) => current || ulist[0]?.id || "");
       setFuncionarios((f.data || []) as FuncOption[]);
     })();
-  }, []);
+  }, [isUnitMaster, user?.unidadeId]);
 
   // Carregar permissões do perfil para a unidade
   const loadPerfil = useCallback(async () => {
     if (!selectedUnidade) return;
     setLoading(true);
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("permissoes")
       .select("*")
       .in("perfil", getRoleQueryKeys(selectedPerfil))
-      .in("unidade_id", [selectedUnidade, ""]);
+      .in("unidade_id", [unidadeScope, ""]);
     if (error) {
       toast.error("Erro ao carregar permissões");
       setLoading(false);
@@ -202,7 +231,7 @@ const Permissoes: React.FC = () => {
     }
     setPerfilRows((data || []) as PermRow[]);
     setLoading(false);
-  }, [selectedPerfil, selectedUnidade]);
+  }, [selectedPerfil, selectedUnidade, unidadeScope]);
 
   useEffect(() => { if (tab === "perfil") loadPerfil(); }, [loadPerfil, tab]);
 
@@ -212,13 +241,16 @@ const Permissoes: React.FC = () => {
     setLoading(true);
 
     const selectedFunc = funcionarios.find((f) => f.id === selectedUserId);
-    const roleKey = normalizeRoleKey(selectedFunc?.role || "recepcao");
+    if (!selectedFunc || (isUnitMaster && selectedFunc.unidade_id !== selectedUnidade)) {
+      setUserBaseRows([]); setUserRows([]); setLoading(false); return;
+    }
+    const roleKey = normalizeRoleKey(selectedFunc.role);
 
-    const { data: baseData, error: baseError } = await (supabase as any)
+    const { data: baseData, error: baseError } = await supabase
       .from("permissoes")
       .select("*")
       .in("perfil", getRoleQueryKeys(selectedFunc?.role || roleKey))
-      .in("unidade_id", [selectedUnidade, ""]);
+      .in("unidade_id", [unidadeScope, ""]);
 
     if (baseError) {
       toast.error("Erro ao carregar permissões-base do perfil");
@@ -228,11 +260,11 @@ const Permissoes: React.FC = () => {
       return;
     }
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("permissoes_usuario")
       .select("*")
       .eq("user_id", selectedUserId)
-      .eq("unidade_id", selectedUnidade);
+      .in("unidade_id", [unidadeScope, ""]);
     if (error) {
       toast.error("Erro ao carregar exceções do usuário");
       setUserRows([]);
@@ -242,7 +274,7 @@ const Permissoes: React.FC = () => {
     setUserBaseRows((baseData || []) as PermRow[]);
     setUserRows((data || []) as UserPermRow[]);
     setLoading(false);
-  }, [funcionarios, selectedUserId, selectedUnidade]);
+  }, [funcionarios, selectedUserId, selectedUnidade, unidadeScope, isUnitMaster]);
 
   useEffect(() => { if (tab === "individual") loadUser(); }, [loadUser, tab]);
 
@@ -252,6 +284,7 @@ const Permissoes: React.FC = () => {
       .channel("permissoes-admin-page")
       .on("postgres_changes", { event: "*", schema: "public", table: "permissoes" }, () => {
         if (tab === "perfil") loadPerfil();
+        if (tab === "individual") loadUser();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "permissoes_usuario" }, () => {
         if (tab === "individual") loadUser();
@@ -264,7 +297,7 @@ const Permissoes: React.FC = () => {
   const funcionariosFiltered = useMemo(() => {
     const q = searchUser.toLowerCase().trim();
     let list = funcionarios;
-    if (selectedUnidade) list = list.filter((f) => f.unidade_id === selectedUnidade || !f.unidade_id);
+    if (selectedUnidade && selectedUnidade !== "__global__") list = list.filter((f) => f.unidade_id === selectedUnidade || !f.unidade_id);
     if (!q) return list.slice(0, 50);
     return list.filter((f) =>
       f.nome.toLowerCase().includes(q)
@@ -287,125 +320,169 @@ const Permissoes: React.FC = () => {
   const getPerfilRow = (modulo: ModuleName): PermRow | undefined => {
     // prefere unidade específica, fallback global
     const perfilKey = normalizeRoleKey(selectedPerfil);
-    return perfilRows.find((r) => r.perfil === perfilKey && r.modulo === modulo && r.unidade_id === selectedUnidade)
+    return perfilRows.find((r) => r.perfil === perfilKey && r.modulo === modulo && r.unidade_id === unidadeScope)
+      || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === unidadeScope)
       || perfilRows.find((r) => r.perfil === perfilKey && r.modulo === modulo && r.unidade_id === "")
-      || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
       || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === "");
   };
 
   const togglePerfil = async (modulo: ModuleName, action: keyof ModulePermission) => {
+    if (savingLock.current || ROUTE_DEPENDENCIES[modulo] || (isUnitMaster && selectedUnidade !== user?.unidadeId)) return;
+    savingLock.current = true;
     const existing = getPerfilRow(modulo);
     const baseRow: PermRow = existing
-      ? { ...existing, unidade_id: selectedUnidade } // criar/atualizar para a unidade
-      : { perfil: normalizeRoleKey(selectedPerfil), modulo, unidade_id: selectedUnidade,
+      ? { ...existing, id: undefined, perfil: normalizeRoleKey(selectedPerfil), unidade_id: unidadeScope }
+      : { perfil: normalizeRoleKey(selectedPerfil), modulo, unidade_id: unidadeScope,
           can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false };
     const newVal = !baseRow[action];
     const updated: PermRow = { ...baseRow, [action]: newVal };
+    const inheritedExtras = existing ? {
+      can_print: existing.can_print, can_export: existing.can_export,
+      can_attach: existing.can_attach, can_sign: existing.can_sign,
+      can_approve: existing.can_approve, can_cancel: existing.can_cancel,
+      can_configure: existing.can_configure, granular_actions: existing.granular_actions,
+    } : {};
     const key = `perfil-${modulo}-${action}`;
     setSaving(key);
 
     // Optimistic
     setPerfilRows((prev) => {
-      const idx = prev.findIndex((r) => r.modulo === modulo && r.unidade_id === selectedUnidade);
+      const idx = prev.findIndex((r) => r.perfil === normalizeRoleKey(selectedPerfil) && r.modulo === modulo && r.unidade_id === unidadeScope);
       if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
       return [...prev, updated];
     });
 
-    const { error } = await (supabase as any)
-      .from("permissoes")
-      .upsert(
-        { perfil: normalizeRoleKey(selectedPerfil), modulo, unidade_id: selectedUnidade,
-          can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute },
-        { onConflict: "perfil,modulo,unidade_id" }
-      );
+    try {
+      const { data: saved, error } = await supabase
+        .from("permissoes")
+        .upsert(
+          { perfil: normalizeRoleKey(selectedPerfil), modulo, unidade_id: unidadeScope,
+            can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
+            can_delete: updated.can_delete, can_execute: updated.can_execute, ...inheritedExtras },
+          { onConflict: "perfil,modulo,unidade_id" }
+        ).select("id").maybeSingle();
 
-    if (error) {
-      toast.error(`Erro: ${error.message}`);
-      loadPerfil();
-    } else {
-      toast.success(`${MODULO_LABELS[modulo]} â†’ ${ACTION_LABELS[action]}: ${newVal ? "ATIVADO" : "DESATIVADO"}`);
+      if (error || !saved) {
+        toast.error(`Erro: ${error?.message || "Gravação não confirmada"}`);
+        await loadPerfil();
+      } else {
+        toast.success(`${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}: ${newVal ? "ATIVADO" : "DESATIVADO"}`);
+      }
+    } catch {
+      toast.error("Não foi possível salvar a permissão.");
+      await loadPerfil();
+    } finally {
+      savingLock.current = false;
+      setSaving(null);
     }
-    setSaving(null);
   };
 
   // ===== Helpers Individual =====
   const selectedUserRoleKey = normalizeRoleKey(funcionarios.find((f) => f.id === selectedUserId)?.role || "recepcao");
 
   const getUserBaseRow = (modulo: ModuleName): PermRow | undefined =>
-    userBaseRows.find((r) => r.perfil === selectedUserRoleKey && r.modulo === modulo && r.unidade_id === selectedUnidade)
+    userBaseRows.find((r) => r.perfil === selectedUserRoleKey && r.modulo === modulo && r.unidade_id === unidadeScope)
+      || userBaseRows.find((r) => r.modulo === modulo && r.unidade_id === unidadeScope)
       || userBaseRows.find((r) => r.perfil === selectedUserRoleKey && r.modulo === modulo && r.unidade_id === "")
-      || userBaseRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
       || userBaseRows.find((r) => r.modulo === modulo && r.unidade_id === "");
 
   const getUserOverrideRow = (modulo: ModuleName): UserPermRow | undefined =>
-    userRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
+    userRows.find((r) => r.modulo === modulo && r.unidade_id === unidadeScope)
       || userRows.find((r) => r.modulo === modulo && r.unidade_id === "");
 
-  const getUserEffectiveRow = (modulo: ModuleName): (UserPermRow | PermRow | undefined) => {
-    const base = getUserBaseRow(modulo);
-    const override = getUserOverrideRow(modulo);
-    if (!override) return base;
-    return { ...(base ?? {}), ...override };
-  };
+  const getUserEffectiveRow = (modulo: ModuleName): ModulePermission => selectedUserRoleKey === "master"
+    ? { can_view: true, can_create: true, can_edit: true, can_delete: true, can_execute: true }
+    : resolveModulePermission({
+        modulo, unidadeId: unidadeScope, perfil: selectedUserRoleKey,
+        rawRole: funcionarios.find((f) => f.id === selectedUserId)?.role,
+        perfilRows: userBaseRows as PermissionSourceRow[], userRows: userRows as PermissionSourceRow[],
+        defaults: getDefaultModulePermission(selectedUserRoleKey, modulo),
+      });
 
   const toggleUser = async (modulo: ModuleName, action: keyof ModulePermission) => {
-    if (!selectedUserId) return;
+    if (!selectedUserId || savingLock.current || ROUTE_DEPENDENCIES[modulo] || (isUnitMaster && selectedUnidade !== user?.unidadeId)) return;
+    savingLock.current = true;
     const existing = getUserOverrideRow(modulo);
-    const baseProfile = getUserBaseRow(modulo);
+    const baseProfile = getUserEffectiveRow(modulo);
     let base: UserPermRow;
     if (existing) {
-      base = { ...existing };
+      base = { ...existing, id: undefined, unidade_id: unidadeScope };
     } else {
       base = {
-        user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-        can_view: baseProfile?.can_view ?? false, can_create: baseProfile?.can_create ?? false,
-        can_edit: baseProfile?.can_edit ?? false, can_delete: baseProfile?.can_delete ?? false,
-        can_execute: baseProfile?.can_execute ?? false,
+        user_id: selectedUserId, modulo, unidade_id: unidadeScope,
+        can_view: baseProfile.can_view, can_create: baseProfile.can_create,
+        can_edit: baseProfile.can_edit, can_delete: baseProfile.can_delete,
+        can_execute: baseProfile.can_execute,
       };
     }
-    const newVal = !base[action];
+    const newVal = !baseProfile[action];
     const updated: UserPermRow = { ...base, [action]: newVal };
+    const inheritedExtras = existing ? {
+      can_print: existing.can_print, can_export: existing.can_export,
+      can_attach: existing.can_attach, can_sign: existing.can_sign,
+      can_approve: existing.can_approve, can_cancel: existing.can_cancel,
+      can_configure: existing.can_configure, granular_actions: existing.granular_actions,
+    } : {};
     const key = `user-${modulo}-${action}`;
     setSaving(key);
 
     setUserRows((prev) => {
-      const idx = prev.findIndex((r) => r.modulo === modulo && r.unidade_id === selectedUnidade);
+      const idx = prev.findIndex((r) => r.modulo === modulo && r.unidade_id === unidadeScope);
       if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
       return [...prev, updated];
     });
 
-    const { error } = await (supabase as any)
-      .from("permissoes_usuario")
-      .upsert(
-        { user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-          can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute },
-        { onConflict: "user_id,modulo,unidade_id" }
-      );
+    try {
+      const { data: saved, error } = await supabase
+        .from("permissoes_usuario")
+        .upsert(
+          { user_id: selectedUserId, modulo, unidade_id: unidadeScope,
+            can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
+            can_delete: updated.can_delete, can_execute: updated.can_execute, ...inheritedExtras },
+          { onConflict: "user_id,modulo,unidade_id" }
+        ).select("id").maybeSingle();
 
-    if (error) {
-      toast.error(`Erro: ${error.message}`);
-      loadUser();
-    } else {
-      toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} -> ${ACTION_LABELS[action]}`);
+      if (error || !saved) {
+        toast.error(`Erro: ${error?.message || "Gravação não confirmada"}`);
+        await loadUser();
+      } else {
+        toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}`);
+      }
+    } catch {
+      toast.error("Não foi possível salvar a exceção.");
+      await loadUser();
+    } finally {
+      savingLock.current = false;
+      setSaving(null);
     }
-    setSaving(null);
   };
 
   const resetUserOverride = async (modulo: ModuleName) => {
-    if (!selectedUserId) return;
+    if (!selectedUserId || savingLock.current || (isUnitMaster && selectedUnidade !== user?.unidadeId)) return;
+    savingLock.current = true;
     setSaving(`user-reset-${modulo}`);
-    const { error } = await (supabase as any)
-      .from("permissoes_usuario")
-      .delete()
-      .eq("user_id", selectedUserId)
-      .eq("modulo", modulo)
-      .eq("unidade_id", selectedUnidade);
-    if (error) toast.error("Erro ao remover exceção");
-    else toast.success(`Exceção removida: ${MODULO_LABELS[modulo]}`);
-    setUserRows((prev) => prev.filter((r) => !(r.modulo === modulo && r.unidade_id === selectedUnidade)));
-    setSaving(null);
+    try {
+      const { data: deleted, error } = await supabase
+        .from("permissoes_usuario")
+        .delete()
+        .eq("user_id", selectedUserId)
+        .eq("modulo", modulo)
+        .eq("unidade_id", unidadeScope)
+        .select("id").maybeSingle();
+      if (error || !deleted) {
+        toast.error("Erro ao remover exceção");
+        await loadUser();
+      } else {
+        toast.success(`Exceção removida: ${MODULO_LABELS[modulo]}`);
+        setUserRows((prev) => prev.filter((r) => !(r.modulo === modulo && r.unidade_id === unidadeScope)));
+      }
+    } catch {
+      toast.error("Não foi possível remover a exceção.");
+      await loadUser();
+    } finally {
+      savingLock.current = false;
+      setSaving(null);
+    }
   };
 
   const selectedUser = funcionarios.find((f) => f.id === selectedUserId);
@@ -427,11 +504,12 @@ const Permissoes: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3">
             <Building2 className="w-5 h-5 text-muted-foreground" />
             <span className="text-sm font-medium">Unidade de Saúde:</span>
-            <Select value={selectedUnidade} onValueChange={setSelectedUnidade}>
-              <SelectTrigger className="w-[280px]">
+            <Select value={selectedUnidade} onValueChange={(value) => { setSelectedUnidade(value); setSelectedUserId(""); }} disabled={isUnitMaster || !!saving}>
+              <SelectTrigger className="w-full sm:w-[280px]" aria-label="Unidade de Saúde">
                 <SelectValue placeholder="Selecione uma unidade" />
               </SelectTrigger>
               <SelectContent>
+                {isGlobalAdmin && <SelectItem value="__global__">Padrão global (todas as unidades)</SelectItem>}
                 {unidades.map((u) => (
                   <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                 ))}
@@ -441,6 +519,8 @@ const Permissoes: React.FC = () => {
               <ShieldCheck className="w-3 h-3" />
               MASTER tem acesso total (não editável)
             </Badge>
+            {isUnitMaster && <span className="text-xs text-muted-foreground">Você administra somente a sua unidade.</span>}
+            {selectedUnidade === "__global__" && <span className="text-xs text-muted-foreground">Alterações no padrão global afetam unidades sem regra própria.</span>}
           </div>
         </CardContent>
       </Card>
@@ -449,16 +529,23 @@ const Permissoes: React.FC = () => {
         <Card><CardContent className="pt-6 text-center text-muted-foreground">Selecione uma unidade para continuar.</CardContent></Card>
       ) : (
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList className="grid w-full grid-cols-2 max-w-md h-auto">
           <TabsTrigger value="perfil">Permissões por Perfil</TabsTrigger>
           <TabsTrigger value="individual">Permissões Individuais</TabsTrigger>
         </TabsList>
+        <div className="relative max-w-md mt-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input aria-label="Buscar módulo" placeholder="Buscar módulo de acesso..." className="pl-9"
+            value={moduleSearch} onChange={(event) => setModuleSearch(event.target.value)} />
+        </div>
+        <p className="text-xs text-muted-foreground">Os módulos informativos mostram qual permissão realmente controla a página. As regras salvas permanecem preservadas.</p>
+        {visibleGroups.length === 0 && <p role="status" className="text-sm text-muted-foreground py-4">Nenhum módulo corresponde à busca.</p>}
 
         {/* ===== ABA PERFIL ===== */}
         <TabsContent value="perfil" className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-medium">Perfil:</span>
-            <Select value={selectedPerfil} onValueChange={setSelectedPerfil}>
+            <Select value={selectedPerfil} onValueChange={setSelectedPerfil} disabled={!!saving}>
               <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {PERFIS.map((p) => <SelectItem key={p} value={p}>{PERFIL_LABELS[p]}</SelectItem>)}
@@ -470,10 +557,12 @@ const Permissoes: React.FC = () => {
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
           ) : (
-            <Accordion type="multiple" className="space-y-2">
-              {MODULOS.map((modulo) => {
+            <Accordion type="multiple" className="space-y-5">
+              {visibleGroups.map((group) => <div key={group.label} className="space-y-2">
+                <h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>
+                {group.modules.map((modulo) => {
                 const row = getPerfilRow(modulo);
-                const isUnidade = !!perfilRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade);
+                const isUnidade = unidadeScope !== "" && row?.unidade_id === unidadeScope;
                 const activeCount = row ? ACTIONS.filter((a) => row[a]).length : 0;
                 return (
                   <AccordionItem key={modulo} value={modulo} className="border rounded-lg px-4">
@@ -483,9 +572,13 @@ const Permissoes: React.FC = () => {
                         <Badge variant={activeCount > 0 ? "default" : "outline"}>{activeCount}/5</Badge>
                         {!isUnidade && row && <Badge variant="outline" className="text-xs">Global</Badge>}
                         {isUnidade && <Badge variant="secondary" className="text-xs">Unidade</Badge>}
+                        {ROUTE_DEPENDENCIES[modulo] && <Badge variant="outline" className="text-xs">Informativo</Badge>}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
+                      {ROUTE_DEPENDENCIES[modulo] && <p className="text-sm text-muted-foreground py-2">{ROUTE_DEPENDENCIES[modulo]}</p>}
+                      {modulo === "agenda" && <p className="text-xs text-muted-foreground">Inclui o acesso à página Exames Diagnósticos e Feriados/Bloqueios.</p>}
+                      {modulo === "usuarios" && <p className="text-xs text-muted-foreground">Inclui Unidades/Salas e Disponibilidade; Acessos ao Portal exige também perfil Master.</p>}
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
                         {ACTIONS.map((action) => {
                           const k = `perfil-${modulo}-${action}`;
@@ -495,7 +588,8 @@ const Permissoes: React.FC = () => {
                               <Switch
                                 checked={!!row?.[action]}
                                 onCheckedChange={() => togglePerfil(modulo, action)}
-                                disabled={isLoading}
+                                disabled={!!saving || !!ROUTE_DEPENDENCIES[modulo]}
+                                aria-label={`${ACTION_LABELS[action]} em ${MODULO_LABELS[modulo]}`}
                               />
                               <span className="text-sm">{ACTION_LABELS[action]}</span>
                               {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -506,7 +600,8 @@ const Permissoes: React.FC = () => {
                     </AccordionContent>
                   </AccordionItem>
                 );
-              })}
+                })}
+              </div>)}
             </Accordion>
           )}
         </TabsContent>
@@ -516,13 +611,14 @@ const Permissoes: React.FC = () => {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <UserIcon className="w-4 h-4" /> Selecionar Profissional
+                <UserIcon className="w-4 h-4" /> Selecionar funcionário
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
+                  aria-label="Buscar funcionário"
                   placeholder="Buscar por nome, usuário ou perfil..."
                   className="pl-9"
                   value={searchUser}
@@ -535,7 +631,7 @@ const Permissoes: React.FC = () => {
                     <div className="p-4 text-center text-sm text-muted-foreground">Nenhum profissional encontrado.</div>
                   ) : funcionariosFiltered.map((f) => (
                     <button key={f.id} type="button" onClick={() => setSelectedUserId(f.id)}
-                      className="w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between">
+                      className="w-full text-left px-3 py-2 hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary flex items-center justify-between">
                       <div>
                         <div className="font-medium text-sm">{f.nome}</div>
                         <div className="text-xs text-muted-foreground">{f.usuario} · {PERFIL_LABELS[normalizeRoleKey(f.role)] || f.role.toUpperCase()}</div>
@@ -562,12 +658,14 @@ const Permissoes: React.FC = () => {
             loading ? (
               <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
             ) : (
-              <Accordion type="multiple" className="space-y-2">
-                {MODULOS.map((modulo) => {
+              <Accordion type="multiple" className="space-y-5">
+                {visibleGroups.map((group) => <div key={group.label} className="space-y-2">
+                  <h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>
+                  {group.modules.map((modulo) => {
                   const override = getUserOverrideRow(modulo);
                   const base = getUserBaseRow(modulo);
                   const effective = getUserEffectiveRow(modulo);
-                  const activeCount = effective ? ACTIONS.filter((a) => effective[a]).length : 0;
+                  const activeCount = ACTIONS.filter((a) => effective[a]).length;
                   return (
                     <AccordionItem key={modulo} value={modulo} className="border rounded-lg px-4">
                       <AccordionTrigger className="hover:no-underline">
@@ -576,14 +674,18 @@ const Permissoes: React.FC = () => {
                           {override ? (
                             <>
                               <Badge variant="default">{activeCount}/5</Badge>
-                              <Badge variant="secondary" className="text-xs">Exceção ativa</Badge>
+                              <Badge variant="secondary" className="text-xs">{override.unidade_id === "" ? "Exceção global" : "Exceção da unidade"}</Badge>
                             </>
                           ) : (
                             <Badge variant="outline" className="text-xs">Herda do perfil</Badge>
                           )}
+                          {ROUTE_DEPENDENCIES[modulo] && <Badge variant="outline" className="text-xs">Informativo</Badge>}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
+                        {ROUTE_DEPENDENCIES[modulo] && <p className="text-sm text-muted-foreground py-2">{ROUTE_DEPENDENCIES[modulo]}</p>}
+                        {selectedUserRoleKey === "master" && <p className="text-sm text-muted-foreground py-2">Master tem acesso total independentemente destas exceções.</p>}
+                        {!ROUTE_DEPENDENCIES[modulo] && selectedUserRoleKey !== "master" && <p className="text-xs text-muted-foreground py-1">Ao criar uma exceção, as cinco ações deste módulo ficam definidas para o funcionário.</p>}
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
                           {ACTIONS.map((action) => {
                             const k = `user-${modulo}-${action}`;
@@ -593,7 +695,8 @@ const Permissoes: React.FC = () => {
                                 <Switch
                                   checked={!!effective?.[action]}
                                   onCheckedChange={() => toggleUser(modulo, action)}
-                                  disabled={isLoading}
+                                  disabled={!!saving || !!ROUTE_DEPENDENCIES[modulo] || selectedUserRoleKey === "master"}
+                                  aria-label={`${ACTION_LABELS[action]} em ${MODULO_LABELS[modulo]} para o funcionário selecionado`}
                                 />
                                 <span className="text-sm">{ACTION_LABELS[action]}</span>
                                 {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -606,10 +709,10 @@ const Permissoes: React.FC = () => {
                             Base do perfil: {ACTIONS.filter((a) => base[a]).length}/5 ativos
                           </div>
                         )}
-                        {override && (
+                        {override?.unidade_id === unidadeScope && (
                           <div className="pt-2 border-t mt-2">
                             <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)}
-                              disabled={saving === `user-reset-${modulo}`}>
+                              disabled={!!saving}>
                               {saving === `user-reset-${modulo}` ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RotateCcw className="w-3 h-3 mr-1" />}
                               Remover exceção (voltar ao perfil)
                             </Button>
@@ -618,7 +721,8 @@ const Permissoes: React.FC = () => {
                       </AccordionContent>
                     </AccordionItem>
                   );
-                })}
+                  })}
+                </div>)}
               </Accordion>
             )
           )}

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { resolveModulePermission, type PermissionSourceRow } from '@/lib/permissionResolution';
 
 export type ModuleName =
   | 'dashboard'
@@ -175,6 +176,9 @@ const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
   },
 };
 
+export const getDefaultModulePermission = (role: string, modulo: ModuleName): ModulePermission =>
+  DEFAULT_PERMISSIONS_BY_ROLE[normalizeRole(role)]?.[modulo] ?? defaultPerm;
+
 function buildFullMap(partial: Partial<PermissionsMap>): PermissionsMap {
   const map = {} as PermissionsMap;
   ALL_MODULES.forEach((m) => { map[m] = partial[m] ?? { ...defaultPerm }; });
@@ -230,7 +234,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const unidadeId = user.unidadeId || '';
 
       // Buscar permissões de perfil (unidade específica + global como fallback)
-      const { data: perfilData, error: perfilErr } = await (supabase as any)
+      const { data: perfilData, error: perfilErr } = await supabase
         .from('permissoes')
         .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
         .in('perfil', profileKeys)
@@ -244,53 +248,28 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       // Buscar overrides do usuário
-      const { data: userOverrides } = await (supabase as any)
+      const { data: userOverrides, error: overrideError } = await supabase
         .from('permissoes_usuario')
         .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
         .eq('user_id', user.id)
         .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
 
-      // Sem dados de perfil â€” semear defaults globais (unidade_id='')
-      if (!perfilData || perfilData.length === 0) {
-        const defaults = DEFAULT_PERMISSIONS_BY_ROLE[role] ?? DEFAULT_PERMISSIONS_BY_ROLE[rawRole];
-        if (defaults) {
-          const inserts = ALL_MODULES.map((m) => ({
-            perfil: role,
-            modulo: m,
-            unidade_id: '',
-            ...(defaults[m] ?? defaultPerm),
-          }));
-          await (supabase as any)
-            .from('permissoes')
-            .upsert(inserts, { onConflict: 'perfil,modulo,unidade_id' });
-        }
+      if (overrideError) {
+        console.error('[Permissions] Erro nas exceções:', overrideError);
+        setPermissions(buildFullMap({}));
+        setLoading(false);
+        return;
       }
 
-      // Montar mapa: prioridade = override usuário (unidade > global) > perfil (unidade > global)
+      // Ações explícitas prevalecem; NULL herda a próxima origem disponível.
       const map: Partial<PermissionsMap> = {};
       ALL_MODULES.forEach((m) => {
-        // perfil global
-        const pGlob = (perfilData || []).find((r: any) => r.modulo === m && r.unidade_id === '');
-        // perfil unidade
-        const pUnid = (perfilData || []).find((r: any) => r.modulo === m && r.unidade_id === unidadeId && unidadeId);
-        // user global / unidade
-        const uGlob = (userOverrides || []).find((r: any) => r.modulo === m && r.unidade_id === '');
-        const uUnid = (userOverrides || []).find((r: any) => r.modulo === m && r.unidade_id === unidadeId && unidadeId);
-
-        const pick = uUnid || uGlob || pUnid || pGlob;
-        if (pick) {
-          map[m] = {
-            can_view: pick.can_view ?? false,
-            can_create: pick.can_create ?? false,
-            can_edit: pick.can_edit ?? false,
-            can_delete: pick.can_delete ?? false,
-            can_execute: pick.can_execute ?? false,
-          };
-        } else {
-          map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m])
-            ?? (DEFAULT_PERMISSIONS_BY_ROLE[rawRole]?.[m])
-            ?? defaultPerm;
-        }
+        map[m] = resolveModulePermission({
+          modulo: m, unidadeId, perfil: role, rawRole,
+          perfilRows: (perfilData ?? []) as PermissionSourceRow[],
+          userRows: (userOverrides ?? []) as PermissionSourceRow[],
+          defaults: getDefaultModulePermission(role, m),
+        });
       });
       setPermissions(buildFullMap(map));
 
@@ -300,7 +279,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     setLoading(false);
-  }, [user?.id, user?.role]);
+  }, [user]);
 
   useEffect(() => {
     loadPermissions();
