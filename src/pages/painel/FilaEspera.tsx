@@ -1893,6 +1893,7 @@ const FilaEspera: React.FC = () => {
                 <ProfissaoCboSelect
                   profissionais={profissionais}
                   value={form.especialidadeDestino}
+                  cboValue={form.cboDestino}
                   onChange={(value) => setForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))}
                   onCboChange={(code) => setForm((p) => ({ ...p, cboDestino: code || "" }))}
                   placeholder="Qualquer profissão ou selecione uma profissão"
@@ -2158,6 +2159,7 @@ const FilaEspera: React.FC = () => {
                     <ProfissaoCboSelect
                       profissionais={profissionais}
                       value={importForm.especialidadeDestino}
+                      cboValue={importForm.cboDestino}
                       onChange={(value) =>
                         setImportForm((p) => ({ ...p, especialidadeDestino: value, profissionalId: "" }))
                       }

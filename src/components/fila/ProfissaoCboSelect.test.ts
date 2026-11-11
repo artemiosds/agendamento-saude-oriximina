@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildProfissaoOptions } from "./ProfissaoCboSelect";
+import { buildProfissaoOptions, getProfissaoLabel } from "./ProfissaoCboSelect";
 
 describe("seletor de profissão e CBO da fila", () => {
-  it("exibe e disponibiliza o CBO quando todos os profissionais têm o mesmo código", () => {
+  it("agrupa profissionais quando todos compartilham o mesmo CBO", () => {
     const options = buildProfissaoOptions([
       { id: "1", nome: "A", profissao: "Fisioterapeuta", customData: { cbo_codigo: "223605" } },
       { id: "2", nome: "B", profissao: "Fisioterapeuta", customData: { cbo_codigo: "223605" } },
     ]);
-
     expect(options).toHaveLength(1);
     expect(options[0]).toMatchObject({
       value: "Fisioterapeuta",
@@ -17,39 +16,44 @@ describe("seletor de profissão e CBO da fila", () => {
     });
   });
 
-  it("não escolhe um código quando a mesma profissão tem CBOs diferentes", () => {
+  it("oferece cada CBO separadamente quando a profissão possui códigos diferentes", () => {
     const options = buildProfissaoOptions([
       { id: "1", nome: "A", profissao: "Fisioterapeuta", customData: { cbo_codigo: "223605" } },
       { id: "2", nome: "B", profissao: "Fisioterapeuta", customData: { cbo_codigo: "223606" } },
     ]);
-
-    expect(options[0]).toMatchObject({
-      label: "Fisioterapeuta • CBO múltiplos",
-      total: 2,
-    });
-    expect(options[0].cboCodigo).toBeUndefined();
+    expect(options).toHaveLength(2);
+    expect(options.map((option) => option.cboCodigo)).toEqual(["223605", "223606"]);
+    expect(options.every((option) => option.value === "Fisioterapeuta")).toBe(true);
   });
 
-  it("não confirma CBO único quando algum profissional da profissão está sem código", () => {
+  it("mantém a opção sem CBO separada e não associa o código de outro profissional", () => {
     const options = buildProfissaoOptions([
       { id: "1", nome: "A", profissao: "Fonoaudióloga", customData: { cbo_codigo: "223810" } },
       { id: "2", nome: "B", profissao: "Fonoaudióloga", customData: {} },
     ]);
+    expect(options).toHaveLength(2);
+    expect(options.find((option) => option.cboCodigo === "223810")?.label).toBe("Fonoaudióloga • CBO 223810");
+    expect(options.find((option) => !option.cboCodigo)?.label).toBe("Fonoaudióloga • CBO não informado");
+  });
 
+  it("expõe claramente quando todos os profissionais estão sem CBO", () => {
+    const options = buildProfissaoOptions([
+      { id: "1", nome: "A", profissao: "Psicóloga", customData: {} },
+      { id: "2", nome: "B", profissao: "Psicóloga", customData: {} },
+    ]);
+    expect(options).toHaveLength(1);
     expect(options[0]).toMatchObject({
-      label: "Fonoaudióloga • CBO não confirmado",
+      value: "Psicóloga",
+      label: "Psicóloga • CBO não informado",
       total: 2,
     });
     expect(options[0].cboCodigo).toBeUndefined();
   });
 
-  it("mantém a profissão sem inventar código quando todos estão sem CBO", () => {
-    const options = buildProfissaoOptions([
-      { id: "1", nome: "A", profissao: "Psicóloga", customData: {} },
-      { id: "2", nome: "B", profissao: "Psicóloga", customData: {} },
-    ]);
-
-    expect(options[0]).toMatchObject({ value: "Psicóloga", label: "Psicóloga", total: 2 });
-    expect(options[0].cboCodigo).toBeUndefined();
+  it("não escolhe arbitrariamente um CBO no rótulo geral quando há vários", () => {
+    expect(getProfissaoLabel([
+      { id: "1", nome: "A", profissao: "Fisioterapeuta", customData: { cbo_codigo: "223605" } },
+      { id: "2", nome: "B", profissao: "Fisioterapeuta", customData: { cbo_codigo: "223606" } },
+    ], "Fisioterapeuta")).toBe("Fisioterapeuta • CBO múltiplos");
   });
 });

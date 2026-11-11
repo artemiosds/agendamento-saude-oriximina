@@ -10,9 +10,11 @@ interface FuncionarioLike {
 }
 
 export interface ProfissaoCboOption {
-  /** Valor salvo em fila_espera.especialidade_destino */
+  /** Chave única para distinguir a mesma profissão com CBOs diferentes. */
+  key: string;
+  /** Profissão gravada em fila_espera.especialidade_destino. */
   value: string;
-  /** Rótulo exibido: "Fisioterapeuta • CBO 223605" */
+  /** Rótulo exibido no seletor. */
   label: string;
   cboCodigo?: string;
   total: number;
@@ -21,54 +23,51 @@ export interface ProfissaoCboOption {
 const norm = (s: string) =>
   (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-/** Monta a lista de profissões (com CBO quando cadastrado) a partir dos profissionais visíveis. */
+const optionKey = (profissao: string, cbo?: string | null) =>
+  JSON.stringify([norm(profissao), (cbo || "").trim().toUpperCase()]);
+
+/** Cria uma opção para cada combinação explícita de profissão e CBO. */
 export function buildProfissaoOptions(profissionais: FuncionarioLike[]): ProfissaoCboOption[] {
-  const map = new Map<string, { option: ProfissaoCboOption; cboCodes: Set<string>; missingCbo: boolean }>();
+  const map = new Map<string, ProfissaoCboOption>();
   for (const p of profissionais) {
     const profissao = (p.profissao || "").trim();
     if (!profissao) continue;
-    const cd = (p.customData || (p as any).custom_data || {}) as Record<string, any>;
+    const cd = (p.customData || p.custom_data || {}) as Record<string, any>;
     const cbo = (cd.cbo_codigo || "").toString().trim().toUpperCase();
-    const key = norm(profissao);
+    const key = optionKey(profissao, cbo);
     const existing = map.get(key);
     if (existing) {
-      existing.option.total += 1;
-      if (cbo) existing.cboCodes.add(cbo);
-      else existing.missingCbo = true;
-    } else {
-      map.set(key, {
-        option: { value: profissao, label: profissao, total: 1 },
-        cboCodes: new Set(cbo ? [cbo] : []),
-        missingCbo: !cbo,
-      });
+      existing.total += 1;
+      continue;
     }
+    map.set(key, {
+      key,
+      value: profissao,
+      label: cbo ? profissao + " • CBO " + cbo : profissao + " • CBO não informado",
+      cboCodigo: cbo || undefined,
+      total: 1,
+    });
   }
 
-  return Array.from(map.values()).map(({ option, cboCodes, missingCbo }) => {
-    if (cboCodes.size === 1 && !missingCbo) {
-      option.cboCodigo = [...cboCodes][0];
-      option.label = option.value + " • CBO " + option.cboCodigo;
-    } else if (cboCodes.size > 1) {
-      option.cboCodigo = undefined;
-      option.label = option.value + " • CBO múltiplos";
-    } else if (missingCbo && cboCodes.size === 1) {
-      option.cboCodigo = undefined;
-      option.label = option.value + " • CBO não confirmado";
-    }
-    return option;
-  }).sort((a, b) => a.value.localeCompare(b.value, "pt-BR"));
+  return Array.from(map.values()).sort((a, b) =>
+    a.value.localeCompare(b.value, "pt-BR") ||
+    (a.cboCodigo || "").localeCompare(b.cboCodigo || "", "pt-BR"),
+  );
 }
 
-/** Rótulo amigável para uma profissão de destino já salva. */
+/** Rótulo amigável sem escolher arbitrariamente um CBO quando há vários. */
 export function getProfissaoLabel(profissionais: FuncionarioLike[], profissao: string): string {
   if (!profissao) return "";
-  const opt = buildProfissaoOptions(profissionais).find((o) => norm(o.value) === norm(profissao));
-  return opt?.label || profissao;
+  const matches = buildProfissaoOptions(profissionais).filter((option) => norm(option.value) === norm(profissao));
+  if (matches.length === 0) return profissao;
+  if (matches.length === 1) return matches[0].label;
+  return matches[0].value + " • CBO múltiplos";
 }
 
 interface Props {
   profissionais: FuncionarioLike[];
   value: string;
+  cboValue?: string | null;
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
@@ -78,21 +77,39 @@ interface Props {
 const ProfissaoCboSelect: React.FC<Props> = ({
   profissionais,
   value,
+  cboValue,
   onChange,
   placeholder = "Selecione a profissão",
   disabled = false,
   onCboChange,
 }) => {
   const options = useMemo(() => buildProfissaoOptions(profissionais), [profissionais]);
+  const selectedKey = value ? optionKey(value, cboValue) : "none";
+  const selectionOptions = useMemo(() => {
+    if (!value || options.some((option) => option.key === selectedKey)) return options;
+    const selectedCbo = (cboValue || "").trim().toUpperCase();
+    return [...options, {
+      key: selectedKey,
+      value,
+      label: value + (selectedCbo ? " • CBO " + selectedCbo : " • CBO não cadastrado"),
+      cboCodigo: selectedCbo || undefined,
+      total: 0,
+    }];
+  }, [options, value, cboValue, selectedKey]);
 
   return (
     <Select
-      value={value || "none"}
-      onValueChange={(v) => {
-        const selected = v === "none" ? "" : v;
-        onChange(selected);
-        const option = options.find((item) => norm(item.value) === norm(selected));
-        onCboChange?.(option?.cboCodigo || null);
+      value={selectedKey}
+      onValueChange={(key) => {
+        if (key === "none") {
+          onChange("");
+          onCboChange?.(null);
+          return;
+        }
+        const selected = selectionOptions.find((option) => option.key === key);
+        if (!selected) return;
+        onChange(selected.value);
+        onCboChange?.(selected.cboCodigo || null);
       }}
       disabled={disabled}
     >
@@ -101,10 +118,10 @@ const ProfissaoCboSelect: React.FC<Props> = ({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="none">Qualquer profissão</SelectItem>
-        {options.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-            {o.total > 1 ? ` (${o.total} profissionais)` : ""}
+        {selectionOptions.map((option) => (
+          <SelectItem key={option.key} value={option.key}>
+            {option.label}
+            {option.total > 1 ? " (" + option.total + " profissionais)" : option.total === 0 ? " (CBO anterior)" : ""}
           </SelectItem>
         ))}
       </SelectContent>
