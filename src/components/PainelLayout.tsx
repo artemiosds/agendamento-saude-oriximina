@@ -207,10 +207,10 @@ const PainelLayout: React.FC = () => {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed lg:static inset-y-0 left-0 z-50 w-72 sm:w-64 max-w-[85vw] bg-sidebar flex flex-col transition-transform duration-300 shadow-2xl lg:shadow-none",
+        "fixed inset-y-0 left-0 z-50 h-dvh w-72 sm:w-64 max-w-[85vw] bg-sidebar flex flex-col transition-transform duration-300 shadow-2xl lg:sticky lg:top-0 lg:self-start lg:shadow-none",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
+        <div className="p-5 border-b border-sidebar-border flex shrink-0 items-center gap-3">
           <img src={brand.logoUrl} alt={brand.titulo} className="w-12 h-12 shrink-0 rounded-xl bg-white p-0.5 object-contain ring-2 ring-sidebar-primary/20" onError={(e) => { (e.currentTarget as HTMLImageElement).src = logoSms; }} />
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight truncate max-w-[160px]">{unitDisplayName}</h2>
@@ -226,7 +226,7 @@ const PainelLayout: React.FC = () => {
           </div>
         )}
 
-        <nav className="flex-1 p-3 space-y-3 overflow-y-auto">
+        <nav className="min-h-0 flex-1 p-3 space-y-3 overflow-y-auto">
           {filteredGroups.map(group => {
             const isCollapsed = !!collapsedGroups[group.id];
             return (
@@ -273,7 +273,7 @@ const PainelLayout: React.FC = () => {
           })}
         </nav>
 
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="shrink-0 p-4 border-t border-sidebar-border">
           <div className="mb-3">
             <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.nome}</p>
             <p className="text-xs text-sidebar-foreground/50">
