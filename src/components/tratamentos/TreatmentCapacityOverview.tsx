@@ -26,6 +26,8 @@ import {
   type TreatmentCapacityPlan,
 } from "@/lib/treatmentCapacityPlanning";
 import type { ExternalQuotaWindow } from "@/lib/externalQuota";
+import TreatmentDemandScenario from "@/components/tratamentos/TreatmentDemandScenario";
+import type { TreatmentDemandScenarioGroupInput } from "@/lib/treatmentDemandScenario";
 
 const PAGE_SIZE = 1000;
 const ACTIVE_CYCLE_STATUSES = ["em_andamento", "ativo", "aguardando_vaga", "em_fila", "concluido"];
@@ -73,6 +75,7 @@ export default function TreatmentCapacityOverview() {
   useEffect(() => { setProfessionalFilter("all"); }, [unitFilter, specialtyFilter]);
   const [snapshot, setSnapshot] = useState<TreatmentCapacitySnapshot | null>(null);
   const [capacityPlan, setCapacityPlan] = useState<TreatmentCapacityPlan | null>(null);
+  const [queueDemandRows, setQueueDemandRows] = useState<QueueDemandInput[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [queueReadStatus, setQueueReadStatus] = useState<"loading" | "available" | "unavailable">("loading");
@@ -100,6 +103,7 @@ export default function TreatmentCapacityOverview() {
       if (!isGlobalAdmin && !userUnidadeId) {
         setSnapshot(null);
         setCapacityPlan(null);
+        setQueueDemandRows([]);
         setError("Seu usuário não possui unidade definida. A consulta foi interrompida para evitar exibição fora do escopo.");
         setLoading(false);
         return;
@@ -190,6 +194,7 @@ export default function TreatmentCapacityOverview() {
           if (!cancelled && requestRef.current === requestId) {
             setSnapshot(emptySnapshot);
             setCapacityPlan({ professionals: [], suggestions: [] });
+            setQueueDemandRows([]);
             setQueueReadStatus("unavailable");
             setQueueWarning("A consulta da fila não foi executada porque não há profissionais-alvo no escopo selecionado.");
             setError("Não foram encontrados profissionais ativos de Fisioterapia ou Fonoaudiologia no escopo selecionado.");
@@ -411,6 +416,7 @@ export default function TreatmentCapacityOverview() {
         if (!cancelled && requestRef.current === requestId) {
           setSnapshot(nextSnapshot);
           setCapacityPlan(nextCapacityPlan);
+          setQueueDemandRows(nextQueueReadStatus === "available" ? queueDemand : []);
           setQueueReadStatus(nextQueueReadStatus);
           setQueueWarning(nextQueueWarning);
           setError("");
@@ -419,6 +425,7 @@ export default function TreatmentCapacityOverview() {
         if (!cancelled && requestRef.current === requestId) {
           setSnapshot(null);
           setCapacityPlan(null);
+          setQueueDemandRows([]);
           setQueueReadStatus("unavailable");
           setQueueWarning("Os indicadores de fila estão indisponíveis porque a leitura geral falhou.");
           setError(loadError?.message || "Não foi possível consultar os dados de capacidade e demanda.");
@@ -555,6 +562,45 @@ export default function TreatmentCapacityOverview() {
     }
     return [...units.values()].sort((a, b) => a.unitName.localeCompare(b.unitName, "pt-BR"));
   }, [visibleProfessionals, planByProfessional]);
+
+  const scenarioGroups = useMemo<TreatmentDemandScenarioGroupInput[]>(() => {
+    const groups = new Map<string, TreatmentDemandScenarioGroupInput>();
+    const ensureGroup = (unitId: string, specialty: "Fisioterapia" | "Fonoaudiologia") => {
+      const key = unitId + "|" + specialty;
+      const existing = groups.get(key);
+      if (existing) return existing;
+      const professional = visibleProfessionals.find((row) => row.unitId === unitId && row.specialty === specialty);
+      const unitName = professional?.unitName ||
+        unidadesVisiveis.find((unit) => String(unit.id) === unitId)?.nome ||
+        unitId;
+      const created: TreatmentDemandScenarioGroupInput = {
+        unitId,
+        unitName,
+        specialty,
+        availableAppointments: 0,
+        pendingSessions: 0,
+        requestDates: [],
+      };
+      groups.set(key, created);
+      return created;
+    };
+
+    visibleProfessionalPlans.forEach((plan) => {
+      ensureGroup(plan.unitId, plan.specialty).availableAppointments += plan.availableAppointments;
+    });
+    visibleProfessionals.forEach((professional) => {
+      ensureGroup(professional.unitId, professional.specialty).pendingSessions += professional.pendingSessions;
+    });
+    queueDemandRows.forEach((request) => {
+      if (request.professionalId || !request.unitId) return;
+      const specialty = classifyTreatmentCapacitySpecialty(request.destinationProfession || "") ||
+        classifyTreatmentCapacitySpecialty(request.sector || "");
+      if (!specialty) return;
+      ensureGroup(request.unitId, specialty).requestDates.push(request.requestDate || null);
+    });
+
+    return [...groups.values()].filter((group) => group.requestDates.length > 0);
+  }, [visibleProfessionalPlans, visibleProfessionals, queueDemandRows, unidadesVisiveis]);
 
   const totalConfiguredSlots = visibleSpecialties.reduce((sum, row) => sum + row.configuredSlots, 0);
   const totalAppointments = visibleSpecialties.reduce((sum, row) => sum + row.occupiedAppointments, 0);
@@ -839,6 +885,15 @@ export default function TreatmentCapacityOverview() {
                 </table>
               </div>
             </div>
+          )}
+
+          {queueReadStatus === "available" && (
+            <TreatmentDemandScenario
+              groups={scenarioGroups}
+              periodDays={Math.max(1, Number(periodDays) || 30)}
+              today={todayLocalStr()}
+              professionalFilterActive={professionalFilter !== "all"}
+            />
           )}
 
           <p className="text-xs text-muted-foreground">
