@@ -105,7 +105,7 @@ const menuGroups: MenuGroup[] = [
       { to: '/painel/monitoramento',           label: 'Monitoramento',     icon: MonitorDot,  modulo: 'monitoramento_sistema' },
       { to: '/painel/configuracoes',           label: 'Configurações',     icon: Settings,    modulo: null, roles_master_only: true },
       { to: '/painel/permissoes',              label: 'Permissões',        icon: Lock,        modulo: null, roles_master_only: true },
-      { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,    modulo: null, roles_master_only: true },
+      { to: '/painel/configuracoes-avancadas', label: 'Backup e Dados', icon: Settings,    modulo: null, roles_master_only: true },
     ],
   },
 ];
