@@ -63,7 +63,7 @@ export interface TreatmentDemandSuggestion {
   pendingSessions: number;
   residualCapacity: number;
   suggestedForReview: number;
-  cboStatus: "compatível" | "não comparável";
+  cboStatus: "compatível" | "incompatível" | "não comparável";
   message: string;
 }
 
@@ -444,6 +444,16 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
       .slice(0, 3);
 
     if (candidates.length === 0 || candidates.every((candidate) => candidate.residualCapacity === 0)) {
+      const specialtyProfessionals = input.professionals.filter((professional) =>
+        professional.unitId === group.unitId &&
+        classifyTreatmentCapacitySpecialty(professional.profession) === group.specialty,
+      );
+      const confirmedCboMismatch = !!group.cboCode &&
+        specialtyProfessionals.length > 0 &&
+        specialtyProfessionals.every((professional) =>
+          !!professional.cboCode?.trim() &&
+          professional.cboCode.trim().toUpperCase() !== group.cboCode,
+        );
       suggestions.push({
         specialty: group.specialty,
         unitId: group.unitId,
@@ -456,11 +466,13 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
         pendingSessions: 0,
         residualCapacity: 0,
         suggestedForReview: 0,
-        cboStatus: group.cboCode && candidates.length > 0 ? "compatível" : "não comparável",
+        cboStatus: candidates.length > 0 ? "compatível" : confirmedCboMismatch ? "incompatível" : "não comparável",
         message: candidates.length === 0
-          ? group.cboCode
-            ? "Nenhum profissional ativo com o CBO de destino informado foi encontrado nesta unidade."
-            : "Nenhum profissional candidato foi encontrado para esta especialidade e unidade."
+          ? confirmedCboMismatch
+            ? "Incompatível: todos os profissionais ativos encontrados nesta unidade e especialidade possuem CBO diferente do destino informado."
+            : group.cboCode
+              ? "Compatibilidade não confirmável: não há CBO completo em todos os profissionais disponíveis para comparação."
+              : "Nenhum profissional candidato foi encontrado para esta especialidade e unidade."
           : "Os profissionais com compatibilidade registrada não possuem capacidade residual após considerar as sessões pendentes. Avaliar a grade sem alterar a fila.",
       });
       continue;

@@ -286,4 +286,20 @@ describe("planejamento de capacidade real para tratamentos", () => {
     expect(result.suggestions.reduce((sum, row) => sum + row.suggestedForReview, 0)).toBe(2);
   });
 
+  it("classifica como incompatível quando todos os CBOs da unidade são conhecidos e diferentes do destino", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"];
+    input.professionals[0].cboCode = "223606";
+    input.queueDemand = [
+      { id: "q1", unitId: "u1", destinationProfession: "Fisioterapia", requestDate: "2026-11-01", cboCode: "223605" },
+    ];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.suggestions).toHaveLength(1);
+    expect(result.suggestions[0]).toMatchObject({
+      professionalId: null,
+      cboStatus: "incompatível",
+      unassignedDemand: 1,
+    });
+  });
+
 });
