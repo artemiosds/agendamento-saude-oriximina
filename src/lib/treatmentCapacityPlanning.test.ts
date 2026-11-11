@@ -42,6 +42,41 @@ describe("horizonte adaptativo de simulação de ciclos", () => {
   });
 });
 
+describe("bloqueios parciais com limites incompletos", () => {
+  it("não transforma bloqueio parcial sem hora final em bloqueio de dia inteiro", () => {
+    const input = baseInput();
+    input.blocks = [{
+      startDate: "2026-11-11",
+      endDate: "2026-11-11",
+      unitId: "u1",
+      allDay: false,
+      startTime: "09:00",
+    }];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0]).toMatchObject({
+      configuredSlots: 4,
+      availableAppointments: 2,
+      availableDates: 1,
+      reviewDays: 0,
+    });
+  });
+
+  it("mantém bloqueio explicitamente integral como indisponibilidade total", () => {
+    const input = baseInput();
+    input.blocks = [{
+      startDate: "2026-11-11",
+      endDate: "2026-11-11",
+      unitId: "u1",
+      allDay: true,
+    }];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0]).toMatchObject({
+      availableAppointments: 0,
+      availableDates: 0,
+    });
+  });
+});
+
 describe("planejamento de capacidade real para tratamentos", () => {
   it("calcula vagas horárias por grade, ocupação, bloqueio parcial e reserva externa da data", () => {
     const input = baseInput();
