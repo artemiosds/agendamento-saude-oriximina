@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { lovable } from "@/integrations/lovable/index";
-import logoSms from "@/assets/logo-sms.jpeg";
+import logoSms from "@/assets/logo-sms-transparente.png";
 import { useBrand } from "@/hooks/useBrand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

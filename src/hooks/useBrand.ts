@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import logoSms from '@/assets/logo-sms.jpeg';
+import logoSms from '@/assets/logo-sms-transparente.png';
 
 export interface Brand {
   titulo: string;
