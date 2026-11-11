@@ -111,6 +111,15 @@ export default function TreatmentCapacityOverview() {
     else if (userUnidadeId) setUnitFilter(userUnidadeId);
   }, [isGlobalAdmin, userUnidadeId]);
 
+  const [debouncedForecastDays, setDebouncedForecastDays] = useState(() => getTreatmentCycleForecastDays(todayLocalStr(), cycleSimulationStart, cycleSimulationFrequency, Number(cycleSimulationSessions)));
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const days = getTreatmentCycleForecastDays(todayLocalStr(), cycleSimulationStart, cycleSimulationFrequency, Number(cycleSimulationSessions));
+      if (Number.isFinite(days) && days > 0) setDebouncedForecastDays(days);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [cycleSimulationStart, cycleSimulationFrequency, cycleSimulationSessions]);
+
   useEffect(() => {
     const requestId = ++requestRef.current;
     let cancelled = false;
@@ -148,12 +157,7 @@ export default function TreatmentCapacityOverview() {
       const horizon = Number(periodDays);
       const endDate = addDaysToDateStr(today, horizon - 1);
       const periodDates = Array.from({ length: horizon }, (_, index) => addDaysToDateStr(today, index));
-      const cycleForecastDays = getTreatmentCycleForecastDays(
-        today,
-        cycleSimulationStart,
-        cycleSimulationFrequency,
-        Number(cycleSimulationSessions),
-      );
+      const cycleForecastDays = debouncedForecastDays;
       const cycleEndDate = addDaysToDateStr(today, Math.min(CYCLE_FORECAST_MAX_DAYS, cycleForecastDays) - 1);
       const cyclePeriodDates = Array.from({ length: Math.min(CYCLE_FORECAST_MAX_DAYS, cycleForecastDays) }, (_, index) => addDaysToDateStr(today, index));
 
@@ -488,7 +492,7 @@ export default function TreatmentCapacityOverview() {
 
     void run();
     return () => { cancelled = true; };
-  }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission, cycleSimulationStart, cycleSimulationFrequency, cycleSimulationSessions]);
+  }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission, debouncedForecastDays]);
 
   const professionalOptions = useMemo(() => {
     if (!snapshot) return [];
