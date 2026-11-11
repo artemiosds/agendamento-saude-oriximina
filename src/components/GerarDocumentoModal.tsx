@@ -481,6 +481,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const selected = modelos.find(x => x.id === selectedId);
   const selectedMeta = ((selected?.blocos_clinicos as any) || {}) as OciTemplateMeta & Record<string, any>;
+  const [editorAberto, setEditorAberto] = useState(false);
   const isOciStructured = !!selected && (
     selectedMeta.structured_type === 'OCI' ||
     selected.nome.trim().toUpperCase().startsWith('OCI ')
@@ -1226,7 +1227,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
 
               {!(isOciStructured && ociData) && (
-                <details className="rounded-lg border p-3">
+                <details className="rounded-lg border p-3" onToggle={(e) => setEditorAberto((e.currentTarget as HTMLDetailsElement).open)}>
                   <summary className="cursor-pointer text-[13px] font-bold">
                     Editar texto (estilo Word: justificar, negrito, itálico, alinhamentos)
                   </summary>
@@ -1234,7 +1235,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
                     Faça os ajustes finais aqui. Se alterar os campos acima depois, o texto é gerado novamente.
                   </p>
                   <React.Suspense fallback={<div className="text-xs text-muted-foreground">Carregando editor...</div>}>
-                    <RichTextEditor content={conteudoFinal} onChange={setConteudoFinal} />
+                    {editorAberto && <RichTextEditor content={conteudoFinal} onChange={setConteudoFinal} />}
                   </React.Suspense>
                 </details>
               )}

@@ -176,8 +176,7 @@ const FONT_SIZES = ['10px', '11px', '12px', '13px', '14px', '16px', '18px', '20p
 const COLORS = ['#000000', '#334155', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#db2777'];
 
 const RichTextEditor: React.FC<Props> = ({ content, onChange, placeholder, className, editable = true }) => {
-  const editor = useEditor({
-    extensions: [
+  const extensions = React.useMemo(() => [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         dropcursor: false,
@@ -198,9 +197,15 @@ const RichTextEditor: React.FC<Props> = ({ content, onChange, placeholder, class
       Dropcursor.configure({ color: '#2A6F97', width: 3 }),
       TextBox,
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []);
+  const editor = useEditor({
+    extensions,
     content,
     editable,
-    onUpdate: ({ editor: e }) => onChange(e.getHTML()),
+    onUpdate: ({ editor: e }) => {
+      try { if (!e.isDestroyed && e.schema) onChange(e.getHTML()); } catch { /* instância desfeita */ }
+    },
     editorProps: {
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none min-h-[240px] px-4 py-3',
@@ -210,9 +215,12 @@ const RichTextEditor: React.FC<Props> = ({ content, onChange, placeholder, class
 
   // Sincroniza conteúdo externo (ex.: documento regenerado) sem perder o cursor durante a digitação
   React.useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content || '', { emitUpdate: false } as any);
-    }
+    if (!editor || editor.isDestroyed || !(editor as any).schema) return;
+    try {
+      if (content !== editor.getHTML()) {
+        editor.commands.setContent(content || '', { emitUpdate: false } as any);
+      }
+    } catch { /* instância desfeita durante a troca */ }
   }, [content, editor]);
 
   const insertVariable = useCallback(
