@@ -142,6 +142,58 @@ function shiftForMinute(minute: number): "Manhã" | "Tarde" | "Noite" {
   return "Noite";
 }
 
+function shiftRange(shift: TreatmentCycleShiftFilter): MinuteRange | null {
+  if (shift === "qualquer") return { start: 0, end: 1440 };
+  if (shift === "Manhã") return { start: 0, end: 720 };
+  if (shift === "Tarde") return { start: 720, end: 1080 };
+  return { start: 1080, end: 1440 };
+}
+
+function periodQuotaAffectsCycleDate(
+  quota: ExternalQuotaWindow,
+  date: string,
+  input: TreatmentCycleFeasibilityInput,
+  selectedShift: TreatmentCycleShiftFilter,
+): boolean {
+  if (
+    !isQuotaConfigurationUsable(quota) ||
+    quota.periodo_inicio >= quota.periodo_fim ||
+    quota.vagas_usadas >= quota.vagas_total ||
+    quota.profissional_interno_id !== input.professionalId ||
+    quota.unidade_id !== input.unitId ||
+    date < quota.periodo_inicio ||
+    date > quota.periodo_fim
+  ) return false;
+
+  const weekday = new Date(date + "T12:00:00").getDay();
+  if (quota.dia_semana != null && quota.dia_semana !== weekday) return false;
+
+  const quotaRange = quota.turno === "integral"
+    ? { start: 0, end: 1440 }
+    : {
+        start: toMinutes(quota.horario_inicio),
+        end: toMinutes(quota.horario_fim),
+      };
+  const requestedShift = shiftRange(selectedShift);
+  if (quotaRange.start === null || quotaRange.end === null) return false;
+  const overlapStart = Math.max(quotaRange.start, requestedShift?.start ?? 0);
+  const overlapEnd = Math.min(quotaRange.end, requestedShift?.end ?? 1440);
+  if (overlapStart >= overlapEnd) return false;
+
+  return input.availabilities.some((row) => {
+    if (
+      row.professionalId !== input.professionalId ||
+      row.unitId !== input.unitId ||
+      date < row.startDate ||
+      date > row.endDate ||
+      !row.weekdays.includes(isoDayOfWeek(date))
+    ) return false;
+    const start = toMinutes(row.startTime);
+    const end = toMinutes(row.endTime);
+    return start !== null && end !== null && start < overlapEnd && overlapStart < end;
+  });
+}
+
 function blockAppliesToProfessional(block: CapacityBlockInput, professionalId: string, unitId: string, date: string): boolean {
   if (date < block.startDate || date > block.endDate) return false;
   const blockUnit = String(block.unitId || "");
@@ -794,6 +846,25 @@ export function buildTreatmentCycleFeasibility(
         projectedSessionsOnDate,
       };
     });
+
+    const overlappingPeriodQuotas = input.externalQuotas.filter((quota) =>
+      generated.dates.some((date) => periodQuotaAffectsCycleDate(quota, date, input, shift)),
+    );
+    if (overlappingPeriodQuotas.length > 0) {
+      const remainingReservedSlots = overlappingPeriodQuotas.reduce((sum, quota) =>
+        sum + Math.max(0, Number(quota.vagas_total) - Number(quota.vagas_usadas)), 0,
+      );
+      return {
+        status: "revisão",
+        requestedSessions: input.totalSessions,
+        feasibleSessions: 0,
+        dates: [],
+        skippedDates: generated.skippedCount,
+        unresolvedSessions: 0,
+        horizonEndDate: input.endDate,
+        message: "Há " + overlappingPeriodQuotas.length + " quota(s) externa(s) de período com saldo de " + remainingReservedSlots + " vaga(s) que alcança(m) as datas/faixas deste ciclo. Como essa reserva é compartilhada no período e não está distribuída por data, a simulação não pode garantir essas vagas. Revise a quota externa ou a distribuição antes de confirmar o ciclo.",
+      };
+    }
 
     return {
       status: "confirmável",
