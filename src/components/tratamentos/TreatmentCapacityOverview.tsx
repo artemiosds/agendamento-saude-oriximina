@@ -36,6 +36,7 @@ import {
   type TreatmentCapacityPlan,
 } from "@/lib/treatmentCapacityPlanning";
 import type { ExternalQuotaWindow } from "@/lib/externalQuota";
+import { buildSharedPatientsSummary, type SharedPatientsSummary } from "@/lib/sharedTreatmentPatients";
 import TreatmentDemandScenario from "@/components/tratamentos/TreatmentDemandScenario";
 import type { TreatmentDemandScenarioGroupInput } from "@/lib/treatmentDemandScenario";
 
@@ -95,6 +96,7 @@ export default function TreatmentCapacityOverview() {
   const [cycleSimulationStart, setCycleSimulationStart] = useState(todayLocalStr());
   const [cycleSimulationWeekdays, setCycleSimulationWeekdays] = useState<number[]>([Math.max(1, isoDayOfWeek(todayLocalStr()))]);
   const [cycleSimulationShift, setCycleSimulationShift] = useState<TreatmentCycleShiftFilter>("qualquer");
+  const [sharedPatients, setSharedPatients] = useState<SharedPatientsSummary | null>(null);
   const [queueDemandRows, setQueueDemandRows] = useState<QueueDemandInput[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -295,7 +297,7 @@ export default function TreatmentCapacityOverview() {
           cycleRows.push(...await fetchAllPages<any>((from, to) => {
             let query = supabase
               .from("treatment_cycles" as any)
-              .select("id,professional_id,unit_id,status")
+              .select("id,professional_id,unit_id,status,patient_id,specialty,treatment_type")
               .in("professional_id", ids)
               .in("status", ACTIVE_CYCLE_STATUSES);
             if (effectiveUnit !== "all") query = query.eq("unit_id", effectiveUnit);
@@ -459,6 +461,7 @@ export default function TreatmentCapacityOverview() {
 
         if (!cancelled && requestRef.current === requestId) {
           setSnapshot(nextSnapshot);
+          setSharedPatients(buildSharedPatientsSummary(relevantCycles.map((c) => ({ patientId: String(c.patient_id || ""), specialty: c.specialty || c.treatment_type }))));
           setCapacityPlan(nextCapacityPlan);
           setCycleCapacityInput(nextCycleCapacityInput);
           setQueueDemandRows(nextQueueReadStatus === "available" ? queueDemand : []);
@@ -702,6 +705,8 @@ export default function TreatmentCapacityOverview() {
           <Select value={periodDays} onValueChange={setPeriodDays}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="7">Próximos 7 dias</SelectItem>
+              <SelectItem value="15">Próximos 15 dias</SelectItem>
               <SelectItem value="30">Próximos 30 dias</SelectItem>
               <SelectItem value="60">Próximos 60 dias</SelectItem>
               <SelectItem value="90">Próximos 90 dias</SelectItem>
@@ -924,6 +929,17 @@ export default function TreatmentCapacityOverview() {
               </tbody>
             </table>
           </div>
+
+          {sharedPatients && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><Users className="h-4 w-4" />Pacientes compartilhados (multiprofissional)</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <p><strong>{formatNumber(sharedPatients.totalPatients)}</strong> paciente(s) com ciclos ativos em 2 ou mais especialidades no escopo selecionado.</p>
+                {sharedPatients.combinations.map((c) => (<p key={c.label} className="text-muted-foreground">{c.label}: {formatNumber(c.count)}</p>))}
+                <p className="text-xs text-muted-foreground">Indicador apenas informativo: ajuda a combinar horários no mesmo deslocamento. Não altera ciclos nem agenda.</p>
+              </CardContent>
+            </Card>
+          )}
 
           {queueReadStatus === "available" && (
             <div className="space-y-3 rounded-lg border border-border p-3">
