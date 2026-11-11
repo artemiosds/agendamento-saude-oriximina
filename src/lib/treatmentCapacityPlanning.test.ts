@@ -336,6 +336,7 @@ describe("planejamento de capacidade real para tratamentos", () => {
       const d = new Date("2026-11-10T12:00:00"); d.setDate(d.getDate() + index); return d.toISOString().slice(0, 10);
     });
     input.availabilities[0].weekdays = [2];
+    input.availabilities[0].endDate = "2026-12-31";
     const result = buildTreatmentCycleFeasibility({ ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-10", frequency: "1x_semana", weekdays: [2], totalSessions: 4 });
     expect(result).toMatchObject({ status: "confirmável", requestedSessions: 4, feasibleSessions: 4 });
     expect(result.dates.map((row) => row.date)).toEqual(["2026-11-10", "2026-11-17", "2026-11-24", "2026-12-01"]);
