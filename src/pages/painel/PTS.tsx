@@ -1280,7 +1280,7 @@ const PTS: React.FC = () => {
     return u?.nomeExibicao || u?.nome || "";
   }, [unidades, user?.unidadeId]);
 
-  if (!can('tratamento', 'can_view')) {
+  if (!can('pts', 'can_view')) {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
 
