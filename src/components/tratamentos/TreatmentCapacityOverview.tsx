@@ -62,7 +62,9 @@ export default function TreatmentCapacityOverview() {
   const [periodDays, setPeriodDays] = useState("30");
   const [unitFilter, setUnitFilter] = useState(isGlobalAdmin ? "all" : userUnidadeId);
   const [specialtyFilter, setSpecialtyFilter] = useState("all");
+  const [professionalFilter, setProfessionalFilter] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => { setProfessionalFilter("all"); }, [unitFilter, specialtyFilter]);
   const [snapshot, setSnapshot] = useState<TreatmentCapacitySnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -385,17 +387,89 @@ export default function TreatmentCapacityOverview() {
     return () => { cancelled = true; };
   }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission]);
 
-  const visibleProfessionals = useMemo(() => {
+  const professionalOptions = useMemo(() => {
     if (!snapshot) return [];
-    if (specialtyFilter === "all") return snapshot.professionals;
-    return snapshot.professionals.filter((row) => row.specialty === specialtyFilter);
+    return snapshot.professionals.filter((row) =>
+      specialtyFilter === "all" || row.specialty === specialtyFilter,
+    );
   }, [snapshot, specialtyFilter]);
+
+  const visibleProfessionals = useMemo(() => {
+    return professionalOptions.filter((row) =>
+      professionalFilter === "all" ||
+      professionalFilter === row.professionalId + "|" + row.unitId,
+    );
+  }, [professionalOptions, professionalFilter]);
+
+  const selectedProfessional = professionalOptions.find((row) =>
+    professionalFilter === row.professionalId + "|" + row.unitId,
+  );
 
   const visibleSpecialties = useMemo(() => {
     if (!snapshot) return [];
-    if (specialtyFilter === "all") return snapshot.specialties;
-    return snapshot.specialties.filter((row) => row.specialty === specialtyFilter);
-  }, [snapshot, specialtyFilter]);
+    return snapshot.specialties
+      .filter((row) =>
+        (specialtyFilter === "all" || row.specialty === specialtyFilter) &&
+        (!selectedProfessional || row.specialty === selectedProfessional.specialty),
+      )
+      .map((summary) => {
+        const rows = visibleProfessionals.filter((row) => row.specialty === summary.specialty);
+        const sum = (selector: (row: (typeof rows)[number]) => number) =>
+          rows.reduce((total, row) => total + selector(row), 0);
+        return {
+          ...summary,
+          configuredSlots: sum((row) => row.configuredSlots),
+          scheduledDays: sum((row) => row.scheduledDays),
+          blockedDays: sum((row) => row.blockedDays),
+          partialBlockDays: sum((row) => row.partialBlockDays),
+          multipleWindowDays: sum((row) => row.multipleWindowDays),
+          occupiedAppointments: sum((row) => row.occupiedAppointments),
+          appointmentsWithoutAvailableSchedule: sum((row) => row.appointmentsWithoutAvailableSchedule),
+          pendingSessions: sum((row) => row.pendingSessions),
+          pendingDated: sum((row) => row.pendingDated),
+          pendingUndated: sum((row) => row.pendingUndated),
+          pendingOverdue: sum((row) => row.pendingOverdue),
+          pendingWithAppointmentLink: sum((row) => row.pendingWithAppointmentLink),
+          queueAssignedCompatible: sum((row) => row.assignedQueueDemand),
+          queueAssignedUnconfirmable: sum((row) => row.assignedQueueUnconfirmable),
+          queueAssignedIncompatible: sum((row) => row.assignedQueueIncompatible),
+        };
+      });
+  }, [snapshot, specialtyFilter, selectedProfessional, visibleProfessionals]);
+
+  const unitSummaries = useMemo(() => {
+    const units = new Map<string, {
+      unitId: string;
+      unitName: string;
+      professionals: number;
+      configuredSlots: number;
+      occupiedAppointments: number;
+      pendingSessions: number;
+      queueCompatible: number;
+      queueUnconfirmable: number;
+    }>();
+    for (const row of visibleProfessionals) {
+      const key = row.unitId;
+      const current = units.get(key) || {
+        unitId: row.unitId,
+        unitName: row.unitName,
+        professionals: 0,
+        configuredSlots: 0,
+        occupiedAppointments: 0,
+        pendingSessions: 0,
+        queueCompatible: 0,
+        queueUnconfirmable: 0,
+      };
+      current.professionals += 1;
+      current.configuredSlots += row.configuredSlots;
+      current.occupiedAppointments += row.occupiedAppointments;
+      current.pendingSessions += row.pendingSessions;
+      current.queueCompatible += row.assignedQueueDemand;
+      current.queueUnconfirmable += row.assignedQueueUnconfirmable + row.assignedQueueIncompatible;
+      units.set(key, current);
+    }
+    return [...units.values()].sort((a, b) => a.unitName.localeCompare(b.unitName, "pt-BR"));
+  }, [visibleProfessionals]);
 
   const totalConfiguredSlots = visibleSpecialties.reduce((sum, row) => sum + row.configuredSlots, 0);
   const totalAppointments = visibleSpecialties.reduce((sum, row) => sum + row.occupiedAppointments, 0);
@@ -423,7 +497,7 @@ export default function TreatmentCapacityOverview() {
 
       {isOpen && (
       <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div>
           <p className="mb-1 text-xs text-muted-foreground">Período da capacidade</p>
           <Select value={periodDays} onValueChange={setPeriodDays}>
@@ -461,6 +535,20 @@ export default function TreatmentCapacityOverview() {
               <SelectItem value="all">Fisioterapia e Fonoaudiologia</SelectItem>
               <SelectItem value="Fisioterapia">Fisioterapia</SelectItem>
               <SelectItem value="Fonoaudiologia">Fonoaudiologia</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <p className="mb-1 text-xs text-muted-foreground">Profissional</p>
+          <Select value={professionalFilter} onValueChange={setProfessionalFilter}>
+            <SelectTrigger><SelectValue placeholder="Todos os profissionais" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os profissionais</SelectItem>
+              {professionalOptions.map((row) => (
+                <SelectItem key={row.professionalId + "|" + row.unitId} value={row.professionalId + "|" + row.unitId}>
+                  {row.professionalName} · {row.unitName}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -546,6 +634,35 @@ export default function TreatmentCapacityOverview() {
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="min-w-[760px] w-full text-left text-sm">
+              <caption className="px-3 py-2 text-left font-semibold">Resumo por unidade no escopo selecionado</caption>
+              <thead className="bg-muted/50 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Unidade</th>
+                  <th className="px-3 py-2 text-right font-medium">Profissionais</th>
+                  <th className="px-3 py-2 text-right font-medium">Vagas programadas</th>
+                  <th className="px-3 py-2 text-right font-medium">Agendamentos</th>
+                  <th className="px-3 py-2 text-right font-medium">Sessões pendentes</th>
+                  <th className="px-3 py-2 text-right font-medium">Fila compatível / não confirmável</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unitSummaries.map((row) => (
+                  <tr key={row.unitId} className="border-t border-border">
+                    <td className="px-3 py-3 font-medium">{row.unitName}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.professionals)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.configuredSlots)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.occupiedAppointments)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.pendingSessions)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueCompatible) + " / " + formatNumber(row.queueUnconfirmable) : "—"}</td>
+                  </tr>
+                ))}
+                {unitSummaries.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Nenhuma unidade encontrada para os filtros selecionados.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-[1040px] w-full text-left text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
@@ -578,7 +695,7 @@ export default function TreatmentCapacityOverview() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Leitura gerencial: vagas programadas são a soma de vagas_por_dia na grade, após bloqueios integrais. Não representam horários livres. Bloqueios parciais são sinalizados separadamente; quotas externas, sobreposições de faixas e capacidade interna livre ainda não são deduzidas. Agendamentos ocupantes seguem a regra atual do sistema. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. O fluxo atual grava a profissão de destino, mas não o CBO selecionado; por isso as atribuições da fila não são declaradas compatíveis por CBO. Não inferimos o CBO a partir do usuário que cadastrou a solicitação.
+            Leitura gerencial: vagas programadas são a soma de vagas_por_dia na grade, após bloqueios integrais. Não representam horários livres. Bloqueios parciais são sinalizados separadamente; quotas externas, sobreposições de faixas e capacidade interna livre ainda não são deduzidas. Agendamentos ocupantes seguem a regra atual do sistema. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. A demanda da fila é total da especialidade no escopo das unidades, não uma atribuição ao profissional filtrado. O fluxo atual grava a profissão de destino, mas não o CBO selecionado; por isso as atribuições da fila não são declaradas compatíveis por CBO. Não inferimos o CBO a partir do usuário que cadastrou a solicitação.
           </p>
           <p className="text-xs text-muted-foreground">
             A capacidade considera o período selecionado; as sessões pendentes e as solicitações aptas representam o estoque atual de demanda, independentemente desse horizonte.
