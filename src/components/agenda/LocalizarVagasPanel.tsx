@@ -9,9 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { isCompleteAgendaDate } from "@/contexts/_agendamentosBridge";
 import { addDaysToDateStr, todayLocalStr } from "@/lib/utils";
 import {
-  classifyDayAvailability, classifyCardAvailability, breakdownPendingByProfessionalUnit, estimateContinuity,
+  classifyDayAvailability, classifyCardAvailability, breakdownPendingByProfessionalUnit, estimateContinuityByDay, emptyBreakdown,
   totalsByUnitSpecialty, isStrictlyCompatible, strictSpecialtyOf, ACTIVE_CYCLE_STATUSES,
-  type ContinuityResult, type ContinuityEstimate, type DayAvailabilityState, type PendingBreakdown, type PendingSessionRow,
+  type DailyContinuityResult, type ContinuityEstimate, type DayAvailabilityState, type PendingBreakdown, type PendingSessionRow,
 } from "@/lib/localizarVagas";
 import type { User } from "@/types";
 
@@ -32,7 +32,7 @@ interface ProfResult {
   freeSlots: number;
   allLoaded: boolean;
   pending: PendingBreakdown | null;
-  continuity: ContinuityResult;
+  continuity: DailyContinuityResult;
 }
 
 /** Busca pendências sem vínculo SOMENTE de ciclos ativos, com a unidade do próprio ciclo. */
@@ -125,9 +125,11 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
       });
       const allLoaded = days.every((d) => d.state !== "nao_carregado" && d.state !== "erro");
       const freeSlots = days.reduce((n, d) => n + d.slots.length, 0);
-      const pending = pendingMap ? pendingMap.get(`${prof.id}|${prof.unidadeId || ""}`) || { semData: 0, noPeriodo: 0, aposPeriodo: 0, vencidas: 0, total: 0 } : null;
+      const pending = pendingMap ? pendingMap.get(`${prof.id}|${prof.unidadeId || ""}`) || emptyBreakdown() : null;
+      const freeSlotsByDate: Record<string, number> = {};
+      days.forEach((d) => { freeSlotsByDate[d.date] = d.slots.length; });
       return { prof, compatible: true, days, freeSlots, allLoaded, pending,
-        continuity: estimateContinuity({ freeSlotsInPeriod: allLoaded ? freeSlots : null, pending, allDaysLoaded: allLoaded }) };
+        continuity: estimateContinuityByDay({ freeSlotsByDate: allLoaded ? freeSlotsByDate : null, pending, allDaysLoaded: allLoaded }) };
     });
     out.sort((a, b) => {
       const fa = a.days.find((d) => d.state === "com_vagas")?.date || "9999";
@@ -149,7 +151,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
   };
 
   const unitName = (id: string) => unidades.find((u) => u.id === id)?.nome || "Unidade não identificada";
-  const pendLine = (b: PendingBreakdown) => `${b.total} (no período: ${b.noPeriodo + b.vencidas} · sem data: ${b.semData} · após o período: ${b.aposPeriodo})`;
+  const pendLine = (b: PendingBreakdown) => `${b.total} (no período: ${b.noPeriodo} · vencidas: ${b.vencidas} · sem data: ${b.semData} · após o período: ${b.aposPeriodo})`;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -209,9 +211,9 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
           <div className="mt-5 space-y-3">
             {loadError && <p className="text-sm text-destructive">Erro ao consultar a Agenda. Os dias não foram confirmados — tente novamente.</p>}
             <div className="rounded-md border p-3 text-sm space-y-1" data-testid="pendentes-totais">
-              <p className="font-medium">Sessões pendentes de agendamento — {servico} (ciclos em andamento, sem agendamento):</p>
+              <p className="font-medium">Sessões pendentes de agendamento — {servico} (ciclos ativos, sem agendamento):</p>
               {!pendingAvailable ? <p>Informação não disponível</p>
-                : unitTotals.length === 0 ? <p>{results.length ? "Nenhuma pendência registrada" : "Informação não disponível"}</p>
+                : unitTotals.length === 0 ? <p>{results.length ? "Nenhuma pendência encontrada nos registros acessíveis a este perfil" : "Informação não disponível"}</p>
                 : unitTotals.map((t) => <p key={t.unitId}>{unitName(t.unitId)}: {t.total ? pendLine(t.total) : "Informação não disponível"}</p>)}
             </div>
             {results.length === 0 && <p className="text-sm text-muted-foreground">Nenhum profissional com compatibilidade confirmada para este serviço.</p>}
@@ -240,7 +242,9 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
                   ))}
                   {naoCarregados > 0 && <p className="text-xs text-muted-foreground">{naoCarregados} dia(s) ainda não carregado(s) — não significa sem vaga.</p>}
                   <p className="text-xs">{continuityLabel[r.continuity.estimate]}
-                    {r.continuity.estimate !== "nao_confirmada" && r.continuity.naoDistribuivel ? ` · ${r.continuity.naoDistribuivel} sessão(ões) do período não cabem nos horários livres` : ""}</p>
+                    {r.continuity.estimate !== "nao_confirmada" && r.continuity.naoDistribuivel ? ` · ${r.continuity.naoDistribuivel} sessão(ões) não cabem nos horários livres do próprio dia (${r.continuity.diasEmConflito.map(fmt).join(", ")})` : ""}</p>
+                  {r.continuity.precisaRevisao && <p className="text-xs text-warning">Revisão necessária: há sessões vencidas ou sem data, que não foram descontadas da capacidade futura.</p>}
+                  <p className="text-[11px] text-muted-foreground">A estimativa não reserva horários nem garante a continuidade do tratamento.</p>
                   <p className="text-xs text-muted-foreground">{r.pending ? `Pendentes nesta unidade: ${pendLine(r.pending)}` : "Pendentes: informação não disponível"}
                     {r.pending && r.pending.semData ? " — sessões sem data não entram na estimativa." : ""}</p>
                   <p className="text-xs text-muted-foreground">Continuidade a confirmar: depende do plano definido pelo profissional (simulação no Novo Ciclo).</p>
