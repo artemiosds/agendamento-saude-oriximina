@@ -112,7 +112,7 @@ const MODULO_LABELS: Record<ModuleName, string> = {
   monitoramento_sistema: "Monitoramento",
   configuracoes: "Configurações",
   permissoes: "Permissões",
-  configuracoes_avancadas: "Config. Avançadas",
+  configuracoes_avancadas: "Gestão Operacional e Dados",
 };
 const ACTIONS: (keyof ModulePermission)[] = ["can_view", "can_create", "can_edit", "can_delete", "can_execute"];
 const ACTION_LABELS: Record<keyof ModulePermission, string> = {
