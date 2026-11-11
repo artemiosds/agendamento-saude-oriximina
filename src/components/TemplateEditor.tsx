@@ -458,7 +458,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
   // -------- Save --------
   const handleSave = async () => {
     if (!nome.trim()) { toast.error('Informe o nome do documento'); return; }
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     setSaving(true);
     const html = normalizeTemplateAliases(editor.getHTML());
     const { data, error } = await (supabase as any).rpc('save_document_template', {
@@ -515,7 +515,7 @@ const TemplateEditorPanel: React.FC<EditorPanelProps> = ({ templateId, seed, onD
 
   // -------- Preview --------
   const renderPreview = (): string => {
-    if (!editor) return '';
+    if (!editor || editor.isDestroyed) return '';
     let html = applyExampleValues(editor.getHTML());
     html = html.replace(/\{\{([\w_]+)\}\}/g, (_m, k) => {
       const manual = camposManuais.find(f => f.key === k);
