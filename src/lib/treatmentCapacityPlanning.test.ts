@@ -466,6 +466,61 @@ const input = baseInput();
     expect(result.dates.every((row) => row.shiftLabels.every((label) => label.startsWith("Tarde")))).toBe(true);
   });
 
+  it("exige revisão quando quota externa de período alcança as datas e horários do ciclo", () => {
+    const input = baseInput();
+    input.endDate = "2026-12-31";
+    input.periodDates = Array.from({ length: 52 }, (_, index) => {
+      const d = new Date("2026-11-10T12:00:00"); d.setDate(d.getDate() + index); return d.toISOString().slice(0, 10);
+    });
+    input.externalQuotas = [{
+      profissional_interno_id: "p1",
+      unidade_id: "u1",
+      periodo_inicio: "2026-11-01",
+      periodo_fim: "2026-11-30",
+      turno: "manha",
+      horario_inicio: "08:00",
+      horario_fim: "12:00",
+      dia_semana: 2,
+      ativo: true,
+      vagas_total: 4,
+      vagas_usadas: 1,
+    }];
+    const result = buildTreatmentCycleFeasibility({
+      ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-10",
+      frequency: "1x_semana", weekdays: [2], totalSessions: 2,
+    });
+    expect(result.status).toBe("revisão");
+    expect(result.feasibleSessions).toBe(0);
+    expect(result.message).toContain("quota(s) externa(s) de período");
+  });
+
+  it("não bloqueia ciclo por quota de período fora do turno solicitado", () => {
+    const input = baseInput();
+    input.endDate = "2026-12-31";
+    input.periodDates = Array.from({ length: 52 }, (_, index) => {
+      const d = new Date("2026-11-10T12:00:00"); d.setDate(d.getDate() + index); return d.toISOString().slice(0, 10);
+    });
+    input.availabilities = [{ ...input.availabilities[0], weekdays: [3], startTime: "13:00", endTime: "17:00" }];
+    input.externalQuotas = [{
+      profissional_interno_id: "p1",
+      unidade_id: "u1",
+      periodo_inicio: "2026-11-01",
+      periodo_fim: "2026-11-30",
+      turno: "manha",
+      horario_inicio: "08:00",
+      horario_fim: "12:00",
+      dia_semana: 3,
+      ativo: true,
+      vagas_total: 4,
+      vagas_usadas: 1,
+    }];
+    const result = buildTreatmentCycleFeasibility({
+      ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-11",
+      frequency: "1x_semana", weekdays: [3], totalSessions: 2, shift: "Tarde",
+    });
+    expect(result.status).toBe("confirmável");
+  });
+
   it("não confirma ciclo se a janela não comporta todas as sessões", () => {
     const input = baseInput();
     input.periodDates = ["2026-11-11"]; input.endDate = "2026-11-11";
