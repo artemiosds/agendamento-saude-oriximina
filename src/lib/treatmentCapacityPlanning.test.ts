@@ -62,6 +62,32 @@ describe("planejamento de capacidade real para tratamentos", () => {
   });
 
   it("calcula turnos usando somente o horário inicial que a Agenda realmente oferece", () => {
+
+  it("soma turnos independentes da mesma data sem misturar ocupação entre faixas", () => {
+    const input = baseInput();
+    input.availabilities = [
+      { ...input.availabilities[0], weekdays: [3], startTime: "08:00", endTime: "12:00", vacanciesPerDay: 2, vacanciesPerHour: 0 },
+      { ...input.availabilities[0], weekdays: [3], startTime: "13:00", endTime: "17:00", vacanciesPerDay: 3, vacanciesPerHour: 0 },
+    ];
+    input.appointments = [
+      { professionalId: "p1", unitId: "u1", date: "2026-11-11", time: "09:00", status: "confirmado", origin: "recepcao" },
+      { professionalId: "p1", unitId: "u1", date: "2026-11-11", time: "14:00", status: "confirmado", origin: "recepcao" },
+    ];
+
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0]).toMatchObject({
+      configuredSlots: 5,
+      confirmedOccupancy: 2,
+      availableAppointments: 3,
+      openWindows: 2,
+    });
+    expect(result.professionals[0].shiftCapacity).toEqual([
+      { shift: "Manhã", availableAppointments: 1 },
+      { shift: "Tarde", availableAppointments: 2 },
+    ]);
+  });
+
+
     const input = baseInput();
     input.availabilities = [{
       ...input.availabilities[0],
