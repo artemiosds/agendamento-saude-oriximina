@@ -4439,6 +4439,22 @@ export type Database = {
           profissional_id: string
         }[]
       }
+      can_manage_permission_unit: {
+        Args: { p_unidade_id: string }
+        Returns: boolean
+      }
+      can_manage_permission_user: {
+        Args: { p_unidade_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      can_read_permission_profile: {
+        Args: { p_perfil: string; p_unidade_id: string }
+        Returns: boolean
+      }
+      can_read_permission_user: {
+        Args: { p_unidade_id: string; p_user_id: string }
+        Returns: boolean
+      }
       cancel_external_appointment: {
         Args: { p_agendamento_id: string; p_motivo: string }
         Returns: Json
