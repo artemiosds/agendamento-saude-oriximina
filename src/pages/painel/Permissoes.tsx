@@ -686,7 +686,7 @@ const Permissoes: React.FC = () => {
           ) : (
             <Accordion type="multiple" className="space-y-5">
               {visibleGroups.map((group) => <div key={group.label} className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>{selectedUserRoleKey !== "master" && <PresetButtons target="user" modulos={group.modules} compact />}</div><PresetButtons target="perfil" modulos={group.modules} compact /></div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2><PresetButtons target="perfil" modulos={group.modules} compact /></div>
                 {group.modules.map((modulo) => {
                 const row = getPerfilRow(modulo);
                 const isUnidade = unidadeScope !== "" && row?.unidade_id === unidadeScope;
@@ -790,7 +790,7 @@ const Permissoes: React.FC = () => {
             ) : (
               <Accordion type="multiple" className="space-y-5">
                 {visibleGroups.map((group) => <div key={group.label} className="space-y-2">
-                  <h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>{selectedUserRoleKey !== "master" && <PresetButtons target="user" modulos={group.modules} compact />}</div>
                   {group.modules.map((modulo) => {
                   const override = getUserOverrideRow(modulo);
                   const base = getUserBaseRow(modulo);
