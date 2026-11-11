@@ -2,6 +2,7 @@ import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import { classifyTreatmentCapacitySpecialty, type TreatmentCapacitySpecialty, type CapacityProfessionalInput, type CapacityAvailabilityInput, type CapacityAppointmentInput, type CapacityBlockInput, type PendingTreatmentSessionInput, type QueueDemandInput } from "@/lib/treatmentCapacityAnalytics";
 import { calculateExternalCapacity, classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable, quotaMatchesAvailability, type ExternalQuotaWindow } from "@/lib/externalQuota";
 import { isoDayOfWeek } from "@/lib/utils";
+import { buildBlockedRanges, generateSessionDatesWithInfo, getMaxWeekdays, isWeekdayFrequency } from "@/lib/treatmentSessionGenerator";
 
 export interface CapacityPlanningProfessionalInput extends CapacityProfessionalInput {
   appointmentDurationMinutes?: number | null;
@@ -51,8 +52,6 @@ export interface ProfessionalCapacityPlan {
   projectedTreatmentDemand: number;
   availableForInitialEvaluation: number;
   availableAfterProjectedDemand: number;
-  fullTreatmentStatus: "não confirmável";
-  fullTreatmentMessage: string;
   shiftCapacity: CapacityShiftSummary[];
   availableAppointments: number;
   openWindows: number;
@@ -381,7 +380,10 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
       session.professionalId === professional.id &&
       session.unitId === professional.unitId &&
       session.status === "pendente_agendamento" &&
-      !session.appointmentId,
+      !session.appointmentId &&
+      !!session.scheduledDate &&
+      session.scheduledDate >= input.today &&
+      session.scheduledDate <= input.endDate,
     ).length;
     const confirmedOccupancy = input.appointments.filter((appointment) =>
       appointment.professionalId === professional.id &&
@@ -416,8 +418,6 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
       projectedTreatmentDemand,
       availableForInitialEvaluation: availableAfterProjectedDemand,
       availableAfterProjectedDemand,
-      fullTreatmentStatus: "não confirmável" as const,
-      fullTreatmentMessage: "Uma vaga isolada comprova apenas espaço para uma avaliação inicial. Para confirmar um ciclo completo, é necessário simular o plano individual com frequência, quantidade de sessões e dias escolhidos.",
       shiftCapacity,
       availableAppointments,
       openWindows,
@@ -433,7 +433,13 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
 
   const pendingByProfessional = new Map<string, number>();
   input.pendingSessions.forEach((session) => {
-    if (session.status !== "pendente_agendamento" || session.appointmentId) return;
+    if (
+      session.status !== "pendente_agendamento" ||
+      session.appointmentId ||
+      !session.scheduledDate ||
+      session.scheduledDate < input.today ||
+      session.scheduledDate > input.endDate
+    ) return;
     const key = session.professionalId + "|" + session.unitId;
     pendingByProfessional.set(key, (pendingByProfessional.get(key) || 0) + 1);
   });
@@ -563,4 +569,200 @@ export function buildTreatmentCapacityPlan(input: CapacityPlanningInput): Treatm
   }
 
   return { professionals, suggestions };
+}
+
+
+export type TreatmentCycleShiftFilter = "qualquer" | "Manhã" | "Tarde" | "Noite";
+export type TreatmentCycleFeasibilityStatus = "confirmável" | "insuficiente" | "revisão" | "inválido";
+
+export interface TreatmentCycleFeasibilityInput extends CapacityPlanningInput {
+  professionalId: string;
+  unitId: string;
+  startDate: string;
+  frequency: string;
+  weekdays: number[];
+  totalSessions: number;
+  shift?: TreatmentCycleShiftFilter;
+}
+
+export interface TreatmentCycleFeasibilityDate {
+  date: string;
+  shiftLabels: string[];
+  availableAppointmentsAfterDemand: number;
+  projectedSessionsOnDate: number;
+}
+
+export interface TreatmentCycleFeasibilityResult {
+  status: TreatmentCycleFeasibilityStatus;
+  requestedSessions: number;
+  feasibleSessions: number;
+  dates: TreatmentCycleFeasibilityDate[];
+  skippedDates: number;
+  unresolvedSessions: number;
+  horizonEndDate: string;
+  message: string;
+}
+
+/**
+ * Read-only simulation of a complete treatment plan. It reuses the date rules
+ * of Tratamentos and the same daily capacity logic as this planning engine.
+ * It never reserves an appointment or writes a treatment cycle.
+ */
+export function buildTreatmentCycleFeasibility(
+  input: TreatmentCycleFeasibilityInput,
+): TreatmentCycleFeasibilityResult {
+  const shift = input.shift || "qualquer";
+  const invalid = (message: string): TreatmentCycleFeasibilityResult => ({
+    status: "inválido",
+    requestedSessions: Number(input.totalSessions) || 0,
+    feasibleSessions: 0,
+    dates: [],
+    skippedDates: 0,
+    unresolvedSessions: 0,
+    horizonEndDate: input.endDate,
+    message,
+  });
+
+  if (!input.professionalId || !input.unitId) return invalid("Selecione um profissional e uma unidade.");
+  if (!Number.isInteger(input.totalSessions) || input.totalSessions < 1 || input.totalSessions > 200) {
+    return invalid("Informe entre 1 e 200 sessões para a simulação.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate) ||
+      input.startDate < input.today ||
+      input.startDate > input.endDate ||
+      !Number.isFinite(new Date(input.startDate + "T12:00:00").getTime())) {
+    return invalid("A data inicial deve estar entre hoje e o fim da janela de análise.");
+  }
+  if (isWeekdayFrequency(input.frequency) &&
+      input.weekdays.length !== getMaxWeekdays(input.frequency)) {
+    return invalid("Selecione exatamente a quantidade de dias exigida pela frequência.");
+  }
+  if (shift !== "qualquer" && shift !== "Manhã" && shift !== "Tarde" && shift !== "Noite") {
+    return invalid("Turno de preferência inválido.");
+  }
+
+  const professional = input.professionals.find((row) =>
+    row.id === input.professionalId && row.unitId === input.unitId,
+  );
+  if (!professional) return invalid("O profissional selecionado não está disponível no escopo atual.");
+
+  const relevantPending = input.pendingSessions.filter((session) =>
+    session.professionalId === input.professionalId &&
+    session.unitId === input.unitId &&
+    session.status === "pendente_agendamento" &&
+    !session.appointmentId,
+  );
+  const unresolvedSessions = relevantPending.filter((session) =>
+    !session.scheduledDate || session.scheduledDate < input.today,
+  ).length;
+
+  if (unresolvedSessions > 0) {
+    return {
+      status: "revisão",
+      requestedSessions: input.totalSessions,
+      feasibleSessions: 0,
+      dates: [],
+      skippedDates: 0,
+      unresolvedSessions,
+      horizonEndDate: input.endDate,
+      message: unresolvedSessions + " sessão(ões) pendente(s) sem data futura válida. Organize essa demanda antes de confirmar a capacidade de um novo ciclo completo.",
+    };
+  }
+
+  const pendingByDate = new Map<string, number>();
+  relevantPending.forEach((session) => {
+    const date = session.scheduledDate;
+    if (!date || date < input.today || date > input.endDate) return;
+    pendingByDate.set(date, (pendingByDate.get(date) || 0) + 1);
+  });
+
+  const availableDates = new Set<string>();
+  const windowsByDate = new Map<string, CapacityWindow[]>();
+  const reviewDates = new Set<string>();
+
+  for (const date of input.periodDates) {
+    if (date < input.startDate || date > input.endDate) continue;
+    const day = getDailyPlan(input, professional, date);
+    if (day.review) {
+      reviewDates.add(date);
+      continue;
+    }
+    const windows = day.windows.filter((window) =>
+      shift === "qualquer" || window.shift === shift,
+    );
+    const rawCapacity = windows.reduce((sum, window) => sum + window.freeAppointments, 0);
+    const projectedOnDate = pendingByDate.get(date) || 0;
+
+    if (shift !== "qualquer" && projectedOnDate > 0) {
+      reviewDates.add(date);
+      continue;
+    }
+    if (rawCapacity - projectedOnDate > 0) {
+      availableDates.add(date);
+      windowsByDate.set(date, windows);
+    }
+  }
+
+  const blockedRanges = buildBlockedRanges(
+    input.blocks.map((block) => ({
+      dataInicio: block.startDate,
+      dataFim: block.endDate,
+      unidadeId: block.unitId || "",
+      profissionalId: block.professionalId || "",
+      diaInteiro: block.allDay,
+      horaInicio: block.startTime || "",
+      horaFim: block.endTime || "",
+    })),
+    input.professionalId,
+    input.unitId,
+  );
+
+  try {
+    const generated = generateSessionDatesWithInfo(
+      input.startDate,
+      input.frequency,
+      input.weekdays,
+      input.totalSessions,
+      blockedRanges,
+      availableDates,
+    );
+
+    const plannedDates: TreatmentCycleFeasibilityDate[] = generated.dates.map((date) => {
+      const windows = windowsByDate.get(date) || [];
+      const projectedSessionsOnDate = pendingByDate.get(date) || 0;
+      const rawCapacity = windows.reduce((sum, window) => sum + window.freeAppointments, 0);
+      return {
+        date,
+        shiftLabels: windows.map((window) => window.shift + " · " + window.label),
+        availableAppointmentsAfterDemand: Math.max(0, rawCapacity - projectedSessionsOnDate),
+        projectedSessionsOnDate,
+      };
+    });
+
+    return {
+      status: "confirmável",
+      requestedSessions: input.totalSessions,
+      feasibleSessions: plannedDates.length,
+      dates: plannedDates,
+      skippedDates: generated.skippedCount,
+      unresolvedSessions: 0,
+      horizonEndDate: input.endDate,
+      message: "As " + plannedDates.length + " sessões encontraram capacidade diária na janela consultada. Isso confirma espaço projetado por data e turno, não reserva horários. A recepção ainda deve escolher e confirmar cada horário na Agenda.",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Não foi possível completar a simulação.";
+    const hasReview = reviewDates.size > 0;
+    return {
+      status: hasReview ? "revisão" : "insuficiente",
+      requestedSessions: input.totalSessions,
+      feasibleSessions: 0,
+      dates: [],
+      skippedDates: 0,
+      unresolvedSessions: 0,
+      horizonEndDate: input.endDate,
+      message: hasReview
+        ? "A análise encontrou " + reviewDates.size + " dia(s) com grade ambígua ou configuração que exige revisão. Não é seguro confirmar o ciclo completo. " + message
+        : "Não há datas/turnos suficientes para acomodar todas as " + input.totalSessions + " sessões até " + input.endDate.split("-").reverse().join("/") + ". " + message,
+    };
+  }
 }
