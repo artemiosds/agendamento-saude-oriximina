@@ -33,6 +33,7 @@ describe("simulação gerencial da demanda de tratamentos", () => {
       cohort8To30: 1,
       cohort31To90: 0,
       cohortOver90: 1,
+      managementStatus: "priority_wait",
     });
   });
 
@@ -47,7 +48,7 @@ describe("simulação gerencial da demanda de tratamentos", () => {
         specialty: "Fonoaudiologia",
         availableAppointments: 40,
         pendingSessions: 10,
-        requestDates: Array.from({ length: 14 }, (_, index) => "2026-11-01"),
+        requestDates: Array.from({ length: 14 }, () => "2026-11-01"),
       }],
     });
 
@@ -77,6 +78,7 @@ describe("simulação gerencial da demanda de tratamentos", () => {
     expect(result[0].baselineWeeksToClear).toBeNull();
     expect(result[0].simulatedWeeksToClear).toBeNull();
     expect(result[0].estimatedDaysReduced).toBeNull();
+    expect(result[0].managementStatus).toBe("capacity_bottleneck");
   });
 
   it("simula prazo quando não há capacidade atual, mas há vagas adicionais informadas", () => {
@@ -115,5 +117,66 @@ describe("simulação gerencial da demanda de tratamentos", () => {
     });
 
     expect(result).toHaveLength(0);
+  });
+
+  it("permite configurar vagas adicionais diferentes por unidade e especialidade", () => {
+    const result = buildTreatmentDemandScenario({
+      today: "2026-11-10",
+      periodDays: 14,
+      additionalSlotsPerWeek: 5,
+      groups: [
+        {
+          unitId: "u1",
+          unitName: "Unidade A",
+          specialty: "Fisioterapia",
+          availableAppointments: 0,
+          pendingSessions: 0,
+          requestDates: ["2026-11-10"],
+          additionalSlotsPerWeek: 2,
+        },
+        {
+          unitId: "u2",
+          unitName: "Unidade B",
+          specialty: "Fonoaudiologia",
+          availableAppointments: 0,
+          pendingSessions: 0,
+          requestDates: ["2026-11-10"],
+        },
+      ],
+    });
+
+    expect(result.find((row) => row.unitId === "u1")?.additionalSlotsPerWeek).toBe(2);
+    expect(result.find((row) => row.unitId === "u2")?.additionalSlotsPerWeek).toBe(5);
+  });
+
+  it("prioriza espera acima de 90 dias e separa capacidade maior que a fila", () => {
+    const result = buildTreatmentDemandScenario({
+      today: "2026-11-10",
+      periodDays: 30,
+      additionalSlotsPerWeek: 0,
+      groups: [
+        {
+          unitId: "u1",
+          unitName: "Unidade A",
+          specialty: "Fisioterapia",
+          availableAppointments: 30,
+          pendingSessions: 0,
+          requestDates: ["2026-08-01"],
+        },
+        {
+          unitId: "u2",
+          unitName: "Unidade B",
+          specialty: "Fonoaudiologia",
+          availableAppointments: 20,
+          pendingSessions: 0,
+          requestDates: ["2026-11-10"],
+        },
+      ],
+    });
+
+    expect(result[0].unitId).toBe("u1");
+    expect(result[0].managementStatus).toBe("priority_wait");
+    expect(result.find((row) => row.unitId === "u2")?.managementStatus)
+      .toBe("capacity_above_unassigned_backlog");
   });
 });
