@@ -431,4 +431,55 @@ const input = baseInput();
     ]);
   });
 
+  it("reproduz a Agenda quando há uma faixa horária e um turno independente no mesmo dia", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"];
+    input.availabilities = [
+      { ...input.availabilities[0], weekdays: [3], startTime: "08:00", endTime: "12:00", vacanciesPerDay: 4, vacanciesPerHour: 2 },
+      { ...input.availabilities[0], weekdays: [3], startTime: "13:00", endTime: "17:00", vacanciesPerDay: 2, vacanciesPerHour: 0 },
+    ];
+    input.appointments = [
+      { professionalId: "p1", unitId: "u1", date: "2026-11-11", time: "08:00", status: "confirmado", origin: "recepcao" },
+      { professionalId: "p1", unitId: "u1", date: "2026-11-11", time: "14:00", status: "confirmado", origin: "recepcao" },
+    ];
+
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0]).toMatchObject({
+      configuredSlots: 6,
+      confirmedOccupancy: 2,
+      availableAppointments: 3,
+    });
+    expect(result.professionals[0].shiftCapacity).toEqual([
+      { shift: "Manhã", availableAppointments: 2 },
+      { shift: "Tarde", availableAppointments: 1 },
+    ]);
+  });
+
+  it("não confirma ciclo no turno solicitado quando só existe capacidade em outro turno", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"];
+    input.endDate = "2026-11-11";
+    input.availabilities = [{
+      ...input.availabilities[0],
+      weekdays: [3],
+      startTime: "08:00",
+      endTime: "12:00",
+      vacanciesPerDay: 4,
+      vacanciesPerHour: 2,
+    }];
+
+    const result = buildTreatmentCycleFeasibility({
+      ...input,
+      professionalId: "p1",
+      unitId: "u1",
+      startDate: "2026-11-11",
+      frequency: "1x_semana",
+      weekdays: [3],
+      totalSessions: 1,
+      shift: "Tarde",
+    });
+    expect(result.status).toBe("insuficiente");
+    expect(result.feasibleSessions).toBe(0);
+  });
+
 });
