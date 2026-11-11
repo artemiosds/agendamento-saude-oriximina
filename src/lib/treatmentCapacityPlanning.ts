@@ -152,7 +152,9 @@ function blockAppliesToProfessional(block: CapacityBlockInput, professionalId: s
 }
 
 function isWholeDayBlock(block: CapacityBlockInput): boolean {
-  return block.allDay === true || !block.startTime || !block.endTime;
+  // Match the live Agenda: explicit whole-day blocks close every slot.
+  // A partial block with one missing boundary uses 00:00/23:59 as fallback.
+  return block.allDay === true;
 }
 
 function isSlotBlockedAt(blocks: CapacityBlockInput[], time: number): boolean {
