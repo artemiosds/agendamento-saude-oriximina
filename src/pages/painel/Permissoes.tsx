@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio } from "lucide-react";
 import { toast } from "sonner";
+import { auditService } from "@/services/auditService";
+import { Copy, Eye, Ban, CheckCheck } from "lucide-react";
 
 const PERFIS = ["gestao", "recepcao", "triagem", "enfermagem", "profissional"] as const;
 const PERFIL_LABELS: Record<string, string> = {
@@ -191,6 +193,20 @@ const Permissoes: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const savingLock = useRef(false);
+
+  const logPerm = (acao: string, detalhes: Record<string, unknown>, before?: unknown, after?: unknown) => {
+    void auditService.log({
+      acao, modulo: "permissoes", entidade: "permissoes", tipoEvento: "edicao",
+      user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
+      unidadeId: unidadeScope || undefined, detalhes: { escopo: unidadeScope || "global", ...detalhes }, before, after,
+    }).catch(() => undefined);
+  };
+  const askMotivo = (texto: string): string | null => {
+    const m = window.prompt(`${texto}\n\nInforme o motivo da alteração (obrigatório, mínimo 5 caracteres):`);
+    if (m === null) return null;
+    if (m.trim().length < 5) { toast.error("Motivo obrigatório (mínimo 5 caracteres)."); return null; }
+    return m.trim();
+  };
 
   const visibleGroups = useMemo(() => MODULE_GROUPS.map((group) => ({
     ...group,
