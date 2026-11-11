@@ -61,7 +61,7 @@ export const DEFAULT_BRAND: Brand = buildDefaultBrand(tenantEnv, logoSms);
 
 const tenantCacheNamespace = envText(tenantEnv, 'VITE_TENANT_ID')
   || (envText(tenantEnv, 'VITE_TENANT_MODE').toLowerCase() === 'independent' ? 'independent' : 'oriximina-legacy');
-const CACHE_KEY = `brand_cache_v2:${tenantCacheNamespace}`;
+const CACHE_KEY = `brand_cache_v3:${tenantCacheNamespace}`;
 
 export function resolveBrand(inst: any): Brand {
   const value = (key: string) => typeof inst?.[key] === 'string' ? inst[key].trim() : '';
