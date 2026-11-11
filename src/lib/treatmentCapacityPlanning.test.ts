@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTreatmentCapacityPlan, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
+import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
 
 const baseInput = (): CapacityPlanningInput => ({
   today: "2026-11-10",
@@ -322,12 +322,75 @@ describe("planejamento de capacidade real para tratamentos", () => {
       availableAppointments: 3,
       availableAfterProjectedDemand: 1,
       availableForInitialEvaluation: 1,
-      fullTreatmentStatus: "não confirmável",
     });
     expect(result.professionals[0].shiftCapacity).toEqual([
       { shift: "Manhã", availableAppointments: 3 },
     ]);
-    expect(result.professionals[0].fullTreatmentMessage).toContain("frequência");
+  });
+
+
+  it("simula todas as sessões semanais com capacidade nas datas escolhidas", () => {
+    const input = baseInput();
+    input.endDate = "2026-12-31";
+    input.periodDates = Array.from({ length: 52 }, (_, index) => {
+      const d = new Date("2026-11-10T12:00:00"); d.setDate(d.getDate() + index); return d.toISOString().slice(0, 10);
+    });
+    input.availabilities[0].weekdays = [2];
+    const result = buildTreatmentCycleFeasibility({ ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-10", frequency: "1x_semana", weekdays: [2], totalSessions: 4 });
+    expect(result).toMatchObject({ status: "confirmável", requestedSessions: 4, feasibleSessions: 4 });
+    expect(result.dates.map((row) => row.date)).toEqual(["2026-11-10", "2026-11-17", "2026-11-24", "2026-12-01"]);
+  });
+
+  it("pula datas bloqueadas respeitando o dia semanal escolhido", () => {
+    const input = baseInput();
+    input.endDate = "2026-12-31";
+    input.periodDates = Array.from({ length: 52 }, (_, index) => {
+      const d = new Date("2026-11-10T12:00:00"); d.setDate(d.getDate() + index); return d.toISOString().slice(0, 10);
+    });
+    input.blocks = [{ startDate: "2026-11-17", endDate: "2026-11-17", unitId: "u1", allDay: true, startTime: null, endTime: null }];
+    const result = buildTreatmentCycleFeasibility({ ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-10", frequency: "1x_semana", weekdays: [2], totalSessions: 2 });
+    expect(result.status).toBe("confirmável");
+    expect(result.dates.map((row) => row.date)).toEqual(["2026-11-10", "2026-11-24"]);
+  });
+
+  it("exige revisão para sessões pendentes sem data futura", () => {
+    const input = baseInput();
+    input.pendingSessions = [{ professionalId: "p1", unitId: "u1", status: "pendente_agendamento", scheduledDate: null, appointmentId: null }];
+    const result = buildTreatmentCycleFeasibility({ ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-11", frequency: "1x_semana", weekdays: [3], totalSessions: 2 });
+    expect(result.status).toBe("revisão");
+    expect(result.unresolvedSessions).toBe(1);
+  });
+
+  it("desconta sessões pendentes agendadas para datas futuras", () => {
+    const input = baseInput();
+    input.availabilities[0].vacanciesPerDay = 1;
+    input.pendingSessions = [{ professionalId: "p1", unitId: "u1", status: "pendente_agendamento", scheduledDate: "2026-11-11", appointmentId: null }];
+    input.endDate = "2026-12-31";
+    input.periodDates = Array.from({ length: 52 }, (_, index) => {
+      const d = new Date("2026-11-10T12:00:00"); d.setDate(d.getDate() + index); return d.toISOString().slice(0, 10);
+    });
+    const result = buildTreatmentCycleFeasibility({ ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-11", frequency: "1x_semana", weekdays: [3], totalSessions: 2 });
+    expect(result.status).toBe("confirmável");
+    expect(result.dates.map((row) => row.date)).toEqual(["2026-11-18", "2026-11-25"]);
+  });
+
+  it("respeita o turno escolhido na simulação completa", () => {
+    const input = baseInput();
+    input.availabilities = [{ ...input.availabilities[0], weekdays: [3], startTime: "13:00", endTime: "17:00", vacanciesPerHour: 2 }];
+    input.endDate = "2026-12-31";
+    input.periodDates = Array.from({ length: 52 }, (_, index) => {
+      const d = new Date("2026-11-10T12:00:00"); d.setDate(d.getDate() + index); return d.toISOString().slice(0, 10);
+    });
+    const result = buildTreatmentCycleFeasibility({ ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-11", frequency: "1x_semana", weekdays: [3], totalSessions: 2, shift: "Tarde" });
+    expect(result.status).toBe("confirmável");
+    expect(result.dates.every((row) => row.shiftLabels.every((label) => label.startsWith("Tarde")))).toBe(true);
+  });
+
+  it("não confirma ciclo se a janela não comporta todas as sessões", () => {
+    const input = baseInput();
+    input.periodDates = ["2026-11-11"]; input.endDate = "2026-11-11";
+    const result = buildTreatmentCycleFeasibility({ ...input, professionalId: "p1", unitId: "u1", startDate: "2026-11-11", frequency: "1x_semana", weekdays: [3], totalSessions: 3 });
+    expect(result.status).toBe("insuficiente");
   });
 
 });
