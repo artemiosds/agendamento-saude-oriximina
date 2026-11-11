@@ -7,19 +7,24 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { addDaysToDateStr, todayLocalStr } from "@/lib/utils";
+import { addDaysToDateStr, todayLocalStr, nowTimeBrazilStr } from "@/lib/utils";
 import {
   buildTreatmentCapacitySnapshot,
   classifyTreatmentCapacitySpecialty,
   extractExplicitCboCode,
-  type CapacityAppointmentInput,
-  type CapacityAvailabilityInput,
   type CapacityBlockInput,
   type CapacityProfessionalInput,
   type PendingTreatmentSessionInput,
   type QueueDemandInput,
   type TreatmentCapacitySnapshot,
 } from "@/lib/treatmentCapacityAnalytics";
+import {
+  buildTreatmentCapacityPlan,
+  type CapacityPlanningAppointmentInput,
+  type CapacityPlanningAvailabilityInput,
+  type TreatmentCapacityPlan,
+} from "@/lib/treatmentCapacityPlanning";
+import type { ExternalQuotaWindow } from "@/lib/externalQuota";
 
 const PAGE_SIZE = 1000;
 const ACTIVE_CYCLE_STATUSES = ["em_andamento", "ativo", "aguardando_vaga", "em_fila", "concluido"];
@@ -66,6 +71,7 @@ export default function TreatmentCapacityOverview() {
   const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => { setProfessionalFilter("all"); }, [unitFilter, specialtyFilter]);
   const [snapshot, setSnapshot] = useState<TreatmentCapacitySnapshot | null>(null);
+  const [capacityPlan, setCapacityPlan] = useState<TreatmentCapacityPlan | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [queueReadStatus, setQueueReadStatus] = useState<"loading" | "available" | "unavailable">("loading");
@@ -92,6 +98,7 @@ export default function TreatmentCapacityOverview() {
       }
       if (!isGlobalAdmin && !userUnidadeId) {
         setSnapshot(null);
+        setCapacityPlan(null);
         setError("Seu usuário não possui unidade definida. A consulta foi interrompida para evitar exibição fora do escopo.");
         setLoading(false);
         return;
@@ -181,6 +188,7 @@ export default function TreatmentCapacityOverview() {
           });
           if (!cancelled && requestRef.current === requestId) {
             setSnapshot(emptySnapshot);
+            setCapacityPlan({ professionals: [], suggestions: [] });
             setQueueReadStatus("unavailable");
             setQueueWarning("A consulta da fila não foi executada porque não há profissionais-alvo no escopo selecionado.");
             setError("Não foram encontrados profissionais ativos de Fisioterapia ou Fonoaudiologia no escopo selecionado.");
@@ -189,14 +197,14 @@ export default function TreatmentCapacityOverview() {
         }
 
         const targetIds = targetStaff.map((row) => String(row.id));
-        const [appointmentRows, blockRows] = await Promise.all([
+        const [appointmentRows, blockRows, quotaRows] = await Promise.all([
           (async () => {
             const rows: any[] = [];
             for (const ids of chunk(targetIds, 100)) {
               rows.push(...await fetchAllPages<any>((from, to) => {
                 let query = supabase
                   .from("agendamentos" as any)
-                  .select("profissional_id,unidade_id,data,hora,status")
+                  .select("profissional_id,unidade_id,data,hora,status,origem")
                   .in("profissional_id", ids)
                   .gte("data", today)
                   .lte("data", endDate);
@@ -212,6 +220,23 @@ export default function TreatmentCapacityOverview() {
             .lte("data_inicio", endDate)
             .gte("data_fim", today)
             .range(from, to)),
+          (async () => {
+            const rows: any[] = [];
+            for (const ids of chunk(targetIds, 100)) {
+              rows.push(...await fetchAllPages<any>((from, to) => {
+                let query = supabase
+                  .from("quotas_externas" as any)
+                  .select("id,profissional_interno_id,unidade_id,periodo_inicio,periodo_fim,turno,horario_inicio,horario_fim,dia_semana,ativo,vagas_total,vagas_usadas")
+                  .eq("ativo", true)
+                  .in("profissional_interno_id", ids)
+                  .lte("periodo_inicio", endDate)
+                  .gte("periodo_fim", today);
+                if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
+                return query.range(from, to);
+              }));
+            }
+            return rows;
+          })(),
         ]);
 
         const targetPairs = new Map<string, { staff: any; unitId: string }>();
@@ -301,7 +326,7 @@ export default function TreatmentCapacityOverview() {
           cboCode: extractExplicitCboCode(staff.custom_data),
         }));
 
-        const availabilities: CapacityAvailabilityInput[] = availabilityRows
+        const availabilities: CapacityPlanningAvailabilityInput[] = availabilityRows
           .filter((row) => targetStaff.some((staff) => String(staff.id) === String(row.profissional_id)))
           .filter((row) => effectiveUnit === "all" || String(row.unidade_id) === effectiveUnit)
           .map((row) => ({
@@ -311,14 +336,19 @@ export default function TreatmentCapacityOverview() {
             endDate: String(row.data_fim),
             weekdays: Array.isArray(row.dias_semana) ? row.dias_semana.map(Number) : [],
             vacanciesPerDay: Math.max(0, Number(row.vagas_por_dia) || 0),
+            startTime: String(row.hora_inicio || ""),
+            endTime: String(row.hora_fim || ""),
+            vacanciesPerHour: Math.max(0, Number(row.vagas_por_hora) || 0),
+            durationMinutes: Math.max(0, Number(row.duracao_consulta) || 0) || 30,
           }));
 
-        const appointments: CapacityAppointmentInput[] = appointmentRows.map((row) => ({
+        const appointments: CapacityPlanningAppointmentInput[] = appointmentRows.map((row) => ({
           professionalId: String(row.profissional_id),
           unitId: String(row.unidade_id),
           date: String(row.data || ""),
           time: row.hora ? String(row.hora) : null,
           status: String(row.status || ""),
+          origin: row.origem ? String(row.origem) : null,
         }));
 
         const blocks: CapacityBlockInput[] = blockRows.map((row) => ({
@@ -354,6 +384,20 @@ export default function TreatmentCapacityOverview() {
           cboCode: null,
         }));
 
+        const nextCapacityPlan = buildTreatmentCapacityPlan({
+          today,
+          nowTime: nowTimeBrazilStr(),
+          endDate,
+          periodDates,
+          professionals,
+          availabilities,
+          appointments,
+          blocks,
+          externalQuotas: quotaRows as ExternalQuotaWindow[],
+          pendingSessions,
+          queueDemand,
+        });
+
         const nextSnapshot = buildTreatmentCapacitySnapshot({
           today,
           periodDates,
@@ -367,6 +411,7 @@ export default function TreatmentCapacityOverview() {
 
         if (!cancelled && requestRef.current === requestId) {
           setSnapshot(nextSnapshot);
+          setCapacityPlan(nextCapacityPlan);
           setQueueReadStatus(nextQueueReadStatus);
           setQueueWarning(nextQueueWarning);
           setError("");
@@ -374,6 +419,7 @@ export default function TreatmentCapacityOverview() {
       } catch (loadError: any) {
         if (!cancelled && requestRef.current === requestId) {
           setSnapshot(null);
+          setCapacityPlan(null);
           setQueueReadStatus("unavailable");
           setQueueWarning("Os indicadores de fila estão indisponíveis porque a leitura geral falhou.");
           setError(loadError?.message || "Não foi possível consultar os dados de capacidade e demanda.");
@@ -405,6 +451,26 @@ export default function TreatmentCapacityOverview() {
     professionalFilter === row.professionalId + "|" + row.unitId,
   );
 
+  const visibleProfessionalPlans = useMemo(() => {
+    const visibleKeys = new Set(visibleProfessionals.map((row) => row.professionalId + "|" + row.unitId));
+    return (capacityPlan?.professionals || []).filter((row) =>
+      visibleKeys.has(row.professionalId + "|" + row.unitId),
+    );
+  }, [capacityPlan, visibleProfessionals]);
+
+  const planByProfessional = useMemo(() => new Map(
+    visibleProfessionalPlans.map((row) => [row.professionalId + "|" + row.unitId, row] as const),
+  ), [visibleProfessionalPlans]);
+
+  const visibleSuggestions = useMemo(() => {
+    return (capacityPlan?.suggestions || []).filter((row) =>
+      (specialtyFilter === "all" || row.specialty === specialtyFilter) &&
+      (!selectedProfessional ||
+        (row.professionalId === selectedProfessional.professionalId &&
+          row.unitId === selectedProfessional.unitId)),
+    );
+  }, [capacityPlan, specialtyFilter, selectedProfessional]);
+
   const visibleSpecialties = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.specialties
@@ -414,8 +480,11 @@ export default function TreatmentCapacityOverview() {
       )
       .map((summary) => {
         const rows = visibleProfessionals.filter((row) => row.specialty === summary.specialty);
+        const plans = visibleProfessionalPlans.filter((row) => row.specialty === summary.specialty);
         const sum = (selector: (row: (typeof rows)[number]) => number) =>
           rows.reduce((total, row) => total + selector(row), 0);
+        const sumPlan = (selector: (row: (typeof plans)[number]) => number) =>
+          plans.reduce((total, row) => total + selector(row), 0);
         return {
           ...summary,
           configuredSlots: sum((row) => row.configuredSlots),
@@ -433,9 +502,13 @@ export default function TreatmentCapacityOverview() {
           queueAssignedCompatible: sum((row) => row.assignedQueueDemand),
           queueAssignedUnconfirmable: sum((row) => row.assignedQueueUnconfirmable),
           queueAssignedIncompatible: sum((row) => row.assignedQueueIncompatible),
+          availableAppointments: sumPlan((row) => row.availableAppointments),
+          sameDayExternalReserved: sumPlan((row) => row.sameDayExternalReserved),
+          periodQuotaRemaining: sumPlan((row) => row.periodQuotaRemaining),
+          reviewDays: sumPlan((row) => row.reviewDays),
         };
       });
-  }, [snapshot, specialtyFilter, selectedProfessional, visibleProfessionals]);
+  }, [snapshot, specialtyFilter, selectedProfessional, visibleProfessionals, visibleProfessionalPlans]);
 
   const unitSummaries = useMemo(() => {
     const units = new Map<string, {
@@ -447,6 +520,10 @@ export default function TreatmentCapacityOverview() {
       pendingSessions: number;
       queueCompatible: number;
       queueUnconfirmable: number;
+      availableAppointments: number;
+      sameDayExternalReserved: number;
+      periodQuotaRemaining: number;
+      reviewDays: number;
     }>();
     for (const row of visibleProfessionals) {
       const key = row.unitId;
@@ -459,22 +536,32 @@ export default function TreatmentCapacityOverview() {
         pendingSessions: 0,
         queueCompatible: 0,
         queueUnconfirmable: 0,
+        availableAppointments: 0,
+        sameDayExternalReserved: 0,
+        periodQuotaRemaining: 0,
+        reviewDays: 0,
       };
+      const plan = planByProfessional.get(row.professionalId + "|" + row.unitId);
       current.professionals += 1;
       current.configuredSlots += row.configuredSlots;
       current.occupiedAppointments += row.occupiedAppointments;
       current.pendingSessions += row.pendingSessions;
       current.queueCompatible += row.assignedQueueDemand;
       current.queueUnconfirmable += row.assignedQueueUnconfirmable + row.assignedQueueIncompatible;
+      current.availableAppointments += plan?.availableAppointments || 0;
+      current.sameDayExternalReserved += plan?.sameDayExternalReserved || 0;
+      current.periodQuotaRemaining += plan?.periodQuotaRemaining || 0;
+      current.reviewDays += plan?.reviewDays || 0;
       units.set(key, current);
     }
     return [...units.values()].sort((a, b) => a.unitName.localeCompare(b.unitName, "pt-BR"));
-  }, [visibleProfessionals]);
+  }, [visibleProfessionals, planByProfessional]);
 
   const totalConfiguredSlots = visibleSpecialties.reduce((sum, row) => sum + row.configuredSlots, 0);
   const totalAppointments = visibleSpecialties.reduce((sum, row) => sum + row.occupiedAppointments, 0);
   const totalPendingSessions = visibleSpecialties.reduce((sum, row) => sum + row.pendingSessions, 0);
   const totalQueueDemand = visibleSpecialties.reduce((sum, row) => sum + row.queueDemand, 0);
+  const totalAvailableAppointments = visibleProfessionalPlans.reduce((sum, row) => sum + row.availableAppointments, 0);
 
   return (
     <section className="space-y-4 rounded-xl border border-border bg-card p-4" aria-label="Visão de capacidade e demanda">
@@ -574,7 +661,7 @@ export default function TreatmentCapacityOverview() {
         </div>
       ) : snapshot ? (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Card>
               <CardContent className="p-4">
                 <div className="mb-2 flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" /><span className="text-xs">Vagas programadas no período</span></div>
@@ -603,6 +690,13 @@ export default function TreatmentCapacityOverview() {
                 <p className="text-xs text-muted-foreground">Backlog apto_atendimento, separado da fila operacional</p>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Activity className="h-4 w-4" /><span className="text-xs">Capacidade interna livre estimada</span></div>
+                <p className="text-2xl font-bold tabular-nums">{capacityPlan ? formatNumber(totalAvailableAppointments) : "—"}</p>
+                <p className="text-xs text-muted-foreground">Após ocupação, grade, bloqueios e cotas de data específica</p>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -611,6 +705,10 @@ export default function TreatmentCapacityOverview() {
                 <CardHeader className="pb-2"><CardTitle className="text-base">{row.specialty}</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                   <div><p className="text-xs text-muted-foreground">Vagas programadas (brutas)</p><p className="font-semibold tabular-nums">{formatNumber(row.configuredSlots)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Capacidade interna livre calculada</p><p className="font-semibold tabular-nums">{capacityPlan ? formatNumber(row.availableAppointments) : "—"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Reserva externa de data específica</p><p className="font-semibold tabular-nums">{capacityPlan ? formatNumber(row.sameDayExternalReserved) : "—"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Saldo de cotas de período (externas)</p><p className="font-semibold tabular-nums">{capacityPlan ? formatNumber(row.periodQuotaRemaining) : "—"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Dias que exigem revisão da grade</p><p className="font-semibold tabular-nums">{capacityPlan ? formatNumber(row.reviewDays) : "—"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Agendamentos ativos</p><p className="font-semibold tabular-nums">{formatNumber(row.occupiedAppointments)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Sessões pendentes</p><p className="font-semibold tabular-nums">{formatNumber(row.pendingSessions)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Solicitações aptas</p><p className="font-semibold tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueDemand) : "—"}</p></div>
@@ -641,6 +739,7 @@ export default function TreatmentCapacityOverview() {
                   <th className="px-3 py-2 font-medium">Unidade</th>
                   <th className="px-3 py-2 text-right font-medium">Profissionais</th>
                   <th className="px-3 py-2 text-right font-medium">Vagas programadas</th>
+                  <th className="px-3 py-2 text-right font-medium">Capacidade livre estimada</th>
                   <th className="px-3 py-2 text-right font-medium">Agendamentos</th>
                   <th className="px-3 py-2 text-right font-medium">Sessões pendentes</th>
                   <th className="px-3 py-2 text-right font-medium">Fila compatível / não confirmável</th>
@@ -652,12 +751,13 @@ export default function TreatmentCapacityOverview() {
                     <td className="px-3 py-3 font-medium">{row.unitName}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.professionals)}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.configuredSlots)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{capacityPlan ? formatNumber(row.availableAppointments) : "—"}<p className="text-xs text-muted-foreground">{formatNumber(row.reviewDays)} dia(s) para revisar</p></td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.occupiedAppointments)}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.pendingSessions)}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{queueReadStatus === "available" ? formatNumber(row.queueCompatible) + " / " + formatNumber(row.queueUnconfirmable) : "—"}</td>
                   </tr>
                 ))}
-                {unitSummaries.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Nenhuma unidade encontrada para os filtros selecionados.</td></tr>}
+                {unitSummaries.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Nenhuma unidade encontrada para os filtros selecionados.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -670,6 +770,8 @@ export default function TreatmentCapacityOverview() {
                   <th className="px-3 py-2 font-medium">Especialidade / CBO</th>
                   <th className="px-3 py-2 font-medium">Unidade</th>
                   <th className="px-3 py-2 text-right font-medium">Vagas programadas</th>
+                  <th className="px-3 py-2 text-right font-medium">Capacidade livre calculada</th>
+                  <th className="px-3 py-2 font-medium">Próximos horários/faixas</th>
                   <th className="px-3 py-2 text-right font-medium">Agendamentos</th>
                   <th className="px-3 py-2 text-right font-medium">Sessões pendentes</th>
                   <th className="px-3 py-2 text-right font-medium">Fila compatível</th>
@@ -683,19 +785,65 @@ export default function TreatmentCapacityOverview() {
                     <td className="px-3 py-3">{row.specialty}<p className="text-xs text-muted-foreground">{row.cboCode ? "CBO " + row.cboCode : "CBO não cadastrado"}</p></td>
                     <td className="px-3 py-3">{row.unitName}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.configuredSlots)}<p className="text-xs text-muted-foreground">{formatNumber(row.scheduledDays)} dia(s) programado(s) • {formatNumber(row.multipleWindowDays)} com múltiplas faixas</p></td>
+                    <td className="px-3 py-3 text-right tabular-nums">{capacityPlan ? formatNumber(planByProfessional.get(row.professionalId + "|" + row.unitId)?.availableAppointments || 0) : "—"}</td>
+                    <td className="px-3 py-3 text-right text-xs">{(planByProfessional.get(row.professionalId + "|" + row.unitId)?.nextWindows || []).map((window) => <div key={window.date + window.label}>{window.date}: {window.label} ({formatNumber(window.freeAppointments)})</div>)}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.occupiedAppointments)}{row.appointmentsWithoutAvailableSchedule > 0 && <p className="text-xs text-amber-600">{formatNumber(row.appointmentsWithoutAvailableSchedule)} sem grade ou dentro de bloqueio</p>}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.pendingSessions)}<p className="text-xs text-muted-foreground">{formatNumber(row.pendingUndated)} sem data • {formatNumber(row.pendingOverdue)} vencida(s)</p>{row.pendingWithAppointmentLink > 0 && <p className="text-xs text-amber-600">{formatNumber(row.pendingWithAppointmentLink)} pendente(s) com vínculo</p>}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{queueReadStatus === "available" ? formatNumber(row.assignedQueueDemand) : "—"}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{queueReadStatus === "available" ? formatNumber(row.assignedQueueUnconfirmable + row.assignedQueueIncompatible) : "—"}</td>
                   </tr>
                 ))}
-                {visibleProfessionals.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">Nenhum profissional encontrado para os filtros selecionados.</td></tr>}
+                {visibleProfessionals.length === 0 && <tr><td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">Nenhum profissional encontrado para os filtros selecionados.</td></tr>}
               </tbody>
             </table>
           </div>
 
+          {queueReadStatus === "available" && (
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              <div>
+                <h3 className="font-semibold text-foreground">Sugestões para organizar a demanda</h3>
+                <p className="text-xs text-muted-foreground">Alternativas para avaliação da gestão. Não atribuem pacientes, não alteram a fila e não criam agendamentos. O CBO de destino não está gravado na solicitação, portanto a comparação por CBO permanece não confirmável.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-[980px] w-full text-left text-sm">
+                  <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Especialidade / unidade</th>
+                      <th className="px-3 py-2 text-right font-medium">Demanda sem profissional</th>
+                      <th className="px-3 py-2 text-right font-medium">Espera mais antiga</th>
+                      <th className="px-3 py-2 font-medium">Profissional candidato</th>
+                      <th className="px-3 py-2 text-right font-medium">Capacidade livre</th>
+                      <th className="px-3 py-2 text-right font-medium">Sessões pendentes</th>
+                      <th className="px-3 py-2 text-right font-medium">Capacidade residual</th>
+                      <th className="px-3 py-2 text-right font-medium">Para avaliação</th>
+                      <th className="px-3 py-2 font-medium">Compatibilidade CBO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleSuggestions.map((row, index) => (
+                      <tr key={row.unitId + "|" + row.specialty + "|" + (row.professionalId || "none") + "|" + index} className="border-t border-border">
+                        <td className="px-3 py-3">{row.specialty}<p className="text-xs text-muted-foreground">{row.unitName}</p></td>
+                        <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.unassignedDemand)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{row.oldestWaitDays === null ? "Sem data válida" : formatNumber(row.oldestWaitDays) + " dia(s)"}</td>
+                        <td className="px-3 py-3 font-medium">{row.professionalName}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.availableAppointments)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.pendingSessions)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.residualCapacity)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.suggestedForReview)}</td>
+                        <td className="px-3 py-3 text-xs">{row.cboStatus}</td>
+                      </tr>
+                    ))}
+                    {visibleSuggestions.length === 0 && (
+                      <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">Não há solicitações sem profissional direcionado que gerem uma alternativa neste filtro.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground">
-            Leitura gerencial: vagas programadas são a soma de vagas_por_dia na grade, após bloqueios integrais. Não representam horários livres. Bloqueios parciais são sinalizados separadamente; quotas externas, sobreposições de faixas e capacidade interna livre ainda não são deduzidas. Agendamentos ocupantes seguem a regra atual do sistema. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. A demanda da fila é total da especialidade no escopo das unidades, não uma atribuição ao profissional filtrado. O fluxo atual grava a profissão de destino, mas não o CBO selecionado; por isso as atribuições da fila não são declaradas compatíveis por CBO. Não inferimos o CBO a partir do usuário que cadastrou a solicitação.
+            Leitura gerencial: capacidade interna livre é uma estimativa por grade horária, limite diário e por hora, agendamentos ocupantes, bloqueios integrais/parciais e reservas externas de data específica. Cotas externas de período são exibidas separadamente como saldo; não são descontadas repetidamente de cada dia. Sobreposição de faixas ou múltiplas grades horárias no mesmo dia suspende o cálculo daquele dia e exige revisão. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. As sugestões são agrupadas por unidade e profissão, usam apenas capacidade residual depois das sessões pendentes e nunca atribuem pacientes ou agendam automaticamente. A solicitação da fila não registra CBO de destino; compatibilidade por CBO permanece não comparável.
           </p>
           <p className="text-xs text-muted-foreground">
             A capacidade considera o período selecionado; as sessões pendentes e as solicitações aptas representam o estoque atual de demanda, independentemente desse horizonte.
