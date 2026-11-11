@@ -394,4 +394,15 @@ describe("planejamento de capacidade real para tratamentos", () => {
     expect(result.status).toBe("insuficiente");
   });
 
+
+  it("separa manhã e tarde quando uma mesma faixa atravessa o meio-dia", () => {
+    const input = baseInput();
+    input.availabilities = [{ ...input.availabilities[0], weekdays: [3], startTime: "08:00", endTime: "14:00", vacanciesPerDay: 12, vacanciesPerHour: 2 }];
+    const result = buildTreatmentCapacityPlan(input);
+    expect(result.professionals[0].shiftCapacity).toEqual([
+      { shift: "Manhã", availableAppointments: 8 },
+      { shift: "Tarde", availableAppointments: 4 },
+    ]);
+  });
+
 });
