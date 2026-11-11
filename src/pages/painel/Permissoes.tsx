@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getDefaultModulePermission, ModuleName, ModulePermission } from "@/contexts/PermissionsContext";
-import { resolveModulePermission, type PermissionSourceRow } from "@/lib/permissionResolution";
+import { resolveWithParent, PERMISSION_PARENT, type PermissionSourceRow } from "@/lib/permissionResolution";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
