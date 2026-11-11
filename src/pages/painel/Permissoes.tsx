@@ -383,6 +383,7 @@ const Permissoes: React.FC = () => {
         await loadPerfil();
       } else {
         toast.success(`${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}: ${newVal ? "ATIVADO" : "DESATIVADO"}`);
+        logPerm("permissao_perfil_alterada", { perfil: normalizeRoleKey(selectedPerfil), modulo, acao: action, valor: newVal }, existing, updated);
       }
     } catch {
       toast.error("Não foi possível salvar a permissão.");
@@ -463,6 +464,7 @@ const Permissoes: React.FC = () => {
         await loadUser();
       } else {
         toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}`);
+        logPerm("permissao_usuario_alterada", { funcionario_id: selectedUserId, modulo, acao: action, valor: newVal }, existing, updated);
       }
     } catch {
       toast.error("Não foi possível salvar a exceção.");
@@ -490,6 +492,7 @@ const Permissoes: React.FC = () => {
         await loadUser();
       } else {
         toast.success(`Exceção removida: ${MODULO_LABELS[modulo]}`);
+        logPerm("excecao_usuario_removida", { funcionario_id: selectedUserId, modulo });
         setUserRows((prev) => prev.filter((r) => !(r.modulo === modulo && r.unidade_id === unidadeScope)));
       }
     } catch {
@@ -500,6 +503,100 @@ const Permissoes: React.FC = () => {
       setSaving(null);
     }
   };
+
+  type Preset = "total" | "leitura" | "bloquear";
+  const presetValues = (preset: Preset): ModulePermission => ({
+    can_view: preset !== "bloquear", can_create: preset === "total", can_edit: preset === "total",
+    can_delete: preset === "total", can_execute: preset === "total",
+  });
+  const PRESET_LABEL: Record<Preset, string> = { total: "Acesso total", leitura: "Apenas leitura", bloquear: "Bloqueado" };
+  const canWriteScope = !(isUnitMaster && selectedUnidade !== user?.unidadeId);
+
+  const applyPreset = async (target: "perfil" | "user", modulos: ModuleName[], preset: Preset) => {
+    const list = modulos.filter((m) => !ROUTE_DEPENDENCIES[m]);
+    if (!list.length || savingLock.current || !canWriteScope) return;
+    if (target === "user" && !selectedUserId) return;
+    if (list.length > 1 || preset === "total") {
+      const motivo = askMotivo(`Aplicar "${PRESET_LABEL[preset]}" em ${list.length} módulo(s)?`);
+      if (!motivo) return;
+      await runPreset(target, list, preset, motivo);
+    } else await runPreset(target, list, preset);
+  };
+  const runPreset = async (target: "perfil" | "user", list: ModuleName[], preset: Preset, motivo?: string) => {
+    savingLock.current = true; setSaving(`preset-${target}`);
+    const vals = presetValues(preset);
+    const perfil = normalizeRoleKey(selectedPerfil);
+    try {
+      const { error } = target === "perfil"
+        ? await supabase.from("permissoes").upsert(list.map((modulo) => ({ perfil, modulo, unidade_id: unidadeScope, ...vals })), { onConflict: "perfil,modulo,unidade_id" })
+        : await supabase.from("permissoes_usuario").upsert(list.map((modulo) => ({ user_id: selectedUserId, modulo, unidade_id: unidadeScope, ...vals })), { onConflict: "user_id,modulo,unidade_id" });
+      if (error) toast.error(`Erro: ${error.message}`);
+      else {
+        toast.success(`${PRESET_LABEL[preset]} aplicado em ${list.length} módulo(s).`);
+        logPerm(target === "perfil" ? "permissao_perfil_em_massa" : "permissao_usuario_em_massa",
+          { perfil: target === "perfil" ? perfil : undefined, funcionario_id: target === "user" ? selectedUserId : undefined, modulos: list, preset, motivo_alteracao: motivo });
+      }
+    } finally {
+      savingLock.current = false; setSaving(null);
+      if (target === "perfil") await loadPerfil(); else await loadUser();
+    }
+  };
+
+  const copyFromPerfil = async (source: string) => {
+    if (!source || source === selectedPerfil || savingLock.current || !canWriteScope) return;
+    const motivo = askMotivo(`Copiar todas as permissões de ${PERFIL_LABELS[source]} para ${PERFIL_LABELS[selectedPerfil]} nesta unidade? As regras atuais de ${PERFIL_LABELS[selectedPerfil]} serão substituídas.`);
+    if (!motivo) return;
+    savingLock.current = true; setSaving("copy");
+    try {
+      const { data, error } = await supabase.from("permissoes").select("*").in("perfil", getRoleQueryKeys(source)).in("unidade_id", [unidadeScope, ""]);
+      if (error) { toast.error("Erro ao ler o perfil de origem."); return; }
+      const rows = (data || []) as PermRow[];
+      const destino = normalizeRoleKey(selectedPerfil);
+      const payload = (Object.keys(MODULO_LABELS) as ModuleName[]).filter((m) => !ROUTE_DEPENDENCIES[m]).map((modulo) => {
+        const r = rows.find((x) => x.modulo === modulo && x.unidade_id === unidadeScope) || rows.find((x) => x.modulo === modulo && x.unidade_id === "");
+        const d = r ?? getDefaultModulePermission(normalizeRoleKey(source), modulo);
+        return { perfil: destino, modulo, unidade_id: unidadeScope, can_view: !!d.can_view, can_create: !!d.can_create, can_edit: !!d.can_edit, can_delete: !!d.can_delete, can_execute: !!d.can_execute };
+      });
+      const { error: upErr } = await supabase.from("permissoes").upsert(payload, { onConflict: "perfil,modulo,unidade_id" });
+      if (upErr) toast.error(`Erro: ${upErr.message}`);
+      else { toast.success(`Permissões copiadas de ${PERFIL_LABELS[source]}.`); logPerm("permissao_perfil_copiada", { origem: source, destino, motivo_alteracao: motivo }); }
+    } finally { savingLock.current = false; setSaving(null); await loadPerfil(); }
+  };
+
+  const resetAllUserOverrides = async () => {
+    if (!selectedUserId || savingLock.current || !canWriteScope) return;
+    const count = userRows.filter((r) => r.unidade_id === unidadeScope).length;
+    if (!count) { toast.info("Este funcionário não tem exceções nesta unidade."); return; }
+    const motivo = askMotivo(`Remover as ${count} exceção(ões) e voltar o funcionário ao padrão do perfil?`);
+    if (!motivo) return;
+    savingLock.current = true; setSaving("reset-all");
+    try {
+      const { error } = await supabase.from("permissoes_usuario").delete().eq("user_id", selectedUserId).eq("unidade_id", unidadeScope);
+      if (error) toast.error("Erro ao remover exceções.");
+      else { toast.success("Funcionário voltou ao padrão do perfil."); logPerm("excecoes_usuario_redefinidas", { funcionario_id: selectedUserId, total: count, motivo_alteracao: motivo }); }
+    } finally { savingLock.current = false; setSaving(null); await loadUser(); }
+  };
+
+  const ActionChips = ({ perm }: { perm?: Partial<ModulePermission> }) => {
+    const on = ACTIONS.filter((a) => perm?.[a]);
+    if (!on.length) return <Badge variant="outline" className="text-xs text-muted-foreground">Sem acesso</Badge>;
+    if (on.length === 5) return <Badge className="text-xs">Acesso total</Badge>;
+    return <span className="hidden md:flex flex-wrap gap-1">{on.map((a) => <Badge key={a} variant={a === "can_delete" ? "destructive" : a === "can_view" ? "secondary" : "default"} className="text-[10px] px-1.5">{ACTION_LABELS[a]}</Badge>)}</span>;
+  };
+  const PresetButtons = ({ target, modulos, compact }: { target: "perfil" | "user"; modulos: ModuleName[]; compact?: boolean }) => (
+    <div className="flex flex-wrap gap-1">
+      <Button type="button" size="sm" variant="outline" className="h-7 text-xs" disabled={!!saving || !canWriteScope} onClick={() => applyPreset(target, modulos, "total")}><CheckCheck className="w-3 h-3 mr-1" />{compact ? "Total" : "Acesso total"}</Button>
+      <Button type="button" size="sm" variant="outline" className="h-7 text-xs" disabled={!!saving || !canWriteScope} onClick={() => applyPreset(target, modulos, "leitura")}><Eye className="w-3 h-3 mr-1" />{compact ? "Leitura" : "Apenas leitura"}</Button>
+      <Button type="button" size="sm" variant="outline" className="h-7 text-xs" disabled={!!saving || !canWriteScope} onClick={() => applyPreset(target, modulos, "bloquear")}><Ban className="w-3 h-3 mr-1" />Bloquear</Button>
+    </div>
+  );
+
+  const editableModules = (Object.keys(MODULO_LABELS) as ModuleName[]).filter((m) => !ROUTE_DEPENDENCIES[m]);
+  const perfilSummary = editableModules.reduce((acc, m) => {
+    const r = getPerfilRow(m); const n = r ? ACTIONS.filter((a) => r[a]).length : 0;
+    if (r?.can_view) acc.view++; if (n === 5) acc.total++; if (r?.can_delete) acc.del++; if (r && unidadeScope && r.unidade_id === unidadeScope) acc.local++;
+    return acc;
+  }, { view: 0, total: 0, del: 0, local: 0 });
 
   const selectedUser = funcionarios.find((f) => f.id === selectedUserId);
 
@@ -567,15 +664,29 @@ const Permissoes: React.FC = () => {
                 {PERFIS.map((p) => <SelectItem key={p} value={p}>{PERFIL_LABELS[p]}</SelectItem>)}
               </SelectContent>
             </Select>
-            <span className="text-xs text-muted-foreground">As alterações são salvas automaticamente.</span>
+            <span className="text-xs text-muted-foreground">As alterações são salvas automaticamente e registradas na auditoria.</span>
+            <div className="flex items-center gap-2 ml-auto">
+              <Copy className="w-4 h-4 text-muted-foreground" />
+              <Select value="" onValueChange={copyFromPerfil} disabled={!!saving || !canWriteScope}>
+                <SelectTrigger className="w-[220px]" aria-label="Copiar de outro perfil"><SelectValue placeholder="Copiar de outro perfil..." /></SelectTrigger>
+                <SelectContent>{PERFIS.filter((p) => p !== selectedPerfil).map((p) => <SelectItem key={p} value={p}>{PERFIL_LABELS[p]}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
           </div>
+          {!loading && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[["Módulos visíveis", `${perfilSummary.view}/${editableModules.length}`], ["Com acesso total", perfilSummary.total], ["Podem excluir", perfilSummary.del], ["Regras próprias da unidade", unidadeScope ? perfilSummary.local : "—"]].map(([l, v]) => (
+                <Card key={l as string}><CardContent className="p-3"><div className="text-xs text-muted-foreground">{l}</div><div className="text-xl font-semibold">{v}</div></CardContent></Card>
+              ))}
+            </div>
+          )}
 
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
           ) : (
             <Accordion type="multiple" className="space-y-5">
               {visibleGroups.map((group) => <div key={group.label} className="space-y-2">
-                <h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>
+                <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>{selectedUserRoleKey !== "master" && <PresetButtons target="user" modulos={group.modules} compact />}</div><PresetButtons target="perfil" modulos={group.modules} compact /></div>
                 {group.modules.map((modulo) => {
                 const row = getPerfilRow(modulo);
                 const isUnidade = unidadeScope !== "" && row?.unidade_id === unidadeScope;
@@ -585,7 +696,7 @@ const Permissoes: React.FC = () => {
                     <AccordionTrigger className="hover:no-underline">
                       <div className="flex items-center gap-3 flex-1">
                         <span className="font-medium">{MODULO_LABELS[modulo]}</span>
-                        <Badge variant={activeCount > 0 ? "default" : "outline"}>{activeCount}/5</Badge>
+                        <ActionChips perm={row} />
                         {!isUnidade && row && <Badge variant="outline" className="text-xs">Global</Badge>}
                         {isUnidade && <Badge variant="secondary" className="text-xs">Unidade</Badge>}
                         {ROUTE_DEPENDENCIES[modulo] && <Badge variant="outline" className="text-xs">Informativo</Badge>}
@@ -593,6 +704,7 @@ const Permissoes: React.FC = () => {
                     </AccordionTrigger>
                     <AccordionContent>
                       {ROUTE_DEPENDENCIES[modulo] && <p className="text-sm text-muted-foreground py-2">{ROUTE_DEPENDENCIES[modulo]}</p>}
+                      {!ROUTE_DEPENDENCIES[modulo] && <div className="py-2"><PresetButtons target="perfil" modulos={[modulo]} /></div>}
                       {modulo === "agenda" && <p className="text-xs text-muted-foreground">Inclui o acesso à página Exames Diagnósticos e Feriados/Bloqueios.</p>}
                       {modulo === "usuarios" && <p className="text-xs text-muted-foreground">Inclui Unidades/Salas e Disponibilidade; Acessos ao Portal exige também perfil Master.</p>}
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
@@ -664,7 +776,10 @@ const Permissoes: React.FC = () => {
                       {selectedUser.usuario} · Perfil base: <Badge variant="outline">{PERFIL_LABELS[normalizeRoleKey(selectedUser.role)] || selectedUser.role}</Badge>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => { setSelectedUserId(""); setUserBaseRows([]); setUserRows([]); }}>Trocar</Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={resetAllUserOverrides} disabled={!!saving || !canWriteScope}><RotateCcw className="w-3 h-3 mr-1" />Redefinir exceções</Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedUserId(""); setUserBaseRows([]); setUserRows([]); }}>Trocar</Button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -689,17 +804,18 @@ const Permissoes: React.FC = () => {
                           <span className="font-medium">{MODULO_LABELS[modulo]}</span>
                           {override ? (
                             <>
-                              <Badge variant="default">{activeCount}/5</Badge>
+                              <ActionChips perm={effective} />
                               <Badge variant="secondary" className="text-xs">{override.unidade_id === "" ? "Exceção global" : "Exceção da unidade"}</Badge>
                             </>
                           ) : (
-                            <Badge variant="outline" className="text-xs">Herda do perfil</Badge>
+                            <><ActionChips perm={effective} /><Badge variant="outline" className="text-xs">Herda do perfil</Badge></>
                           )}
                           {ROUTE_DEPENDENCIES[modulo] && <Badge variant="outline" className="text-xs">Informativo</Badge>}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
                         {ROUTE_DEPENDENCIES[modulo] && <p className="text-sm text-muted-foreground py-2">{ROUTE_DEPENDENCIES[modulo]}</p>}
+                        {!ROUTE_DEPENDENCIES[modulo] && selectedUserRoleKey !== "master" && <div className="py-2"><PresetButtons target="user" modulos={[modulo]} /></div>}
                         {selectedUserRoleKey === "master" && <p className="text-sm text-muted-foreground py-2">Master tem acesso total independentemente destas exceções.</p>}
                         {!ROUTE_DEPENDENCIES[modulo] && selectedUserRoleKey !== "master" && <p className="text-xs text-muted-foreground py-1">Ao criar uma exceção, as cinco ações deste módulo ficam definidas para o funcionário.</p>}
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
