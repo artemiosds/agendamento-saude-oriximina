@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
+import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, getTreatmentCycleForecastDays, MAX_TREATMENT_CYCLE_FORECAST_DAYS, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
 
 const baseInput = (): CapacityPlanningInput => ({
   today: "2026-11-10",
@@ -22,6 +22,24 @@ const baseInput = (): CapacityPlanningInput => ({
   externalQuotas: [],
   pendingSessions: [],
   queueDemand: [],
+});
+
+describe("horizonte adaptativo de simulação de ciclos", () => {
+  it("amplia a janela para ciclos semanais longos e inclui margem para bloqueios", () => {
+    const days = getTreatmentCycleForecastDays("2026-11-11", "2026-11-11", "1x_semana", 200);
+    expect(days).toBeGreaterThan(365);
+    expect(days).toBeLessThanOrEqual(MAX_TREATMENT_CYCLE_FORECAST_DAYS);
+  });
+
+  it("considera o deslocamento quando o ciclo começa no futuro", () => {
+    const days = getTreatmentCycleForecastDays("2026-11-11", "2027-11-11", "1x_semana", 10);
+    expect(days).toBeGreaterThan(365 + 365);
+  });
+
+  it("mantém o horizonte limitado para não criar consultas ilimitadas", () => {
+    expect(getTreatmentCycleForecastDays("2026-11-11", "2026-11-11", "1x_semana", 200))
+      .toBeLessThanOrEqual(3650);
+  });
 });
 
 describe("planejamento de capacidade real para tratamentos", () => {
