@@ -121,6 +121,7 @@ export default function TreatmentCapacityOverview() {
       if (!isGlobalAdmin && !userUnidadeId) {
         setSnapshot(null);
         setCapacityPlan(null);
+        setCycleCapacityInput(null);
         setQueueDemandRows([]);
         setError("Seu usuário não possui unidade definida. A consulta foi interrompida para evitar exibição fora do escopo.");
         setLoading(false);
@@ -214,6 +215,7 @@ export default function TreatmentCapacityOverview() {
           if (!cancelled && requestRef.current === requestId) {
             setSnapshot(emptySnapshot);
             setCapacityPlan({ professionals: [], suggestions: [] });
+            setCycleCapacityInput(null);
             setQueueDemandRows([]);
             setQueueReadStatus("unavailable");
             setQueueWarning("A consulta da fila não foi executada porque não há profissionais-alvo no escopo selecionado.");
@@ -454,6 +456,7 @@ export default function TreatmentCapacityOverview() {
         if (!cancelled && requestRef.current === requestId) {
           setSnapshot(null);
           setCapacityPlan(null);
+          setCycleCapacityInput(null);
           setQueueDemandRows([]);
           setQueueReadStatus("unavailable");
           setQueueWarning("Os indicadores de fila estão indisponíveis porque a leitura geral falhou.");
