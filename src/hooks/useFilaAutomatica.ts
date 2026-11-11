@@ -7,6 +7,7 @@ import { useAgendamentos } from '@/contexts/AgendamentosContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { toast } from 'sonner';
+import { filaEntryMatchesProfession } from '@/lib/filaSpecialtyMatch';
 
 const RESERVA_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -52,6 +53,7 @@ export function useFilaAutomatica() {
    * sorted by priority then entry time.
    */
   const getNextInQueue = useCallback((profissionalId: string, unidadeId: string) => {
+    const profissao = funcionarios.find(fn => fn.id === profissionalId)?.profissao || '';
     const priorityRank: Record<string, number> = {
       urgente: 0, gestante: 1, idoso: 2, alta: 3, pcd: 4, crianca: 5, normal: 6,
     };
@@ -60,7 +62,7 @@ export function useFilaAutomatica() {
       .filter(f =>
         f.status === 'aguardando' &&
         f.unidadeId === unidadeId &&
-        (!f.profissionalId || f.profissionalId === profissionalId)
+        filaEntryMatchesProfession(f, profissionalId, profissao)
       )
       .sort((a, b) => {
         // 1. Priority (lower rank = higher priority)
@@ -82,7 +84,7 @@ export function useFilaAutomatica() {
         if (bCreated) return 1;
         return 0;
       });
-  }, [fila]);
+  }, [fila, funcionarios]);
 
   /**
    * Notify the next patient in queue about an available slot.
