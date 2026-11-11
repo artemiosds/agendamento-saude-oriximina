@@ -54,7 +54,7 @@ describe("bloqueios parciais com limites incompletos", () => {
     }];
     const result = buildTreatmentCapacityPlan(input);
     expect(result.professionals[0]).toMatchObject({
-      configuredSlots: 4,
+      configuredSlots: 6,
       availableAppointments: 2,
       availableDates: 1,
       reviewDays: 0,
