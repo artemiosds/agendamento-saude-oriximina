@@ -58,6 +58,7 @@ export default function TreatmentCapacityOverview() {
   const { user, isGlobalAdmin } = useAuth();
   const { unidadesVisiveis, userUnidadeId } = useUnidadeFilter();
   const { can: hasPermission, loading: permissionsLoading } = usePermissions();
+  const [isOpen, setIsOpen] = useState(false);
   const [periodDays, setPeriodDays] = useState("30");
   const [unitFilter, setUnitFilter] = useState(isGlobalAdmin ? "all" : userUnidadeId);
   const [specialtyFilter, setSpecialtyFilter] = useState("all");
@@ -79,6 +80,10 @@ export default function TreatmentCapacityOverview() {
     let cancelled = false;
 
     const run = async () => {
+      if (!isOpen) {
+        setLoading(false);
+        return;
+      }
       if (permissionsLoading) {
         setLoading(true);
         return;
@@ -378,7 +383,7 @@ export default function TreatmentCapacityOverview() {
 
     void run();
     return () => { cancelled = true; };
-  }, [periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission]);
+  }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission]);
 
   const visibleProfessionals = useMemo(() => {
     if (!snapshot) return [];
@@ -404,11 +409,20 @@ export default function TreatmentCapacityOverview() {
           <h2 className="text-lg font-semibold text-foreground">Capacidade e demanda</h2>
           <p className="text-sm text-muted-foreground">Visão gerencial somente para Fisioterapia e Fonoaudiologia. Nenhum agendamento, fila ou tratamento é alterado.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>
-          <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {isOpen && (
+            <Button variant="outline" size="sm" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>
+              <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setIsOpen((value) => !value)}>
+            {isOpen ? "Recolher análise" : "Abrir análise"}
+          </Button>
+        </div>
       </div>
 
+      {isOpen && (
+      <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
           <p className="mb-1 text-xs text-muted-foreground">Período da capacidade</p>
@@ -571,6 +585,8 @@ export default function TreatmentCapacityOverview() {
           </p>
         </>
       ) : null}
+      </>
+      )}
     </section>
   );
 }
