@@ -14,7 +14,7 @@ const sha256 = async (file: File) => {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 };
 
-export function RecoveryPackageBuilder() {
+export function RecoveryPackageBuilder({ mode = "both" }: { mode?: "build" | "verify" | "both" }) {
   const storageFolderInput = useRef<HTMLInputElement>(null);
   const [database, setDatabase] = useState<File | null>(null);
   const [storage, setStorage] = useState<File[]>([]);
@@ -108,6 +108,7 @@ export function RecoveryPackageBuilder() {
 
   return (
     <div className="space-y-4 rounded-lg border p-4">
+      {mode !== "verify" && <>
       <h4 className="font-semibold">Montar pacote de recuperação no seu computador</h4>
       <p className="text-sm text-muted-foreground">Os arquivos selecionados são processados neste navegador e não são enviados ao sistema. O pacote só fica completo depois de conferir todos os arquivos do Storage e testar a restauração.</p>
       <div className="grid gap-4 md:grid-cols-2">
@@ -118,7 +119,8 @@ export function RecoveryPackageBuilder() {
       <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={storageConfirmed} onChange={event => setStorageConfirmed(event.target.checked)} /> Conferi que a pasta selecionada contém os arquivos de todos os buckets usados pelo projeto.</label>
       <Button onClick={createPackage} disabled={busy || !database || !source || !storage.length || !storageConfirmed}>{busy ? "Verificando arquivos..." : "Baixar pacote ZIP com manifesto"}</Button>
       <p className="text-xs text-muted-foreground">Limite de 300 MB para evitar travamentos no navegador. O ZIP não é criptografado e não restaura automaticamente no Lovable.</p>
-      <div className="space-y-3 border-t pt-4">
+      </>}
+      {mode !== "build" && <div className="space-y-3">
         <h4 className="font-semibold">Verificar um pacote de recuperação</h4>
         <p className="text-sm text-muted-foreground">Selecione o ZIP montado acima. A conferência é local e compara os arquivos com os hashes do manifesto. Ela não acessa o banco nem prova que todos os arquivos do Storage foram incluídos.</p>
         <Label htmlFor="recovery-verify-file">Pacote ZIP para conferência</Label>
@@ -133,6 +135,7 @@ export function RecoveryPackageBuilder() {
         )}
         <p className="text-xs text-muted-foreground">A correspondência com os dados reais e a recuperação de contas só podem ser confirmadas por uma restauração em ambiente isolado. Segredos e provedores de login não estão no pacote.</p>
       </div>
+      }
     </div>
   );
 }

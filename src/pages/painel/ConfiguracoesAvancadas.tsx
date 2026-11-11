@@ -121,17 +121,6 @@ const DadosSection: React.FC = () => {
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup e Exportação do Sistema</CardTitle>
-          <div className="flex gap-2">
-            <Button 
-              variant="default" 
-              className="bg-primary hover:bg-primary/90" 
-              onClick={generateBackup}
-              disabled={!!exporting}
-            >
-              <FileDown className="h-4 w-4 mr-2" />
-              {exporting === "auxiliary_export" ? "Exportando..." : "Baixar exportação auxiliar"}
-            </Button>
-          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -149,11 +138,36 @@ const DadosSection: React.FC = () => {
           ))}
         </div>
 
-        <div className="space-y-4">
+        <Tabs defaultValue="backup" className="w-full space-y-4">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1" aria-label="Etapas de backup e recuperação">
+            <TabsTrigger value="backup">Backup</TabsTrigger>
+            <TabsTrigger value="verificar">Verificar pacote</TabsTrigger>
+            <TabsTrigger value="recuperar">Recuperar no Lovable</TabsTrigger>
+            <TabsTrigger value="migrar">Migrar para Supabase</TabsTrigger>
+          </TabsList>
+          <TabsContent value="backup" className="space-y-4">
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
             <strong>Para recuperar todos os dados, use a exportação nativa do Lovable Cloud.</strong> A exportação auxiliar desta página pode omitir registros e não inclui a estrutura completa do banco ou as contas de autenticação. Não a utilize como único backup.
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3 rounded-lg border p-4">
+              <h4 className="font-semibold">Preparar a exportação nativa</h4>
+              <p className="text-sm text-muted-foreground">No Lovable: More → Database → Manage → Settings → Export project data. Baixe o arquivo PostgreSQL .backup em More → Storage. Baixe também todos os arquivos dos buckets e uma cópia do código no GitHub.</p>
+              <p className="text-xs text-muted-foreground">A exportação nativa inclui estrutura, dados e contas, mas não os arquivos do Storage, segredos, configurações dos provedores de login ou código das funções. Guarde uma cópia fora do Lovable.</p>
+              <Button variant="outline" asChild><a href="https://github.com/artemiosds/agendamento-saude-oriximina" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Abrir repositório</a></Button>
+          </div>
+          <RecoveryPackageBuilder mode="build" />
+          <div className="space-y-2 rounded-lg border p-4">
+            <Label className="text-sm font-medium">Exportações Rápidas (CSV)</Label>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" size="sm" onClick={() => exportCSV("pacientes", "pacientes.csv")} disabled={!!exporting}><FileDown className="mr-1 h-3.5 w-3.5" /> {exporting === "pacientes" ? "Exportando..." : "Pacientes"}</Button>
+              <Button variant="outline" size="sm" onClick={() => exportCSV("agendamentos", "agendamentos.csv")} disabled={!!exporting}><FileDown className="mr-1 h-3.5 w-3.5" /> {exporting === "agendamentos" ? "Exportando..." : "Agendamentos"}</Button>
+              <Button variant="outline" size="sm" onClick={() => exportCSV("notification_logs", "notificacoes.csv")} disabled={!!exporting}><FileDown className="mr-1 h-3.5 w-3.5" /> {exporting === "notification_logs" ? "Exportando..." : "Notificações"}</Button>
+            </div>
+          </div>
+          <Button variant="outline" onClick={generateBackup} disabled={!!exporting}><FileDown className="mr-2 h-4 w-4" />{exporting === "auxiliary_export" ? "Exportando..." : "Baixar exportação auxiliar"}</Button>
+          </TabsContent>
+          <TabsContent value="verificar"><RecoveryPackageBuilder mode="verify" /></TabsContent>
+          <TabsContent value="recuperar">
             <div className="space-y-3 rounded-lg border p-4">
               <h4 className="font-semibold">1. Recuperar no Lovable Cloud</h4>
               <p className="text-sm text-muted-foreground">No editor do Lovable, siga <strong>More → Database → Manage → Backups</strong> e escolha um backup diário anterior ao problema. A restauração substitui o banco atual, inclusive os registros de autenticação; contas e senhas armazenadas acompanham o banco daquele dia. Alterações e usuários criados depois desse ponto são perdidos. Provedores externos e sessões de login exigem conferência separada.</p>
@@ -164,34 +178,14 @@ const DadosSection: React.FC = () => {
                 <Button variant="outline" asChild><a href="https://docs.lovable.dev/features/database-backups#restore-a-daily-backup" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Ver instruções de restauração</a></Button>
               </div>
             </div>
-            <div className="space-y-3 rounded-lg border p-4">
-              <h4 className="font-semibold">2. Exportar para recuperação ou migração</h4>
-              <p className="text-sm text-muted-foreground">No Lovable: More → Database → Manage → Settings → Export project data. Baixe o arquivo PostgreSQL .backup em More → Storage. Baixe também todos os arquivos dos buckets e uma cópia do código no GitHub.</p>
-              <p className="text-xs text-muted-foreground">A exportação nativa inclui estrutura, dados e contas, mas não os arquivos do Storage, segredos, configurações dos provedores de login ou código das funções. Guarde uma cópia fora do Lovable.</p>
-              <Button variant="outline" asChild><a href="https://github.com/artemiosds/agendamento-saude-oriximina" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Abrir repositório</a></Button>
-            </div>
-          </div>
-          <RecoveryPackageBuilder />
+          </TabsContent>
+          <TabsContent value="migrar">
           <div className="rounded-lg border p-4 text-sm">
-            <h4 className="font-semibold">3. Migrar para Supabase próprio</h4>
+            <h4 className="font-semibold">Migrar para Supabase próprio</h4>
             <p className="mt-2 text-muted-foreground">Restaure o .backup com pg_restore em um projeto de teste, resolvendo conflitos com os schemas gerenciados. Reenvie os arquivos aos buckets, implante as funções do repositório e reconfigure autenticação, chaves e integrações. Confira tabelas, vínculos, login e arquivos antes de mudar o endereço do sistema. O .backup não é um script para colar no SQL Editor.</p>
           </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Exportações Rápidas (CSV)</Label>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="outline" size="sm" onClick={() => exportCSV("pacientes", "pacientes.csv")} disabled={!!exporting}>
-                <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "pacientes" ? "Exportando..." : "Pacientes"}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => exportCSV("agendamentos", "agendamentos.csv")} disabled={!!exporting}>
-                <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "agendamentos" ? "Exportando..." : "Agendamentos"}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => exportCSV("notification_logs", "notificacoes.csv")} disabled={!!exporting}>
-                <FileDown className="h-3.5 w-3.5 mr-2" /> {exporting === "notification_logs" ? "Exportando..." : "Notificações"}
-              </Button>
-            </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
 
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
