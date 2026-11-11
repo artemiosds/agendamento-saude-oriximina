@@ -211,8 +211,8 @@ const PainelLayout: React.FC = () => {
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
-          <img src={brand.logoUrl} alt={brand.titulo} className="w-10 h-10 rounded-xl object-cover ring-2 ring-sidebar-primary/20" onError={(e) => { (e.currentTarget as HTMLImageElement).src = logoSms; }} />
-          <div>
+          <img src={brand.logoUrl} alt={brand.titulo} className="w-12 h-12 shrink-0 rounded-xl bg-white p-0.5 object-contain ring-2 ring-sidebar-primary/20" onError={(e) => { (e.currentTarget as HTMLImageElement).src = logoSms; }} />
+          <div className="min-w-0 flex-1">
             <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight truncate max-w-[160px]">{unitDisplayName}</h2>
             <p className="text-xs text-sidebar-foreground/60 truncate max-w-[160px]">{isGlobalAdmin ? brand.subtitulo : brand.titulo}</p>
           </div>
