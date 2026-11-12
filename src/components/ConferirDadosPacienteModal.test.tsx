@@ -65,7 +65,7 @@ describe('conferência de chegada e prioridades', () => {
     mocks.save.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const { onConfirm } = show(undefined, 'agendamento');
     expect(await screen.findByRole('heading', { name: 'Condição e Prioridade de Atendimento (Triagem)' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: 'TEA' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'TEA' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Gestante' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'PNE — Pessoa com deficiência' }));
     expect(screen.getByRole('checkbox', { name: 'Autista (TEA)' })).toBeChecked();
@@ -84,7 +84,7 @@ describe('conferência de chegada e prioridades', () => {
   it.each(['agendamento', 'chegada'] as const)('carrega TEA e prioridades já gravadas no modo %s', async modo => {
     mocks.get.mockResolvedValueOnce({ ...patient, tipo_condicao: 'tea', is_autista: true, is_gestante: true, is_pne: true });
     show(undefined, modo);
-    expect(await screen.findByRole('radio', { name: 'TEA' })).toBeChecked();
+    expect(await screen.findByRole('checkbox', { name: 'TEA' })).toBeChecked();
     for (const name of ['Autista (TEA)', 'Gestante', 'PNE — Pessoa com deficiência']) {
       expect(screen.getByRole('checkbox', { name })).toBeChecked();
     }
@@ -92,7 +92,7 @@ describe('conferência de chegada e prioridades', () => {
   });
   it('salva a prioridade no agendamento pelo botão Salvar agora sem prosseguir', async () => {
     const { onConfirm } = show(undefined, 'agendamento');
-    fireEvent.click(await screen.findByRole('radio', { name: 'Física' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Física' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'PNE — Pessoa com deficiência' }));
     fireEvent.click(screen.getByRole('button', { name: 'Salvar agora' }));
     await waitFor(() => expect(mocks.apply).toHaveBeenCalled());
@@ -108,7 +108,7 @@ describe('conferência de chegada e prioridades', () => {
   });
   it('salva TEA e atualiza só o paciente antes de confirmar, sem aguardar refresh', async () => {
     const { onConfirm, client } = show();
-    fireEvent.click(await screen.findByRole('radio', { name: 'TEA' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'TEA' }));
     expect(screen.getByRole('checkbox', { name: 'Autista (TEA)' })).toBeChecked();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Dados conferidos' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Chegada' }));
@@ -148,7 +148,7 @@ describe('conferência de chegada e prioridades', () => {
 describe('mobilidade no modal de conferência da Agenda', () => {
   it('exibe opções de mobilidade e salva o dispositivo ao selecionar Física', async () => {
     const { onConfirm } = show(undefined, 'agendamento');
-    fireEvent.click(await screen.findByRole('radio', { name: 'Física' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Física' }));
     expect(await screen.findByText('Mobilidade')).toBeInTheDocument();
     expect(screen.getByText('Usa dispositivo?')).toBeInTheDocument();
 
