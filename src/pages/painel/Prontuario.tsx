@@ -93,6 +93,7 @@ import type { TreatmentDischargeResult } from "@/services/treatmentDischargeServ
 const HistoricoClinico = React.lazy(() => import("@/components/HistoricoClinico").then(module => ({ default: module.HistoricoClinico })));
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import DeclaracaoRapidaModal from "@/components/documentos/DeclaracaoRapidaModal";
 import LocalErrorBoundary from "@/components/LocalErrorBoundary";
 const DocumentosHistorico = React.lazy(() => import("@/components/DocumentosHistorico"));
 
@@ -759,6 +760,8 @@ const ProntuarioPage: React.FC = () => {
   const soapCustom = useSoapCustomOptions(user?.id);
 
   const [docModalOpen, setDocModalOpen] = useState(false);
+
+  const [declRapidaOpen, setDeclRapidaOpen] = useState(false);
   const [painelDocOpen, setPainelDocOpen] = useState(false);
   const [painelDocRefresh, setPainelDocRefresh] = useState(0);
   const [encInternoOpen, setEncInternoOpen] = useState(false);
@@ -3960,6 +3963,13 @@ const ProntuarioPage: React.FC = () => {
               </Button>
               <Button
                 variant="outline"
+                onClick={() => setDeclRapidaOpen(true)}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Declaração Rápida
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => setEncInternoOpen(true)}
               >
                 <Send className="w-4 h-4 mr-2" />
@@ -6422,6 +6432,19 @@ const ProntuarioPage: React.FC = () => {
       )}
 
       <div ref={printRef} className="hidden" />
+
+      {declRapidaOpen && (
+        <DeclaracaoRapidaModal
+          open={declRapidaOpen}
+          onOpenChange={setDeclRapidaOpen}
+          paciente={(() => {
+            const p = pacientes.find(x => x.id === queryPacienteId);
+            return p ? { nome: p.nome, cpf: p.cpf, cns: p.cns, cid: p.cid } : undefined;
+          })()}
+          profissional={user ? { nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
+          unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
+        />
+      )}
 
       {/* Modal Gerar Documento Clínico */}
       {docModalOpen && (
