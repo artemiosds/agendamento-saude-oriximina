@@ -99,6 +99,13 @@
       "when": 1794490736111,
       "tag": "0013_harden_clinical_rls_staff",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794514015213,
+      "tag": "0014_fix_external_patient_empty_fields",
+      "breakpoints": true
     }
   ]
 }
