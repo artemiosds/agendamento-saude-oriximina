@@ -82,6 +82,7 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { SmartSchedulingAssist } from "@/components/agenda/SmartSchedulingAssist";
 import { LocalizarVagasPanel } from "@/components/agenda/LocalizarVagasPanel";
+import { RemanejarLoteDialog } from "@/components/agenda/RemanejarLoteDialog";
 import { RadarBalcaoBar, EncaixeBalcaoDialog, useRelogioBalcao } from "@/components/agenda/RadarBalcao";
 import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 import { CalendarioAgenda } from "./CalendarioAgenda";
@@ -311,6 +312,7 @@ const Agenda: React.FC = () => {
   const navigate = useNavigate();
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
+  const [remanejarOpen, setRemanejarOpen] = useState(false);
   const selectedDateRef = React.useRef(selectedDate);
   selectedDateRef.current = selectedDate;
   const selectionGenerationRef = React.useRef(0);
@@ -2972,6 +2974,17 @@ const Agenda: React.FC = () => {
                   </Button>
                 )}
                 
+                {(user?.role === "master" || user?.role === "recepcao") && canEdit && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setRemanejarOpen(true)}>
+                      <RotateCcw className="w-4 h-4 mr-1" />Mover agendamentos
+                    </Button>
+                    <RemanejarLoteDialog open={remanejarOpen} onOpenChange={setRemanejarOpen} dataOrigem={selectedDate}
+                      agendamentos={agendamentos as any} profissionais={profissionais as any}
+                      updateAgendamento={updateAgendamento} logAction={logAction} user={user}
+                      onDone={async (dest) => { await loadAgendaRange(dest, dest); await refreshAgendamentos(); }} />
+                  </>
+                )}
                 {(user?.role === "master" || user?.role === "recepcao") && can("agenda", "can_create") && (
                   <LocalizarVagasPanel
                     profissionais={profissionais}
