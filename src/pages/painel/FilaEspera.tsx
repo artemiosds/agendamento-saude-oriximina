@@ -665,7 +665,8 @@ const FilaEspera: React.FC = () => {
     if (!novoPaciente.nome?.trim()) newErrors.nome = "Nome é obrigatório";
     if (!novoPaciente.nomeMae?.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
     if (!novoPaciente.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
-    if (!novoPaciente.cns?.trim()) newErrors.cns = "CNS é obrigatório";
+    // CNS opcional; se preenchido, exige 15 dígitos.
+    if (String(novoPaciente.cns || "").replace(/\D/g, "").length && String(novoPaciente.cns || "").replace(/\D/g, "").length !== 15) newErrors.cns = "CNS deve conter 15 dígitos";
     if (!novoPaciente.telefone?.trim()) newErrors.telefone = "Telefone é obrigatório";
     if (!novoPaciente.sexo) newErrors.sexo = "Sexo é obrigatório";
 

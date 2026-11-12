@@ -435,6 +435,7 @@ const Agenda: React.FC = () => {
 
   // FALTA com justificativa
   const [faltaTarget, setFaltaTarget] = useState<(typeof agendamentos)[0] | null>(null);
+  const [faltaTipoInicial, setFaltaTipoInicial] = useState<"justificada" | "injustificada">("injustificada");
   const [encaixeVaga, setEncaixeVaga] = useState<(typeof agendamentos)[0] | null>(null);
   const relogioBalcao = useRelogioBalcao();
   const [confirmStatusTarget, setConfirmStatusTarget] = useState<{ ag: (typeof agendamentos)[0]; status: string } | null>(null);
@@ -2821,7 +2822,7 @@ const Agenda: React.FC = () => {
       {!isProfissional && selectedDate === todayLocalStr() && (
         <RadarBalcaoBar agendamentos={filtered as any} agora={relogioBalcao}
           onChegou={(id) => handleStatusChangeRef.current(id, "confirmado_chegada")}
-          onFalta={(id) => handleStatusChangeRef.current(id, "falta")} />
+          onFalta={(id, tipo) => { setFaltaTipoInicial(tipo); handleStatusChangeRef.current(id, "falta"); }} />
       )}
       <EncaixeBalcaoDialog vaga={encaixeVaga} onClose={() => setEncaixeVaga(null)} onEncaixar={() => {
         const v = encaixeVaga; setEncaixeVaga(null); if (!v) return;
@@ -4447,7 +4448,8 @@ const Agenda: React.FC = () => {
       </AlertDialog>
       <RegistrarFaltaModal
         open={!!faltaTarget}
-        onOpenChange={(o) => { if (!o) setFaltaTarget(null); }}
+        tipoInicial={faltaTipoInicial}
+        onOpenChange={(o) => { if (!o) { setFaltaTarget(null); setFaltaTipoInicial("injustificada"); } }}
         agendamento={faltaTarget ? {
           id: faltaTarget.id,
           pacienteId: faltaTarget.pacienteId,

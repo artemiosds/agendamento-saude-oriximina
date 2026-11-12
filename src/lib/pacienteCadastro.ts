@@ -8,7 +8,8 @@ export function validatePacienteCadastro(form: PacienteFormData): Record<string,
     if (!form.nome?.trim()) newErrors.nome = "Nome completo é obrigatório";
     if (!form.nomeMae?.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
     if (!form.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
-    if (!form.cns?.trim()) newErrors.cns = "CNS é obrigatório";
+    // CNS opcional; se preenchido, exige 15 dígitos.
+    if (String(form.cns || "").replace(/\D/g, "").length && String(form.cns || "").replace(/\D/g, "").length !== 15) newErrors.cns = "CNS deve conter 15 dígitos";
     if (!form.naturalidade?.trim()) newErrors.naturalidade = "Naturalidade é obrigatória";
     if (!form.telefone?.trim()) newErrors.telefone = "Telefone é obrigatório";
     if (!form.sexo) newErrors.sexo = "Sexo é obrigatório";

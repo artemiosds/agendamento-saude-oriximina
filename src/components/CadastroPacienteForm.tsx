@@ -435,7 +435,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("cns") && (
                 <div>
-                  <Label className="after:content-['*'] after:ml-0.5 after:text-destructive">{L("cns", "CNS")}</Label>
+                  <Label>{L("cns", "CNS")} <span className="text-xs text-muted-foreground">(opcional)</span></Label>
                   <Input
                     value={maskCNS(form.cns)}
                     onChange={(e) => set("cns", maskCNS(e.target.value))}

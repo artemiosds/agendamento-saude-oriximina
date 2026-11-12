@@ -18,6 +18,7 @@ import { Upload, X } from "lucide-react";
 
 interface RegistrarFaltaModalProps {
   open: boolean;
+  tipoInicial?: "justificada" | "injustificada";
   onOpenChange: (open: boolean) => void;
   agendamento: {
     id: string;
@@ -40,11 +41,13 @@ interface RegistrarFaltaModalProps {
 
 export const RegistrarFaltaModal: React.FC<RegistrarFaltaModalProps> = ({
   open,
+  tipoInicial,
   onOpenChange,
   agendamento,
   onConfirm,
 }) => {
   const [tipoFalta, setTipoFalta] = useState<"justificada" | "injustificada">("injustificada");
+  React.useEffect(() => { if (open) setTipoFalta(tipoInicial || "injustificada"); }, [open, tipoInicial]);
   const [documento, setDocumento] = useState("");
   const [documentoOutro, setDocumentoOutro] = useState("");
   const [descricao, setDescricao] = useState("");
