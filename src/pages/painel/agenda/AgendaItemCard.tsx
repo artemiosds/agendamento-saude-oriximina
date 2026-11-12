@@ -37,6 +37,7 @@ import { formatCNS } from "@/lib/cnsUtils";
 import { getManchesterBadgeStyle } from "@/lib/manchesterProtocol";
 import { cn, todayLocalStr } from "@/lib/utils";
 import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
+import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 
 export interface AgendaItemCardProps {
   ag: any;
@@ -54,6 +55,7 @@ export interface AgendaItemCardProps {
   tipoInfo?: { label: string; class: string; icon: string };
   user: any;
   isProfissional: boolean;
+  canViewClinical?: boolean;
   isMaster: boolean;
   coordenadorPodeConcluir: boolean;
   canEdit: boolean;
@@ -105,6 +107,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   tipoInfo,
   user,
   isProfissional,
+  canViewClinical,
   isMaster,
   coordenadorPodeConcluir,
   canEdit,
@@ -230,6 +233,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          {canViewClinical && ag.pacienteId && <PassaporteClinico patientId={ag.pacienteId} professionalId={user.id} profession={user.profissao || ""} enabled />}
           <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
             {lastAppt && isProfissional && (
               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">

@@ -32,6 +32,7 @@ import {
 import CondicaoBadges from "@/components/CondicaoBadges";
 import ContactActionButton from "@/components/ContactActionButton";
 import { cn } from "@/lib/utils";
+import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 
 export interface FilaEsperaItemRowProps {
   f: any;
@@ -55,6 +56,8 @@ export interface FilaEsperaItemRowProps {
   statusLabelText: string;
   statusLabelClass: string;
   canManage: boolean;
+  passportProfessionalId?: string;
+  passportProfession?: string;
   onConfirmarEncaixe: (f: any, slot: any) => void;
   onExpirarReserva: (f: any, slot: any) => void;
   onChamar: (f: any) => void;
@@ -89,6 +92,8 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
   statusLabelText,
   statusLabelClass,
   canManage,
+  passportProfessionalId,
+  passportProfession,
   onConfirmarEncaixe,
   onExpirarReserva,
   onChamar,
@@ -145,6 +150,7 @@ const FilaEsperaItemRowBase: React.FC<FilaEsperaItemRowProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-foreground">{pacienteNomeResolved}</p>
+              {passportProfessionalId && f.pacienteId && <PassaporteClinico patientId={f.pacienteId} professionalId={passportProfessionalId} profession={passportProfession || ""} enabled />}
               {f.origemCadastro === "demanda_reprimida" && (
                 <Badge
                   variant="outline"

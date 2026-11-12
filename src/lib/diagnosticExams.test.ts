@@ -61,6 +61,7 @@ describe("diagnostic room configuration", () => {
 describe("diagnostic slots", () => {
   const config = normalizeDiagnosticRoomConfig({
     finalidade: "aparelho_diagnostico",
+    tipoExame: "Tomografia",
     duracaoSlot: 30,
     horarioInicio: "08:00",
     horarioFim: "10:00",

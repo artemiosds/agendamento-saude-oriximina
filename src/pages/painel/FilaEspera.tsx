@@ -2302,6 +2302,8 @@ const FilaEspera: React.FC = () => {
                 statusLabelText={statusInfo?.label || f.status}
                 statusLabelClass={statusInfo?.color || ""}
                 canManage={canManage}
+                passportProfessionalId={user?.role === "profissional" && can("prontuario", "can_view") ? user.id : undefined}
+                passportProfession={user?.profissao || ""}
                 onConfirmarEncaixe={stableConfirmarEncaixe}
                 onExpirarReserva={stableExpirarReserva}
                 onChamar={stableChamar}

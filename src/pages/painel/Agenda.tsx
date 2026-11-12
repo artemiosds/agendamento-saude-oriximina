@@ -3796,6 +3796,7 @@ const Agenda: React.FC = () => {
                     tipoInfo={tipoInfo}
                     user={user}
                     isProfissional={isProfissional}
+                    canViewClinical={isProfissional && can("prontuario", "can_view")}
                     isMaster={!!isMaster}
                     coordenadorPodeConcluir={coordenadorPodeConcluir}
                     canEdit={canEdit}

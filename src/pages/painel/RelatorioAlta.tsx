@@ -287,7 +287,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   const [indObjetivos, setIndObjetivos] = useState("");
   const [indIntervencoes, setIndIntervencoes] = useState("");
   const [indEvolucao, setIndEvolucao] = useState("");
-  const [indMetas, setIndMetas] = useState<"totalmente" | "parcialmente" | "nao_atingidas">("totalmente");
+  const [indMetas, setIndMetas] = useState<"" | "totalmente" | "parcialmente" | "nao_atingidas">("");
   const [indMetasJust, setIndMetasJust] = useState("");
   const [indTA, setIndTA] = useState("");
   const [indFrequenciaAtendimento, setIndFrequenciaAtendimento] = useState("");
@@ -392,7 +392,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     setIndObjetivos("");
     setIndIntervencoes("");
     setIndEvolucao("");
-    setIndMetas("totalmente");
+    setIndMetas("");
     setIndMetasJust("");
     setIndTA("");
     setIndFrequenciaAtendimento("");
@@ -670,7 +670,7 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
         setIndObjetivos(data.objetivos || "");
         setIndIntervencoes(data.intervencoes || "");
         setIndEvolucao(data.evolucao || "");
-        setIndMetas(data.metas || "totalmente");
+        setIndMetas(data.metas || "");
         setIndMetasJust(data.metasJust || "");
         setIndTA(data.ta || "");
         setIndFrequenciaAtendimento(data.frequenciaAtendimento || "");
@@ -854,16 +854,20 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
     if (!indOrientacoes) errors.push("Orientações de alta são obrigatórias");
     if (!indDiagClinico) errors.push("Diagnóstico clínico é obrigatório");
     if (!indResumoConsolidado) errors.push("O resumo final consolidado é obrigatório");
-    if (indMetas !== "totalmente" && !indMetasJust) errors.push("Justificativa de metas obrigatória");
+    if (!indMetas) errors.push("Informe a avaliação profissional das metas do PTS");
+    if (indMetas && indMetas !== "totalmente" && !indMetasJust) errors.push("Justificativa de metas obrigatória");
     return errors;
   };
 
   const generateIndSummary = () => {
-    const summary = `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões. 
-Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : "parcialmente"} atingidos. 
-A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}. 
-Na alta, apresenta ${indDiagFuncional || "estabilidade funcional"}. 
-Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`;
+    if (!indMetas) { toast.error("Avalie as metas antes de gerar o resumo."); return; }
+    const summary = [
+      `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões.`,
+      `Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : indMetas === "parcialmente" ? "parcialmente" : "não"} atingidos.`,
+      indEvolucaoGlobal && `A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}.`,
+      indDiagFuncional && `Na alta, apresenta ${indDiagFuncional}.`,
+      indContinuarTerapia && `Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`,
+    ].filter(Boolean).join("\n");
     setIndResumoConsolidado(summary);
   };
 
@@ -1131,7 +1135,8 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
         <div class="field"><span class="field-label">Evolução Global</span><div class="field-value">${indEvolucaoGlobal || "—"}</div></div>
         <div class="field"><span class="field-label">Metas Atingidas</span><div class="field-value">${
           indMetas === "totalmente" ? "Totalmente atingidas" :
-          indMetas === "parcialmente" ? "Parcialmente atingidas" : "Não atingidas"
+          indMetas === "parcialmente" ? "Parcialmente atingidas" :
+          indMetas === "nao_atingidas" ? "Não atingidas" : "Aguardando avaliação profissional"
         }${indMetasJust ? ` — ${indMetasJust}` : ""}</div></div>
         <div class="field"><span class="field-label">Resposta Terapêutica</span><div class="field-value">${indRespostaTerapeutica || "—"}</div></div>
         <div class="field"><span class="field-label">Comparação Início/Alta</span><div class="field-value">${indComparacaoInicioAlta || "—"}</div></div>
@@ -1974,15 +1979,15 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-primary">Status das Metas (PTS)</Label>
-                      <Select value={indMetas} onValueChange={v => setIndMetas(v as any)}>
-                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <Select value={indMetas} onValueChange={v => setIndMetas(v as "totalmente" | "parcialmente" | "nao_atingidas")}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Avalie as metas" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="totalmente">Totalmente atingidas</SelectItem>
                           <SelectItem value="parcialmente">Parcialmente atingidas</SelectItem>
                           <SelectItem value="nao_atingidas">Não atingidas</SelectItem>
                         </SelectContent>
                       </Select>
-                      {indMetas !== "totalmente" && (
+                      {!!indMetas && indMetas !== "totalmente" && (
                         <Textarea value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa clínica para metas não atingidas..." rows={2} className="text-sm mt-2" />
                       )}
                     </div>

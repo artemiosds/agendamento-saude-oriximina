@@ -183,7 +183,7 @@ describe("CID por mesmo paciente e mesmo SIGTAP em outra data", () => {
     { patientId: "paciente-1", procedureCode: "0302050019", appointmentId: "agenda-08", scheduledDate: "2026-10-08", status: "finalizado", cids: ["S721"] },
     { patientId: "paciente-1", procedureCode: "0302050027", appointmentId: "agenda-08", scheduledDate: "2026-10-08", status: "finalizado", cids: ["M549"] },
     { patientId: "paciente-2", procedureCode: "0302050019", appointmentId: "agenda-outro-paciente", scheduledDate: "2026-10-07", status: "finalizado", cids: ["F840"] },
-    { patientId: "paciente-1", procedureCode: "0301010048", appointmentId: "agenda-outro-procedimento", scheduledDate: "2026-10-07", status: "finalizado", cids: ["F840"] },
+    { patientId: "paciente-1", procedureCode: "0301010072", appointmentId: "agenda-outro-procedimento", scheduledDate: "2026-10-07", status: "finalizado", cids: ["F840"] },
     { patientId: "paciente-1", procedureCode: "0302050019", appointmentId: "agenda-falta", scheduledDate: "2026-10-07", status: "falta", cids: ["M545"] },
     { patientId: "paciente-1", procedureCode: "0302050019", appointmentId: "agenda-sem-cid", scheduledDate: "2026-10-09", status: "finalizado", cids: [] },
   ];
@@ -199,6 +199,15 @@ describe("CID por mesmo paciente e mesmo SIGTAP em outra data", () => {
     expect(result.get("0302050027")?.cids).toEqual(["M549"]);
     expect(result.has("0301010048")).toBe(false);
     expect(result.get("0302050019")?.scheduledDate).toBe("2026-10-08");
+  });
+
+  it("reaproveita o CID quando o procedimento solicitado realmente coincide", () => {
+    const result = resolveBpaSamePatientProcedureCidsForProcedures([
+      { codigo: "0301010048", cid: "" },
+    ], [
+      { patientId: "paciente-1", procedureCode: "0301010048", appointmentId: "agenda-outra-data", scheduledDate: "2026-10-07", status: "finalizado", cids: ["F840"] },
+    ], target);
+    expect(result.get("0301010048")?.cids).toEqual(["F840"]);
   });
 
   it("não substitui CID existente nem aproveita atendimento do mesmo dia", () => {
