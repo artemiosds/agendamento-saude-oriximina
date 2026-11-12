@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Input } from '@/components/ui/input';
+import { todayLocalStr } from '@/lib/utils';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,7 +9,7 @@ import { usePermissions } from '@/contexts/PermissionsContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Loader2, Clock, Trash2 } from 'lucide-react';
+import { Loader2, Clock, Trash2, Eye, CheckCircle2, Activity, Timer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -33,12 +36,14 @@ const Atendimentos: React.FC = () => {
   const resolvePaciente = usePacienteNomeResolver();
   const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const [dataFiltro, setDataFiltro] = useState<string>(todayLocalStr());
   const canDelete = can('atendimento', 'can_delete');
 
   const load = async () => {
     setLoading(true);
     try {
-      let query = (supabase as any).from('atendimentos').select('*').order('data', { ascending: false });
+      let query = (supabase as any).from('atendimentos').select('*').eq('data', dataFiltro).order('hora_inicio', { ascending: true });
       if (user?.role === 'profissional') query = query.eq('profissional_id', user.id);
       if (user?.unidadeId && user?.usuario !== 'admin.sms') query = query.eq('unidade_id', user.unidadeId);
       const { data } = await query;
@@ -51,7 +56,18 @@ const Atendimentos: React.FC = () => {
 
   useEffect(() => {
     load();
-  }, [user]);
+  }, [user, dataFiltro]);
+
+  const resumo = useMemo(() => {
+    const fin = atendimentos.filter(a => a.status === 'finalizado');
+    const dur = fin.map(a => a.duracao_minutos || 0).filter(n => n > 0);
+    return { total: atendimentos.length, finalizados: fin.length, emCurso: atendimentos.length - fin.length, medio: dur.length ? Math.round(dur.reduce((x, y) => x + y, 0) / dur.length) : 0 };
+  }, [atendimentos]);
+
+  const verProntuario = (at: AtendimentoDB) => {
+    const params = new URLSearchParams({ pacienteId: at.paciente_id, pacienteNome: resolvePaciente(at.paciente_id, at.paciente_nome) });
+    navigate(`/painel/prontuario?${params.toString()}`);
+  };
 
   const handleDelete = async (at: AtendimentoDB) => {
     try {
@@ -71,16 +87,38 @@ const Atendimentos: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Atendimentos</h1>
-        <p className="text-muted-foreground text-sm">{atendimentos.length} registros</p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold font-display text-foreground">Produtividade do Dia</h1>
+          <p className="text-muted-foreground text-sm">Quem já foi atendido, em ordem de horário.</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Data</label>
+          <Input type="date" value={dataFiltro} onChange={e => e.target.value && setDataFiltro(e.target.value)} className="w-44" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Total', value: resumo.total, icon: Activity },
+          { label: 'Finalizados', value: resumo.finalizados, icon: CheckCircle2 },
+          { label: 'Em atendimento', value: resumo.emCurso, icon: Clock },
+          { label: 'Tempo médio', value: resumo.medio ? `${resumo.medio} min` : '—', icon: Timer },
+        ].map(k => (
+          <Card key={k.label} className="shadow-card border-0">
+            <CardContent className="p-4 flex items-center gap-3">
+              <k.icon className="w-5 h-5 text-primary" />
+              <div><p className="text-xs text-muted-foreground">{k.label}</p><p className="text-lg font-bold text-foreground">{k.value}</p></div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
       ) : atendimentos.length === 0 ? (
         <Card className="shadow-card border-0">
-          <CardContent className="p-8 text-center text-muted-foreground">Nenhum atendimento registrado.</CardContent>
+          <CardContent className="p-8 text-center text-muted-foreground">Nenhum atendimento registrado nesta data.</CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
@@ -89,8 +127,8 @@ const Atendimentos: React.FC = () => {
             return (
               <Card key={at.id} className="shadow-card border-0">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <span className="text-sm font-mono font-medium text-primary w-24 shrink-0">
-                    {at.data} {at.hora_inicio}
+                  <span className="text-sm font-mono font-medium text-primary w-28 shrink-0">
+                    {at.hora_inicio?.slice(0, 5) || '--:--'}{at.hora_fim ? ` – ${at.hora_fim.slice(0, 5)}` : ''}
                   </span>
                   <div className="flex-1">
                     <p className="font-semibold text-foreground">{resolvePaciente(at.paciente_id, at.paciente_nome)}</p>
@@ -108,6 +146,9 @@ const Atendimentos: React.FC = () => {
                         <Clock className="w-3 h-3" />{at.duracao_minutos}min
                       </span>
                     )}
+                    <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => verProntuario(at)}>
+                      <Eye className="w-4 h-4" />Prontuário
+                    </Button>
                     {canDelete && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
