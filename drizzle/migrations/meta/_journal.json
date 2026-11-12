@@ -92,6 +92,13 @@
       "when": 1794428266258,
       "tag": "0012_scope_permission_management",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794490736111,
+      "tag": "0013_harden_clinical_rls_staff",
+      "breakpoints": true
     }
   ]
 }
