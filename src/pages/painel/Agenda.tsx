@@ -82,6 +82,8 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { SmartSchedulingAssist } from "@/components/agenda/SmartSchedulingAssist";
 import { LocalizarVagasPanel } from "@/components/agenda/LocalizarVagasPanel";
+import { RadarBalcaoBar, EncaixeBalcaoDialog, useRelogioBalcao } from "@/components/agenda/RadarBalcao";
+import { classificarAtraso } from "@/lib/radarBalcao";
 import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
@@ -434,6 +436,8 @@ const Agenda: React.FC = () => {
 
   // FALTA com justificativa
   const [faltaTarget, setFaltaTarget] = useState<(typeof agendamentos)[0] | null>(null);
+  const [encaixeVaga, setEncaixeVaga] = useState<(typeof agendamentos)[0] | null>(null);
+  const relogioBalcao = useRelogioBalcao();
   const [confirmStatusTarget, setConfirmStatusTarget] = useState<{ ag: (typeof agendamentos)[0]; status: string } | null>(null);
 
   // Concluir Atendimento (Master)
@@ -2082,6 +2086,7 @@ const Agenda: React.FC = () => {
       // Fecha o modal imediatamente e mostra sucesso — restante roda em background
       toast.success(`Falta registrada para ${ag.pacienteNome}.`);
       setFaltaTarget(null);
+      if (ag.data === todayLocalStr() && !isProfissional && can("agenda", "can_create")) setEncaixeVaga(ag);
 
       // Atualiza estado local sem refetch pesado
       updateAgendamento(ag.id, { status: "falta" as any }).catch((e) =>
@@ -2814,6 +2819,17 @@ const Agenda: React.FC = () => {
   return (
     <div className="space-y-4 animate-fade-in">
       <TriageReconciliationPanel />
+      {!isProfissional && selectedDate === todayLocalStr() && (
+        <RadarBalcaoBar agendamentos={filtered as any} agora={relogioBalcao}
+          onChegou={(id) => handleStatusChangeRef.current(id, "confirmado_chegada")}
+          onFalta={(id) => handleStatusChangeRef.current(id, "falta")} />
+      )}
+      <EncaixeBalcaoDialog vaga={encaixeVaga} onClose={() => setEncaixeVaga(null)} onEncaixar={() => {
+        const v = encaixeVaga; setEncaixeVaga(null); if (!v) return;
+        setSelectedDate(v.data);
+        setNewAg((prev) => ({ ...prev, pacienteId: "", profissionalId: v.profissionalId, salaId: v.salaId || prev.salaId, hora: v.hora, tipo: v.tipo || prev.tipo, obs: "Encaixe de balcão na vaga liberada por falta" }));
+        setDialogOpen(true);
+      }} />
 
       <section className="rounded-2xl border border-primary/20 bg-card/80 p-3 shadow-sm backdrop-blur-xl sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
