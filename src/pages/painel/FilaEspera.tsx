@@ -70,6 +70,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getManchesterConfig } from "@/lib/manchesterProtocol";
 import { compareClinicalAndLegalPriority, hasTriageTea, legalPriorityKey } from "@/lib/queuePriority";
 import FilaEsperaItemRow from "./fila/FilaEsperaItemRow";
+import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 
 const ABSENCE_REASONS = [
   { value: "saude", label: "Problema de Saúde" },
@@ -2570,6 +2571,8 @@ const FilaEspera: React.FC = () => {
               <>
                 <Secao titulo="Dados do Paciente">
                   <Campo label="Nome" valor={pac?.nome || detalheFila.pacienteNome} />
+                  {user?.role === "profissional" && can("prontuario", "can_view") && detalheFila.pacienteId &&
+                    <PassaporteClinico patientId={detalheFila.pacienteId} professionalId={user.id} profession={user.profissao || ""} enabled={detalheOpen} />}
                   <Campo label="CPF" valor={pac?.cpf} />
                   <Campo label="Telefone" valor={pac?.telefone} />
                   <Campo label="E-mail" valor={pac?.email} hide />

@@ -82,6 +82,7 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { SmartSchedulingAssist } from "@/components/agenda/SmartSchedulingAssist";
 import { LocalizarVagasPanel } from "@/components/agenda/LocalizarVagasPanel";
+import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
@@ -4180,6 +4181,8 @@ const Agenda: React.FC = () => {
                       <p className="font-semibold text-foreground break-words">
                         {resolvePaciente(detalheAg.pacienteId, pac?.nome || detalheAg.pacienteNome)}
                       </p>
+                      {user?.role === "profissional" && can("prontuario", "can_view") && detalheAg.pacienteId &&
+                        <PassaporteClinico patientId={detalheAg.pacienteId} professionalId={user.id} profession={user.profissao || ""} enabled={detalheOpen} />}
                       <p className="text-xs text-muted-foreground">
                         {formatarData(detalheAg.data)} às {detalheAg.hora}
                         {prof?.nome || detalheAg.profissionalNome ? ` · ${prof?.nome || detalheAg.profissionalNome}` : ""}

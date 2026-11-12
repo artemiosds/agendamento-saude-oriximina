@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { clinicalEvolutionPrintHtml, evolutionEntries, type ClinicalEvolutionSection } from "@/lib/clinicalEvolution";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePacientes } from "@/contexts/PacientesContext";
 import { useOperacional } from "@/contexts/OperacionalContext";
@@ -175,6 +177,47 @@ const RelatorioAlta: React.FC = () => {
   /* ── shared patient selection ─── */
   const [pacienteId, setPacienteId] = useState("");
   const paciente = useMemo(() => pacientes.find(p => p.id === pacienteId), [pacientes, pacienteId]);
+  const [indPeriodoInicio, setIndPeriodoInicio] = useState("");
+  const [indPeriodoFim, setIndPeriodoFim] = useState("");
+  const { data: evolutionData, error: evolutionError, isPending: evolutionPending } = useQuery({
+    queryKey: ["alta-evolucao-clinica", pacienteId], enabled: !!pacienteId,
+    queryFn: async () => {
+      const [cycles, notes] = await Promise.all([
+        supabase.from("treatment_cycles").select("id,specialty,treatment_type,professional_id").eq("patient_id", pacienteId).limit(100),
+        supabase.from("prontuarios").select("id,data_atendimento,custom_data").eq("paciente_id", pacienteId)
+          .order("data_atendimento", { ascending: true }).limit(500),
+      ]);
+      if (cycles.error) throw cycles.error;
+      if (notes.error) throw notes.error;
+      const sections = (cycles.data || []).map((cycle) => ({
+        cycleId: cycle.id, specialty: cycle.specialty || cycle.treatment_type || "Ciclo sem especialidade",
+        professionalId: cycle.professional_id,
+        entries: evolutionEntries(notes.data || [], cycle.id),
+      })).filter((section) => section.entries.length > 0);
+      return { sections, limited: (cycles.data || []).length === 100 || (notes.data || []).length === 500 };
+    },
+  });
+  const reportEvolutionSections: ClinicalEvolutionSection[] = (evolutionData?.sections || [])
+    .filter((section) => modo === "multiprofissional" || section.professionalId === user?.id)
+    .map((section) => ({ ...section, entries: modo === "individual"
+      ? section.entries.filter((entry) => (!indPeriodoInicio || entry.date >= indPeriodoInicio) && (!indPeriodoFim || entry.date <= indPeriodoFim))
+      : section.entries }))
+    .filter((section) => section.entries.length > 0);
+  const evolutionPrint = evolutionPending || evolutionError || evolutionData?.limited
+    ? `<div class="section"><div class="section-title">Medidas clínicas</div><p>Consulta das medidas incompleta. Confira o prontuário antes de usar estes indicadores.</p></div>`
+    : clinicalEvolutionPrintHtml(reportEvolutionSections);
+  const evolutionPreview = pacienteId && <section aria-label="Medidas clínicas do relatório" className="rounded-md border p-3 text-xs space-y-1">
+    <p className="font-medium">Medidas clínicas registradas</p>
+    {evolutionPending ? <p>Consultando registros…</p> : evolutionError || evolutionData?.limited
+      ? <p role="status" className="text-amber-700">Consulta incompleta. Confira as medidas diretamente no prontuário.</p>
+      : reportEvolutionSections.length ? reportEvolutionSections.map((section) => <p key={section.cycleId}>{section.specialty}: {section.entries.length} registro(s) com escala. Gráfico incluído na impressão.</p>)
+      : <p className="text-muted-foreground">Sem medidas estruturadas para incluir automaticamente.</p>}
+  </section>;
+  const withEvolution = (body: string): string => {
+    if (!evolutionPrint) return body;
+    const signature = body.lastIndexOf('<div class="signature"');
+    return signature < 0 ? body + evolutionPrint : body.slice(0, signature) + evolutionPrint + body.slice(signature);
+  };
 
   /* ── multiprofissional state ─── */
   const [modalidades, setModalidades] = useState<string[]>([]);
@@ -267,8 +310,6 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   const [indDataAlta, setIndDataAlta] = useState(new Date().toISOString().split("T")[0]);
   const [indSessoes, setIndSessoes] = useState(0);
   const [indFaltas, setIndFaltas] = useState(0);
-  const [indPeriodoInicio, setIndPeriodoInicio] = useState("");
-  const [indPeriodoFim, setIndPeriodoFim] = useState("");
   const [indContinuarTerapia, setIndContinuarTerapia] = useState("");
   const [indRiscoRegressao, setIndRiscoRegressao] = useState("");
   const [indPrazoReavaliacao, setIndPrazoReavaliacao] = useState("");
@@ -1121,7 +1162,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
     if (type === "multi") {
       const errs = validateMulti();
       if (errs.length > 0) { toast.error(errs[0]); return; }
-      openPrintDocument("Relatório de Alta — Multiprofissional", buildMultiPrintBody(), {
+      openPrintDocument("Relatório de Alta — Multiprofissional", withEvolution(buildMultiPrintBody()), {
         Paciente: paciente?.nome || "", "Data Alta": fmt(dataAlta)
       });
     } else {
@@ -1130,7 +1171,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
       const func = funcionarios.find(f => f.id === user?.id);
       openPrintDocument(
         `Relatório de Alta — ${func?.profissao || "Individual"}`,
-        buildIndPrintBody(),
+        withEvolution(buildIndPrintBody()),
         { Paciente: paciente?.nome || "", "Data Alta": fmt(indDataAlta) }
       );
     }
@@ -1426,6 +1467,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
           )}
         </div>
 
+        {evolutionPreview}
         {isReportLocked && (
           <Alert className="border-amber-300 bg-amber-50">
             <Lock className="h-4 w-4 text-amber-700" />
@@ -1703,6 +1745,7 @@ Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade
         )}
       </div>
 
+      {evolutionPreview}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Form Content */}
         <div className="lg:col-span-3 space-y-6">

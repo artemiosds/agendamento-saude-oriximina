@@ -26,6 +26,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Skeleton } from "@/components/ui/skeleton";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
+import CockpitTurno from "@/components/prontuario/CockpitTurno";
+import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
+import BpaCadastroAviso from "@/components/prontuario/BpaCadastroAviso";
+import EvolucaoClinica from "@/components/prontuario/EvolucaoClinica";
+import { CLINICAL_SCALES, validClinicalMetric, type ClinicalScale } from "@/lib/clinicalEvolution";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1461,6 +1466,7 @@ const ProntuarioPage: React.FC = () => {
       return list;
     });
     queryClient.invalidateQueries({ queryKey: prontuariosQueryKey, refetchType: 'none' });
+    if (saved.paciente_id) void queryClient.invalidateQueries({ queryKey: ['evolucao-clinica', saved.paciente_id] });
   }, [queryClient, prontuariosQueryKey]);
 
   useRealtimeSubscription({
@@ -2648,6 +2654,8 @@ const ProntuarioPage: React.FC = () => {
       sp: selectedProcIds,
       pd: procDetails,
       sc: selectedCidsByProc,
+      cm: form.custom_data?.clinical_metrics,
+      cc: form.custom_data?.clinical_metrics_context,
     });
     if (hash === lastAutosaveHashRef.current) return;
     lastAutosaveHashRef.current = hash;
@@ -2678,6 +2686,8 @@ const ProntuarioPage: React.FC = () => {
     selectedProcIds,
     procDetails,
     selectedCidsByProc,
+    form.custom_data?.clinical_metrics,
+    form.custom_data?.clinical_metrics_context,
   ]);
 
   // Flush on tab hide / before unload
@@ -4138,9 +4148,11 @@ const ProntuarioPage: React.FC = () => {
           <DialogHeader className="px-6 py-3 border-b border-border shrink-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
+              {user?.role === "profissional" && can("prontuario", "can_view") && form.paciente_id && <PassaporteClinico patientId={form.paciente_id} professionalId={user.id} profession={user.profissao || ""} enabled={dialogOpen} />}
               <AutosaveBadge indicator={autosaveIndicator} />
             </div>
           </DialogHeader>
+          {user?.role === "profissional" && <CockpitTurno professionalId={user.id} unitId={user.unidadeId || ""} enabled={dialogOpen} />}
 
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-[65%_35%] min-h-0 overflow-hidden">
           <div className="flex flex-col min-h-0 overflow-hidden">
@@ -4162,7 +4174,11 @@ const ProntuarioPage: React.FC = () => {
               agendamentoId={form.agendamento_id || undefined}
               triagem={triagemHeaderData}
               funcionarios={funcionariosLight}
-              onPacienteUpdated={loadProntuarios}
+              onPacienteUpdated={() => {
+                loadProntuarios();
+                void queryClient.invalidateQueries({ queryKey: ["bpa-cadastro-aviso", form.paciente_id] });
+                void queryClient.invalidateQueries({ queryKey: ["passaporte-clinico", form.paciente_id] });
+              }}
             />
           )}
 
@@ -5108,6 +5124,7 @@ const ProntuarioPage: React.FC = () => {
             {isProfBlocoVisible('procedimentos') && repeatHistoryError && (
               <p role="status" className="text-sm text-amber-700">Não foi possível consultar os procedimentos anteriores. Feche e abra o prontuário para tentar novamente.</p>
             )}
+            {isProfBlocoVisible('procedimentos') && form.paciente_id && <BpaCadastroAviso patientId={form.paciente_id} />}
             {/* Repetir procedimentos do último atendimento (mesmo profissional) */}
             {isProfBlocoVisible('procedimentos') && ultimoAtendProcs && (
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-wrap items-center justify-between gap-2">
@@ -5608,6 +5625,45 @@ const ProntuarioPage: React.FC = () => {
                 </div>
               );
             })()}
+            {sessaoCycle && form.tipo_registro === 'sessao' && <>
+              <div className="rounded-md border p-3 space-y-2">
+                <p className="text-sm font-medium">Medidas clínicas deste atendimento (opcional)</p>
+                <p className="text-xs text-muted-foreground">Registre apenas escalas realmente aplicadas. Os valores são preservados no prontuário deste ciclo.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {(Object.keys(CLINICAL_SCALES) as ClinicalScale[]).map((scale) => {
+                    const def = CLINICAL_SCALES[scale];
+                    return <div key={scale}><Label htmlFor={`clinical-${scale}`}>{def.label} ({def.min}–{def.max})</Label>
+                      <Input id={`clinical-${scale}`} type="number" min={def.min} max={def.max} step={scale === "eva" ? "0.1" : "1"}
+                        disabled={scale === "mrc" && !String(form.custom_data?.clinical_metrics_context?.mrc || "").trim()}
+                        value={form.custom_data?.clinical_metrics?.[scale] ?? ""}
+                        onChange={(event) => {
+                          const value = validClinicalMetric(scale, event.target.value);
+                          if (event.target.value !== "" && value === null) return;
+                          setForm((current) => ({ ...current, custom_data: {
+                            ...current.custom_data,
+                            clinical_metrics: { ...current.custom_data?.clinical_metrics, [scale]: value ?? undefined },
+                            clinical_metrics_cycle_id: sessaoCycle.id,
+                            clinical_metrics_session: currentSessionForRegistration?.session_number ?? null,
+                          } }));
+                        }} />
+                    </div>;
+                  })}
+                </div>
+                <div className="max-w-sm"><Label htmlFor="clinical-mrc-context">Músculo e lado avaliados na MRC</Label>
+                  <Input id="clinical-mrc-context" maxLength={80} placeholder="Ex.: quadríceps direito"
+                    value={form.custom_data?.clinical_metrics_context?.mrc || ""}
+                    onChange={(event) => setForm((current) => ({ ...current, custom_data: {
+                      ...current.custom_data,
+                      clinical_metrics_context: { ...current.custom_data?.clinical_metrics_context, mrc: event.target.value },
+                      clinical_metrics: { ...current.custom_data?.clinical_metrics, mrc: event.target.value.trim() ? current.custom_data?.clinical_metrics?.mrc : undefined },
+                      clinical_metrics_cycle_id: sessaoCycle.id,
+                      clinical_metrics_session: currentSessionForRegistration?.session_number ?? null,
+                    } }))} />
+                  <p className="text-[11px] text-muted-foreground">A curva MRC compara apenas medidas do mesmo músculo e lado.</p>
+                </div>
+              </div>
+              <EvolucaoClinica patientId={form.paciente_id} cycleId={sessaoCycle.id} />
+            </>}
 
           </div>{/* end scroll area */}
           </div>{/* end left column */}
