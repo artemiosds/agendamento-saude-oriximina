@@ -83,7 +83,6 @@ import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { SmartSchedulingAssist } from "@/components/agenda/SmartSchedulingAssist";
 import { LocalizarVagasPanel } from "@/components/agenda/LocalizarVagasPanel";
 import { RadarBalcaoBar, EncaixeBalcaoDialog, useRelogioBalcao } from "@/components/agenda/RadarBalcao";
-import { classificarAtraso } from "@/lib/radarBalcao";
 import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
