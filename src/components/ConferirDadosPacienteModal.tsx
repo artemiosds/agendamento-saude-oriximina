@@ -24,6 +24,7 @@ import { patientService } from "@/services/patientService";
 import { patientAge } from "@/lib/queuePriority";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { CONDICOES_PACIENTE, hasCondicao, toggleCondicao } from "@/lib/condicoesPaciente";
 import { maskCNS as maskCnsUtil } from "@/lib/cnsUtils";
 
 export interface ConferirDadosPacienteModalProps {
@@ -195,7 +196,7 @@ export function ConferirDadosPacienteModal({
 
   const updateField = (name: string, value: string | boolean) => {
     const masked = typeof value === 'string' && MASKS[name] ? MASKS[name](value) : value;
-    const newForm = { ...form, [name]: masked, ...(name === 'tipo_condicao' && value === 'tea' ? { is_autista: true } : {}) };
+    const newForm = { ...form, [name]: masked, ...(name === 'tipo_condicao' && typeof value === 'string' && hasCondicao(value, 'tea') ? { is_autista: true } : {}) };
     setForm(newForm);
     setDirty(true);
     setSaveStatus("idle");
@@ -550,16 +551,16 @@ export function ConferirDadosPacienteModal({
                 <div className="space-y-3 rounded-lg border border-[#2A6F97]/30 bg-[#2A6F97]/5 p-4">
                   <h3 className="text-sm font-semibold text-[#2A6F97] dark:text-sky-300">Condição e Prioridade de Atendimento (Triagem)</h3>
                   <Label>Tipo de condição</Label>
-                  <RadioGroup value={form.tipo_condicao || 'nenhuma'} disabled={saving || confirming}
-                    onValueChange={value => updateField('tipo_condicao', value === 'nenhuma' ? '' : value)}
-                    className="flex flex-wrap gap-x-5 gap-y-3">
-                    {[['nenhuma', 'Nenhuma'], ['fisica', 'Física'], ['intelectual', 'Intelectual'], ['tea', 'TEA']].map(([value, label]) => (
-                      <label key={value} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <RadioGroupItem value={value} />{label}
+                  <div className="flex flex-wrap gap-x-5 gap-y-3">
+                    {CONDICOES_PACIENTE.map(c => (
+                      <label key={c.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox checked={hasCondicao(form.tipo_condicao, c.value)} disabled={saving || confirming}
+                          onCheckedChange={checked => updateField('tipo_condicao', toggleCondicao(form.tipo_condicao, c.value, checked === true))} />{c.label}
                       </label>
                     ))}
-                  </RadioGroup>
-                  {form.tipo_condicao === "fisica" && (
+                  </div>
+                  <p className="text-xs text-muted-foreground">Pode marcar mais de uma. Nenhuma marcada = sem condição.</p>
+                  {hasCondicao(form.tipo_condicao, "fisica") && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-md border border-[#2A6F97]/20 bg-background/60 p-3">
                       <div className="space-y-1.5">
                         <Label htmlFor="fld-mobilidade">Mobilidade</Label>
@@ -600,7 +601,7 @@ export function ConferirDadosPacienteModal({
                   <div className="flex flex-wrap gap-x-5 gap-y-3">
                     {[['is_gestante', 'Gestante'], ['is_pne', 'PNE — Pessoa com deficiência'], ['is_autista', 'Autista (TEA)']].map(([field, label]) => (
                       <label key={field} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox checked={form[field] === true} disabled={saving || confirming || (field === 'is_autista' && form.tipo_condicao === 'tea')}
+                        <Checkbox checked={form[field] === true} disabled={saving || confirming || (field === 'is_autista' && hasCondicao(form.tipo_condicao, 'tea'))}
                           onCheckedChange={checked => updateField(field, checked === true)} />{label}
                       </label>
                     ))}

@@ -25,6 +25,7 @@ import { useEnderecoPaciente } from "@/hooks/useEnderecoPaciente";
 import BuscaCepPorRua from "@/components/BuscaCepPorRua";
 import BairroPacienteInput from "@/components/BairroPacienteInput";
 import { firstPacienteError, PACIENTE_FIELD_TABS } from "@/lib/pacienteFormFields";
+import { CONDICOES_PACIENTE, hasCondicao, toggleCondicao } from "@/lib/condicoesPaciente";
 import { mergeLatestReferral } from "@/lib/pacienteReferralSnapshot";
 import type { PatientReferral } from "@/services/patientReferralService";
 
@@ -821,27 +822,21 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 <Stethoscope className="w-4 h-4" /> Tipo de Condição
               </div>
 
-              <RadioGroup
-                value={form.tipoCondicao}
-                onValueChange={(v) => onChange({ ...form, tipoCondicao: v, ...(v === "tea" ? { isAutista: true } : {}) })}
-                className="flex flex-wrap gap-4"
-              >
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="fisica" id="cond-fisica" />
-                  <Label htmlFor="cond-fisica" className="cursor-pointer text-sm">Física</Label>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="intelectual" id="cond-intelectual" />
-                  <Label htmlFor="cond-intelectual" className="cursor-pointer text-sm">Intelectual</Label>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="tea" id="cond-tea" />
-                  <Label htmlFor="cond-tea" className="cursor-pointer text-sm">TEA</Label>
-                </div>
-              </RadioGroup>
+              <div className="flex flex-wrap gap-4">
+                {CONDICOES_PACIENTE.map((c) => (
+                  <label key={c.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                    <Checkbox
+                      checked={hasCondicao(form.tipoCondicao, c.value)}
+                      onCheckedChange={(v) => onChange({ ...form, tipoCondicao: toggleCondicao(form.tipoCondicao, c.value, !!v), ...(c.value === "tea" && v ? { isAutista: true } : {}) })}
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Pode marcar mais de uma condição.</p>
               {errors.tipoCondicao && <p data-validation-field="tipoCondicao" role="alert" className="text-xs text-destructive mt-1">{errors.tipoCondicao}</p>}
 
-              {form.tipoCondicao === "fisica" && (
+              {hasCondicao(form.tipoCondicao, "fisica") && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
                   <div>
                     <Label>Mobilidade</Label>
@@ -872,7 +867,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 </div>
               )}
 
-              {(form.tipoCondicao === "intelectual" || form.tipoCondicao === "tea") && (
+              {(hasCondicao(form.tipoCondicao, "intelectual") || hasCondicao(form.tipoCondicao, "tea")) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
                   <div>
                     <Label>Comunicação</Label>
