@@ -3,7 +3,7 @@ import { AlertTriangle, UserCheck, FileText, UserX, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { nowTimeBrazilStr, todayLocalStr } from "@/lib/utils";
-import { ausenciasDetectadas, TOLERANCIA_MINUTOS } from "@/lib/radarBalcao";
+import { classificarAtraso, ausenciasDetectadas, TOLERANCIA_MINUTOS } from "@/lib/radarBalcao";
 
 type Ag = { id: string; data: string; hora: string; status: string; pacienteNome?: string; profissionalNome?: string; tipo?: string };
 
@@ -17,7 +17,7 @@ export function useRelogioBalcao() {
 /** Barra no topo da Agenda + lista rápida. As ações usam os fluxos oficiais (chegada e falta). */
 export function RadarBalcaoBar({ agendamentos, agora, onChegou, onFalta }: {
   agendamentos: readonly Ag[]; agora: string;
-  onChegou: (id: string) => void; onFalta: (id: string) => void;
+  onChegou: (id: string) => void; onFalta: (id: string, tipo: "justificada" | "injustificada") => void;
 }) {
   const [open, setOpen] = useState(false);
   const itens = useMemo(() => ausenciasDetectadas(agendamentos, todayLocalStr(), agora), [agendamentos, agora]);
@@ -42,8 +42,8 @@ export function RadarBalcaoBar({ agendamentos, agora, onChegou, onFalta }: {
               <span className="ml-2 inline-flex rounded-full bg-destructive/10 px-2 text-xs font-semibold text-destructive">+{atrasoMin} min</span></p>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => { setOpen(false); onChegou(ag.id); }}><UserCheck className="h-4 w-4 mr-1" /> Chegou com atraso</Button>
-              <Button size="sm" variant="outline" onClick={() => { setOpen(false); onFalta(ag.id); }}><FileText className="h-4 w-4 mr-1" /> Justificar falta</Button>
-              <Button size="sm" variant="destructive" onClick={() => { setOpen(false); onFalta(ag.id); }}><UserX className="h-4 w-4 mr-1" /> Confirmar falta</Button>
+              <Button size="sm" variant="outline" onClick={() => { setOpen(false); onFalta(ag.id, "justificada"); }}><FileText className="h-4 w-4 mr-1" /> Justificar falta</Button>
+              <Button size="sm" variant="destructive" onClick={() => { setOpen(false); onFalta(ag.id, "injustificada"); }}><UserX className="h-4 w-4 mr-1" /> Confirmar falta</Button>
             </div>
           </li>)}
         </ul>
@@ -69,4 +69,14 @@ export function EncaixeBalcaoDialog({ vaga, onClose, onEncaixar }: {
       </DialogFooter>
     </DialogContent>
   </Dialog>;
+}
+
+/** Etiqueta discreta no cartão: tolerância (amarela) ou atraso (vermelha). */
+export function RadarBalcaoTag({ ag }: { ag: { data: string; hora: string; status: string } }) {
+  const agora = useRelogioBalcao();
+  const c = classificarAtraso(ag, todayLocalStr(), agora);
+  if (!c || c.estado === "no_prazo") return null;
+  const tol = c.estado === "tolerancia";
+  return <span className={`inline-block mb-0.5 mr-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${tol ? "bg-warning/15 text-warning" : "bg-destructive/10 text-destructive"}`}>
+    {tol ? "🟡 Tolerância" : "🔴 Atraso"} +{c.atrasoMin} min</span>;
 }
