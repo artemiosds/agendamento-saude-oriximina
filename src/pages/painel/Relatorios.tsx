@@ -929,9 +929,11 @@ const Relatorios: React.FC = () => {
       const tipo = String(pac.tipo_condicao ?? pac.tipoCondicao ?? '').toLowerCase();
       const mob = String(pac.mobilidade ?? '').toLowerCase();
       const flags = new Set<string>();
-      if (pac.isAutista || pac.is_autista || tipo === 'tea') flags.add('TEA / Autismo');
-      if (tipo === 'intelectual') flags.add('Deficiência Intelectual');
-      if (tipo === 'fisica' || /cadeira_rodas|acamado|muleta_andador/.test(mob)) flags.add('Deficiência Física');
+      if (pac.isAutista || pac.is_autista || tipo.split(',').includes('tea')) flags.add('TEA / Autismo');
+      if (tipo.split(',').includes('intelectual')) flags.add('Deficiência Intelectual');
+      if (tipo.split(',').includes('visual')) flags.add('Deficiência Visual');
+      if (tipo.split(',').includes('auditiva')) flags.add('Deficiência Auditiva');
+      if (tipo.split(',').includes('fisica') || /cadeira_rodas|acamado|muleta_andador/.test(mob)) flags.add('Deficiência Física');
       if (flags.size > 0) sinalizacoes[pac.id] = flags;
     });
 
