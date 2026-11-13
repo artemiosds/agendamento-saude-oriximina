@@ -14,7 +14,7 @@ import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import type { DayInfo } from '@/components/CalendarioDisponibilidade';
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from '@/lib/utils';
-import DadosPacienteBlocos, { emptyDadosPaciente, serializeDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
+import DadosPacienteBlocos, { deserializeDadosPaciente, emptyDadosPaciente, serializeDadosPaciente, type DadosPacienteValue } from '@/components/DadosPacienteBlocos';
 import { statusOcupaVaga } from '@/lib/appointmentCapacity';
 
 const applyDateMask = (value: string): string => {
@@ -58,6 +58,7 @@ const AgendarOnline: React.FC = () => {
   const [dataLoading, setDataLoading] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
+  const [portalPatient, setPortalPatient] = useState<{ id: string } | null>(null);
 
   const [unidades, setUnidades] = useState<PublicUnit[]>([]);
   const [profissionais, setProfissionais] = useState<PublicProf[]>([]);
@@ -73,6 +74,21 @@ const AgendarOnline: React.FC = () => {
   const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
   const updateDados = useCallback((patch: Partial<DadosPacienteValue>) => {
     setDados(prev => ({ ...prev, ...patch }));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadPortalPatient = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase.from('pacientes').select('*')
+        .eq('auth_user_id', session.user.id).maybeSingle();
+      if (!active || !data) return;
+      setPortalPatient({ id: data.id });
+      setDados(deserializeDadosPaciente(data));
+    };
+    void loadPortalPatient().catch(() => { /* o agendamento público segue disponível */ });
+    return () => { active = false; };
   }, []);
 
   const loadPublicData = useCallback(async () => {
@@ -310,6 +326,7 @@ const AgendarOnline: React.FC = () => {
   }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
   const validateStep2 = (): boolean => {
+    if (portalPatient) return true;
     const cpfError = patientCpfError(dados.cpf);
     if (cpfError) {
       setErrors({ cpf: cpfError });
@@ -348,73 +365,81 @@ const AgendarOnline: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!validateStep2()) { setStep(2); return; }
-    if (!dados.nome || !dados.telefone || !dados.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
+    if ((!portalPatient && (!dados.nome || !dados.telefone || !dados.email)) || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
     setLoading(true);
     try {
-      const normalizePhone = (t: string) => t.replace(/\D/g, '');
-      const normalizeCpf = (c: string) => c.replace(/\D/g, '');
-      const normalizeEmail = (e: string) => e.trim().toLowerCase();
-      const phoneNorm = normalizePhone(dados.telefone);
-      const cpfNorm = normalizeCpf(dados.cpf);
-      const emailNorm = normalizeEmail(dados.email);
-
-      const checkRes = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=check-patient`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-          body: JSON.stringify({ cpf: cpfNorm, telefone: phoneNorm, email: emailNorm }) }
-      );
-      const checkData = await checkRes.json();
-
-      let pacienteId: string;
-      if (checkData.found) {
-        pacienteId = checkData.id;
-        if (dados.cns) {
-          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=update-patient-cns`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-              body: JSON.stringify({ id: pacienteId, cns: dados.cns }) });
-        }
-      } else {
-        if (form.tipo === 'Retorno') {
-          toast.error('Não foi encontrado cadastro anterior. Para retorno, é necessário ter uma primeira consulta.');
-          setLoading(false);
+      const cpfNorm = dados.cpf.replace(/\D/g, '');
+      const emailNorm = dados.email.trim().toLowerCase();
+      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling`;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      };
+      if (portalPatient) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          toast.error('Sessão expirada. Entre novamente no Portal do Paciente.');
           return;
         }
-        pacienteId = `p${Date.now()}`;
-        const serialized = serializeDadosPaciente(dados);
-        const createRes = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-patient`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
-            body: JSON.stringify({ id: pacienteId, ...serialized, observacoes: dados.observacoes || form.obs }) }
-        );
-        if (!createRes.ok) {
-          const result = await createRes.json().catch(() => ({}));
-          throw new Error(result.error || 'Não foi possível cadastrar o paciente.');
-        }
+        headers.Authorization = `Bearer ${session.access_token}`;
       }
-
-      try {
-        await supabase.functions.invoke('patient-signup', {
-          body: { email: emailNorm, senha: form.senha, pacienteId },
+      let pacienteId: string;
+      if (portalPatient) {
+        pacienteId = portalPatient.id;
+      } else {
+        const checkRes = await fetch(`${baseUrl}?action=check-patient`, {
+          method: 'POST', headers, body: JSON.stringify({ cpf: cpfNorm, email: emailNorm }),
         });
-      } catch (authErr) {
-        console.error('Patient account creation failed (non-blocking):', authErr);
+        const checkData = await checkRes.json();
+        if (!checkRes.ok) {
+          toast.error(checkData.error || 'Não foi possível confirmar o cadastro. Tente novamente.');
+          return;
+        }
+        if (checkData.found && checkData.id) {
+          pacienteId = checkData.id;
+        } else {
+          if (form.tipo === 'Retorno') {
+            toast.error('Não foi encontrado cadastro anterior. Entre pelo Portal do Paciente ou procure a unidade.');
+            return;
+          }
+          pacienteId = `p${Date.now()}`;
+          const serialized = serializeDadosPaciente(dados);
+          const createRes = await fetch(`${baseUrl}?action=create-patient`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ id: pacienteId, ...serialized, observacoes: dados.observacoes || form.obs }),
+          });
+          if (!createRes.ok) {
+            const result = await createRes.json().catch(() => ({}));
+            toast.error(result.error || 'Não foi possível cadastrar o paciente.');
+            return;
+          }
+          try {
+            await supabase.functions.invoke('patient-signup', {
+              body: { email: emailNorm, senha: form.senha, pacienteId },
+            });
+          } catch (authErr) {
+            console.error('Patient account creation failed (non-blocking):', authErr);
+          }
+        }
       }
 
       const prof = profissionais.find(p => p.id === form.profissionalId);
       const unidade = unidades.find(u => u.id === form.unidadeId);
       const agId = `ag${Date.now()}`;
 
+      const bookingAction = portalPatient ? 'create-portal-appointment' : 'create-appointment';
       const agRes = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-appointment`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        `${baseUrl}?action=${bookingAction}`,
+        { method: 'POST', headers,
           body: JSON.stringify({ id: agId, paciente_id: pacienteId, paciente_nome: dados.nome, unidade_id: form.unidadeId, sala_id: '', setor_id: prof?.setor || '', profissional_id: form.profissionalId, profissional_nome: prof?.nome || '', data: form.data, hora: form.hora, tipo: form.tipo, observacoes: form.obs }) }
       );
       if (!agRes.ok) {
         const result = await agRes.json().catch(() => ({}));
-        throw new Error(result.error || 'Falha ao criar agendamento. Tente novamente.');
+        toast.error(result.error || 'Falha ao criar agendamento. Tente novamente.');
+        return;
       }
 
       try {
@@ -570,7 +595,7 @@ const AgendarOnline: React.FC = () => {
                     {form.tipo === 'Retorno' && (
                       <div className="flex items-center gap-2 p-3 bg-info/10 rounded-lg text-sm text-info">
                         <AlertCircle className="w-4 h-4 shrink-0" />
-                        <span>Para retorno, informe os mesmos dados (CPF, telefone ou e-mail) da primeira consulta.</span>
+                        <span>Para retorno, use o CPF e o e-mail cadastrados ou entre pelo Portal do Paciente.</span>
                       </div>
                     )}
                     <Button onClick={() => setStep(2)} className="w-full gradient-primary text-primary-foreground" disabled={!form.unidadeId || !form.profissionalId}>Próximo</Button>
@@ -582,40 +607,45 @@ const AgendarOnline: React.FC = () => {
             {step === 2 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Seus Dados</h2>
-                <p className="text-xs text-muted-foreground">
-                  Preencha os blocos abaixo. Os campos marcados com * são obrigatórios. Você poderá completar/editar tudo depois no Portal do Paciente.
-                </p>
+                {portalPatient ? (
+                  <p className="text-sm text-muted-foreground">Você está usando a ficha vinculada ao Portal do Paciente. Nenhum novo cadastro será criado.</p>
+                ) : <>
+                  <p className="text-xs text-muted-foreground">
+                    Preencha os blocos abaixo. Os campos marcados com * são obrigatórios. Você poderá completar/editar tudo depois no Portal do Paciente.
+                  </p>
 
-                <DadosPacienteBlocos value={dados} onChange={updateDados} errors={errors} cpfRequired />
+                  <p className="text-sm text-muted-foreground">Já tem cadastro e não tem CPF? <Link to="/portal" className="text-primary underline">Entre pelo Portal do Paciente</Link>. Se ainda não tem acesso, procure a unidade.</p>
+                  <DadosPacienteBlocos value={dados} onChange={updateDados} errors={errors} cpfRequired />
 
-                <div className="border-t pt-4 mt-2">
-                  <p className="text-sm font-medium text-foreground mb-3">Criar acesso ao Portal do Paciente</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Senha *</Label>
-                      <div className="relative">
-                        <Input type={showPassword ? 'text' : 'password'} value={form.senha}
-                          onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Mín. 6 caracteres" />
-                        <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-                          onClick={() => setShowPassword(!showPassword)}>
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+                  <div className="border-t pt-4 mt-2">
+                    <p className="text-sm font-medium text-foreground mb-3">Criar acesso ao Portal do Paciente</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Senha *</Label>
+                        <div className="relative">
+                          <Input type={showPassword ? 'text' : 'password'} value={form.senha}
+                            onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Mín. 6 caracteres" />
+                          <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                            onClick={() => setShowPassword(!showPassword)}>
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        {errors.senha && <p className="text-xs text-destructive mt-1">{errors.senha}</p>}
                       </div>
-                      {errors.senha && <p className="text-xs text-destructive mt-1">{errors.senha}</p>}
+                      <div>
+                        <Label>Confirmar Senha *</Label>
+                        <Input type="password" value={form.senhaConfirm}
+                          onChange={e => setForm(p => ({ ...p, senhaConfirm: e.target.value }))} placeholder="Repita a senha" />
+                        {errors.senhaConfirm && <p className="text-xs text-destructive mt-1">{errors.senhaConfirm}</p>}
+                      </div>
                     </div>
-                    <div>
-                      <Label>Confirmar Senha *</Label>
-                      <Input type="password" value={form.senhaConfirm}
-                        onChange={e => setForm(p => ({ ...p, senhaConfirm: e.target.value }))} placeholder="Repita a senha" />
-                      {errors.senhaConfirm && <p className="text-xs text-destructive mt-1">{errors.senhaConfirm}</p>}
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Use este e-mail e senha para acessar o Portal do Paciente.</p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Use este e-mail e senha para acessar o Portal do Paciente.</p>
-                </div>
 
+                </>}
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Voltar</Button>
-                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!dados.nome || !dados.telefone || !dados.email || !form.senha}>Próximo</Button>
+                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!portalPatient && (!dados.nome || !dados.telefone || !dados.email || !form.senha)}>Próximo</Button>
                 </div>
               </div>
             )}

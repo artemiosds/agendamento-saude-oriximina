@@ -95,21 +95,21 @@ serve(async (req) => {
     }
 
     if (req.method === "POST" && action === "check-patient") {
-      const { cpf, telefone, email } = await req.json();
-      const orFilters: string[] = [];
-      if (cpf) orFilters.push(`cpf.eq.${cpf}`);
-      if (telefone) orFilters.push(`telefone.eq.${telefone}`);
-      if (email) orFilters.push(`email.ilike.${email}`);
-
-      if (orFilters.length === 0) {
+      const { cpf, email } = await req.json();
+      if (patientCpfError(cpf) || typeof email !== "string" || !email.trim()) {
         return new Response(JSON.stringify({ found: false }), { headers: corsHeaders });
       }
-
-      const { data } = await supabase.from("pacientes").select("id").or(orFilters.join(",")).limit(1);
-      if (data && data.length > 0) {
-        return new Response(JSON.stringify({ found: true, id: data[0].id }), { headers: corsHeaders });
+      const digits = normalizePatientCpf(cpf);
+      const masked = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+      const { data, error } = await supabase.from("pacientes").select("id, email").in("cpf", [digits, masked]).limit(2);
+      if (error) {
+        return new Response(JSON.stringify({ error: "Não foi possível confirmar o cadastro. Tente novamente." }), { status: 503, headers: corsHeaders });
       }
-      return new Response(JSON.stringify({ found: false }), { headers: corsHeaders });
+      if (data.length > 1 || (data.length === 1 && data[0].email?.trim().toLowerCase() !== email.trim().toLowerCase())) {
+        return new Response(JSON.stringify({ error: "Não foi possível confirmar a ficha. Entre pelo Portal do Paciente ou procure a unidade." }), { status: 409, headers: corsHeaders });
+      }
+      const match = data[0];
+      return new Response(JSON.stringify(match ? { found: true, id: match.id } : { found: false }), { headers: corsHeaders });
     }
 
     if (req.method === "POST" && action === "create-patient") {
@@ -142,7 +142,10 @@ serve(async (req) => {
       }
       const { error } = await supabase.from("pacientes").insert(payload);
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        const duplicate = error.code === "23505";
+        const status = duplicate ? 409 : error.code === "23514" ? 400 : 500;
+        const message = duplicate ? "Já existe cadastro com este identificador. Entre pelo Portal do Paciente ou procure a unidade." : "Não foi possível cadastrar o paciente.";
+        return new Response(JSON.stringify({ error: message }), { status, headers: corsHeaders });
       }
       return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
     }
@@ -194,10 +197,27 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, id: pac.id }), { headers: corsHeaders });
     }
 
-    if (req.method === "POST" && action === "create-appointment") {
+    if (req.method === "POST" && (action === "create-appointment" || action === "create-portal-appointment")) {
       const ag = await req.json();
       if (!ag.id || !ag.paciente_id || !ag.profissional_id || !ag.data || !ag.hora) {
         return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: corsHeaders });
+      }
+
+      if (action === "create-portal-appointment") {
+        const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+        if (!token) {
+          return new Response(JSON.stringify({ error: "Entre pelo Portal do Paciente para agendar." }), { status: 401, headers: corsHeaders });
+        }
+        const { data: auth, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !auth.user) {
+          return new Response(JSON.stringify({ error: "Sessão inválida. Entre novamente no Portal do Paciente." }), { status: 401, headers: corsHeaders });
+        }
+        const { data: patient, error: lookupError } = await supabase.from("pacientes").select("id, nome")
+          .eq("auth_user_id", auth.user.id).maybeSingle();
+        if (lookupError || !patient || patient.id !== ag.paciente_id) {
+          return new Response(JSON.stringify({ error: "Agendamento não autorizado para esta ficha." }), { status: 403, headers: corsHeaders });
+        }
+        ag.paciente_nome = patient.nome;
       }
 
       const todayStr = todayBrazilStr();
