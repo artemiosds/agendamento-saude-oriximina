@@ -31,13 +31,13 @@ export default function RegulationCockpit({ input, period, professionals, queueA
   const days = Array.from({ length:7 }, (_,i)=>addDaysToDateStr(input.today,i));
   const slots = rows.reduce((n,r)=>n+r.plan.count,0);
   const demand = new Set(rows.flatMap(r=>r.candidates.map(c=>c.patientId))).size;
-  const operational = rows.reduce((n,r)=>n+r.totals.free+r.totals.occupied,0);
+  const operational = rows.reduce((n,r)=>n+r.totals.configured,0);
   const committed = rows.reduce((n,r)=>n+r.totals.occupied+r.totals.projected,0);
   const cards = [
-    ["Vagas para avaliação inicial", slots, `Nos próximos ${horizon} dias, após proteger os ciclos.`],
-    ["Sessões em espera", rows.reduce((n,r)=>n+r.plan.pending,0), "Ciclos em andamento, sem agendamento vinculado."],
-    ["Demanda apta na fila", queueAvailable ? demand : "Indisponível", "Pacientes distintos com destino e CBO compatíveis."],
-    ["Ocupação comprometida", operational ? Math.round(100*committed/operational) + "%" : "Sem capacidade", `Agendamentos e pendências sobre ${operational} vagas operacionais em ${period} dias. Pendências não são reservas.`],
+    ["Vagas seguras para novos pacientes", slots, `Próximos ${horizon} dias, após proteger os ciclos.`],
+    ["Sessões aguardando marcação", rows.reduce((n,r)=>n+r.plan.pending,0), "Ciclos em andamento, sem agendamento vinculado."],
+    ["Pacientes aptos na fila", queueAvailable ? demand : "Indisponível", "Pacientes distintos com destino e CBO compatíveis."],
+    ["Ocupação da grade regular", operational ? Math.round(100*committed/operational) + "%" : "Sem capacidade", `Agendamentos internos e pendências sobre ${operational} vagas cadastradas em ${period} dias. Pendências não são reservas.`],
   ];
   return <section aria-label="Cockpit de regulação" className="space-y-4">
     <h3 className="font-semibold">Regulação de Fisioterapia e Fonoaudiologia</h3>
@@ -51,7 +51,8 @@ export default function RegulationCockpit({ input, period, professionals, queueA
       const orphan = plan.offers.find(s=>s.singleVisit);
       return <article key={key} className="space-y-3 rounded-lg border p-4">
         <div className="flex flex-wrap justify-between gap-2"><div><h4 className="font-semibold">{p.name}</h4><p className="text-xs text-muted-foreground">{specialty} · {p.unitName || p.unitId}</p></div><strong className={riskColor[plan.risk]}>{plan.risk}</strong></div>
-        <p className="text-sm">{plan.count} vagas para avaliação · {plan.projected} pendências no horizonte{plan.review && " · Revisar pendências ou grade"}</p>
+        <p className="text-sm">{plan.count > 0 ? `${plan.count} vaga(s) segura(s) para avaliação` : "Nenhuma vaga confirmável para avaliação"} · {plan.projected} pendência(s) no horizonte{plan.review && " · Revisar pendências ou grade"}</p>
+        {plan.count > 0 && <p className="text-sm text-muted-foreground">{p.name} ({specialty}) possui {plan.count} vaga(s) pontual(is) nos próximos {horizon} dias. {queueAvailable ? `${candidates.length} paciente(s) apto(s) na mesma unidade e com CBO compatível.` : "A fila não está disponível para conferência."} {plan.offers.slice(0,2).map(offer=>`${formatDateBR(offer.date)} às ${offer.time}`).join(" e ")}.</p>}
         <div className="grid grid-cols-4 gap-1 sm:grid-cols-7" aria-label="Próximos sete dias por turno">{days.map(date=>{
           const daySlots = plan.offers.filter(s=>s.date===date);
           const turns = ["Manhã","Tarde","Noite"].map((label,i)=>({label, n:daySlots.filter(s=> (s.time < "12:00" ? 0 : s.time < "18:00" ? 1 : 2) === i).reduce((n,s)=>n+s.count,0)}));

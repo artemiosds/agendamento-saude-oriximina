@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, getTreatmentCycleForecastDays, MAX_TREATMENT_CYCLE_FORECAST_DAYS, planInitialEvaluations, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
+import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, buildWeeklySafeOfferMap, getTreatmentCycleForecastDays, MAX_TREATMENT_CYCLE_FORECAST_DAYS, planInitialEvaluations, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
 
 describe("regulação de vagas avulsas sem comprometer ciclos", () => {
   const evaluation = () => {
@@ -45,6 +45,25 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     expect(result.pending).toBe(0);
     expect(result.occupied).toBe(1);
     expect(result.offers.every(s=>s.date!=="2026-11-11" || s.time!=="08:00")).toBe(true);
+  });
+
+  it("emite apenas vagas seguras da próxima semana, preservando a sessão pendente", () => {
+    const input = evaluation();
+    const regular = buildWeeklySafeOfferMap(input, input.professionals, 0);
+    expect(regular).toMatchObject({ startDate: "2026-11-16", endDate: "2026-11-21", complete: true });
+    expect(regular.rows.some(row => row.date === "2026-11-18")).toBe(true);
+    input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-18",appointmentId:null}];
+    expect(buildWeeklySafeOfferMap(input, input.professionals, 0).rows).toHaveLength(0);
+    input.pendingSessions[0].scheduledDate = null;
+    expect(buildWeeklySafeOfferMap(input, input.professionals, 0).rows).toHaveLength(0);
+    input.endDate = "2026-11-19";
+    expect(buildWeeklySafeOfferMap(input, input.professionals, 0).complete).toBe(false);
+  });
+
+  it("não computa cota externa como ocupação da grade regular", () => {
+    const input = evaluation();
+    input.appointments = [{professionalId:"p1",unitId:"u1",date:"2026-11-11",time:"08:00",status:"confirmado",origin:"externo"}];
+    expect(plan(input).occupied).toBe(0);
   });
 });
 

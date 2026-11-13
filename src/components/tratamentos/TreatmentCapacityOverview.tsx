@@ -1,4 +1,5 @@
 import RegulationCockpit from "./RegulationCockpit";
+import MapaVagasSemanalPrint from "./MapaVagasSemanalPrint";
 import { resolveProfessionalCbo } from "@/lib/sigtapClinicalValidation";
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -104,6 +105,7 @@ export default function TreatmentCapacityOverview() {
   const [sharedPatients, setSharedPatients] = useState<SharedPatientsSummary | null>(null);
   const [queueDemandRows, setQueueDemandRows] = useState<QueueDemandInput[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(0);
   const [error, setError] = useState("");
   const [queueReadStatus, setQueueReadStatus] = useState<"loading" | "available" | "unavailable">("loading");
   const [queueWarning, setQueueWarning] = useState("");
@@ -493,6 +495,7 @@ export default function TreatmentCapacityOverview() {
           setQueueReadStatus(nextQueueReadStatus);
           setQueueWarning(nextQueueWarning);
           setError("");
+          setLoadedAt(Date.now());
         }
       } catch (loadError: any) {
         if (!cancelled && requestRef.current === requestId) {
@@ -551,6 +554,11 @@ export default function TreatmentCapacityOverview() {
       visibleKeys.has(row.professionalId + "|" + row.unitId),
     );
   }, [capacityPlan, visibleProfessionals]);
+
+  const operationalProfessionals = useMemo(() => {
+    const keys = new Set(visibleProfessionals.map(row => row.professionalId + "|" + row.unitId));
+    return (cycleCapacityInput?.professionals || []).filter(row => keys.has(row.id + "|" + row.unitId));
+  }, [cycleCapacityInput, visibleProfessionals]);
 
   const planByProfessional = useMemo(() => new Map(
     visibleProfessionalPlans.map((row) => [row.professionalId + "|" + row.unitId, row] as const),
@@ -699,6 +707,7 @@ export default function TreatmentCapacityOverview() {
           <p className="text-sm text-muted-foreground">Consulte vagas para avaliação inicial e a carga dos ciclos por unidade e profissional.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {isOpen && !loading && !error && cycleCapacityInput && <MapaVagasSemanalPrint input={cycleCapacityInput} professionals={operationalProfessionals} loadedAt={loadedAt} />}
           {isOpen && (
             <Button variant="outline" size="sm" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>
               <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
@@ -725,6 +734,7 @@ export default function TreatmentCapacityOverview() {
               <SelectItem value="90">Próximos 90 dias</SelectItem>
             </SelectContent>
           </Select>
+          <p className="mt-1 text-xs text-muted-foreground">7–15 dias: avaliação inicial. 30–90 dias: continuidade dos ciclos.</p>
         </div>
         <div>
           <p className="mb-1 text-xs text-muted-foreground">Unidade</p>
@@ -792,9 +802,9 @@ export default function TreatmentCapacityOverview() {
         </div>
       ) : snapshot ? (
         <>
-          {cycleCapacityInput && <RegulationCockpit input={cycleCapacityInput} period={Number(periodDays)} professionals={cycleCapacityInput.professionals.filter(p=>visibleProfessionals.some(v=>v.professionalId===p.id && v.unitId===p.unitId))}
+          {cycleCapacityInput && <RegulationCockpit input={cycleCapacityInput} period={Number(periodDays)} professionals={operationalProfessionals}
             queueAvailable={queueReadStatus === "available"} canSchedule={!!user && ["recepcao","master","gestao","coordenador"].includes(user.role) && hasPermission("agenda","can_view") && hasPermission("agenda","can_create")} />}
-          <details className="space-y-4"><summary className="cursor-pointer font-semibold">Simulação de ciclos e indicadores detalhados</summary>
+          <details className="space-y-4"><summary className="cursor-pointer font-semibold">Ver Detalhamento Técnico e Auditoria de Capacidade</summary>
           <div className="space-y-4 rounded-lg border border-border p-4" aria-label="Simulação de tratamento completo">
             <div><h3 className="font-semibold text-foreground">Verificar capacidade para tratamento completo</h3><p className="text-sm text-muted-foreground">Simula todas as sessões conforme frequência, dias escolhidos, turno, horários livres, bloqueios, agendamentos e sessões pendentes com data. A janela é calculada conforme o ciclo, com limite de 10 anos. Não reserva vagas nem cria agendamentos.</p></div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

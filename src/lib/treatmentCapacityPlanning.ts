@@ -997,7 +997,53 @@ export function planInitialEvaluations(input: CapacityPlanningInput, professiona
   const review = needsReview || conflict || undated > 0;
   const offers = conflict || undated > 0 ? [] : slots;
   const count = offers.reduce((sum, slot) => sum + slot.count, 0);
-  const occupied = appointments.filter(a => a.date >= input.today && a.date <= end).length;
+  const occupied = appointments.filter(a => a.date >= input.today && a.date <= end && a.origin !== "externo").length;
   const risk = !configured ? "Sem grade" : free === 0 && !needsReview ? "Esgotado" : review || count === 0 || projected >= free ? "Atenção" : "Capacidade segura";
   return { id, unitId, configured, occupied, pending: sessions.length, projected, free, count, offers, risk, review };
+}
+
+export interface WeeklySafeOfferRow {
+  professionalId: string;
+  unitId: string;
+  professionalName: string;
+  specialty: "Fisioterapia" | "Fonoaudiologia";
+  date: string;
+  shift: "Manhã" | "Tarde" | "Noite";
+  times: EvaluationSlot[];
+  vacancies: number;
+}
+
+/** Próxima semana útil, de segunda a sábado, sem ofertar sessões pendentes. */
+export function buildWeeklySafeOfferMap(input: CapacityPlanningInput, professionals: CapacityPlanningProfessionalInput[], nowMinute: number) {
+  const daysUntilMonday = (8 - isoDayOfWeek(input.today)) % 7;
+  const startDate = addDaysToDateStr(input.today, daysUntilMonday);
+  const endDate = addDaysToDateStr(startDate, 5);
+  if (input.endDate < endDate) return { startDate, endDate, complete: false, rows: [] as WeeklySafeOfferRow[] };
+
+  const rows: WeeklySafeOfferRow[] = [];
+  for (const professional of professionals) {
+    const specialty = classifyTreatmentCapacitySpecialty(professional.profession);
+    if (specialty !== "Fisioterapia" && specialty !== "Fonoaudiologia") continue;
+    const plan = planInitialEvaluations(input, professional, daysUntilMonday + 6, nowMinute);
+    const groups = new Map<string, WeeklySafeOfferRow>();
+    for (const slot of plan.offers) {
+      if (slot.date < startDate || slot.date > endDate) continue;
+      const minute = toMinutes(slot.time);
+      if (minute === null) continue;
+      const shift = shiftForMinute(minute);
+      const key = slot.date + "|" + shift;
+      const row = groups.get(key) || {
+        professionalId: professional.id, unitId: professional.unitId,
+        professionalName: professional.name, specialty, date: slot.date, shift,
+        times: [], vacancies: 0,
+      };
+      row.times.push(slot);
+      row.vacancies += slot.count;
+      groups.set(key, row);
+    }
+    rows.push(...groups.values());
+  }
+  rows.sort((a, b) => a.unitId.localeCompare(b.unitId) || a.specialty.localeCompare(b.specialty, "pt-BR") ||
+    a.professionalName.localeCompare(b.professionalName, "pt-BR") || a.date.localeCompare(b.date) || a.shift.localeCompare(b.shift));
+  return { startDate, endDate, complete: true, rows };
 }

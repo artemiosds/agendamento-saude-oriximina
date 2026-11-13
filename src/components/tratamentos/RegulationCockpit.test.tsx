@@ -24,7 +24,7 @@ describe("cockpit de regulação e navegação oficial", () => {
       <Route path="/painel/tratamentos" element={<RegulationCockpit input={input} period={7} professionals={[professional]} queueAvailable canSchedule/>}/>
       <Route path="/painel/agenda" element={<AgendaDestination/>}/>
     </Routes></MemoryRouter>);
-    expect(screen.getByText("Demanda apta na fila")).toBeTruthy();
+    expect(screen.getByText("Pacientes aptos na fila")).toBeTruthy();
     fireEvent.click(screen.getByRole("button",{name:"Localizar vagas e agendar"}));
     expect(JSON.parse(screen.getByTestId("scope").textContent || "{}")).toMatchObject({
       professionalId:"p1",unitId:"u1",specialty:"Fisioterapia",days:7,
