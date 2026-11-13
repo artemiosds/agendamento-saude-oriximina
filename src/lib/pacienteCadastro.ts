@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import type { PacienteFormData } from '@/components/CadastroPacienteForm';
 import { normalizePhone } from '@/lib/phoneUtils';
 import { normalizeSexo } from '@/lib/utils/sexo-normalization';
@@ -33,9 +34,8 @@ export function validatePacienteCadastro(form: PacienteFormData): Record<string,
     }
 
 
- const cpf=(form.cpf || '').replace(/\D/g,''); const cns=(form.cns || '').replace(/\D/g,'');
- if (cpf && cpf.length!==11) newErrors.cpf='CPF deve conter 11 dígitos';
- if (cns && cns.length!==15) newErrors.cns='CNS deve conter 15 dígitos';
+ const cpfError = patientCpfError(form.cpf, { semCpf: cd.semCpf === true });
+ if (cpfError) newErrors.cpf = cpfError;
  if ((cd.racaCor || cd.raca_cor)==='indigena' && !String(cd.etnia || cd.etniaOutra || '').trim()) newErrors.etnia='Informe a etnia do paciente indígena';
  return newErrors;
 }

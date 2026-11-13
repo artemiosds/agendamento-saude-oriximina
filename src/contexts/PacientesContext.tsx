@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, {
   createContext,
   useCallback,
@@ -278,6 +279,8 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
 
   const addPaciente = useCallback(
     async (p: Paciente) => {
+      const cpfError = patientCpfError(p.cpf);
+      if (cpfError) throw new Error(cpfError);
       const scopedUnidadeId = await resolveScopedUnidadeId();
       if (authUser?.role === "recepcao" && !scopedUnidadeId) {
         throw new Error(
@@ -291,7 +294,7 @@ export const PacientesSliceProvider: React.FC<{ children: React.ReactNode }> = (
       const { error } = await supabase.from("pacientes" as any).insert({
         id: p.id,
         nome: p.nome,
-        cpf: p.cpf,
+        cpf: p.cpf.replace(/\D/g, ""),
         cns: p.cns,
         nome_mae: p.nomeMae,
         telefone: p.telefone,

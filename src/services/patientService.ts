@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import type { PacienteFormData } from '@/components/CadastroPacienteForm';
 import { buildPacienteCadastroFields, validatePacienteCadastro } from '@/lib/pacienteCadastro';
 import { checkPatientDuplicity } from '@/lib/paciente-duplicity';
@@ -254,6 +255,8 @@ export const patientService = {
 
     const currentForm = this.mapPacienteDbToForm(current);
     const updatedForm = { ...currentForm, ...fields };
+    const cpfError = patientCpfError(updatedForm.cpf, { previousCpf: current.cpf ?? "" });
+    if (cpfError) throw new Error(cpfError);
     const updatePayload = this.mapPacienteFormToDb(updatedForm, current);
 
     const { data, error } = await supabase
@@ -300,6 +303,10 @@ export const patientService = {
     
     if (fetchError) throw fetchError;
     if (!current) throw new Error('Paciente não encontrado. Atualize a página e tente novamente.');
+    if (formData.cpf !== undefined) {
+      const cpfError = patientCpfError(formData.cpf, { previousCpf: current.cpf ?? "" });
+      if (cpfError) throw new Error(cpfError);
+    }
     const updatePayload = this.mapPacienteFormToDb(formData, current);
     
     const { data, error } = await supabase

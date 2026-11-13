@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useEffect } from "react";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Button } from "@/components/ui/button";
@@ -67,11 +68,6 @@ const calcularIdade = (dataNasc: string): string => {
 };
 
 // Validators
-const validateCPF = (cpf: string): boolean => {
-  if (!cpf) return true; // optional
-  const clean = cpf.replace(/\D/g, "");
-  return clean.length === 11;
-};
 const validateCNS = (cns: string): boolean => {
   if (!cns) return true;
   const clean = cns.replace(/\D/g, "");
@@ -195,7 +191,8 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
   const handleSave = async () => {
     const newErrors: Record<string, string> = {};
     if (!editData.nome.trim()) newErrors.nome = "Nome é obrigatório";
-    if (!validateCPF(editData.cpf)) newErrors.cpf = "CPF inválido (11 dígitos)";
+    const cpfError = patientCpfError(editData.cpf, { previousCpf: paciente?.cpf ?? "" });
+    if (cpfError) newErrors.cpf = cpfError;
     if (!validateCNS(editData.cns)) newErrors.cns = "CNS inválido (15 dígitos)";
     if (!validateEmail(editData.email)) newErrors.email = "E-mail inválido";
     if (!validatePhone(editData.telefone)) newErrors.telefone = "Telefone inválido";

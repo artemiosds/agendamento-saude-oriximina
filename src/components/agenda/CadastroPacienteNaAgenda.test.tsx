@@ -5,7 +5,7 @@ vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'staff',role:'rece
 vi.mock('@/services/patientService',()=>({patientService:{createPaciente:m.create}}));
 vi.mock('@/components/CadastroPacienteForm',()=>({emptyPacienteForm:{nome:'',cpf:'',cns:'',customData:{}},default:({form,onChange,onSave,saving}:any)=><div>
  <input aria-label="Nome" value={form.nome} onChange={e=>onChange({...form,nome:e.target.value})}/><output>{form.cpf}</output>
- <button onClick={()=>onChange({...form,nomeMae:'MAE',dataNascimento:'2000-01-01',cns:'700000000000001',telefone:'93999990000',naturalidade:'ORIXIMINA',municipio:'ORIXIMINA',sexo:'F',customData:{cep:'68270000',tipoLogradouro:'RUA',logradouro:'TESTE',bairro:'CENTRO',uf:'PA',nacionalidade:'brasileiro',racaCor:'parda'}})}>Preencher</button>
+ <button onClick={()=>onChange({...form,cpf:'52998224725',nomeMae:'MAE',dataNascimento:'2000-01-01',cns:'700000000000001',telefone:'93999990000',naturalidade:'ORIXIMINA',municipio:'ORIXIMINA',sexo:'F',customData:{cep:'68270000',tipoLogradouro:'RUA',logradouro:'TESTE',bairro:'CENTRO',uf:'PA',nacionalidade:'brasileiro',racaCor:'parda'}})}>Preencher</button>
  <button disabled={saving} onClick={onSave}>Salvar paciente</button></div>}));
 import CadastroPacienteNaAgenda from './CadastroPacienteNaAgenda';
 const callbacks={onSaved:vi.fn(),onCancel:vi.fn(),onBusyChange:vi.fn()};

@@ -1,3 +1,4 @@
+import { normalizePatientCpf, patientCpfError } from "../_shared/patient-cpf.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -116,10 +117,14 @@ serve(async (req) => {
       if (!patient.id || !patient.nome) {
         return new Response(JSON.stringify({ error: "id and nome are required" }), { status: 400, headers: corsHeaders });
       }
+      const cpfError = patientCpfError(patient.cpf);
+      if (cpfError) {
+        return new Response(JSON.stringify({ error: cpfError }), { status: 400, headers: corsHeaders });
+      }
       const payload: Record<string, unknown> = {
         id: patient.id,
         nome: patient.nome,
-        cpf: patient.cpf || "",
+        cpf: normalizePatientCpf(patient.cpf),
         cns: patient.cns || "",
         telefone: patient.telefone || "",
         data_nascimento: patient.data_nascimento || null,
@@ -155,7 +160,7 @@ serve(async (req) => {
       }
       const authUserId = userData.user.id;
       const body = await req.json();
-      const { data: pac } = await supabase.from("pacientes").select("id, custom_data").eq("auth_user_id", authUserId).maybeSingle();
+      const { data: pac } = await supabase.from("pacientes").select("id, cpf, custom_data").eq("auth_user_id", authUserId).maybeSingle();
       if (!pac) {
         return new Response(JSON.stringify({ error: "Paciente não vinculado a esta conta." }), { status: 403, headers: corsHeaders });
       }
@@ -168,6 +173,14 @@ serve(async (req) => {
       const updates: Record<string, unknown> = {};
       for (const k of allowed) {
         if (body[k] !== undefined) updates[k] = body[k];
+      }
+      if (body.cpf !== undefined) {
+        const cpfError = patientCpfError(body.cpf, { previousCpf: pac.cpf ?? "" });
+        if (cpfError) {
+          return new Response(JSON.stringify({ error: cpfError }), { status: 400, headers: corsHeaders });
+        }
+        if (normalizePatientCpf(body.cpf) === normalizePatientCpf(pac.cpf)) delete updates.cpf;
+        else updates.cpf = normalizePatientCpf(body.cpf);
       }
       // Merge custom_data em vez de sobrescrever tudo
       if (body.custom_data && typeof body.custom_data === "object") {

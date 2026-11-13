@@ -184,6 +184,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
     onChange(next);
   };
   const cd = form.customData || {};
+  const cpfRequired = !isEdit && cd.semCpf !== true;
 
   // Nacionalidade não tem default: usuário deve selecionar explicitamente (validação obrigatória)
 
@@ -421,10 +422,13 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 </div>
               )}
 
-              {!H("cpf") && (
+              {(!isEdit || !H("cpf")) && (
                 <div>
-                  <Label>{L("cpf", "CPF")}</Label>
+                  <Label htmlFor="paciente-cpf">{L("cpf", "CPF")}{cpfRequired ? " *" : ""}</Label>
                   <Input
+                    id="paciente-cpf"
+                    aria-required={cpfRequired}
+                    aria-invalid={!!errors.cpf}
                     value={form.cpf}
                     onChange={(e) => set("cpf", maskCPF(e.target.value))}
                     placeholder="000.000.000-00"
@@ -488,7 +492,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Esse dado é usado na exportação BPA-I. A ausência de CPF, sozinha, não é considerada confirmação.
+                  Selecione Sim apenas se a pessoa realmente não possui CPF ou registro civil. Essa informação também é usada na exportação BPA-I.
                 </p>
               </div>
             </div>

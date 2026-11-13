@@ -5,7 +5,7 @@ vi.mock('@/lib/paciente-duplicity',()=>({checkPatientDuplicity:mocks.dup}));
 vi.mock('./auditService',()=>({auditService:{auditCreate:mocks.audit}}));
 import { patientService } from './patientService';
 const actor={id:'staff',nome:'RECEPÇÃO',usuario:'recep',role:'recepcao',unidadeId:'u'};
-export const valid:any={nome:'PACIENTE TESTE',nomeMae:'MAE TESTE',dataNascimento:'2000-01-01',cns:'700000000000001',cpf:'',telefone:'93999990000',naturalidade:'ORIXIMINA',municipio:'ORIXIMINA',sexo:'F',customData:{cep:'68270000',tipoLogradouro:'RUA',logradouro:'TESTE',bairro:'CENTRO',uf:'PA',nacionalidade:'brasileiro',racaCor:'parda'}};
+export const valid:any={nome:'PACIENTE TESTE',nomeMae:'MAE TESTE',dataNascimento:'2000-01-01',cns:'700000000000001',cpf:'52998224725',telefone:'93999990000',naturalidade:'ORIXIMINA',municipio:'ORIXIMINA',sexo:'F',customData:{cep:'68270000',tipoLogradouro:'RUA',logradouro:'TESTE',bairro:'CENTRO',uf:'PA',nacionalidade:'brasileiro',racaCor:'parda'}};
 beforeEach(()=>{vi.clearAllMocks();mocks.dup.mockResolvedValue({isDuplicate:false});mocks.audit.mockResolvedValue(undefined);
  mocks.insert.mockReturnValue({select:()=>({single:async()=>({data:{id:'request',nome:'PACIENTE TESTE',unidade_id:'u'},error:null})})});
  mocks.from.mockReturnValue({select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:null})})}),insert:mocks.insert});});
@@ -20,4 +20,17 @@ it('does not insert incomplete or out-of-unit registrations',async()=>{await exp
 it('recovers an already saved request after an uncertain response without a second insert',async()=>{
  mocks.from.mockReturnValue({select:()=>({eq:()=>({maybeSingle:async()=>({data:{id:'request',unidade_id:'u',custom_data:{cadastro_request_id:'request',criado_por:'staff'}},error:null})})}),insert:mocks.insert});
  expect((await patientService.createPaciente(valid,actor,'u','request')).id).toBe('request');expect(mocks.insert).not.toHaveBeenCalled();
+});
+
+it('requires a valid CPF before any insert unless absence is explicitly declared', async () => {
+  for (const cpf of ['', '11111111111', '52998224726']) {
+    await expect(patientService.createPaciente({ ...valid, cpf }, actor, 'u', 'request')).rejects.toThrow('CPF do paciente');
+  }
+  expect(mocks.insert).not.toHaveBeenCalled();
+  await expect(patientService.createPaciente({
+    ...valid, cpf: '', customData: { ...valid.customData, semCpf: true },
+  }, actor, 'u', 'request')).resolves.toMatchObject({ id: 'request' });
+  expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({
+    cpf: '', custom_data: expect.objectContaining({ semCpf: true }),
+  }));
 });

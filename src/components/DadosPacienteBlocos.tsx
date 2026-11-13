@@ -91,13 +91,14 @@ export const emptyDadosPaciente = (): DadosPacienteValue => ({
 });
 
 interface Props {
+  cpfRequired?: boolean;
   value: DadosPacienteValue;
   onChange: (patch: Partial<DadosPacienteValue>) => void;
   errors?: Record<string, string>;
   emailDisabled?: boolean;
 }
 
-const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, emailDisabled }) => {
+const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, emailDisabled, cpfRequired = false }) => {
   const endereco = useEnderecoPaciente({
     cep: value.cep, municipio: value.endereco_municipio, uf: value.endereco_uf,
     ibge_municipio: value.ibge_municipio || "", logradouro: value.logradouro, bairro: value.bairro,
@@ -141,8 +142,9 @@ const DadosPacienteBlocos: React.FC<Props> = ({ value, onChange, errors = {}, em
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>CPF</Label>
-              <Input value={value.cpf} onChange={(e) => onChange({ cpf: maskCPF(e.target.value) })} placeholder="000.000.000-00" />
+              <Label htmlFor="dados-paciente-cpf">CPF{cpfRequired ? " *" : ""}</Label>
+              <Input id="dados-paciente-cpf" inputMode="numeric" aria-required={cpfRequired} aria-invalid={!!errors.cpf} value={value.cpf} onChange={(e) => onChange({ cpf: maskCPF(e.target.value) })} placeholder="000.000.000-00" />
+              {errors.cpf && <p role="alert" className="text-xs text-destructive mt-1">{errors.cpf}</p>}
             </div>
             <div>
               <Label>Cartão SUS (CNS)</Label>

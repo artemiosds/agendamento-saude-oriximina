@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 
 import { usePacientes } from "@/contexts/PacientesContext";
@@ -663,6 +664,8 @@ const FilaEspera: React.FC = () => {
   const handleCriarPacienteEAdicionarFila = async () => {
     const newErrors: Record<string, string> = {};
     if (!novoPaciente.nome?.trim()) newErrors.nome = "Nome é obrigatório";
+    const cpfError = patientCpfError(novoPaciente.cpf);
+    if (cpfError) newErrors.cpf = cpfError;
     if (!novoPaciente.nomeMae?.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
     if (!novoPaciente.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
     // CNS opcional; se preenchido, exige 15 dígitos.
@@ -878,6 +881,12 @@ const FilaEspera: React.FC = () => {
         telefone = existingPatient.telefone;
         email = existingPatient.email;
       } else {
+        const cpfError = patientCpfError(importForm.cpf);
+        if (cpfError) {
+          setImportErrors({ cpf: cpfError });
+          toast.error(cpfError);
+          return;
+        }
         const duplicity = await checkImportDuplicidade(importForm);
         if (duplicity.isDuplicate && !importDup) {
           setImportDup({
@@ -1725,12 +1734,16 @@ const FilaEspera: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>CPF</Label>
+                    <Label htmlFor="fila-cpf">CPF *</Label>
                     <DebouncedInput
+                      id="fila-cpf"
+                      aria-required
+                      aria-invalid={!!pacienteErrors.cpf}
                       value={novoPaciente.cpf}
                       onChange={(e) => setNovoPaciente((p) => ({ ...p, cpf: e.target.value }))}
                       placeholder="000.000.000-00"
                     />
+                    {pacienteErrors.cpf && <p role="alert" className="text-xs text-destructive mt-1">{pacienteErrors.cpf}</p>}
                   </div>
                   <div>
                     <Label>Cartão SUS / CNS</Label>
@@ -2023,12 +2036,15 @@ const FilaEspera: React.FC = () => {
                 {importErrors.telefone && <p className="text-xs text-destructive mt-1">{importErrors.telefone}</p>}
               </div>
               <div>
-                <Label>CPF (opcional)</Label>
+                <Label htmlFor="demanda-cpf">CPF *</Label>
                 <DebouncedInput
+                  id="demanda-cpf"
+                  aria-invalid={!!importErrors.cpf}
                   value={importForm.cpf}
                   onChange={(e) => setImportForm((p) => ({ ...p, cpf: e.target.value }))}
                   placeholder="000.000.000-00"
                 />
+                {importErrors.cpf && <p role="alert" className="text-xs text-destructive mt-1">{importErrors.cpf}</p>}
               </div>
               <div>
                 <Label>CNS / Cartão SUS</Label>

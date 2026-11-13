@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -309,6 +310,12 @@ const AgendarOnline: React.FC = () => {
   }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
   const validateStep2 = (): boolean => {
+    const cpfError = patientCpfError(dados.cpf);
+    if (cpfError) {
+      setErrors({ cpf: cpfError });
+      toast.error(cpfError);
+      return false;
+    }
     const err = validatePacienteFields({ nome: dados.nome, telefone: dados.telefone, email: dados.email });
     if (err) {
       const newErrors: Record<string, string> = {};
@@ -340,6 +347,7 @@ const AgendarOnline: React.FC = () => {
   const handleNext2 = () => { if (validateStep2()) setStep(3); };
 
   const handleSubmit = async () => {
+    if (!validateStep2()) { setStep(2); return; }
     if (!dados.nome || !dados.telefone || !dados.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
@@ -381,7 +389,10 @@ const AgendarOnline: React.FC = () => {
           { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
             body: JSON.stringify({ id: pacienteId, ...serialized, observacoes: dados.observacoes || form.obs }) }
         );
-        if (!createRes.ok) throw new Error('Failed to create patient');
+        if (!createRes.ok) {
+          const result = await createRes.json().catch(() => ({}));
+          throw new Error(result.error || 'Não foi possível cadastrar o paciente.');
+        }
       }
 
       try {
@@ -575,7 +586,7 @@ const AgendarOnline: React.FC = () => {
                   Preencha os blocos abaixo. Os campos marcados com * são obrigatórios. Você poderá completar/editar tudo depois no Portal do Paciente.
                 </p>
 
-                <DadosPacienteBlocos value={dados} onChange={updateDados} errors={errors} />
+                <DadosPacienteBlocos value={dados} onChange={updateDados} errors={errors} cpfRequired />
 
                 <div className="border-t pt-4 mt-2">
                   <p className="text-sm font-medium text-foreground mb-3">Criar acesso ao Portal do Paciente</p>

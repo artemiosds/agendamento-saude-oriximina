@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -179,6 +180,8 @@ const PortalPaciente: React.FC = () => {
   const handleSalvarDados = async () => {
     if (!perms.editarDados) { toast.error('Edição de dados desativada pela unidade.'); return; }
     if (!dados.nome || !dados.telefone) { toast.error('Nome e telefone são obrigatórios.'); return; }
+    const cpfError = patientCpfError(dados.cpf, { previousCpf: paciente?.cpf ?? "" });
+    if (cpfError) { toast.error(cpfError); return; }
     setSavingDados(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();

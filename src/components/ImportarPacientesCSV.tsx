@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -28,23 +29,6 @@ interface ParsedRow {
   data_nascimento: string;
   email: string;
   endereco: string;
-}
-
-// CPF validation
-function isValidCPF(cpf: string): boolean {
-  const cleaned = cpf.replace(/\D/g, '');
-  if (cleaned.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(cleaned)) return false;
-  let sum = 0;
-  for (let i = 0; i < 9; i++) sum += parseInt(cleaned[i]) * (10 - i);
-  let rest = (sum * 10) % 11;
-  if (rest === 10) rest = 0;
-  if (rest !== parseInt(cleaned[9])) return false;
-  sum = 0;
-  for (let i = 0; i < 10; i++) sum += parseInt(cleaned[i]) * (11 - i);
-  rest = (sum * 10) % 11;
-  if (rest === 10) rest = 0;
-  return rest === parseInt(cleaned[10]);
 }
 
 function cleanPhone(phone: string): string {
@@ -124,7 +108,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
   };
 
   const downloadTemplate = () => {
-    const content = `nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco\nMaria da Silva Santos,123.456.789-00,898000000000006,Ana Maria Santos,(93) 99999-0001,15/03/1985,maria@email.com,Rua das Flores 123\nJoão Pedro Oliveira,,,Francisca Oliveira,(93) 99999-0002,,,\nFrancisca Costa,987.654.321-00,898000000000007,Joana Costa,(93) 99999-0003,22/07/1990,,`;
+    const content = `nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco\n`;
     const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -144,7 +128,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const text = e.target?.result as string;
       const { headers, rows } = parseCSV(text);
 
-      const requiredHeaders = ['nome', 'telefone', 'endereco'];
+      const requiredHeaders = ['nome', 'cpf', 'telefone', 'endereco'];
       const missing = requiredHeaders.filter(h => !headers.includes(h));
       if (missing.length > 0) {
         toast.error(`Cabeçalho inválido. Colunas obrigatórias ausentes: ${missing.join(', ')}`);
@@ -236,9 +220,9 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         continue;
       }
 
-      // Optional CPF validation
-      if (cpfClean && !isValidCPF(cpfClean)) {
-        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'CPF inválido' });
+      const cpfError = patientCpfError(row.cpf);
+      if (cpfError) {
+        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: cpfError });
         state.errors++;
         setProgress({ ...state });
         continue;
@@ -377,6 +361,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
             <Button variant="outline" onClick={downloadTemplate} className="w-full">
               <FileText className="w-4 h-4 mr-2" /> Baixar modelo CSV
             </Button>
+            <p className="text-sm text-muted-foreground">Informe um CPF válido por linha. Mantenha a coluna CPF como texto para preservar zeros à esquerda.</p>
 
             <div
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'}`}

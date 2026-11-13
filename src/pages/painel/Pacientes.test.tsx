@@ -49,6 +49,7 @@ vi.mock("@/components/CadastroPacienteForm", async importOriginal => {
       cns: fixture.patient.cns, telefone: fixture.patient.telefone, dataNascimento: fixture.patient.dataNascimento,
       naturalidade: fixture.patient.naturalidade, municipio: fixture.patient.municipio, sexo: fixture.patient.sexo,
       customData: { ...fixture.patient.custom_data }, especialidadeDestino: "FONOAUDIOLOGIA", cid: "CID NOVO" })}>Preencher teste</button>
+    <input aria-label="CPF teste" value={form.cpf} onChange={e => onChange({ ...form, cpf: e.target.value })} />
     <button onClick={onSave}>Salvar teste</button><output data-testid="errors">{JSON.stringify(errors)}</output>
   </> };
 });
@@ -92,9 +93,13 @@ describe("gravação real do handler de Pacientes com consultas simuladas", () =
     fireEvent.click(screen.getByRole("button", { name: "Novo Paciente" }));
     fireEvent.click(screen.getByRole("button", { name: "Preencher teste" }));
     fireEvent.click(screen.getByRole("button", { name: "Salvar teste" }));
+    await waitFor(() => expect(screen.getByTestId("errors")).toHaveTextContent("CPF do paciente é obrigatório"));
+    expect(fixture.insert).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("CPF teste"), { target: { value: "529.982.247-25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar teste" }));
     await waitFor(() => expect(fixture.insert).toHaveBeenCalledTimes(1));
     expect(fixture.insert.mock.calls[0][0]).toMatchObject({
-      especialidade_destino: "FONOAUDIOLOGIA", cid: "CID NOVO", unidade_id: "u1",
+      especialidade_destino: "FONOAUDIOLOGIA", cid: "CID NOVO", unidade_id: "u1", cpf: "52998224725",
       custom_data: { cep: "68270-000", campo_extra: true, numero: "S/N" },
     });
     expect(fixture.update).not.toHaveBeenCalled();

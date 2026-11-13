@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useNavigate } from "react-router-dom";
@@ -265,6 +266,8 @@ const AgendamentoExterno: React.FC = () => {
 
   const handleSavePatient = async () => {
     if (!patientForm.nome.trim()) { toast.error("Nome é obrigatório."); return; }
+    const cpfError = patientCpfError(patientForm.cpf, { previousCpf: isEditingPatient && selectedPatient ? selectedPatient.cpf ?? "" : undefined });
+    if (cpfError) { toast.error(cpfError); return; }
     setSavingPatient(true);
     try {
       if (isEditingPatient && selectedPatient) {
@@ -281,7 +284,7 @@ const AgendamentoExterno: React.FC = () => {
         toast.success("Dados cadastrais atualizados!");
       } else {
         const { data, error } = await supabase.rpc("external_create_patient" as any, {
-          p_unidade_id: selectedUnidade, p_nome: patientForm.nome, p_cpf: patientForm.cpf,
+          p_unidade_id: selectedUnidade, p_nome: patientForm.nome, p_cpf: patientForm.cpf.replace(/\D/g, ""),
           p_cns: patientForm.cns, p_data_nascimento: patientForm.data_nascimento,
           p_telefone: patientForm.telefone, p_email: patientForm.email,
           p_endereco: patientForm.endereco, p_nome_mae: patientForm.nome_mae,
@@ -788,7 +791,7 @@ const AgendamentoExterno: React.FC = () => {
           <div className="space-y-3">
             <div><Label>Nome Completo *</Label><Input value={patientForm.nome} onChange={e => setPatientForm(p => ({ ...p, nome: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>CPF</Label><Input value={patientForm.cpf} onChange={e => setPatientForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
+              <div><Label htmlFor="externo-cpf">CPF{isEditingPatient ? "" : " *"}</Label><Input id="externo-cpf" aria-required={!isEditingPatient} inputMode="numeric" value={patientForm.cpf} onChange={e => setPatientForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
               <div><Label>CNS</Label><Input value={patientForm.cns} onChange={e => setPatientForm(p => ({ ...p, cns: maskCNS(e.target.value) }))} placeholder="000 0000 0000 0000" maxLength={18} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">

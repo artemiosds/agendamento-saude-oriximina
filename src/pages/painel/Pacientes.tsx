@@ -1,3 +1,4 @@
+import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState, ErrorState } from "@/components/EmptyState";
@@ -176,6 +177,7 @@ const Pacientes: React.FC = () => {
       cnesUnidade: u?.cnes || u?.cnes_codigo || "",
     });
   };
+  const originalCpf = useRef("");
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<PacienteFormData>(emptyPacienteForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -382,6 +384,7 @@ const Pacientes: React.FC = () => {
   };
 
   const openEdit = (p: (typeof pacientes)[0]) => {
+    originalCpf.current = p.cpf || "";
     setEditId(p.id);
     const mappedSexo = normalizeSexo((p as any).sexo || (p as any).custom_data?.sexo);
     setForm({
@@ -462,6 +465,8 @@ const Pacientes: React.FC = () => {
     const cd: any = form.customData || {};
 
     if (!form.nome?.trim()) newErrors.nome = "Nome completo é obrigatório";
+    const cpfError = patientCpfError(form.cpf, { semCpf: cd.semCpf === true, previousCpf: editId ? originalCpf.current : undefined });
+    if (cpfError) newErrors.cpf = cpfError;
     if (!form.nomeMae?.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
     if (!form.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
     // CNS opcional; se preenchido, exige 15 dígitos.
