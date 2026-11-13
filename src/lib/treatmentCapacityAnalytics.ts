@@ -40,6 +40,7 @@ export interface CapacityBlockInput {
 }
 
 export interface PendingTreatmentSessionInput {
+  cycleStatus?: string;
   professionalId: string;
   unitId: string;
   status: string;
@@ -48,6 +49,10 @@ export interface PendingTreatmentSessionInput {
 }
 
 export interface QueueDemandInput {
+  patientId?: string;
+  patientName?: string;
+  linkedToAppointment?: boolean;
+  inTreatment?: boolean;
   id: string;
   unitId: string;
   professionalId?: string | null;
@@ -66,7 +71,7 @@ export function isTreatmentSchedulingDemand(row: QueueDemandInput): boolean {
   if (row.status === "aguardando_agendamento_interno") {
     return target && row.origin === "encaminhamento_interno";
   }
-  if (row.status !== "apto_atendimento") return false;
+  if (row.status !== "apto_atendimento" && row.status !== "apto_agendamento") return false;
   if (target) return true;
   // Preserve the existing read-only coverage of other professions.
   const sector = classifyTreatmentCapacitySpecialty(row.sector || "");
@@ -407,4 +412,28 @@ export function buildTreatmentCapacitySnapshot(input: {
     periodDays: periodDates.length,
     queueRowsOutsideTargetSpecialties: input.queueDemand.length - targetQueueRows.length,
   };
+}
+
+/** Backlog regulado. Uma chegada da Agenda também pode ter status apto. */
+export function eligibleEvaluationRequests(rows: QueueDemandInput[], prof: CapacityProfessionalInput, today: string) {
+  const specialty = classifyTreatmentCapacitySpecialty(prof.profession);
+  const normalizeCbo = (raw?: string | null) => {
+    const value = raw?.trim().replace(/[.\s-]/g, "") || "";
+    return /^\d{6}$/.test(value) ? value : null;
+  };
+  const cbo = normalizeCbo(prof.cboCode);
+  const validDate = (value?: string | null) => {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value > today) return "";
+    const time = Date.parse(value + "T12:00:00Z");
+    return Number.isFinite(time) && new Date(time).toISOString().startsWith(value) ? value : "";
+  };
+  if (!cbo || !["Fisioterapia", "Fonoaudiologia"].includes(specialty || "")) return [];
+  const sorted = rows.filter(row => row.patientId && ["apto_atendimento", "apto_agendamento"].includes(row.status || "") &&
+    row.linkedToAppointment === false && row.inTreatment === false && row.unitId === prof.unitId &&
+    (!row.professionalId || row.professionalId === prof.id) &&
+    classifyTreatmentCapacitySpecialty(row.destinationProfession || "") === specialty && normalizeCbo(row.cboCode) === cbo)
+    .map(row => ({ ...row, requestDate: validDate(row.requestDate) }))
+    .sort((a,b) => (a.requestDate || "9999").localeCompare(b.requestDate || "9999") || a.id.localeCompare(b.id));
+  const seen = new Set<string>();
+  return sorted.filter(row => { if (seen.has(row.patientId!)) return false; seen.add(row.patientId!); return true; });
 }

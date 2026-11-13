@@ -1,7 +1,7 @@
 import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import { classifyTreatmentCapacitySpecialty, type TreatmentCapacitySpecialty, type CapacityProfessionalInput, type CapacityAvailabilityInput, type CapacityAppointmentInput, type CapacityBlockInput, type PendingTreatmentSessionInput, type QueueDemandInput } from "@/lib/treatmentCapacityAnalytics";
-import { calculateExternalCapacity, classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable, quotaMatchesAvailability, type ExternalQuotaWindow } from "@/lib/externalQuota";
-import { isoDayOfWeek } from "@/lib/utils";
+import { calculateExternalCapacity, classifyExternalQuotaForAvailabilities, isQuotaConfigurationUsable, quotaMatchesAvailability, quotaAllowsSlot, type ExternalQuotaWindow } from "@/lib/externalQuota";
+import { addDaysToDateStr, isoDayOfWeek } from "@/lib/utils";
 import { buildBlockedRanges, generateSessionDatesWithInfo, getMaxWeekdays, isWeekdayFrequency } from "@/lib/treatmentSessionGenerator";
 
 export const MAX_TREATMENT_CYCLE_FORECAST_DAYS = 3650;
@@ -244,7 +244,14 @@ function scheduleKey(row: CapacityPlanningAvailabilityInput): string {
   return row.startTime.slice(0, 5) + "|" + row.endTime.slice(0, 5);
 }
 
-function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanningProfessionalInput, date: string) {
+interface RegulationSlots {
+  afterMinute: number;
+  choices: Set<string>;
+  capacity: Map<string, number>;
+  quotaReview: boolean;
+}
+
+function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanningProfessionalInput, date: string, regulation?: RegulationSlots) {
   const activeRows = input.availabilities.filter((row) =>
     row.professionalId === professional.id &&
     row.unitId === professional.unitId &&
@@ -324,6 +331,19 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
     statusOcupaVaga(appointment.status),
   );
 
+  const allowed = (minute: number, duration: number) => {
+    if (!regulation) return true;
+    if (minute <= regulation.afterMinute) return false;
+    const time = toTime(minute);
+    const touchesBlock = dateBlocks.some(b => minute < (toMinutes(b.endTime) ?? 1440) && minute + duration > (toMinutes(b.startTime) ?? 0));
+    if (touchesBlock) return false;
+    const uncertainQuota = input.externalQuotas.some(q => q.ativo && q.profissional_interno_id === professional.id
+      && q.unidade_id === professional.unitId && q.periodo_inicio < q.periodo_fim && q.periodo_inicio <= date && q.periodo_fim >= date
+      && (!isQuotaConfigurationUsable(q) || quotaAllowsSlot(q, professional.unitId, date, time)));
+    if (uncertainQuota) regulation.quotaReview = true;
+    return !uncertainQuota;
+  };
+
   let totalFree = 0;
   let totalOpenWindows = 0;
   let totalReserved = 0;
@@ -387,7 +407,11 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
         const hour = Math.floor(minute / 60);
         const hourCount = hourCounts.get(hour) || 0;
         const slotCount = slotCounts.get(minute) || 0;
-        if (isSlotBlockedAt(dateBlocks, minute)) continue;
+        if (isSlotBlockedAt(dateBlocks, minute) || !allowed(minute, duration)) continue;
+        if (regulation && (minute + duration > end || dayAppointments.some(a => {
+          const taken = toMinutes(a.time);
+          return taken !== null && minute < taken + duration && taken < minute + duration;
+        }))) continue;
         if (hourCount >= row.vacanciesPerHour || slotCount >= row.vacanciesPerHour) continue;
         availableStarts.push(minute);
         availableStartsByHour.set(hour, (availableStartsByHour.get(hour) || 0) + 1);
@@ -396,6 +420,19 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
         }
       }
 
+      if (regulation) {
+        const remaining = new Map(availableByHour);
+        let budget = Math.min(capacity.vagasInternasLivres, capacity.vagasTotaisLivres);
+        for (const minute of availableStarts) {
+          const hour = Math.floor(minute / 60);
+          const time = toTime(minute);
+          if (capacity.vagasTotaisLivres > 0) regulation.choices.add(time);
+          if (budget <= 0 || !remaining.get(hour)) continue;
+          regulation.capacity.set(time, 1);
+          remaining.set(hour, remaining.get(hour)! - 1);
+          budget--;
+        }
+      }
       const hourlyCapacityRemaining = [...availableByHour.entries()].reduce((sum, [hour, remaining]) =>
         sum + Math.min(remaining, availableStartsByHour.get(hour) || 0), 0,
       );
@@ -428,6 +465,14 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
       }
     } else {
       if (inTurn.length >= row.vacanciesPerDay || isSlotBlockedAt(dateBlocks, start)) continue;
+      if (!allowed(start, 1)) continue;
+      if (regulation) {
+        const free = Math.min(capacity.vagasInternasLivres, capacity.vagasTotaisLivres);
+        if (free > 0) {
+          regulation.choices.add(toTime(start));
+          regulation.capacity.set(toTime(start), free);
+        }
+      }
       totalFree += capacity.vagasInternasLivres;
       totalOpenWindows += 1;
       windows.push({
@@ -892,4 +937,66 @@ export function buildTreatmentCycleFeasibility(
         : "Não há datas/turnos suficientes para acomodar todas as " + input.totalSessions + " sessões até " + input.endDate.split("-").reverse().join("/") + ". " + message,
     };
   }
+}
+
+export interface EvaluationSlot {
+  date: string;
+  time: string;
+  count: number;
+  singleVisit: boolean;
+}
+
+export function planInitialEvaluations(input: CapacityPlanningInput, professional: CapacityPlanningProfessionalInput, horizon: number, nowMinute: number) {
+  const { id, unitId } = professional;
+  const end = addDaysToDateStr(input.today, horizon - 1);
+  const schedule = input.availabilities.filter(a => a.professionalId === id && a.unitId === unitId);
+  const appointments = input.appointments.filter(a => a.professionalId === id && a.unitId === unitId && statusOcupaVaga(a.status));
+  const scoped = { ...input, availabilities: schedule, appointments,
+    externalQuotas: input.externalQuotas.filter(q => q.profissional_interno_id === id && q.unidade_id === unitId),
+    blocks: input.blocks.filter(b => (!b.unitId || b.unitId === unitId) && (!b.professionalId || b.professionalId === id)),
+  };
+  const sessions = input.pendingSessions.filter(s => s.professionalId === id && s.unitId === unitId &&
+    s.cycleStatus === "em_andamento" && s.status === "pendente_agendamento" && !s.appointmentId);
+  const dated = new Map<string, number>();
+  let undated = 0;
+  for (const s of sessions) {
+    if (!s.scheduledDate || s.scheduledDate < input.today) undated++;
+    else dated.set(s.scheduledDate, (dated.get(s.scheduledDate) || 0) + 1);
+  }
+  const dates = new Map<string, { available: Set<string>; certain: boolean }>();
+  const slots: EvaluationSlot[] = [];
+  let configured = 0, free = 0, projected = undated, needsReview = false, conflict = false;
+  for (let offset = 0; offset < horizon + 21; offset++) {
+    const date = addDaysToDateStr(input.today, offset);
+    if (date > input.endDate) break;
+    const options: RegulationSlots = { afterMinute: offset === 0 ? nowMinute : -1, choices: new Set(), capacity: new Map(), quotaReview: false };
+    const day = getDailyPlan(scoped, professional, date, options);
+    const grade = schedule.filter(a => date >= a.startDate && date <= a.endDate && a.weekdays.includes(isoDayOfWeek(date)));
+    const pending = dated.get(date) || 0;
+    dates.set(date, { available: options.choices, certain: !!grade.length && !day.review && !options.quotaReview });
+    if (offset >= horizon) continue;
+    configured += grade.reduce((n, a) => n + a.vacanciesPerDay, 0);
+    projected += pending;
+    const remaining = day.review ? 0 : [...options.capacity.values()].reduce((a, b) => a + b, 0);
+    free += remaining;
+    needsReview ||= day.review || options.quotaReview;
+    conflict ||= pending > remaining;
+    // Uma sessão pendente tem data, mas não tem hora confirmada. Não oferecer
+    // o dia inteiro como se soubéssemos qual dos horários poderá ser usado.
+    if (!day.review && !pending) for (const [time, count] of options.capacity) {
+      slots.push({ date, time, count, singleVisit: false });
+    }
+  }
+  for (const slot of slots) {
+    slot.singleVisit = [7, 14, 21].every(offset => {
+      const next = dates.get(addDaysToDateStr(slot.date, offset));
+      return next?.certain && !next.available.has(slot.time);
+    });
+  }
+  const review = needsReview || conflict || undated > 0;
+  const offers = conflict || undated > 0 ? [] : slots;
+  const count = offers.reduce((sum, slot) => sum + slot.count, 0);
+  const occupied = appointments.filter(a => a.date >= input.today && a.date <= end).length;
+  const risk = !configured ? "Sem grade" : free === 0 && !needsReview ? "Esgotado" : review || count === 0 || projected >= free ? "Atenção" : "Capacidade segura";
+  return { id, unitId, configured, occupied, pending: sessions.length, projected, free, count, offers, risk, review };
 }

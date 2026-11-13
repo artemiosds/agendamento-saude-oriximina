@@ -4,6 +4,7 @@ import {
   classifyTreatmentCapacitySpecialty,
   extractExplicitCboCode,
   isTreatmentSchedulingDemand,
+  eligibleEvaluationRequests,
 } from "./treatmentCapacityAnalytics";
 
 describe("tratamento: capacidade e demanda — leitura gerencial", () => {
@@ -86,11 +87,27 @@ describe("tratamento: capacidade e demanda — leitura gerencial", () => {
   it("isola demanda Fisio/Fono por destino explícito e origem sem chamar Triagem", () => {
     const row = { id: "1", unitId: "u1", destinationProfession: "Fonoaudiologia" };
     expect(isTreatmentSchedulingDemand({ ...row, status: "apto_atendimento" })).toBe(true);
+    expect(isTreatmentSchedulingDemand({ ...row, status: "apto_agendamento" })).toBe(true);
     expect(isTreatmentSchedulingDemand({ ...row, status: "aguardando_agendamento_interno", origin: "encaminhamento_interno" })).toBe(true);
     expect(isTreatmentSchedulingDemand({ ...row, status: "aguardando_agendamento_interno", origin: "normal" })).toBe(false);
     expect(isTreatmentSchedulingDemand({ ...row, status: "aguardando" })).toBe(false);
     expect(isTreatmentSchedulingDemand({ id: "2", unitId: "u1", sector: "Fisioterapia", status: "apto_atendimento" })).toBe(false);
     expect(isTreatmentSchedulingDemand({ id: "3", unitId: "u1", destinationProfession: "Nutrição", status: "apto_atendimento" })).toBe(true);
+  });
+
+  it("seleciona pacientes aptos por solicitação válida, CBO, unidade e especialidade sem duplicar", () => {
+    const prof = {id:"p1",unitId:"u1",name:"A",profession:"Fisioterapeuta",cboCode:"223605"};
+    const base = {unitId:"u1",status:"apto_agendamento",destinationProfession:"Fisioterapia",cboCode:"223605",linkedToAppointment:false,inTreatment:false};
+    const rows = [
+      { ...base,id:"new",patientId:"person1",requestDate:"2026-11-12" },
+      { ...base,id:"old",patientId:"person1",requestDate:"2026-11-09" },
+      { ...base,id:"without",patientId:"person2",requestDate:null },
+      { ...base,id:"wrong-cbo",patientId:"person3",cboCode:"223810" },
+      { ...base,id:"wrong-unit",patientId:"person4",unitId:"u2" },
+      { ...base,id:"booked",patientId:"person5",linkedToAppointment:true },
+      { ...base,id:"fono",patientId:"person6",destinationProfession:"Fonoaudiologia" },
+    ];
+    expect(eligibleEvaluationRequests(rows,prof,"2026-11-13").map(r=>r.id)).toEqual(["old","without"]);
   });
 
   it("mantém sessões pendentes sem vínculo como demanda e separa datas vencidas e não informadas", () => {

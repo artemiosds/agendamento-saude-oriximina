@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { containsEvaluationSlot, readRegulationCapacity, type RegulationScope, type RegulationSelection } from "@/services/regulationCapacity";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,9 @@ interface Props {
   unidades: { id: string; nome: string }[];
   getAvailableSlots: (profId: string, unidadeId: string, date: string, isPublic?: boolean, lead?: number | null) => string[];
   loadAgendaRange: (start: string, end: string) => Promise<void>;
-  onPick: (profissionalId: string, date: string, hora: string) => void;
+  regulation?: RegulationScope & { requestId?: string };
+  onDismissRegulation?: () => void;
+  onPick: (profissionalId: string, date: string, hora: string, selection?: RegulationSelection) => void;
 }
 
 interface ProfResult {
@@ -36,13 +39,15 @@ interface ProfResult {
 }
 
 /** Busca pendências sem vínculo SOMENTE de ciclos ativos, com a unidade do próprio ciclo. */
-export async function fetchActivePendingRows(professionalIds: string[]): Promise<PendingSessionRow[] | null> {
+export async function fetchActivePendingRows(professionalIds: string[], unitId?: string): Promise<PendingSessionRow[] | null> {
   if (!professionalIds.length) return [];
   const cycles = new Map<string, { status: string; unit_id: string }>();
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from("treatment_cycles")
+    let query = supabase.from("treatment_cycles")
       .select("id,status,unit_id").in("professional_id", professionalIds)
-      .in("status", [...ACTIVE_CYCLE_STATUSES]).range(from, from + 999);
+      .in("status", [...ACTIVE_CYCLE_STATUSES]);
+    if (unitId) query = query.eq("unit_id", unitId);
+    const { data, error } = await query.range(from, from + 999);
     if (error || !data) return null;
     data.forEach((c: any) => cycles.set(c.id, { status: c.status, unit_id: c.unit_id }));
     if (data.length < 1000) break;
@@ -74,11 +79,14 @@ const continuityLabel: Record<ContinuityEstimate, string> = {
   nao_confirmada: "Capacidade não confirmada",
 };
 
-export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots, loadAgendaRange, onPick }: Props) {
-  const [open, setOpen] = useState(false);
-  const [servico, setServico] = useState("");
-  const [unidadeId, setUnidadeId] = useState("all");
-  const [dias, setDias] = useState("15");
+export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots, loadAgendaRange, onPick, regulation, onDismissRegulation }: Props) {
+  const [open, setOpen] = useState(!!regulation);
+  const [selectedPatient, setSelectedPatient] = useState<string>();
+  const [selectedRequestId, setSelectedRequestId] = useState(regulation?.requestId || "");
+  const searchRef = useRef(0);
+  const [servico, setServico] = useState(regulation?.specialty || "");
+  const [unidadeId, setUnidadeId] = useState(regulation?.unitId || "all");
+  const [dias, setDias] = useState(String(regulation?.days || 15));
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [pendingAvailable, setPendingAvailable] = useState(true);
@@ -95,14 +103,23 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
   }, [clinicos]);
   const semProfissao = useMemo(() => clinicos.filter((p) => !strictSpecialtyOf(p.profissao)), [clinicos]);
 
-  const buscar = async () => {
+  const buscar = async (requestId = selectedRequestId) => {
     if (!servico) return;
+    const searchId = ++searchRef.current;
     const t0 = performance.now();
     setLoading(true); setResults(null); setLoadError(false);
     const start = todayLocalStr();
     const end = addDaysToDateStr(start, Number(dias) - 1);
     let err = false;
     try { await loadAgendaRange(start, end); } catch { err = true; }
+    if (searchId !== searchRef.current) return;
+    let safeSlots: Awaited<ReturnType<typeof readRegulationCapacity>> | undefined;
+    if (regulation && !err) {
+      try { safeSlots = await readRegulationCapacity(regulation, requestId || undefined); }
+      catch { err = true; }
+    }
+    if (searchId !== searchRef.current) return;
+    setSelectedPatient(safeSlots?.patientId);
     setLoadError(err);
 
     const alvo = clinicos.filter((p) => unidadeId === "all" || p.unidadeId === unidadeId);
@@ -110,7 +127,8 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
     const ids = compat.map((p) => p.id);
 
     let rows: PendingSessionRow[] | null = null;
-    try { rows = await fetchActivePendingRows(ids); } catch { rows = null; }
+    try { rows = await fetchActivePendingRows(ids, regulation?.unitId); } catch { rows = null; }
+    if (searchId !== searchRef.current) return;
     const pendingMap = rows ? breakdownPendingByProfessionalUnit(rows, start, end) : null;
     setPendingAvailable(pendingMap !== null);
 
@@ -120,7 +138,8 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
     const out: ProfResult[] = compat.map((prof) => {
       const days = dates.map((date) => {
         const loaded = isCompleteAgendaDate(date);
-        const slots = loaded && !err ? getAvailableSlots(prof.id, prof.unidadeId, date, false, null) : [];
+        const offered = loaded && !err ? getAvailableSlots(prof.id, prof.unidadeId, date, false, null) : [];
+        const slots = regulation ? offered.filter(time => safeSlots && containsEvaluationSlot(safeSlots.offers, date, time)) : offered;
         return { date, state: classifyDayAvailability({ loadError: err, dayLoaded: loaded, slots }), slots };
       });
       const allLoaded = days.every((d) => d.state !== "nao_carregado" && d.state !== "erro");
@@ -150,11 +169,17 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
     setElapsedMs(Math.round(performance.now() - t0));
   };
 
+  useEffect(() => {
+    if (regulation && clinicos.length) void buscar();
+    // O localizador regulado é montado novamente quando a navegação muda.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regulation?.professionalId, clinicos.length]);
+
   const unitName = (id: string) => unidades.find((u) => u.id === id)?.nome || "Unidade não identificada";
   const pendLine = (b: PendingBreakdown) => `${b.total} (no período: ${b.noPeriodo} · vencidas: ${b.vencidas} · sem data: ${b.semData} · após o período: ${b.aposPeriodo})`;
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={value => { setOpen(value); if (!value && regulation) onDismissRegulation?.(); }}>
       <SheetTrigger asChild>
         <Button variant="outline"><Search className="w-4 h-4 mr-2" /> Localizar Vagas</Button>
       </SheetTrigger>
@@ -164,10 +189,21 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
           <SheetDescription>Horários reais da Agenda por serviço. Nada é agendado automaticamente.</SheetDescription>
         </SheetHeader>
 
+        {regulation && <p className="mt-3 font-medium">{clinicos.find(p=>p.id===regulation.professionalId)?.nome} · {unitName(regulation.unitId)}</p>}
+        {!!regulation?.candidates?.length && <div className="mt-3">
+          <Label htmlFor="regulation-queue-patient">Paciente apto da fila, por data original da solicitação</Label>
+          <select id="regulation-queue-patient" className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
+            value={selectedRequestId} onChange={e=>{const requestId=e.target.value;searchRef.current++;setSelectedRequestId(requestId);setResults(null);setSelectedPatient(undefined);setLoading(false);void buscar(requestId);}}>
+            <option value="">Selecione uma solicitação apta</option>
+            {regulation.candidates.map(c=><option key={c.id} value={c.id}>{c.name} · {c.requestDate ? fmt(c.requestDate) : "Data não informada"}</option>)}
+          </select>
+          {selectedRequestId && <p className="mt-1 text-xs text-muted-foreground">A solicitação e as vagas são conferidas novamente antes de agendar.</p>}
+        </div>}
+        {regulation && !regulation.candidates?.length && <p className="mt-3 text-xs text-amber-700">Nenhuma solicitação apta com destino e CBO explícitos. Consulte o cadastro da fila antes de agendar por este atalho.</p>}
         <div className="grid gap-3 mt-4">
           <div>
             <Label>Serviço / especialidade</Label>
-            <Select value={servico} onValueChange={setServico}>
+            <Select disabled={!!regulation} value={servico} onValueChange={setServico}>
               <SelectTrigger><SelectValue placeholder="Escolha o serviço" /></SelectTrigger>
               <SelectContent>{servicos.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
@@ -176,7 +212,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
             {unidades.length > 1 && (
               <div>
                 <Label>Unidade</Label>
-                <Select value={unidadeId} onValueChange={setUnidadeId}>
+                <Select disabled={!!regulation} value={unidadeId} onValueChange={setUnidadeId}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
@@ -187,7 +223,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
             )}
             <div>
               <Label>Período</Label>
-              <Select value={dias} onValueChange={setDias}>
+              <Select disabled={!!regulation} value={dias} onValueChange={setDias}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="7">Próximos 7 dias</SelectItem>
@@ -197,7 +233,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
               </Select>
             </div>
           </div>
-          <Button onClick={buscar} disabled={!servico || loading}>
+          <Button onClick={() => void buscar()} disabled={!servico || loading}>
             {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />} Buscar
           </Button>
           <p className="text-xs text-muted-foreground flex gap-1"><Info className="w-3 h-3 mt-0.5 shrink-0" />
@@ -209,7 +245,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
 
         {results && (
           <div className="mt-5 space-y-3">
-            {loadError && <p className="text-sm text-destructive">Erro ao consultar a Agenda. Os dias não foram confirmados — tente novamente.</p>}
+            {loadError && <p className="text-sm text-destructive">Erro ao consultar a Agenda ou ao confirmar a elegibilidade. Atualize a busca.</p>}
             <div className="rounded-md border p-3 text-sm space-y-1" data-testid="pendentes-totais">
               <p className="font-medium">Sessões pendentes de agendamento — {servico} (ciclos ativos, sem agendamento):</p>
               {!pendingAvailable ? <p>Informação não disponível</p>
@@ -236,7 +272,8 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
                       <span className="text-xs w-20">{fmt(d.date)}</span>
                       {d.slots.slice(0, 6).map((h) => (
                         <Button key={h} size="sm" variant="outline" className="h-7 px-2 text-xs"
-                          onClick={() => { setOpen(false); onPick(r.prof.id, d.date, h); }}>{h}</Button>
+                          disabled={!!regulation && (!selectedRequestId || !selectedPatient)}
+                          onClick={() => { setOpen(false); onPick(r.prof.id, d.date, h, regulation ? { ...regulation, date:d.date, time:h, requestId:selectedRequestId || undefined, patientId:selectedPatient } : undefined); }}>{h}</Button>
                       ))}
                     </div>
                   ))}

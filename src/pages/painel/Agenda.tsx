@@ -1,3 +1,5 @@
+import { containsEvaluationSlot, readRegulationCapacity, type RegulationScope, type RegulationSelection } from "@/services/regulationCapacity";
+import { strictSpecialtyOf } from "@/lib/localizarVagas";
 import PatientRegistrationBoundary from '@/components/agenda/PatientRegistrationBoundary';
 import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
 import { confirmCareArrival } from "@/services/careFlowService";
@@ -73,7 +75,7 @@ import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData }
 import ContactActionButton from "@/components/ContactActionButton";
 import { addDaysToDateStr, cn, isoDayOfWeek, nowMinutesInBrazil, nowTimeBrazilStr, todayLocalStr } from "@/lib/utils";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useFilaAutomatica } from "@/hooks/useFilaAutomatica";
 import { useEnsurePortalAccess } from "@/hooks/useEnsurePortalAccess";
@@ -270,7 +272,7 @@ export const getAgendaDayListState = (
 };
 
 const Agenda: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isGlobalAdmin } = useAuth();
   const isProfissional = user?.role === "profissional";
 
   const { pacientes, hydrateAgendaPatients, applyCreatedPaciente, applySavedPaciente } = usePacientes();
@@ -310,6 +312,9 @@ const Agenda: React.FC = () => {
   const { handleVagaLiberada } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
+  const location = useLocation();
+  const requested = location.state?.regulation as (RegulationScope & { requestId?: string }) | undefined;
+  const [regulatedBooking, setRegulatedBooking] = useState<RegulationSelection>();
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [remanejarOpen, setRemanejarOpen] = useState(false);
@@ -711,6 +716,17 @@ const Agenda: React.FC = () => {
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
+  const canRegulate = !!user && ["master","recepcao","coordenador","gestao"].includes(user.role)
+    && can("agenda","can_view") && can("agenda","can_create");
+  const scopeAllowed = (scope: RegulationScope) => canRegulate && (scope.days === 7 || scope.days === 15)
+    && (isGlobalAdmin || (!!user?.unidadeId && scope.unitId === user.unidadeId))
+    && unidadesVisiveis.some(u=>u.id === scope.unitId)
+    && ["Fisioterapia","Fonoaudiologia"].includes(scope.specialty)
+    && profissionais.some(p=>p.id===scope.professionalId && strictSpecialtyOf(p.profissao)===scope.specialty
+      && (p.unidadeId===scope.unitId || disponibilidades.some(d=>d.profissionalId===p.id && d.unidadeId===scope.unitId)));
+  const regulation = requested && scopeAllowed(requested) && (!requested.requestId || can("fila","can_view")) ? requested : undefined;
+  const dismissRegulation = () => navigate(location.pathname + location.search, { replace:true, state:null });
+
 
   const normalizeString = (str: string) => {
     return str
@@ -781,7 +797,7 @@ const Agenda: React.FC = () => {
     return { isWeekend, hasAvailability };
   }, [selectedDate, disponibilidades]);
 
-  const selectedProfUnit = profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || "";
+  const selectedProfUnit = regulatedBooking?.unitId || profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || "";
   const selectedDiagnosticRoom = salas.find((s) => s.id === newAg.salaId);
   const diagnosticUnitId = selectedDiagnosticRoom?.unidadeId || selectedProfUnit;
   useEffect(() => {
@@ -1299,7 +1315,7 @@ const Agenda: React.FC = () => {
     if (!pacientesConferidos.has(newAg.pacienteId)) {
       toast.error("Confira os dados do paciente antes de agendar.");
       const profSel = profissionais.find((p) => p.id === newAg.profissionalId);
-      const unidSel = unidades.find((u) => u.id === profSel?.unidadeId);
+      const unidSel = unidades.find((u) => u.id === selectedProfUnit);
       setConferenciaModal({
         open: true,
         pacienteId: newAg.pacienteId,
@@ -1346,6 +1362,20 @@ const Agenda: React.FC = () => {
       return;
     }
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
+    if (regulatedBooking) {
+      const target = regulatedBooking;
+      if (!scopeAllowed(target) || isDiagnosticBooking || target.professionalId !== newAg.profissionalId
+        || target.date !== selectedDate || target.time !== newAg.hora || (target.requestId && (!can("fila","can_view") || target.patientId !== newAg.pacienteId))
+        || (newAg.salaId && selectedDiagnosticRoom?.unidadeId !== target.unitId)) {
+        toast.error("Os dados mudaram. Selecione novamente a vaga no cockpit.");
+        return;
+      }
+      try {
+        const fresh = await readRegulationCapacity(target, target.requestId);
+        if (!containsEvaluationSlot(fresh.offers,target.date,target.time)
+          || (target.requestId && fresh.patientId !== newAg.pacienteId)) throw new Error();
+      } catch { toast.error("A vaga ou a demanda mudou. Consulte o cockpit novamente."); return; }
+    }
     if (isDiagnosticBooking && selectedDiagnosticRoom?.unidadeId !== prof?.unidadeId) {
       toast.error("O responsável selecionado deve pertencer à mesma unidade do aparelho.");
       return;
@@ -1390,7 +1420,7 @@ const Agenda: React.FC = () => {
     let carencyOverrideReason = "";
     try {
       const { data, error } = await (supabase as any).rpc("check_patient_profession_careness", {
-        p_patient_id: pac.id, p_professional_id: prof.id, p_unit_id: prof.unidadeId || "",
+        p_patient_id: pac.id, p_professional_id: prof.id, p_unit_id: selectedProfUnit || "",
       });
       if (error) throw error;
       if (data?.blocked) {
@@ -1457,7 +1487,7 @@ const Agenda: React.FC = () => {
     try {
       const { data: slotCheck, error: slotCheckError } = await supabase.rpc("check_internal_slot_availability" as any, {
         p_profissional_id: newAg.profissionalId,
-        p_unidade_id: prof.unidadeId,
+        p_unidade_id: selectedProfUnit,
         p_data: selectedDate,
         p_hora: newAg.hora,
       } as any);
@@ -1476,7 +1506,7 @@ const Agenda: React.FC = () => {
           reason === "external_reservation" ? "As vagas internas terminaram; as vagas restantes estão reservadas para agendamento externo." :
           reason === "no_availability" ? "Sem disponibilidade cadastrada." :
           "Sem disponibilidade.";
-        if (!canOverride) {
+        if (!canOverride || regulatedBooking) {
           toast.error(reasonMsg);
           return;
         }
@@ -1506,13 +1536,13 @@ const Agenda: React.FC = () => {
 
     }
 
-    const unidade = unidades.find((u) => u.id === prof.unidadeId);
+    const unidade = unidades.find((u) => u.id === selectedProfUnit);
     const agId = `ag${Date.now()}`;
     const agData = {
       id: agId,
       pacienteId: pac.id,
       pacienteNome: pac.nome,
-      unidadeId: prof.unidadeId,
+      unidadeId: selectedProfUnit,
       salaId: newAg.salaId,
       setorId: "",
       profissionalId: prof.id,
@@ -1522,6 +1552,7 @@ const Agenda: React.FC = () => {
       status: "confirmado" as const,
       tipo: newAg.tipo,
       observacoes: isDiagnosticBooking ? (selectedDiagnosticExam?.exigePreparo ? selectedDiagnosticExam.instrucoesPreparo : "") : newAg.obs,
+      ...(regulatedBooking?.requestId ? { customData: { fila_regulacao_id: regulatedBooking.requestId } } : {}),
       ...(isDiagnosticBooking ? { customData: {
         sala_tipo: "aparelho_diagnostico",
         exame_id: selectedDiagnosticExam?.id || "",
@@ -1562,6 +1593,7 @@ const Agenda: React.FC = () => {
     }
     // Fecha o modal assim que o agendamento foi gravado; auditoria segue em segundo plano
     setDialogOpen(false);
+    setRegulatedBooking(undefined);
     setNewAg({
       pacienteId: "",
       profissionalId: filterProf !== "all" ? filterProf : "",
@@ -1584,6 +1616,7 @@ const Agenda: React.FC = () => {
       agendamentoId: agId,
       after: agData,
       detalhes: {
+        ...(regulatedBooking ? { origem_regulacao:true, fila_id:regulatedBooking.requestId || null } : {}),
         paciente: pac.nome, data: selectedDate, hora: newAg.hora,
         ...(masterOverrideReason || carencyOverrideReason
           ? { motivo_alteracao: [masterOverrideReason, carencyOverrideReason].filter(Boolean).join(" | ") }
@@ -2985,13 +3018,27 @@ const Agenda: React.FC = () => {
                       onDone={async (dest) => { await loadAgendaRange(dest, dest); await refreshAgendamentos(); }} />
                   </>
                 )}
-                {(user?.role === "master" || user?.role === "recepcao") && can("agenda", "can_create") && (
+                {((user?.role === "master" || user?.role === "recepcao") && can("agenda", "can_create") || regulation) && (
                   <LocalizarVagasPanel
-                    profissionais={profissionais}
+                    key={regulation ? location.key : "agenda"} regulation={regulation} onDismissRegulation={dismissRegulation}
+                    profissionais={regulation ? profissionais.filter(p=>p.id===regulation.professionalId).map(p=>({...p, unidadeId:regulation.unitId})) : profissionais}
                     unidades={unidadesVisiveis}
                     getAvailableSlots={getAvailableSlots}
                     loadAgendaRange={(a, b) => loadAgendaRange(a, b)}
-                    onPick={(profId, date, hora) => {
+                    onPick={(profId, date, hora, target) => {
+                      if (target) {
+                        dismissRegulation();
+                        if (!scopeAllowed(target) || !getAvailableSlots(profId,target.unitId,date,false,0).includes(hora)) {
+                          toast.warning("Vaga não confirmada. Atualize o cockpit."); return;
+                        }
+                        setRegulatedBooking(target);
+                        setSelectedDate(date);
+                        setPacientesConferidos(new Set());
+                        setNovoAgStep("agendamento");
+                        setNewAg({profissionalId:profId, pacienteId:target.patientId || "", hora, salaId:"",tipo:"Consulta",obs:""});
+                        setDialogOpen(true);
+                        return;
+                      }
                       const prof = profissionais.find((p) => p.id === profId);
                       // Revalida o horário com a regra oficial da Agenda antes de abrir o modal.
                       const ainda = prof ? getAvailableSlots(profId, prof.unidadeId, date, false, null).includes(hora) : false;
@@ -3007,6 +3054,10 @@ const Agenda: React.FC = () => {
                   onOpenChange={(open) => {
                     if (savingPacienteNovo) return;
                     setDialogOpen(open);
+                    if (!open && regulatedBooking) {
+                      setRegulatedBooking(undefined);
+                      setNewAg({ pacienteId:"", profissionalId:"", hora:"", salaId:"", tipo:"Consulta", obs:"" });
+                    }
                     if (!open) { setPacientesConferidos(new Set()); setNovoAgStep('agendamento'); setTermoInicialCadastro(''); }
                   }}
                 >
@@ -3124,7 +3175,7 @@ const Agenda: React.FC = () => {
                           <SelectValue placeholder="Selecione" />
                         </SelectTrigger>
                         <SelectContent>
-                          {salasVisiveis.map((s) => (
+                          {salasVisiveis.filter(s=>!regulatedBooking || s.unidadeId===regulatedBooking.unitId).map((s) => (
                             <SelectItem key={s.id} value={s.id}>
                               {s.nome}
                             </SelectItem>

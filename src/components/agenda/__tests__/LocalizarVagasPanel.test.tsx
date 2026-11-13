@@ -6,6 +6,12 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 const loaded = new Set<string>();
 vi.mock("@/contexts/_agendamentosBridge", () => ({ isCompleteAgendaDate: (d: string) => loaded.has(d) }));
+vi.mock("@/services/regulationCapacity", () => ({
+  readRegulationCapacity: async (_scope: unknown, requestId?: string) => ({
+    offers:[{date:todayLocalStr(),time:"08:00",count:1}], patientId:requestId ? "person1" : undefined,
+  }),
+  containsEvaluationSlot: (offers: {date:string;time:string}[], date:string,time:string) => offers.some(s=>s.date===date && s.time===time),
+}));
 
 let failPending = false;
 const cycles = [{ id: "c1", status: "em_andamento", unit_id: "u1" }, { id: "c2", status: "em_andamento", unit_id: "u2" }];
@@ -76,6 +82,19 @@ describe("LocalizarVagasPanel (integração)", () => {
     expect(estimate.textContent).toContain("Capacidade favorável para as sessões datadas neste período");
     expect(screen.getByTestId("continuity-review").textContent)
       .toContain("sessões vencidas ou sem data que precisam ser organizadas antes de confirmar a continuidade");
+  });
+
+  it("abre o localizador com filtro regulado, escolhe a fila e repassa a vaga ao formulário oficial", async () => {
+    const onPick = vi.fn();
+    render(<LocalizarVagasPanel profissionais={profs} unidades={unidades} regulation={{professionalId:"p1",unitId:"u1",specialty:"Fonoaudiologia",days:7,
+      candidates:[{id:"request-1",name:"Paciente de teste",requestDate:"2026-11-09"}]}}
+      getAvailableSlots={() => ["08:00","09:00"]} loadAgendaRange={async (start,end)=>{for(let date=start;date<=end;date=addDaysToDateStr(date,1)) loaded.add(date);}} onPick={onPick}/>);
+    fireEvent.change(screen.getByLabelText(/Paciente apto da fila/),{target:{value:"request-1"}});
+    await screen.findByText(/Consulta concluída/);
+    const slot = await screen.findByRole("button",{name:"08:00"});
+    expect(screen.queryByRole("button",{name:"09:00"})).toBeNull();
+    fireEvent.click(slot);
+    expect(onPick).toHaveBeenCalledWith("p1",todayLocalStr(),"08:00",expect.objectContaining({requestId:"request-1",patientId:"person1",unitId:"u1"}));
   });
 
   it("desempenho: 30 dias x 40 profissionais em menos de 1,5 s", async () => {

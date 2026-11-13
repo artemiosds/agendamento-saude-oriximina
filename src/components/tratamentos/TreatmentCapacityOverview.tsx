@@ -1,5 +1,8 @@
+import RegulationCockpit from "./RegulationCockpit";
+import { resolveProfessionalCbo } from "@/lib/sigtapClinicalValidation";
+import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, AlertTriangle, CalendarDays, Clock3, RefreshCw, Users } from "lucide-react";
+import { AlertTriangle, RefreshCw, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -83,7 +86,7 @@ export default function TreatmentCapacityOverview() {
   const { unidadesVisiveis, userUnidadeId } = useUnidadeFilter();
   const { can: hasPermission, loading: permissionsLoading } = usePermissions();
   const [isOpen, setIsOpen] = useState(false);
-  const [periodDays, setPeriodDays] = useState("30");
+  const [periodDays, setPeriodDays] = useState("7");
   const [unitFilter, setUnitFilter] = useState(isGlobalAdmin ? "all" : userUnidadeId);
   const [specialtyFilter, setSpecialtyFilter] = useState("all");
   const [professionalFilter, setProfessionalFilter] = useState("all");
@@ -170,7 +173,7 @@ export default function TreatmentCapacityOverview() {
             .lte("data_inicio", cycleEndDate);
           if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
           if (user?.role === "profissional" && user?.id) query = query.eq("profissional_id", user.id);
-          return query.range(from, to);
+          return query.order("id").range(from, to);
         });
 
         const availabilityProfessionalIds = [...new Set(
@@ -248,12 +251,12 @@ export default function TreatmentCapacityOverview() {
               rows.push(...await fetchAllPages<any>((from, to) => {
                 let query = supabase
                   .from("agendamentos" as any)
-                  .select("profissional_id,unidade_id,data,hora,status,origem")
+                  .select("id,paciente_id,profissional_id,unidade_id,data,hora,status,origem")
                   .in("profissional_id", ids)
                   .gte("data", today)
                   .lte("data", cycleEndDate);
                 if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
-                return query.range(from, to);
+                return query.order("id").range(from, to);
               }));
             }
             return rows;
@@ -263,7 +266,7 @@ export default function TreatmentCapacityOverview() {
             .select("data_inicio,data_fim,unidade_id,profissional_id,dia_inteiro,hora_inicio,hora_fim")
             .lte("data_inicio", cycleEndDate)
             .gte("data_fim", today)
-            .range(from, to)),
+            .order("id").range(from, to)),
           (async () => {
             const rows: any[] = [];
             for (const ids of chunk(targetIds, 100)) {
@@ -276,7 +279,7 @@ export default function TreatmentCapacityOverview() {
                   .lte("periodo_inicio", cycleEndDate)
                   .gte("periodo_fim", today);
                 if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
-                return query.range(from, to);
+                return query.order("id").range(from, to);
               }));
             }
             return rows;
@@ -307,7 +310,7 @@ export default function TreatmentCapacityOverview() {
               .in("professional_id", ids)
               .in("status", ACTIVE_CYCLE_STATUSES);
             if (effectiveUnit !== "all") query = query.eq("unit_id", effectiveUnit);
-            return query.range(from, to);
+            return query.order("id").range(from, to);
           }));
         }
 
@@ -325,17 +328,18 @@ export default function TreatmentCapacityOverview() {
             .select("cycle_id,professional_id,status,scheduled_date,appointment_id")
             .in("cycle_id", ids)
             .eq("status", "pendente_agendamento")
-            .range(from, to)));
+            .order("id").range(from, to)));
         }
 
         const fetchQueue = (term: string) => fetchAllPages<any>((from, to) => {
           let query = supabase
             .from("fila_espera" as any)
-            .select("id,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original,custom_data,status,origem_cadastro")
-            .in("status", ["apto_atendimento", "aguardando_agendamento_interno"])
+            .select("id,paciente_id,paciente_nome,unidade_id,profissional_id,especialidade_destino,setor,data_solicitacao_original,custom_data,status,origem_cadastro")
+            .in("status", ["apto_atendimento", "apto_agendamento", "aguardando_agendamento_interno"])
             .or("especialidade_destino.ilike.%" + term + "%,setor.ilike.%" + term + "%");
+          if (user?.role === "profissional") query = query.eq("profissional_id", user.id);
           if (effectiveUnit !== "all") query = query.eq("unidade_id", effectiveUnit);
-          return query.range(from, to);
+          return query.order("id").range(from, to);
         });
 
         let queueRows: any[] = [];
@@ -344,11 +348,10 @@ export default function TreatmentCapacityOverview() {
         const mayReadQueue = isGlobalAdmin || user?.role === "master" || hasPermission("fila", "can_view");
         if (mayReadQueue) {
           try {
-            const queueTerms = [
+            const queueResults = await Promise.all([
               "fisioterap", "fonoaud", "psicolog", "nutric",
               "assistente social", "enferm", "medic", "odont",
-            ];
-            const queueResults = await Promise.all(queueTerms.map((term) => fetchQueue(term)));
+            ].map(fetchQueue));
             const uniqueQueue = new Map<string, any>();
             queueResults.flat().forEach((row) => uniqueQueue.set(String(row.id), row));
             queueRows = [...uniqueQueue.values()].filter((row) => isTreatmentSchedulingDemand({
@@ -372,7 +375,7 @@ export default function TreatmentCapacityOverview() {
           profession: String(staff.profissao || ""),
           unitId,
           unitName: unitNameById.get(unitId) || unitId,
-          cboCode: extractExplicitCboCode(staff.custom_data),
+          cboCode: resolveProfessionalCbo(staff),
           appointmentDurationMinutes: Math.max(15, Number(staff.tempo_atendimento) || 30),
         }));
 
@@ -416,20 +419,36 @@ export default function TreatmentCapacityOverview() {
           return [{
             professionalId: String(session.professional_id || cycle.professional_id),
             unitId: String(cycle.unit_id),
+            cycleStatus: String(cycle.status),
             status: String(session.status),
             scheduledDate: session.scheduled_date ? String(session.scheduled_date) : null,
             appointmentId: session.appointment_id ? String(session.appointment_id) : null,
           }];
         });
 
+        const appointmentLinks = new Set<string>();
+        // Only check candidates that could actually enter the regulated roster.
+        const possible = queueRows.filter(r => r.status === "apto_atendimento" && r.especialidade_destino && extractExplicitCboCode(r.custom_data, r.especialidade_destino));
+        for (const ids of chunk(possible.map(r=>String(r.id)))) {
+          const { data, error } = await supabase.from("agendamentos").select("id").in("id", ids);
+          if (error) { nextQueueReadStatus = "unavailable"; nextQueueWarning = "Não foi possível conferir vínculos da fila."; break; }
+          data.forEach(a=>appointmentLinks.add(a.id));
+        }
+        const patientKey = (patient: string, unit: string, specialty: string) => JSON.stringify([patient,unit,classifyTreatmentCapacitySpecialty(specialty)]);
+        const bookedPatients = new Set(appointmentRows.filter(a=>statusOcupaVaga(a.status)).map(a=>patientKey(a.paciente_id,a.unidade_id,staffById.get(a.profissional_id)?.profissao)));
+        const inTreatment = new Set(relevantCycles.map(c=>patientKey(c.patient_id,c.unit_id,c.specialty || staffById.get(c.professional_id)?.profissao)));
         const queueDemand: QueueDemandInput[] = queueRows.map((row) => ({
           id: String(row.id),
           unitId: String(row.unidade_id || ""),
           professionalId: row.profissional_id ? String(row.profissional_id) : null,
+          patientId: row.paciente_id || undefined,
+          patientName: row.paciente_nome || undefined,
+          linkedToAppointment: appointmentLinks.has(row.id) || bookedPatients.has(patientKey(row.paciente_id,row.unidade_id,row.especialidade_destino)),
+          inTreatment: inTreatment.has(patientKey(row.paciente_id,row.unidade_id,row.especialidade_destino)),
           destinationProfession: row.especialidade_destino ? String(row.especialidade_destino) : null,
           sector: row.setor ? String(row.setor) : null,
           requestDate: row.data_solicitacao_original ? String(row.data_solicitacao_original) : null,
-          cboCode: extractExplicitCboCode(row.custom_data),
+          cboCode: extractExplicitCboCode(row.custom_data, row.especialidade_destino),
           status: String(row.status || ""),
           origin: row.origem_cadastro ? String(row.origem_cadastro) : null,
         }));
@@ -672,24 +691,12 @@ export default function TreatmentCapacityOverview() {
     return [...groups.values()].filter((group) => group.requestDates.length > 0);
   }, [visibleProfessionalPlans, visibleProfessionals, queueDemandRows, unidadesVisiveis]);
 
-  const totalConfiguredSlots = visibleSpecialties.reduce((sum, row) => sum + row.configuredSlots, 0);
-  const totalAppointments = visibleSpecialties.reduce((sum, row) => sum + row.occupiedAppointments, 0);
-  const totalPendingSessions = visibleSpecialties.reduce((sum, row) => sum + row.pendingSessions, 0);
-  const totalQueueDemand = visibleSpecialties.reduce((sum, row) => sum + row.queueDemand, 0);
-  const totalInternalQueueDemand = queueDemandRows.filter((row) =>
-    row.status === "aguardando_agendamento_interno" &&
-    (specialtyFilter === "all" || classifyTreatmentCapacitySpecialty(row.destinationProfession || "") === specialtyFilter) &&
-    (unitFilter === "all" || row.unitId === unitFilter) &&
-    (professionalFilter === "all" || !row.professionalId || professionalFilter.startsWith(row.professionalId + "|")),
-  ).length;
-  const totalAvailableAfterDemand = visibleProfessionalPlans.reduce((sum, row) => sum + row.availableAfterProjectedDemand, 0);
-
   return (
     <section className="space-y-4 rounded-xl border border-border bg-card p-4" aria-label="Visão de capacidade e demanda">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Capacidade e demanda</h2>
-          <p className="text-sm text-muted-foreground">Visão gerencial dos profissionais ativos com profissão cadastrada. Nenhum agendamento, fila ou tratamento é alterado.</p>
+          <p className="text-sm text-muted-foreground">Consulte vagas para avaliação inicial e a carga dos ciclos por unidade e profissional.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {isOpen && (
@@ -785,45 +792,9 @@ export default function TreatmentCapacityOverview() {
         </div>
       ) : snapshot ? (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" /><span className="text-xs">Capacidade configurada</span></div>
-                <p className="text-2xl font-bold tabular-nums">{formatNumber(totalConfiguredSlots)}</p>
-                <p className="text-xs text-muted-foreground">Total previsto nas grades, inclusive dias posteriormente bloqueados</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Activity className="h-4 w-4" /><span className="text-xs">Agendamentos que ocupam vaga</span></div>
-                <p className="text-2xl font-bold tabular-nums">{formatNumber(totalAppointments)}</p>
-                <p className="text-xs text-muted-foreground">No mesmo período, conforme a regra atual de status</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Clock3 className="h-4 w-4" /><span className="text-xs">Demanda projetada de tratamentos</span></div>
-                <p className="text-2xl font-bold tabular-nums">{formatNumber(totalPendingSessions)}</p>
-                <p className="text-xs text-muted-foreground">Sessões pendentes sem agendamento vinculado nos ciclos consultados</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Users className="h-4 w-4" /><span className="text-xs">Demanda para agendamento</span></div>
-                <p className="text-2xl font-bold tabular-nums">{queueReadStatus === "available" ? formatNumber(totalQueueDemand) : "—"}</p>
-                <p className="text-xs text-muted-foreground">Aptos e encaminhamentos internos; {queueReadStatus === "available" ? formatNumber(totalInternalQueueDemand) : "—"} aguardando agendamento interno. Sem chamar a fila operacional.</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-2 flex items-center gap-2 text-muted-foreground"><Activity className="h-4 w-4" /><span className="text-xs">Capacidade disponível após demanda</span></div>
-                <p className="text-2xl font-bold tabular-nums">{capacityPlan ? formatNumber(totalAvailableAfterDemand) : "—"}</p>
-                <p className="text-xs text-muted-foreground">Vagas livres estimadas após ocupação e sessões pendentes de tratamentos</p>
-              </CardContent>
-            </Card>
-          </div>
-
-
+          {cycleCapacityInput && <RegulationCockpit input={cycleCapacityInput} period={Number(periodDays)} professionals={cycleCapacityInput.professionals.filter(p=>visibleProfessionals.some(v=>v.professionalId===p.id && v.unitId===p.unitId))}
+            queueAvailable={queueReadStatus === "available"} canSchedule={!!user && ["recepcao","master","gestao","coordenador"].includes(user.role) && hasPermission("agenda","can_view") && hasPermission("agenda","can_create")} />}
+          <details className="space-y-4"><summary className="cursor-pointer font-semibold">Simulação de ciclos e indicadores detalhados</summary>
           <div className="space-y-4 rounded-lg border border-border p-4" aria-label="Simulação de tratamento completo">
             <div><h3 className="font-semibold text-foreground">Verificar capacidade para tratamento completo</h3><p className="text-sm text-muted-foreground">Simula todas as sessões conforme frequência, dias escolhidos, turno, horários livres, bloqueios, agendamentos e sessões pendentes com data. A janela é calculada conforme o ciclo, com limite de 10 anos. Não reserva vagas nem cria agendamentos.</p></div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -1006,6 +977,7 @@ export default function TreatmentCapacityOverview() {
           <p className="text-xs text-muted-foreground">
             Os indicadores gerais usam o período selecionado; a simulação do ciclo calcula uma janela adaptativa de acordo com frequência e quantidade de sessões, limitada a 10 anos. A distribuição por turno mostra vagas livres estimadas antes de alocar sessões pendentes sem horário/turno informado; por isso, não deve ser somada como capacidade adicional. Sessões pendentes e solicitações aptas representam estoques de demanda, independentemente do período selecionado.
           </p>
+          </details>
         </>
       ) : null}
       </>

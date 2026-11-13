@@ -1,5 +1,52 @@
 import { describe, expect, it } from "vitest";
-import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, getTreatmentCycleForecastDays, MAX_TREATMENT_CYCLE_FORECAST_DAYS, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
+import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, getTreatmentCycleForecastDays, MAX_TREATMENT_CYCLE_FORECAST_DAYS, planInitialEvaluations, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
+
+describe("regulação de vagas avulsas sem comprometer ciclos", () => {
+  const evaluation = () => {
+    const input = baseInput();
+    input.endDate = "2026-12-10";
+    input.availabilities[0] = { ...input.availabilities[0], endDate: "2026-12-10", weekdays: [3], vacanciesPerDay: 2, vacanciesPerHour: 1, endTime: "09:00" };
+    return input;
+  };
+  const plan = (input: CapacityPlanningInput) => planInitialEvaluations(input, input.professionals[0], 15, 0);
+
+  it("reserva a data de sessão pendente antes de mostrar outras datas ao atendimento inicial", () => {
+    const input = evaluation();
+    input.pendingSessions = [{ professionalId:"p1", unitId:"u1", cycleStatus:"em_andamento", status:"pendente_agendamento", scheduledDate:"2026-11-11", appointmentId:null }];
+    const result = plan(input);
+    expect(result.offers.some(slot=>slot.date === "2026-11-11")).toBe(false);
+    expect(result.offers.some(slot=>slot.date === "2026-11-18")).toBe(true);
+    expect(result.projected).toBe(1);
+    expect(result.occupied).toBe(0);
+  });
+
+  it("não oferece vagas para avaliação quando há pendências sem data ou mais sessões do que vagas", () => {
+    const input = evaluation();
+    input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:null,appointmentId:null}];
+    expect(plan(input)).toMatchObject({count:0,risk:"Atenção"});
+    input.pendingSessions = Array.from({length:3},()=>({professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-11",appointmentId:null}));
+    expect(plan(input)).toMatchObject({count:0,risk:"Atenção"});
+  });
+
+  it("distingue vaga órfã com as próximas três quartas indisponíveis de continuidade desconhecida", () => {
+    const input = evaluation();
+    input.blocks = ["2026-11-18","2026-11-25","2026-12-02"].map(date=>({startDate:date,endDate:date,unitId:"u1",allDay:true}));
+    const result = plan(input);
+    expect(result.offers.find(s=>s.date==="2026-11-11")?.singleVisit).toBe(true);
+    input.availabilities[0].endDate = "2026-11-30";
+    expect(plan(input).offers.find(s=>s.date==="2026-11-11")?.singleVisit).toBe(false);
+  });
+
+  it("não conta sessões de ciclo já vinculado nem vagas bloqueadas como reservas livres", () => {
+    const input = evaluation();
+    input.appointments = [{professionalId:"p1",unitId:"u1",date:"2026-11-11",time:"08:00",status:"confirmado"}];
+    input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-11",appointmentId:"booking"}];
+    const result = plan(input);
+    expect(result.pending).toBe(0);
+    expect(result.occupied).toBe(1);
+    expect(result.offers.every(s=>s.date!=="2026-11-11" || s.time!=="08:00")).toBe(true);
+  });
+});
 
 const baseInput = (): CapacityPlanningInput => ({
   today: "2026-11-10",

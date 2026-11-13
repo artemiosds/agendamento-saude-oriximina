@@ -3326,7 +3326,7 @@ const Tratamentos: React.FC = () => {
       </div>
 
       {isMaster && <label className="flex items-center gap-2 text-sm"><Checkbox checked={integrityOnly} onCheckedChange={(value) => { setIntegrityOnly(value === true); setCurrentPage(1); }} />Pendências de integridade</label>}
-      {(isMaster || canManageFull || user?.role === "gestao" || user?.role === "coordenador") && <TreatmentCapacityOverview />}
+      {can("tratamento", "can_view") && <TreatmentCapacityOverview key={(user?.id || "") + "|" + (user?.unidadeId || "") + "|" + user?.role} />}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
