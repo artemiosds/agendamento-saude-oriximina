@@ -246,7 +246,6 @@ function scheduleKey(row: CapacityPlanningAvailabilityInput): string {
 
 interface RegulationSlots {
   afterMinute: number;
-  choices: Set<string>;
   capacity: Map<string, number>;
   quotaReview: boolean;
 }
@@ -427,7 +426,6 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
         for (const minute of availableStarts) {
           const hour = Math.floor(minute / 60);
           const time = toTime(minute);
-          if (capacity.vagasTotaisLivres > 0) regulation.choices.add(time);
           if (budget <= 0 || !remaining.get(hour)) continue;
           regulation.capacity.set(time, 1);
           remaining.set(hour, remaining.get(hour)! - 1);
@@ -470,7 +468,6 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
       if (regulation) {
         const free = Math.min(capacity.vagasInternasLivres, capacity.vagasTotaisLivres);
         if (free > 0) {
-          regulation.choices.add(toTime(start));
           regulation.capacity.set(toTime(start), free);
         }
       }
@@ -966,27 +963,37 @@ export function planInitialEvaluations(input: CapacityPlanningInput, professiona
   }
   const dates = new Map<string, { available: Set<string>; certain: boolean }>();
   const slots: EvaluationSlot[] = [];
-  let configured = 0, free = 0, projected = undated, needsReview = false, conflict = false;
+  let configured = 0, free = 0, projected = undated, datedProjected = 0, needsReview = false, conflict = false;
   for (let offset = 0; offset < horizon + 21; offset++) {
     const date = addDaysToDateStr(input.today, offset);
     if (date > input.endDate) break;
-    const options: RegulationSlots = { afterMinute: offset === 0 ? nowMinute : -1, choices: new Set(), capacity: new Map(), quotaReview: false };
+    const options: RegulationSlots = { afterMinute: offset === 0 ? nowMinute : -1, capacity: new Map(), quotaReview: false };
     const day = getDailyPlan(scoped, professional, date, options);
     const grade = schedule.filter(a => date >= a.startDate && date <= a.endDate && a.weekdays.includes(isoDayOfWeek(date)));
     const pending = dated.get(date) || 0;
-    dates.set(date, { available: options.choices, certain: !!grade.length && !day.review && !options.quotaReview });
+    // A sessão prevista não tem horário definido: proteja uma vaga por sessão,
+    // sem descartar as demais vagas comprovadas na mesma data.
+    let toProtect = pending;
+    const available = new Set<string>();
+    const dailyOffers: EvaluationSlot[] = [];
+    if (!day.review) for (const [time, count] of options.capacity) {
+      const safeCount = Math.max(0, count - toProtect);
+      toProtect = Math.max(0, toProtect - count);
+      if (safeCount > 0) {
+        available.add(time);
+        dailyOffers.push({ date, time, count: safeCount, singleVisit: false });
+      }
+    }
+    dates.set(date, { available, certain: !!grade.length && !day.review && !options.quotaReview && toProtect === 0 });
     if (offset >= horizon) continue;
     configured += grade.reduce((n, a) => n + a.vacanciesPerDay, 0);
     projected += pending;
+    datedProjected += pending;
     const remaining = day.review ? 0 : [...options.capacity.values()].reduce((a, b) => a + b, 0);
     free += remaining;
     needsReview ||= day.review || options.quotaReview;
     conflict ||= pending > remaining;
-    // Uma sessão pendente tem data, mas não tem hora confirmada. Não oferecer
-    // o dia inteiro como se soubéssemos qual dos horários poderá ser usado.
-    if (!day.review && !pending) for (const [time, count] of options.capacity) {
-      slots.push({ date, time, count, singleVisit: false });
-    }
+    slots.push(...dailyOffers);
   }
   for (const slot of slots) {
     slot.singleVisit = [7, 14, 21].every(offset => {
@@ -995,18 +1002,19 @@ export function planInitialEvaluations(input: CapacityPlanningInput, professiona
     });
   }
   const review = needsReview || conflict || undated > 0;
-  const offers = conflict || undated > 0 ? [] : slots;
+  const offers = slots;
   const count = offers.reduce((sum, slot) => sum + slot.count, 0);
   const occupied = appointments.filter(a => a.date >= input.today && a.date <= end && a.origin !== "externo").length;
-  const risk = !configured ? "Sem grade" : free === 0 && !needsReview ? "Esgotado" : review || count === 0 || projected >= free ? "Atenção" : "Capacidade segura";
-  return { id, unitId, configured, occupied, pending: sessions.length, projected, free, count, offers, risk, review };
+  const risk = !configured ? "Sem grade" : free === 0 && !needsReview && occupied + datedProjected >= configured
+    ? "Esgotado" : review || count === 0 ? "Atenção" : "Capacidade segura";
+  return { id, unitId, configured, occupied, pending: sessions.length, projected, datedProjected, undated, free, count, offers, risk, review };
 }
 
 export interface WeeklySafeOfferRow {
   professionalId: string;
   unitId: string;
   professionalName: string;
-  specialty: "Fisioterapia" | "Fonoaudiologia";
+  specialty: TreatmentCapacitySpecialty;
   date: string;
   shift: "Manhã" | "Tarde" | "Noite";
   times: EvaluationSlot[];
@@ -1023,7 +1031,7 @@ export function buildWeeklySafeOfferMap(input: CapacityPlanningInput, profession
   const rows: WeeklySafeOfferRow[] = [];
   for (const professional of professionals) {
     const specialty = classifyTreatmentCapacitySpecialty(professional.profession);
-    if (specialty !== "Fisioterapia" && specialty !== "Fonoaudiologia") continue;
+    if (!specialty) continue;
     const plan = planInitialEvaluations(input, professional, daysUntilMonday + 6, nowMinute);
     const groups = new Map<string, WeeklySafeOfferRow>();
     for (const slot of plan.offers) {

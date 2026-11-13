@@ -19,12 +19,28 @@ function AgendaDestination() {
 }
 
 describe("cockpit de regulação e navegação oficial", () => {
+  it("mostra o estoque sem data sem somá-lo à ocupação da semana", () => {
+    const pendingSessions = Array.from({length:726},()=>({professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:null,appointmentId:null}));
+    render(<MemoryRouter><RegulationCockpit input={{...input,pendingSessions}} period={7} professionals={[professional]} queueAvailable canSchedule={false}/></MemoryRouter>);
+    expect(screen.getByText("726")).toBeTruthy();
+    expect(screen.getByText("0%")).toBeTruthy();
+    expect(screen.getByText(/vaga\(s\) disponível\(is\) após proteger sessões datadas/)).toBeTruthy();
+  });
+
+  it("inclui outras especialidades na capacidade sem habilitar seleção de fila ainda não validada", () => {
+    const psychologist = {...professional,id:"p2",profession:"Psicóloga",cboCode:"251510"};
+    const otherInput = {...input,professionals:[psychologist],availabilities:input.availabilities.map(row=>({...row,professionalId:"p2"}))};
+    render(<MemoryRouter><RegulationCockpit input={otherInput} period={7} professionals={[psychologist]} queueAvailable canSchedule/></MemoryRouter>);
+    expect(screen.getByText("Psicologia · CER II")).toBeTruthy();
+    expect(screen.queryByRole("button",{name:"Localizar vagas e agendar"})).toBeNull();
+  });
+
   it("exibe métricas e envia apenas escopo e candidatos à Agenda, sem agendar", () => {
     render(<MemoryRouter initialEntries={["/painel/tratamentos"]}><Routes>
       <Route path="/painel/tratamentos" element={<RegulationCockpit input={input} period={7} professionals={[professional]} queueAvailable canSchedule/>}/>
       <Route path="/painel/agenda" element={<AgendaDestination/>}/>
     </Routes></MemoryRouter>);
-    expect(screen.getByText("Pacientes aptos na fila")).toBeTruthy();
+    expect(screen.getByText("Pacientes aptos na fila (Fisio/Fono)")).toBeTruthy();
     fireEvent.click(screen.getByRole("button",{name:"Localizar vagas e agendar"}));
     expect(JSON.parse(screen.getByTestId("scope").textContent || "{}")).toMatchObject({
       professionalId:"p1",unitId:"u1",specialty:"Fisioterapia",days:7,

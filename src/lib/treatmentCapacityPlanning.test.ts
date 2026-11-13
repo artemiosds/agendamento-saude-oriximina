@@ -20,12 +20,23 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     expect(result.occupied).toBe(0);
   });
 
-  it("não oferece vagas para avaliação quando há pendências sem data ou mais sessões do que vagas", () => {
+  it("mantém vagas da semana quando há pendências sem data e protege apenas a data excedida", () => {
     const input = evaluation();
     input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:null,appointmentId:null}];
-    expect(plan(input)).toMatchObject({count:0,risk:"Atenção"});
+    expect(plan(input)).toMatchObject({count:2,undated:1,datedProjected:0,risk:"Atenção"});
     input.pendingSessions = Array.from({length:3},()=>({professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-11",appointmentId:null}));
-    expect(plan(input)).toMatchObject({count:0,risk:"Atenção"});
+    expect(plan(input)).toMatchObject({count:1,datedProjected:3,risk:"Atenção"});
+    expect(plan(input).offers.map(slot=>slot.date)).toEqual(["2026-11-18"]);
+  });
+
+  it("desconta uma sessão datada de dez vagas livres sem eliminar o dia", () => {
+    const input = evaluation();
+    input.availabilities[0] = { ...input.availabilities[0], vacanciesPerDay:10, vacanciesPerHour:10, endTime:"13:00" };
+    input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-11",appointmentId:null}];
+    const result = plan(input);
+    expect(result.offers.filter(slot=>slot.date==="2026-11-11").reduce((sum,slot)=>sum+slot.count,0)).toBe(9);
+    expect(result.undated).toBe(0);
+    expect(result.datedProjected).toBe(1);
   });
 
   it("distingue vaga órfã com as próximas três quartas indisponíveis de continuidade desconhecida", () => {
@@ -55,7 +66,7 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-18",appointmentId:null}];
     expect(buildWeeklySafeOfferMap(input, input.professionals, 0).rows).toHaveLength(0);
     input.pendingSessions[0].scheduledDate = null;
-    expect(buildWeeklySafeOfferMap(input, input.professionals, 0).rows).toHaveLength(0);
+    expect(buildWeeklySafeOfferMap(input, input.professionals, 0).rows[0].vacancies).toBe(1);
     input.endDate = "2026-11-19";
     expect(buildWeeklySafeOfferMap(input, input.professionals, 0).complete).toBe(false);
   });
@@ -64,6 +75,15 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     const input = evaluation();
     input.appointments = [{professionalId:"p1",unitId:"u1",date:"2026-11-11",time:"08:00",status:"confirmado",origin:"externo"}];
     expect(plan(input).occupied).toBe(0);
+  });
+
+  it("mantém a unidade isolada e inclui outras profissões no mapa semanal informativo", () => {
+    const input = evaluation();
+    input.professionals[0].profession = "Psicóloga";
+    input.pendingSessions = [{professionalId:"p1",unitId:"outra-unidade",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-18",appointmentId:null}];
+    expect(buildWeeklySafeOfferMap(input,input.professionals,0).rows).toMatchObject([
+      {unitId:"u1",specialty:"Psicologia",date:"2026-11-18",vacancies:1},
+    ]);
   });
 });
 
