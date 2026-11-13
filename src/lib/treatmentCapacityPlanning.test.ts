@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, buildWeeklySafeOfferMap, getTreatmentCycleForecastDays, MAX_TREATMENT_CYCLE_FORECAST_DAYS, planInitialEvaluations, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
+import { buildTreatmentCapacityPlan, buildTreatmentCycleFeasibility, buildPeriodSafeOfferMap, buildWeeklySafeOfferMap, getSafeOfferPeriod, getTreatmentCycleForecastDays, MAX_TREATMENT_CYCLE_FORECAST_DAYS, planInitialEvaluations, type CapacityPlanningInput } from "./treatmentCapacityPlanning";
 
 describe("regulação de vagas avulsas sem comprometer ciclos", () => {
   const evaluation = () => {
@@ -84,6 +84,25 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     expect(buildWeeklySafeOfferMap(input,input.professionals,0).rows).toMatchObject([
       {unitId:"u1",specialty:"Psicologia",date:"2026-11-18",vacancies:1},
     ]);
+  });
+
+  it.each([
+    [15, "2026-11-24"], [30, "2026-12-09"], [60, "2027-01-08"], [90, "2027-02-07"],
+  ])("imprime exatamente %i dias, até %s, sem truncar na primeira semana", (days, endDate) => {
+    const input = evaluation();
+    input.endDate = "2027-03-01";
+    input.availabilities[0].endDate = input.endDate;
+    input.availabilities[0].weekdays = [2, 3];
+    const map = buildPeriodSafeOfferMap(input, input.professionals, 0, days);
+    expect(map).toMatchObject({ startDate: input.today, endDate, complete: true });
+    expect(map.rows.some(row => row.date > "2026-11-21")).toBe(true);
+    input.endDate = "2026-11-20";
+    expect(buildPeriodSafeOfferMap(input, input.professionals, 0, days).complete).toBe(false);
+  });
+
+  it("preserva a próxima segunda a sábado no formato tradicional de 7 dias", () => {
+    expect(getSafeOfferPeriod("2026-11-10", 7)).toMatchObject({startDate:"2026-11-16",endDate:"2026-11-21"});
+    expect(() => getSafeOfferPeriod("2026-11-10", 45)).toThrow("Período de impressão inválido");
   });
 });
 

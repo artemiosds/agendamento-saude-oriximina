@@ -1021,18 +1021,25 @@ export interface WeeklySafeOfferRow {
   vacancies: number;
 }
 
-/** Próxima semana útil, de segunda a sábado, sem ofertar sessões pendentes. */
-export function buildWeeklySafeOfferMap(input: CapacityPlanningInput, professionals: CapacityPlanningProfessionalInput[], nowMinute: number) {
-  const daysUntilMonday = (8 - isoDayOfWeek(input.today)) % 7;
-  const startDate = addDaysToDateStr(input.today, daysUntilMonday);
-  const endDate = addDaysToDateStr(startDate, 5);
+/** Sete dias mantêm o mapa tradicional da próxima segunda a sábado. */
+export function getSafeOfferPeriod(today: string, periodDays: number) {
+  if (![7, 15, 30, 60, 90].includes(periodDays)) throw new Error("Período de impressão inválido.");
+  const daysUntilMonday = (8 - isoDayOfWeek(today)) % 7;
+  const startDate = periodDays === 7 ? addDaysToDateStr(today, daysUntilMonday) : today;
+  const endDate = addDaysToDateStr(startDate, periodDays === 7 ? 5 : periodDays - 1);
+  return { startDate, endDate, horizonDays: periodDays === 7 ? daysUntilMonday + 6 : periodDays };
+}
+
+/** Apenas vagas confirmáveis da janela escolhida; não cria reservas. */
+export function buildPeriodSafeOfferMap(input: CapacityPlanningInput, professionals: CapacityPlanningProfessionalInput[], nowMinute: number, periodDays: number) {
+  const { startDate, endDate, horizonDays } = getSafeOfferPeriod(input.today, periodDays);
   if (input.endDate < endDate) return { startDate, endDate, complete: false, rows: [] as WeeklySafeOfferRow[] };
 
   const rows: WeeklySafeOfferRow[] = [];
   for (const professional of professionals) {
     const specialty = classifyTreatmentCapacitySpecialty(professional.profession);
     if (!specialty) continue;
-    const plan = planInitialEvaluations(input, professional, daysUntilMonday + 6, nowMinute);
+    const plan = planInitialEvaluations(input, professional, horizonDays, nowMinute);
     const groups = new Map<string, WeeklySafeOfferRow>();
     for (const slot of plan.offers) {
       if (slot.date < startDate || slot.date > endDate) continue;
@@ -1054,4 +1061,8 @@ export function buildWeeklySafeOfferMap(input: CapacityPlanningInput, profession
   rows.sort((a, b) => a.unitId.localeCompare(b.unitId) || a.specialty.localeCompare(b.specialty, "pt-BR") ||
     a.professionalName.localeCompare(b.professionalName, "pt-BR") || a.date.localeCompare(b.date) || a.shift.localeCompare(b.shift));
   return { startDate, endDate, complete: true, rows };
+}
+
+export function buildWeeklySafeOfferMap(input: CapacityPlanningInput, professionals: CapacityPlanningProfessionalInput[], nowMinute: number) {
+  return buildPeriodSafeOfferMap(input, professionals, nowMinute, 7);
 }

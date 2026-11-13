@@ -121,64 +121,106 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
   const [sharedPatients, setSharedPatients] = useState<SharedPatientsSummary | null>(null);
   const [queueDemandRows, setQueueDemandRows] = useState<QueueDemandInput[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadedAt, setLoadedAt] = useState(0);
+  const [loadedPeriodDays, setLoadedPeriodDays] = useState("7");
+  const [requestedForecastDays, setRequestedForecastDays] = useState(90);
   const [error, setError] = useState("");
   const [queueReadStatus, setQueueReadStatus] = useState<"loading" | "available" | "unavailable">("loading");
   const [queueWarning, setQueueWarning] = useState("");
   const requestRef = useRef(0);
+  const lastRequestKeyRef = useRef("");
+  const dataScopeRef = useRef("");
+  const snapshotRef = useRef<TreatmentCapacitySnapshot | null>(null);
+  const visibleUnitsRef = useRef(unidadesVisiveis);
+  visibleUnitsRef.current = unidadesVisiveis;
+  const lastKnownQueueAccessRef = useRef(false);
+  const grantedQueueAccess = hasPermission("fila", "can_view");
+  if (!permissionsLoading) lastKnownQueueAccessRef.current = grantedQueueAccess;
+  const mayReadQueue = Boolean(isGlobalAdmin || user?.role === "master" ||
+    (permissionsLoading ? lastKnownQueueAccessRef.current : grantedQueueAccess));
 
   useEffect(() => {
     if (isGlobalAdmin) setUnitFilter("all");
     else if (userUnidadeId) setUnitFilter(userUnidadeId);
   }, [isGlobalAdmin, userUnidadeId]);
 
-  const [debouncedForecastDays, setDebouncedForecastDays] = useState(() => getTreatmentCycleForecastDays(todayLocalStr(), cycleSimulationStart, cycleSimulationFrequency, Number(cycleSimulationSessions)));
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const days = getTreatmentCycleForecastDays(todayLocalStr(), cycleSimulationStart, cycleSimulationFrequency, Number(cycleSimulationSessions));
-      if (Number.isFinite(days) && days > 0) setDebouncedForecastDays(days);
-    }, 700);
-    return () => clearTimeout(t);
-  }, [cycleSimulationStart, cycleSimulationFrequency, cycleSimulationSessions]);
+  const simulationForecastDays = getTreatmentCycleForecastDays(todayLocalStr(), cycleSimulationStart, cycleSimulationFrequency, Number(cycleSimulationSessions));
 
   useEffect(() => {
-    const requestId = ++requestRef.current;
     let cancelled = false;
+    let finished = false;
+    let started = false;
 
     const run = async () => {
       if (!isOpen) {
+        lastRequestKeyRef.current = "";
         setLoading(false);
+        setIsRefreshing(false);
         return;
       }
       if (permissionsLoading) {
-        setLoading(true);
+        const pendingScope = JSON.stringify([isGlobalAdmin ? unitFilter : userUnidadeId, user?.id, user?.role, isGlobalAdmin, mayReadQueue]);
+        if (dataScopeRef.current && dataScopeRef.current !== pendingScope) {
+          dataScopeRef.current = pendingScope;
+          lastRequestKeyRef.current = "";
+          snapshotRef.current = null;
+          setSnapshot(null);
+          setCapacityPlan(null);
+          setCycleCapacityInput(null);
+          setQueueDemandRows([]);
+          setQueueReadStatus("loading");
+        }
+        if (!snapshotRef.current) setLoading(true);
         return;
       }
       if (!isGlobalAdmin && !userUnidadeId) {
+        snapshotRef.current = null;
         setSnapshot(null);
         setCapacityPlan(null);
         setCycleCapacityInput(null);
         setQueueDemandRows([]);
         setError("Seu usuário não possui unidade definida. A consulta foi interrompida para evitar exibição fora do escopo.");
         setLoading(false);
+        setIsRefreshing(false);
         return;
       }
 
       const effectiveUnit = isGlobalAdmin ? unitFilter : userUnidadeId;
       if (!effectiveUnit) {
         setLoading(false);
+        setIsRefreshing(false);
         return;
       }
 
-      setLoading(true);
+      const scopeKey = JSON.stringify([effectiveUnit, user?.id, user?.role, isGlobalAdmin, mayReadQueue]);
+      const requestKey = JSON.stringify([scopeKey, periodDays, refreshKey, requestedForecastDays]);
+      if (lastRequestKeyRef.current === requestKey) return;
+      lastRequestKeyRef.current = requestKey;
+      started = true;
+      const requestId = ++requestRef.current;
+      const sameScope = dataScopeRef.current === scopeKey;
+      dataScopeRef.current = scopeKey;
+      const hasCached = sameScope && !!snapshotRef.current;
+      if (!sameScope) {
+        snapshotRef.current = null;
+        setSnapshot(null);
+        setCapacityPlan(null);
+        setCycleCapacityInput(null);
+        setQueueDemandRows([]);
+      }
+      setLoading(!hasCached);
+      setIsRefreshing(hasCached);
       setError("");
-      setQueueReadStatus("loading");
-      setQueueWarning("");
+      if (!hasCached) {
+        setQueueReadStatus("loading");
+        setQueueWarning("");
+      }
       const today = todayLocalStr();
       const horizon = Number(periodDays);
       const endDate = addDaysToDateStr(today, horizon - 1);
       const periodDates = Array.from({ length: horizon }, (_, index) => addDaysToDateStr(today, index));
-      const cycleForecastDays = debouncedForecastDays;
+      const cycleForecastDays = Math.min(CYCLE_FORECAST_MAX_DAYS, Math.max(90, horizon, requestedForecastDays));
       const cycleEndDate = addDaysToDateStr(today, Math.min(CYCLE_FORECAST_MAX_DAYS, cycleForecastDays) - 1);
       const cyclePeriodDates = Array.from({ length: Math.min(CYCLE_FORECAST_MAX_DAYS, cycleForecastDays) }, (_, index) => addDaysToDateStr(today, index));
 
@@ -235,7 +277,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
         );
 
         const unitNameById = new Map(
-          unidadesVisiveis.map((unit) => [String(unit.id), String(unit.nome || unit.nomeExibicao || unit.id)] as const),
+          visibleUnitsRef.current.map((unit) => [String(unit.id), String(unit.nome || unit.nomeExibicao || unit.id)] as const),
         );
 
         if (targetStaff.length === 0) {
@@ -250,6 +292,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
             queueDemand: [],
           });
           if (!cancelled && requestRef.current === requestId) {
+            snapshotRef.current = emptySnapshot;
             setSnapshot(emptySnapshot);
             setCapacityPlan({ professionals: [], suggestions: [] });
             setCycleCapacityInput(null);
@@ -363,7 +406,6 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
         let queueRows: any[] = [];
         let nextQueueReadStatus: "available" | "unavailable" = "unavailable";
         let nextQueueWarning = "";
-        const mayReadQueue = isGlobalAdmin || user?.role === "master" || hasPermission("fila", "can_view");
         if (mayReadQueue) {
           try {
             const queueResults = await Promise.all([
@@ -503,6 +545,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
         });
 
         if (!cancelled && requestRef.current === requestId) {
+          snapshotRef.current = nextSnapshot;
           setSnapshot(nextSnapshot);
           setSharedPatients(buildSharedPatientsSummary(relevantCycles.map((c) => ({ patientId: String(c.patient_id || ""), specialty: c.specialty || c.treatment_type }))));
           setCapacityPlan(nextCapacityPlan);
@@ -512,25 +555,34 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
           setQueueWarning(nextQueueWarning);
           setError("");
           setLoadedAt(Date.now());
+          setLoadedPeriodDays(periodDays);
         }
       } catch (loadError: any) {
         if (!cancelled && requestRef.current === requestId) {
-          setSnapshot(null);
-          setCapacityPlan(null);
-          setCycleCapacityInput(null);
-          setQueueDemandRows([]);
-          setQueueReadStatus("unavailable");
-          setQueueWarning("Os indicadores de fila estão indisponíveis porque a leitura geral falhou.");
-          setError(loadError?.message || "Não foi possível consultar os dados de capacidade e demanda.");
+          if (!hasCached) {
+            snapshotRef.current = null;
+            setSnapshot(null);
+            setCapacityPlan(null);
+            setCycleCapacityInput(null);
+            setQueueDemandRows([]);
+            setQueueReadStatus("unavailable");
+            setQueueWarning("Os indicadores de fila estão indisponíveis porque a leitura geral falhou.");
+          }
+          setError((hasCached ? "A atualização falhou; os dados anteriores foram mantidos. " : "") +
+            (loadError?.message || "Não foi possível consultar os dados de capacidade e demanda."));
         }
       } finally {
-        if (!cancelled && requestRef.current === requestId) setLoading(false);
+        finished = true;
+        if (!cancelled && requestRef.current === requestId) {
+          setLoading(false);
+          setIsRefreshing(false);
+        }
       }
     };
 
     void run();
-    return () => { cancelled = true; };
-  }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, unidadesVisiveis, permissionsLoading, hasPermission, debouncedForecastDays]);
+    return () => { cancelled = true; if (started && !finished) lastRequestKeyRef.current = ""; };
+  }, [isOpen, periodDays, unitFilter, refreshKey, isGlobalAdmin, userUnidadeId, user?.id, user?.role, permissionsLoading, mayReadQueue, requestedForecastDays]);
 
   const professionalOptions = useMemo(() => {
     if (!snapshot) return [];
@@ -727,10 +779,10 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
           <p className="text-sm text-muted-foreground">Consulte vagas para avaliação inicial e a carga dos ciclos por unidade e profissional.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isOpen && !loading && !error && cycleCapacityInput && <MapaVagasSemanalPrint input={cycleCapacityInput} professionals={operationalProfessionals} loadedAt={loadedAt} />}
+          {isOpen && !loading && !error && cycleCapacityInput && <MapaVagasSemanalPrint input={cycleCapacityInput} professionals={operationalProfessionals} loadedAt={loadedAt} periodDays={Number(loadedPeriodDays)} disabled={isRefreshing || loadedPeriodDays !== periodDays} />}
           {isOpen && (
-            <Button variant="outline" size="sm" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>
-              <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
+            <Button variant="outline" size="sm" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading || isRefreshing}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} /> {isRefreshing ? "Atualizando…" : "Atualizar"}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => setIsOpen((value) => !value)}>
@@ -741,10 +793,12 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
 
       {isOpen && (
       <>
+      {isRefreshing && <p role="status" className="text-xs text-muted-foreground">Atualizando os dados em segundo plano; a análise anterior permanece disponível.</p>}
+      {snapshot && loadedPeriodDays !== periodDays && <p role="status" className="text-xs text-muted-foreground">Exibindo o período anterior ({loadedPeriodDays} dias) até a atualização de {periodDays} dias terminar.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div>
           <p className="mb-1 text-xs text-muted-foreground">Período da capacidade</p>
-          <Select value={periodDays} onValueChange={setPeriodDays}>
+          <Select value={periodDays} onValueChange={(value) => { setPeriodDays(value); setRequestedForecastDays(90); }}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="7">Próximos 7 dias</SelectItem>
@@ -759,7 +813,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
         <div>
           <p className="mb-1 text-xs text-muted-foreground">Unidade</p>
           {isGlobalAdmin ? (
-            <Select value={unitFilter} onValueChange={setUnitFilter}>
+            <Select value={unitFilter} onValueChange={(value) => { setUnitFilter(value); setRequestedForecastDays(90); }}>
               <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas as unidades</SelectItem>
@@ -822,7 +876,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
         </div>
       ) : snapshot ? (
         <>
-          {cycleCapacityInput && <RegulationCockpit input={cycleCapacityInput} period={Number(periodDays)} professionals={operationalProfessionals}
+          {cycleCapacityInput && <RegulationCockpit input={cycleCapacityInput} period={Number(loadedPeriodDays)} professionals={operationalProfessionals}
             queueAvailable={queueReadStatus === "available"} canSchedule={!!user && ["recepcao","master","gestao","coordenador"].includes(user.role) && hasPermission("agenda","can_view") && hasPermission("agenda","can_create")} />}
           <details className="space-y-4"><summary className="cursor-pointer font-semibold">Ver Detalhamento Técnico e Auditoria de Capacidade</summary>
           <div className="space-y-4 rounded-lg border border-border p-4" aria-label="Simulação de tratamento completo">
@@ -835,7 +889,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
               }}><SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger><SelectContent>{(cycleCapacityInput?.professionals || []).map((row) => <SelectItem key={row.id + "|" + row.unitId} value={row.id + "|" + row.unitId}>{row.name} · {row.unitName}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-1"><Label>Frequência</Label><Select value={cycleSimulationFrequency} onValueChange={setCycleSimulationFrequency}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1x_semana">1 vez por semana</SelectItem><SelectItem value="2x_semana">2 vezes por semana</SelectItem><SelectItem value="3x_semana">3 vezes por semana</SelectItem><SelectItem value="4x_semana">4 vezes por semana</SelectItem><SelectItem value="5x_semana">5 vezes por semana</SelectItem><SelectItem value="6x_semana">6 vezes por semana</SelectItem><SelectItem value="mensal">Mensal</SelectItem><SelectItem value="manual">Manual (semanal)</SelectItem></SelectContent></Select></div>
               <div className="space-y-1"><Label htmlFor="cycle-simulation-sessions">Quantidade de sessões</Label><Input id="cycle-simulation-sessions" type="number" min={1} max={200} value={cycleSimulationSessions} onChange={(event) => setCycleSimulationSessions(event.target.value)} /></div>
-              <div className="space-y-1"><Label htmlFor="cycle-simulation-start">Data inicial</Label><Input id="cycle-simulation-start" type="date" min={cycleCapacityInput?.today || todayLocalStr()} max={cycleCapacityInput?.endDate} value={cycleSimulationStart} onChange={(event) => setCycleSimulationStart(event.target.value)} /></div>
+              <div className="space-y-1"><Label htmlFor="cycle-simulation-start">Data inicial</Label><Input id="cycle-simulation-start" type="date" min={cycleCapacityInput?.today || todayLocalStr()} value={cycleSimulationStart} onChange={(event) => setCycleSimulationStart(event.target.value)} /></div>
               <div className="space-y-1"><Label>Turno</Label><Select value={cycleSimulationShift} onValueChange={(value) => setCycleSimulationShift(value as TreatmentCycleShiftFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="qualquer">Qualquer turno</SelectItem><SelectItem value="Manhã">Manhã</SelectItem><SelectItem value="Tarde">Tarde</SelectItem><SelectItem value="Noite">Noite</SelectItem></SelectContent></Select></div>
               {onCreateFromSimulation && <div className="space-y-1 md:col-span-3"><Label htmlFor="cycle-simulation-type">Tipo de tratamento (necessário para criar o ciclo)</Label><Input id="cycle-simulation-type" value={cycleSimulationTreatmentType} onChange={(event) => setCycleSimulationTreatmentType(event.target.value)} placeholder="Descreva o tratamento definido pelo profissional" /></div>}
             </div>
@@ -843,6 +897,12 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
             {cycleSimulationResult && <div className="rounded-md border border-border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{cycleSimulationResult.status === "confirmável" ? "Capacidade encontrada para o ciclo completo" : cycleSimulationResult.status === "revisão" ? "Necessita revisão" : cycleSimulationResult.status === "insuficiente" ? "Capacidade insuficiente" : "Revise os dados"}</p><span className="text-sm tabular-nums">{cycleSimulationResult.feasibleSessions}/{cycleSimulationResult.requestedSessions} sessões</span></div>
               <p className="mt-1 text-sm">{cycleSimulationResult.message}</p>
+              {cycleCapacityInput && cycleSimulationProfessional && simulationForecastDays > cycleCapacityInput.periodDates.length &&
+                (cycleSimulationResult.status === "insuficiente" || (cycleSimulationResult.status === "inválido" && cycleSimulationStart > cycleCapacityInput.endDate)) &&
+                <Button type="button" size="sm" variant="outline" className="mt-3" disabled={isRefreshing || loading}
+                  onClick={() => setRequestedForecastDays(simulationForecastDays)}>
+                  Ampliar análise para {simulationForecastDays} dias
+                </Button>}
               {cycleSimulationResult.status === "confirmável" && onCreateFromSimulation && <div className="mt-3 space-y-2">
                 <Button type="button" size="sm" onClick={() => {
                   const [professionalId, unitId] = cycleSimulationProfessional.split("|");
@@ -1013,7 +1073,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
           {queueReadStatus === "available" && (
             <TreatmentDemandScenario
               groups={scenarioGroups}
-              periodDays={Math.max(1, Number(periodDays) || 30)}
+              periodDays={Math.max(1, Number(loadedPeriodDays) || 30)}
               today={todayLocalStr()}
               professionalFilterActive={professionalFilter !== "all"}
             />
@@ -1023,7 +1083,7 @@ export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Pr
             Leitura gerencial: capacidade disponível desconta as sessões pendentes sem vínculo, de forma conservadora; vagas simples podem apoiar uma avaliação inicial, mas não comprovam a disponibilidade seriada necessária para o tratamento completo. A confirmação de ciclo exige o plano individual com frequência, quantidade total de sessões e dias escolhidos. Faixas horárias contínuas são divididas nos limites de manhã, tarde e noite; turnos configurados como vaga única usam o horário inicial cadastrado. A capacidade interna livre é uma estimativa por grade horária, limite diário e por hora, agendamentos ocupantes, bloqueios integrais/parciais e reservas externas de data específica. Feriados, férias/recessos e indisponibilidades só são considerados quando registrados em Feriados e Bloqueios. Não presumimos feriados municipais, estaduais ou futuros que não estejam cadastrados; a importação automática disponível no cadastro contém a lista nacional de 2026. Cotas externas de período são exibidas separadamente como saldo; não são descontadas repetidamente de cada dia. Sobreposição de faixas ou múltiplas grades horárias no mesmo dia suspende o cálculo daquele dia e exige revisão. Sessões pendentes e fila apta são fontes distintas e não são somadas. A espera considera somente data_solicitacao_original válida. As sugestões são agrupadas por unidade e profissão, usam apenas capacidade residual depois das sessões pendentes e nunca atribuem pacientes ou agendam automaticamente. Novos direcionamentos registram o CBO de destino quando selecionado no formulário. Registros históricos sem esse metadado permanecem não comparáveis; nenhum CBO é preenchido retroativamente por suposição.
           </p>
           <p className="text-xs text-muted-foreground">
-            Os indicadores gerais usam o período selecionado; a simulação do ciclo calcula uma janela adaptativa de acordo com frequência e quantidade de sessões, limitada a 10 anos. A distribuição por turno mostra vagas livres estimadas antes de alocar sessões pendentes sem horário/turno informado; por isso, não deve ser somada como capacidade adicional. Sessões pendentes e solicitações aptas representam estoques de demanda, independentemente do período selecionado.
+            Os indicadores gerais usam o período carregado; a simulação do ciclo consulta inicialmente 90 dias e permite ampliar a análise conforme a frequência e a quantidade de sessões, até o limite de 10 anos. A distribuição por turno mostra vagas livres estimadas antes de alocar sessões pendentes sem horário/turno informado; por isso, não deve ser somada como capacidade adicional. Sessões pendentes e solicitações aptas representam estoques de demanda, independentemente do período selecionado.
           </p>
           </details>
         </>
