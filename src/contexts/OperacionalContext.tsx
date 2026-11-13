@@ -109,9 +109,9 @@ const defaultConfiguracoes: Configuracoes = {
     lembrete: "Lembrete: Sua consulta é em {data} às {hora} na {unidade} com {profissional}.",
   },
   webhook: {
-    ativo: true,
-    url: "https://hook.us2.make.com/a12e4puc3o58b3z78k9qu3wxevr5qkwa",
-    status: "ativo" as const,
+    ativo: false,
+    url: "",
+    status: "inativo" as const,
   },
   gmail: {
     ativo: false,
@@ -722,14 +722,14 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           horaInicio: td.horaInicio,
           horaFim: td.horaFim,
           vagasTotal,
-          vagasOcupadas: turnoAppCount,
+          vagasOcupadas: vagasOcupadasInterno,
           vagasReservadasExterno,
           vagasOcupadasExterno,
           vagasOcupadasInterno,
           vagasLivresInternas,
           vagasLivresTotal,
-          lotado: turnoAppCount >= vagasTotal,
-          excedido: turnoAppCount > vagasTotal,
+          lotado: vagasOcupadasInterno >= vagasTotal,
+          excedido: vagasOcupadasInterno > vagasTotal,
           conflitoReservaExterna: capacidade.conflitoReserva,
         };
       });
@@ -1105,13 +1105,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
       for (const td of turnoDisps) {
         const turnoStart = td.horaInicio;
         const turnoEnd = td.horaFim;
-        const turnoAppCount = dayAppointments.filter(
-          (a) => a.hora >= turnoStart && a.hora < turnoEnd,
-        ).length;
-        if (turnoAppCount >= td.vagasPorDia) continue;
         const turnoAppointments = dayAppointments.filter((a) => a.hora >= turnoStart && a.hora < turnoEnd);
         const externalCount = turnoAppointments.filter((a) => a.origem === "externo").length;
         const internalCount = turnoAppointments.length - externalCount;
+        if (internalCount >= td.vagasPorDia) continue;
         const reservations = quotasExternasRef.current.filter((quota) => quotaMatchesAvailability(quota, {
           profissionalId, unidadeId, date, horaInicio: td.horaInicio, horaFim: td.horaFim,
         }, allDisps.length));
@@ -1146,10 +1143,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           ocupacaoExterna: externalCount,
           ocupacaoInterna: internalCount,
         });
-        if (dayAppointments.length < disp.vagasPorDia && capacity.vagasInternasLivres > 0) {
+        if (internalCount < disp.vagasPorDia && capacity.vagasInternasLivres > 0) {
           const hourCounts = new Map<string, number>();
           const slotCounts = new Map<string, number>();
-          for (const a of dayAppointments) {
+          for (const a of dayAppointments.filter((appointment) => appointment.origem !== "externo")) {
             const hKey = a.hora.substring(0, 3);
             hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
             slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);

@@ -2541,7 +2541,7 @@ const Agenda: React.FC = () => {
       }
 
       if (dateOrHourChanged && prof?.unidadeId) {
-        const canOverride = user && ["master", "coordenador"].includes(user.role);
+        const canOverride = user?.role === "master";
         const { data: slotCheck, error: slotCheckError } = await (supabase as any).rpc("check_internal_slot_availability", {
           p_profissional_id: editAg.profissionalId,
           p_unidade_id: prof.unidadeId,
@@ -2559,7 +2559,7 @@ const Agenda: React.FC = () => {
             reason === "outside_grid" ? "Horário fora do turno ou da grade configurada." :
             reason === "external_reservation" ? "Horário reservado para vagas externas." :
             "Sem disponibilidade.";
-          if (!canOverride) {
+          if (!canOverride || !isMasterCapacityOverrideReason(reason)) {
             toast.error(`Não é possível reagendar: ${reasonMsg}`);
             return;
           }

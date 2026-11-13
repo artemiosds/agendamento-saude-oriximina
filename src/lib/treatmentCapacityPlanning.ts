@@ -382,16 +382,16 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
     const requestedReservation = externalQuotas.reduce((sum, quota) =>
       sum + Math.max(0, Number(quota.vagas_total) || 0), 0,
     );
-    totalReserved += Math.min(Math.max(0, Number(row.vacanciesPerDay) || 0), requestedReservation);
+    totalReserved += requestedReservation;
     if (capacity.conflitoReserva) review = true;
     if (capacity.vagasInternasLivres <= 0) continue;
 
     if (row.vacanciesPerHour > 0) {
-      if (dayAppointments.length >= row.vacanciesPerDay) continue;
+      if (internalCount >= row.vacanciesPerDay) continue;
       const duration = Math.max(15, Number(professional.appointmentDurationMinutes) || 30);
       const hourCounts = new Map<number, number>();
       const slotCounts = new Map<number, number>();
-      for (const appointment of dayAppointments) {
+      for (const appointment of dayAppointments.filter((item) => item.origin !== "externo")) {
         const appointmentMinute = toMinutes(appointment.time);
         if (appointmentMinute === null) continue;
         const hour = Math.floor(appointmentMinute / 60);
@@ -409,6 +409,7 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
         const slotCount = slotCounts.get(minute) || 0;
         if (isSlotBlockedAt(dateBlocks, minute) || !allowed(minute, duration)) continue;
         if (regulation && (minute + duration > end || dayAppointments.some(a => {
+          if (a.origin === "externo") return false;
           const taken = toMinutes(a.time);
           return taken !== null && minute < taken + duration && taken < minute + duration;
         }))) continue;
@@ -464,7 +465,7 @@ function getDailyPlan(input: CapacityPlanningInput, professional: CapacityPlanni
         remainingFree -= shiftFree;
       }
     } else {
-      if (inTurn.length >= row.vacanciesPerDay || isSlotBlockedAt(dateBlocks, start)) continue;
+      if (internalCount >= row.vacanciesPerDay || isSlotBlockedAt(dateBlocks, start)) continue;
       if (!allowed(start, 1)) continue;
       if (regulation) {
         const free = Math.min(capacity.vagasInternasLivres, capacity.vagasTotaisLivres);

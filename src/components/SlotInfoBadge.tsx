@@ -43,7 +43,8 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     );
 
     // Contagem real de pacientes ativos no dia para este profissional/unidade
-    const dayOccupied = active.length;
+    const internalAppointments = active.filter(a => a.origem !== 'externo');
+    const dayOccupied = internalAppointments.length;
     const dayTotal = turnoData.reduce((sum, t) => sum + t.vagasTotal, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
     const dayExcedido = dayOccupied > dayTotal;
@@ -54,12 +55,12 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     if (hora && !isTurnoMode) {
       const disp = allDisps[0];
       const hPrefix = hora.substring(0, 3);
-      hourOccupied = active.filter(a => a.hora.startsWith(hPrefix)).length;
+      hourOccupied = internalAppointments.filter(a => a.hora.startsWith(hPrefix)).length;
       hourTotal = disp.vagasPorHora;
     }
 
     return { dayOccupied, dayTotal, dayAvailable, dayExcedido, hourOccupied, hourTotal, availableSlotOptions, isTurnoMode };
-  }, [profissionalId, unidadeId, date, hora, agendamentos, disponibilidades, getAvailableSlots]);
+  }, [profissionalId, unidadeId, date, hora, agendamentos, disponibilidades, getAvailableSlots, turnoData]);
 
   if (!info) return null;
 
@@ -72,6 +73,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
   // Turno mode: show per-turno breakdown
   if (info.isTurnoMode && turnoData.length > 0 && !compact) {
     const totalOcupadas = turnoData.reduce((s, t) => s + t.vagasOcupadas, 0);
+    const totalExternas = turnoData.reduce((s, t) => s + t.vagasOcupadasExterno, 0);
     const totalVagas = turnoData.reduce((s, t) => s + t.vagasTotal, 0);
     const totalExcedido = totalOcupadas > totalVagas;
     return (
@@ -80,7 +82,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
           "text-xs font-medium",
           totalExcedido ? "text-destructive font-semibold" : "text-muted-foreground",
         )}>
-          📊 {totalOcupadas} pacientes agendados no dia
+          📊 {totalOcupadas} agendados na grade regular{totalExternas > 0 ? ` · ${totalExternas} pela cota externa` : ''}
           {totalExcedido && ' • LIMITE EXCEDIDO'}
         </span>
         <div className="flex flex-col gap-1.5">

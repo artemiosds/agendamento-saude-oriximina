@@ -18,7 +18,6 @@ import { format } from "date-fns";
 import { CalendarioDisponibilidade, type DayInfo } from "@/components/CalendarioDisponibilidade";
 import { todayLocalStr } from "@/lib/utils";
 import { isQuotaConfigurationUsable, quotaAllowsSlot } from "@/lib/externalQuota";
-import { statusOcupaVaga } from "@/lib/appointmentCapacity";
 import { printComprovanteAgendamento } from "@/lib/printComprovanteAgendamento";
 
 interface ExternalUser {
@@ -62,7 +61,6 @@ const AgendamentoExterno: React.FC = () => {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [unidades, setUnidades] = useState<any[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<any[]>([]);
-  const [agendamentos, setAgendamentos] = useState<any[]>([]);
 
   // Selection
   const [selectedUnidade, setSelectedUnidade] = useState("");
@@ -232,21 +230,10 @@ const AgendamentoExterno: React.FC = () => {
       }
     }
 
-    // Filter booked
-    const bookedSlots = agendamentos
-      .filter(a => a.profissional_id === selectedProfissional && a.data === selectedDate && statusOcupaVaga(a.status))
-      .map(a => a.hora);
-
-    return [...new Set(slots)].filter(s => quotaAllows(selectedQuota, selectedDate, s) && !bookedSlots.includes(s));
-  }, [selectedProfissional, selectedUnidade, selectedDate, selectedQuota, quotaAllows, disponibilidades, agendamentos]);
-
-  // Load agendamentos when profissional/date changes
-  useEffect(() => {
-    if (!selectedProfissional || !selectedDate) return;
-    supabase.from("agendamentos").select("hora, status, profissional_id, data")
-      .eq("profissional_id", selectedProfissional).eq("unidade_id", selectedUnidade).eq("data", selectedDate)
-      .then(({ data }) => setAgendamentos(data || []));
-  }, [selectedProfissional, selectedUnidade, selectedDate]);
+    // A cota é independente das vagas regulares. O horário ocupado pelo balcão
+    // permanece ofertável enquanto a RPC confirmar o saldo contratual.
+    return [...new Set(slots)].filter(s => quotaAllows(selectedQuota, selectedDate, s));
+  }, [selectedProfissional, selectedUnidade, selectedDate, selectedQuota, quotaAllows, disponibilidades]);
 
   // ── Patient search ──
   const handlePatientSearch = async () => {

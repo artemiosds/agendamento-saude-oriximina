@@ -70,19 +70,27 @@ describe('reserva externa em data específica', () => {
       .toBe('reserva_data_especifica');
   });
 
-  it('protege 10 vagas dentro da capacidade total de 30', () => {
+  it('protege 10 vagas externas além das 30 vagas regulares da recepção', () => {
     expect(calculateExternalCapacity({
       capacidadeTotal: 30, reservasConfiguradas: [10], ocupacaoExterna: 3, ocupacaoInterna: 18,
     })).toMatchObject({
       reservaExternaConfigurada: 10, reservaExternaRestante: 7,
-      capacidadeInterna: 20, vagasInternasLivres: 2, vagasTotaisLivres: 9,
+      capacidadeInterna: 30, vagasInternasLivres: 12, vagasTotaisLivres: 19,
     });
   });
 
-  it('limita reservas somadas à capacidade e sinaliza conflito', () => {
+  it('preserva saldo externo quando o Master excede 40 vagas regulares', () => {
+    expect(calculateExternalCapacity({
+      capacidadeTotal: 40, reservasConfiguradas: [5], ocupacaoExterna: 2, ocupacaoInterna: 42,
+    })).toMatchObject({
+      vagasInternasLivres: 0, reservaExternaRestante: 3, vagasTotaisLivres: 3,
+    });
+  });
+
+  it('soma cotas contratadas sem consumir o teto regular', () => {
     expect(calculateExternalCapacity({
       capacidadeTotal: 30, reservasConfiguradas: [20, 15], ocupacaoExterna: 0, ocupacaoInterna: 0,
-    })).toMatchObject({ reservaExternaConfigurada: 30, conflitoReserva: true });
+    })).toMatchObject({ reservaExternaConfigurada: 35, conflitoReserva: false, vagasInternasLivres: 30 });
   });
 
   it('não reserva cota inativa, vencida ou sem unidade', () => {
@@ -101,9 +109,9 @@ describe('reserva externa em data específica', () => {
     })).toMatchObject({ vagasInternasLivres: 18, vagasTotaisLivres: 18 });
   });
 
-  it('não permite que a soma calculada ultrapasse a capacidade total', () => {
+  it('não duplica vagas quando os dois limites independentes se esgotam', () => {
     expect(calculateExternalCapacity({
-      capacidadeTotal: 30, reservasConfiguradas: [10], ocupacaoExterna: 10, ocupacaoInterna: 20,
+      capacidadeTotal: 30, reservasConfiguradas: [10], ocupacaoExterna: 10, ocupacaoInterna: 30,
     })).toMatchObject({ vagasInternasLivres: 0, vagasTotaisLivres: 0 });
   });
 
@@ -130,7 +138,7 @@ describe('reserva externa em data específica', () => {
   it('soma reservas válidas abaixo da capacidade', () => {
     expect(calculateExternalCapacity({
       capacidadeTotal: 30, reservasConfiguradas: [4, 6], ocupacaoExterna: 0, ocupacaoInterna: 0,
-    })).toMatchObject({ reservaExternaConfigurada: 10, conflitoReserva: false, vagasInternasLivres: 20 });
+    })).toMatchObject({ reservaExternaConfigurada: 10, conflitoReserva: false, vagasInternasLivres: 30 });
   });
 
   it('reduz o saldo reservado conforme o externo agenda', () => {

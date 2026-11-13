@@ -91,13 +91,15 @@ export interface ExternalCapacityInput {
 export function calculateExternalCapacity(input: ExternalCapacityInput) {
   const capacidadeTotal = Math.max(0, input.capacidadeTotal);
   const reservaSolicitada = input.reservasConfiguradas.reduce((sum, value) => sum + Math.max(0, value), 0);
-  const reservaExternaConfigurada = Math.min(capacidadeTotal, reservaSolicitada);
+  // A grade é o limite regular da recepção; a quota contratada é uma faixa
+  // independente e não consome nem reduz esse limite.
+  const reservaExternaConfigurada = reservaSolicitada;
   const ocupacaoExterna = Math.max(0, input.ocupacaoExterna);
   const ocupacaoInterna = Math.max(0, input.ocupacaoInterna);
   const reservaExternaRestante = Math.max(0, reservaExternaConfigurada - ocupacaoExterna);
-  const capacidadeInterna = Math.max(0, capacidadeTotal - reservaExternaConfigurada);
+  const capacidadeInterna = capacidadeTotal;
   const vagasInternasLivres = Math.max(0, capacidadeInterna - ocupacaoInterna);
-  const vagasTotaisLivres = Math.max(0, capacidadeTotal - ocupacaoInterna - ocupacaoExterna);
+  const vagasTotaisLivres = vagasInternasLivres + reservaExternaRestante;
   return {
     capacidadeTotal,
     reservaSolicitada,
@@ -108,7 +110,7 @@ export function calculateExternalCapacity(input: ExternalCapacityInput) {
     capacidadeInterna,
     vagasInternasLivres,
     vagasTotaisLivres,
-    conflitoReserva: reservaSolicitada > capacidadeTotal,
+    conflitoReserva: false,
   };
 }
 

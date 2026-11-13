@@ -84,6 +84,8 @@ const Disponibilidade: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [quotaReservation, setQuotaReservation] = useState<number | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [manageProfId, setManageProfId] = useState<string | null>(null);
 
@@ -116,6 +118,30 @@ const Disponibilidade: React.FC = () => {
 
   const todayStr = new Date().toISOString().split('T')[0];
   const isEditing = editGroupIds.length > 0;
+
+  useEffect(() => {
+    if (!dialogOpen || !form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim) {
+      setQuotaReservation(null);
+      return;
+    }
+    let cancelled = false;
+    setQuotaLoading(true);
+    setQuotaReservation(null);
+    const read = async () => {
+      const { data, error } = await supabase.from('quotas_externas')
+        .select('vagas_total')
+        .eq('profissional_interno_id', form.profissionalId)
+        .eq('unidade_id', form.unidadeId)
+        .eq('ativo', true)
+        .lte('periodo_inicio', form.dataFim)
+        .gte('periodo_fim', form.dataInicio);
+      if (cancelled) return;
+      setQuotaReservation(error ? null : (data || []).reduce((sum, quota) => sum + Math.max(0, quota.vagas_total || 0), 0));
+      setQuotaLoading(false);
+    };
+    void read();
+    return () => { cancelled = true; };
+  }, [dialogOpen, form.profissionalId, form.unidadeId, form.dataInicio, form.dataFim]);
 
   // Load config (modes and turnos)
   const loadConfig = useCallback(async () => {
@@ -687,6 +713,13 @@ const Disponibilidade: React.FC = () => {
               </div>
             </div>
 
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm" role="status">
+              <Label htmlFor="external-quota-reservation">Reserva para Cotas Externas</Label>
+              <Input id="external-quota-reservation" className="mt-1 max-w-32" readOnly value={quotaLoading ? 'Carregando' : quotaReservation ?? 'Indisponível'} />
+              <p className="mt-2 text-muted-foreground">{modo === 'por_hora' ? `Recepção limitada a ${form.vagasPorDia} vagas por dia` : 'Recepção limitada às vagas de cada turno abaixo'} · Cotas externas autorizadas no período: {quotaReservation ?? 'não confirmadas'} · Master sem limite de capacidade para encaixes.</p>
+              <p className="mt-1 text-xs text-muted-foreground">A reserva é a soma das cotas ativas vinculadas a este profissional e unidade. Pode variar por data e turno; ajuste as cotas em Funcionários → Profissionais Externos.</p>
+            </div>
+
             {/* === POR HORA mode === */}
             {modo === 'por_hora' && (
               <>
@@ -696,8 +729,8 @@ const Disponibilidade: React.FC = () => {
                     <Input type="number" min={1} value={form.vagasPorHora} onChange={e => setForm(p => ({ ...p, vagasPorHora: parseInt(e.target.value) || 1 }))} />
                   </div>
                   <div>
-                    <Label>Vagas/Dia</Label>
-                    <Input type="number" min={1} value={form.vagasPorDia} onChange={e => setForm(p => ({ ...p, vagasPorDia: parseInt(e.target.value) || 1 }))} />
+                    <Label htmlFor="regular-reception-limit">Vagas para Recepção / Balcão (Limite Regular)</Label>
+                    <Input id="regular-reception-limit" type="number" min={1} value={form.vagasPorDia} onChange={e => setForm(p => ({ ...p, vagasPorDia: parseInt(e.target.value) || 1 }))} />
                   </div>
                   <div>
                     <Label>Duração (min)</Label>

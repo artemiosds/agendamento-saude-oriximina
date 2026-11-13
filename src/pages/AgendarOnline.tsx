@@ -164,7 +164,7 @@ const AgendarOnline: React.FC = () => {
     for (const td of turnoDisps) {
       const turnoStart = td.hora_inicio;
       const turnoEnd = td.hora_fim;
-      const turnoAppCount = dayAppointments.filter(a => a.hora >= turnoStart && a.hora < turnoEnd).length;
+      const turnoAppCount = dayAppointments.filter(a => a.origem !== 'externo' && a.hora >= turnoStart && a.hora < turnoEnd).length;
       if (turnoAppCount >= td.vagas_por_dia) continue;
 
       const sh = parseInt(turnoStart.split(':')[0]);
@@ -176,10 +176,11 @@ const AgendarOnline: React.FC = () => {
 
     if (horaDisps.length > 0) {
       const disp = horaDisps[0];
-      if (dayAppointments.length < disp.vagas_por_dia) {
+      const internalAppointments = dayAppointments.filter(a => a.origem !== 'externo');
+      if (internalAppointments.length < disp.vagas_por_dia) {
         const hourCounts = new Map<string, number>();
         const slotCounts = new Map<string, number>();
-        for (const a of dayAppointments) {
+        for (const a of internalAppointments) {
           const hKey = a.hora.substring(0, 3);
           hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
           slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);

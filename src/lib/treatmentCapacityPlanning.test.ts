@@ -151,12 +151,12 @@ describe("planejamento de capacidade real para tratamentos", () => {
 
     const result = buildTreatmentCapacityPlan(input);
     expect(result.professionals[0]).toMatchObject({
-      availableAppointments: 2,
+      availableAppointments: 3,
       sameDayExternalReserved: 1,
       availableDates: 1,
       reviewDays: 0,
     });
-    expect(result.professionals[0].nextWindows[0]).toMatchObject({ date: "2026-11-11", freeAppointments: 2 });
+    expect(result.professionals[0].nextWindows[0]).toMatchObject({ date: "2026-11-11", freeAppointments: 3 });
     expect(result.professionals[0].nextWindows[0].label).toContain("08:00");
     expect(result.professionals[0].nextWindows[0].label).not.toContain("08:30");
   });
@@ -219,7 +219,7 @@ const input = baseInput();
 
     const result = buildTreatmentCapacityPlan(input);
     expect(result.professionals[0]).toMatchObject({
-      availableAppointments: 2,
+      availableAppointments: 4,
       sameDayExternalReserved: 2,
       availableDates: 1,
     });
