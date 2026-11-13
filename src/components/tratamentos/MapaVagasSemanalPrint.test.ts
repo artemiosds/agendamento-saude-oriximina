@@ -5,7 +5,9 @@ import MapaVagasSemanalPrint from "./MapaVagasSemanalPrint";
 import { renderWeeklyOfferMap } from "@/lib/weeklyOfferPrint";
 import { addDaysToDateStr, todayLocalStr } from "@/lib/utils";
 
-const printDocument = vi.hoisted(() => vi.fn(async () => {}));
+const printDocument = vi.hoisted(() =>
+  vi.fn(async (_html: string, _title?: string, _meta?: Record<string, string>) => {}),
+);
 vi.mock("@/lib/printLayout", () => ({ openPrintDocument: printDocument }));
 
 describe("mapa de balcão sem dados de pacientes", () => {
