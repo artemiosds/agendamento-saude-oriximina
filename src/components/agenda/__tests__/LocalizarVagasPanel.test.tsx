@@ -5,11 +5,15 @@ Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || function 
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 const loaded = new Set<string>();
+let failEligibility = false;
 vi.mock("@/contexts/_agendamentosBridge", () => ({ isCompleteAgendaDate: (d: string) => loaded.has(d) }));
 vi.mock("@/services/regulationCapacity", () => ({
-  readRegulationCapacity: async (_scope: unknown, requestId?: string) => ({
+  readRegulationCapacity: async (_scope: unknown, requestId?: string) => {
+    if (failEligibility) throw new Error("Fila indisponível");
+    return {
     offers:[{date:todayLocalStr(),time:"08:00",count:1}], patientId:requestId ? "person1" : undefined,
-  }),
+    };
+  },
   containsEvaluationSlot: (offers: {date:string;time:string}[], date:string,time:string) => offers.some(s=>s.date===date && s.time===time),
 }));
 
@@ -45,7 +49,7 @@ async function abrirEBuscar(props: Partial<React.ComponentProps<typeof Localizar
   fireEvent.click(screen.getByRole("button", { name: /Buscar/ }));
 }
 
-beforeEach(() => { loaded.clear(); failPending = false; });
+beforeEach(() => { loaded.clear(); failPending = false; failEligibility = false; });
 
 describe("LocalizarVagasPanel (integração)", () => {
   it("erro na Agenda = Disponibilidade não confirmada, nunca Sem vaga", async () => {
@@ -109,6 +113,38 @@ describe("LocalizarVagasPanel (integração)", () => {
     await screen.findByText(/Consulta concluída/);
     fireEvent.click(screen.getAllByRole("button",{name:"08:00"})[0]);
     expect(onPick).toHaveBeenCalledWith("p3",todayLocalStr(),"08:00",undefined);
+  });
+
+  it("abre o modo manual de Fono em 30 dias e mostra a data futura sem exigir vínculo à fila", async () => {
+    const onPick = vi.fn();
+    const future = addDaysToDateStr(todayLocalStr(), 16);
+    render(<LocalizarVagasPanel profissionais={profs} unidades={unidades}
+      manualScope={{professionalId:"p1",unitId:"u1",specialty:"Fonoaudiologia",days:30,candidates:[]}}
+      getAvailableSlots={(_id,_unit,date) => date === future ? ["08:00"] : []}
+      loadAgendaRange={async (start,end) => { for(let date=start;date<=end;date=addDaysToDateStr(date,1)) loaded.add(date); }} onPick={onPick}/>);
+    expect(screen.getByText(/Nenhuma solicitação pré-vinculada da fila/)).toBeTruthy();
+    await screen.findByText(/Consulta concluída/);
+    expect(screen.getByText(future.split("-").reverse().join("/"))).toBeTruthy();
+    fireEvent.click(screen.getByRole("button",{name:"08:00"}));
+    expect(onPick).toHaveBeenCalledWith("p1", future, "08:00", undefined);
+  });
+
+  it("não libera vaga regulada após falha na elegibilidade e oferece busca manual explícita", async () => {
+    failEligibility = true;
+    const onPick = vi.fn();
+    const onUseManualSearch = vi.fn();
+    render(<LocalizarVagasPanel profissionais={profs} unidades={unidades}
+      regulation={{professionalId:"p1",unitId:"u1",specialty:"Fonoaudiologia",days:7,
+        candidates:[{id:"request-1",name:"Paciente de teste",requestDate:"2026-11-09"}]}}
+      getAvailableSlots={()=>["08:00"]}
+      loadAgendaRange={async (start,end)=>{for(let date=start;date<=end;date=addDaysToDateStr(date,1)) loaded.add(date);}}
+      onUseManualSearch={onUseManualSearch} onPick={onPick}/>);
+    fireEvent.change(screen.getByLabelText(/Paciente apto da fila/),{target:{value:"request-1"}});
+    expect(await screen.findByText(/Não foi possível confirmar a solicitação da fila/)).toBeTruthy();
+    expect(screen.queryByRole("button",{name:"08:00"})).toBeNull();
+    fireEvent.click(screen.getByRole("button",{name:"Buscar vagas sem vincular à fila"}));
+    expect(onUseManualSearch).toHaveBeenCalledOnce();
+    expect(onPick).not.toHaveBeenCalled();
   });
 
   it("desempenho: 30 dias x 40 profissionais em menos de 1,5 s", async () => {

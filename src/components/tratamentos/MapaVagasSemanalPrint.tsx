@@ -33,13 +33,15 @@ export default function MapaVagasSemanalPrint({ input, professionals, loadedAt, 
       const freshMap = buildPeriodSafeOfferMap(input, professionals, nowMinutesInBrazil(), periodDays);
       if (!freshMap.complete) throw new Error("Dados incompletos para o período selecionado");
       const emittedAt = new Date().toLocaleString("pt-BR", { dateStyle: "full", timeStyle: "short" });
-      await openPrintDocument(title, renderWeeklyOfferMap(freshMap.rows, freshMap.startDate, freshMap.endDate, unitNames, periodDays), {
+      const documentTitle = periodDays === 7 ? title
+        : `Mapa de Ofertas do Período — ${shortDate(freshMap.startDate)} a ${shortDate(freshMap.endDate)} (${periodDays} dias)`;
+      await openPrintDocument(documentTitle, renderWeeklyOfferMap(freshMap.rows, freshMap.startDate, freshMap.endDate, unitNames, periodDays), {
         "Período": `${shortDate(freshMap.startDate)} a ${shortDate(freshMap.endDate)}${periodDays === 7 ? "" : ` (${periodDays} dias)`}`,
         "Emissão": emittedAt,
       });
     } catch (error) {
-      console.error("Falha ao preparar o mapa semanal", error);
-      toast.error("Não foi possível preparar o mapa semanal. Tente novamente.");
+      console.error("Falha ao preparar o mapa de ofertas", error);
+      toast.error("Não foi possível preparar o mapa de ofertas. Tente novamente.");
     } finally {
       setPrinting(false);
     }

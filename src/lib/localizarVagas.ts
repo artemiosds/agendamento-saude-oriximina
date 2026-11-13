@@ -24,9 +24,11 @@ export interface ManualAvailabilityScope {
   professionalId: string;
   unitId: string;
   specialty: string;
-  days: 7 | 15;
+  days: 7 | 15 | 30;
   candidates: [];
+  queueReadUnavailable?: boolean;
 }
+export const isValidSearchHorizon = (days: number): days is 7 | 15 | 30 => [7, 15, 30].includes(days);
 const KNOWN = new Set<string>(KNOWN_SPECIALTIES);
 
 /** Especialidade reconhecida; nome não reconhecido = null (nunca compatível consigo mesmo). */

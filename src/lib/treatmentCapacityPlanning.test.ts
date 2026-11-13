@@ -58,16 +58,16 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     expect(result.offers.every(s=>s.date!=="2026-11-11" || s.time!=="08:00")).toBe(true);
   });
 
-  it("emite apenas vagas seguras da próxima semana, preservando a sessão pendente", () => {
+  it("emite apenas vagas seguras dos próximos sete dias, preservando a sessão pendente", () => {
     const input = evaluation();
     const regular = buildWeeklySafeOfferMap(input, input.professionals, 0);
-    expect(regular).toMatchObject({ startDate: "2026-11-16", endDate: "2026-11-21", complete: true });
-    expect(regular.rows.some(row => row.date === "2026-11-18")).toBe(true);
-    input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-18",appointmentId:null}];
+    expect(regular).toMatchObject({ startDate: "2026-11-10", endDate: "2026-11-16", complete: true });
+    expect(regular.rows.some(row => row.date === "2026-11-11")).toBe(true);
+    input.pendingSessions = [{professionalId:"p1",unitId:"u1",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-11",appointmentId:null}];
     expect(buildWeeklySafeOfferMap(input, input.professionals, 0).rows).toHaveLength(0);
     input.pendingSessions[0].scheduledDate = null;
     expect(buildWeeklySafeOfferMap(input, input.professionals, 0).rows[0].vacancies).toBe(1);
-    input.endDate = "2026-11-19";
+    input.endDate = "2026-11-12";
     expect(buildWeeklySafeOfferMap(input, input.professionals, 0).complete).toBe(false);
   });
 
@@ -82,7 +82,7 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     input.professionals[0].profession = "Psicóloga";
     input.pendingSessions = [{professionalId:"p1",unitId:"outra-unidade",cycleStatus:"em_andamento",status:"pendente_agendamento",scheduledDate:"2026-11-18",appointmentId:null}];
     expect(buildWeeklySafeOfferMap(input,input.professionals,0).rows).toMatchObject([
-      {unitId:"u1",specialty:"Psicologia",date:"2026-11-18",vacancies:1},
+      {unitId:"u1",specialty:"Psicologia",date:"2026-11-11",vacancies:1},
     ]);
   });
 
@@ -100,8 +100,8 @@ describe("regulação de vagas avulsas sem comprometer ciclos", () => {
     expect(buildPeriodSafeOfferMap(input, input.professionals, 0, days).complete).toBe(false);
   });
 
-  it("preserva a próxima segunda a sábado no formato tradicional de 7 dias", () => {
-    expect(getSafeOfferPeriod("2026-11-10", 7)).toMatchObject({startDate:"2026-11-16",endDate:"2026-11-21"});
+  it("mantém a semana móvel de sete dias, alinhada à janela exibida no painel", () => {
+    expect(getSafeOfferPeriod("2026-11-10", 7)).toMatchObject({startDate:"2026-11-10",endDate:"2026-11-16"});
     expect(() => getSafeOfferPeriod("2026-11-10", 45)).toThrow("Período de impressão inválido");
   });
 });

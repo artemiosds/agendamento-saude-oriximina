@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyDayAvailability, isStrictlyCompatible, estimateContinuity, countUnlinkedPendingByProfessional,
-  classifyCardAvailability, breakdownPendingByProfessionalUnit, totalsByUnitSpecialty, strictSpecialtyOf,
+  classifyCardAvailability, breakdownPendingByProfessionalUnit, totalsByUnitSpecialty, strictSpecialtyOf, isValidSearchHorizon,
 } from "./localizarVagas";
 
 describe("localizarVagas", () => {
+  it("aceita apenas os horizontes oficiais de busca da Agenda", () => {
+    expect([7, 15, 30].every(isValidSearchHorizon)).toBe(true);
+    expect([0, 14, 31, 60, 90].some(isValidSearchHorizon)).toBe(false);
+  });
   it("dia não carregado nunca vira sem vaga", () => {
     expect(classifyDayAvailability({ loadError: false, dayLoaded: false, slots: [] })).toBe("nao_carregado");
     expect(classifyDayAvailability({ loadError: true, dayLoaded: false, slots: [] })).toBe("erro");

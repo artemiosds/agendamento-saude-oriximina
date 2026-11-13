@@ -27,6 +27,7 @@ interface Props {
   manualScope?: ManualAvailabilityScope;
   onDismissRegulation?: () => void;
   onDismissManualScope?: () => void;
+  onUseManualSearch?: () => void;
   onPick: (profissionalId: string, date: string, hora: string, selection?: RegulationSelection) => void;
 }
 
@@ -81,7 +82,7 @@ const continuityLabel: Record<ContinuityEstimate, string> = {
   nao_confirmada: "Capacidade não confirmada",
 };
 
-export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots, loadAgendaRange, onPick, regulation, manualScope, onDismissRegulation, onDismissManualScope }: Props) {
+export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots, loadAgendaRange, onPick, regulation, manualScope, onDismissRegulation, onDismissManualScope, onUseManualSearch }: Props) {
   const [open, setOpen] = useState(!!regulation || !!manualScope);
   const [selectedPatient, setSelectedPatient] = useState<string>();
   const [selectedRequestId, setSelectedRequestId] = useState(regulation?.requestId || "");
@@ -91,6 +92,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
   const [dias, setDias] = useState(String(regulation?.days || manualScope?.days || 15));
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState(false);
   const [pendingAvailable, setPendingAvailable] = useState(true);
   const [results, setResults] = useState<ProfResult[] | null>(null);
   const [unitTotals, setUnitTotals] = useState<{ unitId: string; specialty: string; total: PendingBreakdown | null }[]>([]);
@@ -109,22 +111,26 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
     if (!servico) return;
     const searchId = ++searchRef.current;
     const t0 = performance.now();
-    setLoading(true); setResults(null); setLoadError(false);
+    setLoading(true); setResults(null); setLoadError(false); setEligibilityError(false);
     const start = todayLocalStr();
     const end = addDaysToDateStr(start, Number(dias) - 1);
-    let err = false;
-    try { await loadAgendaRange(start, end); } catch { err = true; }
+    let agendaError = false;
+    try { await loadAgendaRange(start, end); } catch { agendaError = true; }
     if (searchId !== searchRef.current) return;
     let safeSlots: Awaited<ReturnType<typeof readRegulationCapacity>> | undefined;
-    if (regulation && !err) {
+    let queueError = false;
+    if (regulation && !agendaError) {
       try { safeSlots = await readRegulationCapacity(regulation, requestId || undefined); }
-      catch { err = true; }
+      catch { queueError = true; }
     }
     if (searchId !== searchRef.current) return;
     setSelectedPatient(safeSlots?.patientId);
-    setLoadError(err);
+    setLoadError(agendaError);
+    setEligibilityError(queueError);
+    const err = agendaError || queueError;
 
-    const alvo = clinicos.filter((p) => unidadeId === "all" || p.unidadeId === unidadeId);
+    const scopedProfessionalId = regulation?.professionalId || manualScope?.professionalId;
+    const alvo = clinicos.filter((p) => (unidadeId === "all" || p.unidadeId === unidadeId) && (!scopedProfessionalId || p.id === scopedProfessionalId));
     const compat = alvo.filter((p) => isStrictlyCompatible(servico, p.profissao));
     const ids = compat.map((p) => p.id);
 
@@ -193,6 +199,8 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
 
         {regulation && <p className="mt-3 font-medium">{clinicos.find(p=>p.id===regulation.professionalId)?.nome} · {unitName(regulation.unitId)}</p>}
         {manualScope && <p className="mt-3 font-medium">Busca manual: {clinicos.find(p=>p.id===manualScope.professionalId)?.nome} · {unitName(manualScope.unitId)}. Selecione o paciente no formulário oficial após escolher a vaga.</p>}
+        {manualScope && ["Fisioterapia", "Fonoaudiologia"].includes(manualScope.specialty) &&
+          <p className="mt-3 rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm text-amber-950">{manualScope.queueReadUnavailable ? "Não foi possível conferir a fila nesta consulta. " : "Nenhuma solicitação pré-vinculada da fila. "}Selecione o paciente no formulário oficial. Esta busca não altera nem vincula registros da fila.</p>}
         {!!regulation?.candidates?.length && <div className="mt-3">
           <Label htmlFor="regulation-queue-patient">Paciente apto da fila, por data original da solicitação</Label>
           <select id="regulation-queue-patient" className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
@@ -248,7 +256,11 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
 
         {results && (
           <div className="mt-5 space-y-3">
-            {loadError && <p className="text-sm text-destructive">Erro ao consultar a Agenda ou ao confirmar a elegibilidade. Atualize a busca.</p>}
+            {loadError && <p className="text-sm text-destructive">Não foi possível carregar os horários da Agenda. Atualize a busca antes de escolher uma vaga.</p>}
+            {eligibilityError && <div className="rounded-md border border-amber-400/40 bg-amber-50 p-3 text-sm text-amber-950" role="alert">
+              <p>Não foi possível confirmar a solicitação da fila. Nenhuma vaga regulada será liberada nem vinculada automaticamente.</p>
+              {onUseManualSearch && <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onUseManualSearch}>Buscar vagas sem vincular à fila</Button>}
+            </div>}
             <div className="rounded-md border p-3 text-sm space-y-1" data-testid="pendentes-totais">
               <p className="font-medium">Sessões pendentes de agendamento — {servico} (ciclos ativos, sem agendamento):</p>
               {!pendingAvailable ? <p>Informação não disponível</p>
@@ -257,7 +269,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
             </div>
             {results.length === 0 && <p className="text-sm text-muted-foreground">Nenhum profissional com compatibilidade confirmada para este serviço.</p>}
             {results.map((r) => {
-              const comVaga = r.days.filter((d) => d.state === "com_vagas").slice(0, MAX_DATES_PER_PROF);
+              const comVaga = r.days.filter((d) => d.state === "com_vagas").slice(0, regulation || manualScope ? Number(dias) : MAX_DATES_PER_PROF);
               const naoCarregados = r.days.filter((d) => d.state === "nao_carregado").length;
               const card = classifyCardAvailability(r.days.map((d) => d.state));
               const cardLabel = card === "avaliacao_disponivel" ? "Avaliação disponível" : card === "sem_vaga_periodo" ? "Sem vaga no período" : "Disponibilidade não confirmada";

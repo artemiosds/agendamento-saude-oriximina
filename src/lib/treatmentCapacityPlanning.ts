@@ -1021,13 +1021,10 @@ export interface WeeklySafeOfferRow {
   vacancies: number;
 }
 
-/** Sete dias mantêm o mapa tradicional da próxima segunda a sábado. */
+/** O intervalo do mapa começa hoje e contém exatamente o número de dias selecionado. */
 export function getSafeOfferPeriod(today: string, periodDays: number) {
   if (![7, 15, 30, 60, 90].includes(periodDays)) throw new Error("Período de impressão inválido.");
-  const daysUntilMonday = (8 - isoDayOfWeek(today)) % 7;
-  const startDate = periodDays === 7 ? addDaysToDateStr(today, daysUntilMonday) : today;
-  const endDate = addDaysToDateStr(startDate, periodDays === 7 ? 5 : periodDays - 1);
-  return { startDate, endDate, horizonDays: periodDays === 7 ? daysUntilMonday + 6 : periodDays };
+  return { startDate: today, endDate: addDaysToDateStr(today, periodDays - 1), horizonDays: periodDays };
 }
 
 /** Apenas vagas confirmáveis da janela escolhida; não cria reservas. */

@@ -7,7 +7,11 @@ const longDate = (date: string) => new Date(date + "T12:00:00").toLocaleDateStri
 
 export function renderWeeklyOfferMap(rows: WeeklySafeOfferRow[], startDate: string, endDate: string, unitNames: Map<string, string>, periodDays = 7) {
   const groups = new Map<string, WeeklySafeOfferRow[]>();
-  for (const row of rows) groups.set(row.unitId, [...(groups.get(row.unitId) || []), row]);
+  for (const row of rows) {
+    const unitRows = groups.get(row.unitId);
+    if (unitRows) unitRows.push(row);
+    else groups.set(row.unitId, [row]);
+  }
   const sections = [...groups].map(([unitId, offers]) => {
     const byProfessional = new Map<string, WeeklySafeOfferRow[]>();
     for (const row of offers) {

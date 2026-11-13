@@ -1,5 +1,5 @@
 import { containsEvaluationSlot, readRegulationCapacity, type RegulationScope, type RegulationSelection } from "@/services/regulationCapacity";
-import { strictSpecialtyOf, type ManualAvailabilityScope } from "@/lib/localizarVagas";
+import { isValidSearchHorizon, strictSpecialtyOf, type ManualAvailabilityScope } from "@/lib/localizarVagas";
 import PatientRegistrationBoundary from '@/components/agenda/PatientRegistrationBoundary';
 import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
 import { confirmCareArrival } from "@/services/careFlowService";
@@ -720,21 +720,25 @@ const Agenda: React.FC = () => {
   const profissionais = profissionaisVisiveis;
   const canRegulate = !!user && ["master","recepcao","coordenador","gestao"].includes(user.role)
     && can("agenda","can_view") && can("agenda","can_create");
-  const scopeAllowed = (scope: RegulationScope) => canRegulate && (scope.days === 7 || scope.days === 15)
+  const scopeAllowed = (scope: RegulationScope) => canRegulate && isValidSearchHorizon(scope.days)
     && (isGlobalAdmin || (!!user?.unidadeId && scope.unitId === user.unidadeId))
     && unidadesVisiveis.some(u=>u.id === scope.unitId)
     && ["Fisioterapia","Fonoaudiologia"].includes(scope.specialty)
     && profissionais.some(p=>p.id===scope.professionalId && strictSpecialtyOf(p.profissao)===scope.specialty
       && (p.unidadeId===scope.unitId || disponibilidades.some(d=>d.profissionalId===p.id && d.unidadeId===scope.unitId)));
-  const regulation = requested && scopeAllowed(requested) && (!requested.requestId || can("fila","can_view")) ? requested : undefined;
-  const scopeAllowedManual = (scope: ManualAvailabilityScope) => canRegulate && (scope.days === 7 || scope.days === 15)
+  const regulation = requested && !!requested.candidates?.length && scopeAllowed(requested) && (!requested.requestId || can("fila","can_view")) ? requested : undefined;
+  const scopeAllowedManual = (scope: ManualAvailabilityScope) => canRegulate && isValidSearchHorizon(scope.days)
     && (isGlobalAdmin || (!!user?.unidadeId && scope.unitId === user.unidadeId))
     && unidadesVisiveis.some(u=>u.id === scope.unitId)
-    && !["Fisioterapia","Fonoaudiologia"].includes(scope.specialty)
     && Array.isArray(scope.candidates) && scope.candidates.length === 0
     && profissionais.some(p=>p.id===scope.professionalId && strictSpecialtyOf(p.profissao)===scope.specialty
       && (p.unidadeId===scope.unitId || disponibilidades.some(d=>d.profissionalId===p.id && d.unidadeId===scope.unitId)));
-  const manualScope = requestedManual && scopeAllowedManual(requestedManual) ? requestedManual : undefined;
+  // Navegações antigas com fila vazia também podem abrir a busca manual, sem vincular solicitação.
+  const emptyQueueScope: ManualAvailabilityScope | undefined = requested && Array.isArray(requested.candidates) && requested.candidates.length === 0
+    ? { professionalId: requested.professionalId, unitId: requested.unitId, specialty: requested.specialty, days: requested.days as 7 | 15 | 30, candidates: [] }
+    : undefined;
+  const manualCandidate = requestedManual || emptyQueueScope;
+  const manualScope = manualCandidate && scopeAllowedManual(manualCandidate) ? manualCandidate : undefined;
   const searchScope = regulation || manualScope;
   const dismissRegulation = () => navigate(location.pathname + location.search, { replace:true, state:null });
 
@@ -3033,6 +3037,12 @@ const Agenda: React.FC = () => {
                 {((user?.role === "master" || user?.role === "recepcao") && can("agenda", "can_create") || searchScope) && (
                   <LocalizarVagasPanel
                     key={searchScope ? location.key : "agenda"} regulation={regulation} manualScope={manualScope} onDismissRegulation={dismissRegulation} onDismissManualScope={dismissRegulation}
+                    onUseManualSearch={regulation ? () => {
+                      const candidate: ManualAvailabilityScope = { professionalId: regulation.professionalId, unitId: regulation.unitId,
+                        specialty: regulation.specialty, days: regulation.days as 7 | 15 | 30, candidates: [] };
+                      if (!scopeAllowedManual(candidate)) return;
+                      navigate(location.pathname + location.search, { replace: true, state: { manualAvailability: candidate } });
+                    } : undefined}
                     profissionais={searchScope ? profissionais.filter(p=>p.id===searchScope.professionalId).map(p=>({...p, unidadeId:searchScope.unitId})) : profissionais}
                     unidades={unidadesVisiveis}
                     getAvailableSlots={getAvailableSlots}
@@ -3060,7 +3070,11 @@ const Agenda: React.FC = () => {
                       if (manualScope) dismissRegulation();
                       setManualBookingScope(manualScope);
                       setSelectedDate(date);
-                      setNewAg((prev) => ({ ...prev, profissionalId: profId, hora: ainda ? hora : "" }));
+                      if (manualScope) {
+                        setPacientesConferidos(new Set());
+                        setNovoAgStep("agendamento");
+                      }
+                      setNewAg((prev) => ({ ...prev, pacienteId: manualScope ? "" : prev.pacienteId, profissionalId: profId, hora: ainda ? hora : "" }));
                       if (!ainda) toast.warning("Esse horário não está mais livre. Escolha outro no formulário.");
                       setDialogOpen(true);
                     }}
