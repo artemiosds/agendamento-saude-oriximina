@@ -3,7 +3,8 @@ import { recoverMissingTreatmentAppointments } from "@/services/treatmentAppoint
 import { treatmentDateChangeReason } from "@/lib/treatmentDateChangeReason";
 import { TreatmentAgendaAlignmentButton } from "@/components/tratamentos/TreatmentAgendaAlignmentButton";
 import { TreatmentCyclePendingPanel } from "@/components/tratamentos/TreatmentCyclePendingPanel";
-import TreatmentCapacityOverview from "@/components/tratamentos/TreatmentCapacityOverview";
+import TreatmentCapacityOverview, { type TreatmentSimulationDraft } from "@/components/tratamentos/TreatmentCapacityOverview";
+import { getDefaultSessionsByProfession, suggestSessionsForProfessional } from "@/lib/treatmentSessionDefaults";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { isSessionFalta } from "@/lib/sessionFalta";
 import { usePacientes } from "@/contexts/PacientesContext";
@@ -244,6 +245,7 @@ const Tratamentos: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [sessionsCustomized, setSessionsCustomized] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [dischargeOpen, setDischargeOpen] = useState(false);
@@ -295,7 +297,7 @@ const Tratamentos: React.FC = () => {
     unit_id: "",
     specialty: "",
     treatment_type: "",
-    total_sessions: 0,
+    total_sessions: 0 as number | "",
     frequency: "1x_semana",
     start_date: new Date().toISOString().split("T")[0],
     clinical_notes: "",
@@ -981,6 +983,38 @@ const Tratamentos: React.FC = () => {
     } finally {
       setCopyingLastSession(false);
     }
+  };
+
+  const openCreateCycle = (draft?: TreatmentSimulationDraft) => {
+    if (!isProfissional && !canManageFull) return;
+    const selected = draft ? profissionais.find((p) => p.id === draft.professionalId) : profissionais.find((p) => p.id === user?.id);
+    if (draft && (!selected || (isProfissional && selected.id !== user?.id) ||
+      (treatmentUnitId && draft.unitId !== treatmentUnitId) || !unidadesVisiveis.some((u) => u.id === draft.unitId) ||
+      (selected.unidadeId !== draft.unitId && !disponibilidades.some((d) => d.profissionalId === selected.id && d.unidadeId === draft.unitId)) ||
+      !FREQUENCY_OPTIONS_NEW.some((option) => option.value === draft.frequency) ||
+      !Number.isInteger(draft.totalSessions) || draft.totalSessions < 1 || draft.totalSessions > 200 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(draft.startDate) || draft.startDate < todayLocalStr() ||
+      (isWeekdayFrequency(draft.frequency) && (draft.weekdays.length !== getMaxWeekdays(draft.frequency) ||
+        new Set(draft.weekdays).size !== draft.weekdays.length || draft.weekdays.some((day) => !Number.isInteger(day) || day < 1 || day > 6))))) {
+      toast.error("A simulação não pertence ao seu escopo ou precisa ser refeita.");
+      return;
+    }
+    setSessionsCustomized(!!draft);
+    setNewCycle({
+      patient_id: "",
+      professional_id: selected?.id || "",
+      unit_id: draft?.unitId || selected?.unidadeId || user?.unidadeId || "",
+      specialty: selected?.profissao || "",
+      treatment_type: draft?.treatmentType || "",
+      total_sessions: draft?.totalSessions || (selected ? getDefaultSessionsByProfession(selected.profissao || "") : 0),
+      frequency: draft?.frequency || "1x_semana",
+      start_date: draft?.startDate || todayLocalStr(),
+      clinical_notes: "",
+      pts_id: "",
+      weekdays: draft ? [...draft.weekdays] : [],
+      duration_months: 3,
+    });
+    setCreateOpen(true);
   };
 
   const handleCreateCycle = async (force = false) => {
@@ -3300,24 +3334,7 @@ const Tratamentos: React.FC = () => {
         </div>
         {(isProfissional || canManageFull) && (
           <Button
-            onClick={() => {
-              const userIsProf = profissionais.some((p) => p.id === user?.id);
-              setNewCycle({
-                patient_id: "",
-                professional_id: userIsProf ? user?.id || "" : "",
-                unit_id: user?.unidadeId || "",
-                specialty: user?.profissao || "",
-                treatment_type: "",
-                total_sessions: 0,
-                frequency: "1x_semana",
-                start_date: new Date().toISOString().split("T")[0],
-                clinical_notes: "",
-                pts_id: "",
-                weekdays: [],
-                duration_months: 3,
-              });
-              setCreateOpen(true);
-            }}
+            onClick={() => openCreateCycle()}
             className="gradient-primary text-primary-foreground"
           >
             <Plus className="w-4 h-4 mr-2" /> Novo Ciclo
@@ -3326,7 +3343,7 @@ const Tratamentos: React.FC = () => {
       </div>
 
       {isMaster && <label className="flex items-center gap-2 text-sm"><Checkbox checked={integrityOnly} onCheckedChange={(value) => { setIntegrityOnly(value === true); setCurrentPage(1); }} />Pendências de integridade</label>}
-      {can("tratamento", "can_view") && <TreatmentCapacityOverview key={(user?.id || "") + "|" + (user?.unidadeId || "") + "|" + user?.role} />}
+      {can("tratamento", "can_view") && <TreatmentCapacityOverview key={(user?.id || "") + "|" + (user?.unidadeId || "") + "|" + user?.role} onCreateFromSimulation={isProfissional || canManageFull ? openCreateCycle : undefined} />}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -3407,7 +3424,7 @@ const Tratamentos: React.FC = () => {
           <CardContent className="p-8 text-center">
             <p className="text-muted-foreground mb-3">Nenhum ciclo de tratamento encontrado.</p>
             {(isProfissional || canManageFull) && (
-              <Button variant="outline" onClick={() => setCreateOpen(true)}>
+              <Button variant="outline" onClick={() => openCreateCycle()}>
                 <Plus className="w-4 h-4 mr-2" /> Criar Primeiro Ciclo
               </Button>
             )}
@@ -3575,6 +3592,7 @@ const Tratamentos: React.FC = () => {
                         professional_id: v,
                         unit_id: prof?.unidadeId || p.unit_id,
                         specialty: prof?.profissao || p.specialty,
+                        total_sessions: prof ? suggestSessionsForProfessional(p.total_sessions, sessionsCustomized, prof.profissao || "") : p.total_sessions,
                       }));
                     }}
                   >
@@ -3604,7 +3622,7 @@ const Tratamentos: React.FC = () => {
                   placeholder="Ex: Reabilitação Joelho Direito"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label>Frequência *</Label>
                   <Select
@@ -3624,19 +3642,20 @@ const Tratamentos: React.FC = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Total de sessões *</Label>
+                  <Label htmlFor="new-cycle-total-sessions">Total de sessões *</Label>
                   <Input
+                    id="new-cycle-total-sessions"
                     type="number"
                     min={1}
                     max={200}
                     value={newCycle.total_sessions}
                     onChange={(e) => {
-                      const v = parseInt(e.target.value) || 1;
-                      setNewCycle((p) => ({ ...p, total_sessions: Math.min(200, Math.max(1, v)) }));
+                      setSessionsCustomized(true);
+                      setNewCycle((p) => ({ ...p, total_sessions: e.target.value === "" ? "" : Number(e.target.value) }));
                     }}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Controla a quantidade exata de sessões geradas (máximo 200).
+                    Sugestão inicial editável. Informe de 1 a 200 sessões conforme o plano clínico.
                   </p>
                 </div>
               </div>
@@ -3688,7 +3707,8 @@ const Tratamentos: React.FC = () => {
                   <span className="text-muted-foreground">Previsão da última sessão: </span>
                   <strong>
                     {(() => {
-                      const total = Math.max(1, newCycle.total_sessions || 0);
+                      if (!newCycle.total_sessions || newCycle.total_sessions > 200) return "—";
+                      const total = newCycle.total_sessions;
                       const previewProfessional = profissionais.find((p) => p.id === newCycle.professional_id);
                       const previewUnitId = newCycle.unit_id || previewProfessional?.unidadeId || "";
                       const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, previewUnitId);
@@ -3705,7 +3725,7 @@ const Tratamentos: React.FC = () => {
                   Status inicial das sessões: Aguardando Agendamento
                 </div>
                 {(() => {
-                  if (!newCycle.start_date || !newCycle.professional_id) return null;
+                  if (!newCycle.start_date || !newCycle.professional_id || !newCycle.total_sessions || newCycle.total_sessions > 200) return null;
                   const previewProfessional = profissionais.find((professional) => professional.id === newCycle.professional_id);
                   const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id || previewProfessional?.unidadeId || "");
                   try {

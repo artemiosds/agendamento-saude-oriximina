@@ -45,6 +45,21 @@ import TreatmentDemandScenario from "@/components/tratamentos/TreatmentDemandSce
 import type { TreatmentDemandScenarioGroupInput } from "@/lib/treatmentDemandScenario";
 
 import { ACTIVE_TREATMENT_CYCLE_STATUSES } from "@/lib/treatmentCycleStatus";
+import { getDefaultSessionsByProfession } from "@/lib/treatmentSessionDefaults";
+
+export interface TreatmentSimulationDraft {
+  professionalId: string;
+  unitId: string;
+  frequency: string;
+  totalSessions: number;
+  startDate: string;
+  weekdays: number[];
+  treatmentType: string;
+}
+
+interface Props {
+  onCreateFromSimulation?: (draft: TreatmentSimulationDraft) => void;
+}
 
 const PAGE_SIZE = 1000;
 const CYCLE_FORECAST_MAX_DAYS = 3650;
@@ -82,7 +97,7 @@ function specialtyColor(specialty: string) {
     : "border-violet-500/25 bg-violet-500/5";
 }
 
-export default function TreatmentCapacityOverview() {
+export default function TreatmentCapacityOverview({ onCreateFromSimulation }: Props) {
   const { user, isGlobalAdmin } = useAuth();
   const { unidadesVisiveis, userUnidadeId } = useUnidadeFilter();
   const { can: hasPermission, loading: permissionsLoading } = usePermissions();
@@ -102,6 +117,7 @@ export default function TreatmentCapacityOverview() {
   const [cycleSimulationStart, setCycleSimulationStart] = useState(todayLocalStr());
   const [cycleSimulationWeekdays, setCycleSimulationWeekdays] = useState<number[]>([Math.max(1, isoDayOfWeek(todayLocalStr()))]);
   const [cycleSimulationShift, setCycleSimulationShift] = useState<TreatmentCycleShiftFilter>("qualquer");
+  const [cycleSimulationTreatmentType, setCycleSimulationTreatmentType] = useState("");
   const [sharedPatients, setSharedPatients] = useState<SharedPatientsSummary | null>(null);
   const [queueDemandRows, setQueueDemandRows] = useState<QueueDemandInput[]>([]);
   const [loading, setLoading] = useState(false);
@@ -526,7 +542,11 @@ export default function TreatmentCapacityOverview() {
   useEffect(() => {
     if (!cycleCapacityInput?.professionals.length) { setCycleSimulationProfessional(""); return; }
     const keys = new Set(cycleCapacityInput.professionals.map((row) => row.id + "|" + row.unitId));
-    if (!keys.has(cycleSimulationProfessional)) setCycleSimulationProfessional(cycleCapacityInput.professionals[0].id + "|" + cycleCapacityInput.professionals[0].unitId);
+    if (!keys.has(cycleSimulationProfessional)) {
+      const first = cycleCapacityInput.professionals[0];
+      setCycleSimulationProfessional(first.id + "|" + first.unitId);
+      setCycleSimulationSessions(String(getDefaultSessionsByProfession(first.profession)));
+    }
   }, [cycleCapacityInput, cycleSimulationProfessional]);
 
   const cycleSimulationResult = useMemo<TreatmentCycleFeasibilityResult | null>(() => {
@@ -808,14 +828,32 @@ export default function TreatmentCapacityOverview() {
           <div className="space-y-4 rounded-lg border border-border p-4" aria-label="Simulação de tratamento completo">
             <div><h3 className="font-semibold text-foreground">Verificar capacidade para tratamento completo</h3><p className="text-sm text-muted-foreground">Simula todas as sessões conforme frequência, dias escolhidos, turno, horários livres, bloqueios, agendamentos e sessões pendentes com data. A janela é calculada conforme o ciclo, com limite de 10 anos. Não reserva vagas nem cria agendamentos.</p></div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="space-y-1"><Label>Profissional</Label><Select value={cycleSimulationProfessional} onValueChange={setCycleSimulationProfessional}><SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger><SelectContent>{(cycleCapacityInput?.professionals || []).map((row) => <SelectItem key={row.id + "|" + row.unitId} value={row.id + "|" + row.unitId}>{row.name} · {row.unitName}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label>Profissional</Label><Select value={cycleSimulationProfessional} onValueChange={(value) => {
+                setCycleSimulationProfessional(value);
+                const professional = cycleCapacityInput?.professionals.find((row) => row.id + "|" + row.unitId === value);
+                if (professional) setCycleSimulationSessions(String(getDefaultSessionsByProfession(professional.profession)));
+              }}><SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger><SelectContent>{(cycleCapacityInput?.professionals || []).map((row) => <SelectItem key={row.id + "|" + row.unitId} value={row.id + "|" + row.unitId}>{row.name} · {row.unitName}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-1"><Label>Frequência</Label><Select value={cycleSimulationFrequency} onValueChange={setCycleSimulationFrequency}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1x_semana">1 vez por semana</SelectItem><SelectItem value="2x_semana">2 vezes por semana</SelectItem><SelectItem value="3x_semana">3 vezes por semana</SelectItem><SelectItem value="4x_semana">4 vezes por semana</SelectItem><SelectItem value="5x_semana">5 vezes por semana</SelectItem><SelectItem value="6x_semana">6 vezes por semana</SelectItem><SelectItem value="mensal">Mensal</SelectItem><SelectItem value="manual">Manual (semanal)</SelectItem></SelectContent></Select></div>
               <div className="space-y-1"><Label htmlFor="cycle-simulation-sessions">Quantidade de sessões</Label><Input id="cycle-simulation-sessions" type="number" min={1} max={200} value={cycleSimulationSessions} onChange={(event) => setCycleSimulationSessions(event.target.value)} /></div>
               <div className="space-y-1"><Label htmlFor="cycle-simulation-start">Data inicial</Label><Input id="cycle-simulation-start" type="date" min={cycleCapacityInput?.today || todayLocalStr()} max={cycleCapacityInput?.endDate} value={cycleSimulationStart} onChange={(event) => setCycleSimulationStart(event.target.value)} /></div>
               <div className="space-y-1"><Label>Turno</Label><Select value={cycleSimulationShift} onValueChange={(value) => setCycleSimulationShift(value as TreatmentCycleShiftFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="qualquer">Qualquer turno</SelectItem><SelectItem value="Manhã">Manhã</SelectItem><SelectItem value="Tarde">Tarde</SelectItem><SelectItem value="Noite">Noite</SelectItem></SelectContent></Select></div>
+              {onCreateFromSimulation && <div className="space-y-1 md:col-span-3"><Label htmlFor="cycle-simulation-type">Tipo de tratamento (necessário para criar o ciclo)</Label><Input id="cycle-simulation-type" value={cycleSimulationTreatmentType} onChange={(event) => setCycleSimulationTreatmentType(event.target.value)} placeholder="Descreva o tratamento definido pelo profissional" /></div>}
             </div>
             {FREQUENCY_WEEKDAY_COUNT[cycleSimulationFrequency] && <div className="space-y-2"><Label>Dias da semana ({cycleSimulationWeekdays.length}/{FREQUENCY_WEEKDAY_COUNT[cycleSimulationFrequency]})</Label><div className="flex flex-wrap gap-4">{CYCLE_WEEKDAYS.map((day) => <label key={day.value} className="flex items-center gap-2 text-sm"><Checkbox checked={cycleSimulationWeekdays.includes(day.value)} onCheckedChange={(checked) => toggleCycleWeekday(day.value, checked === true)} />{day.label}</label>)}</div></div>}
-            {cycleSimulationResult && <div className="rounded-md border border-border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{cycleSimulationResult.status === "confirmável" ? "Capacidade encontrada para o ciclo completo" : cycleSimulationResult.status === "revisão" ? "Necessita revisão" : cycleSimulationResult.status === "insuficiente" ? "Capacidade insuficiente" : "Revise os dados"}</p><span className="text-sm tabular-nums">{cycleSimulationResult.feasibleSessions}/{cycleSimulationResult.requestedSessions} sessões</span></div><p className="mt-1 text-sm">{cycleSimulationResult.message}</p>{cycleSimulationResult.dates.length > 0 && <div className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 lg:grid-cols-3">{cycleSimulationResult.dates.slice(0, 12).map((row) => <div key={row.date} className="rounded border border-border/60 px-2 py-1">{row.date.split("-").reverse().join("/")} · {row.shiftLabels.join(" | ")}</div>)}</div>}</div>}
+            {cycleSimulationResult && <div className="rounded-md border border-border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{cycleSimulationResult.status === "confirmável" ? "Capacidade encontrada para o ciclo completo" : cycleSimulationResult.status === "revisão" ? "Necessita revisão" : cycleSimulationResult.status === "insuficiente" ? "Capacidade insuficiente" : "Revise os dados"}</p><span className="text-sm tabular-nums">{cycleSimulationResult.feasibleSessions}/{cycleSimulationResult.requestedSessions} sessões</span></div>
+              <p className="mt-1 text-sm">{cycleSimulationResult.message}</p>
+              {cycleSimulationResult.status === "confirmável" && onCreateFromSimulation && <div className="mt-3 space-y-2">
+                <Button type="button" size="sm" onClick={() => {
+                  const [professionalId, unitId] = cycleSimulationProfessional.split("|");
+                  onCreateFromSimulation({ professionalId, unitId, frequency: cycleSimulationFrequency,
+                    totalSessions: Number(cycleSimulationSessions), startDate: cycleSimulationStart,
+                    weekdays: [...cycleSimulationWeekdays], treatmentType: cycleSimulationTreatmentType.trim() });
+                }}>Criar ciclo com estes parâmetros</Button>
+                <p className="text-xs text-muted-foreground">O paciente e o tipo de tratamento são obrigatórios no formulário. {cycleSimulationShift !== "qualquer" && `O turno ${cycleSimulationShift.toLowerCase()} foi usado apenas na simulação e não é fixado no ciclo. `}Nada é salvo antes da confirmação.</p>
+              </div>}
+              {cycleSimulationResult.dates.length > 0 && <div className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 lg:grid-cols-3">{cycleSimulationResult.dates.slice(0, 12).map((row) => <div key={row.date} className="rounded border border-border/60 px-2 py-1">{row.date.split("-").reverse().join("/")} · {row.shiftLabels.join(" | ")}</div>)}</div>}
+            </div>}
           </div>
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

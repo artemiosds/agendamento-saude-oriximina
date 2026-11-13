@@ -1,5 +1,5 @@
 import { containsEvaluationSlot, readRegulationCapacity, type RegulationScope, type RegulationSelection } from "@/services/regulationCapacity";
-import { strictSpecialtyOf } from "@/lib/localizarVagas";
+import { strictSpecialtyOf, type ManualAvailabilityScope } from "@/lib/localizarVagas";
 import PatientRegistrationBoundary from '@/components/agenda/PatientRegistrationBoundary';
 import TriageReconciliationPanel from "@/components/TriageReconciliationPanel";
 import { confirmCareArrival } from "@/services/careFlowService";
@@ -314,7 +314,9 @@ const Agenda: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const requested = location.state?.regulation as (RegulationScope & { requestId?: string }) | undefined;
+  const requestedManual = location.state?.manualAvailability as ManualAvailabilityScope | undefined;
   const [regulatedBooking, setRegulatedBooking] = useState<RegulationSelection>();
+  const [manualBookingScope, setManualBookingScope] = useState<ManualAvailabilityScope>();
   const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [remanejarOpen, setRemanejarOpen] = useState(false);
@@ -725,6 +727,15 @@ const Agenda: React.FC = () => {
     && profissionais.some(p=>p.id===scope.professionalId && strictSpecialtyOf(p.profissao)===scope.specialty
       && (p.unidadeId===scope.unitId || disponibilidades.some(d=>d.profissionalId===p.id && d.unidadeId===scope.unitId)));
   const regulation = requested && scopeAllowed(requested) && (!requested.requestId || can("fila","can_view")) ? requested : undefined;
+  const scopeAllowedManual = (scope: ManualAvailabilityScope) => canRegulate && (scope.days === 7 || scope.days === 15)
+    && (isGlobalAdmin || (!!user?.unidadeId && scope.unitId === user.unidadeId))
+    && unidadesVisiveis.some(u=>u.id === scope.unitId)
+    && !["Fisioterapia","Fonoaudiologia"].includes(scope.specialty)
+    && Array.isArray(scope.candidates) && scope.candidates.length === 0
+    && profissionais.some(p=>p.id===scope.professionalId && strictSpecialtyOf(p.profissao)===scope.specialty
+      && (p.unidadeId===scope.unitId || disponibilidades.some(d=>d.profissionalId===p.id && d.unidadeId===scope.unitId)));
+  const manualScope = requestedManual && scopeAllowedManual(requestedManual) ? requestedManual : undefined;
+  const searchScope = regulation || manualScope;
   const dismissRegulation = () => navigate(location.pathname + location.search, { replace:true, state:null });
 
 
@@ -797,7 +808,7 @@ const Agenda: React.FC = () => {
     return { isWeekend, hasAvailability };
   }, [selectedDate, disponibilidades]);
 
-  const selectedProfUnit = regulatedBooking?.unitId || profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || "";
+  const selectedProfUnit = regulatedBooking?.unitId || (manualBookingScope?.professionalId === newAg.profissionalId ? manualBookingScope.unitId : "") || profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || "";
   const selectedDiagnosticRoom = salas.find((s) => s.id === newAg.salaId);
   const diagnosticUnitId = selectedDiagnosticRoom?.unidadeId || selectedProfUnit;
   useEffect(() => {
@@ -1594,6 +1605,7 @@ const Agenda: React.FC = () => {
     // Fecha o modal assim que o agendamento foi gravado; auditoria segue em segundo plano
     setDialogOpen(false);
     setRegulatedBooking(undefined);
+    setManualBookingScope(undefined);
     setNewAg({
       pacienteId: "",
       profissionalId: filterProf !== "all" ? filterProf : "",
@@ -3018,10 +3030,10 @@ const Agenda: React.FC = () => {
                       onDone={async (dest) => { await loadAgendaRange(dest, dest); await refreshAgendamentos(); }} />
                   </>
                 )}
-                {((user?.role === "master" || user?.role === "recepcao") && can("agenda", "can_create") || regulation) && (
+                {((user?.role === "master" || user?.role === "recepcao") && can("agenda", "can_create") || searchScope) && (
                   <LocalizarVagasPanel
-                    key={regulation ? location.key : "agenda"} regulation={regulation} onDismissRegulation={dismissRegulation}
-                    profissionais={regulation ? profissionais.filter(p=>p.id===regulation.professionalId).map(p=>({...p, unidadeId:regulation.unitId})) : profissionais}
+                    key={searchScope ? location.key : "agenda"} regulation={regulation} manualScope={manualScope} onDismissRegulation={dismissRegulation} onDismissManualScope={dismissRegulation}
+                    profissionais={searchScope ? profissionais.filter(p=>p.id===searchScope.professionalId).map(p=>({...p, unidadeId:searchScope.unitId})) : profissionais}
                     unidades={unidadesVisiveis}
                     getAvailableSlots={getAvailableSlots}
                     loadAgendaRange={(a, b) => loadAgendaRange(a, b)}
@@ -3040,8 +3052,13 @@ const Agenda: React.FC = () => {
                         return;
                       }
                       const prof = profissionais.find((p) => p.id === profId);
+                      if (manualScope && (!scopeAllowedManual(manualScope) || manualScope.professionalId !== profId)) {
+                        toast.warning("O escopo da busca mudou. Consulte novamente as vagas."); return;
+                      }
                       // Revalida o horário com a regra oficial da Agenda antes de abrir o modal.
-                      const ainda = prof ? getAvailableSlots(profId, prof.unidadeId, date, false, null).includes(hora) : false;
+                      const ainda = prof ? getAvailableSlots(profId, manualScope?.unitId || prof.unidadeId, date, false, null).includes(hora) : false;
+                      if (manualScope) dismissRegulation();
+                      setManualBookingScope(manualScope);
                       setSelectedDate(date);
                       setNewAg((prev) => ({ ...prev, profissionalId: profId, hora: ainda ? hora : "" }));
                       if (!ainda) toast.warning("Esse horário não está mais livre. Escolha outro no formulário.");
@@ -3056,6 +3073,9 @@ const Agenda: React.FC = () => {
                     setDialogOpen(open);
                     if (!open && regulatedBooking) {
                       setRegulatedBooking(undefined);
+                    }
+                    if (!open && manualBookingScope) {
+                      setManualBookingScope(undefined);
                       setNewAg({ pacienteId:"", profissionalId:"", hora:"", salaId:"", tipo:"Consulta", obs:"" });
                     }
                     if (!open) { setPacientesConferidos(new Set()); setNovoAgStep('agendamento'); setTermoInicialCadastro(''); }

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { eligibleEvaluationRequests, classifyTreatmentCapacitySpecialty, type CapacityProfessionalInput } from "@/lib/treatmentCapacityAnalytics";
 import { planInitialEvaluations, type CapacityPlanningInput } from "@/lib/treatmentCapacityPlanning";
+import { strictSpecialtyOf, type ManualAvailabilityScope } from "@/lib/localizarVagas";
 import { addDaysToDateStr, formatDateBR, nowMinutesInBrazil } from "@/lib/utils";
 
 interface Props {
@@ -19,7 +20,7 @@ export default function RegulationCockpit({ input, period, professionals, queueA
   const navigate = useNavigate();
   const horizon = Math.min(15, period);
   const rows = useMemo(() => professionals.flatMap(p => {
-    const specialty = classifyTreatmentCapacitySpecialty(p.profession);
+    const specialty = strictSpecialtyOf(p.profession) || classifyTreatmentCapacitySpecialty(p.profession);
     if (!specialty) return [];
     const professional = input.professionals.find(x=>x.id===p.id && x.unitId===p.unitId);
     if (!professional) return [];
@@ -62,9 +63,16 @@ export default function RegulationCockpit({ input, period, professionals, queueA
             {turns.filter(t=>t.n || t.label !== "Noite").map(t=><p key={t.label}>{t.label} {t.n}</p>)}</div>;
         })}</div>
         {orphan && <p className="rounded border border-sky-300 bg-sky-50 p-2 text-sm text-sky-950">Ideal para avaliação inicial ou encaixe único · {formatDateBR(orphan.date)} às {orphan.time}. Mesmo horário indisponível nas três semanas seguintes.</p>}
-        {canSchedule && (specialty === "Fisioterapia" || specialty === "Fonoaudiologia") && <div className="flex flex-wrap items-end gap-2">
-          <Button type="button" size="sm" variant="outline" disabled={!plan.count} onClick={()=>navigate("/painel/agenda",{state:{regulation:{professionalId:p.id,unitId:p.unitId,specialty,days:horizon,
-            candidates: queueAvailable ? candidates.map(c=>({ id:c.id, name:c.patientName || "Paciente", requestDate:c.requestDate || null })) : []}}})}>
+        {canSchedule && strictSpecialtyOf(p.profession) === specialty && <div className="flex flex-wrap items-end gap-2">
+          <Button type="button" size="sm" variant="outline" disabled={!plan.count} onClick={()=>{
+            const scope = {professionalId:p.id,unitId:p.unitId,specialty,days:horizon as 7 | 15};
+            if (specialty === "Fisioterapia" || specialty === "Fonoaudiologia") {
+              navigate("/painel/agenda",{state:{regulation:{...scope,candidates:queueAvailable ? candidates.map(c=>({id:c.id,name:c.patientName || "Paciente",requestDate:c.requestDate || null})) : []}}});
+            } else {
+              const manualAvailability: ManualAvailabilityScope = {...scope,candidates:[]};
+              navigate("/painel/agenda",{state:{manualAvailability}});
+            }
+          }}>
             Localizar vagas e agendar</Button>
         </div>}
       </article>;

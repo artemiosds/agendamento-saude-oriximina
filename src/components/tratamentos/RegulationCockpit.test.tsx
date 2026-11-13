@@ -15,7 +15,7 @@ const input: CapacityPlanningInput = {
 
 function AgendaDestination() {
   const { state } = useLocation();
-  return <div data-testid="scope">{JSON.stringify(state.regulation)}</div>;
+  return <div data-testid="scope">{JSON.stringify(state.regulation || state.manualAvailability)}</div>;
 }
 
 describe("cockpit de regulação e navegação oficial", () => {
@@ -27,12 +27,16 @@ describe("cockpit de regulação e navegação oficial", () => {
     expect(screen.getByText(/vaga\(s\) disponível\(is\) após proteger sessões datadas/)).toBeTruthy();
   });
 
-  it("inclui outras especialidades na capacidade sem habilitar seleção de fila ainda não validada", () => {
-    const psychologist = {...professional,id:"p2",profession:"Psicóloga",cboCode:"251510"};
-    const otherInput = {...input,professionals:[psychologist],availabilities:input.availabilities.map(row=>({...row,professionalId:"p2"}))};
-    render(<MemoryRouter><RegulationCockpit input={otherInput} period={7} professionals={[psychologist]} queueAvailable canSchedule/></MemoryRouter>);
-    expect(screen.getByText("Psicologia · CER II")).toBeTruthy();
-    expect(screen.queryByRole("button",{name:"Localizar vagas e agendar"})).toBeNull();
+  it.each([["Psicóloga","Psicologia"],["Nutricionista","Nutrição"],["Médico","Medicina"],["Terapeuta Ocupacional","Terapia Ocupacional"]])("abre a Agenda manual para %s sem fila automática", (profession, specialty) => {
+    const other = {...professional,id:"p2",profession,cboCode:"251510"};
+    const otherInput = {...input,professionals:[other],availabilities:input.availabilities.map(row=>({...row,professionalId:"p2"}))};
+    render(<MemoryRouter initialEntries={["/painel/tratamentos"]}><Routes>
+      <Route path="/painel/tratamentos" element={<RegulationCockpit input={otherInput} period={7} professionals={[other]} queueAvailable canSchedule/>}/>
+      <Route path="/painel/agenda" element={<AgendaDestination/>}/>
+    </Routes></MemoryRouter>);
+    expect(screen.getByText(`${specialty} · CER II`)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button",{name:"Localizar vagas e agendar"}));
+    expect(JSON.parse(screen.getByTestId("scope").textContent || "{}")).toMatchObject({professionalId:"p2",unitId:"u1",specialty,days:7,candidates:[]});
   });
 
   it("exibe métricas e envia apenas escopo e candidatos à Agenda, sem agendar", () => {

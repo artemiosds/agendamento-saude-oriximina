@@ -18,6 +18,15 @@ export function classifyDayAvailability(args: { loadError: boolean; dayLoaded: b
 export const KNOWN_SPECIALTIES = [
   "Fisioterapia", "Fonoaudiologia", "Psicologia", "Nutrição", "Serviço Social", "Enfermagem", "Medicina", "Odontologia", "Terapia Ocupacional",
 ] as const;
+
+/** Filtro de busca manual: não seleciona candidatos nem inicia agendamento. */
+export interface ManualAvailabilityScope {
+  professionalId: string;
+  unitId: string;
+  specialty: string;
+  days: 7 | 15;
+  candidates: [];
+}
 const KNOWN = new Set<string>(KNOWN_SPECIALTIES);
 
 /** Especialidade reconhecida; nome não reconhecido = null (nunca compatível consigo mesmo). */

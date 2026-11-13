@@ -12,7 +12,7 @@ import { addDaysToDateStr, todayLocalStr } from "@/lib/utils";
 import {
   classifyDayAvailability, classifyCardAvailability, breakdownPendingByProfessionalUnit, estimateContinuityByDay, emptyBreakdown,
   totalsByUnitSpecialty, isStrictlyCompatible, strictSpecialtyOf, ACTIVE_CYCLE_STATUSES,
-  type DailyContinuityResult, type ContinuityEstimate, type DayAvailabilityState, type PendingBreakdown, type PendingSessionRow,
+  type DailyContinuityResult, type ContinuityEstimate, type DayAvailabilityState, type PendingBreakdown, type PendingSessionRow, type ManualAvailabilityScope,
 } from "@/lib/localizarVagas";
 import type { User } from "@/types";
 
@@ -24,7 +24,9 @@ interface Props {
   getAvailableSlots: (profId: string, unidadeId: string, date: string, isPublic?: boolean, lead?: number | null) => string[];
   loadAgendaRange: (start: string, end: string) => Promise<void>;
   regulation?: RegulationScope & { requestId?: string };
+  manualScope?: ManualAvailabilityScope;
   onDismissRegulation?: () => void;
+  onDismissManualScope?: () => void;
   onPick: (profissionalId: string, date: string, hora: string, selection?: RegulationSelection) => void;
 }
 
@@ -79,14 +81,14 @@ const continuityLabel: Record<ContinuityEstimate, string> = {
   nao_confirmada: "Capacidade não confirmada",
 };
 
-export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots, loadAgendaRange, onPick, regulation, onDismissRegulation }: Props) {
-  const [open, setOpen] = useState(!!regulation);
+export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots, loadAgendaRange, onPick, regulation, manualScope, onDismissRegulation, onDismissManualScope }: Props) {
+  const [open, setOpen] = useState(!!regulation || !!manualScope);
   const [selectedPatient, setSelectedPatient] = useState<string>();
   const [selectedRequestId, setSelectedRequestId] = useState(regulation?.requestId || "");
   const searchRef = useRef(0);
-  const [servico, setServico] = useState(regulation?.specialty || "");
-  const [unidadeId, setUnidadeId] = useState(regulation?.unitId || "all");
-  const [dias, setDias] = useState(String(regulation?.days || 15));
+  const [servico, setServico] = useState(regulation?.specialty || manualScope?.specialty || "");
+  const [unidadeId, setUnidadeId] = useState(regulation?.unitId || manualScope?.unitId || "all");
+  const [dias, setDias] = useState(String(regulation?.days || manualScope?.days || 15));
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [pendingAvailable, setPendingAvailable] = useState(true);
@@ -127,7 +129,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
     const ids = compat.map((p) => p.id);
 
     let rows: PendingSessionRow[] | null = null;
-    try { rows = await fetchActivePendingRows(ids, regulation?.unitId); } catch { rows = null; }
+    try { rows = await fetchActivePendingRows(ids, regulation?.unitId || manualScope?.unitId); } catch { rows = null; }
     if (searchId !== searchRef.current) return;
     const pendingMap = rows ? breakdownPendingByProfessionalUnit(rows, start, end) : null;
     setPendingAvailable(pendingMap !== null);
@@ -170,16 +172,16 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
   };
 
   useEffect(() => {
-    if (regulation && clinicos.length) void buscar();
+    if ((regulation || manualScope) && clinicos.length) void buscar();
     // O localizador regulado é montado novamente quando a navegação muda.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regulation?.professionalId, clinicos.length]);
+  }, [regulation?.professionalId, manualScope?.professionalId, clinicos.length]);
 
   const unitName = (id: string) => unidades.find((u) => u.id === id)?.nome || "Unidade não identificada";
   const pendLine = (b: PendingBreakdown) => `${b.total} (no período: ${b.noPeriodo} · vencidas: ${b.vencidas} · sem data: ${b.semData} · após o período: ${b.aposPeriodo})`;
 
   return (
-    <Sheet open={open} onOpenChange={value => { setOpen(value); if (!value && regulation) onDismissRegulation?.(); }}>
+    <Sheet open={open} onOpenChange={value => { setOpen(value); if (!value && regulation) onDismissRegulation?.(); if (!value && manualScope) onDismissManualScope?.(); }}>
       <SheetTrigger asChild>
         <Button variant="outline"><Search className="w-4 h-4 mr-2" /> Localizar Vagas</Button>
       </SheetTrigger>
@@ -190,6 +192,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
         </SheetHeader>
 
         {regulation && <p className="mt-3 font-medium">{clinicos.find(p=>p.id===regulation.professionalId)?.nome} · {unitName(regulation.unitId)}</p>}
+        {manualScope && <p className="mt-3 font-medium">Busca manual: {clinicos.find(p=>p.id===manualScope.professionalId)?.nome} · {unitName(manualScope.unitId)}. Selecione o paciente no formulário oficial após escolher a vaga.</p>}
         {!!regulation?.candidates?.length && <div className="mt-3">
           <Label htmlFor="regulation-queue-patient">Paciente apto da fila, por data original da solicitação</Label>
           <select id="regulation-queue-patient" className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
@@ -203,7 +206,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
         <div className="grid gap-3 mt-4">
           <div>
             <Label>Serviço / especialidade</Label>
-            <Select disabled={!!regulation} value={servico} onValueChange={setServico}>
+            <Select disabled={!!regulation || !!manualScope} value={servico} onValueChange={setServico}>
               <SelectTrigger><SelectValue placeholder="Escolha o serviço" /></SelectTrigger>
               <SelectContent>{servicos.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
@@ -212,7 +215,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
             {unidades.length > 1 && (
               <div>
                 <Label>Unidade</Label>
-                <Select disabled={!!regulation} value={unidadeId} onValueChange={setUnidadeId}>
+                <Select disabled={!!regulation || !!manualScope} value={unidadeId} onValueChange={setUnidadeId}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
@@ -223,7 +226,7 @@ export function LocalizarVagasPanel({ profissionais, unidades, getAvailableSlots
             )}
             <div>
               <Label>Período</Label>
-              <Select disabled={!!regulation} value={dias} onValueChange={setDias}>
+              <Select disabled={!!regulation || !!manualScope} value={dias} onValueChange={setDias}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="7">Próximos 7 dias</SelectItem>

@@ -97,6 +97,20 @@ describe("LocalizarVagasPanel (integração)", () => {
     expect(onPick).toHaveBeenCalledWith("p1",todayLocalStr(),"08:00",expect.objectContaining({requestId:"request-1",patientId:"person1",unitId:"u1"}));
   });
 
+  it("abre com profissional e unidade definidos para outra especialidade sem candidato regulado", async () => {
+    const onPick = vi.fn();
+    const psychologist = {...profs[0],id:"p3",nome:"Psicóloga C",profissao:"Psicóloga"};
+    render(<LocalizarVagasPanel profissionais={[...profs,psychologist]} unidades={unidades}
+      manualScope={{professionalId:"p3",unitId:"u1",specialty:"Psicologia",days:7,candidates:[]}}
+      getAvailableSlots={() => ["08:00"]}
+      loadAgendaRange={async (start,end) => { for(let date=start;date<=end;date=addDaysToDateStr(date,1)) loaded.add(date); }} onPick={onPick}/>);
+    expect(screen.getByText(/Busca manual: Psicóloga C/)).toBeTruthy();
+    expect(screen.queryByLabelText(/Paciente apto da fila/)).toBeNull();
+    await screen.findByText(/Consulta concluída/);
+    fireEvent.click(screen.getAllByRole("button",{name:"08:00"})[0]);
+    expect(onPick).toHaveBeenCalledWith("p3",todayLocalStr(),"08:00",undefined);
+  });
+
   it("desempenho: 30 dias x 40 profissionais em menos de 1,5 s", async () => {
     const many = Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, nome: `Fono ${i}`, profissao: "Fonoaudiologia", role: "profissional", unidadeId: "u1", ativo: true }));
     const start = todayLocalStr();
