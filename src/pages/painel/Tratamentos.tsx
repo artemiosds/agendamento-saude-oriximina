@@ -1585,8 +1585,9 @@ const Tratamentos: React.FC = () => {
         agendarSessaoData,
         agendarSessaoHora,
         agendarSessaoSalaId,
-        "patient_professional",
+        "patient",
         true,
+        canControlSessions,
       );
     } catch (err: any) {
       console.error(err);
@@ -1747,7 +1748,9 @@ const Tratamentos: React.FC = () => {
             session: sess,
             cycle,
             appointment: newAgData,
-            duplicateScope: "patient_professional",
+            duplicateScope: "patient",
+            manualCapacityOverride: canControlSessions,
+            operationContext: "batch",
           });
           const scheduledAppointment = scheduled.appointment;
           if (!scheduledAppointment) throw new Error("A operação não retornou o agendamento confirmado.");

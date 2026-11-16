@@ -117,14 +117,22 @@ function appointmentToRow(appointment: Agendamento) {
   };
 }
 
-function requireOperationResult(data: Record<string, unknown> | null, accepted: string[]): TreatmentSessionOperationResult {
+function requireOperationResult(
+  data: Record<string, unknown> | null,
+  accepted: string[],
+  operationContext: 'individual' | 'batch' = 'individual',
+): TreatmentSessionOperationResult {
   const status = typeof data?.status === 'string' ? data.status : '';
   if (!data || !accepted.includes(status)) {
     const messages: Record<string, string> = {
       duplicado: 'Já existe um agendamento ativo para este paciente, profissional e horário.',
       data_bloqueada: 'Data bloqueada.',
-      sem_disponibilidade: 'Não há disponibilidade válida para este horário. O lote não gravou a sessão.',
-      capacidade_esgotada: 'A capacidade da agenda foi atingida antes da confirmação. O lote não gravou a sessão.',
+      sem_disponibilidade: operationContext === 'batch'
+        ? 'Não há turno ou grade de atendimento cadastrado para o profissional nesta data e horário. A sessão não foi agendada em lote.'
+        : 'Não há turno ou grade de atendimento cadastrada para o profissional nesta data e horário.',
+      capacidade_esgotada: operationContext === 'batch'
+        ? 'A capacidade desta data foi atingida e a sessão não pôde ser agendada em lote. Escolha outro turno ou data.'
+        : 'A capacidade desta data foi atingida e o horário escolhido não pôde ser reservado. Escolha outro turno ou data.',
       fora_escopo: 'Você não tem permissão para realizar esta operação nesta unidade/profissional.',
       vinculo_compartilhado: 'Reserva compartilhada: use Liberar para agendar na sessão que deseja corrigir.',
       sessao_ja_vinculada: 'Esta sessão já está vinculada a outro agendamento. Recarregue o ciclo.',
@@ -184,6 +192,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       checkPatientAbsenceBlock?: boolean;
       manualCapacityOverride?: boolean;
       reason?: string;
+      operationContext?: 'individual' | 'batch';
     }): Promise<TreatmentSessionOperationResult> {
       await deps.validateCycle?.(input.cycle.id, { sessionId: input.session.id, date: input.appointment.data });
       const duplicate = await deps.findDuplicate({
@@ -218,7 +227,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
           throw new Error('A validação segura do lote ainda não foi ativada no banco. Aplique a migration de agendamento de tratamentos e tente novamente.');
         }
         if (error) throwRpcError(error);
-        rpcResult = requireOperationResult(data, ['agendado', 'ja_agendado']);
+        rpcResult = requireOperationResult(data, ['agendado', 'ja_agendado'], input.operationContext);
         if (!rpcResult.appointment) throw new Error('A operação não retornou o vínculo da sessão com a Agenda.');
         return { appointment: rpcResult.appointment, created: rpcResult.status === 'agendado' };
       });

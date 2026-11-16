@@ -132,8 +132,39 @@ describe('treatmentSessionOperations: schedule', () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: appointment.data }, appointment: appointmentRow }, error: null });
     await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient', manualCapacityOverride: true });
-    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({ p_session_id: 'session-1' }));
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({
+      p_session_id: 'session-1',
+      p_manual_capacity: true,
+    }));
     expect(ctx.scheduleCommits).toEqual([{ appointment: expect.objectContaining({ id: appointment.id }), created: true }]);
+  });
+
+  it('usa mensagem de capacidade própria da operação individual', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'capacidade_esgotada', reason: 'day_full' }, error: null });
+    await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient' }))
+      .rejects.toThrow('A capacidade desta data foi atingida e o horário escolhido não pôde ser reservado. Escolha outro turno ou data.');
+  });
+
+  it('usa mensagem de capacidade própria do agendamento em lote', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'capacidade_esgotada', reason: 'day_full' }, error: null });
+    await expect(ctx.service.schedule({
+      session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional', operationContext: 'batch',
+    })).rejects.toThrow('A capacidade desta data foi atingida e a sessão não pôde ser agendada em lote. Escolha outro turno ou data.');
+  });
+
+  it('mantém o conflito de paciente em qualquer profissão no agendamento em lote', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null });
+    await ctx.service.schedule({
+      session: session(), cycle: cycle(), appointment, duplicateScope: 'patient',
+      manualCapacityOverride: true, operationContext: 'batch',
+    });
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({
+      p_manual_capacity: true,
+      p_check_patient_conflict: true,
+    }));
   });
   it('cria o vínculo por RPC e só confirma depois do resultado completo', async () => {
     const ctx = setup();
