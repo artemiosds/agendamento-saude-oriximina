@@ -32,6 +32,7 @@ import { ChartCard } from '@/components/ChartCard';
 import RelatorioCareniaProfissional from '@/components/reports/RelatorioCareniaProfissional';
 import RelatorioCondicoes from '@/components/reports/RelatorioCondicoes';
 import { reportScopesEqual, validateReportScope, type ReportScope } from '@/lib/reportScope';
+import { buildReportExportMetadataRows } from '@/lib/reportExportMetadata';
 import { getTreatmentCycleIdsForScope } from '@/lib/reportTreatmentScope';
 import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope } from '@/lib/reportAppointmentScope';
 
@@ -46,6 +47,9 @@ const statusLabels: Record<string, string> = {
   em_atendimento: 'Em Atendimento', concluido: 'Concluído', falta: 'Falta',
   cancelado: 'Cancelado', remarcado: 'Remarcado', atraso: 'Atraso',
 };
+
+const getLastAutoTableFinalY = (doc: jsPDF): number | undefined =>
+  (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY;
 
 const formatDateBR = (d: string | null | undefined): string => {
   if (!d || d === '0001-01-01' || d.startsWith('0001') || d === 'undefined' || d === 'null') return 'Não informado';
@@ -1694,19 +1698,139 @@ const Relatorios: React.FC = () => {
     return { titulo, conclusaoSujeito, escopo, periodo, un, prof, especialidade, municipio, status, setor, tipo };
   }, [filterUnit, filterProf, filterStatus, filterSetor, filterTipo, dateFrom, dateTo, unidadesMap, profissionaisMap]);
 
+  const buildExportMetadataRows = useCallback(() => {
+    const escopo = buildEscopo();
+    return buildReportExportMetadataRows({
+      scope: {
+        period: escopo.periodo,
+        unit: escopo.un,
+        professional: escopo.prof,
+        specialty: escopo.especialidade,
+        status: escopo.status,
+        sector: escopo.setor,
+        type: escopo.tipo,
+      },
+      generatedAt: new Date().toLocaleString('pt-BR'),
+      partialSources: partialTables,
+    });
+  }, [buildEscopo, partialTables]);
+
+  const buildMapaExportMetadataRows = useCallback(() => {
+    const escopo = buildEscopo();
+    const selectedProfessional = mapaProf !== 'all'
+      ? [...profissionais, ...tecnicos].find(professional => professional.id === mapaProf)?.nome
+      : escopo.prof;
+    return buildReportExportMetadataRows({
+      scope: {
+        period: escopo.periodo,
+        unit: escopo.un,
+        professional: selectedProfessional || 'Todos',
+        specialty: escopo.especialidade,
+        status: 'Concluído',
+        sector: escopo.setor,
+        type: 'Mapa de atendimentos concluídos',
+      },
+      generatedAt: new Date().toLocaleString('pt-BR'),
+      partialSources: partialTables,
+    });
+  }, [buildEscopo, mapaProf, profissionais, tecnicos, partialTables]);
+
+  const ensureExportSnapshotReady = useCallback(() => {
+    if (isFetching || hasPendingFilters) {
+      toast.warning('Aplique os filtros e aguarde a atualização antes de exportar.');
+      return false;
+    }
+    return true;
+  }, [hasPendingFilters, isFetching]);
+
+  const buildAuxiliaryExportTable = useCallback((type: string) => {
+    const headers = ['Grupo', 'Indicador', 'Quantidade'];
+    const rows: string[][] = [];
+    const add = (group: string, label: string, value: string | number) => rows.push([group, label, String(value)]);
+
+    if (type === 'executivo') {
+      Object.entries({
+        'Total de Atendimentos': executiveKpis.total,
+        'Pacientes Únicos': executiveKpis.pacientesUnicos,
+        'Taxa de Comparecimento (%)': executiveKpis.taxaComparecimento,
+        'Taxa de Falta (%)': executiveKpis.taxaFalta,
+        'Taxa de Cancelamento (%)': executiveKpis.taxaCancelamento,
+        'Taxa de Retorno (%)': executiveKpis.taxaRetorno,
+        'Tempo Médio (min)': executiveKpis.tempoMedio,
+        'Espera Média da Fila (min)': executiveKpis.tempoEsperaMedio,
+        'Profissionais Ativos': executiveKpis.profissionaisAtivos,
+        'Unidades Ativas': executiveKpis.unidadesAtivas,
+        'Ciclos Ativos': executiveKpis.ciclosAtivos,
+        'Pacientes Aguardando na Fila': executiveKpis.filaAguardando,
+      }).forEach(([label, value]) => add('Indicador executivo', label, value));
+      statusData.forEach(item => add('Distribuição por status', item.name, item.value));
+      timelineGrouped.forEach(item => {
+        add(`Evolução por ${timelineGroup}`, `${item.label} — concluídos`, item.concluidos);
+        add(`Evolução por ${timelineGroup}`, `${item.label} — faltas`, item.faltas);
+        add(`Evolução por ${timelineGroup}`, `${item.label} — cancelados`, item.cancelados);
+      });
+    } else if (type === 'tratamentos') {
+      [
+        ['Ciclos', 'Total', treatmentStats.total], ['Ciclos', 'Ativos', treatmentStats.ativos],
+        ['Ciclos', 'Finalizados', treatmentStats.finalizados], ['Ciclos', 'Suspensos', treatmentStats.suspensos],
+        ['Sessões', 'Total', treatmentStats.totalSessions], ['Sessões', 'Realizadas', treatmentStats.sessRealizadas],
+        ['Sessões', 'Faltas', treatmentStats.sessFaltas], ['Sessões', 'Canceladas', treatmentStats.sessCanceladas],
+        ['Indicador', 'Média de sessões por paciente', treatmentStats.avgSessoesPorPaciente],
+        ['Indicador', 'Ciclos suspensos (%)', `${treatmentStats.taxaSuspensao}%`],
+      ].forEach(([group, label, value]) => add(String(group), String(label), value as string | number));
+      treatmentStats.byType.forEach(item => add('Tratamentos por tipo', item.nome, item.total));
+      treatmentStats.byProfessional.forEach(item => add('Tratamentos por profissional', `${item.nome} — ativos`, item.ativos));
+      treatmentStats.byProfessional.forEach(item => add('Tratamentos por profissional', `${item.nome} — finalizados`, item.finalizados));
+      treatmentStats.byProfessional.forEach(item => add('Tratamentos por profissional', `${item.nome} — sessões`, item.sessoes));
+      treatmentStats.byUnit.forEach(item => add('Tratamentos por unidade', `${item.nome} — total`, item.total));
+      treatmentStats.byUnit.forEach(item => add('Tratamentos por unidade', `${item.nome} — ativos`, item.ativos));
+    } else if (type === 'procedimentos') {
+      add('Resumo', 'Total de procedimentos', procedimentoStats.total);
+      procedimentoStats.byProcedure.forEach(item => add('Procedimento', item.nome, item.total));
+      procedimentoStats.byProfessional.forEach(item => add('Por profissional', item.nome, item.total));
+      procedimentoStats.byUnit.forEach(item => add('Por unidade', item.nome, item.total));
+    } else if (type === 'triagem') {
+      add('Resumo', 'Total', triagemReport.total);
+      add('Resumo', 'Confirmadas', triagemReport.confirmadas);
+      add('Resumo', 'Pendentes', triagemReport.pendentes);
+      triagemReport.porTecnico.forEach(item => add('Por técnico', `${item.nome} — total`, item.total));
+      triagemReport.porTecnico.forEach(item => add('Por técnico', `${item.nome} — confirmadas`, item.confirmadas));
+      triagemReport.porTecnico.forEach(item => add('Por técnico', `${item.nome} — pendentes`, item.pendentes));
+    } else if (type === 'enfermagem') {
+      add('Resumo', 'Total de avaliações', nursingReport.total);
+      add('Resumo', 'Aptos', nursingReport.aptos);
+      add('Resumo', 'Inaptos', nursingReport.inaptos);
+      add('Resumo', 'Multiprofissional', nursingReport.multiprof);
+      nursingReport.byPriority.forEach(item => add('Por prioridade', item.nome, item.total));
+    } else if (type === 'multiprofissional') {
+      add('Resumo', 'Total de avaliações', multiReport.total);
+      multiReport.bySpecialty.forEach(item => add('Por especialidade', item.nome, item.total));
+      multiReport.byParecer.forEach(item => add('Por parecer', item.nome, item.total));
+    } else if (type === 'pts_report') {
+      add('Resumo', 'Total de PTS', ptsReport.total);
+      add('Resumo', 'Ativos', ptsReport.ativos);
+      add('Resumo', 'Concluídos', ptsReport.concluidos);
+    }
+
+    return { headers, rows };
+  }, [executiveKpis, statusData, timelineGrouped, timelineGroup, treatmentStats, procedimentoStats, triagemReport, nursingReport, multiReport, ptsReport]);
+
   const exportCSV = useCallback((type: string) => {
+    if (!ensureExportSnapshotReady()) return;
     let headers: string[] = [];
     let rows: string[][] = [];
     const filename = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.csv`;
 
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
-      rows = filtered.map(a => {
+      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
+      rows = consolidatedData.map(a => {
         const un = unidadesMap.get(a.unidadeId);
-        // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.setor, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
+        return [a.data, a.hora || '-', a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem || '-', '-', '-', '-'];
       });
+    } else if (type === 'mapa') {
+      headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
+      rows = mapaData.map(r => [String(r.num), r.paciente_nome, formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), r.cpf, r.cns, r.telefone, r.tipo_logradouro, r.logradouro, r.numero, r.complemento, r.bairro, r.municipio, r.profissional_nome, r.especialidade, r.procedimentos_realizados, r.procedimento_sigtap, r.cid, r.observacoes]);
     } else if (type === 'municipios') {
       headers = ['Município', 'Total de Pacientes', 'Total de Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
       rows = municipioReport.map(m => [
@@ -1760,36 +1884,38 @@ const Relatorios: React.FC = () => {
       clinicalReport.faixaEtariaDist.forEach(f => blocks.push(['Faixa Etária', f.name, String(f.value), `${((f.value/tot)*100).toFixed(1)}%`]));
       clinicalReport.evolucaoTemporal.forEach(e => blocks.push(['Evolução Mensal', e.month, String(e.value), '-']));
       rows = blocks;
+    } else {
+      const auxiliary = buildAuxiliaryExportTable(type);
+      headers = auxiliary.headers;
+      rows = auxiliary.rows;
     }
 
 
 
-    const esc = buildEscopo();
-    const escopoLines = [
-      ['ESCOPOS APLICADOS'],
-      ...Object.entries(esc.escopo).map(([k, v]) => [k, String(v)]),
-      [`Gerado em`, new Date().toLocaleString('pt-BR')],
-      [''],
-    ];
-    const csv = [...escopoLines, headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
+    const metadataRows = [...(type === 'mapa' ? buildMapaExportMetadataRows() : buildExportMetadataRows()), ['Linhas no arquivo', String(rows.length)]];
+    const csv = [...metadataRows, headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, filaReport, unidades, buildEscopo, municipioReport, clinicalReport]);
+  }, [consolidatedData, porProfissional, faltasReport, pacientesReportFiltrados, filaReport, unidadesMap, buildExportMetadataRows, ensureExportSnapshotReady, municipioReport, clinicalReport, buildAuxiliaryExportTable, mapaData, buildMapaExportMetadataRows]);
 
   // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
+    if (!ensureExportSnapshotReady()) return;
     let headers: string[] = [];
     let rows: string[][] = [];
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
+      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
       rows = consolidatedData.map(d => {
         const un = unidadesMap.get(d.unidadeId);
-        return [d.data, d.hora || '-', d.pacienteNome, d.profissionalNome, un?.nome || '', d.tipo, statusLabels[d.status] || d.status, d.origem || ''];
+        return [d.data, d.hora || '-', d.pacienteNome, d.profissionalNome, un?.nome || '', d.tipo, statusLabels[d.status] || d.status, d.origem || '-', '-', '-', '-'];
       });
+    } else if (type === 'mapa') {
+      headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
+      rows = mapaData.map(r => [String(r.num), r.paciente_nome, formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), r.cpf, r.cns, r.telefone, r.tipo_logradouro, r.logradouro, r.numero, r.complemento, r.bairro, r.municipio, r.profissional_nome, r.especialidade, r.procedimentos_realizados, r.procedimento_sigtap, r.cid, r.observacoes]);
     } else if (type === 'municipios') {
       headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
       rows = municipioReport.map(m => [
@@ -1840,6 +1966,10 @@ const Relatorios: React.FC = () => {
       clinicalReport.faixaEtariaDist.forEach(f => blocks.push(['Faixa Etária', f.name, String(f.value), `${((f.value/tot)*100).toFixed(1)}%`]));
       clinicalReport.evolucaoTemporal.forEach(e => blocks.push(['Evolução Mensal', e.month, String(e.value), '-']));
       rows = blocks;
+    } else {
+      const auxiliary = buildAuxiliaryExportTable(type);
+      headers = auxiliary.headers;
+      rows = auxiliary.rows;
     }
 
 
@@ -1847,6 +1977,9 @@ const Relatorios: React.FC = () => {
     // Build XML Spreadsheet (Excel-compatible)
     const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const headerCells = headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('');
+    const metadataRows = [...(type === 'mapa' ? buildMapaExportMetadataRows() : buildExportMetadataRows()), ['Linhas no arquivo', String(rows.length)]].map(r =>
+      `<Row>${r.map(c => `<Cell><Data ss:Type="String">${escXml(c)}</Data></Cell>`).join('')}</Row>`
+    ).join('\n');
     const dataRows = rows.map(r =>
       `<Row>${r.map(c => `<Cell><Data ss:Type="String">${escXml(c)}</Data></Cell>`).join('')}</Row>`
     ).join('\n');
@@ -1864,6 +1997,8 @@ const Relatorios: React.FC = () => {
 <Worksheet ss:Name="Relatório">
 <Table>
 ${headers.map(() => '<Column ss:AutoFitWidth="1" ss:Width="120"/>').join('')}
+${metadataRows}
+<Row/>
 <Row>${headerCells}</Row>
 ${dataRows}
 </Table>
@@ -1877,10 +2012,13 @@ ${dataRows}
     a.download = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [consolidatedData, porProfissional, faltasReport, pacientesReportFiltrados, filaReport, unidades, municipioReport, clinicalReport]);
+  }, [consolidatedData, porProfissional, faltasReport, pacientesReportFiltrados, filaReport, unidadesMap, buildExportMetadataRows, buildMapaExportMetadataRows, ensureExportSnapshotReady, municipioReport, clinicalReport, buildAuxiliaryExportTable, mapaData]);
 
   // === DOWNLOAD PDF REAL ===
   const downloadPDF = useCallback(async (type: string) => {
+    if (!ensureExportSnapshotReady()) return;
+    const auxiliaryTable = buildAuxiliaryExportTable(type);
+    const auxiliaryTabTypes = ['executivo', 'procedimentos', 'triagem', 'enfermagem', 'multiprofissional', 'pts_report', 'tratamentos'];
     const isEmpty =
       (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (consolidatedData.length === 0 && porProfissional.length === 0) :
       type === 'produtividade' ? porProfissional.length === 0 :
@@ -1888,7 +2026,8 @@ ${dataRows}
       type === 'faltas' ? faltasReport.length === 0 :
       type === 'pacientes' ? pacientesReportFiltrados.length === 0 :
       type === 'clinico' ? clinicalReport.byCategory.length === 0 :
-      type === 'fila' ? filaReport.items.length === 0 : false;
+      type === 'fila' ? filaReport.items.length === 0 :
+      auxiliaryTabTypes.includes(type) ? auxiliaryTable.rows.length === 0 : false;
 
     if (isEmpty) {
       toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
@@ -1898,7 +2037,7 @@ ${dataRows}
     const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando o documento para download.' });
     try {
       await new Promise(r => requestAnimationFrame(() => r(null)));
-      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera', clinico: 'Relatório de Análise Clínica' };
+      const titleMap: Record<string, string> = { executivo: 'Dashboard Executivo', geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', procedimentos: 'Relatório de Procedimentos', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera', triagem: 'Relatório de Triagem', enfermagem: 'Relatório de Enfermagem', multiprofissional: 'Relatório Multiprofissional', pts_report: 'Relatório de PTS', tratamentos: 'Relatório de Tratamentos', clinico: 'Relatório de Análise Clínica' };
       const title = titleMap[type] || 'Relatório';
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const un = filterUnit !== 'all' ? unidadesMap.get(filterUnit)?.nome : 'Todas';
@@ -1921,12 +2060,22 @@ ${dataRows}
       doc.text(`Período: ${periodo}   Unidade: ${un || 'Todas'}   Profissional: ${prof || 'Todos'}`, 14, 20);
       doc.text(`Emitido em: ${generatedAt}`, 14, 25);
 
+      autoTable(doc, {
+        startY: 28,
+        head: [['Escopo aplicado', 'Valor']],
+        body: buildExportMetadataRows().filter(([label]) => label !== 'ESCOPO E CONFERÊNCIA' && label !== '').map(([label, value]) => [label, value]),
+        theme: 'grid',
+        styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+        headStyles: { fillColor: [42, 111, 151], textColor: [255, 255, 255] },
+        columnStyles: { 0: { cellWidth: 36 }, 1: { cellWidth: 220 } },
+      });
+
       const summaryRows = [
         ['Total Agendamentos', String(stats.total), 'Atendimentos', String(tempoStats.totalAtendimentos), 'Concluídos', String(stats.concluidos), 'Faltas', String(stats.faltas)],
         ['Cancelados', String(stats.cancelados), 'Remarcados', String(stats.remarcados), 'Tempo Médio', `${tempoStats.tempoMedio}min`, 'Comparecimento', `${stats.taxaComparecimento}%`],
       ];
       autoTable(doc, {
-        startY: 31,
+        startY: (getLastAutoTableFinalY(doc) || 28) + 3,
         body: summaryRows,
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
@@ -1953,7 +2102,7 @@ ${dataRows}
       };
 
       if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(consolidatedData).map(a => [a.data || '', a.hora || '-', a.pacienteNome || '', a.profissionalNome || '', unidadesMap.get(a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
+        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem', 'Início', 'Fim', 'Duração'], cap(consolidatedData).map(a => [a.data || '', a.hora || '-', a.pacienteNome || '', a.profissionalNome || '', unidadesMap.get(a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '', a.origem || '-', '-', '-', '-']));
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
@@ -1986,12 +2135,23 @@ ${dataRows}
         addTable('Distribuição por Sexo', ['Sexo', 'Pacientes', '%'], clinicalReport.sexoDist.map(s => [s.name, s.value, `${((s.value/tot)*100).toFixed(1)}%`]));
         addTable('Distribuição por Faixa Etária', ['Faixa', 'Pacientes', '%'], clinicalReport.faixaEtariaDist.map(f => [f.name, f.value, `${((f.value/tot)*100).toFixed(1)}%`]));
         addTable('Evolução Temporal dos Diagnósticos', ['Mês', 'Diagnósticos'], cap(clinicalReport.evolucaoTemporal).map(e => [e.month, e.value]));
+      } else if (auxiliaryTabTypes.includes(type)) {
+        addTable('Indicadores e totais da aba', auxiliaryTable.headers, auxiliaryTable.rows);
       }
 
 
 
       if (truncated) {
         toast.warning(`PDF limitado a ${ROW_LIMIT} linhas`, { description: 'Para o conjunto completo, use Excel.' });
+        doc.addPage();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(180, 83, 9);
+        doc.text('RELATÓRIO PARCIAL', 14, 20);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Esta exportação foi limitada às primeiras ${ROW_LIMIT} linhas de cada tabela para proteger o navegador.`, 14, 30, { maxWidth: 265 });
+        doc.text('Use Excel para consultar o conjunto integral dentro do escopo aplicado.', 14, 39, { maxWidth: 265 });
       }
       doc.save(`relatorio_${type}_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success('PDF gerado com sucesso', { description: 'O download do arquivo foi iniciado.' });
@@ -2001,11 +2161,14 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais, buildExportMetadataRows, ensureExportSnapshotReady, buildAuxiliaryExportTable]);
 
   // === EXPORT PDF ===
   const exportPDF = useCallback(async (type: string) => {
+    if (!ensureExportSnapshotReady()) return;
     try {
+      const auxiliaryTable = buildAuxiliaryExportTable(type);
+      const auxiliaryTabTypes = ['executivo', 'procedimentos', 'triagem', 'enfermagem', 'multiprofissional', 'pts_report', 'tratamentos'];
       // Empty-data guard per tab
       const isEmpty =
         (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (consolidatedData.length === 0 && porProfissional.length === 0) :
@@ -2013,17 +2176,15 @@ ${dataRows}
         type === 'municipios' ? municipioReport.length === 0 :
         type === 'faltas' ? faltasReport.length === 0 :
         type === 'pacientes' ? pacientesReportFiltrados.length === 0 :
-        type === 'fila' ? filaReport.items.length === 0 : false;
+        type === 'clinico' ? clinicalReport.byCategory.length === 0 :
+        type === 'fila' ? filaReport.items.length === 0 :
+        auxiliaryTabTypes.includes(type) ? auxiliaryTable.rows.length === 0 : false;
       if (isEmpty) {
         toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
         return;
       }
       const loadingId = toast.loading('Gerando PDF...', { description: 'Preparando documento para impressão / salvar como PDF.' });
       await new Promise(r => requestAnimationFrame(() => r(null))); // yield UI
-    const un = filterUnit !== 'all' ? unidadesMap.get(filterUnit)?.nome : 'Todas';
-    const prof = filterProf !== 'all' ? profissionaisMap.get(filterProf)?.nome : 'Todos';
-    const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
-
     let body = '';
 
     const summaryBlock = `
@@ -2050,14 +2211,14 @@ ${dataRows}
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       const rows = cap(consolidatedData).map(a => {
         const unName = unidadesMap.get(a.unidadeId)?.nome || '';
-        return `<tr><td>${a.data}</td><td>${a.hora || '-'}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
+        return `<tr><td>${a.data}</td><td>${a.hora || '-'}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>${a.origem || '-'}</td><td>-</td><td>-</td><td>-</td></tr>`;
       }).join('');
       const prodRows = cap(porProfissional).map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
       ).join('');
       body = `${summaryBlock}
         <h2>Agendamentos Detalhados</h2>
-        <table><thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Início</th><th>Fim</th><th>Duração</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Origem</th><th>Início</th><th>Fim</th><th>Duração</th></tr></thead><tbody>${rows}</tbody></table>
         <h2>Produtividade por Profissional</h2>
         <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Tempo Médio</th><th>Taxa</th></tr></thead><tbody>${prodRows}</tbody></table>`;
     } else if (type === 'produtividade') {
@@ -2107,6 +2268,9 @@ ${dataRows}
         </div>
         <h2>Fila de Espera</h2>
         <table><thead><tr><th>Posição</th><th>Paciente</th><th>Unidade</th><th>Setor</th><th>Prioridade</th><th>Status</th><th>Chegada</th><th>Chamada</th></tr></thead><tbody>${filaRows}</tbody></table>`;
+    } else if (auxiliaryTabTypes.includes(type)) {
+      const rows = auxiliaryTable.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
+      body = `${summaryBlock}<h2>Indicadores e totais da aba</h2><table><thead><tr>${auxiliaryTable.headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     if (truncated) {
@@ -2114,12 +2278,12 @@ ${dataRows}
       toast.warning(`Mostrando ${ROW_LIMIT} linhas no PDF`, { description: 'Para o conjunto completo, exporte em Excel.' });
     }
 
-    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+    const titleMap: Record<string, string> = { executivo: 'Dashboard Executivo', geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', procedimentos: 'Relatório de Procedimentos', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera', triagem: 'Relatório de Triagem', enfermagem: 'Relatório de Enfermagem', multiprofissional: 'Relatório Multiprofissional', pts_report: 'Relatório de PTS', tratamentos: 'Relatório de Tratamentos', clinico: 'Relatório de Análise Clínica' };
 
       await openPrintDocument(
         titleMap[type] || 'Relatório',
         body,
-        { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
+        Object.fromEntries(buildExportMetadataRows().filter(([label]) => label !== 'ESCOPO E CONFERÊNCIA' && label !== '').map(([label, value]) => [label, value]))
       );
       toast.dismiss(loadingId);
       toast.success('Documento pronto', { description: 'A janela de impressão foi aberta. Use "Salvar como PDF" para baixar.' });
@@ -2127,12 +2291,16 @@ ${dataRows}
       console.error('[exportPDF] erro:', err);
       toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
     }
-  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais, buildExportMetadataRows, ensureExportSnapshotReady, buildAuxiliaryExportTable]);
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
     if (isFetching || hasPendingFilters) {
       toast.warning('Aplique os filtros gerais e aguarde a atualização antes de gerar o mapa.');
+      return;
+    }
+    if (filterStatus !== 'all' && filterStatus !== 'concluido') {
+      toast.warning('O Mapa de Atendimentos inclui somente registros concluídos. Ajuste o filtro de status para continuar.');
       return;
     }
     if (!dateFrom || !dateTo) {
@@ -2149,14 +2317,19 @@ ${dataRows}
         .lte('data', dateTo)
         .order('data', { ascending: true });
 
-      if (mapaProf !== 'all') {
-        query = query.eq('profissional_id', mapaProf);
+      const selectedMapProfessional = mapaProf !== 'all' ? mapaProf : filterProf;
+      if (selectedMapProfessional !== 'all') {
+        query = query.eq('profissional_id', selectedMapProfessional);
       }
+      if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+      if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
       if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         query = query.eq('unidade_id', user.unidadeId);
       }
 
-      const { data: agend } = await query;
+      const { data: appointments, error: appointmentsError } = await query;
+      if (appointmentsError) throw appointmentsError;
+      const agend = filterAppointmentsToSectorScope(appointments || [], atendimentosDB, filterSetor);
 
       if (!agend || agend.length === 0) {
         setMapaData([]);
@@ -2166,10 +2339,11 @@ ${dataRows}
       }
 
       const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
-      const { data: pacs } = await supabase
+      const { data: pacs, error: patientsError } = await supabase
         .from('pacientes')
         .select('id, cns, telefone, cid, cpf, data_nascimento, endereco, logradouro, numero, complemento, bairro, municipio, tipo_logradouro, custom_data')
         .in('id', pacienteIds);
+      if (patientsError) throw patientsError;
 
       const pacMap = new Map((pacs || []).map(p => [p.id, p]));
       const profIds = [...new Set(agend.map(a => a.profissional_id).filter(Boolean))];
@@ -2177,23 +2351,29 @@ ${dataRows}
 
       // Buscar CIDs e Procedimentos dos prontuários concluídos para os agendamentos encontrados
       const agendIds = agend.map(a => a.id);
-      const { data: prons } = await supabase
+      const { data: prons, error: recordsError } = await supabase
         .from('prontuarios')
         .select('id, agendamento_id, hipotese, outro_procedimento, procedimentos_texto, queixa_principal')
 
         .in('agendamento_id', agendIds);
+      if (recordsError) throw recordsError;
 
       const pronIds = prons?.map(p => p.id) || [];
-      const { data: pronProcs } = await supabase
+      const { data: pronProcs, error: recordProceduresError } = await supabase
         .from('prontuario_procedimentos')
         .select('prontuario_id, procedimento_id, cids_selecionados')
         .in('prontuario_id', pronIds);
+      if (recordProceduresError) throw recordProceduresError;
 
       // Fetch procedures from both tables to map IDs to SIGTAP codes and names
-      const [{ data: legacyProcs }, { data: sigtapProcs }] = await Promise.all([
+      const [legacyProceduresResult, sigtapProceduresResult] = await Promise.all([
         supabase.from('procedimentos').select('id, codigo_sigtap, nome'),
         supabase.from('sigtap_procedimentos').select('id, codigo, nome')
       ]);
+      if (legacyProceduresResult.error) throw legacyProceduresResult.error;
+      if (sigtapProceduresResult.error) throw sigtapProceduresResult.error;
+      const legacyProcs = legacyProceduresResult.data;
+      const sigtapProcs = sigtapProceduresResult.data;
 
       const proceduresMap = new Map();
       (legacyProcs || []).forEach(p => {
@@ -2350,13 +2530,20 @@ ${dataRows}
       setMapaGenerated(true);
     } catch (e) {
       console.error('Erro ao gerar mapa:', e);
+      setMapaData([]);
+      setMapaGenerated(false);
+      toast.error('Não foi possível gerar o mapa', { description: 'Confira os filtros e tente novamente.' });
     } finally {
       setMapaLoading(false);
     }
-  }, [dateFrom, dateTo, mapaProf, funcionarios, isFetching, hasPendingFilters]);
+  }, [dateFrom, dateTo, mapaProf, filterProf, filterUnit, filterSetor, filterTipo, filterStatus, atendimentosDB, funcionarios, user?.unidadeId, user?.usuario, isFetching, hasPendingFilters]);
 
+  useEffect(() => {
+    setMapaGenerated(false);
+  }, [filterUnit, filterProf, filterSetor, filterTipo, filterStatus, dateFrom, dateTo]);
 
   const exportMapaPDF = useCallback(async () => {
+    if (!ensureExportSnapshotReady()) return;
     if (mapaData.length === 0) {
       toast.warning('Não há dados para exportar', { description: 'Gere o relatório primeiro.' });
       return;
@@ -2376,7 +2563,7 @@ ${dataRows}
           formatDateBR(r.data_atendimento), 
           formatDateBR(r.data_nascimento), 
           fmtCPF(r.cpf), 
-          r.cns || '-',
+          fmtCNS(r.cns),
           r.telefone || '-',
           r.tipo_logradouro || '-',
           r.logradouro || '-',
@@ -2384,6 +2571,7 @@ ${dataRows}
           r.complemento || '-',
           r.bairro || '-',
           r.municipio || '-',
+          r.endereco_completo || '-',
           r.profissional_nome || '', 
           r.especialidade || '-', 
           r.procedimentos_realizados || '-',
@@ -2406,7 +2594,17 @@ ${dataRows}
       doc.text(`Gerado por: ${user?.nome || '-'}`, 14, 30);
 
       autoTable(doc, {
-        startY: 36,
+        startY: 32,
+        head: [['Escopo aplicado', 'Valor']],
+        body: buildMapaExportMetadataRows().filter(([label]) => label !== 'ESCOPO E CONFERÊNCIA' && label !== '').map(([label, value]) => [label, value]),
+        theme: 'grid',
+        styles: { fontSize: 6, cellPadding: 1, overflow: 'linebreak' },
+        headStyles: { fillColor: [42, 111, 151], textColor: [255, 255, 255] },
+        columnStyles: { 0: { cellWidth: 34 }, 1: { cellWidth: 235 } },
+      });
+
+      autoTable(doc, {
+        startY: (getLastAutoTableFinalY(doc) || 32) + 3,
         head: [['Nº', 'Paciente', 'Dt Atend', 'Dt Nasc', 'CPF', 'CNS', 'Telefone', 'Tipo Logr', 'Logradouro', 'Nº', 'Compl', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procs Realizados', 'Proc. SIGTAP', 'CID', 'Obs']],
         body: rows,
         theme: 'grid',
@@ -2422,6 +2620,14 @@ ${dataRows}
       doc.text(`Total: ${mapaData.length} atendimentos`, 14, Math.min(finalY, 200));
       if (mapaData.length > ROW_LIMIT) {
         toast.warning(`PDF limitado a ${ROW_LIMIT} linhas`, { description: 'Para o conjunto completo, use CSV.' });
+        doc.addPage();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(180, 83, 9);
+        doc.text('MAPA PARCIAL', 14, 20);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Esta exportação contém ${ROW_LIMIT} de ${mapaData.length} registros. Use CSV para consultar o conjunto integral.`, 14, 30, { maxWidth: 265 });
       }
       doc.save(`mapa_atendimentos_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success('PDF gerado com sucesso', { description: 'O download do arquivo foi iniciado.' });
@@ -2431,9 +2637,10 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [mapaData, dateFrom, dateTo, user]);
+  }, [mapaData, dateFrom, dateTo, user, buildMapaExportMetadataRows, ensureExportSnapshotReady]);
 
   const exportMapaCSV = useCallback(() => {
+    if (!ensureExportSnapshotReady()) return;
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
     const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
@@ -2459,7 +2666,7 @@ ${dataRows}
       r.observacoes || ''
     ]);
 
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const csv = [...buildMapaExportMetadataRows(), ['Linhas no arquivo', String(rows.length)], headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2467,7 +2674,7 @@ ${dataRows}
     a.download = `mapa-atendimentos-${dateFrom}-a-${dateTo}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [mapaData, dateFrom, dateTo]);
+  }, [mapaData, dateFrom, dateTo, buildMapaExportMetadataRows, ensureExportSnapshotReady]);
 
   const clearFilters = () => {
     setFilterUnitInput('all');
@@ -3109,16 +3316,16 @@ ${dataRows}
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={handleRefresh} disabled={isFetching}>
             <RefreshCw className={`w-4 h-4 mr-1 ${isFetching ? 'animate-spin' : ''}`} />{isFetching ? 'Atualizando...' : hasPendingFilters ? 'Aplicar filtros' : 'Atualizar dados'}
           </Button>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => activeTab === 'mapa' ? exportMapaCSV() : exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)} disabled={isFetching || hasPendingFilters || ['condicoes', 'carencias'].includes(activeTab) || (activeTab === 'mapa' && (!mapaGenerated || mapaData.length === 0))} title={['condicoes', 'carencias'].includes(activeTab) ? 'Esta seção possui relatório e escopo próprios.' : undefined}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => activeTab === 'mapa' ? exportMapaPDF() : downloadPDF(activeTab)} loadingText="Gerando PDF...">
+          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => activeTab === 'mapa' ? exportMapaPDF() : downloadPDF(activeTab)} disabled={isFetching || hasPendingFilters || ['condicoes', 'carencias'].includes(activeTab) || (activeTab === 'mapa' && (!mapaGenerated || mapaData.length === 0))} title={['condicoes', 'carencias'].includes(activeTab) ? 'Esta seção possui relatório e escopo próprios.' : undefined} loadingText="Gerando PDF...">
             <FileText className="w-4 h-4 mr-1" />PDF
           </ActionButton>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)} disabled={isFetching || hasPendingFilters || ['condicoes', 'carencias'].includes(activeTab) || (activeTab === 'mapa' && (!mapaGenerated || mapaData.length === 0))} title={['condicoes', 'carencias'].includes(activeTab) ? 'Esta seção possui relatório e escopo próprios.' : undefined}>
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} loadingText="Preparando impressão...">
+          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} disabled={isFetching || hasPendingFilters || ['mapa', 'condicoes', 'carencias'].includes(activeTab)} title={['mapa', 'condicoes', 'carencias'].includes(activeTab) ? 'Use a opção de impressão disponível dentro desta seção.' : undefined} loadingText="Preparando impressão...">
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </ActionButton>
         </div>
@@ -4974,6 +5181,9 @@ th{background:#f1f5f9;font-weight:600;}
                   try {
                     const now = new Date().toLocaleString('pt-BR');
                     const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
+                    const metadata = buildMapaExportMetadataRows()
+                      .filter(([label]) => label !== 'ESCOPO E CONFERÊNCIA' && label !== '')
+                      .map(([label, value]) => `${label}: ${value}`).join(' • ');
                     const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
                     const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
                     const tableRows = mapaData.map((r, i) => {
@@ -5012,7 +5222,7 @@ table{width:100%;border-collapse:collapse;margin-bottom:8px;}
 th,td{border:1px solid #ccc;padding:2px 3px;text-align:left;font-size:6px;}
 th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:0;}.no-print{display:none!important;}}</style></head><body>
-<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:2px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:8px;font-size:7px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:2px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:8px;font-size:7px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div><div style="font-size:7px;color:#475569;margin:5px 0 8px">${escapeHtml(metadata)}</div>
 <table><thead><tr><th style="width:20px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>CNS</th><th>Tel</th><th>Tipo</th><th>Logr</th><th>Nº</th><th>Compl</th><th>Bairro</th><th>Mun</th><th>Profissional</th><th>Espec</th><th>Procs Realizados</th><th>SIGTAP</th><th>CID</th><th>Obs</th></tr></thead><tbody>${tableRows}</tbody>
 <tfoot><tr><td colspan="19" style="text-align:right;font-weight:600;padding:4px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
 </body></html>`;
