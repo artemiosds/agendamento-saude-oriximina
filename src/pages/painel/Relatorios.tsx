@@ -34,8 +34,9 @@ import RelatorioCondicoes from '@/components/reports/RelatorioCondicoes';
 import { reportScopesEqual, validateReportScope, type ReportScope } from '@/lib/reportScope';
 import { buildReportExportMetadataRows } from '@/lib/reportExportMetadata';
 import { buildAppointmentExportMatrix, buildAttendanceMapExportMatrix, serializeReportCsv, serializeSpreadsheetRowsXml } from '@/lib/reportExportRows';
-import { getTreatmentCycleIdsForScope } from '@/lib/reportTreatmentScope';
-import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope } from '@/lib/reportAppointmentScope';
+import { buildTreatmentReportMetrics } from '@/lib/reportTreatmentMetrics';
+import { getMunicipalityWithMostPatients } from '@/lib/reportMunicipalityScope';
+import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope, getPatientIdsInReportScope } from '@/lib/reportAppointmentScope';
 
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
@@ -302,6 +303,7 @@ const Relatorios: React.FC = () => {
         table: string,
         dateField?: string,
         selectFields = '*',
+        includeUndatedInDateRange = false,
       ): Promise<{ table: string; rows: any[]; partial: boolean }> => {
         let allData: any[] = [];
         let from = 0;
@@ -319,11 +321,18 @@ const Relatorios: React.FC = () => {
           
           if (dateField) {
             const isTimestamp = TIMESTAMP_DATE_FIELDS.has(dateField);
-            if (queryDateFrom) {
-              query = query.gte(dateField, isTimestamp ? `${queryDateFrom}T00:00:00` : queryDateFrom);
-            }
-            if (queryDateTo) {
-              query = query.lte(dateField, isTimestamp ? `${queryDateTo}T23:59:59` : queryDateTo);
+            const fromValue = queryDateFrom ? (isTimestamp ? `${queryDateFrom}T00:00:00` : queryDateFrom) : null;
+            const toValue = queryDateTo ? (isTimestamp ? `${queryDateTo}T23:59:59` : queryDateTo) : null;
+            if (includeUndatedInDateRange && (fromValue || toValue)) {
+              const datedCondition = fromValue && toValue
+                ? `and(${dateField}.gte.${fromValue},${dateField}.lte.${toValue})`
+                : fromValue
+                  ? `${dateField}.gte.${fromValue}`
+                  : `${dateField}.lte.${toValue}`;
+              query = query.or(`${dateField}.is.null,${datedCondition}`);
+            } else {
+              if (fromValue) query = query.gte(dateField, fromValue);
+              if (toValue) query = query.lte(dateField, toValue);
             }
           }
 
@@ -346,6 +355,8 @@ const Relatorios: React.FC = () => {
             if (queryProfessional !== 'all') query = query.eq('profissional_id', queryProfessional);
           } else if (table === 'prontuarios') {
             if (queryProfessional !== 'all') query = query.eq('profissional_id', queryProfessional);
+          } else if (table === 'treatment_cycles') {
+            if (queryProfessional !== 'all') query = query.eq('professional_id', queryProfessional);
           }
 
 
@@ -370,9 +381,11 @@ const Relatorios: React.FC = () => {
         fetchAllPages('atendimentos', 'data', 'id,agendamento_id,profissional_id,profissional_nome,unidade_id,setor,procedimento,data,status'),
         fetchAllPages('prontuarios', 'data_atendimento'),
         fetchAllPages('fila_espera', 'criado_em'),
-        fetchAllPages('triage_records', 'criado_em', 'id,agendamento_id,tecnico_id,criado_em,confirmado_em'),
-        fetchAllPages('treatment_cycles', 'start_date'),
-        fetchAllPages('treatment_sessions', 'scheduled_date'),
+        fetchAllPages('triage_records', undefined, 'id,agendamento_id,tecnico_id,criado_em,confirmado_em'),
+        // Ciclos antigos também podem ter sessões marcadas dentro do período selecionado.
+        fetchAllPages('treatment_cycles', undefined, 'id,unit_id,professional_id,start_date,status,patient_id,sessions_done,treatment_type'),
+        // Inclui as sessões datadas do período e as sem data para mostrar o backlog separadamente.
+        fetchAllPages('treatment_sessions', 'scheduled_date', 'id,cycle_id,scheduled_date,status', true),
         fetchAllPages('nursing_evaluations', 'evaluation_date'),
         fetchAllPages('multiprofessional_evaluations', 'evaluation_date'),
         fetchAllPages('pts', 'created_at'),
@@ -896,6 +909,7 @@ const Relatorios: React.FC = () => {
   // === CLINICAL ANALYSIS REPORT ===
   const clinicalReport = useMemo(() => {
     const pacMap = new Map(pacientes.map(p => [p.id, p]));
+    const patientsInAppliedScope = getPatientIdsInReportScope(consolidatedData);
     
     const patientStats: Record<string, {
       id: string;
@@ -1025,9 +1039,13 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    // Entram na Análise Clínica pacientes com CID válido OU condição cadastral sinalizada.
+    // A coorte segue os agendamentos/atendimentos do período e da unidade aplicados.
+    // Os CID/condições vêm do cadastro e dos registros clínicos disponíveis para essa coorte.
     Object.keys(patientStats).forEach(id => {
-      if (patientStats[id].cids.size === 0 && patientStats[id].categories.size === 0) delete patientStats[id];
+      if (!patientsInAppliedScope.has(id)
+        || (patientStats[id].cids.size === 0 && patientStats[id].categories.size === 0)) {
+        delete patientStats[id];
+      }
     });
 
     let patientsList = Object.values(patientStats);
@@ -1181,7 +1199,7 @@ const Relatorios: React.FC = () => {
       evolucaoTemporal,
       kpis
     };
-  }, [prontuariosFull, pacientes, ptsData, ptsCidData, procedimentosDB, cid10Descriptions, clinicalSearch]);
+  }, [prontuariosFull, pacientes, ptsData, ptsCidData, procedimentosDB, cid10Descriptions, clinicalSearch, consolidatedData]);
 
 
   // === FILA REPORT ===
@@ -1200,11 +1218,9 @@ const Relatorios: React.FC = () => {
 
   // === TRIAGEM REPORT ===
   const triagemReport = useMemo(() => {
-    const filteredTriagens = triagensDB.filter(t => {
-      if (dateFrom && t.criado_em && t.criado_em < dateFrom) return false;
-      if (dateTo && t.criado_em && t.criado_em > dateTo + 'T23:59:59') return false;
-      return true;
-    });
+    // A unidade e o período vêm do agendamento já filtrado; a data da triagem
+    // não deve excluir um registro válido do atendimento selecionado.
+    const filteredTriagens = triagensDB;
     const total = filteredTriagens.length;
     const confirmadas = filteredTriagens.filter(t => t.confirmado_em).length;
     const pendentes = total - confirmadas;
@@ -1221,7 +1237,7 @@ const Relatorios: React.FC = () => {
     });
 
     return { total, confirmadas, pendentes, porTecnico: Object.values(porTecnico).sort((a, b) => b.total - a.total) };
-  }, [triagensDB, funcionarios, dateFrom, dateTo]);
+  }, [triagensDB, funcionarios]);
 
   // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
@@ -1386,7 +1402,7 @@ const Relatorios: React.FC = () => {
   const municipioStats = useMemo(() => {
     const list = municipioReport;
     const totalMunicipios = list.filter(m => m.municipio !== 'Não informado').length;
-    const muniComMaisPacientes = list.length > 0 ? list[0] : null;
+    const muniComMaisPacientes = getMunicipalityWithMostPatients(list);
     const muniComMaisAtendimentos = [...list].sort((a, b) => b.atendimentos - a.atendimentos)[0];
     const totalComNaturalidade = pacientes.filter(p => (p as any).naturalidade && (p as any).naturalidade.trim() !== '').length;
     const totalSemNaturalidade = pacientes.length - totalComNaturalidade;
@@ -1476,19 +1492,11 @@ const Relatorios: React.FC = () => {
 
   // === TREATMENT STATS ===
   const treatmentStats = useMemo(() => {
-    const cycleScopeIds = getTreatmentCycleIdsForScope(treatmentCycles, filterUnit, filterProf);
-    const filteredCycles = treatmentCycles.filter(c => {
-      if (!cycleScopeIds.has(c.id)) return false;
-      if (dateFrom && c.start_date < dateFrom) return false;
-      if (dateTo && c.start_date > dateTo) return false;
-      return true;
-    });
-    const filteredSessions = treatmentSessions.filter(s => {
-      if (!cycleScopeIds.has(s.cycle_id)) return false;
-      if (dateFrom && s.scheduled_date < dateFrom) return false;
-      if (dateTo && s.scheduled_date > dateTo) return false;
-      return true;
-    });
+    const { filteredCycles, filteredSessions, undatedPendingSessions } = buildTreatmentReportMetrics(
+      treatmentCycles,
+      treatmentSessions,
+      { unitId: filterUnit, professionalId: filterProf, dateFrom, dateTo },
+    );
 
     const ativos = filteredCycles.filter(c => c.status === 'em_andamento').length;
     const finalizados = filteredCycles.filter(c => c.status === 'finalizado_alta').length;
@@ -1507,7 +1515,6 @@ const Relatorios: React.FC = () => {
       ? Math.round(Array.from(pacientesMap.values()).reduce((a, b) => a + b, 0) / pacientesMap.size)
       : 0;
 
-    // Abandonment rate: cycles that were active but patient stopped (no sessions in last 30 days for active cycles)
     // Suspensão é um status administrativo/clínico; não comprova abandono do tratamento.
     const taxaSuspensao = total > 0 ? Math.round((suspensos / total) * 100) : 0;
 
@@ -1541,7 +1548,7 @@ const Relatorios: React.FC = () => {
     return {
       total, ativos, finalizados, suspensos,
       totalSessions, sessRealizadas, sessFaltas, sessCanceladas,
-      avgSessoesPorPaciente, taxaSuspensao,
+      undatedPendingSessions, avgSessoesPorPaciente, taxaSuspensao,
       byProfessional: Object.values(byProf).sort((a, b) => b.sessoes - a.sessoes),
       byUnit: Object.values(byUnit).sort((a, b) => b.total - a.total),
       byType: Object.entries(byType).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
@@ -1776,6 +1783,7 @@ const Relatorios: React.FC = () => {
         ['Ciclos', 'Finalizados', treatmentStats.finalizados], ['Ciclos', 'Suspensos', treatmentStats.suspensos],
         ['Sessões', 'Total', treatmentStats.totalSessions], ['Sessões', 'Realizadas', treatmentStats.sessRealizadas],
         ['Sessões', 'Faltas', treatmentStats.sessFaltas], ['Sessões', 'Canceladas', treatmentStats.sessCanceladas],
+        ['Backlog de ciclos ativos', 'Sessões pendentes sem data', treatmentStats.undatedPendingSessions],
         ['Indicador', 'Média de sessões por paciente', treatmentStats.avgSessoesPorPaciente],
         ['Indicador', 'Ciclos suspensos (%)', `${treatmentStats.taxaSuspensao}%`],
       ].forEach(([group, label, value]) => add(String(group), String(label), value as string | number));
@@ -1791,6 +1799,7 @@ const Relatorios: React.FC = () => {
       procedimentoStats.byProfessional.forEach(item => add('Por profissional', item.nome, item.total));
       procedimentoStats.byUnit.forEach(item => add('Por unidade', item.nome, item.total));
     } else if (type === 'triagem') {
+      add('Escopo', 'Critério', 'Triagens vinculadas aos agendamentos do período e unidade selecionados');
       add('Resumo', 'Total', triagemReport.total);
       add('Resumo', 'Confirmadas', triagemReport.confirmadas);
       add('Resumo', 'Pendentes', triagemReport.pendentes);
@@ -1832,7 +1841,7 @@ const Relatorios: React.FC = () => {
       headers = matrix.headers;
       rows = matrix.rows;
     } else if (type === 'municipios') {
-      headers = ['Município', 'Total de Pacientes', 'Total de Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
+      headers = ['Município de naturalidade', 'Pacientes cadastrados (base geral, sem período/unidade)', 'Atendimentos no período e escopo', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
       rows = municipioReport.map(m => [
         m.municipio, 
         m.pacientesCount.toString(), 
@@ -1869,7 +1878,8 @@ const Relatorios: React.FC = () => {
       headers = ['Bloco', 'Item', 'Quantidade', 'Percentual'];
       const tot = clinicalReport.kpis.totalPacientesComCID || 1;
       const blocks: string[][] = [];
-      blocks.push(['KPI', 'Total (CID + Cadastro)', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
+      blocks.push(['Escopo', 'População', 'Pacientes com atendimento/agendamento no período e unidade selecionados; CIDs/condições consultados no cadastro e registros clínicos', '']);
+      blocks.push(['KPI', 'Pacientes no escopo com CID/condição', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
       blocks.push(['KPI', 'TEA/Autismo', String(clinicalReport.kpis.tea), `${((clinicalReport.kpis.tea/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Física', String(clinicalReport.kpis.fisica), `${((clinicalReport.kpis.fisica/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Intelectual', String(clinicalReport.kpis.intelectual), `${((clinicalReport.kpis.intelectual/tot)*100).toFixed(1)}%`]);
@@ -1916,7 +1926,7 @@ const Relatorios: React.FC = () => {
       headers = matrix.headers;
       rows = matrix.rows;
     } else if (type === 'municipios') {
-      headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
+      headers = ['Município de naturalidade', 'Pacientes cadastrados (base geral, sem período/unidade)', 'Atendimentos no período e escopo', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
       rows = municipioReport.map(m => [
         m.municipio, 
         m.pacientesCount.toString(), 
@@ -1950,7 +1960,8 @@ const Relatorios: React.FC = () => {
       headers = ['Bloco', 'Item', 'Quantidade', 'Percentual'];
       const tot = clinicalReport.kpis.totalPacientesComCID || 1;
       const blocks: string[][] = [];
-      blocks.push(['KPI', 'Total (CID + Cadastro)', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
+      blocks.push(['Escopo', 'População', 'Pacientes com atendimento/agendamento no período e unidade selecionados; CIDs/condições consultados no cadastro e registros clínicos', '']);
+      blocks.push(['KPI', 'Pacientes no escopo com CID/condição', String(clinicalReport.kpis.totalPacientesComCID), '100%']);
       blocks.push(['KPI', 'TEA/Autismo', String(clinicalReport.kpis.tea), `${((clinicalReport.kpis.tea/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Física', String(clinicalReport.kpis.fisica), `${((clinicalReport.kpis.fisica/tot)*100).toFixed(1)}%`]);
       blocks.push(['KPI', 'Def. Intelectual', String(clinicalReport.kpis.intelectual), `${((clinicalReport.kpis.intelectual/tot)*100).toFixed(1)}%`]);
@@ -2100,7 +2111,7 @@ ${spreadsheetRows.dataRowsXml}
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
       } else if (type === 'municipios') {
-        addTable('Relatório por Município', ['Município', 'Pacientes', 'Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Comparecim.', 'Taxa Falta'], cap(municipioReport).map(m => [m.municipio, m.pacientesCount, m.atendimentos, m.concluidos, m.pendentes, m.faltas, m.cancelados, m.remarcados, m.retornos, `${m.taxaComparecimento}%`, `${m.taxaFalta}%`]));
+        addTable('Relatório por Município', ['Município de naturalidade', 'Pacientes cadastrados (base geral)', 'Atendimentos no período e escopo', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Comparecim.', 'Taxa Falta'], cap(municipioReport).map(m => [m.municipio, m.pacientesCount, m.atendimentos, m.concluidos, m.pendentes, m.faltas, m.cancelados, m.remarcados, m.retornos, `${m.taxaComparecimento}%`, `${m.taxaFalta}%`]));
 
       } else if (type === 'faltas') {
         addTable('Relatório de Faltas', ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total', 'Datas'], cap(faltasReport).map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total, f.datas.join(', ')]));
@@ -2112,8 +2123,9 @@ ${spreadsheetRows.dataRowsXml}
       } else if (type === 'clinico') {
         const k = clinicalReport.kpis;
         const tot = k.totalPacientesComCID || 1;
-        addTable('Indicadores CER II', ['Indicador', 'Quantidade', '% sobre total'], [
-          ['Total (CID + Cadastro)', k.totalPacientesComCID, '100%'],
+        addTable('Indicadores clínicos', ['Indicador', 'Quantidade', '% sobre total'], [
+          ['Critério de população', 'Pacientes com atendimento/agendamento no período e unidade selecionados; diagnósticos consultados no cadastro e registros clínicos', ''],
+          ['Pacientes no escopo com CID/condição', k.totalPacientesComCID, '100%'],
           ['TEA / Autismo', k.tea, `${((k.tea/tot)*100).toFixed(1)}%`],
           ['Deficiência Física', k.fisica, `${((k.fisica/tot)*100).toFixed(1)}%`],
           ['Deficiência Intelectual', k.intelectual, `${((k.intelectual/tot)*100).toFixed(1)}%`],
@@ -2226,7 +2238,8 @@ ${spreadsheetRows.dataRowsXml}
       ).join('');
       body = `${summaryBlock}
         <h2>Relatório por Município</h2>
-        <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
+        <p>Pacientes cadastrados consideram a base geral, sem recorte de período/unidade. Atendimentos e taxas respeitam o período e escopo aplicados.</p>
+        <table><thead><tr><th>Município de naturalidade</th><th>Pacientes cadastrados (base geral)</th><th>Atendimentos no período e escopo</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
 
 
 
@@ -4228,6 +4241,9 @@ th{background:#f1f5f9;font-weight:600;}
 
         {/* === TRIAGEM === */}
         <TabsContent value="triagem" className="space-y-5 mt-4">
+          <p className="text-xs text-muted-foreground rounded-lg bg-muted/40 px-3 py-2">
+            Conta triagens vinculadas aos agendamentos do período e unidade aplicados. Registros sem agendamento vinculado não entram neste recorte.
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Card className="shadow-card border-0">
               <CardContent className="p-3 text-center">
@@ -4472,7 +4488,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <p className="text-lg font-bold text-[#2D7A4F] truncate" title={municipioStats.muniComMaisPacientes?.municipio}>
                   {municipioStats.muniComMaisPacientes?.municipio || '-'}
                 </p>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Mais Pacientes</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Mais cadastrados por naturalidade</p>
                 <p className="text-xs font-semibold">{municipioStats.muniComMaisPacientes?.pacientesCount || 0} pacientes</p>
               </CardContent>
             </Card>
@@ -4499,17 +4515,21 @@ th{background:#f1f5f9;font-weight:600;}
             </Card>
           </div>
 
+          <p className="text-xs text-muted-foreground rounded-lg bg-muted/40 px-3 py-2">
+            Pacientes cadastrados são agrupados pela naturalidade e usam a base geral, sem filtro de período ou unidade. Atendimentos, resultados e taxas respeitam o período e os filtros aplicados.
+          </p>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-[#1B3A5C] mb-4">Top 10 Municípios (Pacientes)</h3>
+                <h3 className="font-semibold font-display text-[#1B3A5C] mb-4">Top 10 por pacientes cadastrados</h3>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={municipioReport.slice(0, 10)} layout="vertical" margin={{ left: 80 }}>
+                  <BarChart data={[...municipioReport].sort((a, b) => b.pacientesCount - a.pacientesCount).slice(0, 10)} layout="vertical" margin={{ left: 80 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#EEF2F7" />
                     <XAxis type="number" hide />
                     <YAxis dataKey="municipio" type="category" width={75} tick={{ fontSize: 10, fill: '#6B7280' }} />
                     <Tooltip cursor={{ fill: '#F8FAFC' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                    <Bar dataKey="pacientesCount" name="Pacientes" fill="#2E8B8B" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="pacientesCount" name="Pacientes cadastrados (base geral)" fill="#2E8B8B" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -4544,8 +4564,8 @@ th{background:#f1f5f9;font-weight:600;}
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 border-b">
                     <tr>
-                      <th className="text-left py-3 px-4 text-muted-foreground font-medium">Município</th>
-                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Pacientes</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground font-medium">Município de naturalidade</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Pacientes cadastrados*</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Atendimentos</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Concluídos</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Pendentes</th>
@@ -4594,6 +4614,9 @@ th{background:#f1f5f9;font-weight:600;}
 
         {/* === TRATAMENTOS === */}
         <TabsContent value="tratamentos" className="space-y-5 mt-4">
+          <p className="text-xs text-muted-foreground rounded-lg bg-muted/40 px-3 py-2">
+            Ciclos são agrupados pela data de início; sessões com data consideram a data agendada no período. Sessões pendentes sem data em ciclos ativos aparecem separadamente e não são atribuídas a um período.
+          </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
             {[
               { label: 'Total Ciclos', value: treatmentStats.total, color: 'text-foreground' },
@@ -4612,12 +4635,13 @@ th{background:#f1f5f9;font-weight:600;}
             ))}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {[
-              { label: 'Total Sessões', value: treatmentStats.totalSessions },
+              { label: 'Sessões com data no período', value: treatmentStats.totalSessions },
               { label: 'Realizadas', value: treatmentStats.sessRealizadas },
               { label: 'Faltas', value: treatmentStats.sessFaltas },
               { label: 'Canceladas', value: treatmentStats.sessCanceladas },
+              { label: 'Pendentes sem data (ciclos ativos)', value: treatmentStats.undatedPendingSessions },
             ].map(s => (
               <Card key={s.label} className="shadow-card border-0">
                 <CardContent className="p-2.5 text-center">
@@ -4734,6 +4758,9 @@ th{background:#f1f5f9;font-weight:600;}
 
         {/* === CLÍNICO === */}
         <TabsContent value="clinico" className="space-y-5 mt-4">
+          <p className="text-xs text-muted-foreground rounded-lg bg-muted/40 px-3 py-2">
+            A população considera pacientes com atendimento/agendamento no período e unidade aplicados. Diagnósticos e condições são obtidos do cadastro e dos registros clínicos disponíveis para esses pacientes.
+          </p>
           <Card className="shadow-sm border-0 mb-4 bg-muted/30">
             <CardContent className="p-4 flex flex-col md:flex-row items-end gap-4">
               <div className="flex-1 w-full">
@@ -4779,7 +4806,7 @@ th{background:#f1f5f9;font-weight:600;}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2">
             {[
-              { label: 'Total (CID + Cadastro)', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
+              { label: 'Pacientes no escopo com CID/condição', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
               { label: 'TEA/Autismo', value: clinicalReport.kpis.tea, icon: Brain, color: 'text-indigo-600' },
               { label: 'Def. Auditiva', value: clinicalReport.kpis.auditiva, icon: Ear, color: 'text-blue-600' },
               { label: 'Def. Visual', value: clinicalReport.kpis.visual, icon: Activity, color: 'text-amber-600' },
@@ -4975,7 +5002,8 @@ th{background:#f1f5f9;font-weight:600;}
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold font-display text-foreground">Distribuição por Categoria e Volume</h3>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm"><Download className="w-3 h-3 mr-1" />Exportar</Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportCSV('clinico')} disabled={isFetching || hasPendingFilters}><Download className="w-3 h-3 mr-1" />CSV</Button>
+                  <ActionButton variant="ghost" size="sm" onClick={() => downloadPDF('clinico')} disabled={isFetching || hasPendingFilters} loadingText="Gerando..."><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">

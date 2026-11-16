@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope } from './reportAppointmentScope';
+import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope, getPatientIdsInReportScope } from './reportAppointmentScope';
 
 describe('escopo de Triagem nos Relatórios', () => {
   it('inclui apenas triagens vinculadas aos agendamentos do escopo aplicado', () => {
@@ -15,6 +15,15 @@ describe('escopo de Triagem nos Relatórios', () => {
 
   it('retorna vazio quando o escopo não tem agendamentos', () => {
     expect(filterTriagesToAppointmentScope([{ agendamento_id: 'agenda-1' }], [])).toEqual([]);
+  });
+
+  it('gera uma coorte clínica distinta apenas com pacientes presentes no snapshot aplicado', () => {
+    expect(getPatientIdsInReportScope([
+      { pacienteId: 'patient-1' },
+      { pacienteId: 'patient-1' },
+      { pacienteId: 'patient-2' },
+      { pacienteId: null },
+    ])).toEqual(new Set(['patient-1', 'patient-2']));
   });
 });
 

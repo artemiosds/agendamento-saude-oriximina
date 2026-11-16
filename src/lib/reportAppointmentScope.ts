@@ -6,6 +6,10 @@ export interface TriageAppointmentRecord {
   agendamento_id: string;
 }
 
+export interface ReportPatientAppointmentRecord {
+  pacienteId?: string | null;
+}
+
 export interface AppointmentSectorRecord extends AppointmentScopeRecord {
   setor_id?: string | null;
 }
@@ -35,3 +39,10 @@ export const filterTriagesToAppointmentScope = <T extends TriageAppointmentRecor
   const scopedAppointmentIds = new Set(appointments.map(appointment => appointment.id));
   return triages.filter(triage => scopedAppointmentIds.has(triage.agendamento_id));
 };
+
+/** Returns the distinct patient cohort represented by the already-filtered report rows. */
+export const getPatientIdsInReportScope = <T extends ReportPatientAppointmentRecord>(
+  records: T[],
+): Set<string> => new Set(records
+  .map(record => record.pacienteId)
+  .filter((patientId): patientId is string => Boolean(patientId)));
