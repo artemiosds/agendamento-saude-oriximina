@@ -18,9 +18,16 @@ import { DEFAULT_DIAGNOSTIC_ROOM_CONFIG, DIAGNOSTIC_EXAM_CATALOG, createDiagnost
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Link } from 'react-router-dom';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
+import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const UnidadesSalas: React.FC = () => {
   const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useOperacional();
+  const { isGlobalAdmin } = useUnidadeFilter();
+  const { unitId, setUnitId } = useOperationalUnitScope(unidades, isGlobalAdmin);
   const { resolved: customConfig } = useCustomFields('unidade');
   const [customData, setCustomData] = useState<Record<string, any>>({});
   const [unitDialog, setUnitDialog] = useState(false);
@@ -31,6 +38,9 @@ const UnidadesSalas: React.FC = () => {
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '', config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG } as DiagnosticRoomConfig });
   const [roomConfigs, setRoomConfigs] = useState<Record<string, DiagnosticRoomConfig>>({});
   const [roomFilter, setRoomFilter] = useState<'todas' | 'consultorios' | 'aparelhos'>('todas');
+  const visibleUnits = isGlobalAdmin && unitId !== 'all' ? unidades.filter(unit => unit.id === unitId) : unidades;
+  const visibleRooms = isGlobalAdmin && unitId !== 'all' ? salas.filter(room => room.unidadeId === unitId) : salas;
+  const filteredRooms = visibleRooms.filter(room => roomFilter === 'todas' || (roomFilter === 'aparelhos' ? !!roomConfigs[room.id] : !roomConfigs[room.id]));
 
   // Carrega as configurações persistidas por unidade para identificar os aparelhos nos cartões.
   useEffect(() => {
@@ -93,7 +103,7 @@ const UnidadesSalas: React.FC = () => {
     setEditRoomId(null);
     setRoomForm({
       nome: '',
-      unidadeId: '',
+      unidadeId: isGlobalAdmin && unitId !== 'all' ? unitId : '',
       config: { ...DEFAULT_DIAGNOSTIC_ROOM_CONFIG, finalidade },
     });
     setRoomDialog(true);
@@ -234,12 +244,70 @@ const UnidadesSalas: React.FC = () => {
     setVideoUnit(null);
   };
 
+  const renderRoomCard = (room: typeof salas[number], showUnitName = true) => {
+    const unit = unidades.find(item => item.id === room.unidadeId);
+    const diagnosticConfig = roomConfigs[room.id];
+    return (
+      <Card key={room.id} className="shadow-card border">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-foreground">{room.nome}</h3>
+              {showUnitName && <p className="text-sm text-muted-foreground">{unit?.nome || 'Unidade não identificada'}</p>}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {diagnosticConfig ? (
+                  <>
+                    <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800">Aparelho / Exames: {diagnosticConfig.exames.length}</span>
+                    <span className="text-xs text-muted-foreground">{diagnosticConfig.exames.map(exam => exam.tipoExame).join(', ')}</span>
+                  </>
+                ) : <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">Consultório</span>}
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              <Button size="icon" variant="ghost" aria-label={`Editar sala ${room.nome}`} onClick={() => openEditRoom(room)}><Pencil className="w-4 h-4" /></Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" aria-label={`Excluir sala ${room.nome}`} className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader><AlertDialogTitle>Excluir sala?</AlertDialogTitle><AlertDialogDescription>Tem certeza?</AlertDialogDescription></AlertDialogHeader>
+                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteSala(room.id); toast.success('Sala excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const roomControls = (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><DoorOpen className="w-5 h-5" />Salas / Consultórios</h2>
+          <p className="text-xs text-muted-foreground mt-1">{visibleRooms.length} sala(s) cadastrada(s) • {visibleRooms.filter(room => !!roomConfigs[room.id]).length} aparelho(s) diagnóstico(s)</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => openNewRoom('aparelho_diagnostico')} className="border-violet-300 text-violet-700 hover:bg-violet-50"><Plus className="w-4 h-4 mr-1" />Novo Aparelho</Button>
+          <Button size="sm" onClick={() => openNewRoom('consultorio_clinico')} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Sala</Button>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar salas por finalidade">
+        <Button size="sm" variant={roomFilter === 'todas' ? 'default' : 'outline'} aria-pressed={roomFilter === 'todas'} onClick={() => setRoomFilter('todas')}>Todas ({visibleRooms.length})</Button>
+        <Button size="sm" variant={roomFilter === 'consultorios' ? 'default' : 'outline'} aria-pressed={roomFilter === 'consultorios'} onClick={() => setRoomFilter('consultorios')}>Consultórios ({visibleRooms.filter(room => !roomConfigs[room.id]).length})</Button>
+        <Button size="sm" variant={roomFilter === 'aparelhos' ? 'default' : 'outline'} aria-pressed={roomFilter === 'aparelhos'} onClick={() => setRoomFilter('aparelhos')}>Aparelhos / Exames ({visibleRooms.filter(room => !!roomConfigs[room.id]).length})</Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold font-display text-foreground">Unidades e Salas</h1>
         <p className="text-muted-foreground text-sm">Gerenciar estrutura física</p>
       </div>
+
+      {isGlobalAdmin && <UnitScopeNavigator units={unidades} value={unitId} onChange={setUnitId} />}
+      {isGlobalAdmin && roomControls}
 
       {/* Unidades */}
       <div>
@@ -248,7 +316,7 @@ const UnidadesSalas: React.FC = () => {
           <Button size="sm" onClick={openNewUnit} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Unidade</Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {unidades.map(u => (
+          {visibleUnits.map(u => (
             <Card key={u.id} className="shadow-card border-0">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
@@ -262,6 +330,12 @@ const UnidadesSalas: React.FC = () => {
                       <Button size="sm" variant="outline" onClick={() => window.open(linkTV(u.id), '_blank')}><Tv className="w-4 h-4 mr-1" />Painel</Button>
                       <Button size="sm" variant="outline" onClick={() => copiarLink(u.id)}><Copy className="w-4 h-4 mr-1" />Link TV</Button>
                       <Button size="sm" variant="outline" onClick={() => abrirVideo(u.id, u.nome)}><Video className="w-4 h-4 mr-1" />Vídeo</Button>
+                      {isGlobalAdmin && (
+                        <>
+                          <Button size="sm" variant="outline" asChild><Link to={`/painel/funcionarios?unidade=${encodeURIComponent(u.id)}`}>Ver equipe</Link></Button>
+                          <Button size="sm" variant="outline" asChild><Link to={`/painel/disponibilidade?unidade=${encodeURIComponent(u.id)}`}>Ver disponibilidade</Link></Button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-1">
@@ -275,70 +349,45 @@ const UnidadesSalas: React.FC = () => {
                     </AlertDialog>
                   </div>
                 </div>
+                {isGlobalAdmin && (
+                  <Accordion key={`${u.id}-${unitId}`} type="single" collapsible defaultValue={unitId === u.id ? 'salas' : undefined} className="mt-4 border-t">
+                    <AccordionItem value="salas" className="border-b-0">
+                      <AccordionTrigger className="py-3 text-left text-sm">
+                        Salas da unidade ({salas.filter(room => room.unidadeId === u.id).length})
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        {filteredRooms.some(room => room.unidadeId === u.id) ? (
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                            {filteredRooms.filter(room => room.unidadeId === u.id).map(room => renderRoomCard(room, false))}
+                          </div>
+                        ) : <p className="text-sm text-muted-foreground">Nenhuma sala neste filtro.</p>}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                )}
               </CardContent>
             </Card>
           ))}
         </div>
       </div>
 
-      {/* Salas */}
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <div>
-            <h2 className="text-lg font-semibold font-display text-foreground flex items-center gap-2"><DoorOpen className="w-5 h-5" />Salas / Consultórios</h2>
-            <p className="text-xs text-muted-foreground mt-1">{salas.length} sala(s) cadastrada(s) • {Object.keys(roomConfigs).length} aparelho(s) diagnóstico(s)</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => openNewRoom('aparelho_diagnostico')} className="border-violet-300 text-violet-700 hover:bg-violet-50">
-              <Plus className="w-4 h-4 mr-1" />Novo Aparelho
-            </Button>
-            <Button size="sm" onClick={() => openNewRoom('consultorio_clinico')} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nova Sala</Button>
+      {/* Original grid for unit-scoped users; global management groups rooms with their units. */}
+      {!isGlobalAdmin && (
+        <div>
+          {roomControls}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+            {filteredRooms.map(room => renderRoomCard(room))}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Filtrar salas por finalidade">
-          <Button size="sm" variant={roomFilter === 'todas' ? 'default' : 'outline'} onClick={() => setRoomFilter('todas')}>Todas ({salas.length})</Button>
-          <Button size="sm" variant={roomFilter === 'consultorios' ? 'default' : 'outline'} onClick={() => setRoomFilter('consultorios')}>Consultórios ({salas.length - Object.keys(roomConfigs).filter(id => salas.some(s => s.id === id)).length})</Button>
-          <Button size="sm" variant={roomFilter === 'aparelhos' ? 'default' : 'outline'} onClick={() => setRoomFilter('aparelhos')}>Aparelhos / Exames ({salas.filter(s => !!roomConfigs[s.id]).length})</Button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {salas.filter(s => roomFilter === 'todas' || (roomFilter === 'aparelhos' ? !!roomConfigs[s.id] : !roomConfigs[s.id])).map(s => {
-            const unidade = unidades.find(u => u.id === s.unidadeId);
-            const diagnosticConfig = roomConfigs[s.id];
-            return (
-              <Card key={s.id} className="shadow-card border-0">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-foreground">{s.nome}</h3>
-                      <p className="text-sm text-muted-foreground">{unidade?.nome}</p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {diagnosticConfig ? (
-                          <>
-                            <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800">Aparelho / Exames: {diagnosticConfig.exames.length}</span>
-                            <span className="text-xs text-muted-foreground">{diagnosticConfig.exames.map(exam => exam.tipoExame).join(', ')}</span>
-                          </>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">Consultório</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => openEditRoom(s)}><Pencil className="w-4 h-4" /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Excluir sala?</AlertDialogTitle><AlertDialogDescription>Tem certeza?</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteSala(s.id); toast.success('Sala excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
+      )}
+      {isGlobalAdmin && unitId === 'all' && filteredRooms.some(room => !unidades.some(unit => unit.id === room.unidadeId)) && (
+        <Card className="border-dashed"><CardContent className="p-4 space-y-3">
+          <h3 className="font-semibold">Salas sem unidade identificada</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredRooms.filter(room => !unidades.some(unit => unit.id === room.unidadeId)).map(room => renderRoomCard(room))}
+          </div>
+        </CardContent></Card>
+      )}
 
       {/* Dialogs */}
       <Dialog open={unitDialog} onOpenChange={setUnitDialog}>

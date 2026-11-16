@@ -18,6 +18,8 @@ import { toast } from 'sonner';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { SlotInfoBadge } from '@/components/SlotInfoBadge';
 import type { TurnoDefinition } from '@/components/config/ConfigFluxoAtendimento';
+import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
+import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
 
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -90,7 +92,8 @@ const Disponibilidade: React.FC = () => {
   const [manageProfId, setManageProfId] = useState<string | null>(null);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
-  const { unidadesVisiveis } = useUnidadeFilter();
+  const { unidadesVisiveis, isGlobalAdmin } = useUnidadeFilter();
+  const { unitId, setUnitId } = useOperationalUnitScope(unidadesVisiveis, isGlobalAdmin);
 
   // Mode per professional
   const [modosPorProfissional, setModosPorProfissional] = useState<Record<string, ModoDisponibilidade>>({});
@@ -184,7 +187,7 @@ const Disponibilidade: React.FC = () => {
   const groups = useMemo(() => {
     const map = new Map<string, typeof disponibilidades>();
     disponibilidades.forEach(d => {
-      const key = `${d.profissionalId}|${d.dataInicio}|${d.dataFim}`;
+      const key = `${d.profissionalId}|${d.unidadeId}|${d.dataInicio}|${d.dataFim}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(d);
     });
@@ -198,7 +201,7 @@ const Disponibilidade: React.FC = () => {
 
   const openNew = () => {
     setEditGroupIds([]);
-    setForm({ profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '', vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30, intervalo: 0 });
+    setForm({ profissionalId: '', unidadeId: isGlobalAdmin && unitId !== 'all' ? unitId : '', salaId: '', dataInicio: '', dataFim: '', vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30, intervalo: 0 });
     setDaySchedules(defaultDaySchedules.map(d => ({ ...d })));
     setModo('por_hora');
     setConfigDias(Array.from({ length: 7 }, (_, i) => ({
@@ -564,26 +567,33 @@ const Disponibilidade: React.FC = () => {
     });
   }, [groups, funcionarios]);
 
-  // Filter by search
-  const filteredProfGroups = useMemo(() => {
-    if (!searchTerm.trim()) return profGroups;
-    const term = searchTerm.toLowerCase().trim();
-    return profGroups.filter(([profId, data]) => {
-      const nome = data.prof?.nome?.toLowerCase() || '';
-      const unidadeId = data.groups[0]?.[1]?.[0]?.unidadeId || '';
-      const unidadeNome = unidades.find(u => u.id === unidadeId)?.nome?.toLowerCase() || '';
-      return nome.includes(term) || unidadeNome.includes(term);
-    });
-  }, [profGroups, searchTerm, unidades]);
+  const unitProfGroups = useMemo(() => {
+    return unitId === 'all' ? profGroups : profGroups
+      .map(([id, data]): typeof profGroups[number] => [id, {
+        ...data,
+        groups: data.groups.filter(([, records]) => records.some(record => record.unidadeId === unitId)),
+      }])
+      .filter(([, data]) => data.groups.length > 0);
+  }, [profGroups, unitId]);
 
-  const manageProfData = manageProfId ? profGroups.find(([id]) => id === manageProfId) : null;
+  // Search only changes the visible cards, not the data in an open management panel.
+  const filteredProfGroups = useMemo(() => {
+    if (!searchTerm.trim()) return unitProfGroups;
+    const term = searchTerm.toLowerCase().trim();
+    return unitProfGroups.filter(([, data]) => {
+      const nome = data.prof?.nome?.toLowerCase() || '';
+      return nome.includes(term) || data.groups.some(([, records]) => unidades.find(u => u.id === records[0]?.unidadeId)?.nome?.toLowerCase().includes(term));
+    });
+  }, [unitProfGroups, searchTerm, unidades]);
+
+  const manageProfData = manageProfId ? unitProfGroups.find(([id]) => id === manageProfId) : null;
 
   const openNewForProf = (profId: string) => {
     const prof = profissionais.find(p => p.id === profId);
     setEditGroupIds([]);
     setForm({
       profissionalId: profId,
-      unidadeId: prof?.unidadeId || '',
+      unidadeId: isGlobalAdmin && unitId !== 'all' ? unitId : prof?.unidadeId || '',
       salaId: prof?.salaId || '',
       dataInicio: '', dataFim: '',
       vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30, intervalo: 0,
@@ -618,6 +628,7 @@ const Disponibilidade: React.FC = () => {
       </div>
 
       {/* Search */}
+      {isGlobalAdmin && <UnitScopeNavigator units={unidadesVisiveis} value={unitId} onChange={setUnitId} />}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -1160,7 +1171,7 @@ const Disponibilidade: React.FC = () => {
       ) : filteredProfGroups.length === 0 ? (
         <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
           <Search className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
-          Nenhum profissional encontrado para "{searchTerm}".
+          Nenhuma disponibilidade encontrada para esta busca ou unidade.
         </CardContent></Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1168,7 +1179,8 @@ const Disponibilidade: React.FC = () => {
             const prof = data.prof;
             const totalDisp = data.groups.length;
             const firstUnidadeId = data.groups[0]?.[1]?.[0]?.unidadeId || '';
-            const unidade = unidades.find(u => u.id === (prof?.unidadeId || firstUnidadeId));
+            const unidade = unidades.find(u => u.id === firstUnidadeId);
+            const unitsServed = new Set(data.groups.map(([, records]) => records[0]?.unidadeId).filter(Boolean));
             const hasTurno = data.groups.some(([_, records]) => isGroupTurno(records));
             const hasHora = data.groups.some(([_, records]) => !isGroupTurno(records));
 
@@ -1182,7 +1194,7 @@ const Disponibilidade: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-foreground truncate">{prof?.nome || 'Profissional'}</h3>
                       <p className="text-xs text-muted-foreground truncate">{prof?.profissao || prof?.cargo || ''}</p>
-                      {unidade && <p className="text-xs text-muted-foreground truncate">{unidade.nome}</p>}
+                      {unidade && <p className="text-xs text-muted-foreground truncate">{unitsServed.size > 1 ? `Atende em ${unitsServed.size} unidades` : unidade.nome}</p>}
                     </div>
                   </div>
 

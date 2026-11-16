@@ -29,6 +29,9 @@ import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import CboAutocomplete, { CboValue } from '@/components/CboAutocomplete';
 import { formatCNS, unmaskCNS, validateCNS } from '@/lib/cnsUtils';
+import { Link } from 'react-router-dom';
+import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
+import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
 const roleLabels: Record<string, string> = {
   master: 'MASTER', coordenador: 'Coordenador', recepcao: 'RECEPÇÃO', profissional: 'PROFISSIONAL', gestao: 'GESTÃO', tecnico: 'TRIAGEM', enfermagem: 'ENFERMAGEM',
 };
@@ -64,8 +67,9 @@ interface FuncionarioDB {
 }
 
 const Funcionarios: React.FC = () => {
-  const { unidades, salas, refreshFuncionarios, logAction } = useOperacional();
+  const { unidades, salas, disponibilidades, refreshDisponibilidades, refreshFuncionarios, logAction } = useOperacional();
   const { unidadesVisiveis, isGlobalMaster } = useUnidadeFilter();
+  const { unitId: globalUnitId, setUnitId: setGlobalUnitId } = useOperationalUnitScope(unidadesVisiveis, isGlobalMaster);
   const { user, isUnitMaster } = useAuth();
   const { can } = usePermissions();
   const { resolved: customConfig } = useCustomFields('funcionario', user?.unidadeId);
@@ -85,7 +89,12 @@ const Funcionarios: React.FC = () => {
   const [showCboError, setShowCboError] = useState(false);
   const canManage = can('usuarios', 'can_edit');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterUnidade, setFilterUnidade] = useState<string>('all');
+  const [localFilterUnidade, setLocalFilterUnidade] = useState<string>('all');
+  const filterUnidade = isGlobalMaster ? globalUnitId : localFilterUnidade;
+  const setFilterUnidade = (unitId: string) => {
+    if (isGlobalMaster) setGlobalUnitId(unitId);
+    else setLocalFilterUnidade(unitId);
+  };
   const [filterProfissao, setFilterProfissao] = useState<string>('all');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('nome_asc');
@@ -110,6 +119,10 @@ const Funcionarios: React.FC = () => {
   useEffect(() => {
     loadFuncionarios();
   }, []);
+
+  useEffect(() => {
+    if (isGlobalMaster) void refreshDisponibilidades();
+  }, [isGlobalMaster, refreshDisponibilidades]);
 
   useEffect(() => {
     // Check for ID in URL to automatically open edit modal
@@ -456,10 +469,40 @@ const Funcionarios: React.FC = () => {
   const filteredAtivos = useMemo(() => applyFilters(ativosList), [ativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades]);
   const filteredInativos = useMemo(() => applyFilters(inativosList), [inativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades]);
 
+  const attendanceUnits = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    disponibilidades.forEach(schedule => {
+      if (!map.has(schedule.profissionalId)) map.set(schedule.profissionalId, new Set());
+      map.get(schedule.profissionalId)!.add(schedule.unidadeId);
+    });
+    return map;
+  }, [disponibilidades]);
+
+  const staffByUnit = useMemo(() => {
+    const groups = unidadesVisiveis.map(unit => ({
+      id: unit.id,
+      nome: unit.nome,
+      staff: filteredAtivos.filter(member => member.unidade_id === unit.id),
+    }));
+    const withoutUnit = filteredAtivos.filter(member => !unidadesVisiveis.some(unit => unit.id === member.unidade_id));
+    if (withoutUnit.length) groups.push({ id: '', nome: 'Sem unidade de lotação', staff: withoutUnit });
+    return groups.filter(group => group.staff.length);
+  }, [filteredAtivos, unidadesVisiveis]);
+
+  const summaryUnits = isGlobalMaster
+    ? unidadesVisiveis.filter(unit => filterUnidade === 'all' || unit.id === filterUnidade)
+    : [];
+
   const clearFilters = () => {
     setSearchTerm(''); setFilterUnidade('all'); setFilterProfissao('all'); setFilterRole('all'); setSortBy('nome_asc');
   };
   const hasActiveFilters = !!searchTerm || filterUnidade !== 'all' || filterProfissao !== 'all' || filterRole !== 'all';
+
+  const staffListProps = {
+    unidades, canManage, isUnitMaster, currentUserUnitId: user?.unidadeId,
+    isProtectedGlobalMaster, onView: setViewFuncionario, onEdit: openEdit,
+    onDelete: handleDelete, attendanceUnits: isGlobalMaster ? attendanceUnits : undefined,
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -477,6 +520,38 @@ const Funcionarios: React.FC = () => {
         </TabsList>
 
         <TabsContent value="internos" className="mt-4 space-y-4">
+          {isGlobalMaster && (
+            <>
+              <UnitScopeNavigator units={unidadesVisiveis} value={filterUnidade} onChange={setFilterUnidade} />
+              {!loading && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" aria-label="Resumo da equipe por unidade">
+                  {summaryUnits.map(unit => {
+                    const assigned = ativosList.filter(member => member.unidade_id === unit.id);
+                    const scheduled = new Set(disponibilidades.filter(schedule => schedule.unidadeId === unit.id).map(schedule => schedule.profissionalId));
+                    return (
+                      <Card key={unit.id} className="border shadow-sm">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <h2 className="font-semibold text-foreground">{unit.nome}</h2>
+                            <Badge variant="secondary">{assigned.length} na equipe</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {assigned.filter(member => member.role === 'profissional').length} profissionais · {assigned.filter(member => member.role === 'recepcao').length} recepção · {assigned.filter(member => ['enfermagem', 'tecnico'].includes(member.role)).length} enfermagem/triagem
+                          </p>
+                          <p className="text-xs text-muted-foreground">{scheduled.size} profissional(is) com horário nesta unidade, inclusive de outra lotação.</p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant={filterUnidade === unit.id ? 'secondary' : 'outline'} onClick={() => setFilterUnidade(unit.id)}>{filterUnidade === unit.id ? 'Unidade selecionada' : 'Ver equipe'}</Button>
+                            <Button size="sm" variant="outline" asChild><Link to={`/painel/unidades?unidade=${encodeURIComponent(unit.id)}`}>Ver salas</Link></Button>
+                            <Button size="sm" variant="outline" asChild><Link to={`/painel/disponibilidade?unidade=${encodeURIComponent(unit.id)}`}>Horários</Link></Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
             <div className="relative w-full lg:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -488,13 +563,15 @@ const Funcionarios: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={filterUnidade} onValueChange={setFilterUnidade}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as unidades</SelectItem>
-                {unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {!isGlobalMaster && (
+              <Select value={filterUnidade} onValueChange={setFilterUnidade}>
+                <SelectTrigger className="w-[180px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as unidades</SelectItem>
+                  {unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={filterProfissao} onValueChange={setFilterProfissao}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="Profissão" /></SelectTrigger>
               <SelectContent>
@@ -783,17 +860,19 @@ const Funcionarios: React.FC = () => {
               description={hasActiveFilters ? 'Nenhum resultado com os filtros aplicados.' : 'Clique em "Novo Funcionário" para começar.'}
             />
           ) : (
-            <FuncionarioList
-              items={filteredAtivos}
-              unidades={unidades}
-              canManage={canManage}
-              isUnitMaster={isUnitMaster}
-              currentUserUnitId={user?.unidadeId}
-              isProtectedGlobalMaster={isProtectedGlobalMaster}
-              onView={setViewFuncionario}
-              onEdit={openEdit}
-              onDelete={handleDelete}
-            />
+            isGlobalMaster && filterUnidade === 'all' ? (
+              <div className="space-y-5">
+                {staffByUnit.map(group => (
+                  <section key={group.id || 'sem-unidade'} aria-label={`Equipe: ${group.nome}`} className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                      <h2 className="font-semibold text-foreground">{group.nome} <span className="text-sm font-normal text-muted-foreground">({group.staff.length})</span></h2>
+                      {group.id && <Button size="sm" variant="ghost" onClick={() => setFilterUnidade(group.id)}>Ver somente esta unidade</Button>}
+                    </div>
+                    <FuncionarioList {...staffListProps} items={group.staff} />
+                  </section>
+                ))}
+              </div>
+            ) : <FuncionarioList {...staffListProps} items={filteredAtivos} />
           )}
         </TabsContent>
 
@@ -814,15 +893,8 @@ const Funcionarios: React.FC = () => {
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">{filteredInativos.length} inativo(s) — clique em reativar para retornar ao quadro.</p>
               <FuncionarioList
+                {...staffListProps}
                 items={filteredInativos}
-                unidades={unidades}
-                canManage={canManage}
-                isUnitMaster={isUnitMaster}
-                currentUserUnitId={user?.unidadeId}
-                isProtectedGlobalMaster={isProtectedGlobalMaster}
-                onView={setViewFuncionario}
-                onEdit={openEdit}
-                onDelete={handleDelete}
                 inactive
                 onReactivate={handleToggleAtivo}
               />
@@ -876,9 +948,10 @@ interface FuncionarioListProps {
   onDelete: (id: string) => void;
   inactive?: boolean;
   onReactivate?: (f: FuncionarioDB) => void;
+  attendanceUnits?: Map<string, Set<string>>;
 }
 
-const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canManage, isUnitMaster, currentUserUnitId, isProtectedGlobalMaster, onView, onEdit, onDelete, inactive, onReactivate }) => (
+const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canManage, isUnitMaster, currentUserUnitId, isProtectedGlobalMaster, onView, onEdit, onDelete, inactive, onReactivate, attendanceUnits }) => (
   <div className="space-y-2">
     {items.map(f => {
       const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
@@ -901,6 +974,11 @@ const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canM
               </div>
               <div className="md:col-span-3 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">{unidadeNome || '—'}{f.setor ? ` / ${f.setor}` : ''}</p>
+                {f.role === 'profissional' && attendanceUnits && [...(attendanceUnits.get(f.id) || [])].some(unitId => unitId !== f.unidade_id) && (
+                  <p className="text-xs text-primary" title="Unidades com horário de atendimento cadastrado">
+                    Atende também: {[...(attendanceUnits.get(f.id) || [])].filter(unitId => unitId !== f.unidade_id).map(unitId => unidades.find(unit => unit.id === unitId)?.nome || 'Unidade não identificada').join(', ')}
+                  </p>
+                )}
               </div>
               <div className="md:col-span-2 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">
