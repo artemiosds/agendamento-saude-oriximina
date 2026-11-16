@@ -32,6 +32,7 @@ import { ChartCard } from '@/components/ChartCard';
 import RelatorioCareniaProfissional from '@/components/reports/RelatorioCareniaProfissional';
 import RelatorioCondicoes from '@/components/reports/RelatorioCondicoes';
 import { reportScopesEqual, validateReportScope, type ReportScope } from '@/lib/reportScope';
+import { getTreatmentCycleIdsForScope } from '@/lib/reportTreatmentScope';
 
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
@@ -87,8 +88,16 @@ const escapeHtml = (value: unknown): string => String(value ?? '')
  */
 const baseEfetivos = (total: number, cancelados: number) => Math.max(0, total - cancelados);
 
-/** Tabelas que possuem a coluna unidade_id — filtrar por unidade fora dessa lista gera erro 42703. */
-const TABLES_WITH_UNIDADE = new Set(['agendamentos', 'prontuarios', 'fila_espera']);
+/** Coluna real da unidade em cada fonte. Algumas tabelas usam unit_id. */
+const TABLE_UNIT_COLUMNS: Record<string, string> = {
+  agendamentos: 'unidade_id',
+  prontuarios: 'unidade_id',
+  fila_espera: 'unidade_id',
+  treatment_cycles: 'unit_id',
+  nursing_evaluations: 'unit_id',
+  multiprofessional_evaluations: 'unit_id',
+  pts: 'unit_id',
+};
 
 /** Campos de data que são TIMESTAMP(TZ) e precisam de recorte por hora. */
 const TIMESTAMP_DATE_FIELDS = new Set(['criado_em', 'created_at', 'updated_at', 'atualizado_em']);
@@ -314,15 +323,15 @@ const Relatorios: React.FC = () => {
             }
           }
 
-          // Só filtra por unidade nas tabelas que realmente possuem a coluna unidade_id.
-          const hasUnidade = TABLES_WITH_UNIDADE.has(table);
+          // Aplica unidade apenas nas fontes com coluna de unidade verificada no schema.
+          const unitColumn = TABLE_UNIT_COLUMNS[table];
 
-          if (hasUnidade && userUnidadeId && userUsuario !== 'admin.sms') {
-            query = query.eq('unidade_id', userUnidadeId);
+          if (unitColumn && userUnidadeId && userUsuario !== 'admin.sms') {
+            query = query.eq(unitColumn, userUnidadeId);
           }
 
-          if (hasUnidade && queryUnit !== 'all') {
-            query = query.eq('unidade_id', queryUnit);
+          if (unitColumn && queryUnit !== 'all') {
+            query = query.eq(unitColumn, queryUnit);
           }
 
           if (table === 'agendamentos') {
@@ -356,10 +365,10 @@ const Relatorios: React.FC = () => {
         fetchAllPages('prontuarios', 'data_atendimento'),
         fetchAllPages('fila_espera', 'criado_em'),
         fetchAllPages('triage_records', 'criado_em'),
-        fetchAllPages('treatment_cycles', 'created_at'),
+        fetchAllPages('treatment_cycles', 'start_date'),
         fetchAllPages('treatment_sessions', 'scheduled_date'),
-        fetchAllPages('nursing_evaluations', 'created_at'),
-        fetchAllPages('multiprofessional_evaluations', 'created_at'),
+        fetchAllPages('nursing_evaluations', 'evaluation_date'),
+        fetchAllPages('multiprofessional_evaluations', 'evaluation_date'),
         fetchAllPages('pts', 'created_at'),
         fetchAllPages('patient_procedures', 'created_at'),
         fetchAllPages('pts_cid', 'created_at'),
@@ -1440,15 +1449,15 @@ const Relatorios: React.FC = () => {
 
   // === TREATMENT STATS ===
   const treatmentStats = useMemo(() => {
+    const cycleScopeIds = getTreatmentCycleIdsForScope(treatmentCycles, filterUnit, filterProf);
     const filteredCycles = treatmentCycles.filter(c => {
-      if (filterUnit !== 'all' && c.unit_id !== filterUnit) return false;
-      if (filterProf !== 'all' && c.professional_id !== filterProf) return false;
+      if (!cycleScopeIds.has(c.id)) return false;
       if (dateFrom && c.start_date < dateFrom) return false;
       if (dateTo && c.start_date > dateTo) return false;
       return true;
     });
     const filteredSessions = treatmentSessions.filter(s => {
-      if (filterProf !== 'all' && s.professional_id !== filterProf) return false;
+      if (!cycleScopeIds.has(s.cycle_id)) return false;
       if (dateFrom && s.scheduled_date < dateFrom) return false;
       if (dateTo && s.scheduled_date > dateTo) return false;
       return true;
