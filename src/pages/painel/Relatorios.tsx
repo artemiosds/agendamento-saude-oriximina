@@ -37,6 +37,7 @@ import { buildAppointmentExportMatrix, buildAttendanceMapExportMatrix, serialize
 import { buildTreatmentReportMetrics } from '@/lib/reportTreatmentMetrics';
 import { getMunicipalityWithMostPatients } from '@/lib/reportMunicipalityScope';
 import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope, getPatientIdsInReportScope } from '@/lib/reportAppointmentScope';
+import { buildExecutiveReportVisuals } from '@/lib/reportExecutiveVisuals';
 
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
@@ -1675,8 +1676,8 @@ const Relatorios: React.FC = () => {
       : dateTo ? `até ${formatDateBR(dateTo)}`
       : 'Todo o período';
 
-    let titulo = 'Relatório Institucional CER II';
-    let conclusaoSujeito = 'pelo CER II';
+    let titulo = 'Relatório Gerencial — Rede Municipal de Saúde';
+    let conclusaoSujeito = 'pela Rede Municipal de Saúde';
     if (filterProf !== 'all' && profObj) {
       titulo = `Relatório de Produtividade Profissional — ${prof}`;
       conclusaoSujeito = `pelo(a) profissional ${prof}`;
@@ -2870,6 +2871,7 @@ ${spreadsheetRows.dataRowsXml}
 
       const reportTables: { title: string; headers: string[]; rows: (string | number)[][]; limit?: number; note?: string }[] = [];
       const reportSections: { title: string; paragraphs: string[]; tables?: typeof reportTables }[] = [];
+      const institutionName = esc.un === 'Todas' ? 'Rede Municipal de Saúde' : esc.un;
       const addSection = (title: string, paragraphs: string[] = [], tables: typeof reportTables = []) => {
         reportSections.push({ title, paragraphs, tables });
       };
@@ -3059,6 +3061,31 @@ ${spreadsheetRows.dataRowsXml}
         'Emissão: ' + emitidaLabel + ' · Identificador do relatório: ' + reportId + '.',
       ]);
 
+      // O sumário e o documento começam pelo resumo executivo, que é a parte
+      // mais útil para leitura gerencial; escopo e metodologia vêm em seguida.
+      const executiveIndex = reportSections.findIndex(section => section.title === 'Resumo executivo e achados do período');
+      if (executiveIndex > 0) reportSections.unshift(...reportSections.splice(executiveIndex, 1));
+
+      const executiveVisualsHtml = buildExecutiveReportVisuals({
+        kpis: {
+          total: stats.total,
+          completed: stats.concluidos,
+          attendanceRate: stats.taxaComparecimento,
+          absences: stats.faltas,
+        },
+        monthly: timelineData.map(point => ({
+          date: point.data,
+          appointments: point.agendamentos,
+          completed: point.concluidos,
+          absences: point.faltas,
+        })),
+        specialties: specialtyRows.map(row => ({
+          name: String(row[0]),
+          appointments: Number(row[1]),
+          absences: Number(row[2]),
+        })),
+      });
+
       const renderHtmlTable = (table: { title: string; headers: string[]; rows: (string | number)[][]; limit?: number; note?: string }) => {
         const limit = table.limit ?? 60;
         const shownRows = table.rows.slice(0, limit);
@@ -3073,14 +3100,14 @@ ${spreadsheetRows.dataRowsXml}
         '<li><a href="#report-section-' + (index + 1) + '">' + (index + 1) + '. ' + escapeHtml(section.title) + '</a></li>'
       ).join('');
       const bodyHtml =
-        '<section class="report-cover"><div><p class="institution">' + escapeHtml(getBrandSync().mantenedora) + '</p><p class="institution">Secretaria Municipal de Saúde</p><p class="institution">Centro Especializado em Reabilitação — CER II</p></div>' +
+        '<section class="report-cover"><div><p class="institution">' + escapeHtml(getBrandSync().mantenedora) + '</p><p class="institution">Secretaria Municipal de Saúde</p><p class="institution">' + escapeHtml(institutionName) + '</p></div>' +
           '<div><h1>' + escapeHtml(esc.titulo) + '</h1><p>Unidade: <strong>' + escapeHtml(esc.un) + '</strong></p><p>Período: <strong>' + escapeHtml(esc.periodo) + '</strong></p><p>Classificação: ' + (restrictedAnnex ? 'Gerencial + Anexo Operacional Restrito' : 'Gerencial — dados agregados') + '</p></div>' +
           '<div><p>' + escapeHtml(getBrandSync().cidadeUf) + '</p><p>' + escapeHtml(emitida.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })) + '</p><p>ID: ' + escapeHtml(reportId) + '</p></div></section>' +
-        '<section class="report-title-page"><p class="institution">' + escapeHtml(responsavelNome) + '</p><div><h2>' + escapeHtml(esc.titulo) + '</h2><p>Relatório Gerencial Institucional referente a ' + escapeHtml(esc.periodo) + ', com filtros e limites descritos no próprio documento.</p></div><p>Responsável pela emissão: ' + escapeHtml(responsavelNome + (responsavelCargo ? ' — ' + responsavelCargo : '')) + '</p><p>Emitido em ' + escapeHtml(emitidaLabel) + ' · ' + escapeHtml(reportId) + '</p></section>' +
         '<section class="report-toc"><h2>Sumário</h2><ol>' + tocHtml + '</ol><p class="report-note">Sumário navegável com seções geradas a partir do conteúdo incluído. A paginação do documento aparece no rodapé; números fixos de página não são estimados.</p></section>' +
         '<div class="report-body">' + reportSections.map((section, index) =>
           '<section class="report-section" id="report-section-' + (index + 1) + '"><h2>' + (index + 1) + '. ' + escapeHtml(section.title) + '</h2>' +
           section.paragraphs.map(text => '<p>' + escapeHtml(text) + '</p>').join('') +
+          (index === 0 ? executiveVisualsHtml : '') +
           (section.tables || []).map(renderHtmlTable).join('') +
           '</section>'
         ).join('') +
@@ -3129,7 +3156,7 @@ ${spreadsheetRows.dataRowsXml}
         const coverContent = [
           Center('PREFEITURA MUNICIPAL DE ORIXIMINÁ — PA', 28, true),
           Center('SECRETARIA MUNICIPAL DE SAÚDE', 26, true),
-          Center('CENTRO ESPECIALIZADO EM REABILITAÇÃO — CER II', 24, true),
+          Center(institutionName.toUpperCase(), 24, true),
           ...Array.from({ length: 6 }, () => new Paragraph({ children: [new TextRun('')] })),
           Center(esc.titulo.toUpperCase(), 34, true),
           Center('Unidade: ' + esc.un, 24),
