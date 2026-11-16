@@ -79,7 +79,7 @@ describe('ModalAgendarSessao', () => {
     await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
   });
 
-  it('permite encaixe manual no turno cheio somente quando autorizado', async () => {
+  it('exige justificativa e permite encaixe manual no turno cheio quando autorizado', async () => {
     const onConfirm = vi.fn(async () => {});
     render(<ModalAgendarSessao {...baseProps} onConfirm={onConfirm} allowCapacityOverride
       availableDates={['2099-10-08']} getAvailableSlots={() => []}
@@ -89,8 +89,25 @@ describe('ModalAgendarSessao', () => {
 
     await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
     fireEvent.change(screen.getByRole('dialog').querySelector('input[type="time"]')!, { target: { value: '08:00' } });
-    expect(screen.getByText(/Encaixe acima da capacidade/i)).toBeInTheDocument();
+    expect(screen.getByText(/Encaixe manual fora da disponibilidade regular/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Justificativa obrigatória para encaixe manual'), { target: { value: 'Encaixe autorizado pelo profissional' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Agendamento' }));
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-08', '08:00', '', ''));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-08', '08:00', '', 'Encaixe autorizado pelo profissional'));
+  });
+
+  it('permite ao perfil autorizado usar hora fora de qualquer turno após informar justificativa', async () => {
+    const onConfirm = vi.fn(async () => {});
+    render(<ModalAgendarSessao {...baseProps} onConfirm={onConfirm} allowCapacityOverride
+      availableDates={[]} getAvailableSlots={() => []} getTurnoInfo={() => []} getConfiguredWindows={() => []}
+      session={{ id: 'session-1', session_number: 8, total_sessions: 12, scheduled_date: '2099-10-08', status: 'pendente_agendamento', appointment_id: null }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '9' }));
+    const timeInput = screen.getByRole('dialog').querySelector('input[type="time"]')!;
+    fireEvent.change(timeInput, { target: { value: '17:00' } });
+    expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Justificativa obrigatória para encaixe manual'), { target: { value: 'Atendimento excepcional autorizado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Agendamento' }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-09', '17:00', '', 'Atendimento excepcional autorizado'));
   });
 });
