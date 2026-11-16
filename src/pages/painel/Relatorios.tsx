@@ -33,6 +33,7 @@ import RelatorioCareniaProfissional from '@/components/reports/RelatorioCareniaP
 import RelatorioCondicoes from '@/components/reports/RelatorioCondicoes';
 import { reportScopesEqual, validateReportScope, type ReportScope } from '@/lib/reportScope';
 import { getTreatmentCycleIdsForScope } from '@/lib/reportTreatmentScope';
+import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope } from '@/lib/reportAppointmentScope';
 
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
@@ -91,6 +92,7 @@ const baseEfetivos = (total: number, cancelados: number) => Math.max(0, total - 
 /** Coluna real da unidade em cada fonte. Algumas tabelas usam unit_id. */
 const TABLE_UNIT_COLUMNS: Record<string, string> = {
   agendamentos: 'unidade_id',
+  atendimentos: 'unidade_id',
   prontuarios: 'unidade_id',
   fila_espera: 'unidade_id',
   treatment_cycles: 'unit_id',
@@ -113,10 +115,8 @@ export const calcTaxaFalta = (faltas: number, total: number, cancelados: number)
 
 
 interface AtendimentoDB {
-  id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
-  profissional_id: string; profissional_nome: string; unidade_id: string;
-  sala_id: string; setor: string; procedimento: string; data: string;
-  hora_inicio: string; hora_fim: string; duracao_minutos: number | null; status: string;
+  id: string; agendamento_id: string; profissional_id: string; profissional_nome: string;
+  unidade_id: string; setor: string; procedimento: string; data: string; status: string;
 }
 
 interface FilaDB {
@@ -252,11 +252,10 @@ const Relatorios: React.FC = () => {
   }, []);
 
   const setoresUnicos = useMemo(() => {
-    // Definimos uma lista fixa de setores para garantir consistência se os dados filtrados forem vazios
-    const setoresBase = ['Ambulatório', 'Fisioterapia', 'Fonoaudiologia', 'Neuropediatria', 'Odontologia', 'Psicologia', 'Psicopedagogia', 'Serviço Social', 'Terapia Ocupacional', 'Triagem'];
-    const s = new Set([...setoresBase, ...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
+    const s = new Set([...atendimentosDB.map(a => a.setor), ...filaDB.map(item => item.setor)]
+      .map(value => value?.trim()).filter(Boolean));
     return Array.from(s).sort();
-  }, [atendimentosDB, agendamentosFull]);
+  }, [atendimentosDB, filaDB]);
 
   const tiposUnicos = useMemo(() => {
     const s = new Set(agendamentosFull.map(a => a.tipo).filter(Boolean));
@@ -288,7 +287,6 @@ const Relatorios: React.FC = () => {
         professional: queryProfessional,
         status: queryStatus,
         type: queryType,
-        sector: querySector,
         dateFrom: queryDateFrom,
         dateTo: queryDateTo,
       } = scope;
@@ -298,6 +296,7 @@ const Relatorios: React.FC = () => {
       const fetchAllPages = async (
         table: string,
         dateField?: string,
+        selectFields = '*',
       ): Promise<{ table: string; rows: any[]; partial: boolean }> => {
         let allData: any[] = [];
         let from = 0;
@@ -308,7 +307,7 @@ const Relatorios: React.FC = () => {
 
           // O signal é aplicado em TODA página de TODA tabela, não só na primeira.
           let query = (supabase.from(table as any) as any)
-            .select('*')
+            .select(selectFields)
             .order('id', { ascending: true })
             .range(from, from + PAGE_SIZE - 1)
             .abortSignal(signal);
@@ -338,7 +337,8 @@ const Relatorios: React.FC = () => {
             if (queryProfessional !== 'all') query = query.eq('profissional_id', queryProfessional);
             if (queryStatus !== 'all') query = query.eq('status', queryStatus);
             if (queryType !== 'all') query = query.eq('tipo', queryType);
-            if (querySector !== 'all') query = query.eq('tipo', querySector);
+          } else if (table === 'atendimentos') {
+            if (queryProfessional !== 'all') query = query.eq('profissional_id', queryProfessional);
           } else if (table === 'prontuarios') {
             if (queryProfessional !== 'all') query = query.eq('profissional_id', queryProfessional);
           }
@@ -362,9 +362,10 @@ const Relatorios: React.FC = () => {
 
       const results = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
+        fetchAllPages('atendimentos', 'data', 'id,agendamento_id,profissional_id,profissional_nome,unidade_id,setor,procedimento,data,status'),
         fetchAllPages('prontuarios', 'data_atendimento'),
         fetchAllPages('fila_espera', 'criado_em'),
-        fetchAllPages('triage_records', 'criado_em'),
+        fetchAllPages('triage_records', 'criado_em', 'id,agendamento_id,tecnico_id,criado_em,confirmado_em'),
         fetchAllPages('treatment_cycles', 'start_date'),
         fetchAllPages('treatment_sessions', 'scheduled_date'),
         fetchAllPages('nursing_evaluations', 'evaluation_date'),
@@ -378,14 +379,22 @@ const Relatorios: React.FC = () => {
       // Busca cancelada: não aplica nenhum estado da requisição obsoleta.
       if (signal.aborted) return;
 
-      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes, ptsCidRes] =
+      const [ags, attendancesRes, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes, proceduresRes, ptsCidRes] =
         results.map(r => r.rows);
       const failedTables = results.filter(r => r.partial).map(r => r.table);
+      const scopedAppointments = filterAppointmentsToSectorScope(
+        ags || [], attendancesRes || [], scope.sector,
+      );
+      const scopedAppointmentIds = new Set(scopedAppointments.map(appointment => appointment.id));
+      const scopedProntuarios = scope.sector === 'all'
+        ? prons || []
+        : (prons || []).filter(prontuario => prontuario.agendamento_id && scopedAppointmentIds.has(prontuario.agendamento_id));
 
-      setAgendamentosFull(ags || []);
-      setProntuariosFull(prons || []);
+      setAgendamentosFull(scopedAppointments);
+      setAtendimentosDB(attendancesRes || []);
+      setProntuariosFull(scopedProntuarios);
       setFilaDB(filaRes || []);
-      setTriagensDB(triageRes as any as TriagemDB[] || []);
+      setTriagensDB(filterTriagesToAppointmentScope(triageRes as TriagemDB[] || [], scopedAppointments));
       setTreatmentCycles(cyclesRes || []);
       setTreatmentSessions(sessRes || []);
       setNursingEvals(nursingRes || []);
@@ -400,7 +409,7 @@ const Relatorios: React.FC = () => {
       // patient_procedures.cid e pacientes.cid.
       const allCids = new Set<string>();
       const collect = (v?: string | null) => extractCids(v).forEach(c => allCids.add(c));
-      (prons || []).forEach((p: any) => { collect(p.custom_data?.cid); collect(p.custom_data?.cid10); });
+      (scopedProntuarios || []).forEach((p: any) => { collect(p.custom_data?.cid); collect(p.custom_data?.cid10); });
       (ptsCidRes || []).forEach((p: any) => collect(p.cid_codigo));
       (proceduresRes || []).forEach((p: any) => collect(p.cid));
       pacientes.forEach((p: any) => collect(p.cid));
@@ -494,9 +503,19 @@ const Relatorios: React.FC = () => {
     );
   }, [lastUpdated]);
 
+  const attendanceByAppointmentId = useMemo(
+    () => new Map(atendimentosDB.map(attendance => [attendance.agendamento_id, attendance])),
+    [atendimentosDB],
+  );
+  const scopedAppointmentIds = useMemo(
+    () => new Set(agendamentosFull.map(appointment => appointment.id)),
+    [agendamentosFull],
+  );
+
   const filtered = useMemo(() => {
     return agendamentosFull.map(a => ({
       ...a,
+      setor: attendanceByAppointmentId.get(a.id)?.setor || '',
       status: normalizeStatus(a.status),
       unidadeId: a.unidade_id,
       profissionalId: a.profissional_id,
@@ -504,7 +523,7 @@ const Relatorios: React.FC = () => {
       pacienteId: a.paciente_id,
       pacienteNome: a.paciente_nome,
     }));
-  }, [agendamentosFull, normalizeStatus]);
+  }, [agendamentosFull, attendanceByAppointmentId, normalizeStatus]);
 
   const consolidatedData = useMemo(() => {
     const ags = filtered;
@@ -1165,13 +1184,14 @@ const Relatorios: React.FC = () => {
     const filteredFila = filaDB.filter(f => {
       if (filterUnit !== 'all' && f.unidade_id !== filterUnit) return false;
       if (filterProf !== 'all' && f.profissional_id !== filterProf) return false;
+      if (filterSetor !== 'all' && f.setor !== filterSetor) return false;
       return true;
     });
     const aguardando = filteredFila.filter(f => f.status === 'aguardando').length;
     const chamados = filteredFila.filter(f => f.status === 'chamado' || f.status === 'atendido').length;
     const desistencias = filteredFila.filter(f => f.status === 'desistiu' || f.status === 'cancelado').length;
     return { items: filteredFila.sort((a, b) => a.posicao - b.posicao), aguardando, chamados, desistencias, total: filteredFila.length };
-  }, [filaDB, filterUnit, filterProf]);
+  }, [filaDB, filterUnit, filterProf, filterSetor]);
 
   // === TRIAGEM REPORT ===
   const triagemReport = useMemo(() => {
@@ -1424,18 +1444,20 @@ const Relatorios: React.FC = () => {
 
   // === PROCEDURE STATS ===
   const procedimentoStats = useMemo(() => {
-    const filteredProcs = procedimentosDB.filter(p => {
-      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
-      if (dateFrom && p.data && p.data < dateFrom) return false;
-      if (dateTo && p.data && p.data > dateTo) return false;
+    const filteredProcs = atendimentosDB.filter(p => {
+      if (!scopedAppointmentIds.has(p.agendamento_id)) return false;
+      if (filterSetor !== 'all' && p.setor !== filterSetor) return false;
+      if (!p.procedimento?.trim()) return false;
       return true;
     });
     const byProc: Record<string, number> = {};
     const byProf: Record<string, number> = {};
     const byUnit: Record<string, number> = {};
     filteredProcs.forEach(p => {
-      byProc[p.proc_nome || 'Desconhecido'] = (byProc[p.proc_nome || 'Desconhecido'] || 0) + 1;
-      byProf[p.prof_nome || 'Desconhecido'] = (byProf[p.prof_nome || 'Desconhecido'] || 0) + 1;
+      const procedureName = p.procedimento?.trim() || 'Não informado';
+      const professionalName = p.profissional_nome || 'Desconhecido';
+      byProc[procedureName] = (byProc[procedureName] || 0) + 1;
+      byProf[professionalName] = (byProf[professionalName] || 0) + 1;
       const un = unidadesMap.get(p.unidade_id);
       byUnit[un?.nome || 'Desconhecida'] = (byUnit[un?.nome || 'Desconhecida'] || 0) + 1;
     });
@@ -1445,7 +1467,7 @@ const Relatorios: React.FC = () => {
       byProfessional: Object.entries(byProf).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
       byUnit: Object.entries(byUnit).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
     };
-  }, [procedimentosDB, filterUnit, dateFrom, dateTo, unidades]);
+  }, [atendimentosDB, filterSetor, scopedAppointmentIds, unidadesMap]);
 
   // === TREATMENT STATS ===
   const treatmentStats = useMemo(() => {
@@ -1664,7 +1686,9 @@ const Relatorios: React.FC = () => {
       'Especialidade': especialidade,
       'Município': municipio,
       'Status': status,
-      'Setor': setor,
+      'Setor': filterSetor !== 'all'
+        ? `${setor} (atendimentos e registros vinculados)`
+        : setor,
       'Tipo': tipo,
     };
     return { titulo, conclusaoSujeito, escopo, periodo, un, prof, especialidade, municipio, status, setor, tipo };
@@ -1681,7 +1705,7 @@ const Relatorios: React.FC = () => {
       rows = filtered.map(a => {
         const un = unidadesMap.get(a.unidadeId);
         // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.setor, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
       });
     } else if (type === 'municipios') {
       headers = ['Município', 'Total de Pacientes', 'Total de Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
@@ -2470,6 +2494,10 @@ ${dataRows}
       toast.error('Relatório institucional bloqueado porque há fontes com carga parcial. Tente atualizar os dados.');
       return;
     }
+    if (filterSetor !== 'all') {
+      toast.error('Remova o filtro de setor antes de emitir o relatório institucional completo, pois nem todas as fontes registram setor.');
+      return;
+    }
     const restrictedAnnex = includeRestrictedAnnex && canExportRestrictedReport;
     if (includeRestrictedAnnex && !restrictedAnnex) {
       toast.error('Anexo restrito disponível somente para Master ou administrador global.');
@@ -2616,7 +2644,6 @@ ${dataRows}
                 if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
                 if (filterStatus !== 'all') query = query.eq('status', filterStatus);
                 if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
-                if (filterSetor !== 'all') query = query.eq('tipo', filterSetor);
               } else if (filterProf !== 'all') {
                 query = query.eq('profissional_id', filterProf);
               }
@@ -3136,7 +3163,7 @@ ${dataRows}
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Setor</Label>
+            <Label className="text-xs">Setor (Fila/Atendimentos)</Label>
             <Select value={filterSetorInput} onValueChange={setFilterSetorInput} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
@@ -3145,6 +3172,12 @@ ${dataRows}
           <div><Label className="text-xs">De</Label><Input type="date" value={dateFromInput} onChange={e => setDateFromInput(e.target.value)} disabled={isFetching} className="h-9" /></div>
           <div><Label className="text-xs">Até</Label><Input type="date" value={dateToInput} onChange={e => setDateToInput(e.target.value)} disabled={isFetching} className="h-9" /></div>
         </div>
+
+        {filterSetorInput !== 'all' && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            O setor é confirmado pelo atendimento registrado e pela fila. Fontes clínicas e de tratamento sem vínculo confiável com setor não são filtradas por esse critério.
+          </p>
+        )}
 
         <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <p className="text-xs text-muted-foreground">
