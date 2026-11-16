@@ -33,6 +33,7 @@ import RelatorioCareniaProfissional from '@/components/reports/RelatorioCareniaP
 import RelatorioCondicoes from '@/components/reports/RelatorioCondicoes';
 import { reportScopesEqual, validateReportScope, type ReportScope } from '@/lib/reportScope';
 import { buildReportExportMetadataRows } from '@/lib/reportExportMetadata';
+import { buildAppointmentExportMatrix, buildAttendanceMapExportMatrix, serializeReportCsv, serializeSpreadsheetRowsXml } from '@/lib/reportExportRows';
 import { getTreatmentCycleIdsForScope } from '@/lib/reportTreatmentScope';
 import { filterAppointmentsToSectorScope, filterTriagesToAppointmentScope } from '@/lib/reportAppointmentScope';
 
@@ -1823,14 +1824,13 @@ const Relatorios: React.FC = () => {
 
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
-      rows = consolidatedData.map(a => {
-        const un = unidadesMap.get(a.unidadeId);
-        return [a.data, a.hora || '-', a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem || '-', '-', '-', '-'];
-      });
+      const matrix = buildAppointmentExportMatrix(consolidatedData, id => unidadesMap.get(id)?.nome, statusLabels);
+      headers = matrix.headers;
+      rows = matrix.rows;
     } else if (type === 'mapa') {
-      headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
-      rows = mapaData.map(r => [String(r.num), r.paciente_nome, formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), r.cpf, r.cns, r.telefone, r.tipo_logradouro, r.logradouro, r.numero, r.complemento, r.bairro, r.municipio, r.profissional_nome, r.especialidade, r.procedimentos_realizados, r.procedimento_sigtap, r.cid, r.observacoes]);
+      const matrix = buildAttendanceMapExportMatrix(mapaData, formatDateBR);
+      headers = matrix.headers;
+      rows = matrix.rows;
     } else if (type === 'municipios') {
       headers = ['Município', 'Total de Pacientes', 'Total de Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
       rows = municipioReport.map(m => [
@@ -1893,8 +1893,8 @@ const Relatorios: React.FC = () => {
 
 
     const metadataRows = [...(type === 'mapa' ? buildMapaExportMetadataRows() : buildExportMetadataRows()), ['Linhas no arquivo', String(rows.length)]];
-    const csv = [...metadataRows, headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const csv = serializeReportCsv(metadataRows, { headers, rows });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
@@ -1908,14 +1908,13 @@ const Relatorios: React.FC = () => {
     let rows: string[][] = [];
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
-      rows = consolidatedData.map(d => {
-        const un = unidadesMap.get(d.unidadeId);
-        return [d.data, d.hora || '-', d.pacienteNome, d.profissionalNome, un?.nome || '', d.tipo, statusLabels[d.status] || d.status, d.origem || '-', '-', '-', '-'];
-      });
+      const matrix = buildAppointmentExportMatrix(consolidatedData, id => unidadesMap.get(id)?.nome, statusLabels);
+      headers = matrix.headers;
+      rows = matrix.rows;
     } else if (type === 'mapa') {
-      headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
-      rows = mapaData.map(r => [String(r.num), r.paciente_nome, formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), r.cpf, r.cns, r.telefone, r.tipo_logradouro, r.logradouro, r.numero, r.complemento, r.bairro, r.municipio, r.profissional_nome, r.especialidade, r.procedimentos_realizados, r.procedimento_sigtap, r.cid, r.observacoes]);
+      const matrix = buildAttendanceMapExportMatrix(mapaData, formatDateBR);
+      headers = matrix.headers;
+      rows = matrix.rows;
     } else if (type === 'municipios') {
       headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
       rows = municipioReport.map(m => [
@@ -1974,15 +1973,8 @@ const Relatorios: React.FC = () => {
 
 
 
-    // Build XML Spreadsheet (Excel-compatible)
-    const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const headerCells = headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('');
-    const metadataRows = [...(type === 'mapa' ? buildMapaExportMetadataRows() : buildExportMetadataRows()), ['Linhas no arquivo', String(rows.length)]].map(r =>
-      `<Row>${r.map(c => `<Cell><Data ss:Type="String">${escXml(c)}</Data></Cell>`).join('')}</Row>`
-    ).join('\n');
-    const dataRows = rows.map(r =>
-      `<Row>${r.map(c => `<Cell><Data ss:Type="String">${escXml(c)}</Data></Cell>`).join('')}</Row>`
-    ).join('\n');
+    const metadataRows = [...(type === 'mapa' ? buildMapaExportMetadataRows() : buildExportMetadataRows()), ['Linhas no arquivo', String(rows.length)]];
+    const spreadsheetRows = serializeSpreadsheetRowsXml(metadataRows, { headers, rows });
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
@@ -1997,10 +1989,10 @@ const Relatorios: React.FC = () => {
 <Worksheet ss:Name="Relatório">
 <Table>
 ${headers.map(() => '<Column ss:AutoFitWidth="1" ss:Width="120"/>').join('')}
-${metadataRows}
+${spreadsheetRows.metadataRowsXml}
 <Row/>
-<Row>${headerCells}</Row>
-${dataRows}
+${spreadsheetRows.headerRowXml}
+${spreadsheetRows.dataRowsXml}
 </Table>
 </Worksheet>
 </Workbook>`;
@@ -2018,6 +2010,7 @@ ${dataRows}
   const downloadPDF = useCallback(async (type: string) => {
     if (!ensureExportSnapshotReady()) return;
     const auxiliaryTable = buildAuxiliaryExportTable(type);
+    const appointmentMatrix = buildAppointmentExportMatrix(consolidatedData, id => unidadesMap.get(id)?.nome, statusLabels);
     const auxiliaryTabTypes = ['executivo', 'procedimentos', 'triagem', 'enfermagem', 'multiprofissional', 'pts_report', 'tratamentos'];
     const isEmpty =
       (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (consolidatedData.length === 0 && porProfissional.length === 0) :
@@ -2102,7 +2095,7 @@ ${dataRows}
       };
 
       if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem', 'Início', 'Fim', 'Duração'], cap(consolidatedData).map(a => [a.data || '', a.hora || '-', a.pacienteNome || '', a.profissionalNome || '', unidadesMap.get(a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '', a.origem || '-', '-', '-', '-']));
+        addTable('Agendamentos Detalhados', appointmentMatrix.headers, cap(appointmentMatrix.rows));
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
@@ -2161,13 +2154,14 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais, buildExportMetadataRows, ensureExportSnapshotReady, buildAuxiliaryExportTable]);
+  }, [filtered, consolidatedData, unidadesMap, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais, buildExportMetadataRows, ensureExportSnapshotReady, buildAuxiliaryExportTable]);
 
   // === EXPORT PDF ===
   const exportPDF = useCallback(async (type: string) => {
     if (!ensureExportSnapshotReady()) return;
     try {
       const auxiliaryTable = buildAuxiliaryExportTable(type);
+      const appointmentMatrix = buildAppointmentExportMatrix(consolidatedData, id => unidadesMap.get(id)?.nome, statusLabels);
       const auxiliaryTabTypes = ['executivo', 'procedimentos', 'triagem', 'enfermagem', 'multiprofissional', 'pts_report', 'tratamentos'];
       // Empty-data guard per tab
       const isEmpty =
@@ -2209,16 +2203,14 @@ ${dataRows}
     };
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      const rows = cap(consolidatedData).map(a => {
-        const unName = unidadesMap.get(a.unidadeId)?.nome || '';
-        return `<tr><td>${a.data}</td><td>${a.hora || '-'}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>${a.origem || '-'}</td><td>-</td><td>-</td><td>-</td></tr>`;
-      }).join('');
+      const rows = cap(appointmentMatrix.rows).map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
+      const headers = appointmentMatrix.headers.map(header => `<th>${escapeHtml(header)}</th>`).join('');
       const prodRows = cap(porProfissional).map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
       ).join('');
       body = `${summaryBlock}
         <h2>Agendamentos Detalhados</h2>
-        <table><thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Origem</th><th>Início</th><th>Fim</th><th>Duração</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>
         <h2>Produtividade por Profissional</h2>
         <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Tempo Médio</th><th>Taxa</th></tr></thead><tbody>${prodRows}</tbody></table>`;
     } else if (type === 'produtividade') {
@@ -2291,7 +2283,7 @@ ${dataRows}
       console.error('[exportPDF] erro:', err);
       toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
     }
-  }, [filtered, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais, buildExportMetadataRows, ensureExportSnapshotReady, buildAuxiliaryExportTable]);
+  }, [filtered, consolidatedData, unidadesMap, porProfissional, faltasReport, pacientesReportFiltrados, pacientesComTfd, pacientesComOrdemJudicial, pacientesComExcecao, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais, buildExportMetadataRows, ensureExportSnapshotReady, buildAuxiliaryExportTable]);
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
@@ -2553,33 +2545,9 @@ ${dataRows}
       await new Promise(r => requestAnimationFrame(() => r(null)));
       const now = new Date().toLocaleString('pt-BR');
       const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
-      const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-      const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
       const ROW_LIMIT = 3000;
-      const rows = mapaData.slice(0, ROW_LIMIT).map(r => {
-        return [
-          String(r.num).padStart(2, '0'), 
-          r.paciente_nome || '', 
-          formatDateBR(r.data_atendimento), 
-          formatDateBR(r.data_nascimento), 
-          fmtCPF(r.cpf), 
-          fmtCNS(r.cns),
-          r.telefone || '-',
-          r.tipo_logradouro || '-',
-          r.logradouro || '-',
-          r.numero || '-',
-          r.complemento || '-',
-          r.bairro || '-',
-          r.municipio || '-',
-          r.endereco_completo || '-',
-          r.profissional_nome || '', 
-          r.especialidade || '-', 
-          r.procedimentos_realizados || '-',
-          r.procedimento_sigtap || '-', 
-          r.cid || '-',
-          r.observacoes || '-'
-        ];
-      });
+      const mapMatrix = buildAttendanceMapExportMatrix(mapaData, formatDateBR);
+      const rows = mapMatrix.rows.slice(0, ROW_LIMIT);
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       doc.setProperties({ title: 'Mapa de Atendimentos', subject: 'Relatório ' + getBrandSync().titulo });
@@ -2605,7 +2573,7 @@ ${dataRows}
 
       autoTable(doc, {
         startY: (getLastAutoTableFinalY(doc) || 32) + 3,
-        head: [['Nº', 'Paciente', 'Dt Atend', 'Dt Nasc', 'CPF', 'CNS', 'Telefone', 'Tipo Logr', 'Logradouro', 'Nº', 'Compl', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procs Realizados', 'Proc. SIGTAP', 'CID', 'Obs']],
+        head: [mapMatrix.headers],
         body: rows,
         theme: 'grid',
         styles: { fontSize: 4.5, cellPadding: 0.8, overflow: 'linebreak', valign: 'middle' },
@@ -2642,32 +2610,10 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (!ensureExportSnapshotReady()) return;
     if (mapaData.length === 0) return;
-    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
-    const rows = mapaData.map(r => [
-      r.num.toString(), 
-      r.paciente_nome, 
-      formatDateBR(r.data_atendimento), 
-      formatDateBR(r.data_nascimento), 
-      fmtCPF(r.cpf),
-      r.cns || '',
-      r.telefone || '',
-      r.tipo_logradouro || '',
-      r.logradouro || '',
-      r.numero || '',
-      r.complemento || '',
-      r.bairro || '',
-      r.municipio || '',
-      r.profissional_nome, 
-      r.especialidade,
-      r.procedimentos_realizados || '',
-      r.procedimento_sigtap || '',
-      r.cid,
-      r.observacoes || ''
-    ]);
+    const matrix = buildAttendanceMapExportMatrix(mapaData, formatDateBR);
 
-    const csv = [...buildMapaExportMetadataRows(), ['Linhas no arquivo', String(rows.length)], headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const csv = serializeReportCsv([...buildMapaExportMetadataRows(), ['Linhas no arquivo', String(matrix.rows.length)]], matrix);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -5184,31 +5130,9 @@ th{background:#f1f5f9;font-weight:600;}
                     const metadata = buildMapaExportMetadataRows()
                       .filter(([label]) => label !== 'ESCOPO E CONFERÊNCIA' && label !== '')
                       .map(([label, value]) => `${label}: ${value}`).join(' • ');
-                    const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                    const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
-                    const tableRows = mapaData.map((r, i) => {
-                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}">
-                        <td style="text-align:center">${String(r.num).padStart(2, '0')}</td>
-                        <td>${r.paciente_nome}</td>
-                        <td>${formatDateBR(r.data_atendimento)}</td>
-                        <td>${formatDateBR(r.data_nascimento)}</td>
-                        <td>${formatCPF(r.cpf)}</td>
-                        <td>${r.cns || '-'}</td>
-                        <td>${r.telefone || '-'}</td>
-                        <td>${r.tipo_logradouro || '-'}</td>
-                        <td>${r.logradouro || '-'}</td>
-                        <td>${r.numero || '-'}</td>
-                        <td>${r.complemento || '-'}</td>
-                        <td>${r.bairro || '-'}</td>
-                        <td>${r.municipio || '-'}</td>
-                        <td>${r.profissional_nome}</td>
-                        <td>${r.especialidade || '-'}</td>
-                        <td>${r.procedimentos_realizados || '-'}</td>
-                        <td>${r.procedimento_sigtap || '-'}</td>
-                        <td>${r.cid || '-'}</td>
-                        <td>${r.observacoes || '-'}</td>
-                      </tr>`;
-                    }).join('');
+                    const matrix = buildAttendanceMapExportMatrix(mapaData, formatDateBR);
+                    const tableRows = matrix.rows.map((row, index) => `<tr style="${index % 2 === 1 ? 'background:#f9f9f9;' : ''}">${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
+                    const tableHeaders = matrix.headers.map(header => `<th>${escapeHtml(header)}</th>`).join('');
                     const logoUrl = logoSmsFallback;
                     const logoUrlRight = logoCerFallback;
                     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
@@ -5223,8 +5147,8 @@ th,td{border:1px solid #ccc;padding:2px 3px;text-align:left;font-size:6px;}
 th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:0;}.no-print{display:none!important;}}</style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:2px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:8px;font-size:7px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div><div style="font-size:7px;color:#475569;margin:5px 0 8px">${escapeHtml(metadata)}</div>
-<table><thead><tr><th style="width:20px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>CNS</th><th>Tel</th><th>Tipo</th><th>Logr</th><th>Nº</th><th>Compl</th><th>Bairro</th><th>Mun</th><th>Profissional</th><th>Espec</th><th>Procs Realizados</th><th>SIGTAP</th><th>CID</th><th>Obs</th></tr></thead><tbody>${tableRows}</tbody>
-<tfoot><tr><td colspan="19" style="text-align:right;font-weight:600;padding:4px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+<table><thead><tr>${tableHeaders}</tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="${matrix.headers.length}" style="text-align:right;font-weight:600;padding:4px;">Total: ${matrix.rows.length} atendimentos</td></tr></tfoot></table>
 </body></html>`;
                     printViaIframe(html);
                     toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
