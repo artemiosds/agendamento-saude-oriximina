@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
 import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, Activity, Info, ChevronRight, ClipboardList, BookOpen, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,11 +27,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.webp';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { DashboardSkeleton, TableSkeleton } from '@/components/skeletons';
 import { ChartCard } from '@/components/ChartCard';
 import RelatorioCareniaProfissional from '@/components/reports/RelatorioCareniaProfissional';
 import RelatorioCondicoes from '@/components/reports/RelatorioCondicoes';
+import { reportScopesEqual, validateReportScope, type ReportScope } from '@/lib/reportScope';
 
 // Realtime removido: relatórios são snapshot estático.
 import { CLINICAL_CATEGORIES, getCategoryByCID, extractCids, normalizeCid, formatCid, OTHER_CATEGORY_NAME } from '@/data/clinicalCategories';
@@ -136,23 +137,31 @@ const Relatorios: React.FC = () => {
   const [filterCargoProd, setFilterCargoProd] = useState('all');
   const [prodViewMode, setProdViewMode] = useState<'tabela' | 'grafico'>('tabela');
   const [timelineGroup, setTimelineGroup] = useState<'dia' | 'semana' | 'mes'>('dia');
-  const [filterUnit, setFilterUnit] = useState('all');
-  const [filterProf, setFilterProf] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterSetor, setFilterSetor] = useState('all');
-  const [filterTipo, setFilterTipo] = useState('all');
+  const defaultPeriod = useMemo(() => {
+    const from = new Date(); from.setDate(from.getDate() - 30);
+    return { dateFrom: from.toISOString().slice(0, 10), dateTo: new Date().toISOString().slice(0, 10) };
+  }, []);
+  const [filterUnitInput, setFilterUnitInput] = useState('all');
+  const [filterProfInput, setFilterProfInput] = useState('all');
+  const [filterStatusInput, setFilterStatusInput] = useState('all');
+  const [filterSetorInput, setFilterSetorInput] = useState('all');
+  const [filterTipoInput, setFilterTipoInput] = useState('all');
   const [filterPacienteExcecao, setFilterPacienteExcecao] = useState<'all' | 'tfd' | 'judicial' | 'exceptions'>('all');
   const [exceptionTimelineGroup, setExceptionTimelineGroup] = useState<'dia' | 'semana' | 'mes'>('dia');
-  // Padrão: últimos 30 dias para evitar varrer todo o histórico em cada carga
-  // dateFromInput/dateToInput = valor imediato do input (UI responsiva)
-  // dateFrom/dateTo = valor com debounce de 400ms, usado por fetch e cálculos
-  const [dateFromInput, setDateFrom] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
-  });
-  const [dateToInput, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const dateFrom = useDebouncedValue(dateFromInput, 400);
-  const dateTo = useDebouncedValue(dateToInput, 400);
+  // A tela mantém filtros em edição separados do último snapshot efetivamente carregado.
+  const [dateFromInput, setDateFromInput] = useState(defaultPeriod.dateFrom);
+  const [dateToInput, setDateToInput] = useState(defaultPeriod.dateTo);
+  const [appliedScope, setAppliedScope] = useState<ReportScope>(() => ({
+    unit: 'all', professional: 'all', status: 'all', type: 'all', sector: 'all',
+    dateFrom: defaultPeriod.dateFrom, dateTo: defaultPeriod.dateTo,
+  }));
+  const filterUnit = appliedScope.unit;
+  const filterProf = appliedScope.professional;
+  const filterStatus = appliedScope.status;
+  const filterTipo = appliedScope.type;
+  const filterSetor = appliedScope.sector;
+  const dateFrom = appliedScope.dateFrom;
+  const dateTo = appliedScope.dateTo;
 
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
@@ -252,7 +261,7 @@ const Relatorios: React.FC = () => {
   const profissionaisMap = useMemo(() => new Map((profissionais || []).map((p: any) => [p.id, p])), [profissionais]);
   // categoriasMap declared after CATEGORIAS to avoid TDZ — see below.
 
-  const loadReportData = useCallback(async (isAutoRefresh = false) => {
+  const loadReportData = useCallback(async (scope: ReportScope, isAutoRefresh = false) => {
     // Cancela a busca anterior ainda em voo: a última intenção do usuário sempre vence.
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -264,15 +273,16 @@ const Relatorios: React.FC = () => {
     setIsFetching(true);
 
     try {
-      const filters = { 
-        unit: filterUnit, 
-        prof: filterProf, 
-        status: filterStatus, 
-        type: filterTipo, 
-        setor: filterSetor,
-        dateFrom, 
-        dateTo 
-      };
+      const filters = scope;
+      const {
+        unit: queryUnit,
+        professional: queryProfessional,
+        status: queryStatus,
+        type: queryType,
+        sector: querySector,
+        dateFrom: queryDateFrom,
+        dateTo: queryDateTo,
+      } = scope;
       console.log(`[Relatórios] ${isAutoRefresh ? 'Auto-refresh' : 'Buscando'} dados com filtros:`, filters);
 
       /** Retorna as linhas e sinaliza se a carga daquela tabela ficou incompleta. */
@@ -296,11 +306,11 @@ const Relatorios: React.FC = () => {
           
           if (dateField) {
             const isTimestamp = TIMESTAMP_DATE_FIELDS.has(dateField);
-            if (dateFrom) {
-              query = query.gte(dateField, isTimestamp ? `${dateFrom}T00:00:00` : dateFrom);
+            if (queryDateFrom) {
+              query = query.gte(dateField, isTimestamp ? `${queryDateFrom}T00:00:00` : queryDateFrom);
             }
-            if (dateTo) {
-              query = query.lte(dateField, isTimestamp ? `${dateTo}T23:59:59` : dateTo);
+            if (queryDateTo) {
+              query = query.lte(dateField, isTimestamp ? `${queryDateTo}T23:59:59` : queryDateTo);
             }
           }
 
@@ -311,17 +321,17 @@ const Relatorios: React.FC = () => {
             query = query.eq('unidade_id', userUnidadeId);
           }
 
-          if (hasUnidade && filterUnit !== 'all') {
-            query = query.eq('unidade_id', filterUnit);
+          if (hasUnidade && queryUnit !== 'all') {
+            query = query.eq('unidade_id', queryUnit);
           }
 
           if (table === 'agendamentos') {
-            if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
-            if (filterStatus !== 'all') query = query.eq('status', filterStatus);
-            if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
-            if (filterSetor !== 'all') query = query.eq('tipo', filterSetor);
+            if (queryProfessional !== 'all') query = query.eq('profissional_id', queryProfessional);
+            if (queryStatus !== 'all') query = query.eq('status', queryStatus);
+            if (queryType !== 'all') query = query.eq('tipo', queryType);
+            if (querySector !== 'all') query = query.eq('tipo', querySector);
           } else if (table === 'prontuarios') {
-            if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+            if (queryProfessional !== 'all') query = query.eq('profissional_id', queryProfessional);
           }
 
 
@@ -374,6 +384,7 @@ const Relatorios: React.FC = () => {
       setPtsData(ptsRes || []);
       setProcedimentosDB(proceduresRes || []);
       setPtsCidData(ptsCidRes || []);
+      setAppliedScope(scope);
 
       // Extrai CIDs válidos (regex estrito, forma canônica sem ponto) para buscar descrições oficiais.
       // Fontes reais no banco: prontuarios.custom_data.cid/cid10, pts_cid.cid_codigo,
@@ -427,7 +438,7 @@ const Relatorios: React.FC = () => {
       if (abortRef.current === controller) setIsFetching(false);
     }
     // Deps primitivas: evita refetch duplicado quando o AuthContext recria o objeto `user`.
-  }, [userUnidadeId, userUsuario, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo, pacientes]);
+  }, [userUnidadeId, userUsuario, pacientes]);
 
 
   // Carrega os dados automaticamente apenas UMA vez, na montagem da página.
@@ -437,15 +448,31 @@ const Relatorios: React.FC = () => {
   // filtros selecionados no momento do clique.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    loadReportData();
+    loadReportData(appliedScope);
   }, []);
 
   // Cancela qualquer busca pendente ao desmontar a página.
   useEffect(() => () => abortRef.current?.abort(), []);
 
 
+  const draftScope = useMemo<ReportScope>(() => ({
+    unit: filterUnitInput,
+    professional: filterProfInput,
+    status: filterStatusInput,
+    type: filterTipoInput,
+    sector: filterSetorInput,
+    dateFrom: dateFromInput,
+    dateTo: dateToInput,
+  }), [filterUnitInput, filterProfInput, filterStatusInput, filterTipoInput, filterSetorInput, dateFromInput, dateToInput]);
+  const hasPendingFilters = !reportScopesEqual(draftScope, appliedScope);
+
   const handleRefresh = () => {
-    loadReportData();
+    const validationError = validateReportScope(draftScope);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    void loadReportData(draftScope);
   };
 
   // Snapshot estático: sem realtime, sem auto-refresh.
@@ -1445,7 +1472,8 @@ const Relatorios: React.FC = () => {
       : 0;
 
     // Abandonment rate: cycles that were active but patient stopped (no sessions in last 30 days for active cycles)
-    const taxaAbandono = total > 0 ? Math.round(((suspensos) / total) * 100) : 0;
+    // Suspensão é um status administrativo/clínico; não comprova abandono do tratamento.
+    const taxaSuspensao = total > 0 ? Math.round((suspensos / total) * 100) : 0;
 
     // By professional
     const byProf: Record<string, { nome: string; ativos: number; finalizados: number; sessoes: number }> = {};
@@ -1477,7 +1505,7 @@ const Relatorios: React.FC = () => {
     return {
       total, ativos, finalizados, suspensos,
       totalSessions, sessRealizadas, sessFaltas, sessCanceladas,
-      avgSessoesPorPaciente, taxaAbandono,
+      avgSessoesPorPaciente, taxaSuspensao,
       byProfessional: Object.values(byProf).sort((a, b) => b.sessoes - a.sessoes),
       byUnit: Object.values(byUnit).sort((a, b) => b.total - a.total),
       byType: Object.entries(byType).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
@@ -1532,7 +1560,7 @@ const Relatorios: React.FC = () => {
       total, pacientesUnicos, profissionaisAtivos, unidadesAtivas,
       taxaComparecimento, taxaFalta, taxaCancelamento, taxaRetorno, taxaOcupacao,
       tempoMedio: tempoStats.tempoMedio, tempoEsperaMedio,
-      ciclosAtivos, taxaConclusaoCiclos, taxaAbandono: treatmentStats.taxaAbandono,
+      ciclosAtivos, taxaConclusaoCiclos, taxaSuspensao: treatmentStats.taxaSuspensao,
       filaAguardando: filaReport.aguardando, filaTotal: filaReport.total,
       triagemTotal, taxaConfirmacaoTriagem,
       mediaDiaria, dias,
@@ -2070,6 +2098,10 @@ ${dataRows}
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
+    if (isFetching || hasPendingFilters) {
+      toast.warning('Aplique os filtros gerais e aguarde a atualização antes de gerar o mapa.');
+      return;
+    }
     if (!dateFrom || !dateTo) {
       toast.warning('Selecione o período para o mapa');
       return;
@@ -2288,7 +2320,7 @@ ${dataRows}
     } finally {
       setMapaLoading(false);
     }
-  }, [dateFrom, dateTo, mapaProf, funcionarios]);
+  }, [dateFrom, dateTo, mapaProf, funcionarios, isFetching, hasPendingFilters]);
 
 
   const exportMapaPDF = useCallback(async () => {
@@ -2405,7 +2437,13 @@ ${dataRows}
   }, [mapaData, dateFrom, dateTo]);
 
   const clearFilters = () => {
-    setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
+    setFilterUnitInput('all');
+    setFilterProfInput('all');
+    setFilterStatusInput('all');
+    setFilterSetorInput('all');
+    setFilterTipoInput('all');
+    setDateFromInput('');
+    setDateToInput('');
   };
 
 
@@ -2415,6 +2453,14 @@ ${dataRows}
 
 
   const exportCompleteReport = useCallback(async (format: 'pdf' | 'docx', includeRestrictedAnnex = false) => {
+    if (isFetching || hasPendingFilters) {
+      toast.error('Aplique os filtros e aguarde a atualização antes de emitir o relatório institucional.');
+      return;
+    }
+    if (partialTables.length > 0) {
+      toast.error('Relatório institucional bloqueado porque há fontes com carga parcial. Tente atualizar os dados.');
+      return;
+    }
     const restrictedAnnex = includeRestrictedAnnex && canExportRestrictedReport;
     if (includeRestrictedAnnex && !restrictedAnnex) {
       toast.error('Anexo restrito disponível somente para Master ou administrador global.');
@@ -2749,7 +2795,7 @@ ${dataRows}
           ['Ciclos suspensos', treatmentStats.suspensos],
           ['Sessões realizadas', treatmentStats.sessRealizadas],
           ['Sessões com falta', treatmentStats.sessFaltas],
-          ['Taxa de abandono registrada', treatmentStats.taxaAbandono + '%'],
+          ['Percentual de ciclos suspensos', treatmentStats.taxaSuspensao + '%'],
         ]),
         addTable('Ciclos por tipo de tratamento', ['Tipo', 'Quantidade'], treatmentStats.byType.map(t => [t.nome, t.total]), 30),
       ]);
@@ -2967,7 +3013,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [stats, clinicalReport, clinicalSearch, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, pacientesReport, pacientes, pacientesMap, procedimentosDB, ptsData, ptsCidData, cid10Descriptions, partialTables, profissionaisMap, user, filterUnit, filterProf, filterStatus, filterSetor, filterTipo, dateFrom, dateTo, unidadesMap, buildEscopo, filtered, tempoStats, canExportRestrictedReport, normalizeStatus]);
+  }, [stats, clinicalReport, clinicalSearch, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, pacientesReport, pacientes, pacientesMap, procedimentosDB, ptsData, ptsCidData, cid10Descriptions, partialTables, profissionaisMap, user, filterUnit, filterProf, filterStatus, filterSetor, filterTipo, dateFrom, dateTo, unidadesMap, buildEscopo, filtered, tempoStats, canExportRestrictedReport, normalizeStatus, isFetching, hasPendingFilters]);
 
 
   return (
@@ -3024,8 +3070,8 @@ ${dataRows}
           <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
             <RefreshCw className="w-3 h-3" /> Última atualização: {lastUpdatedLabel}
           </span>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={handleRefresh}>
-            <RefreshCw className="w-4 h-4 mr-1" />{isFetching ? 'Buscando...' : 'Atualizar Dados'}
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={handleRefresh} disabled={isFetching}>
+            <RefreshCw className={`w-4 h-4 mr-1 ${isFetching ? 'animate-spin' : ''}`} />{isFetching ? 'Atualizando...' : hasPendingFilters ? 'Aplicar filtros' : 'Atualizar dados'}
           </Button>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
@@ -3051,21 +3097,21 @@ ${dataRows}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div>
             <Label className="text-xs">Unidade</Label>
-            <Select value={filterUnit} onValueChange={setFilterUnit} disabled={isFetching}>
+            <Select value={filterUnitInput} onValueChange={setFilterUnitInput} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Profissional</Label>
-            <Select value={filterProf} onValueChange={setFilterProf} disabled={isFetching}>
+            <Select value={filterProfInput} onValueChange={setFilterProfInput} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Status</Label>
-            <Select value={filterStatus} onValueChange={setFilterStatus} disabled={isFetching}>
+            <Select value={filterStatusInput} onValueChange={setFilterStatusInput} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
@@ -3075,23 +3121,40 @@ ${dataRows}
           </div>
           <div>
             <Label className="text-xs">Tipo</Label>
-            <Select value={filterTipo} onValueChange={setFilterTipo} disabled={isFetching}>
+            <Select value={filterTipoInput} onValueChange={setFilterTipoInput} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label className="text-xs">Setor</Label>
-            <Select value={filterSetor} onValueChange={setFilterSetor} disabled={isFetching}>
+            <Select value={filterSetorInput} onValueChange={setFilterSetorInput} disabled={isFetching}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div><Label className="text-xs">De</Label><Input type="date" value={dateFromInput} onChange={e => setDateFrom(e.target.value)} disabled={isFetching} className="h-9" /></div>
-          <div><Label className="text-xs">Até</Label><Input type="date" value={dateToInput} onChange={e => setDateTo(e.target.value)} disabled={isFetching} className="h-9" /></div>
+          <div><Label className="text-xs">De</Label><Input type="date" value={dateFromInput} onChange={e => setDateFromInput(e.target.value)} disabled={isFetching} className="h-9" /></div>
+          <div><Label className="text-xs">Até</Label><Input type="date" value={dateToInput} onChange={e => setDateToInput(e.target.value)} disabled={isFetching} className="h-9" /></div>
+        </div>
+
+        <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            {hasPendingFilters ? 'Existem filtros ainda não aplicados. Os números abaixo continuam no último escopo carregado.' : `Escopo aplicado em ${lastUpdatedLabel}.`}
+          </p>
+          <Button size="sm" onClick={handleRefresh} disabled={isFetching || !hasPendingFilters}>
+            <RefreshCw className={`w-4 h-4 mr-1 ${isFetching ? 'animate-spin' : ''}`} />Aplicar filtros e atualizar
+          </Button>
         </div>
 
       </div>
+
+      {hasPendingFilters && !isFetching && (
+        <Alert className="border-sky-200 bg-sky-50 text-sky-950">
+          <Info className="h-4 w-4" />
+          <AlertTitle>Filtros ainda não aplicados</AlertTitle>
+          <AlertDescription>Use “Aplicar filtros e atualizar”. Até lá, indicadores e exportações continuam vinculados ao último período carregado.</AlertDescription>
+        </Alert>
+      )}
 
       {/* Aviso de dados parciais: falha em uma ou mais tabelas */}
       {partialTables.length > 0 && (
@@ -3204,7 +3267,7 @@ ${dataRows}
               { label: 'Profissionais Ativos', value: k.profissionaisAtivos, icon: Stethoscope, color: '#1B3A5C', bg: '#EEF2F7' },
               { label: 'Unidades Ativas', value: k.unidadesAtivas, icon: MapPin, color: '#0E7490', bg: '#ECFEFF' },
               { label: 'Ciclos em Andamento', value: k.ciclosAtivos, icon: Activity, color: '#14B8A6', bg: '#F0FDFA', hint: `${k.taxaConclusaoCiclos}% concluídos` },
-              { label: 'Taxa de Abandono Trat.', value: k.taxaAbandono, suffix: '%', icon: TrendingUp, color: '#DC2626', bg: '#FEF2F2' },
+              { label: '% Ciclos Suspensos', value: k.taxaSuspensao, suffix: '%', icon: TrendingUp, color: '#DC2626', bg: '#FEF2F2' },
             ];
             return (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -4343,7 +4406,7 @@ th{background:#f1f5f9;font-weight:600;}
               { label: 'Finalizados', value: treatmentStats.finalizados, color: 'text-muted-foreground' },
               { label: 'Suspensos', value: treatmentStats.suspensos, color: 'text-destructive' },
               { label: 'Méd. Sessões/Pac.', value: treatmentStats.avgSessoesPorPaciente, color: 'text-primary' },
-              { label: 'Taxa Abandono', value: `${treatmentStats.taxaAbandono}%`, color: 'text-warning' },
+              { label: 'Ciclos suspensos', value: `${treatmentStats.taxaSuspensao}%`, color: 'text-warning' },
             ].map(s => (
               <Card key={s.label} className="shadow-card border-0">
                 <CardContent className="p-2.5 text-center">
@@ -4837,11 +4900,11 @@ th{background:#f1f5f9;font-weight:600;}
               <div className="flex flex-wrap items-end gap-3 mb-4">
                 <div>
                   <Label className="text-xs">Data Inicial *</Label>
-                  <Input type="date" value={dateFromInput} onChange={e => { setDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateFromInput} onChange={e => { setDateFromInput(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Data Final *</Label>
-                  <Input type="date" value={dateToInput} onChange={e => { setDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateToInput} onChange={e => { setDateToInput(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Profissional</Label>
@@ -4855,7 +4918,7 @@ th{background:#f1f5f9;font-weight:600;}
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={generateMapa} disabled={!dateFrom || !dateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
+                <Button onClick={generateMapa} disabled={!dateFrom || !dateTo || mapaLoading || isFetching || hasPendingFilters} className="gradient-primary text-primary-foreground h-9">
                   <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
                 </Button>
                 <ActionButton variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9" loadingText="Gerando PDF...">
