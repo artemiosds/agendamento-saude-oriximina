@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
-import { createTreatmentSessionOperations, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
+import { createTreatmentSessionOperations, OPTIONAL_TREATMENT_REASON, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
 import { getSoapOptions, hasDropdownSoap, isMedico, normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 
@@ -1749,6 +1749,7 @@ const Tratamentos: React.FC = () => {
             cycle,
             appointment: newAgData,
             duplicateScope: "patient",
+            reason: OPTIONAL_TREATMENT_REASON,
             manualCapacityOverride: canControlSessions,
             operationContext: "batch",
           });

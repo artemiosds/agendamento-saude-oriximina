@@ -11,6 +11,8 @@ export interface TreatmentSessionOperationResult {
   appointment: Agendamento | null;
 }
 
+export const OPTIONAL_TREATMENT_REASON = 'Motivo não informado (campo opcional).';
+
 export interface AgendaMutationBridge {
   addAgendamentoTransactionally: (
     appointment: Agendamento,
@@ -216,7 +218,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       await deps.agenda.addAgendamentoTransactionally(input.appointment, async (normalized) => {
         const { data, error } = await deps.client.rpc('schedule_treatment_session_checked', {
           p_manual_capacity: !!input.manualCapacityOverride,
-          p_reason: input.appointment.data !== input.session.scheduled_date ? treatmentDateChangeReason(input.reason) : input.reason?.trim() || null,
+          p_reason: input.reason?.trim() || OPTIONAL_TREATMENT_REASON,
           p_session_id: input.session.id,
           p_cycle_id: input.cycle.id,
           p_expected_session_date: input.session.scheduled_date,

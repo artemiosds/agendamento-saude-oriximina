@@ -254,13 +254,13 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
       && configuredTurnWindows.some((window) => window.horaInicio === turn.horaInicio && window.horaFim === turn.horaFim)
       && isTimeWithinTurnWindow(selectedHora, [turn]),
   );
-  const requiresManualJustification = Boolean(
+  const isManualCapacityOverride = Boolean(
     allowCapacityOverride && selectedDate && selectedHora && selectedTimeAllowed
       && !slots.includes(selectedHora) && !hasFreeConfiguredTurn,
   );
-  const showReason = mode === 'remarcar'
+  const showReason = allowCapacityOverride || mode === 'remarcar'
     || (!!selectedDate && selectedDate !== session?.scheduled_date)
-    || requiresManualJustification;
+    || isManualCapacityOverride;
   const masterManualFallback = isMaster && !allowCapacityOverride && slots.length === 0 && turnWindows.length === 0
     && selectedTimeAfterCutoff && !exactPatientConflict;
 
@@ -308,10 +308,6 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     }
     if (!selectedTimeAllowed && !masterManualFallback) {
       toast.error(exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).');
-      return;
-    }
-    if (requiresManualJustification && !reason.trim()) {
-      toast.error('Informe a justificativa obrigatória para este encaixe manual.');
       return;
     }
     setSaving(true);
@@ -538,8 +534,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
               {selectedHora && !selectedTimeAllowed && !masterManualFallback && (
                 <p className="mt-2 text-xs text-destructive">{exactPatientConflict ? 'O paciente já possui agendamento nesse horário.' : 'Informe um horário válido (HH:MM).'}</p>
               )}
-              {requiresManualJustification && (
-                <p className="mt-2 text-xs text-warning">Encaixe manual fora da disponibilidade regular. Informe a justificativa; bloqueios oficiais e conflitos do paciente continuam sendo verificados.</p>
+              {isManualCapacityOverride && (
+                <p className="mt-2 text-xs text-warning">Encaixe manual fora da disponibilidade regular. O motivo é opcional; bloqueios oficiais e conflitos do paciente continuam sendo verificados.</p>
               )}
             </div>
           )}
@@ -568,11 +564,11 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
 
           {/* Action button — fixed footer */}
           <div className="modal-footer px-4 sm:px-6">
-            {showReason && <div className="space-y-1"><Label htmlFor="session-date-reason">{requiresManualJustification ? 'Justificativa obrigatória para encaixe manual' : 'Motivo da alteração da data (opcional)'}</Label><Textarea id="session-date-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div>}
+            {showReason && <div className="space-y-1"><Label htmlFor="session-date-reason">Motivo do encaixe ou alteração (opcional)</Label><Textarea id="session-date-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div>}
             <Button
               onClick={handleConfirm}
               className="w-full gradient-primary text-primary-foreground"
-              disabled={!selectedDate || !selectedHora || saving || (!selectedTimeAllowed && !masterManualFallback) || (requiresManualJustification && !reason.trim())}
+              disabled={!selectedDate || !selectedHora || saving || (!selectedTimeAllowed && !masterManualFallback)}
             >
               {saving ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>

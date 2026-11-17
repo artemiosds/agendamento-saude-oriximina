@@ -140,6 +140,16 @@ describe('treatmentSessionOperations: schedule', () => {
     expect(ctx.scheduleCommits).toEqual([{ appointment: expect.objectContaining({ id: appointment.id }), created: true }]);
   });
 
+  it('usa o motivo padrão de auditoria quando a justificativa não foi preenchida', async () => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: { status: 'agendado', session: { status: 'agendada', appointment_id: appointment.id }, appointment: appointmentRow }, error: null });
+    await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient', manualCapacityOverride: true });
+    expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({
+      p_manual_capacity: true,
+      p_reason: 'Motivo não informado (campo opcional).',
+    }));
+  });
+
   it('usa mensagem de capacidade própria da operação individual', async () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'capacidade_esgotada', reason: 'day_full' }, error: null });

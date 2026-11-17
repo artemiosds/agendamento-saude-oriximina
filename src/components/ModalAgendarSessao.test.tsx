@@ -53,7 +53,7 @@ describe('ModalAgendarSessao', () => {
     const timeInput = screen.getByRole('dialog').querySelector('input[type="time"]')!;
     fireEvent.change(timeInput, { target: { value: '09:00' } });
 
-    const reason = screen.queryByLabelText('Motivo da alteração da data (opcional)');
+    const reason = screen.queryByLabelText('Motivo do encaixe ou alteração (opcional)');
     if (reason) fireEvent.change(reason, { target: { value: 'Nova data conferida com o paciente' } });
     expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeEnabled();
     fireEvent.change(timeInput, { target: { value: '08:00' } });
@@ -67,7 +67,7 @@ describe('ModalAgendarSessao', () => {
 
     await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
     fireEvent.change(screen.getByRole('dialog').querySelector('input[type="time"]')!, { target: { value: '09:00' } });
-    expect(screen.getByLabelText('Motivo da alteração da data (opcional)')).toHaveValue('');
+    expect(screen.getByLabelText('Motivo do encaixe ou alteração (opcional)')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Confirmar Remarcação' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Remarcação' }));
     await waitFor(() => expect(onRemarcar).toHaveBeenCalledWith('2099-10-08', '09:00', expect.any(String), ''));
@@ -79,7 +79,7 @@ describe('ModalAgendarSessao', () => {
     await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
   });
 
-  it('exige justificativa e permite encaixe manual no turno cheio quando autorizado', async () => {
+  it('permite encaixe manual no turno cheio sem exigir motivo quando autorizado', async () => {
     const onConfirm = vi.fn(async () => {});
     render(<ModalAgendarSessao {...baseProps} onConfirm={onConfirm} allowCapacityOverride
       availableDates={['2099-10-08']} getAvailableSlots={() => []}
@@ -90,13 +90,13 @@ describe('ModalAgendarSessao', () => {
     await waitFor(() => expect(screen.getByRole('dialog').querySelector('input[type="time"]')).not.toBeNull());
     fireEvent.change(screen.getByRole('dialog').querySelector('input[type="time"]')!, { target: { value: '08:00' } });
     expect(screen.getByText(/Encaixe manual fora da disponibilidade regular/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('Justificativa obrigatória para encaixe manual'), { target: { value: 'Encaixe autorizado pelo profissional' } });
+    expect(screen.getByLabelText('Motivo do encaixe ou alteração (opcional)')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Agendamento' }));
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-08', '08:00', '', 'Encaixe autorizado pelo profissional'));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-08', '08:00', '', ''));
   });
 
-  it('permite ao perfil autorizado usar hora fora de qualquer turno após informar justificativa', async () => {
+  it('permite ao perfil autorizado usar hora fora de qualquer turno sem motivo digitado', async () => {
     const onConfirm = vi.fn(async () => {});
     render(<ModalAgendarSessao {...baseProps} onConfirm={onConfirm} allowCapacityOverride
       availableDates={[]} getAvailableSlots={() => []} getTurnoInfo={() => []} getConfiguredWindows={() => []}
@@ -105,9 +105,9 @@ describe('ModalAgendarSessao', () => {
     fireEvent.click(screen.getByRole('button', { name: '9' }));
     const timeInput = screen.getByRole('dialog').querySelector('input[type="time"]')!;
     fireEvent.change(timeInput, { target: { value: '17:00' } });
-    expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('Justificativa obrigatória para encaixe manual'), { target: { value: 'Atendimento excepcional autorizado' } });
+    expect(screen.getByLabelText('Motivo do encaixe ou alteração (opcional)')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Confirmar Agendamento' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Agendamento' }));
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-09', '17:00', '', 'Atendimento excepcional autorizado'));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('2099-10-09', '17:00', '', ''));
   });
 });
