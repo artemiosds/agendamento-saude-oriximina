@@ -43,8 +43,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     );
 
     // Contagem real de pacientes ativos no dia para este profissional/unidade
-    const internalAppointments = active.filter(a => a.origem !== 'externo');
-    const dayOccupied = internalAppointments.length;
+    const dayOccupied = active.length;
     const dayTotal = turnoData.reduce((sum, t) => sum + t.vagasTotal, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
     const dayExcedido = dayOccupied > dayTotal;
@@ -55,7 +54,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     if (hora && !isTurnoMode) {
       const disp = allDisps[0];
       const hPrefix = hora.substring(0, 3);
-      hourOccupied = internalAppointments.filter(a => a.hora.startsWith(hPrefix)).length;
+      hourOccupied = active.filter(a => a.hora.startsWith(hPrefix)).length;
       hourTotal = disp.vagasPorHora;
     }
 
@@ -72,8 +71,9 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
 
   // Turno mode: show per-turno breakdown
   if (info.isTurnoMode && turnoData.length > 0 && !compact) {
-    const totalOcupadas = turnoData.reduce((s, t) => s + t.vagasOcupadas, 0);
+    const totalInternas = turnoData.reduce((s, t) => s + t.vagasOcupadasInterno, 0);
     const totalExternas = turnoData.reduce((s, t) => s + t.vagasOcupadasExterno, 0);
+    const totalOcupadas = totalInternas + totalExternas;
     const totalVagas = turnoData.reduce((s, t) => s + t.vagasTotal, 0);
     const totalExcedido = totalOcupadas > totalVagas;
     return (
@@ -82,17 +82,18 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
           "text-xs font-medium",
           totalExcedido ? "text-destructive font-semibold" : "text-muted-foreground",
         )}>
-          📊 {totalOcupadas} agendados na grade regular{totalExternas > 0 ? ` · ${totalExternas} pela cota externa` : ''}
+          📊 {totalOcupadas} agendados no dia{totalExternas > 0 ? ` · ${totalInternas} recepção + ${totalExternas} externo` : ''}
           {totalExcedido && ' • LIMITE EXCEDIDO'}
         </span>
         <div className="flex flex-col gap-1.5">
           {turnoData.map((t) => {
-            const pct = t.vagasTotal > 0 ? (t.vagasOcupadas / t.vagasTotal) * 100 : 0;
+            const totalPacientesBloco = t.vagasOcupadasInterno + t.vagasOcupadasExterno;
+            const pct = t.vagasTotal > 0 ? (totalPacientesBloco / t.vagasTotal) * 100 : 0;
             const titulo = t.descricao || t.nome;
             const periodo = t.periodo || t.nome;
             const emoji = periodo === 'Manhã' ? '🌅' : periodo === 'Tarde' ? '🌆' : '🌙';
-            const disponiveis = Math.max(0, t.vagasTotal - t.vagasOcupadas);
-            const excedente = Math.max(0, t.vagasOcupadas - t.vagasTotal);
+            const disponiveis = Math.max(0, t.vagasTotal - totalPacientesBloco);
+            const excedente = Math.max(0, totalPacientesBloco - t.vagasTotal);
             let situacao = 'Disponível';
             let situacaoClass = 'bg-success/10 text-success';
             let mensagem = '';
@@ -140,7 +141,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
                 </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-muted-foreground">
                   <span>Capacidade: <strong className="text-foreground">{t.vagasTotal} vagas</strong></span>
-                  <span>Agendados neste bloco: <strong className="text-foreground">{t.vagasOcupadas} paciente{t.vagasOcupadas !== 1 ? 's' : ''}</strong></span>
+                  <span>Agendados neste bloco: <strong className="text-foreground">{totalPacientesBloco} paciente{totalPacientesBloco !== 1 ? 's' : ''}</strong>{t.vagasOcupadasExterno > 0 && ` (${t.vagasOcupadasInterno} recepção + ${t.vagasOcupadasExterno} externo)`}</span>
                   <span>Disponíveis: <strong className="text-foreground">{disponiveis} vaga{disponiveis !== 1 ? 's' : ''}</strong></span>
                 </div>
                 {mensagem && (
@@ -155,7 +156,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
   }
 
   if (info.isTurnoMode && turnoData.length > 0 && compact) {
-    const totalLivres = turnoData.reduce((s, t) => s + t.vagasLivresInternas, 0);
+    const totalLivres = turnoData.reduce((s, t) => s + Math.max(0, t.vagasTotal - t.vagasOcupadasInterno - t.vagasOcupadasExterno), 0);
     const allFull = turnoData.every(t => t.lotado);
     return (
       <span

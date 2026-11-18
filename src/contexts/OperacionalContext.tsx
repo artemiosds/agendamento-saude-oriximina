@@ -700,7 +700,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           ocupacaoInterna: vagasOcupadasInterno,
         });
         const vagasReservadasExterno = capacidade.reservaExternaConfigurada;
-        const vagasLivresInternas = capacidade.vagasInternasLivres;
+        const vagasLivresFisicas = Math.max(0, vagasTotal - turnoAppCount);
+        const vagasLivresInternas = Math.min(capacidade.vagasInternasLivres, vagasLivresFisicas);
         const vagasLivresTotal = capacidade.vagasTotaisLivres;
         const periodo = td.horaInicio < "12:00" ? "Manhã" : td.horaInicio < "18:00" ? "Tarde" : "Noite";
 
@@ -728,8 +729,8 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
           vagasOcupadasInterno,
           vagasLivresInternas,
           vagasLivresTotal,
-          lotado: vagasOcupadasInterno >= vagasTotal,
-          excedido: vagasOcupadasInterno > vagasTotal,
+          lotado: turnoAppCount >= vagasTotal,
+          excedido: turnoAppCount > vagasTotal,
           conflitoReservaExterna: capacidade.conflitoReserva,
         };
       });
