@@ -38,12 +38,12 @@ export interface TreatmentSessionOperationsDependencies {
 
 function throwRpcError(error: RpcError): never {
   // Keep the database cause available for support instead of masking unknown SQL/PostgREST errors.
-  console.error('[Tratamentos] Falha na operação transacional da sessão', {
+  console.error('[Tratamentos] Falha na operação transacional da sessão', JSON.stringify({
     code: error.code || 'sem_codigo',
     message: error.message || 'sem_mensagem',
     details: error.details || null,
     hint: error.hint || null,
-  });
+  }));
 
   // PostgreSQL uses 42501 for several different denials. Preserve the reason
   // for known server messages so the user can distinguish a stale login from
@@ -60,7 +60,12 @@ function throwRpcError(error: RpcError): never {
       'Sem permissão para remarcar sessões de tratamento': 'Seu perfil não tem permissão para remarcar sessões de tratamento nesta unidade.',
       'Somente o profissional ou Master pode fazer encaixe manual de tratamento': 'O encaixe manual exige perfil de profissional ou Master ativo.',
     };
-    throw new Error(scopeMessages[error.message || ''] || 'Sua conta não foi autorizada para esta remarcação (42501). Informe o código ao suporte.');
+    const databaseMessage = (error.message || '').trim();
+    const safeDatabaseDenial = /^(?:permission denied for (?:table|schema|function|relation|sequence) [\w".]+|new row violates row-level security policy for table [\w".]+)$/i;
+    throw new Error(scopeMessages[databaseMessage]
+      || (safeDatabaseDenial.test(databaseMessage)
+        ? `O banco recusou a remarcação (42501): ${databaseMessage}.`
+        : 'O banco recusou a remarcação (42501). A causa técnica foi registrada para análise.'));
   }
 
   const safeMessages: Record<string, string> = {

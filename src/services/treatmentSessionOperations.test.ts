@@ -217,12 +217,12 @@ describe('treatmentSessionOperations: schedule', () => {
       await expect(ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient_professional' }))
         .rejects.toThrow('A estrutura do banco está desatualizada para esta operação. Informe o código ao suporte.');
 
-      expect(errorSpy).toHaveBeenCalledWith('[Tratamentos] Falha na operação transacional da sessão', {
+      expect(errorSpy).toHaveBeenCalledWith('[Tratamentos] Falha na operação transacional da sessão', JSON.stringify({
         code: '42703',
         message: 'column does not exist',
         details: 'schema mismatch',
         hint: 'refresh schema',
-      });
+      }));
       expect(ctx.scheduleCommits).toHaveLength(0);
     } finally {
       errorSpy.mockRestore();
@@ -369,6 +369,7 @@ describe('treatmentSessionOperations: reschedule', () => {
     ['Fora do escopo de unidade', /unidade diferente/],
     ['Funcionário ativo não encontrado', /funcionário ativo/],
     ['Usuário não autenticado', /sessão de acesso expirou/],
+    ['permission denied for table agendamentos', /permission denied for table agendamentos/],
     ['permission denied', /42501/],
   ])('mostra a causa segura de uma remarcação negada: %s', async (message, expected) => {
     const ctx = setup();
