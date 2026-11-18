@@ -146,7 +146,7 @@ describe('treatmentSessionOperations: schedule', () => {
     await ctx.service.schedule({ session: session(), cycle: cycle(), appointment, duplicateScope: 'patient', manualCapacityOverride: true });
     expect(ctx.rpc).toHaveBeenCalledWith('schedule_treatment_session_checked', expect.objectContaining({
       p_manual_capacity: true,
-      p_reason: 'Motivo não informado (campo opcional).',
+      p_reason: 'Encaixe autorizado pelo profissional / Continuidade do cuidado multiprofissional',
     }));
   });
 
@@ -310,7 +310,7 @@ describe('treatmentSessionOperations: reschedule', () => {
     const ctx = setup();
     ctx.rpc.mockResolvedValue({ data: { status: 'remarcado', session: { status: 'agendada', appointment_id: appointment.id, scheduled_date: '2026-10-01' }, appointment: { ...appointmentRow, data: '2026-10-01' } }, error: null });
     await ctx.service.reschedule({ session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', newTime: '10:30' });
-    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_checked', expect.objectContaining({ p_reason: 'Motivo não informado (campo opcional).' }));
+    expect(ctx.rpc).toHaveBeenCalledWith('reschedule_treatment_session_checked', expect.objectContaining({ p_reason: 'Encaixe autorizado pelo profissional / Continuidade do cuidado multiprofissional' }));
   });
 
   it('preserva a escolha de sala junto à remarcação atômica do Prontuário', async () => {

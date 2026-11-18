@@ -513,12 +513,10 @@ const Tratamentos: React.FC = () => {
     if (!silent) setLoading(true);
     try {
       // Server-side paginated cycles via RPC (lightweight, with stats only)
-      const isProf = user?.role === "profissional";
-
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_scoped', {
         p_page: currentPage,
         p_page_size: PAGE_SIZE,
-        p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
+        p_professional_id: filterProf !== 'all' ? filterProf : null,
         p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictTreatmentUnit ? user?.unidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
         p_search: debouncedSearchTerm || null,

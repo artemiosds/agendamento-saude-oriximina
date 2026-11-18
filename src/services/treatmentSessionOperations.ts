@@ -1,4 +1,3 @@
-import { treatmentDateChangeReason } from "@/lib/treatmentDateChangeReason";
 import type { Agendamento } from '@/types';
 
 type RpcError = { message?: string; code?: string; details?: string; hint?: string };
@@ -11,7 +10,7 @@ export interface TreatmentSessionOperationResult {
   appointment: Agendamento | null;
 }
 
-export const OPTIONAL_TREATMENT_REASON = 'Motivo não informado (campo opcional).';
+export const OPTIONAL_TREATMENT_REASON = 'Encaixe autorizado pelo profissional / Continuidade do cuidado multiprofissional';
 
 export interface AgendaMutationBridge {
   addAgendamentoTransactionally: (
@@ -269,7 +268,7 @@ export function createTreatmentSessionOperations(deps: TreatmentSessionOperation
       }
       const { data, error } = await deps.client.rpc(input.newRoomId === undefined ? 'reschedule_treatment_session_checked' : 'reschedule_treatment_session_with_room', {
         ...(input.newRoomId === undefined ? {} : { p_new_room_id: input.newRoomId }),
-        p_reason: treatmentDateChangeReason(input.reason),
+        p_reason: input.reason?.trim() || OPTIONAL_TREATMENT_REASON,
         p_manual_capacity: !!input.manualCapacityOverride,
         p_session_id: input.session.id,
         p_cycle_id: input.cycle.id,
