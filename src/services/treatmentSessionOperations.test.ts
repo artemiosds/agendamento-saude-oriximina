@@ -364,6 +364,21 @@ describe('treatmentSessionOperations: reschedule', () => {
     await expect(ctx.service.reschedule({ reason: 'Revisão manual', session: session({ status: 'agendada', appointment_id: appointment.id }), cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true })).rejects.toThrow();
     expect(ctx.applyTreatmentAgendamentoUpdate).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['Fora do escopo de unidade', /unidade diferente/],
+    ['Funcionário ativo não encontrado', /funcionário ativo/],
+    ['Usuário não autenticado', /sessão de acesso expirou/],
+    ['permission denied', /42501/],
+  ])('mostra a causa segura de uma remarcação negada: %s', async (message, expected) => {
+    const ctx = setup();
+    ctx.rpc.mockResolvedValue({ data: null, error: { code: '42501', message } });
+    await expect(ctx.service.reschedule({
+      session: session({ status: 'agendada', appointment_id: appointment.id }),
+      cycle: cycle(), newDate: '2026-10-01', bypassBlockCheck: true,
+    })).rejects.toThrow(expected);
+    expect(ctx.applyTreatmentAgendamentoUpdate).not.toHaveBeenCalled();
+  });
 });
 
 describe('treatmentSessionOperations: unschedule', () => {

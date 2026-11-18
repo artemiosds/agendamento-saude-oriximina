@@ -45,8 +45,25 @@ function throwRpcError(error: RpcError): never {
     hint: error.hint || null,
   });
 
+  // PostgreSQL uses 42501 for several different denials. Preserve the reason
+  // for known server messages so the user can distinguish a stale login from
+  // a real unit/permission restriction without exposing arbitrary SQL text.
+  if (error.code === '42501') {
+    const scopeMessages: Record<string, string> = {
+      'Usuário não autenticado': 'Sua sessão de acesso expirou. Entre novamente e tente remarcar.',
+      'Funcionário ativo não encontrado': 'Esta conta não está vinculada a um funcionário ativo. Confira o acesso com o Master.',
+      'Perfil não identificado': 'O perfil desta conta não foi identificado. Confira o cadastro com o Master.',
+      'Fora do escopo de unidade': 'Este ciclo pertence a uma unidade diferente da unidade vinculada à sua conta. Confira seu cadastro e a unidade do ciclo.',
+      'Fora do escopo do tratamento': 'O ciclo não está ativo ou pertence a outra unidade. Confira a unidade e o estado do tratamento.',
+      'Fora do escopo profissional': 'A operação ainda exige o profissional titular do ciclo. Informe o suporte para revisar esta validação.',
+      'Sem permissão para agendar sessões de tratamento': 'Seu perfil não tem permissão para operar sessões de tratamento nesta unidade.',
+      'Sem permissão para remarcar sessões de tratamento': 'Seu perfil não tem permissão para remarcar sessões de tratamento nesta unidade.',
+      'Somente o profissional ou Master pode fazer encaixe manual de tratamento': 'O encaixe manual exige perfil de profissional ou Master ativo.',
+    };
+    throw new Error(scopeMessages[error.message || ''] || 'Sua conta não foi autorizada para esta remarcação (42501). Informe o código ao suporte.');
+  }
+
   const safeMessages: Record<string, string> = {
-    '42501': 'Você não tem permissão para realizar esta operação nesta unidade/profissional.',
     '40001': 'A sessão mudou durante a operação. Recarregue o ciclo e tente novamente.',
     '23505': 'Já existe um agendamento conflitante para este horário.',
     '23503': 'O vínculo entre a sessão e o agendamento não é válido.',
