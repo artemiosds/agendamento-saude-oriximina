@@ -12,3 +12,7 @@ export function termoSigtap(termo: string) {
   return termo.trim().replace(/^(raio[ -]?x|rx)\b/i,'radiografia').replace(/^ecocardiograma/i,'ecocardiografia')
     .replace(/^ultrassom/i,'ultrassonografia').replace(/^([\d. -]+)$/, s=>s.replace(/\D/g,''));
 }
+
+export function usarProcedimentoLegado(metadata: unknown): boolean {
+  return !(metadata && typeof metadata === 'object' && 'procedimentos_agendados' in metadata);
+}

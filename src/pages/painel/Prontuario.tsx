@@ -1642,8 +1642,14 @@ const ProntuarioPage: React.FC = () => {
     return map[agendaTipo] || 'avaliacao_inicial';
   };
 
+  const [loadedExamScope, setLoadedExamScope] = useState('');
+  const examScope = dialogOpen && !editId && form.agendamento_id && form.paciente_id
+    ? JSON.stringify([form.agendamento_id, form.paciente_id]) : '';
+  const loadingScheduledExams = Boolean(examScope && loadedExamScope !== examScope);
+  const loadingScheduledExamsRef = useRef(false);
+  loadingScheduledExamsRef.current = loadingScheduledExams;
   useEffect(() => {
-    if (!dialogOpen || editId || !form.agendamento_id || !form.paciente_id) return;
+    if (!examScope) { setLoadedExamScope(''); return; }
     let active = true;
     const preload = async () => {
       const {data,error} = await supabase.from("agendamentos").select("custom_data,procedimento_sigtap,nome_procedimento")
@@ -1657,12 +1663,11 @@ const ProntuarioPage: React.FC = () => {
       const matched = planned.flatMap(p=>items.find(item=>item.id===p.codigo && item.ativo) || []);
       mergeProcedimentos(matched);
       setSelectedProcIds(current=>Array.from(new Set([...current,...matched.map(p=>p.id)])));
-      matched.forEach(p=>loadCidsForProc(p.id));
       if (matched.length !== planned.length) toast.warning("Confira os exames agendados: alguns códigos não foram localizados no catálogo ativo.");
     };
-    void preload().catch(()=>{if(active) toast.warning("Não foi possível carregar os exames agendados. Confira os procedimentos antes de salvar.");});
+    void preload().catch(()=>{if(active) toast.warning("Não foi possível carregar os exames agendados. Confira os procedimentos antes de salvar.");}).finally(()=>{ if(active) setLoadedExamScope(examScope); });
     return ()=>{active=false;};
-  }, [dialogOpen, editId, form.agendamento_id, form.paciente_id, mergeProcedimentos]);
+  }, [dialogOpen, editId, form.agendamento_id, form.paciente_id, mergeProcedimentos, examScope]);
 
   const initializedRef = useRef(false);
 
@@ -1813,7 +1818,7 @@ const ProntuarioPage: React.FC = () => {
       
       setPacienteProcHistory(Array.from(seen.values()));
     })();
-  }, [form.paciente_id, mergeProcedimentos]);
+  }, [form.paciente_id, mergeProcedimentos, examScope]);
 
   // Último atendimento do mesmo profissional com este paciente (para "Repetir procedimentos")
   const { ultimoAtendProcs, repeatHistoryError } = usePreviousProcedures({
@@ -2066,6 +2071,7 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleSave = async (formOverride?: any, keepOpenForFinalization = false): Promise<boolean> => {
+    if (loadingScheduledExamsRef.current) return false;
     // Anti-duplo-clique: bloqueia chamadas concorrentes antes mesmo de setSaving refletir.
     if (savingRef.current) {
       console.warn("[handleSave] Salvamento já em curso — clique duplo ignorado.");
@@ -2528,7 +2534,7 @@ const ProntuarioPage: React.FC = () => {
   // Silent autosave: persists draft without validations/toasts/logs/navigation.
   // Does NOT change agendamento status. Finalize button continues to set "concluido".
   const performAutosave = useCallback(async () => {
-    if (autosaveInFlightRef.current) return;
+    if (loadingScheduledExamsRef.current || autosaveInFlightRef.current) return;
     const f = formRef.current;
     const ef = especialidadeFieldsRef.current;
     const lp = listaPrescricaoRef.current;
@@ -2668,6 +2674,7 @@ const ProntuarioPage: React.FC = () => {
   useEffect(() => {
     if (!dialogOpen) return;
     if (!form.paciente_id || !form.paciente_nome) return;
+    if (loadingScheduledExams) return;
     // Build a hash of editable text fields to detect real changes
     const hash = JSON.stringify({
       qp: form.queixa_principal, an: form.anamnese, ss: form.sinais_sintomas,
@@ -2690,6 +2697,7 @@ const ProntuarioPage: React.FC = () => {
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
   }, [
     dialogOpen,
+    loadingScheduledExams,
     form.paciente_id,
     form.paciente_nome,
     form.queixa_principal,
@@ -3092,6 +3100,7 @@ const ProntuarioPage: React.FC = () => {
 
   // Dedicated handler: register session only (no close)
   const handleRegistrarSessaoOnly = async () => {
+    if (loadingScheduledExamsRef.current) return;
     if (registeringSessionRef.current) {
       console.warn("[handleRegistrarSessaoOnly] Registro já em curso — clique duplo ignorado.");
       return;
@@ -5204,6 +5213,8 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {loadingScheduledExams && <p role="status">Carregando exames do agendamento…</p>}
+            <fieldset disabled={loadingScheduledExams} className="min-w-0">
             {/* Procedimentos Realizados — checkboxes */}
             {isProfBlocoVisible('procedimentos') && (
               <div>
@@ -5497,6 +5508,7 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            </fieldset>
             <div>
               <Label>Outro Procedimento</Label>
               <DebouncedInput value={form.outro_procedimento} onChange={textFieldHandlers.outro_procedimento} placeholder="Descreva outro procedimento..." />
@@ -5721,7 +5733,7 @@ const ProntuarioPage: React.FC = () => {
             <div className="flex items-center justify-between gap-2 flex-wrap shrink-0 border-t border-border py-3 px-6 bg-background">
               <div className="flex items-center gap-2">
                 {canFinalize && (
-                  <Button onClick={() => { void handleSave(); }} disabled={saving} variant="ghost" size="sm" className="text-muted-foreground">
+                  <Button onClick={() => { void handleSave(); }} disabled={loadingScheduledExams || saving} variant="ghost" size="sm" className="text-muted-foreground">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
                   </Button>
                 )}
@@ -5742,7 +5754,7 @@ const ProntuarioPage: React.FC = () => {
                   <Button
                     type="button"
                     onClick={handleRegistrarSessaoOnly}
-                    disabled={saving}
+                    disabled={loadingScheduledExams || saving}
                     variant="outline"
                     className="border-primary/50 text-primary hover:bg-primary/10"
                   >
@@ -5755,7 +5767,7 @@ const ProntuarioPage: React.FC = () => {
                   <>
                   <Button
                     onClick={() => { void handleFinalizarAtendimento(false); }}
-                    disabled={saving}
+                    disabled={loadingScheduledExams || saving}
                     className="bg-success hover:bg-success/90 text-success-foreground min-w-[200px]"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
@@ -5765,7 +5777,7 @@ const ProntuarioPage: React.FC = () => {
                     <Button
                       type="button"
                       onClick={() => { void handleFinalizarAtendimento(true); }}
-                      disabled={saving || finalizing}
+                      disabled={loadingScheduledExams || saving || finalizing}
                       className="bg-sky-600 hover:bg-sky-700 text-white min-w-[220px]"
                     >
                       {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Megaphone className="w-4 h-4 mr-2" />}
@@ -5776,7 +5788,7 @@ const ProntuarioPage: React.FC = () => {
                 ) : (
                   <Button
                     onClick={() => { void handleSave(); }}
-                    disabled={saving}
+                    disabled={loadingScheduledExams || saving}
                     className="gradient-primary text-primary-foreground min-w-[200px]"
                   >
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}

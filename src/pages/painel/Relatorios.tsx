@@ -1,3 +1,4 @@
+import { usarProcedimentoLegado } from '@/lib/agendamentoSigtap';
 import { EscalaProfissionais } from '@/components/EscalaProfissionais';
 import { getBrandSync } from '@/hooks/useBrand';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -2318,7 +2319,7 @@ ${spreadsheetRows.dataRowsXml}
     try {
       let query = supabase
         .from('agendamentos')
-        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento, cid_concluido')
+        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento, cid_concluido, custom_data')
         .eq('status', 'concluido')
         .gte('data', dateFrom)
         .lte('data', dateTo)
@@ -2373,15 +2374,20 @@ ${spreadsheetRows.dataRowsXml}
       if (recordProceduresError) throw recordProceduresError;
 
       // Fetch procedures from both tables to map IDs to SIGTAP codes and names
-      const [legacyProceduresResult, sigtapProceduresResult] = await Promise.all([
-        supabase.from('procedimentos').select('id, codigo_sigtap, nome'),
-        supabase.from('sigtap_procedimentos').select('id, codigo, nome')
-      ]);
-      if (legacyProceduresResult.error) throw legacyProceduresResult.error;
-      if (sigtapProceduresResult.error) throw sigtapProceduresResult.error;
-      const legacyProcs = legacyProceduresResult.data;
-      const sigtapProcs = sigtapProceduresResult.data;
-
+      const ids = [...new Set((pronProcs || []).map(p => p.procedimento_id).filter(Boolean))];
+      const legacyProcs = [];
+      const sigtapProcs = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const batch = ids.slice(offset, offset + 100);
+        const [legacy, sigtap] = await Promise.all([
+          supabase.from('procedimentos').select('id, codigo_sigtap, nome').in('id', batch),
+          supabase.from('sigtap_procedimentos').select('id, codigo, nome').in('id', batch),
+        ]);
+        if (legacy.error) throw legacy.error;
+        if (sigtap.error) throw sigtap.error;
+        legacyProcs.push(...legacy.data);
+        sigtapProcs.push(...sigtap.data);
+      }
       const proceduresMap = new Map();
       (legacyProcs || []).forEach(p => {
         proceduresMap.set(p.id, { codigo: p.codigo_sigtap, nome: p.nome });
@@ -2459,7 +2465,7 @@ ${spreadsheetRows.dataRowsXml}
 
         groupAgend.forEach(ag => {
           // 1. SIGTAP do agendamento
-          if (ag.procedimento_sigtap) {
+          if (ag.procedimento_sigtap && usarProcedimentoLegado(ag.custom_data)) {
             procsSigtapList.add(`${ag.procedimento_sigtap}${ag.nome_procedimento ? ' - ' + ag.nome_procedimento : ''}`);
             if (ag.nome_procedimento) procsRealizadosList.add(ag.nome_procedimento);
           }
