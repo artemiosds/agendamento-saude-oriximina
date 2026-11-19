@@ -1,12 +1,97 @@
-import { CadastroEscala, registros, escalaDoDia } from './EscalaInformativa';
+import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useState } from 'react';
+import { addDays, addMonths, eachDayOfInterval, endOfMonth, format, startOfWeek } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { ChevronLeft, ChevronRight, MapPin, Printer, Trash2 } from 'lucide-react';
+import { CadastroEscala } from './EscalaInformativa';
 import { resolveProfessionalCbo } from '@/lib/sigtapClinicalValidation';
-import { useState } from 'react';
-import { addDays, eachDayOfInterval, endOfMonth, format, startOfWeek } from 'date-fns';
+import { dateKeyEscala, distribuirRegistros, localKeyEscala, minutesEscala as time, registros } from '@/lib/escalaInformativa';
+import type { RegistroEscala } from '@/lib/escalaInformativa';
+import { useAuth } from '@/contexts/AuthContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { openPrintDocument } from '@/lib/printLayout';
+import { cn } from '@/lib/utils';
+
+const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const localDate = (date: string) => new Date(date + 'T12:00:00');
+const clock = (minutes: number) => String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
+const slotKey = (person: string, unit: string, room: string | null | undefined, start: string, end: string) =>
+  JSON.stringify([person, unit, room || '', start.slice(0, 5), end.slice(0, 5)]);
+const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const normalized = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
+const EMPTY: RegistroEscala[] = [];
+const recordPlace = (r: RegistroEscala) => r.profissional
+  ? r.unidade_oficial ? 'unidade:' + r.unidade_oficial : localKeyEscala(r.local || '')
+  : r.local_avulso ? localKeyEscala(r.local_avulso) : 'unidade:' + r.unidade;
+const coverageKey = (person: string, unit: string, start: number, duration: number) => JSON.stringify([person, unit, start, duration]);
+
+interface Entrada {
+  id: string;
+  personId: string;
+  person: string;
+  place: string;
+  placeGroup: string;
+  start: number;
+  hours: string;
+  minutes: number;
+  gradeKey?: string;
+  unitId?: string;
+  reason?: string;
+  mode: string;
+  duration?: number;
+  informational?: boolean;
+  continuation?: boolean;
+  remove?: { id: string; recurring: boolean };
+}
+
+type AgendaBlock = ReturnType<typeof useOperacional>['bloqueios'][number];
+function applyBlocks(from: number, to: number, blocks: AgendaBlock[], unit: string, personId: string) {
+  let spans = [[from, to]];
+  const reasons: string[] = [];
+  for (const b of blocks) {
+    if ((b.unidadeId && b.unidadeId !== unit) || (b.profissionalId && b.profissionalId !== personId)) continue;
+    const left = b.diaInteiro ? 0 : time(b.horaInicio);
+    const right = b.diaInteiro ? 1440 : time(b.horaFim);
+    if (left >= to || right <= from) continue;
+    reasons.push(b.titulo || b.tipo);
+    spans = spans.flatMap(([a, z]) => [[a, Math.min(z, left)], [Math.max(a, right), z]].filter(([l, r]) => l < r));
+  }
+  return { hours: spans.map(([a, z]) => clock(a) + '–' + clock(z)).join(', '),
+    reason: reasons.join(', '), minutes: spans.reduce((sum, [a, z]) => sum + z - a, 0) };
+}
+
+const CalendarDay = memo(function CalendarDay({ day, entries, compact, onRemove }: { day: Date; entries: Entrada[]; compact: boolean; onRemove: (row: Entrada) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const limit = compact ? 2 : 4;
+  const today = dateKeyEscala(day) === dateKeyEscala(new Date());
+  return <section className={cn('min-w-0 rounded-lg border bg-card px-2.5 py-2', today && 'border-primary/50')}
+    aria-label={format(day, "EEEE, dd 'de' MMMM", { locale: ptBR })}>
+    <div className="flex items-center justify-between gap-1">
+      <span className={cn('text-sm font-semibold capitalize', today ? 'text-primary' : 'text-foreground')}>{format(day, 'EEE dd', { locale: ptBR })}</span>
+      {today && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Hoje</span>}
+    </div>
+    {!entries.length && <p className="mt-2 text-xs text-muted-foreground">Sem escala</p>}
+    {entries.slice(0, expanded ? undefined : limit).map(r => <div key={r.id} className={cn('mt-2 rounded border-l-2 bg-muted/25 p-1.5 text-xs', r.informational ? 'border-primary' : 'border-muted-foreground/40')}>
+      <div className="flex items-start justify-between gap-1">
+        <p className="break-words font-semibold">{r.person}</p>
+        {r.remove && <button type="button" className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          title="Remover entrada manual" aria-label={'Remover escala de ' + r.person + ' em ' + r.place}
+          onClick={() => onRemove(r)}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" /></button>}
+      </div>
+      <p className="break-words text-muted-foreground">{r.place}</p>
+      <p className="mt-1 font-medium tabular-nums">{r.hours || 'Bloqueado'}</p>
+      <p className="text-[11px] text-muted-foreground">{r.mode}{r.duration ? ' · ' + r.duration + ' min' : ''}</p>
+      {r.reason && <p className="mt-1 rounded bg-amber-100 px-1 text-amber-950">{r.reason}</p>}
+    </div>)}
+    {entries.length > limit && <button type="button" aria-expanded={expanded} className="mt-2 text-xs font-semibold text-primary hover:underline"
+      onClick={() => setExpanded(!expanded)}>{expanded ? 'Mostrar menos' : 'Ver mais ' + (entries.length - limit)}</button>}
+  </section>;
+});
 
 export function EscalaProfissionais() {
   return <Dialog><DialogTrigger asChild><Button variant="outline">Consultar Escala da Rede</Button></DialogTrigger>
@@ -14,69 +99,260 @@ export function EscalaProfissionais() {
 }
 
 export function Escala() {
+  const { user } = useAuth();
   const { funcionarios, disponibilidades, bloqueios } = useOperacional();
   const { unidadesVisiveis, salasVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
-  const [unit, setUnit] = useState('');
+  const [place, setPlace] = useState('');
   const [name, setName] = useState('');
   const [monthly, setMonthly] = useState(false);
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const units = unidadesVisiveis.filter(u => (isGlobalAdmin || u.id === userUnidadeId) && (!unit || u.id === unit));
-  const grades = disponibilidades.filter(g => units.some(u => u.id === g.unidadeId));
-  const staff = funcionarios.filter(p => p.ativo && p.role === "profissional").filter(p => units.some(u => u.id === p.unidadeId || registros(p).some(r=>r.unidade===u.id)) || grades.some(g => g.profissionalId === p.id));
-  const selected = staff.filter(p => !name || p.nome.toLocaleLowerCase().includes(name.trim().toLocaleLowerCase()));
-  const ref = new Date(date + 'T12:00:00');
-  const start = monthly ? new Date(ref.getFullYear(), ref.getMonth(), 1) : startOfWeek(ref, { weekStartsOn: 1 });
-  const days = eachDayOfInterval({ start, end: monthly ? endOfMonth(start) : addDays(start, 5) });
-  const counts = new Map<string, number>();
-  let minutes = 0;
-  let workingDays = 0;
-  const calendar = days.map(day => {
-    const key = format(day, 'yyyy-MM-dd');
-    let active = false;
-    const weekday = day.getDay();
-    const official = grades.filter(g => g.diasSemana.includes(weekday) && key >= g.dataInicio && (!g.dataFim || key <= g.dataFim));
-    const notes = selected.flatMap(p => escalaDoDia(p,key).filter(r => units.some(u => u.id === r.unidade)
-      && !official.some(g => g.profissionalId===p.id && g.unidadeId===r.unidade && (g.salaId||'')===(r.sala||'') && g.horaInicio.slice(0,5)===r.inicio && g.horaFim.slice(0,5)===r.fim))
-      .map(r=>({id:r.id, profissionalId:p.id, unidadeId:r.unidade, salaId:r.sala, dataInicio:key,dataFim:key,diasSemana:[weekday],horaInicio:r.inicio,horaFim:r.fim,vagasPorHora:-1,duracaoConsulta:undefined})));
-    const entries = [...official,...notes].flatMap(g => {
-      const person = selected.find(p => p.id === g.profissionalId);
-      if (!person || key < g.dataInicio || (g.dataFim && key > g.dataFim) || !g.diasSemana.includes(day.getDay())) return [];
-      const unitName = units.find(u => u.id === g.unidadeId)!.nome;
-      const room = salasVisiveis.find(s => s.id === g.salaId)?.nome;
-      const blocks = bloqueios.filter(b => (!b.unidadeId || b.unidadeId === g.unidadeId) && (!b.profissionalId || b.profissionalId === person.id) && key >= b.dataInicio && key <= b.dataFim);
-      const time = (h: string) => Number(h.slice(0,2))*60 + Number(h.slice(3,5));
-      let spans = [[time(g.horaInicio), time(g.horaFim)]];
-      const reasons = [];
-      for (const b of blocks) {
-        const from = b.diaInteiro ? 0 : time(b.horaInicio);
-        const to = b.diaInteiro ? 1440 : time(b.horaFim);
-        if (from >= time(g.horaFim) || to <= time(g.horaInicio)) continue;
-        reasons.push(b.titulo || b.tipo);
-        spans = spans.flatMap(([a,z]) => [[a,Math.min(z,from)], [Math.max(a,to),z]].filter(([l,r]) => l<r));
+  const [date, setDate] = useState(() => dateKeyEscala(new Date()));
+  const [reload, setReload] = useState(0);
+  const [snapshot, setSnapshot] = useState<{ key: string; rows: RegistroEscala[]; error?: string }>();
+  const [target, setTarget] = useState<Entrada>();
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState('');
+  const listId = useId();
+  const periodId = useId();
+  const deferredName = useDeferredValue(name);
+  const { start, days } = useMemo(() => {
+    const ref = localDate(date);
+    const start = monthly ? new Date(ref.getFullYear(), ref.getMonth(), 1) : startOfWeek(ref, { weekStartsOn: 1 });
+    return { start, days: eachDayOfInterval({ start, end: monthly ? endOfMonth(start) : addDays(start, 6) }) };
+  }, [date, monthly]);
+  const from = dateKeyEscala(start);
+  const to = dateKeyEscala(days[days.length - 1]);
+  const signedIn = !!user;
+  const requestKey = [user?.id, userUnidadeId, isGlobalAdmin, from, to, reload].join('/');
+  useEffect(() => {
+    if (!signedIn) return;
+    let active = true;
+    async function read() {
+      try {
+        const { data, error } = await supabase.rpc('listar_escalas_personalizadas' as never, { p_inicio: from, p_fim: to } as never);
+        if (error) throw error;
+        if (active) setSnapshot({ key: requestKey, rows: Array.isArray(data) ? data : EMPTY });
+      } catch {
+        if (active) setSnapshot({ key: requestKey, rows: EMPTY, error: 'Não foi possível carregar as escalas manuais deste período.' });
       }
-      if (spans.length) {
-        active = true;
-        counts.set(unitName,(counts.get(unitName)||0)+1);
-        minutes += spans.reduce((sum,[a,z]) => sum+z-a,0);
-      }
-      const clock = (m:number) => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-      return [{ person:person.nome, place:[unitName,room].filter(Boolean).join(' · '), hours:spans.map(([a,z]) => clock(a)+'–'+clock(z)).join(', '), reason:reasons.join(', '), mode:g.vagasPorHora === -1 ? 'Escala informativa' : g.vagasPorHora > 0 ? 'Por hora' : 'Por turno', duration:g.duracaoConsulta }];
-    });
-    if (active) workingDays++;
-    return {day,entries};
-  });
-  const summary = [workingDays+' dias com atendimento', Math.floor(minutes/60)+'h '+minutes%60+'min', ...Array.from(counts, ([u,n]) => n+' turnos em '+u)].join(' · ');
-  const print = () => {
-    const e = (s:string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const entries = calendar.flatMap(({day,entries}) => entries.map(r => '<tr>'+[format(day,'dd/MM'),r.person,r.place,r.hours || 'Bloqueado',[r.mode,r.reason].filter(Boolean).join(' · ')].map(v=>'<td>'+e(v)+'</td>').join('')+'</tr>')).join('');
-    const identity = selected.map(p => [p.nome,p.profissao,p.tipoConselho,p.numeroConselho,p.ufConselho,'CBO '+(resolveProfessionalCbo(p) || 'não informado'),unidadesVisiveis.find(u=>u.id===p.unidadeId)?.nome].filter(Boolean).join(' · ')).map(v=>'<p>'+e(v)+'</p>').join('');
-    void openPrintDocument('ESCALA '+(monthly?'MENSAL':'SEMANAL')+' DE ATENDIMENTO — REDE MUNICIPAL DE SAÚDE',identity+'<table><thead><tr><th>Data</th><th>Profissional</th><th>Local</th><th>Atendimento</th><th>Bloqueio</th></tr></thead><tbody>'+entries+'</tbody></table><p>'+e(summary)+'</p><div style="display:flex;gap:2em;text-align:center;margin-top:4em;break-inside:avoid"><div style="flex:1;border-top:1px solid">Assinatura do(a) Profissional</div><div style="flex:1;border-top:1px solid">Chefia Imediata / Coordenação SMS</div></div>',{Período:format(start,'dd/MM/yyyy')+' a '+format(days[days.length-1],'dd/MM/yyyy'),Unidades:e(units.map(u=>u.nome).join(', ')),Emissão:new Date().toLocaleString('pt-BR')});
+    }
+    void read();
+    return () => { active = false; };
+  }, [requestKey, from, to, signedIn]);
+  const current = signedIn && snapshot?.key === requestKey ? snapshot : undefined;
+  const manual = current?.rows ?? EMPTY;
+  const canWrite = !!user && ['master', 'coordenador', 'gestao'].includes(user.role);
+  const onRemove = useCallback((row: Entrada) => { setRemoveError(''); setTarget(row); }, []);
+  const onSaved = useCallback((savedDate: string) => {
+    setDate(savedDate); setMonthly(true); setPlace(''); setName(''); setReload(n => n + 1);
+  }, []);
+  const confirmRemove = async () => {
+    if (!target?.remove || removing) return;
+    setRemoving(true);
+    try {
+      const { error } = await supabase.rpc('remover_escala_personalizada' as never, { p_id: target.remove.id } as never);
+      if (error) throw error;
+      setTarget(undefined); setReload(n => n + 1);
+    } catch (error) {
+      setRemoveError((error as { message?: string }).message || 'Não foi possível remover a escala.');
+    } finally {
+      setRemoving(false);
+    }
   };
-  return <div className="space-y-4"><CadastroEscala date={date}/><div className="flex flex-wrap gap-3 [&_input]:border [&_select]:border">
-    <select aria-label="Visão" value={monthly?'mensal':'semanal'} onChange={ev=>setMonthly(ev.target.value==='mensal')}><option value="semanal">Visão semanal</option><option value="mensal">Visão mensal</option></select>
-    <input aria-label="Período" type={monthly?'month':'date'} value={monthly?date.slice(0,7):date} onChange={ev=>ev.target.value && setDate(ev.target.value+(monthly?'-01':''))}/>
-    <select aria-label="Unidade" value={unit} onChange={ev=>setUnit(ev.target.value)}><option value="">Todas as unidades autorizadas</option>{unidadesVisiveis.filter(u=>isGlobalAdmin||u.id===userUnidadeId).map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}</select>
-    <input aria-label="Pesquisar profissional" list="escala-equipe" value={name} placeholder="Todos os profissionais" onChange={ev=>setName(ev.target.value)}/><datalist id="escala-equipe">{staff.map(p=><option key={p.id} value={p.nome}/>)}</datalist></div>
-    <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-7">{monthly && Array.from({length:(start.getDay()+6)%7},(_,i)=><div key={i} className="hidden lg:block"/>)}{calendar.map(({day,entries})=><section key={day.toISOString()} className="rounded-lg border bg-card p-2"><strong className="text-[#2A6F97]">{day.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})}</strong>{entries.length===0 && <p className="text-xs">Sem escala</p>}{entries.map((r,i)=><div key={i} className="mt-2 border-t pt-1 text-xs"><b>{r.person}</b><p>{r.place}</p><p>{r.hours}</p><p>{r.mode} {r.duration && '· '+r.duration+' min'}</p>{r.reason && <p className="bg-amber-100 text-amber-950">{r.reason}</p>}</div>)}</section>)}</div>
-    <p>{summary}</p><Button disabled={!calendar.some(d=>d.entries.length)} onClick={print}>Imprimir Escala Oficial (A4)</Button></div>;
+  const units = useMemo(() => new Map(unidadesVisiveis.filter(u => isGlobalAdmin || u.id === userUnidadeId)
+    .map(u => [u.id, u.nome])), [unidadesVisiveis, isGlobalAdmin, userUnidadeId]);
+  const rooms = useMemo(() => new Map(salasVisiveis.map(s => [s.id, s.nome])), [salasVisiveis]);
+  const { staff, gradesByDay, externalPlaces } = useMemo(() => {
+    const gradesByDay = Array.from({ length: 7 }, () => [] as typeof disponibilidades);
+    const gradeStaff = new Set<string>();
+    for (const grade of disponibilidades) {
+      if (!units.has(grade.unidadeId)) continue;
+      gradeStaff.add(grade.profissionalId);
+      for (const weekday of new Set(grade.diasSemana)) gradesByDay[weekday]?.push(grade);
+    }
+    const externalPlaces = new Map<string, string>();
+    const manualByPerson = new Map<string, RegistroEscala[]>();
+    for (const r of manual) {
+      if (!r.profissional) continue;
+      const list = manualByPerson.get(r.profissional) ?? [];
+      list.push(r);
+      manualByPerson.set(r.profissional, list);
+    }
+    const staff = funcionarios.filter(p => p.ativo && p.role === 'profissional').flatMap(p => {
+      const rows = [...registros(p), ...(manualByPerson.get(p.id) ?? [])];
+      const visible = new Set(rows.filter(r => (r.profissional || r.local_avulso)
+        ? isGlobalAdmin || (!!userUnidadeId && r.unidade === userUnidadeId) : units.has(r.unidade)).map(r => r.id));
+      if (!isGlobalAdmin && !units.has(p.unidadeId) && !visible.size && !gradeStaff.has(p.id)) return [];
+      for (const r of rows) {
+        const label = r.profissional && !r.unidade_oficial ? r.local : r.local_avulso;
+        if (label && visible.has(r.id)) externalPlaces.set(localKeyEscala(label), label);
+      }
+      return [{ p, rows, visible, search: normalized(p.nome) }];
+    });
+    return { staff, gradesByDay, externalPlaces: [...externalPlaces].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')) };
+  }, [funcionarios, disponibilidades, units, isGlobalAdmin, userUnidadeId, manual]);
+  const activePlace = place.startsWith('avulso:') && !externalPlaces.some(([key]) => key === place) ? '' : place;
+  const selected = useMemo(() => {
+    const query = normalized(deferredName);
+    return query ? staff.filter(s => s.search.includes(query)) : staff;
+  }, [staff, deferredName]);
+  const { calendar, summary, count, placeTotals } = useMemo(() => {
+    const people = new Map(selected.map(({ p }) => [p.id, p]));
+    const notesByDay = new Map<string, Entrada[]>();
+    const projectedDays = [addDays(days[0], -1), ...days];
+    const nextByDay = new Map(projectedDays.slice(0, -1).map((d, index) => [dateKeyEscala(d), dateKeyEscala(projectedDays[index + 1])]));
+    const addNote = (date: string, note: Entrada) => {
+      const list = notesByDay.get(date) ?? [];
+      list.push(note);
+      notesByDay.set(date, list);
+    };
+    for (const { p, rows, visible } of selected) {
+      if (!visible.size) continue;
+      // Project all rows, so an exception at another place still hides the original occurrence.
+      for (const [key, entries] of distribuirRegistros(rows, projectedDays)) {
+        for (const r of entries) {
+          if (!visible.has(r.id) || (activePlace && activePlace !== recordPlace(r))) continue;
+          const placeName = r.local || r.local_avulso || units.get(r.unidade) || '';
+          const placeGroup = (r.unidade_oficial && units.get(r.unidade_oficial)) || placeName;
+          const minutes = r.duracao ?? time(r.fim) - time(r.inicio);
+          const start = time(r.inicio);
+          const carry = r.duracao ? Math.max(0, start + minutes - 1440) : 0;
+          const note: Entrada = { id: 'note:' + r.id, personId: p.id, person: p.nome, placeGroup,
+            place: [placeName, r.setor || rooms.get(r.sala || '')].filter(Boolean).join(' - '),
+            unitId: r.profissional || r.local_avulso ? undefined : r.unidade,
+            gradeKey: r.profissional ? (r.unidade_oficial ? coverageKey(p.id, r.unidade_oficial, start, minutes) : undefined)
+              : r.local_avulso ? undefined : slotKey(p.id, r.unidade, r.sala, r.inicio, r.fim),
+            start, hours: r.inicio + '–' + (start + minutes >= 1440 && r.duracao ? '24:00' : r.fim),
+            minutes: minutes - carry,
+            mode: r.profissional ? 'Manual · ' + (r.semanal ? 'Semanal' : 'Avulsa') : 'Escala informativa', informational: true,
+            remove: r.profissional && canWrite ? { id: r.id, recurring: r.semanal } : undefined };
+          if (key >= from) addNote(key, note);
+          const next = nextByDay.get(key);
+          if (carry && next) {
+            addNote(next, { ...note, id: note.id + ':continuacao', gradeKey: undefined, minutes: carry,
+              start: 0, hours: '00:00–' + r.fim, mode: 'Manual · Continuação', continuation: true });
+          }
+        }
+      }
+    }
+    let count = 0, workDays = 0, minutes = 0;
+    const totals = new Map<string, { label: string; quantity: number }>();
+    const calendar = days.map(day => {
+      const key = dateKeyEscala(day);
+      const entries: Entrada[] = [];
+      const officialKeys = new Set<string>();
+      const notes = notesByDay.get(key) ?? [];
+      const manualCoverage = new Set(notes.filter(n => !n.unitId && n.gradeKey).map(n => n.gradeKey));
+      let dayBlocks: typeof bloqueios | undefined;
+      for (const grade of gradesByDay[day.getDay()]) {
+        const person = people.get(grade.profissionalId);
+        if (!person || (activePlace && activePlace !== 'unidade:' + grade.unidadeId) || key < grade.dataInicio || (grade.dataFim && key > grade.dataFim)) continue;
+        officialKeys.add(slotKey(person.id, grade.unidadeId, grade.salaId, grade.horaInicio, grade.horaFim));
+        const from = time(grade.horaInicio), to = time(grade.horaFim);
+        if (manualCoverage.has(coverageKey(person.id, grade.unidadeId, from, to - from))) continue;
+        dayBlocks ??= bloqueios.filter(b => key >= b.dataInicio && key <= b.dataFim);
+        entries.push({ id: 'grade:' + grade.id, personId: person.id, person: person.nome, placeGroup: units.get(grade.unidadeId) || '',
+          place: [units.get(grade.unidadeId), rooms.get(grade.salaId || '')].filter(Boolean).join(' · '),
+          start: from, ...applyBlocks(from, to, dayBlocks, grade.unidadeId, person.id),
+          mode: grade.vagasPorHora > 0 ? 'Por hora' : 'Por turno', duration: grade.duracaoConsulta });
+      }
+      for (const note of notes) {
+        if (note.gradeKey && officialKeys.has(note.gradeKey)) continue;
+        if (note.unitId) {
+          dayBlocks ??= bloqueios.filter(b => key >= b.dataInicio && key <= b.dataFim);
+          entries.push({ ...note, ...applyBlocks(note.start, note.start + note.minutes, dayBlocks, note.unitId, note.personId) });
+        } else entries.push(note);
+      }
+      entries.sort((a, b) => a.start - b.start || a.person.localeCompare(b.person, 'pt-BR') || a.place.localeCompare(b.place, 'pt-BR'));
+      if (entries.some(e => e.minutes > 0)) workDays++;
+      minutes += entries.reduce((sum, e) => sum + e.minutes, 0);
+      for (const e of entries) if (e.minutes > 0 && e.placeGroup && !e.continuation) {
+        const key = localKeyEscala(e.placeGroup);
+        const previous = totals.get(key);
+        totals.set(key, { label: previous?.label ?? e.placeGroup, quantity: (previous?.quantity ?? 0) + 1 });
+      }
+      count += entries.length;
+      return { day, entries };
+    });
+    const summary = workDays + (workDays === 1 ? ' dia com escala' : ' dias com escala') + ' · ' + count + (count === 1 ? ' registro' : ' registros')
+      + ' · ' + Math.floor(minutes / 60) + 'h ' + minutes % 60 + 'min no período';
+    return { calendar, summary, count, placeTotals: [...totals.values()].sort((a, b) => b.quantity - a.quantity).map(({ label, quantity }) =>
+      quantity + (quantity === 1 ? ' turno em ' : ' turnos em ') + label) };
+  }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, canWrite]);
+  const period = format(start, 'dd/MM/yyyy') + ' a ' + format(days[days.length - 1], 'dd/MM/yyyy');
+  const shift = (direction: number) => setDate(previous => dateKeyEscala(monthly ? addMonths(localDate(previous.slice(0, 7) + '-01'), direction) : addDays(localDate(previous), 7 * direction)));
+  const print = () => {
+    const entries = calendar.flatMap(({ day, entries }) => entries.map(r => '<tr>' + [format(day, 'dd/MM'), r.person, r.place, r.hours || 'Bloqueado', [r.mode, r.reason].filter(Boolean).join(' · ')].map(v => '<td>' + escape(v) + '</td>').join('') + '</tr>')).join('');
+    const printedPeople = new Set(calendar.flatMap(d => d.entries.map(r => r.personId)));
+    const identity = selected.filter(({ p }) => printedPeople.has(p.id)).map(({ p }) => [p.nome, p.profissao, p.tipoConselho, p.numeroConselho, p.ufConselho, 'CBO ' + (resolveProfessionalCbo(p) || 'não informado'), units.get(p.unidadeId)].filter(Boolean).join(' · ')).map(v => '<p>' + escape(v) + '</p>').join('');
+    const places = [...new Set(calendar.flatMap(d => d.entries.map(r => r.place)))].filter(Boolean).join(', ');
+    void openPrintDocument('ESCALA ' + (monthly ? 'MENSAL' : 'SEMANAL') + ' DE ATENDIMENTO — REDE MUNICIPAL DE SAÚDE',
+      identity + '<table><thead><tr><th>Data</th><th>Profissional</th><th>Local</th><th>Horário</th><th>Tipo / observação</th></tr></thead><tbody>' + entries + '</tbody></table><p>' + escape(summary) + '</p><p>' + escape(placeTotals.join(' · ')) + '</p><div style="display:flex;gap:2em;text-align:center;margin-top:4em;break-inside:avoid"><div style="flex:1;border-top:1px solid">Assinatura do(a) Profissional</div><div style="flex:1;border-top:1px solid">Chefia Imediata / Coordenação SMS</div></div>', { Período: period, Locais: escape(places), Emissão: new Date().toLocaleString('pt-BR') });
+  };
+
+  return <div className="space-y-4">
+    <CadastroEscala date={date} entries={manual} onSavedDate={onSaved} />
+    <section className="space-y-3 rounded-xl border bg-card p-3 sm:p-4" aria-label="Filtros da escala">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div><h3 className="font-semibold">Consultar escala</h3><p className="text-xs text-muted-foreground">{period}</p></div>
+        <Button type="button" variant="outline" size="sm" disabled={!count || !current || !!current.error} onClick={print}><Printer className="h-4 w-4" /> Imprimir Escala Oficial (A4)</Button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="flex items-end gap-1" aria-label="Visão do calendário">
+          <Button type="button" variant={!monthly ? 'secondary' : 'ghost'} aria-pressed={!monthly} onClick={() => setMonthly(false)}>Semanal</Button>
+          <Button type="button" variant={monthly ? 'secondary' : 'ghost'} aria-pressed={monthly} onClick={() => setMonthly(true)}>Mensal</Button>
+        </div>
+        <div className="min-w-0 space-y-1 text-xs font-medium"><label htmlFor={periodId}>Período de consulta</label>
+          <span className="flex items-center gap-1">
+            <Button type="button" size="icon" variant="outline" className="shrink-0" aria-label="Período anterior" onClick={() => shift(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+            <Input id={periodId} className="min-w-0" type={monthly ? 'month' : 'date'} value={monthly ? date.slice(0, 7) : date}
+              onChange={e => { if (e.target.value) setDate(e.target.value + (monthly ? '-01' : '')); }} />
+            <Button type="button" size="icon" variant="outline" className="shrink-0" aria-label="Próximo período" onClick={() => shift(1)}><ChevronRight className="h-4 w-4" /></Button>
+          </span>
+        </div>
+        <label className="min-w-0 space-y-1 text-xs font-medium"><span><MapPin className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />Local</span>
+          <select className={selectClass} value={activePlace} onChange={e => setPlace(e.target.value)}><option value="">Todos os locais autorizados</option>
+            <optgroup label="Unidades cadastradas">{[...units].map(([id, label]) => <option key={id} value={'unidade:' + id}>{label}</option>)}</optgroup>
+            {!!externalPlaces.length && <optgroup label="Locais avulsos">{externalPlaces.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</optgroup>}
+          </select>
+        </label>
+        <label className="min-w-0 space-y-1 text-xs font-medium"><span>Profissional</span>
+          <Input type="search" list={listId} placeholder="Pesquisar profissional" value={name} onChange={e => setName(e.target.value)} />
+          <datalist id={listId}>{staff.map(({ p }) => <option key={p.id} value={p.nome} />)}</datalist>
+        </label>
+      </div>
+    </section>
+    {!current && signedIn && <p className="text-sm text-muted-foreground" role="status">Carregando escalas manuais…</p>}
+    {current?.error && <div className="flex flex-wrap items-center gap-2 text-sm text-destructive" role="alert">
+      {current.error}<Button type="button" size="sm" variant="outline" onClick={() => setReload(n => n + 1)}>Tentar novamente</Button>
+    </div>}
+    <div className="space-y-2">
+      <p className="text-sm font-medium" role="status">{summary}</p>
+      {!!placeTotals.length && <ul className="flex flex-wrap gap-1.5" aria-label="Turnos por local">
+        {placeTotals.map(total => <li key={total} className="rounded-full border bg-muted/30 px-2 py-0.5 text-xs">{total}</li>)}
+      </ul>}
+    </div>
+    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
+      {monthly && Array.from({ length: (start.getDay() + 6) % 7 }, (_, i) => <div key={i} className="hidden xl:block" aria-hidden="true" />)}
+      {calendar.map(({ day, entries }) => <CalendarDay key={dateKeyEscala(day)} day={day} entries={entries} compact={monthly} onRemove={onRemove} />)}
+    </div>
+    <AlertDialog open={!!target} onOpenChange={open => { if (!open && !removing) setTarget(undefined); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{target?.remove?.recurring ? 'Remover a série semanal?' : 'Remover esta escala?'}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {target?.person} · {target?.place} · {target?.hours}. {target?.remove?.recurring
+              ? 'A repetição semanal será removida de todas as datas. Ocorrências alteradas separadamente serão mantidas.'
+              : 'Somente esta entrada manual será removida. A agenda de atendimentos não muda.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {removeError && <p role="alert" className="text-sm text-destructive">{removeError}</p>}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={removing}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction disabled={removing} onClick={event => { event.preventDefault(); void confirmRemove(); }}>
+            {removing ? 'Removendo…' : 'Remover escala'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </div>;
 }
