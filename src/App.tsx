@@ -93,6 +93,7 @@ const AtualizacaoCadastral         = lazyRetry(() => import("./pages/painel/Atua
 const Faltosos                    = lazyRetry(() => import("./pages/painel/Faltosos"));
 const PainelChamadasConfig        = lazyRetry(() => import("./pages/painel/PainelChamadasConfig"));
 const BpaExportar                  = lazyRetry(() => import("./pages/painel/BpaExportar"));
+const ConsultaSigtap               = lazyRetry(() => import("./pages/painel/ConsultaSigtap"));
 
 const LoginExterno                = lazyRetry(() => import("./pages/LoginExterno"));
 const AgendamentoExterno          = lazyRetry(() => import("./pages/AgendamentoExterno"));
@@ -230,6 +231,7 @@ const App = () => (
                     <Route path="unidades" element={<ModuleRoute modulo="unidades_salas"><UnidadesSalas /></ModuleRoute>} />
                     <Route path="disponibilidade" element={<ModuleRoute modulo="disponibilidade"><Disponibilidade /></ModuleRoute>} />
                     <Route path="prontuario" element={<ModuleRoute modulo="prontuario"><Prontuario /></ModuleRoute>} />
+                    <Route path="procedimentos-sigtap" element={<ModuleRoute modulo="prontuario"><ConsultaSigtap /></ModuleRoute>} />
                     <Route path="auditoria" element={<ModuleRoute modulo="logs_auditoria"><Auditoria /></ModuleRoute>} />
                     <Route path="triagem" element={<ModuleRoute modulo="triagem"><Triagem /></ModuleRoute>} />
                     <Route path="historico-triagem" element={<ModuleRoute modulo="historico_triagem"><HistoricoTriagem /></ModuleRoute>} />

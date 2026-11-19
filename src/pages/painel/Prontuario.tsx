@@ -5184,11 +5184,14 @@ const ProntuarioPage: React.FC = () => {
             {/* Procedimentos Realizados — checkboxes */}
             {isProfBlocoVisible('procedimentos') && (
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <Label>Procedimentos Realizados</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
-                    <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild type="button" variant="outline" size="sm"><a href="/painel/procedimentos-sigtap" target="_blank" rel="noopener noreferrer">Consultar SIGTAP</a></Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
+                      <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
+                    </Button>
+                  </div>
                 </div>
                 {/* === Busca Unificada SIGTAP + CID-10 (índices GIN trigram) === */}
                 <div className="relative mb-2">

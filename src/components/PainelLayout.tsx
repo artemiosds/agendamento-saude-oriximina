@@ -62,6 +62,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { to: '/painel/tratamentos',       label: 'Gestão de Tratamentos', icon: Activity,    modulo: 'tratamento' },
       { to: '/painel/prontuario',        label: 'Prontuário',            icon: Stethoscope, modulo: 'prontuario' },
+      { to: '/painel/procedimentos-sigtap', label: 'Consultar SIGTAP', icon: FileText, modulo: 'prontuario' },
       { to: '/painel/triagem',           label: 'Triagem',               icon: HeartPulse,  modulo: 'triagem' },
       { to: '/painel/historico-triagem', label: 'Histórico Triagem',     icon: History,     modulo: 'historico_triagem' },
       { to: '/painel/enfermagem',        label: 'Avaliação Enfermagem',  icon: Stethoscope, modulo: 'avaliacao_enfermagem' },
