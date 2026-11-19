@@ -45,7 +45,7 @@ export function elapsedMinutes(start: string | null, end: number) {
   return Number.isFinite(diff) && diff >= 0 ? Math.floor(diff / 60000) : null;
 }
 
-export const waitingTone = (minutes: number | null) => minutes === null ? 'neutral' : minutes > 30 ? 'danger' : minutes >= 15 ? 'warning' : 'safe';
+export const waitingTone = (minutes: number | null): 'neutral' | 'danger' | 'warning' | 'safe' => minutes === null ? 'neutral' : minutes > 30 ? 'danger' : minutes >= 15 ? 'warning' : 'safe';
 
 export const isBottleneck = (waitingPatientsOver20: number) => waitingPatientsOver20 > 3;
 

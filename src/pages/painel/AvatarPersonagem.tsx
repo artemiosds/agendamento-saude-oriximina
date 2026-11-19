@@ -1,25 +1,25 @@
 export type Papel = 'clinico' | 'enfermagem' | 'paciente' | 'medicacao';
 
-export function AvatarPersonagem({ papel, variante = '' }: { papel: Papel; variante?: string }) {
-  const equipe = papel === 'clinico' || papel === 'enfermagem';
-  const alternado = (variante.charCodeAt(variante.length - 1) || 0) % 2 === 1;
-  const pele = alternado ? '#ad7557' : '#e1b494';
-  const uniforme = papel === 'clinico' ? '#fff' : papel === 'enfermagem' ? '#428baa' : alternado ? '#d89068' : '#698fa0';
-  return <svg aria-hidden="true" className="hospital-avatar" viewBox="0 0 84 92" data-papel={papel}>
-    <ellipse cx="40" cy="84" rx="25" ry="4" fill="#274b5f" opacity=".14"/>
-    <g fill="#678b9d" stroke="#375b6c" strokeWidth="2">
-      <path d="M18 46q0-5 5-5h12v24h22v6H21z"/><path d="M23 69v13m28-13v13"/>
+/** A planta usa grupos SVG nativos. Os identificadores servem só para variar o desenho. */
+export function AvatarPersonagem({ papel, x, y, variante = '' }: {
+  papel: Papel; x: number; y: number; variante?: string;
+}) {
+  const i = Array.from(variante).reduce((n, char) => (n + char.charCodeAt(0)) % 5, 0);
+  const skin = ['#e1aa81', '#a96d56', '#efbb9d', '#855742', '#d19970'][i];
+  const hair = ['#58362e', '#282d31', '#8e5341', '#171f25', '#463639'][i];
+  const staff = papel === 'clinico' || papel === 'enfermagem';
+  const cloth = papel === 'clinico' ? '#fefdf3' : papel === 'enfermagem' ? '#258d96' :
+    ['#b46b71', '#5279a2', '#8069a2', '#ce8b49', '#3b8e82'][i];
+  return <g transform={`translate(${x} ${y})`} data-papel={papel} aria-hidden="true">
+    <ellipse cy="11" rx="9.5" ry="5" fill="#21463f" opacity=".18" />
+    <g className="planta-personagem">
+      <path d="M-7 3q7-5 14 0l1 8H-8z" fill={cloth} stroke="#4b6869" strokeWidth=".7" />
+      <path d="M-5 10v5m10-5v5" stroke="#294552" strokeWidth="3.3" strokeLinecap="round" />
+      <path d="M-4 5v4m8-4v4" stroke={skin} strokeWidth="1.8" strokeLinecap="round" />
+      <circle cy="-2" r="6" fill={skin} stroke="#68483f" strokeWidth=".6" />
+      <path d="M-6-1c-2-8 11-11 12-2l-2-1-3-2-6 2z" fill={hair} />
+      <path d="M-2.6-1h.2m4.7 0h.2" stroke="#443234" strokeWidth="1" strokeLinecap="round" />
+      {staff && <path d="M1 4h4v3H1z" fill="#55b4a7" stroke="#f1fcfa" strokeWidth=".65" />}
     </g>
-    {papel === 'medicacao' && <g stroke="#587380" fill="#dbf1ef"><path d="M69 82V12H58m5 70h12"/><rect x="54" y="14" width="10" height="15" rx="2"/><path d="M59 29q9 29-9 26" fill="none"/></g>}
-    <g className="hospital-respira"><g transform={papel === 'medicacao' ? 'rotate(-19 39 60)' : undefined}>
-      <path d="M31 58h17l9 6-2 14h-7V69H32z" fill="#394f66"/><path d="M48 77h8l4 4q0 2-12 1z" fill="#253b48"/>
-      <path d="M28 34q8-5 15-1 7 2 8 13l-3 16H26z" fill={uniforme} stroke="#69858c"/>
-      <path d="M33 31v5q4 5 8 0v-7" fill={pele}/><ellipse cx="37" cy="22" rx="11" ry="13" fill={pele}/>
-      <path d={alternado ? 'M25 27q-4-20 10-20 14-2 15 14l-6-4-3-4q-3 8-12 9l2 11h-7z' : 'M26 23q-5-18 11-17 11 0 12 12-6 0-9-5-4 6-13 6z'} fill="#443e42"/>
-      <circle cx="43" cy="22" r="1" fill="#423836"/>
-      {equipe && <><path d="M32 35q-4 15 5 14 7 0 5-13" fill="none" stroke="#416b78" strokeWidth="2"/><rect x="41" y="42" width="6" height="8" rx="1" fill="#bddee8"/></>}
-      {papel === 'enfermagem' && <rect x="43" y="43" width="13" height="18" rx="2" fill="#f5e6bd" stroke="#63808a"/>}
-      <path d="m32 44 4 10 14-2" fill="none" stroke={pele} strokeWidth="6" strokeLinecap="round"/>
-    </g></g>
-  </svg>;
+  </g>;
 }
