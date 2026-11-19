@@ -101,7 +101,7 @@ export default function ConsultaSigtap() {
       })
       .catch((cause) => {
         console.error('[ConsultaSigtap] regras oficiais:', cause);
-        if (!cancelled) setRulesError('Não foi possível conferir as regras oficiais. CBO, instrumentos e exigências estão temporariamente indisponíveis.');
+        if (!cancelled) setRulesError('Não foi possível conferir as regras oficiais. O filtro CBO e os selos de instrumentos e exigências estão indisponíveis; a busca por código, nome e CID continua funcionando.');
       })
       .finally(() => { if (!cancelled) setRulesLoading(false); });
     return () => { cancelled = true; };
@@ -210,7 +210,7 @@ export default function ConsultaSigtap() {
     <Card><CardContent className="space-y-4 pt-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
         <div><Label htmlFor="sigtap-search">Pesquisar por código ou descrição</Label><Input id="sigtap-search" placeholder="Código ou nome do procedimento" value={draftTerm} onChange={(e) => setDraftTerm(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search(); }} /></div>
-        <div><Label htmlFor="sigtap-cbo">Filtrar por cargo/CBO</Label><Select value={draftCbo || 'all'} onValueChange={(value) => setDraftCbo(value === 'all' ? '' : value)}><SelectTrigger id="sigtap-cbo"><SelectValue placeholder="Todos os CBOs" /></SelectTrigger><SelectContent><SelectItem value="all">Todos os CBOs</SelectItem>{cbos.map((option) => <SelectItem key={option.codigo} value={option.codigo}>{option.codigo} · {option.descricao}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label htmlFor="sigtap-cbo">Filtrar por cargo/CBO</Label><Select value={draftCbo || 'all'} onValueChange={(value) => setDraftCbo(value === 'all' ? '' : value)} disabled={!catalog}><SelectTrigger id="sigtap-cbo"><SelectValue placeholder="Todos os CBOs" /></SelectTrigger><SelectContent><SelectItem value="all">Todos os CBOs</SelectItem>{cbos.map((option) => <SelectItem key={option.codigo} value={option.codigo}>{option.codigo} · {option.descricao}</SelectItem>)}</SelectContent></Select></div>
         <div><Label htmlFor="sigtap-cid">Filtrar por CID</Label><Input id="sigtap-cid" placeholder="Ex.: F32, M54.5" value={draftCid} onChange={(e) => setDraftCid(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search(); }} /></div>
         <div><Label htmlFor="sigtap-sort">Ordenar por valor</Label><Select value={sort} onValueChange={(value) => { setSort(value); setPage(1); }} disabled={!hasValues}><SelectTrigger id="sigtap-sort"><SelectValue placeholder="Não informado" /></SelectTrigger><SelectContent><SelectItem value="default">Padrão</SelectItem><SelectItem value="asc">Menor valor</SelectItem><SelectItem value="desc">Maior valor</SelectItem></SelectContent></Select></div>
         <div className="flex gap-2"><Button onClick={() => void search()} disabled={cidLoading || loading}><Search className="mr-1 h-4 w-4" />Buscar</Button><Button variant="outline" onClick={clear} aria-label="Limpar filtros"><X className="mr-1 h-4 w-4" />Limpar</Button></div>

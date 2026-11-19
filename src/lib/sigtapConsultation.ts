@@ -47,7 +47,9 @@ export function filterSigtapRows(
       && !(row.descricao || '').toLocaleLowerCase('pt-BR').includes(needle)) return false;
     if (cidCodes && !cidCodes.has(row.codigo)) return false;
     const rule = catalog?.get(row.codigo);
-    if (cbo && (!rule || avaliarCboSigtap(rule, cbo) === 'incompativel')) return false;
+    // A missing official file must not turn the entire local catalogue into
+    // "zero results". The UI labels CBO verification as unavailable.
+    if (cbo && catalog && (!rule || avaliarCboSigtap(rule, cbo) === 'incompativel')) return false;
     return [...filters].every((filter) => matchesSigtapFilter(rule, filter));
   });
 }

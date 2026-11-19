@@ -39,6 +39,7 @@ describe('consulta SIGTAP', () => {
     expect(filterSigtapRows(rows, '', '223810', null, new Set(['bpa_i', 'exige_cid']), catalog)).toEqual([rows[0]]);
     expect(filterSigtapRows(rows, 'AVALIA', '', null, new Set(), catalog)).toEqual([rows[1]]);
     expect(filterSigtapRows(rows, '', '', new Set(['0301010056']), new Set(), catalog)).toEqual([rows[1]]);
+    expect(filterSigtapRows(rows, '', '223810', null, new Set(), null)).toEqual(rows);
     expect(matchesSigtapFilter(undefined, 'exige_cid')).toBe(false);
   });
 
