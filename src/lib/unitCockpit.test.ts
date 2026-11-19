@@ -13,3 +13,17 @@ describe('monitor da unidade', () => {
     expect(elapsedMinutes('2026-11-19T09:30:00-03:00',end)).toBeNull();
   });
 });
+
+it('usa o dia oficial da unidade e não o dia UTC', async () => {
+  const { cockpitDay } = await import('./unitCockpit');
+  expect(cockpitDay(Date.parse('2026-11-20T01:00:00Z'))).toBe('2026-11-19');
+});
+
+it('diferencia setores físicos, tempo de espera e chamada efêmera', async () => {
+  const { roomSector, waitingTone, freshCockpitCall } = await import('./unitCockpit');
+  expect(roomSector('Recepção')).toBe('reception');
+  expect(roomSector('Sala de Medicação')).toBe('procedure');
+  expect(roomSector('Consultório 01')).toBe('consultation');
+  expect([null, 14, 15, 30, 31].map(waitingTone)).toEqual(['neutral','safe','warning','warning','danger']);
+  expect(freshCockpitCall('2026-11-19T15:00:00Z', Date.parse('2026-11-19T15:01:00Z'))).toBe(false);
+});
