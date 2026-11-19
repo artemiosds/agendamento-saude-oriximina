@@ -235,6 +235,7 @@ export default function ConsultaSigtap() {
       {rulesLoading && <p role="status" className="text-sm text-muted-foreground">Conferindo as regras do SIGTAP…</p>}
       {rulesError && <p role="alert" className="text-sm text-amber-700">{rulesError}</p>}
       {reference && reference !== competence && <p className="text-xs text-amber-700">Regras consultadas na referência {reference}; a referência atual ainda não estava disponível. A exigência de CID na competência atual aparece como “Não confirmado”. Consulte os detalhes da referência antes de registrar.</p>}
+      <p className="text-xs text-muted-foreground">“Exige CID” indica o atributo complementar 048 na competência consultada. “Não” significa que esse atributo não consta no procedimento; confira também as regras do instrumento de registro antes de lançar a produção.</p>
       {!hasValues && !loading && <p className="text-xs text-muted-foreground">Valores não estão preenchidos no catálogo local; a ordenação por valor está indisponível.</p>}
     </CardContent></Card>
     {error ? <Card><CardContent className="pt-5 text-sm text-destructive" role="alert">{error}</CardContent></Card> : loading ? <div className="flex items-center gap-2 p-6 text-muted-foreground" role="status"><Loader2 className="h-4 w-4 animate-spin" />Carregando procedimentos…</div> : <>
