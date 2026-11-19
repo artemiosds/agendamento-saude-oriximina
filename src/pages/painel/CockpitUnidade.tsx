@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PlantaUnidade } from './PlantaUnidade';
 import { Button } from '@/components/ui/button';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -52,6 +53,7 @@ function Monitor({ unit, day, now }: { unit: string; day: string; now: number })
   const drafts = triage.filter(t => t.iniciado_em && !t.confirmado_em && active.some(a => a.id === t.agendamento_id && a.stage === 'reception'));
   const last = triage.filter(t => t.confirmado_em && t.classificacao_risco).sort((a,b) => (b.confirmado_em || '').localeCompare(a.confirmado_em || ''))[0];
   const waiting = active.filter(a => ['ready','reception'].includes(a.stage) && !drafts.some(t => t.agendamento_id === a.id));
+  const procedures = active.filter(a => a.stage === 'otherCare' || (a.stage === 'consultation' && /procedimento|medicação|curativo|inalação|sessão de tratamento/i.test(a.tipo)));
   const patientList = (list: Item[]) => list.length ? <ul className="divide-y">{list.map(a => {
     const minutes = elapsedMinutes(a.arrival, now);
     return <li className="flex flex-wrap justify-between gap-2 py-2" key={a.id}><span>{a.paciente_nome}</span>
@@ -68,12 +70,13 @@ function Monitor({ unit, day, now }: { unit: string; day: string; now: number })
       ['Salas em atendimento', occupied + ' de ' + rooms.length + (rooms.length ? ' (' + Math.round(100*occupied/rooms.length) + '%)' : '')],
       ['Atendimentos finalizados hoje', done.length]
     ].map(([label,value]) => <div key={label} className={card}><p className="text-sm">{label}</p><strong className={label === 'Espera média observada até a consulta' && (avg || 0)>30 ? 'text-amber-700' : 'text-xl'}>{value}</strong></div>)}</section>
-    <section className={card}><h2 className={heading}>Recepção · {waiting.length} aguardando</h2>
+    <PlantaUnidade contagens={{ recepcao: waiting.length, triagem: drafts.length, consultorios: occupied, procedimentos: procedures.length }} />
+    <section id="cockpit-recepcao" className={card}><h2 className={heading}>Recepção · {waiting.length} aguardando</h2>
       <div className="grid gap-4 md:grid-cols-2">{(['reception','ready'] as const).map(stage => <div key={stage}><h3 className="font-medium">{stage === 'ready' ? 'Aguardando consulta' : 'Aguardando triagem'}</h3>{patientList(waiting.filter(a => a.stage === stage))}</div>)}</div></section>
-    <section className={card}><h2 className={heading}>Triagem e acolhimento</h2>
+    <section id="cockpit-triagem" className={card}><h2 className={heading}>Triagem e acolhimento</h2>
       {drafts.length ? drafts.map(t => <p key={t.agendamento_id}>Em classificação · {active.find(a => a.id === t.agendamento_id)?.paciente_nome} · {staff.get(t.tecnico_id)?.nome || 'Responsável sem identificação'}</p>) : <p>Sem triagem em andamento registrada.</p>}
       {last && <p>Última classificação · {last.classificacao_risco} · {clock(last.confirmado_em)}</p>}</section>
-    <section><h2 className={heading}>Consultórios e salas</h2><div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{rooms.map(room => {
+    <section id="cockpit-consultorios"><h2 className={heading}>Consultórios e salas</h2><div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{rooms.map(room => {
       const visits = active.filter(a => a.sala_id === room.id && a.stage === 'consultation');
       const history = done.filter(a => a.sala_id === room.id);
       const team = funcionarios.filter(f => f.ativo && f.unidadeId === unit && f.salaId === room.id);
@@ -92,8 +95,8 @@ function Monitor({ unit, day, now }: { unit: string; day: string; now: number })
       </article>;
     })}</div>{!rooms.length && <p>Nenhuma sala ativa cadastrada.</p>}</section>
     {active.some(a => a.stage === 'consultation' && !rooms.some(s => s.id === a.sala_id)) && <section className={card}><h2 className={heading}>Em atendimento sem sala identificada</h2>{active.filter(a => a.stage === 'consultation' && !rooms.some(s => s.id === a.sala_id)).map(a => <p key={a.id}>{a.paciente_nome} · {a.profissional_nome}</p>)}</section>}
-    <section className={card}><h2 className={heading}>Procedimentos e sessões especializadas</h2>
-      {active.filter(a => a.stage === 'otherCare' || (a.stage === 'consultation' && /procedimento|medicação|curativo|inalação|sessão de tratamento/i.test(a.tipo))).map(a => <p key={a.id}>{a.paciente_nome} · {a.stage === 'otherCare' ? 'Aguardando equipe' : a.tipo}</p>)}
+    <section id="cockpit-procedimentos" className={card}><h2 className={heading}>Procedimentos e sessões especializadas</h2>
+      {procedures.map(a => <p key={a.id}>{a.paciente_nome} · {a.stage === 'otherCare' ? 'Aguardando equipe' : a.tipo}</p>)}
       <p className="text-sm text-muted-foreground">A administração de medicamentos exige registro de execução. Uma prescrição isolada não confirma atendimento.</p></section></>}
   </div>;
 }
