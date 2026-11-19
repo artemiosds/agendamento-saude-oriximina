@@ -1,3 +1,5 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Escala } from '@/components/EscalaProfissionais';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -612,6 +614,7 @@ const Disponibilidade: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Disponibilidade</h1>
+
           <p className="text-muted-foreground text-sm">
             Configurar horários e vagas dos profissionais
             {profGroups.length > 0 && ` • ${profGroups.length} profissional(is) com horários`}
@@ -627,6 +630,8 @@ const Disponibilidade: React.FC = () => {
         </div>
       </div>
 
+      <Tabs defaultValue="grade"><TabsList><TabsTrigger value="grade">Grade de atendimento</TabsTrigger><TabsTrigger value="escala">Escala dos profissionais</TabsTrigger></TabsList>
+      <TabsContent value="escala"><Escala /></TabsContent><TabsContent value="grade" className="space-y-4">
       {/* Search */}
       {isGlobalAdmin && <UnitScopeNavigator units={unidadesVisiveis} value={unitId} onChange={setUnitId} />}
       <div className="relative max-w-md">
@@ -1222,6 +1227,7 @@ const Disponibilidade: React.FC = () => {
           })}
         </div>
       )}
+      </TabsContent></Tabs>
     </div>
   );
 };

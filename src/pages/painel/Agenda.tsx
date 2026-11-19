@@ -1,3 +1,4 @@
+import { EscalaProfissionais } from '@/components/EscalaProfissionais';
 import { containsEvaluationSlot, readRegulationCapacity, type RegulationScope, type RegulationSelection } from "@/services/regulationCapacity";
 import { isValidSearchHorizon, strictSpecialtyOf, type ManualAvailabilityScope } from "@/lib/localizarVagas";
 import PatientRegistrationBoundary from '@/components/agenda/PatientRegistrationBoundary';
@@ -2989,6 +2990,7 @@ const Agenda: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Agenda</h1>
+          <EscalaProfissionais />
           <p className="text-muted-foreground text-sm">
             {isProfissional ? "Pacientes confirmados para atendimento" : "Gerenciar agendamentos"}
           </p>

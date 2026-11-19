@@ -1,3 +1,4 @@
+import { EscalaProfissionais } from '@/components/EscalaProfissionais';
 import { getBrandSync } from '@/hooks/useBrand';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
@@ -3253,6 +3254,7 @@ ${spreadsheetRows.dataRowsXml}
           <h1 className="text-2xl font-bold font-display flex items-center gap-2" style={{ color: '#1B3A5C' }}>
             <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
           </h1>
+          <EscalaProfissionais />
           <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
             {stats.total} agendamentos · {stats.concluidos} atendimentos realizados
           </p>
