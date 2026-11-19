@@ -1,5 +1,5 @@
 import type { BpaSigtapCatalog, BpaSigtapProcedure } from './bpaSigtapCatalog';
-import { avaliarCboSigtap } from './bpaSigtapCatalog';
+import { avaliarCboSigtap, SIGTAP_DETALHE_NAO_EXIGE_CBO } from './bpaSigtapCatalog';
 
 export type SigtapConsultationFilter = 'bpa_c' | 'bpa_i' | 'raas' | 'exige_cid' | 'classificacao';
 
@@ -16,6 +16,31 @@ export const formatSigtapCode = (code: string): string => /^\d{10}$/.test(code)
   : code;
 
 export const normalizeCidCode = (value: string): string => value.trim().toUpperCase().replace(/\./g, '');
+
+export const formatSigtapCompetence = (value: string): string => /^\d{4}(0[1-9]|1[0-2])$/.test(value)
+  ? `${value.slice(4)}/${value.slice(0, 4)}`
+  : value;
+
+export type CboConsultationStatus = 'relacionado' | 'nao_relacionado' | 'lista_disponivel' | 'nao_exige' | 'nao_confirmado';
+
+/** Evidence for display only. Does not participate in clinical/BPA validation. */
+export function cboStatusForCompetence(
+  procedure: BpaSigtapProcedure | undefined,
+  reference: string,
+  competence: string,
+  cbo = '',
+): CboConsultationStatus {
+  if (!procedure || !reference || reference !== competence) return 'nao_confirmado';
+  if (procedure.cbos.size > 0) {
+    if (!cbo) return 'lista_disponivel';
+    return procedure.cbos.has(cbo) ? 'relacionado' : 'nao_relacionado';
+  }
+  return procedure.detalhes?.has(SIGTAP_DETALHE_NAO_EXIGE_CBO) ? 'nao_exige' : 'nao_confirmado';
+}
+
+const searchText = (text: string): string => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().trim().replace(/\s+/g, ' ');
+const codePattern = /^[\d.\s-]+$/;
 
 export const requiresCid = (procedure?: BpaSigtapProcedure): boolean | null =>
   procedure?.detalhes === undefined ? null : procedure.detalhes.has('048');
@@ -43,17 +68,20 @@ export function filterSigtapRows(
   filters: ReadonlySet<SigtapConsultationFilter>,
   catalog: BpaSigtapCatalog | null,
 ): SigtapConsultationRow[] {
-  const needle = term.trim().toLocaleLowerCase('pt-BR');
-  const digits = needle.replace(/\D/g, '');
+  const needle = searchText(term);
+  const code = codePattern.test(needle) ? needle.replace(/\D/g, '') : '';
+  const activeFilters = [...filters];
   return rows.filter((row) => {
-    if (needle && !row.nome.toLocaleLowerCase('pt-BR').includes(needle)
-      && !row.codigo.includes(digits || needle)
-      && !(row.descricao || '').toLocaleLowerCase('pt-BR').includes(needle)) return false;
+    if (code) {
+      if (!codePattern.test(row.codigo) || !row.codigo.replace(/\D/g, '').includes(code)) return false;
+    } else if (needle && !searchText(row.nome).includes(needle)
+      && !searchText(row.descricao || '').includes(needle)
+      && searchText(row.codigo) !== needle) return false;
     if (cidCodes && !cidCodes.has(row.codigo)) return false;
     const rule = catalog?.get(row.codigo);
     // A missing official file must not turn the entire local catalogue into
     // "zero results". The UI labels CBO verification as unavailable.
     if (cbo && catalog && (!rule || avaliarCboSigtap(rule, cbo) === 'incompativel')) return false;
-    return [...filters].every((filter) => matchesSigtapFilter(rule, filter));
+    return activeFilters.every((filter) => matchesSigtapFilter(rule, filter));
   });
 }

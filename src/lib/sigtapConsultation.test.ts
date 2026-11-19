@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterSigtapRows, formatSigtapCode, matchesSigtapFilter, normalizeCidCode, requiresCid, requiresCidForCompetence, type SigtapConsultationRow } from './sigtapConsultation';
+import { cboStatusForCompetence, filterSigtapRows, formatSigtapCode, formatSigtapCompetence, matchesSigtapFilter, normalizeCidCode, requiresCid, requiresCidForCompetence, type SigtapConsultationRow } from './sigtapConsultation';
 import { parseBpaSigtapCatalog, type BpaSigtapCatalog, type BpaSigtapProcedure } from './bpaSigtapCatalog';
 
 const rule = (details: string[], instruments: string[] = [], cbos: string[] = []): BpaSigtapProcedure => ({
@@ -50,5 +50,40 @@ describe('consulta SIGTAP', () => {
     expect(formatSigtapCode('0301010048')).toBe('03.01.01.004-8');
     expect(formatSigtapCode('CUSTOM-1')).toBe('CUSTOM-1');
     expect(normalizeCidCode('m54.5')).toBe('M545');
+  });
+
+  it('só pesquisa os dígitos no código quando a busca é numérica ou tem máscara de código', () => {
+    const mixedRows = [
+      { ...rows[0], codigo: '0201012048', nome: 'Consulta em atenção especializada' },
+      { ...rows[1], codigo: '0301010056', nome: 'Consulta 2' },
+    ];
+    const search = (term: string) => filterSigtapRows(mixedRows, term, '', null, new Set(), null);
+    expect(search('consulta 2')).toEqual([mixedRows[1]]);
+    expect(search('consulta 3')).toEqual([]);
+    expect(search('02.01.01.204-8')).toEqual([mixedRows[0]]);
+    expect(search('0201012048')).toEqual([mixedRows[0]]);
+  });
+
+  it('encontra nome e descrição com ou sem acentos e espaços adicionais', () => {
+    const accented = { ...rows[1], descricao: 'Avaliação de réde' };
+    const search = (term: string) => filterSigtapRows([rows[0], accented], term, '', null, new Set(), null);
+    expect(search(' ATENCAO   ESPECIALIZADA ')).toEqual([rows[0]]);
+    expect(search('avaliação')).toEqual([accented]);
+    expect(search('avaliacao')).toEqual([accented]);
+    expect(search('avaliacao de rede')).toEqual([accented]);
+  });
+
+  it('distingue CBO relacionado, isento, sem evidência e de referência anterior', () => {
+    const listed = catalog.get('0301010048');
+    expect(cboStatusForCompetence(listed, '202611', '202611', '223810')).toBe('relacionado');
+    expect(cboStatusForCompetence(listed, '202611', '202611', '251510')).toBe('nao_relacionado');
+    expect(cboStatusForCompetence(listed, '202611', '202611')).toBe('lista_disponivel');
+    expect(cboStatusForCompetence(rule(['021']), '202611', '202611', '223810')).toBe('nao_exige');
+    expect(cboStatusForCompetence(rule([]), '202611', '202611', '223810')).toBe('nao_confirmado');
+    expect(cboStatusForCompetence({ ...rule([]), detalhes: undefined }, '202611', '202611')).toBe('nao_confirmado');
+    expect(cboStatusForCompetence(listed, '202610', '202611', '223810')).toBe('nao_confirmado');
+    expect(cboStatusForCompetence(rule(['021']), '202610', '202611', '223810')).toBe('nao_confirmado');
+    expect(cboStatusForCompetence(listed, '', '202611', '223810')).toBe('nao_confirmado');
+    expect(formatSigtapCompetence('202611')).toBe('11/2026');
   });
 });
