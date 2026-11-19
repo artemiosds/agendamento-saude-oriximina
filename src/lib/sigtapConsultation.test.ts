@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterSigtapRows, formatSigtapCode, matchesSigtapFilter, normalizeCidCode, requiresCid, type SigtapConsultationRow } from './sigtapConsultation';
+import { filterSigtapRows, formatSigtapCode, matchesSigtapFilter, normalizeCidCode, requiresCid, requiresCidForCompetence, type SigtapConsultationRow } from './sigtapConsultation';
 import { parseBpaSigtapCatalog, type BpaSigtapCatalog, type BpaSigtapProcedure } from './bpaSigtapCatalog';
 
 const rule = (details: string[], instruments: string[] = [], cbos: string[] = []): BpaSigtapProcedure => ({
@@ -23,6 +23,9 @@ describe('consulta SIGTAP', () => {
     expect(requiresCid(catalog.get('0301010056'))).toBe(false);
     expect(requiresCid(undefined)).toBeNull();
     expect(requiresCid({ ...rule([]), detalhes: undefined })).toBeNull();
+    expect(requiresCidForCompetence(rule([]), '202610', '202611')).toBeNull();
+    expect(requiresCidForCompetence(rule(['048']), '202611', '202611')).toBe(true);
+    expect(requiresCidForCompetence(rule([]), '202611', '202611')).toBe(false);
   });
 
   it('lê o atributo 048 no arquivo oficial mesmo sem relação de CID', () => {

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Loader2, Search, X } from 'lucide-react';
+import { Check, ChevronsUpDown, FileText, Loader2, Search, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo, avaliarCboSigtap, type BpaSigtapCatalog } from '@/lib/bpaSigtapCatalog';
+import { avaliarCboSigtap, type BpaSigtapCatalog } from '@/lib/bpaSigtapCatalog';
 import { instrumentoRotulo } from '@/lib/sigtapInstruments';
 import { resolveProfessionalCboReliable } from '@/lib/sigtapClinicalValidation';
-import { filterSigtapRows, formatSigtapCode, normalizeCidCode, requiresCid, type SigtapConsultationFilter, type SigtapConsultationRow } from '@/lib/sigtapConsultation';
+import { filterSigtapRows, formatSigtapCode, normalizeCidCode, requiresCidForCompetence, type SigtapConsultationFilter, type SigtapConsultationRow } from '@/lib/sigtapConsultation';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 const PAGE_SIZE = 20;
 const LOAD_SIZE = 500;
@@ -52,6 +54,7 @@ export default function ConsultaSigtap() {
   const [rulesError, setRulesError] = useState('');
   const [draftTerm, setDraftTerm] = useState('');
   const [draftCbo, setDraftCbo] = useState('');
+  const [cboOpen, setCboOpen] = useState(false);
   const [draftCid, setDraftCid] = useState('');
   const [applied, setApplied] = useState({ term: '', cbo: '', cidCodes: null as ReadonlySet<string> | null });
   const [cidLoading, setCidLoading] = useState(false);
@@ -93,18 +96,29 @@ export default function ConsultaSigtap() {
         if (queryError) setCboError('Não foi possível carregar os nomes dos CBOs. Reabra a página para tentar novamente.');
         else setCbos(data || []);
       });
-    void loadBpaSigtapCatalog(competence)
-      .then((rules) => {
-        if (cancelled) return;
-        setCatalog(rules);
-        setReference(getCompetenciaReferenciaCatalogo(rules) || competence);
-      })
-      .catch((cause) => {
-        console.error('[ConsultaSigtap] regras oficiais:', cause);
-        if (!cancelled) setRulesError('Não foi possível conferir as regras oficiais. O filtro CBO e os selos de instrumentos e exigências estão indisponíveis; a busca por código, nome e CID continua funcionando.');
-      })
-      .finally(() => { if (!cancelled) setRulesLoading(false); });
-    return () => { cancelled = true; };
+    // A descompactação e a leitura dos arquivos SIGTAP acontecem fora da thread da interface.
+    const worker = new Worker(new URL('../../workers/sigtapConsultationCatalog.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<{ catalog?: BpaSigtapCatalog; reference?: string; error?: string }>) => {
+      if (cancelled) return;
+      if (event.data.catalog) {
+        setCatalog(event.data.catalog);
+        setReference(event.data.reference || '');
+      } else {
+        console.error('[ConsultaSigtap] regras oficiais:', event.data.error);
+        setRulesError('Não foi possível conferir as regras oficiais. O filtro CBO e os selos de instrumentos e exigências estão indisponíveis; a busca por código, nome e CID continua funcionando.');
+      }
+      setRulesLoading(false);
+      worker.terminate();
+    };
+    worker.onerror = (event) => {
+      if (cancelled) return;
+      console.error('[ConsultaSigtap] worker SIGTAP:', event.message);
+      setRulesError('Não foi possível carregar as regras oficiais nesta sessão. A busca por código, nome e CID continua funcionando.');
+      setRulesLoading(false);
+      worker.terminate();
+    };
+    worker.postMessage(competence);
+    return () => { cancelled = true; worker.terminate(); };
   }, [competence]);
 
   useEffect(() => {
@@ -201,7 +215,7 @@ export default function ConsultaSigtap() {
   };
 
   const cidBadge = (row: SigtapConsultationRow) => {
-    const required = requiresCid(catalog?.get(row.codigo));
+    const required = requiresCidForCompetence(catalog?.get(row.codigo), reference, competence);
     return <Badge variant={required === true ? 'destructive' : 'outline'}>{statusText(required)}</Badge>;
   };
 
@@ -210,30 +224,30 @@ export default function ConsultaSigtap() {
     <Card><CardContent className="space-y-4 pt-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
         <div><Label htmlFor="sigtap-search">Pesquisar por código ou descrição</Label><Input id="sigtap-search" placeholder="Código ou nome do procedimento" value={draftTerm} onChange={(e) => setDraftTerm(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search(); }} /></div>
-        <div><Label htmlFor="sigtap-cbo">Filtrar por cargo/CBO</Label><Select value={draftCbo || 'all'} onValueChange={(value) => setDraftCbo(value === 'all' ? '' : value)} disabled={!catalog}><SelectTrigger id="sigtap-cbo"><SelectValue placeholder="Todos os CBOs" /></SelectTrigger><SelectContent><SelectItem value="all">Todos os CBOs</SelectItem>{cbos.map((option) => <SelectItem key={option.codigo} value={option.codigo}>{option.codigo} · {option.descricao}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label htmlFor="sigtap-cbo">Filtrar por cargo/CBO</Label><Popover open={cboOpen} onOpenChange={setCboOpen}><PopoverTrigger asChild><Button id="sigtap-cbo" type="button" variant="outline" role="combobox" aria-expanded={cboOpen} aria-label="Pesquisar cargo ou CBO" disabled={!catalog} className="w-full justify-between gap-2 font-normal"><span className="min-w-0 truncate">{draftCbo ? `${draftCbo} · ${cbos.find((option) => option.codigo === draftCbo)?.descricao || 'CBO selecionado'}` : 'Todos os cargos/CBOs'}</span><ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" /></Button></PopoverTrigger><PopoverContent align="start" className="w-[min(90vw,360px)] p-0"><Command><CommandInput placeholder="Buscar por código ou cargo" aria-label="Buscar por código ou nome do cargo" /><CommandList><CommandEmpty>Nenhum CBO encontrado.</CommandEmpty><CommandGroup><CommandItem value="Todos os cargos e CBOs" onSelect={() => { setDraftCbo(''); setCboOpen(false); }}><Check className={`mr-2 h-4 w-4 ${!draftCbo ? 'opacity-100' : 'opacity-0'}`} />Todos os cargos/CBOs</CommandItem>{cbos.map((option) => <CommandItem key={option.codigo} value={`${option.codigo} ${option.descricao}`} onSelect={() => { setDraftCbo(option.codigo); setCboOpen(false); }}><Check className={`mr-2 h-4 w-4 shrink-0 ${draftCbo === option.codigo ? 'opacity-100' : 'opacity-0'}`} /><span className="truncate">{option.codigo} · {option.descricao}</span></CommandItem>)}</CommandGroup></CommandList></Command></PopoverContent></Popover></div>
         <div><Label htmlFor="sigtap-cid">Filtrar por CID</Label><Input id="sigtap-cid" placeholder="Ex.: F32, M54.5" value={draftCid} onChange={(e) => setDraftCid(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search(); }} /></div>
         <div><Label htmlFor="sigtap-sort">Ordenar por valor</Label><Select value={sort} onValueChange={(value) => { setSort(value); setPage(1); }} disabled={!hasValues}><SelectTrigger id="sigtap-sort"><SelectValue placeholder="Não informado" /></SelectTrigger><SelectContent><SelectItem value="default">Padrão</SelectItem><SelectItem value="asc">Menor valor</SelectItem><SelectItem value="desc">Maior valor</SelectItem></SelectContent></Select></div>
         <div className="flex gap-2"><Button onClick={() => void search()} disabled={cidLoading || loading}><Search className="mr-1 h-4 w-4" />Buscar</Button><Button variant="outline" onClick={clear} aria-label="Limpar filtros"><X className="mr-1 h-4 w-4" />Limpar</Button></div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">{filterOptions.map((option) => <Button key={option.key} size="sm" variant={filters.has(option.key) ? 'default' : 'outline'} aria-pressed={filters.has(option.key)} disabled={!catalog} onClick={() => toggleFilter(option.key)} className="rounded-full">{option.label}</Button>)}<span className="ml-auto text-sm text-muted-foreground" role="status">{loading ? 'Carregando…' : `${filtered.length} resultado(s)`}</span></div>
+      <div className="flex flex-wrap items-center gap-2">{filterOptions.map((option) => <Button key={option.key} size="sm" variant={filters.has(option.key) ? 'default' : 'outline'} aria-pressed={filters.has(option.key)} disabled={!catalog || (option.key === 'exige_cid' && reference !== competence)} onClick={() => toggleFilter(option.key)} className="rounded-full">{option.label}</Button>)}<span className="ml-auto text-sm text-muted-foreground" role="status">{loading ? 'Carregando…' : `${filtered.length} resultado(s)`}</span></div>
       {cidError && <p role="alert" className="text-sm text-destructive">{cidError}</p>}
       {cboError && <p role="alert" className="text-sm text-amber-700">{cboError}</p>}
       {rulesLoading && <p role="status" className="text-sm text-muted-foreground">Conferindo as regras do SIGTAP…</p>}
       {rulesError && <p role="alert" className="text-sm text-amber-700">{rulesError}</p>}
-      {reference && reference !== competence && <p className="text-xs text-amber-700">Regras consultadas na referência {reference}; a referência atual ainda não estava disponível.</p>}
+      {reference && reference !== competence && <p className="text-xs text-amber-700">Regras consultadas na referência {reference}; a referência atual ainda não estava disponível. A exigência de CID na competência atual aparece como “Não confirmado”. Consulte os detalhes da referência antes de registrar.</p>}
       {!hasValues && !loading && <p className="text-xs text-muted-foreground">Valores não estão preenchidos no catálogo local; a ordenação por valor está indisponível.</p>}
     </CardContent></Card>
     {error ? <Card><CardContent className="pt-5 text-sm text-destructive" role="alert">{error}</CardContent></Card> : loading ? <div className="flex items-center gap-2 p-6 text-muted-foreground" role="status"><Loader2 className="h-4 w-4 animate-spin" />Carregando procedimentos…</div> : <>
       <div className="hidden overflow-x-auto rounded-lg border bg-card md:block"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Descrição</TableHead><TableHead>Tipo</TableHead><TableHead>Valor</TableHead><TableHead>CBO</TableHead><TableHead>Exige CID</TableHead><TableHead>Exige classificação</TableHead></TableRow></TableHeader><TableBody>
         {visible.map((row) => { const rule = catalog?.get(row.codigo); return <TableRow key={row.codigo} className="cursor-pointer" onClick={() => setSelected(row)}><TableCell><button className="text-left font-mono font-semibold text-primary underline-offset-2 hover:underline focus-visible:underline" onClick={() => setSelected(row)}>{formatSigtapCode(row.codigo)}</button><span className="block text-xs text-muted-foreground">Ver detalhes</span></TableCell><TableCell className="max-w-xs whitespace-normal font-medium">{row.nome}</TableCell><TableCell>{badges(row)}</TableCell><TableCell className="whitespace-nowrap">{formatValue(row.valor)}</TableCell><TableCell>{!rule ? 'Não confirmado' : applied.cbo ? 'Compatível' : rule.cbos.size ? `${rule.cbos.size} CBO(s)` : rule.detalhes?.has('021') ? 'Não exige' : 'Sem restrição listada'}</TableCell><TableCell>{cidBadge(row)}</TableCell><TableCell><Badge variant="outline">{rule ? statusText(rule.servicosClassificacoes.size > 0) : 'Não confirmado'}</Badge></TableCell></TableRow>; })}
       </TableBody></Table></div>
-      <div className="space-y-2 md:hidden">{visible.map((row) => { const rule = catalog?.get(row.codigo); return <button key={row.codigo} onClick={() => setSelected(row)} className="w-full rounded-lg border bg-card p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-mono text-sm font-semibold text-primary">{formatSigtapCode(row.codigo)}</span><span className="mt-1 block font-medium">{row.nome}</span><span className="mt-2 block">{badges(row)}</span><span className="mt-2 block text-xs text-muted-foreground">Exige CID: {statusText(requiresCid(rule))} · Valor: {formatValue(row.valor)}</span></button>; })}</div>
+      <div className="space-y-2 md:hidden">{visible.map((row) => <button key={row.codigo} onClick={() => setSelected(row)} className="w-full rounded-lg border bg-card p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-mono text-sm font-semibold text-primary">{formatSigtapCode(row.codigo)}</span><span className="mt-1 block font-medium">{row.nome}</span><span className="mt-2 block">{badges(row)}</span><span className="mt-2 block text-xs text-muted-foreground">Exige CID: {statusText(requiresCidForCompetence(catalog?.get(row.codigo), reference, competence))} · Valor: {formatValue(row.valor)}</span></button>)}</div>
       {visible.length === 0 && <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Nenhum procedimento corresponde aos filtros informados.</CardContent></Card>}
       <div className="flex items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Página {page} de {pages}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</Button><Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Próxima</Button></div></div>
     </>}
     <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}><DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5" />{selected ? formatSigtapCode(selected.codigo) : 'Procedimento'}</DialogTitle><DialogDescription>{selected?.nome}</DialogDescription></DialogHeader>{selected && (() => {
       const rule = catalog?.get(selected.codigo);
-      return <div className="space-y-4 text-sm"><p className="text-muted-foreground">{selected.descricao || 'Sem descrição adicional no cadastro.'}</p><div className="grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-2"><div><strong>Instrumentos de registro</strong><p>{rule ? instrumentoRotulo([...rule.instrumentos]) : 'Não confirmado'}</p></div><div><strong>Valor</strong><p>{formatValue(selected.valor)}</p></div><div><strong>Exige CID</strong><p>{statusText(requiresCid(rule))}</p></div><div><strong>Serviço/classificação</strong><p>{rule ? rule.servicosClassificacoes.size ? [...rule.servicosClassificacoes].sort().join(', ') : 'Nenhuma relação listada' : 'Não confirmado'}</p></div><div><strong>CBOs relacionados</strong><p className="break-words">{rule ? rule.cbos.size ? [...rule.cbos].sort().join(', ') : rule.detalhes?.has('021') ? 'Não exige CBO' : 'Sem restrição listada' : 'Não confirmado'}</p></div><div><strong>Referência consultada</strong><p>{reference || 'Não confirmada'}</p></div></div>
+      return <div className="space-y-4 text-sm"><p className="text-muted-foreground">{selected.descricao || 'Sem descrição adicional no cadastro.'}</p><div className="grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-2"><div><strong>Instrumentos de registro</strong><p>{rule ? instrumentoRotulo([...rule.instrumentos]) : 'Não confirmado'}</p></div><div><strong>Valor</strong><p>{formatValue(selected.valor)}</p></div><div><strong>Exige CID na competência atual</strong><p>{statusText(requiresCidForCompetence(rule, reference, competence))}</p>{reference && reference !== competence && <p className="text-xs text-muted-foreground">Na referência {reference}: {statusText(requiresCidForCompetence(rule, reference, reference))}</p>}</div><div><strong>Serviço/classificação</strong><p>{rule ? rule.servicosClassificacoes.size ? [...rule.servicosClassificacoes].sort().join(', ') : 'Nenhuma relação listada' : 'Não confirmado'}</p></div><div><strong>CBOs relacionados</strong><p className="break-words">{rule ? rule.cbos.size ? [...rule.cbos].sort().join(', ') : rule.detalhes?.has('021') ? 'Não exige CBO' : 'Sem restrição listada' : 'Não confirmado'}</p></div><div><strong>Referência consultada</strong><p>{reference || 'Não confirmada'}</p></div></div>
         {applied.cbo && rule && <p className="rounded-md bg-muted p-3">CBO {applied.cbo}: {avaliarCboSigtap(rule, applied.cbo) === 'incompativel' ? 'não relacionado a este procedimento' : 'compatível conforme a relação disponível'}.</p>}
         <div><strong>CIDs relacionados</strong>{detailError ? <p role="alert" className="text-destructive">{detailError}</p> : !detail ? <p className="text-muted-foreground">Carregando…</p> : detail.total === 0 ? <p className="text-muted-foreground">Nenhum CID relacionado cadastrado.</p> : <><p className="text-xs text-muted-foreground">{detail.total > detail.cids.length ? `Primeiros ${detail.cids.length} de ${detail.total}` : `${detail.total} CID(s)`}. Esta relação não determina, por si só, a exigência de CID.</p><div className="mt-2 max-h-40 overflow-y-auto rounded border p-2">{detail.cids.map((cid) => <p key={cid.cid_codigo}><span className="font-mono">{cid.cid_codigo}</span> · {cid.cid_descricao || 'Sem descrição'}</p>)}</div></>}</div>
       </div>;

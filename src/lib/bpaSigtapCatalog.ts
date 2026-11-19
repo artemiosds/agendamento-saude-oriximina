@@ -1,4 +1,3 @@
-import JSZip from "jszip";
 
 export interface BpaSigtapProcedure {
   instrumentos: Set<string>;
@@ -182,6 +181,7 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
 
     const zipResponse = await fetch(selected.download_url);
     if (!zipResponse.ok) throw new Error(`Falha ao baixar SIGTAP ${competenciaUsada} (HTTP ${zipResponse.status})`);
+    const { default: JSZip } = await import("jszip");
     const zip = await JSZip.loadAsync(await zipResponse.arrayBuffer());
 
     const find = (name: string) => Object.entries(zip.files).find(([filePath]) =>

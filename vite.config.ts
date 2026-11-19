@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  worker: { format: "es" },
   build: {
     target: "es2020",
     cssCodeSplit: true,

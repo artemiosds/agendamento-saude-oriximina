@@ -20,6 +20,10 @@ export const normalizeCidCode = (value: string): string => value.trim().toUpperC
 export const requiresCid = (procedure?: BpaSigtapProcedure): boolean | null =>
   procedure?.detalhes === undefined ? null : procedure.detalhes.has('048');
 
+/** Uma regra histórica não confirma a exigência da competência atual. */
+export const requiresCidForCompetence = (procedure: BpaSigtapProcedure | undefined, reference: string, competence: string): boolean | null =>
+  reference === competence ? requiresCid(procedure) : null;
+
 export function matchesSigtapFilter(procedure: BpaSigtapProcedure | undefined, filter: SigtapConsultationFilter): boolean {
   if (!procedure) return false;
   switch (filter) {
