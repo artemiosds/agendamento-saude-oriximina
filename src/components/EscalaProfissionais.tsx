@@ -1,3 +1,4 @@
+import { CadastroEscala, registros, escalaDoDia } from './EscalaInformativa';
 import { resolveProfessionalCbo } from '@/lib/sigtapClinicalValidation';
 import { useState } from 'react';
 import { addDays, eachDayOfInterval, endOfMonth, format, startOfWeek } from 'date-fns';
@@ -13,15 +14,15 @@ export function EscalaProfissionais() {
 }
 
 export function Escala() {
-  const { disponibilidades, bloqueios } = useOperacional();
-  const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
+  const { funcionarios, disponibilidades, bloqueios } = useOperacional();
+  const { unidadesVisiveis, salasVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
   const [unit, setUnit] = useState('');
   const [name, setName] = useState('');
   const [monthly, setMonthly] = useState(false);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const units = unidadesVisiveis.filter(u => (isGlobalAdmin || u.id === userUnidadeId) && (!unit || u.id === unit));
   const grades = disponibilidades.filter(g => units.some(u => u.id === g.unidadeId));
-  const staff = profissionaisVisiveis.filter(p => units.some(u => u.id === p.unidadeId) || grades.some(g => g.profissionalId === p.id));
+  const staff = funcionarios.filter(p => p.ativo && p.role === "profissional").filter(p => units.some(u => u.id === p.unidadeId || registros(p).some(r=>r.unidade===u.id)) || grades.some(g => g.profissionalId === p.id));
   const selected = staff.filter(p => !name || p.nome.toLocaleLowerCase().includes(name.trim().toLocaleLowerCase()));
   const ref = new Date(date + 'T12:00:00');
   const start = monthly ? new Date(ref.getFullYear(), ref.getMonth(), 1) : startOfWeek(ref, { weekStartsOn: 1 });
@@ -32,7 +33,12 @@ export function Escala() {
   const calendar = days.map(day => {
     const key = format(day, 'yyyy-MM-dd');
     let active = false;
-    const entries = grades.flatMap(g => {
+    const weekday = day.getDay();
+    const official = grades.filter(g => g.diasSemana.includes(weekday) && key >= g.dataInicio && (!g.dataFim || key <= g.dataFim));
+    const notes = selected.flatMap(p => escalaDoDia(p,key).filter(r => units.some(u => u.id === r.unidade)
+      && !official.some(g => g.profissionalId===p.id && g.unidadeId===r.unidade && (g.salaId||'')===(r.sala||'') && g.horaInicio.slice(0,5)===r.inicio && g.horaFim.slice(0,5)===r.fim))
+      .map(r=>({id:r.id, profissionalId:p.id, unidadeId:r.unidade, salaId:r.sala, dataInicio:key,dataFim:key,diasSemana:[weekday],horaInicio:r.inicio,horaFim:r.fim,vagasPorHora:-1,duracaoConsulta:undefined})));
+    const entries = [...official,...notes].flatMap(g => {
       const person = selected.find(p => p.id === g.profissionalId);
       if (!person || key < g.dataInicio || (g.dataFim && key > g.dataFim) || !g.diasSemana.includes(day.getDay())) return [];
       const unitName = units.find(u => u.id === g.unidadeId)!.nome;
@@ -54,7 +60,7 @@ export function Escala() {
         minutes += spans.reduce((sum,[a,z]) => sum+z-a,0);
       }
       const clock = (m:number) => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-      return [{ person:person.nome, place:[unitName,room].filter(Boolean).join(' · '), hours:spans.map(([a,z]) => clock(a)+'–'+clock(z)).join(', '), reason:reasons.join(', '), mode:g.vagasPorHora > 0 ? 'Por hora' : 'Por turno', duration:g.duracaoConsulta }];
+      return [{ person:person.nome, place:[unitName,room].filter(Boolean).join(' · '), hours:spans.map(([a,z]) => clock(a)+'–'+clock(z)).join(', '), reason:reasons.join(', '), mode:g.vagasPorHora === -1 ? 'Escala informativa' : g.vagasPorHora > 0 ? 'Por hora' : 'Por turno', duration:g.duracaoConsulta }];
     });
     if (active) workingDays++;
     return {day,entries};
@@ -62,11 +68,11 @@ export function Escala() {
   const summary = [workingDays+' dias com atendimento', Math.floor(minutes/60)+'h '+minutes%60+'min', ...Array.from(counts, ([u,n]) => n+' turnos em '+u)].join(' · ');
   const print = () => {
     const e = (s:string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const entries = calendar.flatMap(({day,entries}) => entries.map(r => '<tr>'+[format(day,'dd/MM'),r.person,r.place,r.hours || 'Bloqueado',r.reason].map(v=>'<td>'+e(v)+'</td>').join('')+'</tr>')).join('');
+    const entries = calendar.flatMap(({day,entries}) => entries.map(r => '<tr>'+[format(day,'dd/MM'),r.person,r.place,r.hours || 'Bloqueado',[r.mode,r.reason].filter(Boolean).join(' · ')].map(v=>'<td>'+e(v)+'</td>').join('')+'</tr>')).join('');
     const identity = selected.map(p => [p.nome,p.profissao,p.tipoConselho,p.numeroConselho,p.ufConselho,'CBO '+(resolveProfessionalCbo(p) || 'não informado'),unidadesVisiveis.find(u=>u.id===p.unidadeId)?.nome].filter(Boolean).join(' · ')).map(v=>'<p>'+e(v)+'</p>').join('');
     void openPrintDocument('ESCALA '+(monthly?'MENSAL':'SEMANAL')+' DE ATENDIMENTO — REDE MUNICIPAL DE SAÚDE',identity+'<table><thead><tr><th>Data</th><th>Profissional</th><th>Local</th><th>Atendimento</th><th>Bloqueio</th></tr></thead><tbody>'+entries+'</tbody></table><p>'+e(summary)+'</p><div style="display:flex;gap:2em;text-align:center;margin-top:4em;break-inside:avoid"><div style="flex:1;border-top:1px solid">Assinatura do(a) Profissional</div><div style="flex:1;border-top:1px solid">Chefia Imediata / Coordenação SMS</div></div>',{Período:format(start,'dd/MM/yyyy')+' a '+format(days[days.length-1],'dd/MM/yyyy'),Unidades:e(units.map(u=>u.nome).join(', ')),Emissão:new Date().toLocaleString('pt-BR')});
   };
-  return <div className="space-y-4"><div className="flex flex-wrap gap-3 [&_input]:border [&_select]:border">
+  return <div className="space-y-4"><CadastroEscala date={date}/><div className="flex flex-wrap gap-3 [&_input]:border [&_select]:border">
     <select aria-label="Visão" value={monthly?'mensal':'semanal'} onChange={ev=>setMonthly(ev.target.value==='mensal')}><option value="semanal">Visão semanal</option><option value="mensal">Visão mensal</option></select>
     <input aria-label="Período" type={monthly?'month':'date'} value={monthly?date.slice(0,7):date} onChange={ev=>ev.target.value && setDate(ev.target.value+(monthly?'-01':''))}/>
     <select aria-label="Unidade" value={unit} onChange={ev=>setUnit(ev.target.value)}><option value="">Todas as unidades autorizadas</option>{unidadesVisiveis.filter(u=>isGlobalAdmin||u.id===userUnidadeId).map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}</select>
