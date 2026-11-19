@@ -1,3 +1,5 @@
+import SigtapProcedurePicker from '@/components/documents/SigtapProcedurePicker';
+import { termoSigtap, type ExameAgendado } from '@/lib/agendamentoSigtap';
 import { EscalaProfissionais } from '@/components/EscalaProfissionais';
 import { containsEvaluationSlot, readRegulationCapacity, type RegulationScope, type RegulationSelection } from "@/services/regulationCapacity";
 import { isValidSearchHorizon, strictSpecialtyOf, type ManualAvailabilityScope } from "@/lib/localizarVagas";
@@ -419,6 +421,11 @@ const Agenda: React.FC = () => {
   const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
   const [retornoForm, setRetornoForm] = useState({ data: "", hora: "" });
+  const [exames, setExames] = useState<ExameAgendado[]>([]);
+  const [mostrarExames, setMostrarExames] = useState(false);
+  useEffect(() => {
+    if (!dialogOpen) { setExames([]); setMostrarExames(false); }
+  }, [dialogOpen]);
   const [newAg, setNewAg] = useState({
     pacienteId: "",
     profissionalId: filterProf !== "all" ? filterProf : "",
@@ -1554,6 +1561,7 @@ const Agenda: React.FC = () => {
 
     const unidade = unidades.find((u) => u.id === selectedProfUnit);
     const agId = `ag${Date.now()}`;
+    const procedimentos = newAg.tipo === "Sessão de Tratamento" ? [] : exames;
     const agData = {
       id: agId,
       pacienteId: pac.id,
@@ -1568,8 +1576,11 @@ const Agenda: React.FC = () => {
       status: "confirmado" as const,
       tipo: newAg.tipo,
       observacoes: isDiagnosticBooking ? (selectedDiagnosticExam?.exigePreparo ? selectedDiagnosticExam.instrucoesPreparo : "") : newAg.obs,
-      ...(regulatedBooking?.requestId ? { customData: { fila_regulacao_id: regulatedBooking.requestId } } : {}),
-      ...(isDiagnosticBooking ? { customData: {
+      ...(procedimentos.length ? { procedimentoSigtap: procedimentos[0].codigo, nomeProcedimento: procedimentos[0].nome } : {}),
+      ...((regulatedBooking?.requestId || isDiagnosticBooking || procedimentos.length) ? { customData: {
+        ...(regulatedBooking?.requestId ? { fila_regulacao_id: regulatedBooking.requestId } : {}),
+        ...(procedimentos.length ? { procedimentos_agendados: procedimentos } : {}),
+      ...(isDiagnosticBooking ? {
         sala_tipo: "aparelho_diagnostico",
         exame_id: selectedDiagnosticExam?.id || "",
         exame_nome: selectedDiagnosticExam?.tipoExame || "Exame diagnóstico",
@@ -1580,6 +1591,7 @@ const Agenda: React.FC = () => {
         prazo_resultado_dias: selectedDiagnosticExam?.prazoResultadoDias || 0,
         status_exame: "agendado",
         historico_status: [{ status: "agendado", em: new Date().toISOString(), por: user?.id || "" }],
+      } : {}),
       } } : {}),
       origem: "recepcao" as const,
       criadoEm: new Date().toISOString(),
@@ -1595,6 +1607,7 @@ const Agenda: React.FC = () => {
             data: normalized.data, hora: normalized.hora, status: normalized.status, tipo: normalized.tipo,
             observacoes: normalized.observacoes, origem: normalized.origem,
             criado_por: normalized.criadoPor || "current",
+            procedimento_sigtap: normalized.procedimentoSigtap, nome_procedimento: normalized.nomeProcedimento,
             ...(normalized.customData ? { custom_data: normalized.customData } : {}),
           },
           p_override_reason: [masterOverrideReason, carencyOverrideReason].filter(Boolean).join(" | "),
@@ -3237,6 +3250,15 @@ const Agenda: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>}
+                  {newAg.tipo !== "Sessão de Tratamento" && (
+                    mostrarExames || isDiagnosticBooking || ["Exame","Procedimento"].includes(newAg.tipo) ? <section className="space-y-2">
+                      <Label>Exames / Procedimentos do SUS (SIGTAP)</Label>
+                      <SigtapProcedurePicker normalizeSearch={termoSigtap} onChange={item => {
+                        if (item) setExames(current => current.some(p=>p.codigo===item.codigo) ? current : [...current,item]);
+                      }}/>
+                      <div className="flex flex-wrap gap-2">{exames.map(p=><Button key={p.codigo} type="button" size="sm" variant="secondary" aria-label={'Remover '+p.nome} onClick={()=>setExames(current=>current.filter(x=>x.codigo!==p.codigo))}>{p.nome} ×</Button>)}</div>
+                    </section> : <Button type="button" variant="outline" onClick={()=>setMostrarExames(true)}>Adicionar exame ou procedimento</Button>
+                  )}
                   {isDiagnosticBooking && <div className="space-y-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950"><Label>Exame a agendar *</Label><Select value={selectedDiagnosticExamId} onValueChange={value => { setSelectedDiagnosticExamId(value); setNewAg(prev => ({ ...prev, hora: "" })); }}><SelectTrigger><SelectValue placeholder="Selecione o exame" /></SelectTrigger><SelectContent>{diagnosticRoomConfig?.exames.map(exam => <SelectItem key={exam.id} value={exam.id}>{exam.tipoExame}</SelectItem>)}</SelectContent></Select><strong>{selectedDiagnosticExam?.tipoExame || "Selecione um exame"}</strong><p className="text-xs">Agendamento por aparelho • slot de {selectedDiagnosticExam?.duracaoSlot || "—"} minutos. O responsável selecionado será registrado no agendamento.</p>{selectedDiagnosticExam?.exigePreparo && <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2"><strong>Preparo cadastrado pela unidade</strong><p className="mt-1 whitespace-pre-wrap">{selectedDiagnosticExam.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme antes de agendar."}</p></div>}<p className="text-xs">Contraste: {selectedDiagnosticExam?.exigeContraste || "—"} • Prazo de resultado: {selectedDiagnosticExam?.prazoResultadoDias || 0} dia(s)</p></div>}
                   <div>
                     <Label>{isDiagnosticBooking ? "Horários disponíveis do aparelho" : isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>

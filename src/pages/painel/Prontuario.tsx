@@ -1,3 +1,4 @@
+import { examesAgendados } from '@/lib/agendamentoSigtap';
 import ProcedureCidPicker from "@/components/prontuario/ProcedureCidPicker";
 import { loadProcedureCidOptions, partitionProcedureCids, normalizeProcedureCid, resolveManualProcedureCid } from "@/lib/procedureCidSelection";
 import AutosaveBadge, { createAutosaveIndicator } from '@/components/prontuario/AutosaveBadge';
@@ -1640,6 +1641,28 @@ const ProntuarioPage: React.FC = () => {
     };
     return map[agendaTipo] || 'avaliacao_inicial';
   };
+
+  useEffect(() => {
+    if (!dialogOpen || editId || !form.agendamento_id || !form.paciente_id) return;
+    let active = true;
+    const preload = async () => {
+      const {data,error} = await supabase.from("agendamentos").select("custom_data,procedimento_sigtap,nome_procedimento")
+        .eq("id",form.agendamento_id).eq("paciente_id",form.paciente_id).maybeSingle();
+      if (error) throw error;
+      if (!active || !data) return;
+      const planned = examesAgendados(data.custom_data,data.procedimento_sigtap,data.nome_procedimento);
+      if (!planned.length) return;
+      const items = await procedureService.getSpecific({ codes: planned.map(p=>p.codigo) });
+      if (!active) return;
+      const matched = planned.flatMap(p=>items.find(item=>item.id===p.codigo && item.ativo) || []);
+      mergeProcedimentos(matched);
+      setSelectedProcIds(current=>Array.from(new Set([...current,...matched.map(p=>p.id)])));
+      matched.forEach(p=>loadCidsForProc(p.id));
+      if (matched.length !== planned.length) toast.warning("Confira os exames agendados: alguns códigos não foram localizados no catálogo ativo.");
+    };
+    void preload().catch(()=>{if(active) toast.warning("Não foi possível carregar os exames agendados. Confira os procedimentos antes de salvar.");});
+    return ()=>{active=false;};
+  }, [dialogOpen, editId, form.agendamento_id, form.paciente_id, mergeProcedimentos]);
 
   const initializedRef = useRef(false);
 

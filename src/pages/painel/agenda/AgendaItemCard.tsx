@@ -1,3 +1,4 @@
+import { examesAgendados } from '@/lib/agendamentoSigtap';
 import { RadarBalcaoTag } from "@/components/agenda/RadarBalcao";
 import CondicaoBadges from "@/components/CondicaoBadges";
 import React from "react";
@@ -154,6 +155,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
     "Sessão de Tratamento": "border-l-[#F97316]",
   };
 
+  const exames = examesAgendados(ag.customData, ag.procedimentoSigtap, ag.nomeProcedimento);
   return (
     <React.Fragment>
       {showMorningDivider && (
@@ -177,6 +179,9 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
           <span className="text-lg font-mono font-bold text-primary w-14 shrink-0">{ag.hora}</span>
           <div className="flex-1 min-w-0">
             <RadarBalcaoTag ag={ag as any} />
+            {exames.length > 0 && <TooltipProvider><Tooltip><TooltipTrigger asChild>
+              <button type="button" className="rounded bg-secondary px-2 py-1 text-xs" onClick={e=>e.stopPropagation()}>🩺 {exames[0].nome}{exames.length>1 && ' +'+(exames.length-1)+' exames'}</button>
+            </TooltipTrigger><TooltipContent>{exames.map(p=><p key={p.codigo}>{p.codigo} · {p.nome}</p>)}</TooltipContent></Tooltip></TooltipProvider>}
             {(ag.origem as string) === 'externo' && (
               <span className="inline-block mb-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                 🔗 Agendado por externo

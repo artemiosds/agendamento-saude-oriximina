@@ -72,10 +72,11 @@ const priorityRank: Record<string, number> = {
 };
 
 const agendamentoColumns =
-  "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,agendado_por_externo,google_event_id,sync_status,criado_em,criado_por,custom_data";
+  "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,agendado_por_externo,google_event_id,sync_status,criado_em,criado_por,custom_data,procedimento_sigtap,nome_procedimento";
 
 const mapAgendamentoRow = (a: any): Agendamento => ({
   id: a.id,
+  procedimentoSigtap: a.procedimento_sigtap, nomeProcedimento: a.nome_procedimento,
   pacienteId: a.paciente_id,
   pacienteNome: a.paciente_nome,
   unidadeId: a.unidade_id,
@@ -683,6 +684,7 @@ export const AgendamentosSliceProvider: React.FC<{ children: React.ReactNode }> 
           google_event_id: normalized.googleEventId || "",
           sync_status: normalized.syncStatus || "pendente",
           criado_por: normalized.criadoPor || "",
+          procedimento_sigtap: normalized.procedimentoSigtap, nome_procedimento: normalized.nomeProcedimento,
           prioridade_perfil: "normal",
           ...(normalized.customData ? { custom_data: normalized.customData } : {}),
         } as any);

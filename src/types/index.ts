@@ -157,6 +157,8 @@ export interface Paciente {
 
 
 export interface Agendamento {
+  procedimentoSigtap?: string;
+  nomeProcedimento?: string;
   id: string;
   pacienteId: string;
   pacienteNome: string;

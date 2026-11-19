@@ -17,6 +17,7 @@ export interface SigtapPickerValue {
 }
 
 interface Props {
+  normalizeSearch?: (value: string) => string;
   value?: SigtapPickerValue | null;
   onChange: (value: SigtapPickerValue | null) => void;
   placeholder?: string;
@@ -33,6 +34,7 @@ interface Props {
 const SigtapProcedurePicker: React.FC<Props> = ({
   value,
   onChange,
+  normalizeSearch,
   placeholder = "Buscar procedimento SIGTAP por código ou nome...",
   disabled,
   validation,
@@ -43,9 +45,10 @@ const SigtapProcedurePicker: React.FC<Props> = ({
   const [validationResult, setValidationResult] = useState<SigtapClinicalValidationResult | null>(null);
 
   useEffect(() => {
-    const q = query.trim();
+    const q = normalizeSearch ? normalizeSearch(query) : query.trim();
+    let cancelled = false;
     if (q.length < 2) {
-      setResults([]);
+      setResults([]); setLoading(false);
       return;
     }
     const timer = window.setTimeout(async () => {
@@ -62,16 +65,16 @@ const SigtapProcedurePicker: React.FC<Props> = ({
           : request.ilike("nome", `%${q.replace(/[%_]/g, " ")}%`);
         const { data, error } = await request;
         if (error) throw error;
-        setResults((data || []).map((item: any) => ({ codigo: item.codigo, nome: item.nome })));
+        if (!cancelled) setResults((data || []).map((item: any) => ({ codigo: item.codigo, nome: item.nome })));
       } catch (error) {
         console.error("[SigtapProcedurePicker] busca:", error);
-        setResults([]);
+        if (!cancelled) setResults([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 250);
-    return () => window.clearTimeout(timer);
-  }, [query]);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [query, normalizeSearch]);
 
   useEffect(() => {
     let cancelled = false;
