@@ -20,6 +20,7 @@ export type ModuleName =
   | 'avaliacao_multi'
   | 'avaliacao_enfermagem'
   | 'relatorio_alta'
+  | 'cockpit_unidade'
   | 'relatorios'
   | 'bpa_exportar'
   | 'monitoramento_sistema'
@@ -66,6 +67,7 @@ const ALL_MODULES: ModuleName[] = [
   'pts',
   'avaliacao_multi',
   'relatorio_alta',
+  'cockpit_unidade',
   'relatorios',
   'bpa_exportar',
   'monitoramento_sistema',

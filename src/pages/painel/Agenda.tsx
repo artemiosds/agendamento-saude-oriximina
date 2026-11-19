@@ -3004,6 +3004,7 @@ const Agenda: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Agenda</h1>
           <EscalaProfissionais />
+          {(isMaster || can("cockpit_unidade", "can_view")) && <Button variant="link" onClick={() => navigate("/painel/cockpit-ao-vivo")}>Cockpit ao Vivo</Button>}
           <p className="text-muted-foreground text-sm">
             {isProfissional ? "Pacientes confirmados para atendimento" : "Gerenciar agendamentos"}
           </p>

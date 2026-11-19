@@ -76,6 +76,7 @@ const menuGroups: MenuGroup[] = [
     id: 'documentos',
     title: 'Documentos e Arquivo',
     items: [
+      { to: '/painel/cockpit-ao-vivo', label: 'Cockpit ao Vivo', icon: Activity, modulo: 'cockpit_unidade' },
       { to: '/painel/relatorios',   label: 'Relatórios',    icon: FileText, modulo: 'relatorios' },
       { to: '/painel/bpa-exportar', label: 'BPA-Exportar',  icon: FileText, modulo: 'bpa_exportar' },
     ],

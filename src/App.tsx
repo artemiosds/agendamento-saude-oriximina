@@ -66,6 +66,7 @@ const AgendaExames                 = lazyRetry(() => import("./pages/painel/Agen
 const FilaEspera                  = lazyRetry(() => import("./pages/painel/FilaEspera"));
 const Pacientes                   = lazyRetry(() => import("./pages/painel/Pacientes"));
 const Atendimentos                = lazyRetry(() => import("./pages/painel/Atendimentos"));
+const CockpitUnidade = lazyRetry(() => import("./pages/painel/CockpitUnidade"));
 const Relatorios                  = lazyRetry(() => import("./pages/painel/Relatorios"));
 const Funcionarios                = lazyRetry(() => import("./pages/painel/Funcionarios"));
 const PortalAcessos               = lazyRetry(() => import("./pages/painel/PortalAcessos"));
@@ -224,6 +225,7 @@ const App = () => (
                     <Route path="pacientes" element={<ModuleRoute modulo="pacientes"><Pacientes /></ModuleRoute>} />
                     <Route path="atualizacao-cadastral" element={<ModuleRoute modulo="pacientes"><AtualizacaoCadastral /></ModuleRoute>} />
                     <Route path="atendimentos" element={<ModuleRoute modulo="atendimento"><Atendimentos /></ModuleRoute>} />
+                    <Route path="cockpit-ao-vivo" element={<ModuleRoute modulo="cockpit_unidade"><CockpitUnidade /></ModuleRoute>} />
                     <Route path="relatorios" element={<ModuleRoute modulo="relatorios"><Relatorios /></ModuleRoute>} />
                     <Route path="funcionarios" element={<ModuleRoute modulo="usuarios"><Funcionarios /></ModuleRoute>} />
                     

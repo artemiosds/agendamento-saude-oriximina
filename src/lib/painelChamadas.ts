@@ -67,6 +67,26 @@ export function chamadaValida(value: unknown, unidade: string, validarPrazo = tr
 
 interface ChannelEntry { channel: RealtimeChannel; ready: Promise<RealtimeChannel> }
 const canais = new Map<string, ChannelEntry>();
+const observadores = new Map<string, Set<(value: ChamadaPaciente) => void>>();
+
+export function observarChamadas(unidade: string, receber: (value: ChamadaPaciente) => void) {
+  const listeners = observadores.get(unidade) || new Set();
+  listeners.add(receber);
+  observadores.set(unidade, listeners);
+  const canal = obterCanal(unidade);
+  void canal.catch(() => {});
+  return () => {
+    listeners.delete(receber);
+    if (listeners.size) return;
+    observadores.delete(unidade);
+    void canal.then(channel => {
+      if (!observadores.has(unidade) && !Array.from(pending.values()).some(p => p.unidade === unidade)) {
+        descartar(canalPainel(unidade), channel);
+      }
+    }).catch(() => {});
+  };
+}
+
 const pending = new Map<string, { unidade: string; resolve: (status: ConfirmacaoPainel) => void }>();
 
 function obterCanal(unidadeId: string): Promise<RealtimeChannel> {
@@ -76,6 +96,9 @@ function obterCanal(unidadeId: string): Promise<RealtimeChannel> {
   const channel = supabase.channel(nome, { config: { broadcast: { ack: true } } });
   const p = new Promise<RealtimeChannel>((resolve, reject) => {
     const t = setTimeout(() => { descartar(nome, channel); reject(new Error("timeout")); }, 4000);
+    channel.on('broadcast', { event: 'chamada' }, ({ payload }) => {
+      if (chamadaValida(payload, unidadeId)) observadores.get(unidadeId)?.forEach(receber => receber(payload));
+    });
     channel.on('broadcast', { event: 'chamada_status' }, ({ payload }) => {
       const item = pending.get(payload?.id);
       if (!item || item.unidade !== unidadeId || payload?.unidadeId !== unidadeId ||

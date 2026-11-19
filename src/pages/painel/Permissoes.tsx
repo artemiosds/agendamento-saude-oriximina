@@ -76,6 +76,7 @@ const MODULO_LABELS: Record<ModuleName, string> = {
   pts: "PTS",
   avaliacao_multi: "Avaliação Multi",
   relatorio_alta: "Relatório de Alta",
+  cockpit_unidade: "Cockpit ao Vivo",
   relatorios: "Relatórios",
   bpa_exportar: "BPA-Exportar",
   encaminhamento: "Encaminhamento",
@@ -101,7 +102,7 @@ const ACTION_LABELS: Record<keyof ModulePermission, string> = {
 const MODULE_GROUPS: { label: string; modules: ModuleName[] }[] = [
   { label: "Agenda e recepção", modules: ["agenda", "fila", "pacientes", "faltosos", "atendimento"] },
   { label: "Assistência e clínica", modules: ["tratamento", "prontuario", "triagem", "historico_triagem", "enfermagem", "avaliacao_enfermagem", "pts", "avaliacao_multi", "relatorio_alta"] },
-  { label: "Documentos e regulação", modules: ["relatorios", "bpa_exportar", "encaminhamento"] },
+  { label: "Documentos e regulação", modules: ["cockpit_unidade", "relatorios", "bpa_exportar", "encaminhamento"] },
   { label: "Gestão da unidade", modules: ["usuarios", "unidades_salas", "disponibilidade", "feriados_bloqueios", "logs_auditoria", "monitoramento_sistema"] },
   { label: "Administração", modules: ["dashboard", "configuracoes", "permissoes", "configuracoes_avancadas"] },
 ];
