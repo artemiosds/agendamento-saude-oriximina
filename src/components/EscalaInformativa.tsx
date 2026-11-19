@@ -15,6 +15,7 @@ import type { RegistroEscala } from '@/lib/escalaInformativa';
 type Mode = 'avulsa' | 'semanal' | 'excecao';
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const toDate = (value: string) => new Date(value + 'T12:00:00');
+const hourLabel = (value: string) => value.slice(0, 2) + 'h' + (value.slice(3) === '00' ? '' : value.slice(3));
 const shifts = [
   { id: 'manha', label: 'Manhã · 08:00–12:00', start: '08:00', end: '12:00' },
   { id: 'tarde', label: 'Tarde · 14:00–18:00', start: '14:00', end: '18:00' },
@@ -31,6 +32,7 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
   const formId = useId();
   const staffId = useId();
   const placesId = useId();
+  const placeHintId = useId();
   const saving = useRef(false);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<{ text: string; error?: boolean }>();
@@ -66,6 +68,9 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
   const weeklyDays = useMemo(() => primeirasDatasSemanais(sortedDates).length, [sortedDates]);
   const duration = durationEscala(startTime, endTime, shift === 'plantao24');
   const nextDay = duration > 0 && minutesEscala(startTime) + duration >= 1440;
+  const selectionLabel = mode === 'semanal'
+    ? weeklyDays + (weeklyDays === 1 ? ' dia por semana' : ' dias por semana')
+    : dates.length + (dates.length === 1 ? ' data' : ' datas');
   if (!user || !['master', 'gestao', 'coordenador'].includes(user.role) || (!isGlobalAdmin && !userUnidadeId)) return null;
 
   const isDisabled = (d: Date) => mode === 'excecao' && (!chosenSource || dateKeyEscala(d) < chosenSource.data || d.getDay() !== weekdayEscala(chosenSource.data));
@@ -148,10 +153,13 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
             <div className="space-y-2">
               <label className="block space-y-1.5 text-sm font-medium">
                 <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" aria-hidden="true" /> Local de trabalho</span>
-                <Input required list={placesId} maxLength={100} value={placeName} onChange={e => setPlaceName(e.target.value)} placeholder="Escolha uma unidade ou digite um local" />
-                <datalist id={placesId}>{suggestions.map(p => <option key={p} value={p} />)}</datalist>
-                <span className="block text-xs font-normal text-muted-foreground">Locais digitados aparecem só na escala, sem criar unidades no sistema.</span>
+                <Input required list={placesId} maxLength={100} value={placeName} onChange={e => setPlaceName(e.target.value)}
+                  aria-describedby={placeHintId} placeholder="Escolha ou digite um local" />
               </label>
+              <datalist id={placesId}>{suggestions.map(p => <option key={p} value={p} />)}</datalist>
+              <p id={placeHintId} className="text-xs text-muted-foreground">
+                Escolha uma unidade ou digite outro local. Isso não abre vagas na Agenda.
+              </p>
               <label className="block space-y-1.5 text-sm font-medium"><span>Setor ou sala (opcional)</span>
                 <Input maxLength={100} value={sector} onChange={e => setSector(e.target.value)} placeholder="Ex. Sala de Parto" />
               </label>
@@ -229,8 +237,23 @@ export function CadastroEscala({ date, entries, onSavedDate }: {
             </ul>}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-          <Button type="submit" disabled={busy || !dates.length}>{busy ? 'Salvando…' : 'Salvar escala informativa'}</Button>
+        <div className="space-y-2 border-t pt-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {dates.length > 0 && <div className="min-w-0 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+              <p className="text-xs font-semibold text-primary">Confira antes de salvar</p>
+              <p className="break-words text-sm">
+                {[
+                  placeName.trim() || 'Local não informado',
+                  sector.trim(),
+                  duration ? hourLabel(startTime) + ' às ' + hourLabel(endTime) + (nextDay ? ' do dia seguinte' : '') : 'Horário não informado',
+                  selectionLabel,
+                ].filter(Boolean).join(' · ')}
+              </p>
+            </div>}
+            <Button type="submit" className="shrink-0 self-start sm:self-center" disabled={busy || !dates.length}>
+              {busy ? 'Salvando…' : dates.length ? 'Salvar ' + selectionLabel : 'Salvar escala'}
+            </Button>
+          </div>
           {status && <span role={status.error ? 'alert' : 'status'} className={status.error ? 'text-sm text-destructive' : 'text-sm text-primary'}>{status.text}</span>}
         </div>
       </fieldset>

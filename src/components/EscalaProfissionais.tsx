@@ -1,8 +1,9 @@
 import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useState } from 'react';
-import { addDays, addMonths, eachDayOfInterval, endOfMonth, format, startOfWeek } from 'date-fns';
+import { addDays, eachDayOfInterval, endOfMonth, format, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, MapPin, Printer, Trash2 } from 'lucide-react';
+import { MapPin, Printer, Trash2 } from 'lucide-react';
 import { CadastroEscala } from './EscalaInformativa';
+import { EscalaPeriodo } from './EscalaPeriodo';
 import { resolveProfessionalCbo } from '@/lib/sigtapClinicalValidation';
 import { dateKeyEscala, distribuirRegistros, localKeyEscala, minutesEscala as time, registros } from '@/lib/escalaInformativa';
 import type { RegistroEscala } from '@/lib/escalaInformativa';
@@ -112,7 +113,6 @@ export function Escala() {
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState('');
   const listId = useId();
-  const periodId = useId();
   const deferredName = useDeferredValue(name);
   const { start, days } = useMemo(() => {
     const ref = localDate(date);
@@ -279,7 +279,6 @@ export function Escala() {
       quantity + (quantity === 1 ? ' turno em ' : ' turnos em ') + label) };
   }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, canWrite]);
   const period = format(start, 'dd/MM/yyyy') + ' a ' + format(days[days.length - 1], 'dd/MM/yyyy');
-  const shift = (direction: number) => setDate(previous => dateKeyEscala(monthly ? addMonths(localDate(previous.slice(0, 7) + '-01'), direction) : addDays(localDate(previous), 7 * direction)));
   const print = () => {
     const entries = calendar.flatMap(({ day, entries }) => entries.map(r => '<tr>' + [format(day, 'dd/MM'), r.person, r.place, r.hours || 'Bloqueado', [r.mode, r.reason].filter(Boolean).join(' · ')].map(v => '<td>' + escape(v) + '</td>').join('') + '</tr>')).join('');
     const printedPeople = new Set(calendar.flatMap(d => d.entries.map(r => r.personId)));
@@ -301,14 +300,7 @@ export function Escala() {
           <Button type="button" variant={!monthly ? 'secondary' : 'ghost'} aria-pressed={!monthly} onClick={() => setMonthly(false)}>Semanal</Button>
           <Button type="button" variant={monthly ? 'secondary' : 'ghost'} aria-pressed={monthly} onClick={() => setMonthly(true)}>Mensal</Button>
         </div>
-        <div className="min-w-0 space-y-1 text-xs font-medium"><label htmlFor={periodId}>Período de consulta</label>
-          <span className="flex items-center gap-1">
-            <Button type="button" size="icon" variant="outline" className="shrink-0" aria-label="Período anterior" onClick={() => shift(-1)}><ChevronLeft className="h-4 w-4" /></Button>
-            <Input id={periodId} className="min-w-0" type={monthly ? 'month' : 'date'} value={monthly ? date.slice(0, 7) : date}
-              onChange={e => { if (e.target.value) setDate(e.target.value + (monthly ? '-01' : '')); }} />
-            <Button type="button" size="icon" variant="outline" className="shrink-0" aria-label="Próximo período" onClick={() => shift(1)}><ChevronRight className="h-4 w-4" /></Button>
-          </span>
-        </div>
+        <EscalaPeriodo date={date} monthly={monthly} onChange={setDate} />
         <label className="min-w-0 space-y-1 text-xs font-medium"><span><MapPin className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />Local</span>
           <select className={selectClass} value={activePlace} onChange={e => setPlace(e.target.value)}><option value="">Todos os locais autorizados</option>
             <optgroup label="Unidades cadastradas">{[...units].map(([id, label]) => <option key={id} value={'unidade:' + id}>{label}</option>)}</optgroup>
