@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, Building2, ChevronLeft, ChevronRight, CircleCheck, Clock3, DoorOpen, Hospital, Maximize, Minimize, RefreshCw, UsersRound, X } from 'lucide-react';
+import { Activity, Building2, CircleCheck, Clock3, DoorOpen, Hospital, Maximize, Minimize, RefreshCw, UsersRound, X } from 'lucide-react';
 import { CockpitAlerts, type CockpitAlert } from './CockpitAlerts';
-import { PlantaUnidade, ROOMS_PER_MAP, roomStatuses } from './PlantaUnidade';
+import { PlantaUnidade, roomStatuses } from './PlantaUnidade';
 import type { MapRoom, Risk, RoomState } from './PlantaUnidade';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { useOperacional } from '@/contexts/OperacionalContext';
@@ -139,7 +139,6 @@ export default function CockpitUnidade() {
 
 function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName: string; day: string; now: number; theater: boolean }) {
   const [zone, setZone] = useState<string | null>(null);
-  const [roomPage, setRoomPage] = useState(0);
   const [acknowledged, setAcknowledged] = useState<Set<string>>(() => new Set());
   const viewport = useRef<HTMLDivElement>(null);
   const lastTrigger = useRef<HTMLElement | SVGElement | null>(null);
@@ -155,7 +154,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     const wrap = viewport.current;
     const target = id ? zoneElement(id) : wrap?.querySelector<SVGElement>('[data-state]');
     if (!target || !wrap) return;
-    wrap.scrollTo({ left: wrap.scrollLeft + target.getBoundingClientRect().left - wrap.getBoundingClientRect().left - 12,
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest',
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     target.focus({ preventScroll: true });
   };
@@ -174,8 +173,12 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   const rooms = salas.filter(s => s.unidadeId === unit && s.ativo);
   const consulting = rooms.filter(r => roomSector(r.nome) === 'consultation');
   const consultationIds = new Set(consulting.map(r => r.id));
-  const procedureRooms = new Map(rooms.filter(r => roomSector(r.nome) === 'procedure').map(r => [r.id, r]));
   const roomById = new Map(rooms.map(r => [r.id, r]));
+  const roomNameCounts = new Map<string, number>();
+  for (const room of rooms) {
+    const label = cockpitLabel(room.nome);
+    roomNameCounts.set(label, (roomNameCounts.get(label) ?? 0) + 1);
+  }
   const staff = new Map(funcionarios.filter(f => f.unidadeId === unit).map(f => [f.id, f]));
   const teamByRoom = new Map<string, typeof funcionarios>();
   for (const person of staff.values()) {
@@ -220,10 +223,10 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     historyByRoom.set(a.sala_id, history);
   }
   const occupied = consulting.filter(r => visitsByRoom.has(r.id)).length;
-  const procedureActive = active.filter(a => a.stage === 'consultation' && (procedureRooms.has(a.sala_id) || procedureVisit(a.tipo)));
+  const procedureActive = active.filter(a => a.stage === 'consultation' && (roomSector(roomById.get(a.sala_id)?.nome || '') === 'procedure' || procedureVisit(a.tipo)));
   const procedureIds = new Set(procedureActive.map(a => a.id));
   const waitingCare = active.filter(a => a.stage === 'otherCare');
-  const unmapped = active.filter(a => a.stage === 'consultation' && !consultationIds.has(a.sala_id) && !procedureIds.has(a.id));
+  const unmapped = active.filter(a => a.stage === 'consultation' && !roomById.has(a.sala_id));
   const waitBySpecialty = new Map<string, Set<string>>();
   for (const a of waiting) {
     const specialty = cockpitLabel(staff.get(a.profissional_id)?.profissao);
@@ -233,38 +236,32 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     waitBySpecialty.set(specialty, ids);
   }
 
-  const roomViews = [...consulting].sort((a, b) => orderNames.compare(a.nome, b.nome)).map(room => {
+  const roomViews = [...rooms].sort((a, b) => orderNames.compare(a.nome, b.nome)).map(room => {
     const visits = visitsByRoom.get(room.id) ?? [];
     const history = historyByRoom.get(room.id) ?? [];
     const team = (teamByRoom.get(room.id) ?? []).filter(f => f.role === 'profissional');
     const specialties = new Set(team.map(f => cockpitLabel(f.profissao)).filter(Boolean));
     const overdue = new Set([...specialties].flatMap(s => [...(waitBySpecialty.get(s) ?? [])])).size;
-    const call = calls[cockpitLabel(room.nome)];
+    const roomLabel = cockpitLabel(room.nome);
+    const call = roomNameCounts.get(roomLabel) === 1 ? calls[roomLabel] : undefined;
     const agendaCall = callingByRoom.get(room.id)?.paciente_nome;
     const stillCalling = call && freshCockpitCall(call.criadoEm, now)
       && !history.some(a => cockpitLabel(a.paciente_nome) === cockpitLabel(call.pacienteNome) && Date.parse(a.concluido_em || '') >= Date.parse(call.criadoEm));
     const calling = agendaCall || (stillCalling ? call.pacienteNome : '');
-    const state: RoomState = visits.length ? 'occupied' : calling ? 'calling' : isBottleneck(overdue) ? 'bottleneck' : 'free';
+    const state: RoomState = visits.length ? 'occupied' : calling ? 'calling' : consultationIds.has(room.id) && isBottleneck(overdue) ? 'bottleneck' : 'free';
     const currentStaff = staff.get(visits[0]?.profissional_id || '');
     const specialty = currentStaff?.profissao || [...new Set(team.map(f => f.profissao).filter(Boolean))].join(' · ');
-    const clinician = visits[0]?.profissional_nome || currentStaff?.nome || (team.length === 1 ? team[0].nome : '');
-    const regularVisits = visits.filter(a => !procedureIds.has(a.id));
+    const clinician = visits[0]?.profissional_nome || currentStaff?.nome || '';
     const elapsed = (a: Item) => elapsedMinutes(a.iniciado_em || starts[a.id] || null, now);
     const timedVisits = visits.map(elapsed).filter((min): min is number => min !== null);
     const map: MapRoom = {
-      id: room.id, name: room.nome, state, specialty, staff: !!clinician || team.length > 0, overdue,
+      id: room.id, name: room.nome, state, specialty, staff: visits.length > 0 || !!calling, overdue,
       elapsed: timedVisits.length ? Math.max(...timedVisits) : null, completed: history.length,
-      patients: regularVisits.map(a => ({ id: a.id })),
+      patients: visits.map(a => ({ id: a.id })),
     };
     return { map, clinician, calling, visits, history, team, elapsed };
   });
-  const pageCount = Math.max(1, Math.ceil(roomViews.length / ROOMS_PER_MAP));
-  const page = Math.min(roomPage, pageCount - 1);
-  const currentRooms = roomViews.slice(page * ROOMS_PER_MAP, (page + 1) * ROOMS_PER_MAP).map(r => r.map);
-  const onPage = (next: number) => {
-    setRoomPage(next);
-    if (viewport.current) viewport.current.scrollLeft = 0;
-  };
+  const currentRooms = roomViews.map(room => room.map);
   const triageQueue = classifying.map(a => ({ id: a.id, risk: asRisk(recordByAppointment.get(a.id)?.classificacao_risco) }));
   const riskRank = (risk?: Risk) => risk ? riskOrder.indexOf(risk) : riskOrder.length;
   triageQueue.sort((a, b) => riskRank(a.risk) - riskRank(b.risk));
@@ -293,7 +290,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   const asRecord = (a: Item, text: string, tone?: string): RecordLine => {
     const record = recordByAppointment.get(a.id);
     const room = roomById.get(a.sala_id);
-    const call = room ? calls[cockpitLabel(room.nome)] : undefined;
+    const label = cockpitLabel(room?.nome);
+    const call = room && roomNameCounts.get(label) === 1 ? calls[label] : undefined;
     const key = JSON.stringify([a.sala_id, cockpitLabel(a.paciente_nome)]);
     const broadcastCall = call && cockpitLabel(call.pacienteNome) === cockpitLabel(a.paciente_nome) &&
       sameNameInRoom.get(key) === 1 && (!a.concluido_em || Date.parse(call.criadoEm) <= Date.parse(a.concluido_em))
@@ -347,7 +345,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       tone: 'warning', appointmentIds: entries.map(({ a }) => a.id),
     });
   }
-  const procedureOverdue = procedureActive.filter(a => !consultationIds.has(a.sala_id) && (visitMinutes(a) ?? 0) > VISIT_LIMIT);
+  const procedureOverdue = procedureActive.filter(a => !roomById.has(a.sala_id) && (visitMinutes(a) ?? 0) > VISIT_LIMIT);
   if (procedureOverdue.length) alerts.unshift({
     id: 'procedimentos-demora', zones: ['procedimentos'], title: 'Procedimentos prolongados',
     summary: `${procedureOverdue.length} acima de ${VISIT_LIMIT} min · maior tempo ${Math.max(...procedureOverdue.map(a => visitMinutes(a) ?? 0))} min`,
@@ -389,7 +387,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       detail = { title: room.map.name, body: <>
         <span className="planta-badge" data-state={room.map.state}>{roomStatuses[room.map.state]}</span>
         <p>{room.map.specialty || 'Especialidade não informada'}{room.clinician && ' · ' + room.clinician}</p>
-        {!room.clinician && room.team.length > 1 && <p>Equipe vinculada · {room.team.map(f => f.nome).join(', ')}</p>}
+        {!room.visits.length && room.team.length > 0 && <p>Equipe cadastrada · {room.team.map(f => f.nome).join(', ')}</p>}
         {room.map.state === 'calling' && <p>Paciente chamado · <strong>{room.calling}</strong></p>}
         {room.map.state === 'bottleneck' && <p>{room.map.overdue} pacientes da especialidade aguardam há mais de 20 min.</p>}
         {!!room.visits.length && <RecordList empty="" records={room.visits.map(a => {
@@ -426,7 +424,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       </> };
     } else if (zone === 'sem-sala') {
       detail = { title: 'Em atendimento sem sala identificada', body: <RecordList empty="Nenhum atendimento sem sala identificada."
-        records={unmapped.map(a => asRecord(a, a.profissional_nome || 'Profissional não informado'))} /> };
+        records={unmapped.map(a => asRecord(a, (a.profissional_nome || 'Profissional não informado') +
+          (a.sala_id ? ' · Sala vinculada indisponível no cadastro ativo desta unidade' : ' · Sem sala vinculada na Agenda')))} /> };
     }
   }
 
@@ -451,7 +450,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     <section className="planta-board" aria-label="Planta operacional">
       <header className="planta-board-head">
         <div className="planta-location"><Building2 size={20} aria-hidden="true" />
-          <div><h2>{unitName}</h2><p>Planta operacional · {dateLabel(day)}</p></div>
+          <div><h2>{unitName}</h2><p>{rows ? `${rooms.length} salas ativas cadastradas · ` : ''}{dateLabel(day)}</p></div>
         </div>
         {rows && <div className="planta-legend" aria-label="Legenda dos consultórios">
           {(Object.entries(roomStatuses) as [RoomState, string][]).map(([state, text]) =>
@@ -463,7 +462,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
         {!theater && <nav className="planta-mobile-zones" aria-label="Atalhos da planta">
           <button type="button" className="planta-action" onClick={() => scrollToZone('recepcao')}>Recepção</button>
           <button type="button" className="planta-action" onClick={() => scrollToZone('triagem')}>Triagem</button>
-          {!!currentRooms.length && <button type="button" className="planta-action" onClick={() => scrollToZone()}>Consultórios</button>}
+          {!!currentRooms.length && <button type="button" className="planta-action" onClick={() => scrollToZone()}>Salas cadastradas</button>}
           <button type="button" className="planta-action" onClick={() => scrollToZone('procedimentos')}>Procedimentos</button>
         </nav>}
         <PlantaUnidade rooms={currentRooms} waiting={mapWaiting} longest={longest} triage={triageQueue}
@@ -475,18 +474,13 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
           {theater && unmapped.length > 0 && <span>{unmapped.length} em atendimento sem sala</span>}
         </div>
         <div className="planta-footer-tools">
-          {rows && pageCount > 1 && <nav className="planta-pagination" aria-label="Páginas de consultórios">
-            <button type="button" className="planta-action" aria-label="Consultórios anteriores" disabled={page === 0} onClick={() => onPage(page - 1)}><ChevronLeft size={16} /></button>
-            <span>Consultórios {page + 1}/{pageCount}</span>
-            <button type="button" className="planta-action" aria-label="Próximos consultórios" disabled={page === pageCount - 1} onClick={() => onPage(page + 1)}><ChevronRight size={16} /></button>
-          </nav>}
           {(!theater || error) && <button type="button" className="planta-action" onClick={reload}><RefreshCw size={14} aria-hidden="true" /> Atualizar</button>}
         </div>
       </footer>
     </section>
     {rows && <div className="planta-caption">
       <span>{theater ? 'Modo telão · Sem nomes de pacientes' : 'Selecione um setor para abrir os detalhes.'}</span>
-      <span>Estados registrados · As posições na planta são ilustrativas.</span>
+      <span>Salas do cadastro e ocupação pela Agenda · Disposição ilustrativa.</span>
     </div>}
     {detail && <Details key={zone} title={detail.title} onClose={closeZone}>{detail.body}</Details>}
   </div>;

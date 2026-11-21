@@ -28,7 +28,7 @@
   min-height: 64px; padding: 9px clamp(12px, 2vw, 30px);
   background: var(--planta-dark); color: #fff; border-bottom: 1px solid #3f5659;
 }
-.planta-brand, .planta-tools, .planta-location, .planta-footer-tools, .planta-statuses, .planta-pagination { display: flex; align-items: center; gap: 10px; }
+.planta-brand, .planta-tools, .planta-location, .planta-footer-tools, .planta-statuses { display: flex; align-items: center; gap: 10px; }
 .planta-brand { min-width: 0; gap: 12px; }
 .planta-emblem { width: 39px; height: 39px; border-radius: 11px; color: #adf3cd; background: #24484a; display: grid; place-items: center; flex: none; }
 .planta-kicker { display: block; color: #aecbc8; font-size: 10px; font-weight: 730; letter-spacing: .14em; text-transform: uppercase; line-height: 1.2; }
@@ -92,9 +92,7 @@
 .planta-mobile-zones { display: none; }
 .planta-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 7px; min-height: 43px; padding: 4px 11px; border-top: 1px solid #d6e2de; }
 .planta-footer .planta-action { min-height: 30px; font-size: 12px; }
-.planta-statuses, .planta-pagination { color: var(--planta-muted); font-size: 12px; font-weight: 670; flex-wrap: wrap; }
-.planta-pagination { gap: 6px; }
-.planta-pagination .planta-action { padding-inline: 5px; }
+.planta-statuses { color: var(--planta-muted); font-size: 12px; font-weight: 670; flex-wrap: wrap; }
 .planta-sync { display: inline-flex; align-items: center; gap: 7px; color: #6f4e1a; font-size: 12px; font-weight: 750; }
 .planta-sync i { width: 8px; height: 8px; border-radius: 50%; background: #9b671d; box-shadow: 0 0 0 3px #f0e6d3; }
 .planta-sync[data-online="true"] { color: #16664e; }
@@ -172,3 +170,6 @@
 .cockpit-journey summary { width: fit-content; cursor: pointer; color: hsl(var(--primary)); font-size: .8rem; }
 .cockpit-journey ol { display: grid; gap: .2rem; border-inline-start: 2px solid hsl(var(--border)); margin-block: .45rem; padding-inline-start: .65rem; }
 .cockpit-journey li { display: flex; justify-content: space-between; gap: .5rem; padding: .2rem 0; border: 0; background: transparent; font-size: .8rem; }
+
+/* Additional registered rooms extend the map instead of shrinking the room labels. */
+.planta-cockpit .planta-map[data-multirow="true"] { max-height: none; height: auto; }

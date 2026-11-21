@@ -81,7 +81,7 @@ it('usa a chamada do painel sem ler eventos de outra unidade', () => {
   expect(screen.queryByText('Paciente teste')).toBeNull();
 });
 
-it('mostra prioridade e procedimento no setor correto sem duplicar o paciente', () => {
+it('mostra prioridade, procedimento no resumo e ocupação na sala vinculada', () => {
   const now = new Date().toISOString();
   setup('', {
     rows: [
@@ -95,7 +95,7 @@ it('mostra prioridade e procedimento no setor correto sem duplicar o paciente', 
   expect(screen.getByRole('button', { name: /Recepção e sala de espera\. 0 aguardando/ })).toBeTruthy();
   const procedure = screen.getByRole('button', { name: /Medicação e sessões\. 1 em andamento/ });
   expect(procedure.querySelector('[data-papel=medicacao]')).toBeTruthy();
-  expect(consult().querySelector('[data-papel=paciente]')).toBeNull();
+  expect(consult().querySelectorAll('[data-papel=paciente]')).toHaveLength(1);
   fireEvent.click(procedure);
   expect(within(screen.getByRole('dialog')).getByText('Infusão registrada · Sala teste')).toBeTruthy();
 });
@@ -133,16 +133,34 @@ it('global alterna unidades e o telão não inclui nomes, detalhes ou seletor de
   expect(consult()).toBeTruthy();
 });
 
-it('mantém a visão compacta com mais de cinco consultórios sem omitir os demais', () => {
+it('mostra todos os consultórios e demais salas ativas cadastradas, inclusive na segunda fileira', () => {
   for (let i = 1; i <= 7; i++) fixture.salas.push({ id: 'r' + i, nome: 'Consultório ' + i, ativo: true, unidadeId: 'local' });
+  fixture.salas.push({ id: 't', nome: 'TRIAGEM', ativo: true, unidadeId: 'local' },
+    { id: 'inativa', nome: 'Sala desativada', ativo: false, unidadeId: 'local' });
   setup('', { rows: [] });
-  render(<CockpitUnidade />);
+  const view = render(<CockpitUnidade />);
   expect(screen.getByText('0/8')).toBeTruthy();
-  expect(screen.getByText('Consultórios 1/2')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /Consultório 7/ })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Próximos consultórios' }));
-  expect(screen.getByRole('button', { name: /Consultório 7/ })).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /Consultório 1\./ })).toBeNull();
+  expect(screen.getByText(/9 salas ativas cadastradas/)).toBeInTheDocument();
+  expect(view.container.querySelector('[data-map-zone="t"]')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Consultório 7\./ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Consultório 1\./ })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Sala desativada|Sala externa/ })).not.toBeInTheDocument();
+});
+
+it('usa a sala real da Agenda para sessões e sinaliza vínculos a salas de outra unidade', () => {
+  fixture.salas.push({ id: 'curativo', nome: 'Sala de Curativos', ativo: true, unidadeId: 'local' });
+  setup('em_atendimento', { rows: [
+    { ...a, sala_id: 'curativo', tipo: 'Sessão', status: 'em_atendimento' },
+    { ...a, id: 'fora', sala_id: 'x', paciente_nome: 'Paciente sem sala local', status: 'em_atendimento' },
+  ] });
+  const view = render(<CockpitUnidade />);
+  const room = view.container.querySelector('[data-map-zone="curativo"]') as SVGElement;
+  expect(room).toHaveAttribute('data-state', 'occupied');
+  fireEvent.click(room);
+  expect(within(screen.getByRole('dialog')).getByText('Paciente teste')).toBeInTheDocument();
+  close();
+  fireEvent.click(screen.getByRole('button', { name: '1 em atendimento sem sala' }));
+  expect(within(screen.getByRole('dialog')).getByText('Paciente sem sala local')).toBeInTheDocument();
 });
 
 it('agrupa recepção cheia sem esconder o total ou impedir consultar toda a fila', () => {

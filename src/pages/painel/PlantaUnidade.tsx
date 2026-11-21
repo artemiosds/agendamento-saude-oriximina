@@ -19,7 +19,8 @@ export type MapRoom = {
   id: string; name: string; specialty: string; staff: boolean; state: RoomState;
   elapsed: number | null; overdue: number; patients: MapPatient[]; completed: number;
 };
-export const ROOMS_PER_MAP = 5;
+const ROOMS_PER_ROW = 5;
+const ROOM_ROW_HEIGHT = 166;
 const colors: Record<RoomState, [string, string, string]> = {
   free: ['#e1f0e5', '#165d44', '#1d8b61'],
   calling: ['#ffebc7', '#744204', '#c27a11'],
@@ -114,12 +115,12 @@ function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, 
     <rect className="planta-focus" x={x + 2} y={y + 2} width={w - 4} height={h - 4} rx="5" />
   </g>;
 }
-function Consultation({ room, x, w, onOpen, alert }: { room: MapRoom; x: number; w: number; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
-  const y = 65, h = 142;
+function RegisteredRoom({ room, x, y, w, onOpen, alert }: { room: MapRoom; x: number; y: number; w: number; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
+  const h = 142;
   const status = roomStatuses[room.state] + (room.elapsed === null ? '' : ' · ' + room.elapsed + ' min');
   const singleLine = room.name.length < 19 && room.specialty.length < 14;
   return <Zone id={room.id} title={room.name} summary={status} x={x} y={y} w={w} h={h} state={room.state} color="#f4f8f4" onOpen={onOpen} alert={alert}>
-    <text className="planta-room-title" x={x + 10} y={y + 20}>{short(room.name, singleLine ? 18 : Math.floor((w - 26) / 7.8))}</text>
+    <text className="planta-room-title" x={x + 10} y={y + 20}>{short(room.name, Math.floor((w - 20) / (singleLine && room.specialty ? 11 : 7)))}</text>
     {singleLine && <text className="planta-tile-label" textAnchor="end" x={x + w - 11} y={y + 19}>{room.specialty}</text>}
     <Plate x={x + 10} y={y + 47} state={room.state} label={status} />
     <Cabinet x={x + w - 41} y={y + 37} w={31} /><Stretcher x={x + w - 64} y={y + 64} />
@@ -187,23 +188,26 @@ function Procedures({ patients, waiting, onOpen, alert }: { patients: MapPatient
   </Zone>;
 }
 
-const Background = memo(function Background({ grid, arrow, empty }: { grid: string; arrow: string; empty: boolean }) {
+const Background = memo(function Background({ grid, arrow, empty, shift }: { grid: string; arrow: string; empty: boolean; shift: number }) {
   return <>
     <defs>
       <pattern id={grid} width="16" height="16" patternUnits="userSpaceOnUse"><path d="M16 0H0v16" fill="none" stroke="#b8d0c7" strokeOpacity=".55" strokeWidth=".7" /></pattern>
       <marker id={arrow} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="m0 0 10 5-10 5z" fill="#569387" /></marker>
     </defs>
-    <rect width="1232" height="466" fill="#deebe7" /><rect width="1232" height="466" fill={`url(#${grid})`} />
-    <rect x="11" y="51" width="1210" height="396" rx="10" fill="#72998a" opacity=".19" />
-    <rect x="11" y="48" width="1210" height="396" rx="10" fill="#d2e4db" stroke="#8eaaa1" strokeWidth="2.7" />
-    <rect x="16" y="53" width="1200" height="386" rx="7" fill="#d9e8e0" stroke="#edf5ed" strokeWidth="3" />
-    <path d="M22 238H1210m-1188 35h1188" stroke="#c3d9d0" />
-    <path d="M66 255H252m147 0h800" stroke="#579286" strokeWidth="1.4" strokeDasharray="5 6" markerEnd={`url(#${arrow})`} opacity=".55" />
-    <text className="planta-annotation" x="326" y="259" textAnchor="middle">CORREDOR CENTRAL</text>
-    <text className="planta-wing" x="23" y="32">CONSULTÓRIOS · ALA CLÍNICA</text>
-    <path d="M242 28h966M23 451h44m131 0h1010" stroke="#a6c1b7" opacity=".75" />
-    <text className="planta-annotation" x="121" y="459" textAnchor="middle">ENTRADA</text>
-    {empty && <text className="planta-room-title" textAnchor="middle" x="616" y="138">Nenhum consultório ativo cadastrado nesta unidade.</text>}
+    <rect width="1232" height={466 + shift} fill="#deebe7" /><rect width="1232" height={466 + shift} fill={`url(#${grid})`} />
+    <rect x="11" y="51" width="1210" height={396 + shift} rx="10" fill="#72998a" opacity=".19" />
+    <rect x="11" y="48" width="1210" height={396 + shift} rx="10" fill="#d2e4db" stroke="#8eaaa1" strokeWidth="2.7" />
+    <rect x="16" y="53" width="1200" height={386 + shift} rx="7" fill="#d9e8e0" stroke="#edf5ed" strokeWidth="3" />
+    <g transform={`translate(0 ${shift})`}>
+      <path d="M22 238H1210m-1188 35h1188" stroke="#c3d9d0" />
+      <path d="M66 255H252m147 0h800" stroke="#579286" strokeWidth="1.4" strokeDasharray="5 6" markerEnd={`url(#${arrow})`} opacity=".55" />
+      <text className="planta-annotation" x="326" y="259" textAnchor="middle">FLUXO DO ATENDIMENTO</text>
+      <path d="M23 451h44m131 0h1010" stroke="#a6c1b7" opacity=".75" />
+      <text className="planta-annotation" x="121" y="459" textAnchor="middle">ENTRADA</text>
+    </g>
+    <text className="planta-wing" x="23" y="32">SALAS ATIVAS CADASTRADAS</text>
+    <path d="M282 28h926" stroke="#a6c1b7" opacity=".75" />
+    {empty && <text className="planta-room-title" textAnchor="middle" x="616" y="138">Nenhuma sala ativa cadastrada nesta unidade.</text>}
   </>;
 });
 
@@ -213,17 +217,26 @@ export function PlantaUnidade({ rooms, waiting, longest, triage, risk, procedure
 }) {
   const uid = useId().replace(/:/g, '');
   const arrow = 'planta-arrow-' + uid;
-  const width = Math.min(354, Math.floor((1186 - 9 * (rooms.length - 1)) / Math.max(rooms.length, 1)));
-  const start = Math.round((1232 - (rooms.length * width + 9 * (rooms.length - 1))) / 2);
+  const columns = Math.min(ROOMS_PER_ROW, Math.max(rooms.length, 1));
+  const width = Math.min(354, Math.floor((1186 - 9 * (columns - 1)) / columns));
+  const shift = ROOM_ROW_HEIGHT * Math.max(0, Math.ceil(rooms.length / columns) - 1);
   return <div className="planta-map-wrap" ref={viewport}>
-    <svg className="planta-map" viewBox="0 0 1232 466" role="group" aria-label="Planta da unidade">
-      <Background grid={'planta-grid-' + uid} arrow={arrow} empty={!rooms.length} />
-      {rooms.map((room, index) => <Consultation key={room.id} room={room} x={start + index * (width + 9)} w={width} onOpen={onOpen} alert={alerts?.get(room.id)} />)}
-      <Reception patients={waiting} longest={longest} onOpen={onOpen} alert={alerts?.get("recepcao")} />
-      <Triage patients={triage} risk={risk} onOpen={onOpen} alert={alerts?.get("triagem")} />
-      <Procedures patients={procedures} waiting={waitingCare} onOpen={onOpen} alert={alerts?.get("procedimentos")} />
-      <g pointerEvents="none"><path d="M80 439v8m83-8v8" stroke="#96b2a8" /><path d="M81 436h81" stroke="#e4efe8" strokeWidth="5" />
-        <path d="M122 447V431" stroke="#519185" strokeWidth="1.2" markerEnd={`url(#${arrow})`} /></g>
+    <svg className="planta-map" data-multirow={shift > 0} viewBox={`0 0 1232 ${466 + shift}`} role="group" aria-label="Planta da unidade">
+      <Background grid={'planta-grid-' + uid} arrow={arrow} empty={!rooms.length} shift={shift} />
+      {rooms.map((room, index) => {
+        const row = Math.floor(index / columns);
+        const rowSize = Math.min(columns, rooms.length - row * columns);
+        const start = Math.round((1232 - (rowSize * width + 9 * (rowSize - 1))) / 2);
+        return <RegisteredRoom key={room.id} room={room} x={start + (index % columns) * (width + 9)}
+          y={65 + ROOM_ROW_HEIGHT * row} w={width} onOpen={onOpen} alert={alerts?.get(room.id)} />;
+      })}
+      <g transform={`translate(0 ${shift})`}>
+        <Reception patients={waiting} longest={longest} onOpen={onOpen} alert={alerts?.get("recepcao")} />
+        <Triage patients={triage} risk={risk} onOpen={onOpen} alert={alerts?.get("triagem")} />
+        <Procedures patients={procedures} waiting={waitingCare} onOpen={onOpen} alert={alerts?.get("procedimentos")} />
+        <g pointerEvents="none"><path d="M80 439v8m83-8v8" stroke="#96b2a8" /><path d="M81 436h81" stroke="#e4efe8" strokeWidth="5" />
+          <path d="M122 447V431" stroke="#519185" strokeWidth="1.2" markerEnd={`url(#${arrow})`} /></g>
+      </g>
     </svg>
   </div>;
 }
