@@ -30,6 +30,7 @@ import ContactActionButton from "@/components/ContactActionButton";
 import { formatCNS } from "@/components/PacienteDetalheModal";
 
 export interface PacienteItemCardProps {
+  onOverlayChange?: (id: string, open: boolean) => void;
   paciente: any;
   naFila: boolean;
   filaEntry?: { horaChegada: string; prioridade: string; unidadeId?: string } | undefined;
@@ -60,6 +61,7 @@ const PacienteItemCardBase: React.FC<PacienteItemCardProps> = ({
   onOpenDetalhe,
   onVerProntuarios,
   onEditar,
+  onOverlayChange,
   onDelete,
 }) => {
   return (
@@ -154,7 +156,7 @@ const PacienteItemCardBase: React.FC<PacienteItemCardProps> = ({
               <Pencil className="w-3.5 h-3.5" />
             </Button>
             {canDelete && (
-              <AlertDialog>
+              <AlertDialog onOpenChange={open => onOverlayChange?.(p.id, open)}>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive">
                     <Trash2 className="w-3.5 h-3.5" />

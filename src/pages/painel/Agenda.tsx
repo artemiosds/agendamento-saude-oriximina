@@ -1,3 +1,4 @@
+import { OperationalVirtualList } from "@/components/OperationalVirtualList";
 import SigtapProcedurePicker from '@/components/documents/SigtapProcedurePicker';
 import { termoSigtap, type ExameAgendado } from '@/lib/agendamentoSigtap';
 import { EscalaProfissionais } from '@/components/EscalaProfissionais';
@@ -3914,12 +3915,13 @@ const Agenda: React.FC = () => {
                 </CardContent>
               </Card>
             ) : (
-              filtered.map((ag, idx) => {
+              <OperationalVirtualList items={filtered} threshold={12} estimateSize={140} label="Agendamentos do dia"
+                renderItem={(ag, idx, onOverlayChange) => {
                 const tipoInfo = tipoBadge[ag.tipo];
                 const displayStatus = getDisplayStatus(ag, todayLocalStr());
                 return (
                   <AgendaItemCard
-                    key={ag.id}
+                    onOverlayChange={onOverlayChange}
                     ag={ag}
                     showMorningDivider={idx === idxPendentesManha}
                     paciente={pacienteById.get(ag.pacienteId)}
@@ -3961,7 +3963,7 @@ const Agenda: React.FC = () => {
                     onImprimirComprovante={stableComprovante}
                   />
                 );
-              })
+              }} />
             )}
           </div>
 

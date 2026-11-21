@@ -1,3 +1,4 @@
+import { OperationalVirtualList } from "@/components/OperationalVirtualList";
 import { patientCpfError } from '@/lib/patientCpf';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -1209,15 +1210,16 @@ const Pacientes: React.FC = () => {
         </Select>
       </div>
 
-      <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 ${filtered.length > 50 ? 'perf-dense' : ''}`}>
-        {filtered.slice(0, visibleCount).map((p) => {
+      <div className={`${filtered.length > 50 ? 'perf-dense' : ''}`}>
+        <OperationalVirtualList items={filtered.slice(0, visibleCount)} threshold={30} estimateSize={220} grid label="Lista de pacientes"
+          renderItem={(p, _index, onOverlayChange) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
           const unidadeNome =
             unidadesById.get(filaEntry?.unidadeId || user?.unidadeId || "")?.nome || "";
           return (
             <PacienteItemCard
-              key={p.id}
+              onOverlayChange={onOverlayChange}
               paciente={p}
               naFila={naFila}
               filaEntry={filaEntry}
@@ -1234,8 +1236,7 @@ const Pacientes: React.FC = () => {
               onDelete={stableDelete}
             />
           );
-        })}
-
+        }} />
       </div>
       {visibleCount < (needsFullList ? filtered.length : directoryQuery.data?.total || 0) && (
         <div className="flex justify-center pt-2">

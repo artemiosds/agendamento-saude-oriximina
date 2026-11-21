@@ -42,6 +42,7 @@ import { isArrivalAlreadyProcessed } from "@/lib/triageCompletion";
 import PassaporteClinico from "@/components/prontuario/PassaporteClinico";
 
 export interface AgendaItemCardProps {
+  onOverlayChange?: (id: string, open: boolean) => void;
   ag: any;
   showMorningDivider: boolean;
   paciente: any | undefined;
@@ -130,6 +131,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
   onStatusChange,
   onCancelInit,
   onConcluir,
+  onOverlayChange,
   onDeleteInit,
   onImprimirFicha,
   onImprimirComprovante,
@@ -624,7 +626,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
                     </Button>
                   )}
                   {outras.length > 0 && (
-                    <DropdownMenu>
+                    <DropdownMenu onOpenChange={open => onOverlayChange?.(ag.id, open)}>
                       <DropdownMenuTrigger asChild>
                         <Button size="sm" variant="outline" className="h-8 px-2 gap-1 text-xs" title="Mais ações">
                           <MoreHorizontal className="w-3.5 h-3.5" /> Mais ações
