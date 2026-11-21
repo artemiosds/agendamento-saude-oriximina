@@ -4653,6 +4653,10 @@ export type Database = {
           unidade_id: string
         }[]
       }
+      get_atendimentos_pendentes_master_page: {
+        Args: { p_periodo: string; p_pagina: number }
+        Returns: Json
+      }
       get_procedures_for_cid: {
         Args: { lim?: number; p_cid: string }
         Returns: Json

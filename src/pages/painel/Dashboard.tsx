@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AtendimentosPendentesMaster } from './AtendimentosPendentesMaster';
 import { Link } from 'react-router-dom';
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Calendar, CheckCircle, Clock, DoorOpen, ListOrdered, Stethoscope, Users, XCircle } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -246,7 +247,7 @@ function DashboardScope({ userId, firstName, userUnidadeId, isGlobalAdmin, isMas
               icon={AlertTriangle} detail="Aguardando na fila atual" />
           </div>
         </section>
-        {isMaster && <AtendimentosPendentesMaster userUnidadeId={userUnidadeId} isGlobalAdmin={isGlobalAdmin}
+        {isMaster && <AtendimentosPendentesMaster key={today} scope={JSON.stringify([userId, unitId, isGlobalAdmin])} today={today}
           agendaAllowed={allowedActions.some(action => action.module === 'agenda')} />}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="min-w-0 shadow-none">
@@ -319,59 +320,5 @@ function DashboardScope({ userId, firstName, userUnidadeId, isGlobalAdmin, isMas
     </div>
   );
 }
-
-const AtendimentosPendentesMaster: React.FC<{ userUnidadeId: string; isGlobalAdmin: boolean; agendaAllowed: boolean }> = ({ userUnidadeId, isGlobalAdmin, agendaAllowed }) => {
-  const [pendentes, setPendentes] = useState<any[]>([]);
-  const [minutos, setMinutos] = useState(60);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const { data: cfgRow } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-        const m = (cfgRow?.configuracoes as any)?.config_fluxo_atendimento?.alerta_minutos_em_atendimento;
-        const mins = typeof m === 'number' ? m : 60;
-        if (!active) return;
-        setMinutos(mins);
-        const { data } = await (supabase as any).rpc('get_atendimentos_pendentes_master', {
-          p_unidade_id: isGlobalAdmin ? null : (userUnidadeId || null),
-          p_minutos: mins,
-        });
-        if (active) setPendentes((data || []).filter((row: { unidade_id: string }) => isGlobalAdmin || row.unidade_id === userUnidadeId));
-      } catch {}
-    })();
-    return () => { active = false; };
-  }, [userUnidadeId, isGlobalAdmin]);
-
-  if (pendentes.length === 0) return null;
-
-  return (
-    <Card className="border-destructive/30 bg-destructive/5">
-      <CardContent className="p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-destructive" />
-          <h3 className="font-semibold font-display text-foreground">
-            Atendimentos em aberto há mais de {minutos} min ({pendentes.length})
-          </h3>
-          {agendaAllowed && <Button asChild variant="outline" size="sm" className="sm:ml-auto"><Link to="/painel/agenda">Abrir Agenda <ArrowUpRight className="ml-1 h-4 w-4" /></Link></Button>}
-        </div>
-        <div className="space-y-2">
-          {pendentes.slice(0, 10).map((p: any) => (
-            <div
-              key={p.id}
-              className="flex items-center justify-between gap-3 rounded-lg bg-background/80 p-3"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{p.paciente_nome}</p>
-                <p className="text-xs text-muted-foreground truncate">com {p.profissional_nome} · {p.data} {p.hora}</p>
-              </div>
-              <span className="text-xs font-semibold text-destructive shrink-0">{p.minutos_aberto} min</span>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
 
 export default Dashboard;
