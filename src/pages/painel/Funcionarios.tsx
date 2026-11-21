@@ -67,7 +67,7 @@ interface FuncionarioDB {
 }
 
 const Funcionarios: React.FC = () => {
-  const { unidades, salas, disponibilidades, refreshDisponibilidades, refreshFuncionarios, logAction } = useOperacional();
+  const { unidades, salas, disponibilidades, refreshFuncionarios, logAction } = useOperacional();
   const { unidadesVisiveis, isGlobalMaster } = useUnidadeFilter();
   const { unitId: globalUnitId, setUnitId: setGlobalUnitId } = useOperationalUnitScope(unidadesVisiveis, isGlobalMaster);
   const { user, isUnitMaster } = useAuth();
@@ -119,10 +119,6 @@ const Funcionarios: React.FC = () => {
   useEffect(() => {
     loadFuncionarios();
   }, []);
-
-  useEffect(() => {
-    if (isGlobalMaster) void refreshDisponibilidades();
-  }, [isGlobalMaster, refreshDisponibilidades]);
 
   useEffect(() => {
     // Check for ID in URL to automatically open edit modal

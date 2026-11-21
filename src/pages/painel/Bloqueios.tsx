@@ -56,7 +56,7 @@ const ROLES_PROFISSIONAL = [
 ];
 
 const Bloqueios: React.FC = () => {
-  const { bloqueios, addBloqueio, deleteBloqueio, refreshBloqueios, unidades, funcionarios, logAction } = useOperacional();
+  const { bloqueios, addBloqueio, deleteBloqueio, unidades, funcionarios, logAction } = useOperacional();
   const { user } = useAuth();
 
   const [dialogOpen, setDialogOpen]     = useState(false);
@@ -201,7 +201,6 @@ const Bloqueios: React.FC = () => {
 
       setDialogOpen(false);
       resetForm();
-      await refreshBloqueios();
     } catch (err) {
       console.error('Erro ao salvar bloqueio:', err);
       toast.error('Erro ao salvar bloqueio. Tente novamente.');
@@ -238,7 +237,6 @@ const Bloqueios: React.FC = () => {
       });
 
       toast.success(`${toImport.length} feriados nacionais de 2026 importados!`);
-      await refreshBloqueios();
     } catch (err) {
       console.error('Error importing holidays:', err);
       toast.error('Erro ao importar feriados.');
@@ -251,7 +249,6 @@ const Bloqueios: React.FC = () => {
     try {
       await deleteBloqueio(id);
       toast.success('Bloqueio removido.');
-      await refreshBloqueios();
     } catch {
       toast.error('Erro ao remover bloqueio.');
     }

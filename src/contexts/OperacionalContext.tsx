@@ -9,7 +9,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -234,19 +234,186 @@ interface OperacionalContextType {
 
 const OperacionalContext = createContext<OperacionalContextType | null>(null);
 
+const EMPTY_UNIDADES: Unidade[] = [];
+const EMPTY_SALAS: Sala[] = [];
+const EMPTY_FUNCIONARIOS: User[] = [];
+const EMPTY_DISPONIBILIDADES: Disponibilidade[] = [];
+const EMPTY_BLOQUEIOS: BloqueioAgenda[] = [];
+
+const cadastralCacheOptions = {
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+  // The app-wide placeholder uses the previous query's data, even across key changes.
+  placeholderData: undefined,
+} as const;
+
+function useOperationalDirectory<T>(
+  table: "unidades" | "salas" | "funcionarios" | "disponibilidades" | "bloqueios",
+  scope: string,
+  enabled: boolean,
+  fetch: (signal: AbortSignal) => Promise<T>,
+) {
+  const queryClient = useQueryClient();
+  const key = useMemo(() => [...queryKeys[table].all, "operacional", scope], [table, scope]);
+  const { data } = useQuery({
+    ...cadastralCacheOptions,
+    queryKey: key,
+    enabled,
+    queryFn: ({ signal }) => fetch(signal),
+  });
+  const invalidationQueued = useRef(false);
+  useRealtimeSync({
+    table,
+    enabled,
+    onEvent: () => {
+      if (invalidationQueued.current) return;
+      invalidationQueued.current = true;
+      queueMicrotask(() => {
+        invalidationQueued.current = false;
+        void queryClient.invalidateQueries({ queryKey: key, exact: true });
+      });
+    },
+  });
+  return { data, key };
+}
+
+async function fetchUnidades(isGlobalAdmin: boolean, userUnidadeId: string, signal: AbortSignal): Promise<{ items: Unidade[]; logo: unknown }> {
+  let query = supabase.from("unidades").select("id,nome,nome_exibicao,endereco,telefone,whatsapp,ativo,custom_data");
+  if (!isGlobalAdmin && userUnidadeId) query = query.eq("id", userUnidadeId);
+  const { data, error } = await query.abortSignal(signal);
+  if (error) throw error;
+  const own = (data || []).find((u) => u.id === userUnidadeId);
+  return {
+    items: (data || []).map((u) => ({
+      id: u.id,
+      nome: u.nome,
+      nomeExibicao: u.nome_exibicao || "",
+      endereco: u.endereco || "",
+      telefone: u.telefone || "",
+      whatsapp: u.whatsapp || "",
+      ativo: u.ativo,
+    })),
+    logo: own?.custom_data && typeof own.custom_data === "object" && "logo_url" in own.custom_data
+      ? own.custom_data.logo_url : undefined,
+  };
+}
+
+async function fetchSalas(isGlobalAdmin: boolean, userUnidadeId: string, signal: AbortSignal): Promise<Sala[]> {
+  let query = supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
+  if (!isGlobalAdmin && userUnidadeId) query = query.eq("unidade_id", userUnidadeId);
+  const { data, error } = await query.abortSignal(signal);
+  if (error) throw error;
+  return (data || []).map((s: any) => ({
+    id: s.id, nome: s.nome, unidadeId: s.unidade_id, ativo: s.ativo
+  }));
+}
+
+async function fetchFuncionarios(signal: AbortSignal): Promise<User[]> {
+  const query = supabase
+    .from("funcionarios" as any)
+    .select(
+      "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo,custom_data",
+    );
+  const { data, error } = await query.abortSignal(signal);
+  if (error) throw error;
+  return (data || []).map((f: any) => ({
+    id: f.id,
+    authUserId: f.auth_user_id || "",
+    nome: f.nome,
+    usuario: f.usuario,
+    email: f.email || "",
+    cpf: f.cpf || "",
+    profissao: f.profissao || "",
+    tipoConselho: f.tipo_conselho || "",
+    numeroConselho: f.numero_conselho || "",
+    ufConselho: f.uf_conselho || "",
+    role: f.role,
+    unidadeId: f.unidade_id || "",
+    salaId: f.sala_id || "",
+    setor: f.setor || "",
+    cargo: f.cargo || "",
+    criadoEm: f.criado_em || "",
+    criadoPor: f.criado_por || "",
+    tempoAtendimento: f.tempo_atendimento || 30,
+    podeAgendarRetorno: f.pode_agendar_retorno || false,
+    coren: f.coren || "",
+    ativo: f.ativo ?? true,
+    customData: f.custom_data || {},
+  }));
+}
+
+async function fetchDisponibilidades(isGlobalAdmin: boolean, userUnidadeId: string, signal: AbortSignal): Promise<Disponibilidade[]> {
+  let query = supabase
+    .from("disponibilidades" as any)
+    .select(
+      "id,profissional_id,unidade_id,sala_id,data_inicio,data_fim,hora_inicio,hora_fim,vagas_por_hora,vagas_por_dia,dias_semana,duracao_consulta",
+    );
+  if (!isGlobalAdmin && userUnidadeId) query = query.eq("unidade_id", userUnidadeId);
+  const { data, error } = await query.abortSignal(signal);
+  if (error) throw error;
+  return (data || []).map((d: any) => ({
+    id: d.id,
+    profissionalId: d.profissional_id,
+    unidadeId: d.unidade_id,
+    salaId: d.sala_id || "",
+    dataInicio: d.data_inicio,
+    dataFim: d.data_fim,
+    horaInicio: d.hora_inicio,
+    horaFim: d.hora_fim,
+    vagasPorHora: d.vagas_por_hora,
+    vagasPorDia: d.vagas_por_dia,
+    diasSemana: d.dias_semana || [],
+    duracaoConsulta: d.duracao_consulta || 30,
+  }));
+}
+
+async function fetchBloqueios(signal: AbortSignal): Promise<BloqueioAgenda[]> {
+  const query = supabase.from("bloqueios" as any).select(
+    "id,titulo,tipo,data_inicio,data_fim,dia_inteiro,hora_inicio,hora_fim,unidade_id,profissional_id,criado_por",
+  );
+  const { data, error } = await query.abortSignal(signal);
+  if (error) throw error;
+  return (data || []).map((b: any) => ({
+    id: b.id,
+    titulo: b.titulo,
+    tipo: b.tipo,
+    dataInicio: b.data_inicio,
+    dataFim: b.data_fim,
+    diaInteiro: b.dia_inteiro ?? true,
+    horaInicio: b.hora_inicio || "",
+    horaFim: b.hora_fim || "",
+    unidadeId: b.unidade_id || "",
+    profissionalId: b.profissional_id || "",
+    criadoPor: b.criado_por || "",
+  }));
+}
+
 export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
   const isGlobalAdmin = authUser?.usuario === "admin.sms";
   const userUnidadeId = authUser?.unidadeId || "";
 
-  const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [salas, setSalas] = useState<Sala[]>([]);
+  const actorScope = JSON.stringify([authUser?.id, authUser?.authUserId, authUser?.role, isGlobalAdmin, userUnidadeId]);
+  const enabled = !!authUser;
+  const { data: unidadeDirectory } = useOperationalDirectory("unidades", actorScope, enabled,
+    (signal) => fetchUnidades(isGlobalAdmin, userUnidadeId, signal));
+  const unidades = unidadeDirectory?.items ?? EMPTY_UNIDADES;
+  const { data: salas = EMPTY_SALAS } = useOperationalDirectory("salas", actorScope, enabled,
+    (signal) => fetchSalas(isGlobalAdmin, userUnidadeId, signal));
+  const { data: funcionarios = EMPTY_FUNCIONARIOS, key: funcionariosKey } = useOperationalDirectory(
+    "funcionarios", actorScope, enabled, fetchFuncionarios);
+  const { data: disponibilidades = EMPTY_DISPONIBILIDADES, key: disponibilidadesKey } = useOperationalDirectory(
+    "disponibilidades", actorScope, enabled, (signal) => fetchDisponibilidades(isGlobalAdmin, userUnidadeId, signal));
+  const { data: bloqueios = EMPTY_BLOQUEIOS, key: bloqueiosKey } = useOperationalDirectory(
+    "bloqueios", actorScope, enabled, fetchBloqueios);
+  const unitLogo = unidadeDirectory?.logo;
+  useEffect(() => { setActiveUnitLogo(unitLogo); }, [unitLogo]);
+
   const [setores] = useState<Setor[]>(inlineSetores);
-  const [funcionarios, setFuncionarios] = useState<User[]>([]);
-  const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>([]);
   const [quotasExternas, setQuotasExternas] = useState<ExternalQuotaWindow[]>([]);
-  const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
   // Mirror reativo do estado de agendamentos vindo do AgendamentosSliceProvider,
@@ -374,146 +541,6 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
     }
   }, []);
 
-  const loadUnidades = useCallback(async () => {
-    try {
-      let query = supabase.from("unidades" as any).select("id,nome,nome_exibicao,endereco,telefone,whatsapp,ativo,custom_data");
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq("id", userUnidadeId);
-      const { data, error } = await query;
-      if (data && !error) {
-        const own = (data as any[]).find((u: any) => u.id === userUnidadeId);
-        setActiveUnitLogo(own?.custom_data?.logo_url);
-      }
-      if (data && !error)
-        setUnidades(
-          data.map((u: any) => ({
-            id: u.id,
-            nome: u.nome,
-            nomeExibicao: u.nome_exibicao || "",
-            endereco: u.endereco || "",
-            telefone: u.telefone || "",
-            whatsapp: u.whatsapp || "",
-            ativo: u.ativo,
-          })),
-        );
-    } catch (err) {
-      console.error("Error loading unidades:", err);
-    }
-  }, [isGlobalAdmin, userUnidadeId]);
-
-  const loadSalas = useCallback(async () => {
-    try {
-      let query = supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq("unidade_id", userUnidadeId);
-      const { data, error } = await query;
-      if (data && !error)
-        setSalas(data.map((s: any) => ({ id: s.id, nome: s.nome, unidadeId: s.unidade_id, ativo: s.ativo })));
-    } catch (err) {
-      console.error("Error loading salas:", err);
-    }
-  }, [isGlobalAdmin, userUnidadeId]);
-
-  const loadFuncionarios = useCallback(async () => {
-    try {
-      const query = supabase
-        .from("funcionarios" as any)
-        .select(
-          "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo,custom_data",
-        );
-      const { data, error } = await query;
-      if (data && !error) {
-        setFuncionarios(
-          data.map((f: any) => ({
-            id: f.id,
-            authUserId: f.auth_user_id || "",
-            nome: f.nome,
-            usuario: f.usuario,
-            email: f.email || "",
-            cpf: f.cpf || "",
-            profissao: f.profissao || "",
-            tipoConselho: f.tipo_conselho || "",
-            numeroConselho: f.numero_conselho || "",
-            ufConselho: f.uf_conselho || "",
-            role: f.role,
-            unidadeId: f.unidade_id || "",
-            salaId: f.sala_id || "",
-            setor: f.setor || "",
-            cargo: f.cargo || "",
-            criadoEm: f.criado_em || "",
-            criadoPor: f.criado_por || "",
-            tempoAtendimento: f.tempo_atendimento || 30,
-            podeAgendarRetorno: f.pode_agendar_retorno || false,
-            coren: f.coren || "",
-            ativo: f.ativo ?? true,
-            customData: f.custom_data || {},
-          })),
-        );
-      }
-    } catch (err) {
-      console.error("Error loading funcionarios:", err);
-    }
-  }, []);
-
-  const loadDisponibilidades = useCallback(async () => {
-    try {
-      let query = supabase
-        .from("disponibilidades" as any)
-        .select(
-          "id,profissional_id,unidade_id,sala_id,data_inicio,data_fim,hora_inicio,hora_fim,vagas_por_hora,vagas_por_dia,dias_semana,duracao_consulta",
-        );
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq("unidade_id", userUnidadeId);
-      const { data, error } = await query;
-      if (data && !error) {
-        setDisponibilidades(
-          data.map((d: any) => ({
-            id: d.id,
-            profissionalId: d.profissional_id,
-            unidadeId: d.unidade_id,
-            salaId: d.sala_id || "",
-            dataInicio: d.data_inicio,
-            dataFim: d.data_fim,
-            horaInicio: d.hora_inicio,
-            horaFim: d.hora_fim,
-            vagasPorHora: d.vagas_por_hora,
-            vagasPorDia: d.vagas_por_dia,
-            diasSemana: d.dias_semana || [],
-            duracaoConsulta: d.duracao_consulta || 30,
-          })),
-        );
-      }
-    } catch (err) {
-      console.error("Error loading disponibilidades:", err);
-    }
-  }, [isGlobalAdmin, userUnidadeId]);
-
-  const loadBloqueios = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from("bloqueios" as any)
-        .select(
-          "id,titulo,tipo,data_inicio,data_fim,dia_inteiro,hora_inicio,hora_fim,unidade_id,profissional_id,criado_por",
-        );
-      if (data && !error) {
-        setBloqueios(
-          data.map((b: any) => ({
-            id: b.id,
-            titulo: b.titulo,
-            tipo: b.tipo,
-            dataInicio: b.data_inicio,
-            dataFim: b.data_fim,
-            diaInteiro: b.dia_inteiro ?? true,
-            horaInicio: b.hora_inicio || "",
-            horaFim: b.hora_fim || "",
-            unidadeId: b.unidade_id || "",
-            profissionalId: b.profissional_id || "",
-            criadoPor: b.criado_por || "",
-          })),
-        );
-      }
-    } catch (err) {
-      console.error("Error loading bloqueios:", err);
-    }
-  }, []);
-
   const loadQuotasExternas = useCallback(async () => {
     try {
       let query = supabase.from("quotas_externas").select(
@@ -529,60 +556,25 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
     }
   }, [isGlobalAdmin, userUnidadeId]);
 
-  const loadAll = useCallback(async () => {
-    await Promise.all([loadConfiguracoes(), loadUnidades(), loadSalas(), loadFuncionarios()]);
-    void Promise.all([loadDisponibilidades(), loadBloqueios(), loadQuotasExternas()]).catch((err) =>
-      console.error("Background data load failed:", err),
-    );
-  }, [loadConfiguracoes, loadUnidades, loadSalas, loadFuncionarios, loadDisponibilidades, loadBloqueios, loadQuotasExternas]);
-
   useEffect(() => {
     if (!authUser) return;
-    loadAll();
-  }, [loadAll, authUser]);
+    void loadConfiguracoes();
+    void loadQuotasExternas();
+  }, [loadConfiguracoes, loadQuotasExternas, authUser]);
 
   const refreshFuncionarios = useCallback(async () => {
-    await loadFuncionarios();
-  }, [loadFuncionarios]);
+    await queryClient.invalidateQueries({ queryKey: funcionariosKey, exact: true });
+  }, [queryClient, funcionariosKey]);
   const refreshDisponibilidades = useCallback(async () => {
-    await loadDisponibilidades();
-  }, [loadDisponibilidades]);
+    await queryClient.invalidateQueries({ queryKey: disponibilidadesKey, exact: true });
+  }, [queryClient, disponibilidadesKey]);
   const refreshBloqueios = useCallback(async () => {
-    await loadBloqueios();
-  }, [loadBloqueios]);
+    await queryClient.invalidateQueries({ queryKey: bloqueiosKey, exact: true });
+  }, [queryClient, bloqueiosKey]);
   const refreshConfiguracoes = useCallback(async () => {
     await loadConfiguracoes();
   }, [loadConfiguracoes]);
 
-  // Realtime ownership — handlers interiorizados chamando loaders locais.
-  // Full-reload aceito nestas tabelas: frequência baixa, edições Master
-  // pontuais, sem risco de regressão como em `agendamentos`.
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "disponibilidades",
-    onEvent: () => {
-      loadDisponibilidades();
-    },
-    poll: loadDisponibilidades,
-  });
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "bloqueios",
-    onEvent: () => {
-      loadBloqueios();
-    },
-    poll: loadBloqueios,
-  });
-  useRealtimeSync({
-    enabled: !!authUser,
-    table: "funcionarios",
-    debounceMs: 1000,
-    pollIntervalMs: 120000,
-    onEvent: () => {
-      loadFuncionarios();
-    },
-    poll: loadFuncionarios,
-  });
   useRealtimeSync({
     enabled: !!authUser,
     table: "system_config",
@@ -750,11 +742,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         ativo: u.ativo,
       } as any);
       if (!error) {
-        invalidateCache(queryKeys.unidades.all);
-        setUnidades((prev) => [...prev, u]);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.unidades.all });
       } else console.error("Error adding unidade:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const updateUnidade = useCallback(
@@ -771,11 +762,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.unidades.all);
-        setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.unidades.all });
       } else console.error("Error updating unidade:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const deleteUnidade = useCallback(
@@ -785,11 +775,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .delete()
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.unidades.all);
-        setUnidades((prev) => prev.filter((u) => u.id !== id));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.unidades.all });
       } else console.error("Error deleting unidade:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const addSala = useCallback(
@@ -798,11 +787,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .from("salas" as any)
         .insert({ id: s.id, nome: s.nome, unidade_id: s.unidadeId, ativo: s.ativo } as any);
       if (!error) {
-        invalidateCache(queryKeys.salas.all);
-        setSalas((prev) => [...prev, s]);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.salas.all });
       } else console.error("Error adding sala:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const updateSala = useCallback(
@@ -816,11 +804,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.salas.all);
-        setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.salas.all });
       } else console.error("Error updating sala:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const deleteSala = useCallback(
@@ -830,11 +817,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .delete()
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.salas.all);
-        setSalas((prev) => prev.filter((s) => s.id !== id));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.salas.all });
       } else console.error("Error deleting sala:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const addFuncionario = useCallback(
@@ -862,11 +848,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         ativo: u.ativo,
       } as any);
       if (!error) {
-        invalidateCache(queryKeys.funcionarios.all);
-        setFuncionarios((prev) => [...prev, u]);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.funcionarios.all });
       } else console.error("Error adding funcionario:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const updateFuncionario = useCallback(
@@ -894,11 +879,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.funcionarios.all);
-        setFuncionarios((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.funcionarios.all });
       } else console.error("Error updating funcionario:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const deleteFuncionario = useCallback(
@@ -908,11 +892,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .delete()
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.funcionarios.all);
-        setFuncionarios((prev) => prev.filter((f) => f.id !== id));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.funcionarios.all });
       } else console.error("Error deleting funcionario:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const addDisponibilidade = useCallback(
@@ -932,11 +915,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         duracao_consulta: d.duracaoConsulta,
       } as any);
       if (!error) {
-        invalidateCache(queryKeys.disponibilidades.all);
-        setDisponibilidades((prev) => [...prev, d]);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.disponibilidades.all });
       } else console.error("Error adding disponibilidade:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const updateDisponibilidade = useCallback(
@@ -958,11 +940,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.disponibilidades.all);
-        setDisponibilidades((prev) => prev.map((disp) => (disp.id === id ? { ...disp, ...data } : disp)));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.disponibilidades.all });
       } else console.error("Error updating disponibilidade:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const deleteDisponibilidade = useCallback(
@@ -972,11 +953,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .delete()
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.disponibilidades.all);
-        setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.disponibilidades.all });
       } else console.error("Error deleting disponibilidade:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const addBloqueio = useCallback(
@@ -998,15 +978,13 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .select()
         .single();
       if (!error && inserted) {
-        const id = (inserted as any).id;
-        invalidateCache(queryKeys.bloqueios.all);
-        setBloqueios((prev) => [{ ...b, id }, ...prev]);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.bloqueios.all });
       } else {
         console.error("Error adding bloqueio:", error);
         throw error;
       }
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const updateBloqueio = useCallback(
@@ -1026,11 +1004,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.bloqueios.all);
-        setBloqueios((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.bloqueios.all });
       } else console.error("Error updating bloqueio:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const deleteBloqueio = useCallback(
@@ -1040,11 +1017,10 @@ export const OperacionalSliceProvider: React.FC<{ children: React.ReactNode }> =
         .delete()
         .eq("id", id);
       if (!error) {
-        invalidateCache(queryKeys.bloqueios.all);
-        setBloqueios((prev) => prev.filter((b) => b.id !== id));
+        await queryClient.invalidateQueries({ queryKey: queryKeys.bloqueios.all });
       } else console.error("Error deleting bloqueio:", error);
     },
-    [invalidateCache],
+    [queryClient],
   );
 
   const updateConfiguracoes = useCallback(

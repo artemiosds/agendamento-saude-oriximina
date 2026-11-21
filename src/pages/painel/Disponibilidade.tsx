@@ -158,8 +158,6 @@ const Disponibilidade: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    refreshFuncionarios();
-    refreshDisponibilidades();
     loadConfig();
   }, []);
 
@@ -395,7 +393,6 @@ const Disponibilidade: React.FC = () => {
         }
         toast.success(isEditing ? 'Disponibilidade atualizada!' : `${activeDays.length} registro(s) criado(s)!`);
         setDialogOpen(false);
-        await refreshDisponibilidades();
       } catch (err) {
         console.error('Erro ao salvar disponibilidade:', err);
         toast.error('Erro ao salvar disponibilidade.');
@@ -439,7 +436,6 @@ const Disponibilidade: React.FC = () => {
         }
         toast.success(isEditing ? 'Disponibilidade atualizada!' : 'Disponibilidade por turno salva!');
         setDialogOpen(false);
-        await refreshDisponibilidades();
       } catch (err) {
         console.error('Erro ao salvar disponibilidade:', err);
         toast.error('Erro ao salvar disponibilidade.');
