@@ -91,7 +91,7 @@ it('mostra prioridade, procedimento no resumo e ocupação na sala vinculada', (
     triage: [{ agendamento_id: 'ag', iniciado_em: now, confirmado_em: null, classificacao_risco: 'Laranja' }],
   });
   render(<CockpitUnidade />);
-  expect(screen.getByRole('button', { name: /Triagem\. Prioridade laranja/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /Em classificação Prioridade laranja/ })).toBeTruthy();
   expect(screen.getByRole('button', { name: /Recepção e sala de espera\. 0 aguardando/ })).toBeTruthy();
   const procedure = screen.getByRole('button', { name: /Medicação e sessões\. 1 em andamento/ });
   expect(procedure.querySelector('[data-papel=medicacao]')).toBeTruthy();
@@ -139,7 +139,7 @@ it('mostra todos os consultórios e demais salas ativas cadastradas, inclusive n
     { id: 'inativa', nome: 'Sala desativada', ativo: false, unidadeId: 'local' });
   setup('', { rows: [] });
   const view = render(<CockpitUnidade />);
-  expect(screen.getByText('0/8')).toBeTruthy();
+  expect(screen.getByText('0/9')).toBeTruthy();
   expect(screen.getByText(/9 salas ativas cadastradas/)).toBeInTheDocument();
   expect(view.container.querySelector('[data-map-zone="t"]')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Consultório 7\./ })).toBeInTheDocument();
@@ -202,4 +202,37 @@ it('abre só os pacientes do alerta, registra ciência nesta tela e remove o ale
   setup('em_atendimento', { rows: [overdue, current] });
   page.rerender(<CockpitUnidade />);
   expect(screen.getByRole('button', { name: 'Ciente de Sala teste' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+it('separa as etapas com seus próprios horários e mantém só a sala de triagem cadastrada na planta', () => {
+  fixture.salas.push({ id: 'triagem-fisica', nome: 'Triagem', ativo: true, unidadeId: 'local' });
+  const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60000).toISOString();
+  const ready = { ...a, id: 'apto', paciente_nome: 'Pessoa apta', status: 'apto_atendimento' };
+  setup('', {
+    rows: [{ ...a, status: 'chegou' }, ready],
+    arrivals: { [a.id]: minutesAgo(25), apto: minutesAgo(40) },
+    triage: [{ agendamento_id: 'apto', iniciado_em: minutesAgo(20), confirmado_em: minutesAgo(8), classificacao_risco: 'Verde' }],
+  });
+  render(<CockpitUnidade />);
+  const map = screen.getByRole('group', { name: 'Planta da unidade' });
+  expect(within(map).getAllByRole('button', { name: /^Triagem\./ })).toHaveLength(1);
+  expect(screen.getByRole('button', { name: /Aguardando triagem Até 25 min desde a chegada/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Aptos para consulta Até 8 min desde a classificação/ }));
+  const drawer = screen.getByRole('dialog');
+  expect(within(drawer).getByText('Pessoa apta')).toBeInTheDocument();
+  expect(within(drawer).queryByText('Paciente teste')).not.toBeInTheDocument();
+});
+
+it('limita a exibição inicial de alertas sem esconder seu total', () => {
+  const rows = Array.from({ length: 5 }, (_, i) => {
+    const id = 'alert-room-' + i;
+    fixture.salas.push({ id, nome: 'Sala ' + i, ativo: true, unidadeId: 'local' });
+    return { ...a, id, sala_id: id, status: 'em_atendimento', iniciado_em: new Date(Date.now() - 95 * 60000).toISOString() };
+  });
+  setup('', { rows });
+  render(<CockpitUnidade />);
+  expect(screen.getByText('5 ativos · 5 críticos')).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: /Ver detalhes de Sala/ })).toHaveLength(3);
+  fireEvent.click(screen.getByRole('button', { name: 'Ver mais alertas (2)' }));
+  expect(screen.getAllByRole('button', { name: /Ver detalhes de Sala/ })).toHaveLength(5);
 });

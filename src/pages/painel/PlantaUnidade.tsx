@@ -4,7 +4,7 @@ import { AvatarPersonagem } from './AvatarPersonagem';
 
 export type RoomState = 'free' | 'calling' | 'occupied' | 'bottleneck';
 export const roomStatuses: Record<RoomState, string> = {
-  free: 'Livre', calling: 'Chamando', occupied: 'Em atendimento', bottleneck: 'Gargalo',
+  free: 'Sem atendimento', calling: 'Chamando', occupied: 'Em atendimento', bottleneck: 'Gargalo',
 };
 export const riskColors = {
   vermelho: ['#fbe0e4', '#8a2434', '#b83243'],
@@ -98,7 +98,7 @@ function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, 
   id: string; title: string; summary: string; x: number; y: number; w: number; h: number; color: string;
   children: ReactNode; lower?: boolean; state?: RoomState; onOpen?: OpenZone; alert?: 'danger' | 'warning';
 }) {
-  const doorX = x + (id === 'recepcao' ? w - 129 : id === 'triagem' ? 82 : Math.round(w * .54));
+  const doorX = x + (id === 'recepcao' ? w - 129 : Math.round(w * .54));
   const label = title + '. ' + summary;
   return <g className="planta-zone" id={id} data-map-zone={id} data-state={state} data-alert={alert} role={onOpen ? 'button' : 'group'}
     tabIndex={onOpen ? 0 : undefined} aria-label={label} aria-haspopup={onOpen ? 'dialog' : undefined}
@@ -139,17 +139,17 @@ function RegisteredRoom({ room, x, y, w, onOpen, alert }: { room: MapRoom; x: nu
 }
 function Reception({ patients, longest, onOpen, alert }: { patients: MapPatient[]; longest: number | null; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
   const total = patients.length, label = total + ' aguardando', maxText = longest === null ? 'Espera sem horário' : 'Maior espera · ' + longest + ' min';
-  return <Zone id="recepcao" title="Recepção e sala de espera" summary={label} x={23} y={288} w={366} h={148} color="#f3f7f2" lower onOpen={onOpen} alert={alert}>
+  return <Zone id="recepcao" title="Recepção e sala de espera" summary={label} x={23} y={288} w={630} h={148} color="#f3f7f2" lower onOpen={onOpen} alert={alert}>
     <text className="planta-room-title" x="36" y="309">Recepção e sala de espera</text>
-    <text className="planta-tile-label" x="377" y="308" textAnchor="end">ACOLHIMENTO</text>
+    <text className="planta-tile-label" x="641" y="308" textAnchor="end">ACOLHIMENTO</text>
     {Array.from({ length: 16 }, (_, i) => {
-      const x = 64 + (i % 8) * 29, y = 355 + Math.floor(i / 8) * 29, patient = patients[i];
+      const x = 64 + (i % 8) * 49, y = 355 + Math.floor(i / 8) * 29, patient = patients[i];
       return <g key={i}><Chair x={x} y={y} />{patient && <g key={patient.id}>
         <circle cx={x} cy={y + 1} r="12" fill="none" stroke={waitingColors[patient.tone || 'neutral']} strokeWidth="1.7" />
         <AvatarPersonagem papel="paciente" x={x} y={y - 5} variante={patient.id} />
       </g>}</g>;
     })}
-    <Desk x={310} y={345} w={64} h={28} /><Screen x={319} y={357} /><Chair x={345} y={335} /><Plant x={365} y={400} />
+    <Desk x={560} y={345} w={64} h={28} /><Screen x={569} y={357} /><Chair x={595} y={335} /><Plant x={615} y={400} />
     <rect x="36" y="406" width="132" height="21" rx="5" fill="#e3efe8" />
     <text className="planta-mini" x="44" y="420" fill="#155a46">{label}{total > 16 && ' · +' + (total - 16)}</text>
     {total > 0 && <>
@@ -157,23 +157,6 @@ function Reception({ patients, longest, onOpen, alert }: { patients: MapPatient[
       <circle cx="184" cy="416.5" r="3" fill={waitingColors[longest === null ? 'neutral' : longest > 30 ? 'danger' : longest >= 15 ? 'warning' : 'safe']} />
       <text className="planta-mini" x="193" y="420">{maxText}</text>
     </>}
-  </Zone>;
-}
-function Triage({ patients, risk, onOpen, alert }: { patients: MapPatient[]; risk?: Risk; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
-  const active = patients.length > 0;
-  const label = active ? (risk ? 'Prioridade ' + risk : 'Classificando') : 'Livre';
-  return <Zone id="triagem" title="Triagem" summary={label} x={400} y={288} w={253} h={148} color="#f4f7ef" lower onOpen={onOpen} alert={alert}>
-    <text className="planta-room-title" x="412" y="309">Triagem</text>
-    <text className="planta-tile-label" x="641" y="308" textAnchor="end">CLASSIFICAÇÃO DE RISCO</text>
-    <Plate x={411} y={337} state={active ? 'occupied' : 'free'} label={label} risk={risk} />
-    <Chair x={504} y={350} /><AvatarPersonagem papel="enfermagem" x={504} y={346} variante="triagem" />
-    <Desk x={461} y={362} w={77} h={24} /><Screen x={470} y={367} />
-    <Chair x={493} y={399} rotate={180} color="#dfdfd0" />
-    {patients[0] && <AvatarPersonagem key={patients[0].id} papel="paciente" x={493} y={394} variante={patients[0].id} />}
-    <Cabinet x={607} y={335} w={34} /><Plant x={625} y={416} />
-    <path d="M582 365h16v20h-16z" fill="#d6e6df" stroke="#84a097" /><path d="M585 369h10m-5 0v4" stroke="#577e70" />
-    <rect x="582" y="378" width="16" height="9" rx="2" fill="#b6d2c5" /><text className="planta-tile-label" x="609" y="382">Balança</text>
-    <text className="planta-mini" x="412" y="420">{active ? patients.length + ' em classificação' : 'Sem classificação em curso'}</text>
   </Zone>;
 }
 function Procedures({ patients, waiting, onOpen, alert }: { patients: MapPatient[]; waiting: number; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
@@ -211,8 +194,8 @@ const Background = memo(function Background({ grid, arrow, empty, shift }: { gri
   </>;
 });
 
-export function PlantaUnidade({ rooms, waiting, longest, triage, risk, procedures, waitingCare, viewport, onOpen, alerts }: {
-  rooms: MapRoom[]; waiting: MapPatient[]; longest: number | null; triage: MapPatient[]; risk?: Risk;
+export function PlantaUnidade({ rooms, waiting, longest, procedures, waitingCare, viewport, onOpen, alerts }: {
+  rooms: MapRoom[]; waiting: MapPatient[]; longest: number | null;
   procedures: MapPatient[]; waitingCare: number; viewport: Ref<HTMLDivElement>; onOpen?: OpenZone; alerts?: ReadonlyMap<string, 'danger' | 'warning'>;
 }) {
   const uid = useId().replace(/:/g, '');
@@ -232,7 +215,6 @@ export function PlantaUnidade({ rooms, waiting, longest, triage, risk, procedure
       })}
       <g transform={`translate(0 ${shift})`}>
         <Reception patients={waiting} longest={longest} onOpen={onOpen} alert={alerts?.get("recepcao")} />
-        <Triage patients={triage} risk={risk} onOpen={onOpen} alert={alerts?.get("triagem")} />
         <Procedures patients={procedures} waiting={waitingCare} onOpen={onOpen} alert={alerts?.get("procedimentos")} />
         <g pointerEvents="none"><path d="M80 439v8m83-8v8" stroke="#96b2a8" /><path d="M81 436h81" stroke="#e4efe8" strokeWidth="5" />
           <path d="M122 447V431" stroke="#519185" strokeWidth="1.2" markerEnd={`url(#${arrow})`} /></g>

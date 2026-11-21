@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, Building2, CircleCheck, Clock3, DoorOpen, Hospital, Maximize, Minimize, RefreshCw, UsersRound, X } from 'lucide-react';
+import { Activity, Building2, ChevronRight, CircleCheck, Clock3, DoorOpen, Hospital, Maximize, Minimize, RefreshCw, UsersRound, X } from 'lucide-react';
 import { CockpitAlerts, type CockpitAlert } from './CockpitAlerts';
 import { PlantaUnidade, roomStatuses } from './PlantaUnidade';
 import type { MapRoom, Risk, RoomState } from './PlantaUnidade';
@@ -22,6 +22,34 @@ type RecordLine = { id: string; title: string; detail: string; tone?: string; jo
 const WAIT_LIMIT = 20;
 const VISIT_LIMIT = 90;
 const orderNames = new Intl.Collator('pt-BR', { numeric: true });
+const completionHour = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' });
+
+function ShiftSummary({ completed, day, delayed }: { completed: Item[]; day: string; delayed: number }) {
+  const [open, setOpen] = useState(false);
+  const totals = new Map<string, number>();
+  let covered = 0;
+  if (open) {
+    for (const item of completed) {
+      const time = Date.parse(item.concluido_em || '');
+      if (!Number.isFinite(time) || cockpitDay(time) !== day) continue;
+      const hour = completionHour.format(time);
+      totals.set(hour, (totals.get(hour) ?? 0) + 1);
+      covered++;
+    }
+  }
+  const peak = Math.max(0, ...totals.values());
+  const busiest = [...totals].filter(([, total]) => total === peak).map(([hour]) => hour).sort();
+  return <details className="cockpit-shift" onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>Resumo operacional de hoje</summary>
+    {open && <dl>
+      <div><dt>Concluídos na agenda do dia</dt><dd>{completed.length}</dd></div>
+      <div><dt>Em atendimento há mais de {VISIT_LIMIT} min</dt><dd>{delayed}</dd></div>
+      <div><dt>Horários com mais conclusões</dt><dd>{peak ? busiest.map(hour => hour + 'h').join(', ') + ' · ' + peak + ' por hora' : 'Sem horários registrados'}</dd>
+        <small>{covered} de {completed.length} conclusões com horário registrado hoje.</small></div>
+    </dl>}
+  </details>;
+}
+
 
 function PatientJourney({ steps }: { steps: RecordLine['journey'] }) {
   const [open, setOpen] = useState(false);
@@ -171,8 +199,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   })), [unit, day]);
 
   const rooms = salas.filter(s => s.unidadeId === unit && s.ativo);
-  const consulting = rooms.filter(r => roomSector(r.nome) === 'consultation');
-  const consultationIds = new Set(consulting.map(r => r.id));
+  const consultationIds = new Set(rooms.filter(r => roomSector(r.nome) === 'consultation').map(r => r.id));
   const roomById = new Map(rooms.map(r => [r.id, r]));
   const roomNameCounts = new Map<string, number>();
   for (const room of rooms) {
@@ -222,7 +249,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     history.push(a);
     historyByRoom.set(a.sala_id, history);
   }
-  const occupied = consulting.filter(r => visitsByRoom.has(r.id)).length;
+  const occupied = rooms.filter(r => visitsByRoom.has(r.id)).length;
   const procedureActive = active.filter(a => a.stage === 'consultation' && (roomSector(roomById.get(a.sala_id)?.nome || '') === 'procedure' || procedureVisit(a.tipo)));
   const procedureIds = new Set(procedureActive.map(a => a.id));
   const waitingCare = active.filter(a => a.stage === 'otherCare');
@@ -262,12 +289,29 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     return { map, clinician, calling, visits, history, team, elapsed };
   });
   const currentRooms = roomViews.map(room => room.map);
-  const triageQueue = classifying.map(a => ({ id: a.id, risk: asRisk(recordByAppointment.get(a.id)?.classificacao_risco) }));
-  const riskRank = (risk?: Risk) => risk ? riskOrder.indexOf(risk) : riskOrder.length;
-  triageQueue.sort((a, b) => riskRank(a.risk) - riskRank(b.risk));
+  const triageRisks = new Set(classifying.map(a => asRisk(recordByAppointment.get(a.id)?.classificacao_risco)));
+  const highestRisk = riskOrder.find(risk => triageRisks.has(risk));
   const waitingSorted = waiting.map(a => ({ a, minutes: elapsedMinutes(a.arrival, now) }))
     .sort((a, b) => (b.minutes ?? -1) - (a.minutes ?? -1));
   const longest = waitingSorted[0]?.minutes ?? null;
+  const receptionQueue = waitingSorted.filter(({ a }) => a.stage === 'reception');
+  const readyQueue = waitingSorted.filter(({ a }) => a.stage === 'ready');
+  // Only a recorded triage completion can anchor time since clearance.
+  const clearedWait = (a: Item) => elapsedMinutes(recordByAppointment.get(a.id)?.confirmado_em ?? null, now);
+  const longestReadyWait = readyQueue.reduce<number | null>((longestWait, { a }) => {
+    const minutes = clearedWait(a);
+    return minutes === null ? longestWait : Math.max(longestWait ?? 0, minutes);
+  }, null);
+  const waitHint = (count: number, minutes: number | null, origin: string) =>
+    !count ? 'Sem espera' : minutes === null ? 'Sem horário registrado' : `Até ${minutes} min ${origin}`;
+  const stages = [
+    { id: 'aguardando-triagem', label: 'Aguardando triagem', count: receptionQueue.length,
+      hint: waitHint(receptionQueue.length, receptionQueue[0]?.minutes ?? null, 'desde a chegada') },
+    { id: 'triagem', label: 'Em classificação', count: classifying.length,
+      hint: highestRisk ? 'Prioridade ' + highestRisk : classifying.length ? 'Classificação em curso' : 'Sem classificação em curso' },
+    { id: 'aguardando-consulta', label: 'Aptos para consulta', count: readyQueue.length,
+      hint: waitHint(readyQueue.length, longestReadyWait, 'desde a classificação') },
+  ];
   const mapWaiting = waitingSorted.map(({ a, minutes }) => ({ id: a.id, tone: waitingTone(minutes) }));
   const mapProcedures = procedureActive.map(a => ({
     id: a.id, infusion: infusionVisit(a.tipo) || infusionVisit(roomById.get(a.sala_id)?.nome || ''),
@@ -275,7 +319,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   const metrics = [
     { icon: UsersRound, label: 'Pacientes na unidade', value: String(inside), hint: 'presentes' },
     { icon: Clock3, label: 'Espera média', value: average === null ? '—' : average + ' min', hint: waits.length + ' com horário' },
-    { icon: DoorOpen, label: 'Consultórios ocupados', value: occupied + '/' + consulting.length, hint: 'salas' },
+    { icon: DoorOpen, label: 'Salas em atendimento', value: occupied + '/' + rooms.length, hint: 'salas' },
     { icon: CircleCheck, label: 'Concluídos hoje', value: String(done.length), hint: 'atendimentos' },
   ];
 
@@ -319,13 +363,13 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     id: 'sem-sala', zones: [], title: 'Atendimento sem sala identificada',
     summary: `${unmapped.length} em andamento · confira o vínculo da sala`, tone: 'warning', appointmentIds: unmapped.map(a => a.id),
   });
-  const waitingTriage = waitingSorted.filter(({ a, minutes }) => a.stage === 'reception' && (minutes ?? 0) > WAIT_LIMIT);
+  const waitingTriage = receptionQueue.filter(({ minutes }) => (minutes ?? 0) > WAIT_LIMIT);
   if (waitingTriage.length) alerts.push({
-    id: 'espera-triagem', zones: ['recepcao', 'triagem'], title: 'Espera pela triagem',
+    id: 'espera-triagem', zones: ['recepcao', 'aguardando-triagem'], title: 'Espera pela triagem',
     summary: `${waitingTriage.length} acima de ${WAIT_LIMIT} min · maior espera ${waitingTriage[0].minutes} min`,
     tone: 'warning', appointmentIds: waitingTriage.map(({ a }) => a.id),
   });
-  const waitingConsultation = waitingSorted.filter(({ a, minutes }) => a.stage === 'ready' && (minutes ?? 0) > WAIT_LIMIT);
+  const waitingConsultation = readyQueue.filter(({ minutes }) => (minutes ?? 0) > WAIT_LIMIT);
   const specialties = new Map<string, typeof waitingConsultation>();
   for (const entry of waitingConsultation) {
     const name = staff.get(entry.a.profissional_id)?.profissao?.trim() || '';
@@ -339,9 +383,9 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       room.team.some(person => cockpitLabel(person.profissao) === specialty)) : [];
     const name = staff.get(entries[0].a.profissional_id)?.profissao?.trim();
     alerts.push({
-      id: `espera-consulta:${specialty}`, zones: ['recepcao', ...matchingRooms.map(room => room.map.id)],
+      id: `espera-consulta:${specialty}`, zones: ['recepcao', 'aguardando-consulta', ...matchingRooms.map(room => room.map.id)],
       title: name ? `Espera · ${name}` : 'Espera pela consulta',
-      summary: `${entries.length} acima de ${WAIT_LIMIT} min · maior espera ${entries[0].minutes} min`,
+      summary: `${entries.length} acima de ${WAIT_LIMIT} min · maior espera ${entries[0].minutes} min desde a chegada`,
       tone: 'warning', appointmentIds: entries.map(({ a }) => a.id),
     });
   }
@@ -351,6 +395,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     summary: `${procedureOverdue.length} acima de ${VISIT_LIMIT} min · maior tempo ${Math.max(...procedureOverdue.map(a => visitMinutes(a) ?? 0))} min`,
     tone: 'danger', appointmentIds: procedureOverdue.map(a => a.id),
   });
+  alerts.sort((a, b) => Number(b.tone === 'danger') - Number(a.tone === 'danger'));
   const alertZones = new Map<string, CockpitAlert['tone']>();
   for (const alert of alerts) {
     for (const id of alert.zones) {
@@ -373,8 +418,12 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       const alert = alerts.find(item => `alerta:${item.id}` === zone);
       const related = alert?.appointmentIds.map(id => itemById.get(id)).filter((item): item is Item => !!item) ?? [];
       const roomLinks = alert?.zones.flatMap(id => roomViews.filter(item => item.map.id === id)) ?? [];
+      const stageLink = stages.find(stage => alert?.zones.includes(stage.id));
       detail = { title: alert?.title ?? 'Alerta resolvido', body: <>
         {alert && <p>{alert.summary}</p>}
+        {stageLink && <button type="button" className="planta-action" onClick={() => setZone(stageLink.id)}>
+          Abrir {stageLink.label.toLowerCase()}
+        </button>}
         {roomLinks.map(item => <button type="button" key={item.map.id} className="planta-action"
           onClick={() => setZone(item.map.id)}>Abrir {item.map.name}</button>)}
         <RecordList empty="A condição deste alerta deixou de ocorrer na leitura atual." records={related.map(a => {
@@ -406,9 +455,18 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
         <RecordList empty="Ninguém aguardando na recepção." records={waitingSorted.map(({ a, minutes }) =>
           asRecord(a, minutes === null ? 'Chegada sem horário disponível' : minutes + ' min de espera', waitingTone(minutes)))} />
       </> };
+    } else if (zone === 'aguardando-triagem' || zone === 'aguardando-consulta') {
+      const beforeTriage = zone === 'aguardando-triagem';
+      const queue = beforeTriage ? receptionQueue : readyQueue;
+      detail = { title: beforeTriage ? 'Aguardando triagem' : 'Aptos para consulta', body: <RecordList
+        empty="Nenhum atendimento aguardando nesta etapa." records={queue.map(({ a, minutes }) => {
+          const wait = beforeTriage ? minutes : clearedWait(a);
+          const origin = beforeTriage ? 'desde a chegada' : 'desde a classificação';
+          return asRecord(a, wait === null ? 'Horário da etapa não registrado' : `${wait} min ${origin}`, waitingTone(wait));
+        })} /> };
     } else if (zone === 'triagem') {
       detail = { title: 'Triagem', body: <>
-        <span className="planta-badge">{classifying.length ? classifying.length + ' em classificação' : 'Livre'}</span>
+        <span className="planta-badge">{classifying.length ? classifying.length + ' em classificação' : 'Sem classificação em curso'}</span>
         <RecordList empty="Sem classificação em andamento." records={classifying.map(a => {
           const entry = recordByAppointment.get(a.id), risk = asRisk(entry?.classificacao_risco);
           const technician = staff.get(entry?.tecnico_id || '')?.nome;
@@ -447,12 +505,22 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
         if (next.has(id)) next.delete(id); else next.add(id);
         return next;
       })} />}
+    {rows && <section className="cockpit-stages" aria-label="Etapas do atendimento">
+      {stages.map(({ id, label, count, hint }) => {
+        const content = <><strong>{count}</strong><span>{label}<small>{hint}</small></span>
+          {!theater && <ChevronRight size={15} aria-hidden="true" />}</>;
+        const tone = alertZones.get(id);
+        return theater ? <div className="cockpit-stage" key={id} data-tone={tone}>{content}</div> :
+          <button className="cockpit-stage" key={id} data-tone={tone} type="button" aria-haspopup="dialog"
+            onClick={event => openZone(id, event.currentTarget)}>{content}</button>;
+      })}
+    </section>}
     <section className="planta-board" aria-label="Planta operacional">
       <header className="planta-board-head">
         <div className="planta-location"><Building2 size={20} aria-hidden="true" />
           <div><h2>{unitName}</h2><p>{rows ? `${rooms.length} salas ativas cadastradas · ` : ''}{dateLabel(day)}</p></div>
         </div>
-        {rows && <div className="planta-legend" aria-label="Legenda dos consultórios">
+        {rows && <div className="planta-legend" aria-label="Legenda das salas">
           {(Object.entries(roomStatuses) as [RoomState, string][]).map(([state, text]) =>
             <span key={state}><i data-state={state} aria-hidden="true" />{text}</span>)}
         </div>}
@@ -461,12 +529,11 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
       {rows && <>
         {!theater && <nav className="planta-mobile-zones" aria-label="Atalhos da planta">
           <button type="button" className="planta-action" onClick={() => scrollToZone('recepcao')}>Recepção</button>
-          <button type="button" className="planta-action" onClick={() => scrollToZone('triagem')}>Triagem</button>
           {!!currentRooms.length && <button type="button" className="planta-action" onClick={() => scrollToZone()}>Salas cadastradas</button>}
           <button type="button" className="planta-action" onClick={() => scrollToZone('procedimentos')}>Procedimentos</button>
         </nav>}
-        <PlantaUnidade rooms={currentRooms} waiting={mapWaiting} longest={longest} triage={triageQueue}
-          risk={triageQueue[0]?.risk} procedures={mapProcedures} waitingCare={waitingCare.length} viewport={viewport} alerts={alertZones} onOpen={theater ? undefined : openZone} />
+        <PlantaUnidade rooms={currentRooms} waiting={mapWaiting} longest={longest}
+          procedures={mapProcedures} waitingCare={waitingCare.length} viewport={viewport} alerts={alertZones} onOpen={theater ? undefined : openZone} />
       </>}
       <footer className="planta-footer">
         <div className="planta-statuses"><span className="planta-sync" role="status" data-online={!!rows && online && !error}><i aria-hidden="true" />{syncLabel}{lastReading}</span>
@@ -478,6 +545,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
         </div>
       </footer>
     </section>
+    {rows && !theater && <ShiftSummary completed={done} day={day}
+      delayed={active.filter(item => item.stage === 'consultation' && (visitMinutes(item) ?? 0) > VISIT_LIMIT).length} />}
     {rows && <div className="planta-caption">
       <span>{theater ? 'Modo telão · Sem nomes de pacientes' : 'Selecione um setor para abrir os detalhes.'}</span>
       <span>Salas do cadastro e ocupação pela Agenda · Disposição ilustrativa.</span>

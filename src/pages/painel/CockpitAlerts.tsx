@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BellRing, Check, ChevronRight } from 'lucide-react';
 
 export type CockpitAlert = {
@@ -17,12 +18,15 @@ export function CockpitAlerts({ alerts, acknowledged, theater, stale, onOpen, on
   onOpen: (alert: CockpitAlert, button: HTMLButtonElement) => void;
   onAcknowledge: (id: string) => void;
 }) {
+  const [limit, setLimit] = useState(3);
+  const critical = alerts.filter(alert => alert.tone === 'danger').length;
+  const visible = theater ? 3 : limit;
   return <section className="cockpit-alerts" aria-labelledby="cockpit-alert-title">
     <div className="cockpit-alert-heading">
       <h2 id="cockpit-alert-title"><BellRing size={17} aria-hidden="true" /> Alertas do plantão</h2>
-      <span>{stale ? 'Dados da última leitura' : `${alerts.length} ativos`}</span>
+      <span>{stale ? 'Dados da última leitura' : `${alerts.length} ativos${critical ? ' · ' + critical + ' críticos' : ''}`}</span>
     </div>
-    {alerts.length ? <ul className="cockpit-alert-grid">{alerts.map(alert => {
+    {alerts.length ? <ul className="cockpit-alert-grid">{alerts.slice(0, visible).map(alert => {
       const ciente = acknowledged.has(alert.id);
       return <li key={alert.id} data-tone={alert.tone}>
         <div className="cockpit-alert-copy">
@@ -39,5 +43,13 @@ export function CockpitAlerts({ alerts, acknowledged, theater, stale, onOpen, on
         </div>}
       </li>;
     })}</ul> : <p className="planta-empty">{stale ? 'Nenhum alerta na última leitura.' : 'Nenhum alerta operacional ativo.'}</p>}
+    {alerts.length > 3 && <div className="cockpit-alert-more">
+      {theater ? <span>{alerts.length - 3} alertas adicionais</span> : <>
+        {alerts.length > visible && <button type="button" className="planta-action" onClick={() => setLimit(visible + 6)}>
+          Ver mais alertas ({alerts.length - visible})
+        </button>}
+        {limit > 3 && <button type="button" className="planta-action" onClick={() => setLimit(3)}>Recolher alertas</button>}
+      </>}
+    </div>}
   </section>;
 }
