@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Escala } from '@/components/EscalaProfissionais';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -84,6 +85,17 @@ type ModoDisponibilidade = 'por_hora' | 'por_turno';
 const CONFIG_KEY_MODOS = 'config_modos_disponibilidade';
 
 const Disponibilidade: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('aba') === 'escala' ? 'escala' : 'grade';
+
+  const selectTab = (value: string) => {
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (value === 'escala') next.set('aba', 'escala');
+      else next.delete('aba');
+      return next;
+    }, { replace: true });
+  };
   const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useOperacional();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
@@ -626,7 +638,7 @@ const Disponibilidade: React.FC = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="grade"><TabsList><TabsTrigger value="grade">Grade de atendimento</TabsTrigger><TabsTrigger value="escala">Escala dos profissionais</TabsTrigger></TabsList>
+      <Tabs value={activeTab} onValueChange={selectTab}><TabsList><TabsTrigger value="grade">Grade de atendimento</TabsTrigger><TabsTrigger value="escala">Escala dos profissionais</TabsTrigger></TabsList>
       <TabsContent value="escala"><Escala /></TabsContent><TabsContent value="grade" className="space-y-4">
       {/* Search */}
       {isGlobalAdmin && <UnitScopeNavigator units={unidadesVisiveis} value={unitId} onChange={setUnitId} />}

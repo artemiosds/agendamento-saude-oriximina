@@ -1,5 +1,5 @@
 import React, { useState, Suspense, useMemo } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Link, matchPath, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
 import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
@@ -23,6 +23,7 @@ import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
 type MenuItem = {
   to: string;
+  search?: string;
   label: string;
   icon: React.ElementType;
   modulo: ModuleName | null;
@@ -33,7 +34,8 @@ type MenuItem = {
 
 type MenuGroup = {
   id: string;
-  title: string | null; // null = sem título (Principal)
+  title: string | null;
+  icon?: React.ElementType;
   items: MenuItem[];
 };
 
@@ -46,74 +48,72 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    id: 'atendimento',
-    title: 'Agenda e Recepção',
+    id: 'recepcao',
+    title: 'Recepção e Fluxo do Paciente',
+    icon: Users,
     items: [
-      { to: '/painel/agenda',       label: 'Agenda',          icon: Calendar,      modulo: 'agenda' },
-      { to: '/painel/exames',       label: 'Exames Diagnósticos', icon: FileText, modulo: 'agenda' },
-      { to: '/painel/fila',         label: 'Fila de Espera',  icon: ListOrdered,   modulo: 'fila' },
-      { to: '/painel/pacientes',    label: 'Pacientes',       icon: Users,         modulo: 'pacientes' },
-      { to: '/painel/faltosos',     label: 'Faltosos',        icon: Users,         modulo: 'faltosos' },
-      { to: '/painel/atendimentos', label: 'Atendimentos',    icon: ClipboardList, modulo: 'atendimento' },
-    ],
-  },
-  {
-    id: 'clinica',
-    title: 'Assistência / Clínica',
-    items: [
-      { to: '/painel/tratamentos',       label: 'Gestão de Tratamentos', icon: Activity,    modulo: 'tratamento' },
-      { to: '/painel/prontuario',        label: 'Prontuário',            icon: Stethoscope, modulo: 'prontuario' },
-      { to: '/painel/procedimentos-sigtap', label: 'Consultar SIGTAP', icon: FileText, modulo: 'prontuario' },
-      { to: '/painel/triagem',           label: 'Triagem',               icon: HeartPulse,  modulo: 'triagem' },
-      { to: '/painel/historico-triagem', label: 'Histórico Triagem',     icon: History,     modulo: 'historico_triagem' },
-      { to: '/painel/enfermagem',        label: 'Avaliação Enfermagem',  icon: Stethoscope, modulo: 'avaliacao_enfermagem' },
-      { to: '/painel/pts',               label: 'PTS',                   icon: FileText,    modulo: 'pts' },
-      { to: '/painel/multiprofissional', label: 'Avaliação Multi',       icon: BookOpen,    modulo: 'avaliacao_multi' },
-      { to: '/painel/alta',              label: 'Relatório de Alta',     icon: FileText,    modulo: 'relatorio_alta' },
-      { to: '/painel/meu-prontuario',    label: 'Meu Prontuário',        icon: Stethoscope, modulo: 'prontuario', hide_from_master: true },
-    ],
-  },
-  {
-    id: 'documentos',
-    title: 'Documentos e Arquivo',
-    items: [
-      { to: '/painel/cockpit-ao-vivo', label: 'Cockpit ao Vivo', icon: Activity, modulo: 'cockpit_unidade' },
-      { to: '/painel/relatorios',   label: 'Relatórios',    icon: FileText, modulo: 'relatorios' },
-      { to: '/painel/bpa-exportar', label: 'BPA-Exportar',  icon: FileText, modulo: 'bpa_exportar' },
-    ],
-  },
-  {
-    id: 'regulacao',
-    title: 'Regulação / Encaminhamentos',
-    items: [
+      { to: '/painel/agenda', label: 'Agenda Diária', icon: Calendar, modulo: 'agenda' },
+      { to: '/painel/fila', label: 'Fila de Espera', icon: ListOrdered, modulo: 'fila' },
+      { to: '/painel/pacientes', label: 'Pacientes', icon: Users, modulo: 'pacientes' },
+      { to: '/painel/exames', label: 'Exames Diagnósticos', icon: FileText, modulo: 'agenda' },
+      { to: '/painel/faltosos', label: 'Faltosos', icon: Users, modulo: 'faltosos' },
       { to: '/painel/encaminhamentos', label: 'Encaminhamentos', icon: Send, modulo: 'encaminhamento' },
     ],
   },
   {
-    id: 'gestao',
-    title: 'Gestão da Unidade',
+    id: 'clinica',
+    title: 'Atendimento Clínico',
+    icon: Stethoscope,
     items: [
-      { to: '/painel/funcionarios',    label: 'Funcionários',       icon: UserCog,       modulo: 'usuarios' },
-      { to: '/painel/portal-acessos',  label: 'Acessos ao Portal',  icon: UserCog,       modulo: 'usuarios' },
-      { to: '/painel/unidades',        label: 'Unidades/Salas',     icon: Building2,     modulo: 'unidades_salas' },
-      { to: '/painel/disponibilidade', label: 'Disponibilidade',    icon: CalendarClock, modulo: 'disponibilidade' },
-      { to: '/painel/bloqueios',       label: 'Feriados/Bloqueios', icon: CalendarClock, modulo: 'feriados_bloqueios' },
+      { to: '/painel/prontuario', label: 'Consultório', icon: Stethoscope, modulo: 'prontuario' },
+      { to: '/painel/tratamentos', label: 'Gestão de Tratamentos', icon: Activity, modulo: 'tratamento' },
+      { to: '/painel/triagem', label: 'Triagem', icon: HeartPulse, modulo: 'triagem' },
+      { to: '/painel/atendimentos', label: 'Atendimentos', icon: ClipboardList, modulo: 'atendimento' },
+      { to: '/painel/historico-triagem', label: 'Histórico da Triagem', icon: History, modulo: 'historico_triagem' },
+      { to: '/painel/enfermagem', label: 'Avaliação de Enfermagem', icon: Stethoscope, modulo: 'avaliacao_enfermagem' },
+      { to: '/painel/pts', label: 'PTS', icon: ClipboardListIcon, modulo: 'pts' },
+      { to: '/painel/multiprofissional', label: 'Avaliação Multiprofissional', icon: BookOpen, modulo: 'avaliacao_multi' },
+      { to: '/painel/alta', label: 'Relatório de Alta', icon: FileText, modulo: 'relatorio_alta' },
+      { to: '/painel/meu-prontuario', label: 'Meu Prontuário', icon: Stethoscope, modulo: 'prontuario', hide_from_master: true },
     ],
   },
   {
-    id: 'administracao',
-    title: 'Administração',
+    id: 'producao',
+    title: 'Faturamento e Produção SUS',
+    icon: FileText,
     items: [
-      { to: '/painel/auditoria',               label: 'Logs & Auditoria',  icon: ShieldCheck, modulo: 'logs_auditoria' },
-      { to: '/painel/monitoramento',           label: 'Monitoramento',     icon: MonitorDot,  modulo: 'monitoramento_sistema' },
-      { to: '/painel/configuracoes',           label: 'Configurações',     icon: Settings,    modulo: null, roles_master_only: true },
-      { to: '/painel/permissoes',              label: 'Permissões',        icon: Lock,        modulo: null, roles_master_only: true },
-      { to: '/painel/configuracoes-avancadas', label: 'Gestão Operacional e Dados', icon: Settings,    modulo: null, roles_master_only: true },
+      { to: '/painel/bpa-exportar', label: 'Exportação BPA', icon: FileText, modulo: 'bpa_exportar' },
+      { to: '/painel/procedimentos-sigtap', label: 'Consulta SIGTAP', icon: FileText, modulo: 'prontuario' },
+      { to: '/painel/relatorios', label: 'Relatórios', icon: FileText, modulo: 'relatorios' },
+    ],
+  },
+  {
+    id: 'gestao',
+    title: 'Gestão e Escalas',
+    icon: CalendarClock,
+    items: [
+      { to: '/painel/disponibilidade', search: '?aba=escala', label: 'Escala dos Profissionais', icon: Calendar, modulo: 'disponibilidade' },
+      { to: '/painel/funcionarios', label: 'Funcionários', icon: UserCog, modulo: 'usuarios' },
+      { to: '/painel/unidades', label: 'Unidades e Salas', icon: Building2, modulo: 'unidades_salas' },
+      { to: '/painel/disponibilidade', label: 'Disponibilidade', icon: CalendarClock, modulo: 'disponibilidade' },
+      { to: '/painel/bloqueios', label: 'Feriados e Bloqueios', icon: CalendarClock, modulo: 'feriados_bloqueios' },
+      { to: '/painel/cockpit-ao-vivo', label: 'Cockpit ao Vivo', icon: Activity, modulo: 'cockpit_unidade' },
+      { to: '/painel/portal-acessos', label: 'Acessos ao Portal', icon: UserCog, modulo: 'usuarios' },
+      { to: '/painel/auditoria', label: 'Auditoria', icon: ShieldCheck, modulo: 'logs_auditoria' },
+      { to: '/painel/monitoramento', label: 'Monitoramento', icon: MonitorDot, modulo: 'monitoramento_sistema' },
+      { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, modulo: null, roles_master_only: true },
+      { to: '/painel/permissoes', label: 'Permissões', icon: Lock, modulo: null, roles_master_only: true },
+      { to: '/painel/configuracoes-avancadas', label: 'Gestão Operacional e Dados', icon: Settings, modulo: null, roles_master_only: true },
     ],
   },
 ];
 
-const SIDEBAR_GROUPS_STORAGE_KEY = 'sidebar-collapsed-groups-v1';
+const SIDEBAR_GROUPS_STORAGE_KEY = 'sidebar-workflow-groups-v1';
+const defaultGroupByRole: Record<string, string> = {
+  master: 'gestao', gestor: 'gestao', gestao: 'gestao', coordenador: 'gestao',
+  recepcao: 'recepcao', profissional: 'clinica', tecnico: 'clinica',
+  tecnico_enfermagem: 'clinica', enfermagem: 'clinica',
+};
 
 const roleLabels: Record<string, string> = {
   master:             'Master',
@@ -139,7 +139,8 @@ const PainelLayout: React.FC = () => {
   
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const isMaster = user?.role?.toLowerCase().trim() === 'master';
+  const role = user?.role?.toLowerCase().trim() || '';
+  const isMaster = role === 'master';
 
   // Resolve display name for the current user's unit
   const unitDisplayName = useMemo(() => {
@@ -175,27 +176,45 @@ const PainelLayout: React.FC = () => {
         .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
         .filter(g => g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isMaster, can, permLoading, license, licenseLoading]
+    [isMaster, isGlobalAdmin, can, permLoading, license, licenseLoading]
   );
 
   const searchPaths = new Set(filteredGroups.flatMap(group => group.items.map(item => item.to)));
+  const showingSchedule = new URLSearchParams(location.search).get('aba') === 'escala';
+  const matchesItem = (item: MenuItem) => {
+    if (!matchPath({ path: item.to, end: item.to === '/painel' }, location.pathname)) return false;
+    return item.to !== '/painel/disponibilidade' || Boolean(item.search) === showingSchedule;
+  };
+  const currentGroup = filteredGroups.find(group => group.items.some(matchesItem));
+  const activeGroup = currentGroup?.title ? currentGroup.id : undefined;
+  const currentItem = currentGroup?.items.find(matchesItem);
+  const defaultGroup = filteredGroups.find(group => group.id === defaultGroupByRole[role])
+    ?? filteredGroups.find(group => group.title);
 
-  // Collapsed groups state (persisted locally)
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+  const [savedGroups, setSavedGroups] = useState<Record<string, Record<string, boolean>>>(() => {
     try {
-      const raw = localStorage.getItem(SIDEBAR_GROUPS_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : {};
+      return JSON.parse(localStorage.getItem(SIDEBAR_GROUPS_STORAGE_KEY) || '{}') || {};
     } catch {
       return {};
     }
   });
+  const [collapsedLocation, setCollapsedLocation] = useState<string>();
+  const preferenceKey = (user?.id || 'anon') + ':' + role;
+  const currentLocationKey = preferenceKey + ':' + location.key;
+  React.useEffect(() => setCollapsedLocation(undefined), [currentLocationKey]);
 
-  const toggleGroup = (id: string) => {
-    setCollapsedGroups(prev => {
-      const next = { ...prev, [id]: !prev[id] };
-      try { localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
+  const isExpanded = (group: MenuGroup) => {
+    if (!group.title) return true;
+    if (group.id === activeGroup) return collapsedLocation !== currentLocationKey;
+    return savedGroups[preferenceKey]?.[group.id] ?? (!activeGroup && group.id === defaultGroup?.id);
+  };
+
+  const toggleGroup = (group: MenuGroup) => {
+    const open = !isExpanded(group);
+    if (group.id === activeGroup) setCollapsedLocation(open ? undefined : currentLocationKey);
+    const next = { ...savedGroups, [preferenceKey]: { ...savedGroups[preferenceKey], [group.id]: open } };
+    setSavedGroups(next);
+    try { localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(next)); } catch { /* Preferência opcional. */ }
   };
 
   return (
@@ -211,9 +230,9 @@ const PainelLayout: React.FC = () => {
       </AnimatePresence>
 
       {/* Sidebar */}
-      <aside className={cn(
+      <aside id="painel-sidebar" className={cn(
         "fixed inset-y-0 left-0 z-50 h-dvh w-72 sm:w-64 max-w-[85vw] bg-sidebar flex flex-col transition-transform duration-300 shadow-2xl lg:sticky lg:top-0 lg:self-start lg:shadow-none",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        sidebarOpen ? "visible translate-x-0" : "invisible -translate-x-full lg:visible lg:translate-x-0"
       )}>
         <div className="p-5 border-b border-sidebar-border flex shrink-0 items-center gap-3">
           <img src={brand.logoUrl} alt={brand.titulo} className="w-12 h-12 shrink-0 rounded-xl bg-white p-0.5 object-contain ring-2 ring-sidebar-primary/20" onError={(e) => { (e.currentTarget as HTMLImageElement).src = logoSms; }} />
@@ -231,48 +250,58 @@ const PainelLayout: React.FC = () => {
           </div>
         )}
 
-        <nav className="min-h-0 flex-1 p-3 space-y-3 overflow-y-auto">
+        <nav aria-label="Menu principal" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-2.5 py-3">
           {filteredGroups.map(group => {
-            const isCollapsed = !!collapsedGroups[group.id];
+            const expanded = isExpanded(group);
+            const containsCurrent = group.id === activeGroup;
+            const groupRegionId = 'menu-grupo-' + group.id;
             return (
-              <div key={group.id} className="space-y-0.5">
+              <div key={group.id} className={cn(group.title && "space-y-1", !group.title && "mb-2 border-b border-sidebar-border pb-2")}>
                 {group.title && (
                   <button
                     type="button"
-                    onClick={() => toggleGroup(group.id)}
-                    className="w-full flex items-center justify-between px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
+                    onClick={() => toggleGroup(group)}
+                    aria-expanded={expanded}
+                    aria-controls={groupRegionId}
+                    className={cn(
+                      "flex min-h-11 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-semibold leading-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-primary",
+                      containsCurrent
+                        ? "bg-sidebar-primary/15 text-sidebar-foreground"
+                        : "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
                   >
-                    <span>{group.title}</span>
+                    {group.icon && <group.icon className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                    <span className="min-w-0 flex-1">{group.title}</span>
                     <ChevronDown
-                      className={cn(
-                        "w-3 h-3 transition-transform duration-200",
-                        isCollapsed && "-rotate-90"
-                      )}
-                      strokeWidth={2}
+                      className={cn("h-4 w-4 shrink-0 opacity-80 transition-transform motion-reduce:transition-none", !expanded && "-rotate-90")}
+                      aria-hidden="true"
                     />
                   </button>
                 )}
-                {!isCollapsed && (
-                  <div className="space-y-0.5">
-                    {group.items.map(item => (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        end={item.to === '/painel'}
+                <div id={group.title ? groupRegionId : undefined} hidden={!expanded}
+                  className={cn("space-y-0.5", group.title && "ml-4 border-l border-sidebar-border pl-2")}>
+                  {expanded && group.items.map(item => {
+                    const isActive = item === currentItem;
+                    const destination = item.to + (item.search || '');
+                    return (
+                      <Link
+                        key={destination}
+                        to={destination}
+                        aria-current={isActive ? 'page' : undefined}
                         onClick={() => setSidebarOpen(false)}
-                        className={({ isActive }) => cn(
-                          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group",
+                        className={cn(
+                          "relative flex min-h-10 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium leading-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-primary",
                           isActive
-                            ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm sidebar-active-glow"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            ? "bg-sidebar-primary/20 font-semibold text-sidebar-foreground ring-1 ring-inset ring-sidebar-primary/50"
+                            : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         )}
                       >
-                        <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-                        {item.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
+                        <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
@@ -282,7 +311,7 @@ const PainelLayout: React.FC = () => {
           <div className="mb-3">
             <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.nome}</p>
             <p className="text-xs text-sidebar-foreground/50">
-              {roleLabels[user?.role?.toLowerCase().trim() || ''] || user?.role}
+              {isMaster ? (isGlobalAdmin ? 'Master Global' : 'Master de unidade') : roleLabels[role] || user?.role}
             </p>
             {user?.cargo && (
               <p className="text-xs text-sidebar-foreground/40 truncate">{user.cargo}</p>
@@ -309,19 +338,15 @@ const PainelLayout: React.FC = () => {
             className="lg:hidden mr-1 h-10 w-10"
             onClick={() => setSidebarOpen(true)}
             aria-label="Abrir menu"
+            aria-controls="painel-sidebar"
+            aria-expanded={sidebarOpen}
           >
             <Menu className="w-5 h-5" />
           </Button>
           {/* Título dinâmico da página atual (mobile) */}
           <div className="flex-1 min-w-0 lg:hidden">
             <p className="text-sm font-semibold text-foreground truncate">
-              {(() => {
-                for (const g of filteredGroups) {
-                  const it = g.items.find(i => location.pathname === i.to || (i.to !== '/painel' && location.pathname.startsWith(i.to + '/')));
-                  if (it) return it.label;
-                }
-                return location.pathname === '/painel' ? 'Dashboard' : '';
-              })()}
+              {currentItem?.label || (location.pathname === '/painel' ? 'Dashboard' : '')}
             </p>
           </div>
           <div className="hidden lg:block flex-1" />
