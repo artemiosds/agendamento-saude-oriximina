@@ -1,5 +1,8 @@
-import type { BpaSigtapCatalog, BpaSigtapProcedure } from './bpaSigtapCatalog';
+import type { BpaSigtapProcedure } from './bpaSigtapCatalog';
 import { avaliarCboSigtap, SIGTAP_DETALHE_NAO_EXIGE_CBO } from './bpaSigtapCatalog';
+
+export type SigtapConsultationRule = Pick<BpaSigtapProcedure, 'instrumentos' | 'cbos' | 'detalhes' | 'servicosClassificacoes'>;
+export type SigtapConsultationCatalog = ReadonlyMap<string, SigtapConsultationRule>;
 
 export type SigtapConsultationFilter = 'bpa_c' | 'bpa_i' | 'raas' | 'exige_cid' | 'classificacao';
 
@@ -7,7 +10,6 @@ export interface SigtapConsultationRow {
   codigo: string;
   nome: string;
   descricao: string | null;
-  origem: string | null;
   valor: number | null;
 }
 
@@ -25,7 +27,7 @@ export type CboConsultationStatus = 'relacionado' | 'nao_relacionado' | 'lista_d
 
 /** Evidence for display only. Does not participate in clinical/BPA validation. */
 export function cboStatusForCompetence(
-  procedure: BpaSigtapProcedure | undefined,
+  procedure: SigtapConsultationRule | undefined,
   reference: string,
   competence: string,
   cbo = '',
@@ -42,14 +44,14 @@ const searchText = (text: string): string => text.normalize('NFD').replace(/[\u0
   .toLowerCase().trim().replace(/\s+/g, ' ');
 const codePattern = /^[\d.\s-]+$/;
 
-export const requiresCid = (procedure?: BpaSigtapProcedure): boolean | null =>
+export const requiresCid = (procedure?: SigtapConsultationRule): boolean | null =>
   procedure?.detalhes === undefined ? null : procedure.detalhes.has('048');
 
 /** Uma regra histórica não confirma a exigência da competência atual. */
-export const requiresCidForCompetence = (procedure: BpaSigtapProcedure | undefined, reference: string, competence: string): boolean | null =>
+export const requiresCidForCompetence = (procedure: SigtapConsultationRule | undefined, reference: string, competence: string): boolean | null =>
   reference === competence ? requiresCid(procedure) : null;
 
-export function matchesSigtapFilter(procedure: BpaSigtapProcedure | undefined, filter: SigtapConsultationFilter): boolean {
+export function matchesSigtapFilter(procedure: SigtapConsultationRule | undefined, filter: SigtapConsultationFilter): boolean {
   if (!procedure) return false;
   switch (filter) {
     case 'bpa_c': return procedure.instrumentos.has('01');
@@ -66,7 +68,8 @@ export function filterSigtapRows(
   cbo: string,
   cidCodes: ReadonlySet<string> | null,
   filters: ReadonlySet<SigtapConsultationFilter>,
-  catalog: BpaSigtapCatalog | null,
+  catalog: SigtapConsultationCatalog | null,
+  confirmedCboOnly = false,
 ): SigtapConsultationRow[] {
   const needle = searchText(term);
   const code = codePattern.test(needle) ? needle.replace(/\D/g, '') : '';
@@ -81,7 +84,11 @@ export function filterSigtapRows(
     const rule = catalog?.get(row.codigo);
     // A missing official file must not turn the entire local catalogue into
     // "zero results". The UI labels CBO verification as unavailable.
-    if (cbo && catalog && (!rule || avaliarCboSigtap(rule, cbo) === 'incompativel')) return false;
+    if (cbo && catalog) {
+      if (!rule || avaliarCboSigtap(rule, cbo) === 'incompativel') return false;
+      if (confirmedCboOnly && !rule.cbos.has(cbo)
+        && !(rule.cbos.size === 0 && rule.detalhes?.has(SIGTAP_DETALHE_NAO_EXIGE_CBO))) return false;
+    }
     return activeFilters.every((filter) => matchesSigtapFilter(rule, filter));
   });
 }

@@ -10,8 +10,8 @@ const rule = (details: string[], instruments: string[] = [], cbos: string[] = []
 
 describe('consulta SIGTAP', () => {
   const rows: SigtapConsultationRow[] = [
-    { codigo: '0301010048', nome: 'Consulta em atenção especializada', descricao: null, origem: 'SIGTAP', valor: null },
-    { codigo: '0301010056', nome: 'Avaliação', descricao: null, origem: 'SIGTAP', valor: null },
+    { codigo: '0301010048', nome: 'Consulta em atenção especializada', descricao: null, valor: null },
+    { codigo: '0301010056', nome: 'Avaliação', descricao: null, valor: null },
   ];
   const catalog: BpaSigtapCatalog = new Map([
     ['0301010048', rule(['048'], ['02'], ['223810'])],
