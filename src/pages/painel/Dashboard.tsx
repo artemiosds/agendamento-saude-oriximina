@@ -1,441 +1,372 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Calendar, CheckCircle, Clock, DoorOpen, ListOrdered, Stethoscope, Users, XCircle } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useAuth } from '@/contexts/AuthContext';
 import { useFila } from '@/contexts/FilaContext';
 import { useOperacional } from '@/contexts/OperacionalContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
+import { useLicense } from '@/hooks/useLicense';
+import { isPathLicensed } from '@/lib/licenseModules';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, Users, Clock, CheckCircle, TrendingUp, XCircle, AlertTriangle, BarChart3 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
-import { cn } from '@/lib/utils';
 import { DashboardSkeleton } from '@/components/skeletons';
-import { localDateStr } from '@/lib/utils';
-import type { Agendamento } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { addDaysToDateStr, BRAZIL_TIMEZONE, localDateStr, nowTimeBrazilStr } from '@/lib/utils';
 
-const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(38, 92%, 50%)', 'hsl(280, 60%, 50%)', 'hsl(0, 72%, 51%)'];
+const BLUE = '#2A6F97';
+const PERIODS = [{ days: 1, label: 'Hoje' }, { days: 7, label: 'Últimos 7 dias' }, { days: 30, label: 'Últimos 30 dias' }] as const;
+const QUICK_ACTIONS = [
+  { label: 'Agenda do Dia', path: '/painel/agenda', module: 'agenda', icon: Calendar },
+  { label: 'Fila da Recepção', path: '/painel/fila', module: 'fila', icon: ListOrdered },
+  { label: 'Cockpit ao Vivo', path: '/painel/cockpit-ao-vivo', module: 'cockpit_unidade', icon: Activity },
+  { label: 'Relatórios', path: '/painel/relatorios', module: 'relatorios', icon: BarChart3 },
+] as const;
+const WAITING = new Set(['aguardando', 'pendente', 'confirmado', 'confirmado_chegada', 'chegada_confirmada', 'aguardando_triagem', 'triagem_concluida', 'aguardando_enfermagem', 'aguardando_atendimento', 'apto_atendimento', 'chamado', 'encaixado']);
+const FINISHED = new Set(['concluido', 'finalizado', 'atendido', 'atendimento_encerrado', 'prontuario_finalizado']);
+const ARRIVED = new Set([...WAITING].filter(status => !['confirmado', 'pendente', 'aguardando'].includes(status)));
+const CANCELLED = new Set(['cancelado', 'cancelada', 'excluido', 'removido', 'inativo', 'remarcado']);
+const FILTERS = ['Todos', 'Aguardando', 'Em Atendimento', 'Finalizados'] as const;
+type AgendaFilter = typeof FILTERS[number];
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string; subtitle?: string; onClick?: () => void; critical?: boolean }> = ({ title, value, icon, color, subtitle, onClick, critical }) => (
-  <Card className={cn("shadow-card border-0 transition-all", onClick && "cursor-pointer hover:ring-1 hover:ring-primary/30", critical && "ring-1 ring-destructive/40")} onClick={onClick}>
-    <CardContent className="p-5 flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-sm text-muted-foreground">{title}</p>
-        <p className={cn("text-2xl font-bold font-display", critical ? "text-destructive" : "text-foreground")}>{value}</p>
-        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-      </div>
-    </CardContent>
-  </Card>
-);
-
-interface AtendimentoDB {
-  id: string;
-  profissional_nome: string;
-  unidade_id: string;
-  setor: string;
-  data: string;
-  status: string;
-  duracao_minutos: number | null;
-  sala_id: string;
+function agendaGroup(status: string): AgendaFilter | undefined {
+  if (FINISHED.has(status)) return 'Finalizados';
+  if (status === 'em_atendimento') return 'Em Atendimento';
+  if (WAITING.has(status)) return 'Aguardando';
 }
 
-const DASHBOARD_AGENDAMENTO_COLUMNS = 'id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,criado_em,criado_por';
-const TERMINAL_PAST_STATUSES = [
-  'cancelado', 'cancelada', 'falta', 'faltou', 'concluido', 'finalizado',
-  'atendido', 'atendimento_encerrado', 'prontuario_finalizado', 'excluido',
-  'removido', 'inativo',
-];
+function StatCard({ title, value, detail, badge, icon: Icon }: {
+  title: string; value: string | number; detail?: string; badge?: { label: string; high: boolean }; icon: typeof Calendar;
+}) {
+  return (
+    <Card className="min-w-0 shadow-none">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="rounded-lg bg-[#2A6F97]/10 p-2 text-[#2A6F97] dark:text-sky-300"><Icon className="h-4 w-4" aria-hidden="true" /></span>
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        </div>
+        <div className="flex flex-wrap items-baseline gap-2">
+          <p className="font-display text-2xl font-bold tabular-nums">{value}</p>
+          {badge && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.high ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'}`}>{badge.label}</span>}
+        </div>
+        {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
+      </CardContent>
+    </Card>
+  );
+}
 
-const mapDashboardAgendamento = (row: any): Agendamento => ({
-  id: row.id,
-  pacienteId: row.paciente_id,
-  pacienteNome: row.paciente_nome,
-  unidadeId: row.unidade_id,
-  salaId: row.sala_id || '',
-  setorId: row.setor_id || '',
-  profissionalId: row.profissional_id,
-  profissionalNome: row.profissional_nome,
-  data: row.data,
-  hora: row.hora,
-  status: row.status,
-  tipo: row.tipo,
-  observacoes: row.observacoes || '',
-  origem: row.origem || 'recepcao',
-  criadoEm: row.criado_em || '',
-  criadoPor: row.criado_por || '',
-});
+async function readDashboard(today: string, unitId: string, professionalId: string, signal: AbortSignal) {
+  const start = addDaysToDateStr(today, -29);
+  // Page by a stable order so multiple rows on the same date are not skipped.
+  const paged = async <T,>(makePage: (first: number, last: number) => PromiseLike<{ data: T[] | null; error: unknown }>) => {
+    const rows: T[] = [];
+    const pageSize = 1000;
+    for (let first = 0; !signal.aborted; first += pageSize) {
+      const { data, error } = await makePage(first, first + pageSize - 1);
+      if (error) throw error;
+      rows.push(...(data ?? []));
+      if (!data || data.length < pageSize) break;
+    }
+    return rows;
+  };
+  const scope = {
+    ...(unitId ? { unidade_id: unitId } : {}),
+    ...(professionalId ? { profissional_id: professionalId } : {}),
+  };
+  const [todayRows, pastRows, attendances] = await Promise.all([
+    paged((from, to) => supabase.from('agendamentos')
+      .select('id,paciente_id,paciente_nome,profissional_nome,data,hora,status,tipo,sala_id,turno').eq('data', today)
+      .match(scope).order('id').range(from, to).abortSignal(signal)),
+    paged((from, to) => supabase.from('agendamentos')
+      .select('id,data,status').gte('data', start).lt('data', today)
+      .match(scope).order('id').range(from, to).abortSignal(signal)),
+    paged((from, to) => supabase.from('atendimentos')
+      .select('id,profissional_id,profissional_nome,agendamento_id,data,status,duracao_minutos,sala_id')
+      .gte('data', start).lte('data', today).match(scope).order('id').range(from, to).abortSignal(signal)),
+  ]);
+  return { todayRows, pastRows, attendances };
+}
 
-const Dashboard: React.FC = () => {
-  const { fila } = useFila();
-  const { funcionarios, unidades, disponibilidades, salas } = useOperacional();
+const Dashboard = () => {
   const { user } = useAuth();
   const isGlobalAdmin = user?.usuario === 'admin.sms';
   const userUnidadeId = user?.unidadeId || '';
   const userId = user?.id || '';
-  const userRole = user?.role || '';
-  const userLogin = user?.usuario || '';
-  const navigate = useNavigate();
-  const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
-  const [todayAg, setTodayAg] = useState<Agendamento[]>([]);
-  const [weekAgendamentos, setWeekAgendamentos] = useState<Array<{ id: string; data: string; status: string }>>([]);
-  const [profAgendamentos, setProfAgendamentos] = useState<Array<{ profissional_nome: string | null }>>([]);
-  const [appointmentCounts, setAppointmentCounts] = useState({ total: 0, faltas: 0, cancelados: 0 });
-  const [loading, setLoading] = useState(true);
-  const requestIdRef = useRef(0);
-
-  useEffect(() => {
-    const requestId = ++requestIdRef.current;
-    const load = async () => {
-      try {
-        setLoading(true);
-        const today = localDateStr(new Date());
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - 14);
-        const cutoff = localDateStr(cutoffDate);
-
-        const applyUserScope = (query: any) => {
-          let scoped = query;
-          if (userUnidadeId && userLogin !== 'admin.sms') scoped = scoped.eq('unidade_id', userUnidadeId);
-          if (userRole === 'profissional' && userId) scoped = scoped.eq('profissional_id', userId);
-          return scoped;
-        };
-
-        const fetchPaged = async (columns: string, configure: (query: any) => any) => {
-          const rows: any[] = [];
-          const pageSize = 1000;
-          let from = 0;
-          while (true) {
-            let query = (supabase as any)
-              .from('agendamentos')
-              .select(columns)
-              .order('data', { ascending: false })
-              .range(from, from + pageSize - 1);
-            query = configure(query);
-            const { data, error } = await applyUserScope(query);
-            if (error) throw error;
-            if (!data || data.length === 0) break;
-            rows.push(...data);
-            if (data.length < pageSize) break;
-            from += pageSize;
-          }
-          return rows;
-        };
-
-        const countAppointments = async (configure: (query: any) => any) => {
-          let query = (supabase as any).from('agendamentos').select('id', { count: 'exact', head: true });
-          query = configure(query);
-          const { count, error } = await applyUserScope(query);
-          if (error) throw error;
-          return count || 0;
-        };
-
-        const recentScope = (query: any) => query.gte('data', cutoff);
-        const openPastScope = (query: any) => query.lt('data', cutoff).not('status', 'in', `(${TERMINAL_PAST_STATUSES.join(',')})`);
-        const recentStatus = (status: string) => (query: any) => recentScope(query).eq('status', status);
-        const weekStartDate = new Date();
-        weekStartDate.setDate(weekStartDate.getDate() - 6);
-        const weekStart = localDateStr(weekStartDate);
-
-        let atendimentosQuery = (supabase as any).from('atendimentos').select('id,profissional_nome,unidade_id,setor,data,status,duracao_minutos,sala_id').order('data', { ascending: false }).limit(1000);
-        atendimentosQuery = applyUserScope(atendimentosQuery);
-
-        const [atendimentosResult, todayRows, weekRows, recentProfRows, openPastProfRows, recentCount, openPastCount, faltaCount, canceladoCount] = await Promise.all([
-          atendimentosQuery,
-          fetchPaged(DASHBOARD_AGENDAMENTO_COLUMNS, (query) => query.eq('data', today)),
-          fetchPaged('id,data,status', (query) => query.gte('data', weekStart).lte('data', today)),
-          fetchPaged('profissional_nome', recentScope),
-          fetchPaged('profissional_nome', openPastScope),
-          countAppointments(recentScope),
-          countAppointments(openPastScope),
-          countAppointments(recentStatus('falta')),
-          countAppointments(recentStatus('cancelado')),
-        ]);
-        if (requestIdRef.current !== requestId) return;
-
-        setAtendimentosDB(atendimentosResult.data || []);
-        setTodayAg(todayRows.map(mapDashboardAgendamento));
-        setWeekAgendamentos(weekRows);
-        setProfAgendamentos([...recentProfRows, ...openPastProfRows]);
-        setAppointmentCounts({
-          total: recentCount + openPastCount,
-          faltas: faltaCount,
-          cancelados: canceladoCount,
-        });
-      } catch (err) {
-        console.error('Error loading atendimentos for dashboard:', err);
-      } finally {
-        if (requestIdRef.current === requestId) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      if (requestIdRef.current === requestId) requestIdRef.current += 1;
-    };
-  }, [userId, userLogin, userRole, userUnidadeId]);
-
-  const today = localDateStr(new Date());
-
-  const confirmados = todayAg.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
-  const pendentes = todayAg.filter(a => a.status === 'pendente').length;
-  const aguardando = fila.filter(f => f.status === 'aguardando').length;
-
-  // KPIs
-  const kpis = useMemo(() => {
-    const totalAg = appointmentCounts.total;
-    const faltas = appointmentCounts.faltas;
-    const cancelados = appointmentCounts.cancelados;
-    const noShowRate = totalAg > 0 ? Math.round((faltas / totalAg) * 100) : 0;
-
-    const finalizados = atendimentosDB.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
-    const avgTime = finalizados.length > 0
-      ? Math.round(finalizados.reduce((s, a) => s + (a.duracao_minutos || 0), 0) / finalizados.length)
-      : 0;
-
-    // Occupancy per sala (today)
-    const todayAtendimentos = atendimentosDB.filter(a => a.data === today);
-    const salasAtivas = salas.filter(s => s.ativo).length;
-    const salasOcupadas = new Set(todayAtendimentos.map(a => a.sala_id).filter(Boolean)).size;
-    const occupancyRate = salasAtivas > 0 ? Math.round((salasOcupadas / salasAtivas) * 100) : 0;
-
-    // Priority patients
-    const prioritarios = fila.filter(f => f.prioridade === 'alta' || f.prioridade === 'urgente');
-    const prioAtendidos = prioritarios.filter(f => f.status === 'atendido').length;
-    const prioAguardando = prioritarios.filter(f => f.status === 'aguardando' || f.status === 'chamado').length;
-
-    return { noShowRate, avgTime, occupancyRate, cancelados, faltas, prioAtendidos, prioAguardando, totalFinalizados: finalizados.length };
-  }, [appointmentCounts, atendimentosDB, today, salas, fila]);
-
-  const weekChartData = useMemo(() => {
-    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    const now = new Date();
-    const result = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      // Use atendimentos (finalized) as primary source; only add agendamentos not yet in atendimentos
-      const atendimentoCount = atendimentosDB.filter(a => a.data === dateStr).length;
-      const agendamentoIds = new Set(atendimentosDB.filter(a => a.data === dateStr).map(a => a.id));
-       const extraFromAgendamentos = weekAgendamentos.filter(a => a.data === dateStr && (a.status === 'concluido' || a.status === 'em_atendimento') && !agendamentoIds.has(a.id)).length;
-      result.push({ name: days[d.getDay()], atendimentos: atendimentoCount + extraFromAgendamentos });
-    }
-    return result;
-  }, [atendimentosDB, weekAgendamentos]);
-
-  const profData = useMemo(() => {
-    // Use agendamentos as the single source to avoid double-counting
-    const map: Record<string, number> = {};
-    profAgendamentos.forEach(a => {
-      if (a.profissional_nome) map[a.profissional_nome] = (map[a.profissional_nome] || 0) + 1;
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
-  }, [profAgendamentos]);
-
-  const totalAtendimentos = atendimentosDB.filter(a => a.status === 'finalizado').length;
-
-  if (loading) return <DashboardSkeleton />;
-
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Dashboard Executivo</h1>
-        <p className="text-muted-foreground text-sm">Visão geral e KPIs em tempo real</p>
-      </div>
-
-      {/* Main KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Consultas Hoje" value={todayAg.length} icon={<Calendar className="w-5 h-5 text-primary-foreground" />} color="gradient-primary" onClick={() => navigate('/painel/agenda')} />
-        <StatCard title="Confirmados/Chegou" value={confirmados} icon={<CheckCircle className="w-5 h-5 text-success-foreground" />} color="bg-success" onClick={() => navigate('/painel/agenda')} />
-        <StatCard title="Na Fila" value={aguardando} icon={<Clock className="w-5 h-5 text-warning-foreground" />} color="bg-warning" onClick={() => navigate('/painel/fila')} />
-        <StatCard title="Atendimentos Totais" value={totalAtendimentos} icon={<TrendingUp className="w-5 h-5 text-info-foreground" />} color="bg-info" onClick={() => navigate('/painel/atendimentos')} />
-      </div>
-
-      {/* Executive KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Taxa No-Show" 
-          value={`${kpis.noShowRate}%`} 
-          icon={<XCircle className="w-5 h-5 text-destructive-foreground" />} 
-          color="bg-destructive"
-          subtitle={`${kpis.faltas} faltas de ${appointmentCounts.total}`}
-          onClick={() => navigate('/painel/relatorios')}
-          critical={kpis.noShowRate > 20}
-        />
-        <StatCard 
-          title="Tempo Médio" 
-          value={`${kpis.avgTime}min`} 
-          icon={<Clock className="w-5 h-5 text-primary-foreground" />} 
-          color="gradient-primary"
-          subtitle={`${kpis.totalFinalizados} atendimentos`}
-          onClick={() => navigate('/painel/relatorios')}
-        />
-        <StatCard 
-          title="Ocupação Salas" 
-          value={`${kpis.occupancyRate}%`} 
-          icon={<BarChart3 className="w-5 h-5 text-info-foreground" />} 
-          color="bg-info"
-          subtitle="Hoje"
-          onClick={() => navigate('/painel/unidades')}
-        />
-        <StatCard 
-          title="Prioritários" 
-          value={kpis.prioAguardando} 
-          icon={<AlertTriangle className="w-5 h-5 text-warning-foreground" />} 
-          color="bg-warning"
-          subtitle={`${kpis.prioAtendidos} atendidos`}
-          onClick={() => navigate('/painel/fila')}
-          critical={kpis.prioAguardando > 5}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="shadow-card border-0">
-          <CardContent className="p-5">
-            <h3 className="font-semibold font-display text-foreground mb-4">Atendimentos da Semana</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={weekChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 20%, 90%)" />
-                <XAxis dataKey="name" tick={{ fill: 'hsl(215, 15%, 50%)' }} />
-                <YAxis tick={{ fill: 'hsl(215, 15%, 50%)' }} />
-                <Tooltip />
-                <Bar dataKey="atendimentos" fill="hsl(199, 89%, 38%)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-card border-0">
-          <CardContent className="p-5">
-            <h3 className="font-semibold font-display text-foreground mb-4">Agendamentos por Profissional</h3>
-            {profData.length === 0 ? (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
-                Nenhum dado disponível ainda.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={profData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`}>
-                    {profData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Today's appointments summary */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
-          <h3 className="font-semibold font-display text-foreground mb-4">Agenda de Hoje</h3>
-          <div className="space-y-2">
-            {todayAg.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Nenhum agendamento para hoje.</p>
-            ) : (
-              todayAg.sort((a, b) => a.hora.localeCompare(b.hora)).map(ag => {
-                const tipoLabel = ag.tipo === 'Retorno' ? '🔄' : ag.tipo === 'Exame' ? '🔬' : '🩺';
-                return (
-                  <div key={ag.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-sm font-mono font-medium text-foreground w-14 shrink-0">{ag.hora}</span>
-                      <span className="text-sm shrink-0" title={ag.tipo}>{tipoLabel}</span>
-                      <span className="text-sm text-foreground truncate">{ag.pacienteNome || 'Paciente não encontrado'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap pl-0 sm:pl-0">
-                      <span className="text-xs text-muted-foreground truncate max-w-[150px]">{ag.profissionalNome}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
-                        ag.status === 'confirmado' || ag.status === 'confirmado_chegada' ? 'bg-success/10 text-success' :
-                        ag.status === 'pendente' ? 'bg-warning/10 text-warning' :
-                        ag.status === 'cancelado' ? 'bg-destructive/10 text-destructive' :
-                        ag.status === 'em_atendimento' ? 'bg-primary/10 text-primary' :
-                        ag.status === 'concluido' ? 'bg-info/10 text-info' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {ag.status === 'confirmado_chegada' ? 'Chegou' : ag.status}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* System status */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="shadow-card border-0">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{funcionarios.filter(f => f.role === 'profissional' && f.ativo && (isGlobalAdmin || !userUnidadeId || f.unidadeId === userUnidadeId)).length}</p>
-            <p className="text-xs text-muted-foreground">Profissionais Ativos</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-0">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{unidades.filter(u => u.ativo).length}</p>
-            <p className="text-xs text-muted-foreground">Unidades Ativas</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-0">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{disponibilidades.length}</p>
-            <p className="text-xs text-muted-foreground">Disponibilidades Configuradas</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {(user?.role === 'master') && <AtendimentosPendentesMaster userUnidadeId={userUnidadeId} isGlobalAdmin={isGlobalAdmin} />}
-    </div>
-  );
+  const userRole = user?.role?.trim().toLowerCase() || '';
+  const isMaster = userRole === 'master';
+  const isProfessional = userRole === 'profissional';
+  if (!userId) return null;
+  if (!isGlobalAdmin && !userUnidadeId) {
+    return <div role="status" className="rounded-lg border p-5">Selecione uma unidade para visualizar o Dashboard Executivo.</div>;
+  }
+  // Never render the previous account's snapshot while the next scope loads.
+  return <DashboardScope key={JSON.stringify([userId, userRole, userUnidadeId, isGlobalAdmin])}
+    userId={userId} firstName={user?.nome?.trim().split(/\s+/)[0] || ''} userUnidadeId={userUnidadeId}
+    isGlobalAdmin={isGlobalAdmin} isMaster={isMaster} isProfessional={isProfessional} />;
 };
 
-const AtendimentosPendentesMaster: React.FC<{ userUnidadeId: string; isGlobalAdmin: boolean }> = ({ userUnidadeId, isGlobalAdmin }) => {
-  const navigate = useNavigate();
+function DashboardScope({ userId, firstName, userUnidadeId, isGlobalAdmin, isMaster, isProfessional }: {
+  userId: string; firstName: string; userUnidadeId: string; isGlobalAdmin: boolean; isMaster: boolean; isProfessional: boolean;
+}) {
+  const { fila } = useFila();
+  const { funcionarios, unidades, salas, disponibilidades } = useOperacional();
+  const { can, loading: permissionsLoading } = usePermissions();
+  const { license, loading: licenseLoading } = useLicense();
+  const allowedActions = QUICK_ACTIONS.filter(action => !permissionsLoading && !licenseLoading &&
+    isPathLicensed(action.path, license) && (isMaster || can(action.module, 'can_view')));
+
+  const [now, setNow] = useState(() => new Date());
+  const today = localDateStr(now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const [data, setData] = useState<Awaited<ReturnType<typeof readDashboard>>>();
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [period, setPeriod] = useState<(typeof PERIODS)[number]['days']>(1);
+  const [filter, setFilter] = useState<AgendaFilter>('Todos');
+  const unitId = isGlobalAdmin ? '' : userUnidadeId;
+  const professionalId = isProfessional ? userId : '';
+  useEffect(() => {
+    const controller = new AbortController();
+    setError(false);
+    readDashboard(today, unitId, professionalId, controller.signal).then(result => {
+      if (!controller.signal.aborted) setData(result);
+    }).catch(cause => {
+      if (controller.signal.aborted) return;
+      console.error('Erro ao carregar o Dashboard Executivo:', cause);
+      setError(true);
+    });
+    return () => controller.abort();
+  }, [today, unitId, professionalId, retry]);
+
+  const todayRows = (data?.todayRows ?? []).filter(row => row.data === today);
+  const start = addDaysToDateStr(today, 1 - period);
+  const scopedQueue = fila.filter(entry => (!unitId || entry.unidadeId === unitId) &&
+    (!professionalId || entry.profissionalId === professionalId));
+  const queued = scopedQueue.filter(entry => WAITING.has(entry.status));
+  const roomIds = new Set(salas.filter(room => room.ativo && (!unitId || room.unidadeId === unitId)).map(room => room.id));
+  const activeRows = todayRows.filter(row => row.status === 'em_atendimento');
+  const currentAttendances = (data?.attendances ?? []).filter(row => row.data === today && ['em_atendimento', 'em_andamento', 'aberto', 'iniciado'].includes(row.status));
+  const activeVisits = new Set([...activeRows.map(row => row.id), ...currentAttendances.map(row => row.agendamento_id || row.id)]);
+  const occupied = new Set([...activeRows, ...currentAttendances].map(row => row.sala_id).filter(id => roomIds.has(id))).size;
+  const visibleAppointments = todayRows.filter(row => filter === 'Todos' || agendaGroup(row.status) === filter)
+    .sort((a, b) => a.hora.localeCompare(b.hora));
+
+  const { total, missing, mean, weekly, ranking, completed } = useMemo(() => {
+    const appointments = [...(data?.pastRows ?? []), ...(data?.todayRows ?? [])];
+    const periodAppointments = appointments.filter(row => row.data >= start && row.data <= today && !CANCELLED.has(row.status));
+    const done = (data?.attendances ?? []).filter(row => FINISHED.has(row.status));
+    const rangeDone = done.filter(row => row.data >= start && row.data <= today);
+    const durations = rangeDone.flatMap(row => row.duracao_minutos && row.duracao_minutos > 0 ? [row.duracao_minutos] : []);
+    const professionals = new Map<string, { name: string; count: number }>();
+    for (const row of rangeDone) {
+      if (!row.profissional_id || !row.profissional_nome) continue;
+      const item = professionals.get(row.profissional_id) ?? { name: row.profissional_nome, count: 0 };
+      item.count += 1;
+      professionals.set(row.profissional_id, item);
+    }
+    const matched = new Set(done.map(row => row.agendamento_id).filter(Boolean));
+    const weekly = Array.from({ length: 7 }, (_, index) => {
+      const date = addDaysToDateStr(today, index - 6);
+      return {
+        date: date.split('-').reverse().join('/'),
+        count: done.filter(row => row.data === date).length +
+          appointments.filter(row => row.data === date && FINISHED.has(row.status) && !matched.has(row.id)).length,
+      };
+    });
+    return {
+      total: periodAppointments.length,
+      missing: periodAppointments.filter(row => row.status === 'falta' || row.status === 'faltou').length,
+      mean: durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null,
+      weekly,
+      ranking: Array.from(professionals, ([id, item]) => ({ id, ...item })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 5),
+      completed: rangeDone.length,
+    };
+  }, [data, start, today]);
+  const absence = total ? 100 * missing / total : null;
+  const hour = Number(nowTimeBrazilStr(now).slice(0, 2));
+  const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const unit = unidades.find(item => item.id === userUnidadeId);
+  const unitLabel = isGlobalAdmin ? 'Visão consolidada · Toda a rede' : unit?.nomeExibicao || unit?.nome || 'Unidade atual';
+  const periodLabel = PERIODS.find(item => item.days === period)?.label;
+
+  return (
+    <div className="space-y-6">
+      <header className="rounded-2xl border border-[#2A6F97]/20 bg-[#2A6F97] p-5 text-white sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-sky-100">Dashboard Executivo</p>
+            <h1 className="mt-1 font-display text-2xl font-bold sm:text-3xl">{greeting}{firstName ? `, ${firstName}` : ''}</h1>
+            <p className="mt-1 text-sm text-sky-50">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeZone: BRAZIL_TIMEZONE }).format(now)}</p>
+          </div>
+          <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-sm">{unitLabel}</span>
+        </div>
+        {allowedActions.length > 0 && <nav className="mt-5 flex flex-wrap gap-2" aria-label="Ações rápidas">
+          {allowedActions.map(({ path, label, icon: Icon }) => (
+            <Button key={path} asChild className="border border-white/25 bg-white/10 text-white hover:bg-white/20">
+              <Link to={path}><Icon className="mr-2 h-4 w-4" />{label}<ArrowUpRight className="ml-2 h-3.5 w-3.5" /></Link>
+            </Button>
+          ))}
+        </nav>}
+      </header>
+      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 p-4">
+        <p className="text-sm">Não foi possível atualizar os dados do Dashboard.</p>
+        <Button variant="outline" onClick={() => setRetry(value => value + 1)}>Tentar novamente</Button>
+      </div>}
+      {!data && !error && <DashboardSkeleton />}
+      {data && <>
+        <section className="space-y-3">
+          <h2 className="font-display text-lg font-semibold">Operação de hoje</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard title="Consultas agendadas" value={todayRows.filter(row => !CANCELLED.has(row.status)).length} icon={Calendar} />
+            <StatCard title="Pacientes que chegaram" value={new Set(todayRows.filter(row => ARRIVED.has(row.status) || FINISHED.has(row.status) || row.status === 'em_atendimento').map(row => row.paciente_id || row.id)).size} icon={CheckCircle} />
+            <StatCard title="Pacientes na fila" value={queued.length} icon={Users} />
+            <StatCard title="Em atendimento" value={activeVisits.size} icon={Stethoscope} />
+          </div>
+        </section>
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold">Eficiência clínica</h2>
+            <div role="group" aria-label="Período dos indicadores agregados" className="flex flex-wrap gap-1 rounded-lg border bg-muted/30 p-1">
+              {PERIODS.map(item => <Button key={item.days} size="sm" variant={period === item.days ? 'default' : 'ghost'}
+                aria-pressed={period === item.days} onClick={() => setPeriod(item.days)}>{item.label}</Button>)}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard title="Taxa de absenteísmo" value={absence === null ? '—' : `${absence.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}
+              icon={XCircle} detail={`${missing} faltas em ${total} agendamentos válidos`}
+              badge={absence === null ? undefined : { label: absence < 15 ? 'Dentro da meta' : 'Atenção', high: absence >= 15 }} />
+            <StatCard title="Tempo médio de consulta" value={mean === null ? '—' : `${mean} min`} icon={Clock} detail={periodLabel} />
+            <StatCard title="Ocupação física de salas" value={isProfessional ? occupied : roomIds.size ? `${Math.round(100 * occupied / roomIds.size)}%` : '—'}
+              icon={DoorOpen} detail={isProfessional ? 'Salas em uso nos seus atendimentos de hoje' : `${occupied} de ${roomIds.size} salas ativas em uso hoje`} />
+            <StatCard title="Casos prioritários / urgentes" value={queued.filter(entry => entry.prioridade === 'alta' || entry.prioridade === 'urgente').length}
+              icon={AlertTriangle} detail="Aguardando na fila atual" />
+          </div>
+        </section>
+        {isMaster && <AtendimentosPendentesMaster userUnidadeId={userUnidadeId} isGlobalAdmin={isGlobalAdmin}
+          agendaAllowed={allowedActions.some(action => action.module === 'agenda')} />}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="min-w-0 shadow-none">
+            <CardContent className="space-y-3 p-5">
+              <h2 className="font-display font-semibold">Evolução semanal</h2>
+              <p className="text-sm text-muted-foreground">Atendimentos concluídos · Últimos 7 dias</p>
+              <ResponsiveContainer width="100%" height={222}>
+                <AreaChart data={weekly} margin={{ top: 8, right: 12, left: -22, bottom: 0 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tickFormatter={(date: string) => date.slice(0, 5)} tickLine={false} axisLine={false} fontSize={11} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
+                  <Tooltip labelFormatter={(date) => date} formatter={(value) => [value, 'Atendimentos concluídos']}
+                    contentStyle={{ background: 'hsl(var(--card))', borderColor: BLUE, borderRadius: 8 }} itemStyle={{ color: 'hsl(var(--foreground))' }} />
+                  <Area dataKey="count" type="monotone" stroke={BLUE} strokeWidth={2.5} fill={BLUE} fillOpacity={0.14} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 shadow-none">
+            <CardContent className="space-y-3 p-5">
+              <h2 className="font-display font-semibold">{isProfessional ? 'Seus atendimentos concluídos' : 'Top 5 profissionais'}</h2>
+              <p className="text-sm text-muted-foreground">Atendimentos concluídos · {periodLabel}</p>
+              {ranking.length ? <ol className="space-y-3">
+                {ranking.map(item => (
+                  <li key={item.id} className="space-y-1.5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                      <span className="break-words font-medium">{item.name}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{item.count} · {Math.round(100 * item.count / completed)}%</span>
+                    </div>
+                    <div aria-hidden="true" className="h-2 rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-[#2A6F97]" style={{ width: `${100 * item.count / completed}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ol> : <p className="py-8 text-sm text-muted-foreground">Nenhum atendimento concluído no período.</p>}
+            </CardContent>
+          </Card>
+        </div>
+        <Card className="shadow-none">
+          <CardContent className="space-y-4 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-lg font-semibold">Agenda de Hoje</h2>
+              <div role="group" aria-label="Filtrar Agenda de Hoje" className="flex flex-wrap gap-1">
+                {FILTERS.map(item => <Button key={item} size="sm" variant={filter === item ? 'secondary' : 'ghost'}
+                  aria-pressed={filter === item} onClick={() => setFilter(item)}>{item}</Button>)}
+              </div>
+            </div>
+            {visibleAppointments.length ? <ul className="divide-y rounded-lg border">
+              {visibleAppointments.map(row => <li key={row.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
+                <time className="font-semibold tabular-nums text-[#2A6F97] dark:text-sky-300">{row.hora.slice(0, 5)}</time>
+                {(row.turno || row.hora) && <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{row.turno?.replace(/^manha$/i, 'Manhã').replace(/^tarde$/i, 'Tarde') || (Number(row.hora.slice(0, 2)) < 12 ? 'Manhã' : 'Tarde')}</span>}
+                <div className="min-w-0 flex-1 basis-36">
+                  <p className="break-words text-sm font-medium">{row.paciente_nome || 'Paciente não identificado'}</p>
+                  <p className="break-words text-xs text-muted-foreground">{row.profissional_nome || 'Profissional não informado'}{row.tipo && ` · ${row.tipo}`}</p>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  {row.status === 'em_atendimento' ? 'Em atendimento' : FINISHED.has(row.status) ? 'Finalizado' :
+                    (['confirmado_chegada', 'chegada_confirmada'].includes(row.status) ? 'Chegou' : row.status.replace(/_/g, ' '))}
+                </span>
+              </li>)}
+            </ul> : <p className="text-sm text-muted-foreground">Nenhum agendamento nesta visualização.</p>}
+          </CardContent>
+        </Card>
+        {!isProfessional && <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard title="Profissionais ativos" value={funcionarios.filter(f => f.role === 'profissional' && f.ativo && (!unitId || f.unidadeId === unitId)).length} icon={Users} />
+          <StatCard title="Unidades ativas" value={unidades.filter(u => u.ativo && (!unitId || u.id === unitId)).length} icon={Activity} />
+          <StatCard title="Disponibilidades configuradas" value={disponibilidades.filter(d => !unitId || d.unidadeId === unitId).length} icon={Calendar} />
+        </div>}
+      </>}
+    </div>
+  );
+}
+
+const AtendimentosPendentesMaster: React.FC<{ userUnidadeId: string; isGlobalAdmin: boolean; agendaAllowed: boolean }> = ({ userUnidadeId, isGlobalAdmin, agendaAllowed }) => {
   const [pendentes, setPendentes] = useState<any[]>([]);
   const [minutos, setMinutos] = useState(60);
 
   useEffect(() => {
+    let active = true;
     (async () => {
       try {
         const { data: cfgRow } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
         const m = (cfgRow?.configuracoes as any)?.config_fluxo_atendimento?.alerta_minutos_em_atendimento;
         const mins = typeof m === 'number' ? m : 60;
+        if (!active) return;
         setMinutos(mins);
         const { data } = await (supabase as any).rpc('get_atendimentos_pendentes_master', {
           p_unidade_id: isGlobalAdmin ? null : (userUnidadeId || null),
           p_minutos: mins,
         });
-        setPendentes(data || []);
+        if (active) setPendentes((data || []).filter((row: { unidade_id: string }) => isGlobalAdmin || row.unidade_id === userUnidadeId));
       } catch {}
     })();
+    return () => { active = false; };
   }, [userUnidadeId, isGlobalAdmin]);
 
   if (pendentes.length === 0) return null;
 
   return (
-    <Card className="shadow-card border-0 ring-1 ring-destructive/40">
+    <Card className="border-destructive/30 bg-destructive/5">
       <CardContent className="p-5">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-destructive" />
           <h3 className="font-semibold font-display text-foreground">
             Atendimentos em aberto há mais de {minutos} min ({pendentes.length})
           </h3>
+          {agendaAllowed && <Button asChild variant="outline" size="sm" className="sm:ml-auto"><Link to="/painel/agenda">Abrir Agenda <ArrowUpRight className="ml-1 h-4 w-4" /></Link></Button>}
         </div>
         <div className="space-y-2">
           {pendentes.slice(0, 10).map((p: any) => (
-            <button
+            <div
               key={p.id}
-              onClick={() => navigate('/painel/agenda')}
-              className="w-full text-left flex items-center justify-between gap-3 p-3 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors"
+              className="flex items-center justify-between gap-3 rounded-lg bg-background/80 p-3"
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{p.paciente_nome}</p>
                 <p className="text-xs text-muted-foreground truncate">com {p.profissional_nome} · {p.data} {p.hora}</p>
               </div>
               <span className="text-xs font-semibold text-destructive shrink-0">{p.minutos_aberto} min</span>
-            </button>
+            </div>
           ))}
         </div>
       </CardContent>
