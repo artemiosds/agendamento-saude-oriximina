@@ -22,6 +22,7 @@ import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { SlotInfoBadge } from '@/components/SlotInfoBadge';
 import type { TurnoDefinition } from '@/components/config/ConfigFluxoAtendimento';
 import { UnitScopeNavigator } from '@/components/operacional/UnitScopeNavigator';
+import { saveAvailabilityGroup, type AvailabilitySlot } from '@/services/availabilityGroupService';
 import { useOperationalUnitScope } from '@/hooks/useOperationalUnitScope';
 
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -96,7 +97,7 @@ const Disponibilidade: React.FC = () => {
       return next;
     }, { replace: true });
   };
-  const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useOperacional();
+  const { disponibilidades, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useOperacional();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -358,6 +359,35 @@ const Disponibilidade: React.FC = () => {
     return null;
   };
 
+  const gradeWriteInFlight = useRef(false);
+  const persistGrade = async (
+    ids: string[],
+    group: Pick<(typeof disponibilidades)[number], 'profissionalId' | 'unidadeId' | 'dataInicio' | 'dataFim'>,
+    slots: AvailabilitySlot[],
+    successMessage: string,
+  ) => {
+    if (gradeWriteInFlight.current) return false;
+    gradeWriteInFlight.current = true;
+    setSaving(true);
+    try {
+      await saveAvailabilityGroup(ids, group, slots);
+      toast.success(successMessage);
+      void refreshDisponibilidades().catch(error => console.error('Erro ao atualizar a lista de disponibilidades:', error));
+      return true;
+    } catch (err) {
+      const error = err as { code?: string; message?: string } | null;
+      console.error('Erro ao gravar a grade de disponibilidade:', err);
+      const knownError = ['40001', '23P01', '42501', '22023'].includes(error?.code || '');
+      toast.error(knownError && error?.message
+        ? error.message
+        : 'Não foi possível confirmar a alteração. Atualize a grade e confira os horários antes de tentar novamente.');
+      return false;
+    } finally {
+      setSaving(false);
+      gradeWriteInFlight.current = false;
+    }
+  };
+
   const handleSave = async () => {
     if (!form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim) {
       toast.error('Preencha todos os campos obrigatórios.');
@@ -368,6 +398,7 @@ const Disponibilidade: React.FC = () => {
       return;
     }
 
+    let slots: AvailabilitySlot[];
     if (modo === 'por_hora') {
       const activeDays = daySchedules.map((ds, i) => ({ ...ds, dayNum: i })).filter(ds => ds.ativo);
       if (activeDays.length === 0) { toast.error('Ative pelo menos um dia da semana.'); return; }
@@ -383,76 +414,29 @@ const Disponibilidade: React.FC = () => {
           return;
         }
       }
-
-      const overlapMsg = checkOverlap();
-      if (overlapMsg) { toast.error(overlapMsg); return; }
-
-      setSaving(true);
-      try {
-        if (isEditing) { for (const id of editGroupIds) { await deleteDisponibilidade(id); } }
-        for (const day of activeDays) {
-          await addDisponibilidade({
-            id: `d${Date.now()}_${day.dayNum}`,
-            profissionalId: form.profissionalId,
-            unidadeId: form.unidadeId,
-            salaId: form.salaId,
-            dataInicio: form.dataInicio, dataFim: form.dataFim,
-            horaInicio: day.horaInicio, horaFim: day.horaFim,
-            vagasPorHora: form.vagasPorHora, vagasPorDia: form.vagasPorDia,
-            diasSemana: [day.dayNum],
-            duracaoConsulta: form.duracaoConsulta,
-          });
-        }
-        toast.success(isEditing ? 'Disponibilidade atualizada!' : `${activeDays.length} registro(s) criado(s)!`);
-        setDialogOpen(false);
-      } catch (err) {
-        console.error('Erro ao salvar disponibilidade:', err);
-        toast.error('Erro ao salvar disponibilidade.');
-      } finally { setSaving(false); }
+      slots = activeDays.map(day => ({
+        salaId: form.salaId, horaInicio: day.horaInicio, horaFim: day.horaFim,
+        vagasPorHora: form.vagasPorHora, vagasPorDia: form.vagasPorDia,
+        diasSemana: [day.dayNum], duracaoConsulta: form.duracaoConsulta,
+      }));
     } else {
-      // Por Turno
-      const activeDays = configDias.filter(d => d.ativo && d.blocos.some(b => b.ativo));
-      if (activeDays.length === 0) { toast.error('Ative pelo menos um dia com turnos.'); return; }
-
-      const overlapMsg = checkOverlap();
-      if (overlapMsg) { toast.error(overlapMsg); return; }
-
-      setSaving(true);
-      try {
-        if (isEditing) {
-          // Rule: identified records to remain, insert new ones, delete removed ones.
-          // Since we are replacing the whole group logic, we delete old and add new.
-          for (const id of editGroupIds) { await deleteDisponibilidade(id); }
-        }
-
-        // Create one record per bloco-day combination
-        for (const dia of activeDays) {
-          for (const bloco of dia.blocos.filter(b => b.ativo)) {
-            // Find if it's a standard turno to keep ID, otherwise use name
-            const turnoObj = turnosGlobais.find(t => t.nome === bloco.nome);
-            const salaId = bloco.tipo === 'padrao' && turnoObj ? turnoObj.id : bloco.nome;
-            
-            await addDisponibilidade({
-              id: `d${Date.now()}_${dia.diaSemana}_${Math.random().toString(36).substr(2, 4)}`,
-              profissionalId: form.profissionalId,
-              unidadeId: form.unidadeId,
-              salaId: salaId, 
-              dataInicio: form.dataInicio, dataFim: form.dataFim,
-              horaInicio: bloco.horaInicio, horaFim: bloco.horaFim,
-              vagasPorHora: 0, // marker for turno mode
-              vagasPorDia: bloco.vagas,
-              diasSemana: [dia.diaSemana],
-              duracaoConsulta: 0,
-            });
-          }
-        }
-        toast.success(isEditing ? 'Disponibilidade atualizada!' : 'Disponibilidade por turno salva!');
-        setDialogOpen(false);
-      } catch (err) {
-        console.error('Erro ao salvar disponibilidade:', err);
-        toast.error('Erro ao salvar disponibilidade.');
-      } finally { setSaving(false); }
+      slots = configDias.filter(dia => dia.ativo).flatMap(dia => dia.blocos.filter(bloco => bloco.ativo).map(bloco => {
+        const turno = turnosGlobais.find(item => item.nome === bloco.nome);
+        return {
+          salaId: bloco.tipo === 'padrao' && turno ? turno.id : bloco.nome,
+          horaInicio: bloco.horaInicio, horaFim: bloco.horaFim,
+          vagasPorHora: 0, vagasPorDia: bloco.vagas,
+          diasSemana: [dia.diaSemana], duracaoConsulta: 0,
+        };
+      }));
+      if (slots.length === 0) { toast.error('Ative pelo menos um dia com turnos.'); return; }
     }
+    const overlapMsg = checkOverlap();
+    if (overlapMsg) { toast.error(overlapMsg); return; }
+
+    const message = isEditing ? 'Disponibilidade atualizada!'
+      : modo === 'por_hora' ? `${slots.length} registro(s) criado(s)!` : 'Disponibilidade por turno salva!';
+    if (await persistGrade(editGroupIds, form, slots, message)) setDialogOpen(false);
   };
 
   const updateDaySchedule = (dayIndex: number, field: keyof DaySchedule, value: any) => {
@@ -1041,7 +1025,6 @@ const Disponibilidade: React.FC = () => {
                     const unidade = unidades.find(u => u.id === first.unidadeId);
                     const isTurno = isGroupTurno(records);
                     const sala = first.salaId && !isTurno ? salas.find(s => s.id === first.salaId) : null;
-                    const allIds = records.map(r => r.id);
 
                     if (isTurno) {
                       const turnoBlocks: { bloco: BlocoConfig; dayNum: number }[] = [];
@@ -1079,7 +1062,7 @@ const Disponibilidade: React.FC = () => {
                                 <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" title="Excluir"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os registros serão removidos.</AlertDialogDescription></AlertDialogHeader>
-                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const r of records) { await deleteDisponibilidade(r.id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={saving} onClick={() => void persistGrade(records.map(r => r.id), first, [], 'Disponibilidade excluída!')}>Excluir</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
                             </div>
@@ -1137,7 +1120,7 @@ const Disponibilidade: React.FC = () => {
                                 <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os {records.length} registro(s) serão removidos.</AlertDialogDescription></AlertDialogHeader>
-                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const id of allIds) { await deleteDisponibilidade(id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={saving} onClick={() => void persistGrade(records.map(r => r.id), first, [], 'Disponibilidade excluída!')}>Excluir</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
                             </div>
