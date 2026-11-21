@@ -338,9 +338,9 @@ const Agenda: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const patientLink = location.state?.quickPatient as import("@/lib/quickSearch").QuickSearchPatientLink | undefined;
-  const quickPatient = patientLink && patientLink.userId === user?.id && patientLink.unitId === (user?.unidadeId || "")
+  const agendaSearchPatient = patientLink && patientLink.userId === user?.id && patientLink.unitId === (user?.unidadeId || "")
     ? patientLink : undefined;
-  const quickPatientId = quickPatient?.id;
+  const quickPatientId = agendaSearchPatient?.id;
   const requested = location.state?.regulation as (RegulationScope & { requestId?: string }) | undefined;
   const requestedManual = location.state?.manualAvailability as ManualAvailabilityScope | undefined;
   const [regulatedBooking, setRegulatedBooking] = useState<RegulationSelection>();
@@ -1122,11 +1122,11 @@ const Agenda: React.FC = () => {
       Turno: TURNO_FILTER_OPTIONS.find(option => option.value === turnoFilter)?.label || turnoFilter,
       Tipo: TIPO_FILTER_OPTIONS.find(option => option.value === tipoFilter)?.label || tipoFilter,
       Status: STATUS_FILTER_OPTIONS.find(option => option.value === statusFilter)?.label || statusFilter,
-      Busca: [quickPatient?.nome, deferredSearchTerm ? searchTerm.trim() : ""].filter(Boolean).join(" · ") || "Sem busca",
+      Busca: [agendaSearchPatient?.nome, deferredSearchTerm ? searchTerm.trim() : ""].filter(Boolean).join(" · ") || "Sem busca",
       Total: String(filtered.length),
     }));
   }, [canPrintFilteredList, isGlobalAdmin, filterUnit, user, isProfissional, filterProf, unidadesVisiveis,
-    profissionais, filtered, pacienteById, resolvePaciente, selectedDate, turnoFilter, tipoFilter, statusFilter, deferredSearchTerm, searchTerm, quickPatient?.nome]);
+    profissionais, filtered, pacienteById, resolvePaciente, selectedDate, turnoFilter, tipoFilter, statusFilter, deferredSearchTerm, searchTerm, agendaSearchPatient?.nome]);
 
   // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
   const statusCounts = React.useMemo(() => {
@@ -2771,7 +2771,7 @@ const Agenda: React.FC = () => {
     if (quickSelected.data !== todayLocalStr() || !["agendado", "confirmado"].includes(String(quickSelected.status || "").toLowerCase())) { toast.error("Este agendamento não está mais pendente de chegada. Atualize a busca."); return; }
     if (user?.usuario !== "admin.sms" && user?.unidadeId && quickSelected.unidadeId !== user.unidadeId) { toast.error("Agendamento fora da unidade autorizada."); return; }
     quickConfirmingRef.current = true; setQuickConfirming(true);
-    const patientName = quickPatient?.nome || quickSelected.pacienteNome || "Paciente";
+    const patientName = agendaSearchPatient?.nome || quickSelected.pacienteNome || "Paciente";
     const priorityLabels = [quickAgePriority.age !== null && quickAgePriority.age >= 60 ? (quickAgePriority.age >= 80 ? "Idoso 80+" : "Idoso 60+") : "", quickPriorityDraft.is_pne ? "Cadeirante/PNE" : "", quickPriorityDraft.is_gestante ? "Gestante" : "", quickPriorityDraft.is_autista ? "TEA/Autista" : ""].filter(Boolean);
     try {
       const current = quickExistingPriority;
@@ -2918,7 +2918,7 @@ const Agenda: React.FC = () => {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-base font-bold text-foreground">{resolvePaciente(quickSelected.pacienteId, quickSelected.pacienteNome)}</p>
-                    <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || "Não informado"}</p>
+                    <p className="text-sm text-muted-foreground">Mãe: {agendaSearchPatient?.nomeMae || "Não informado"}</p>
                      {quickCpf && <p className="text-sm text-muted-foreground">CPF: {quickCpf.length === 11 ? quickCpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : quickPatient?.cpf}</p>}
                      {quickCns && <p className="text-sm text-muted-foreground">CNS: {formatCNS(quickCns)}</p>}
                     <p className="text-sm text-muted-foreground">Nascimento: {quickBirth ? `${String(quickBirth).split("-").reverse().join("/")} · ${calcularIdade(quickBirth)} anos` : "Não informado"}</p>
@@ -3543,7 +3543,7 @@ const Agenda: React.FC = () => {
                 <div className="flex flex-col gap-4">
                   {quickPatientId && (
                     <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
-                      <span className="min-w-0 flex-1 break-words">Agendamentos de <strong>{quickPatient.nome}</strong> na data selecionada</span>
+                      <span className="min-w-0 flex-1 break-words">Agendamentos de <strong>{agendaSearchPatient.nome}</strong> na data selecionada</span>
                       <Button type="button" variant="ghost" size="sm" onClick={() =>
                         navigate(location.pathname + location.search, { replace: true, state: { ...location.state, quickPatient: undefined } })
                       }>Limpar paciente</Button>
