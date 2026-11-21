@@ -93,13 +93,13 @@ function Door({ x, y, down, width = 31 }: { x: number; y: number; down: boolean;
   </g>;
 }
 type OpenZone = (zone: string) => void;
-function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, state, onOpen }: {
+function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, state, onOpen, alert }: {
   id: string; title: string; summary: string; x: number; y: number; w: number; h: number; color: string;
-  children: ReactNode; lower?: boolean; state?: RoomState; onOpen?: OpenZone;
+  children: ReactNode; lower?: boolean; state?: RoomState; onOpen?: OpenZone; alert?: 'danger' | 'warning';
 }) {
   const doorX = x + (id === 'recepcao' ? w - 129 : id === 'triagem' ? 82 : Math.round(w * .54));
   const label = title + '. ' + summary;
-  return <g className="planta-zone" id={id} data-map-zone={id} data-state={state} role={onOpen ? 'button' : 'group'}
+  return <g className="planta-zone" id={id} data-map-zone={id} data-state={state} data-alert={alert} role={onOpen ? 'button' : 'group'}
     tabIndex={onOpen ? 0 : undefined} aria-label={label} aria-haspopup={onOpen ? 'dialog' : undefined}
     onClick={onOpen ? () => onOpen(id) : undefined} onKeyDown={onOpen ? e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); }
@@ -114,11 +114,11 @@ function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, 
     <rect className="planta-focus" x={x + 2} y={y + 2} width={w - 4} height={h - 4} rx="5" />
   </g>;
 }
-function Consultation({ room, x, w, onOpen }: { room: MapRoom; x: number; w: number; onOpen?: OpenZone }) {
+function Consultation({ room, x, w, onOpen, alert }: { room: MapRoom; x: number; w: number; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
   const y = 65, h = 142;
   const status = roomStatuses[room.state] + (room.elapsed === null ? '' : ' · ' + room.elapsed + ' min');
   const singleLine = room.name.length < 19 && room.specialty.length < 14;
-  return <Zone id={room.id} title={room.name} summary={status} x={x} y={y} w={w} h={h} state={room.state} color="#f4f8f4" onOpen={onOpen}>
+  return <Zone id={room.id} title={room.name} summary={status} x={x} y={y} w={w} h={h} state={room.state} color="#f4f8f4" onOpen={onOpen} alert={alert}>
     <text className="planta-room-title" x={x + 10} y={y + 20}>{short(room.name, singleLine ? 18 : Math.floor((w - 26) / 7.8))}</text>
     {singleLine && <text className="planta-tile-label" textAnchor="end" x={x + w - 11} y={y + 19}>{room.specialty}</text>}
     <Plate x={x + 10} y={y + 47} state={room.state} label={status} />
@@ -136,9 +136,9 @@ function Consultation({ room, x, w, onOpen }: { room: MapRoom; x: number; w: num
     {room.state !== 'bottleneck' && <text className="planta-tile-label" x={x + w - 11} y={y + 133} textAnchor="end">{room.completed} concluídos</text>}
   </Zone>;
 }
-function Reception({ patients, longest, onOpen }: { patients: MapPatient[]; longest: number | null; onOpen?: OpenZone }) {
+function Reception({ patients, longest, onOpen, alert }: { patients: MapPatient[]; longest: number | null; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
   const total = patients.length, label = total + ' aguardando', maxText = longest === null ? 'Espera sem horário' : 'Maior espera · ' + longest + ' min';
-  return <Zone id="recepcao" title="Recepção e sala de espera" summary={label} x={23} y={288} w={366} h={148} color="#f3f7f2" lower onOpen={onOpen}>
+  return <Zone id="recepcao" title="Recepção e sala de espera" summary={label} x={23} y={288} w={366} h={148} color="#f3f7f2" lower onOpen={onOpen} alert={alert}>
     <text className="planta-room-title" x="36" y="309">Recepção e sala de espera</text>
     <text className="planta-tile-label" x="377" y="308" textAnchor="end">ACOLHIMENTO</text>
     {Array.from({ length: 16 }, (_, i) => {
@@ -158,10 +158,10 @@ function Reception({ patients, longest, onOpen }: { patients: MapPatient[]; long
     </>}
   </Zone>;
 }
-function Triage({ patients, risk, onOpen }: { patients: MapPatient[]; risk?: Risk; onOpen?: OpenZone }) {
+function Triage({ patients, risk, onOpen, alert }: { patients: MapPatient[]; risk?: Risk; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
   const active = patients.length > 0;
   const label = active ? (risk ? 'Prioridade ' + risk : 'Classificando') : 'Livre';
-  return <Zone id="triagem" title="Triagem" summary={label} x={400} y={288} w={253} h={148} color="#f4f7ef" lower onOpen={onOpen}>
+  return <Zone id="triagem" title="Triagem" summary={label} x={400} y={288} w={253} h={148} color="#f4f7ef" lower onOpen={onOpen} alert={alert}>
     <text className="planta-room-title" x="412" y="309">Triagem</text>
     <text className="planta-tile-label" x="641" y="308" textAnchor="end">CLASSIFICAÇÃO DE RISCO</text>
     <Plate x={411} y={337} state={active ? 'occupied' : 'free'} label={label} risk={risk} />
@@ -175,9 +175,9 @@ function Triage({ patients, risk, onOpen }: { patients: MapPatient[]; risk?: Ris
     <text className="planta-mini" x="412" y="420">{active ? patients.length + ' em classificação' : 'Sem classificação em curso'}</text>
   </Zone>;
 }
-function Procedures({ patients, waiting, onOpen }: { patients: MapPatient[]; waiting: number; onOpen?: OpenZone }) {
+function Procedures({ patients, waiting, onOpen, alert }: { patients: MapPatient[]; waiting: number; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
   const title = 'Medicação e sessões', label = patients.length + ' em andamento';
-  return <Zone id="procedimentos" title={title} summary={label} x={664} y={288} w={545} h={148} color="#edf6f0" lower onOpen={onOpen}>
+  return <Zone id="procedimentos" title={title} summary={label} x={664} y={288} w={545} h={148} color="#edf6f0" lower onOpen={onOpen} alert={alert}>
     <text className="planta-room-title" x="676" y="309">{title}</text>
     <text className="planta-tile-label" x="1197" y="308" textAnchor="end">PROCEDIMENTOS</text>
     <Plate x={676} y={338} state={patients.length ? 'occupied' : 'free'} label={label} />
@@ -207,9 +207,9 @@ const Background = memo(function Background({ grid, arrow, empty }: { grid: stri
   </>;
 });
 
-export function PlantaUnidade({ rooms, waiting, longest, triage, risk, procedures, waitingCare, viewport, onOpen }: {
+export function PlantaUnidade({ rooms, waiting, longest, triage, risk, procedures, waitingCare, viewport, onOpen, alerts }: {
   rooms: MapRoom[]; waiting: MapPatient[]; longest: number | null; triage: MapPatient[]; risk?: Risk;
-  procedures: MapPatient[]; waitingCare: number; viewport: Ref<HTMLDivElement>; onOpen?: OpenZone;
+  procedures: MapPatient[]; waitingCare: number; viewport: Ref<HTMLDivElement>; onOpen?: OpenZone; alerts?: ReadonlyMap<string, 'danger' | 'warning'>;
 }) {
   const uid = useId().replace(/:/g, '');
   const arrow = 'planta-arrow-' + uid;
@@ -218,10 +218,10 @@ export function PlantaUnidade({ rooms, waiting, longest, triage, risk, procedure
   return <div className="planta-map-wrap" ref={viewport}>
     <svg className="planta-map" viewBox="0 0 1232 466" role="group" aria-label="Planta da unidade">
       <Background grid={'planta-grid-' + uid} arrow={arrow} empty={!rooms.length} />
-      {rooms.map((room, index) => <Consultation key={room.id} room={room} x={start + index * (width + 9)} w={width} onOpen={onOpen} />)}
-      <Reception patients={waiting} longest={longest} onOpen={onOpen} />
-      <Triage patients={triage} risk={risk} onOpen={onOpen} />
-      <Procedures patients={procedures} waiting={waitingCare} onOpen={onOpen} />
+      {rooms.map((room, index) => <Consultation key={room.id} room={room} x={start + index * (width + 9)} w={width} onOpen={onOpen} alert={alerts?.get(room.id)} />)}
+      <Reception patients={waiting} longest={longest} onOpen={onOpen} alert={alerts?.get("recepcao")} />
+      <Triage patients={triage} risk={risk} onOpen={onOpen} alert={alerts?.get("triagem")} />
+      <Procedures patients={procedures} waiting={waitingCare} onOpen={onOpen} alert={alerts?.get("procedimentos")} />
       <g pointerEvents="none"><path d="M80 439v8m83-8v8" stroke="#96b2a8" /><path d="M81 436h81" stroke="#e4efe8" strokeWidth="5" />
         <path d="M122 447V431" stroke="#519185" strokeWidth="1.2" markerEnd={`url(#${arrow})`} /></g>
     </svg>

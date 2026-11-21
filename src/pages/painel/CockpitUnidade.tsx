@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Activity, Building2, ChevronLeft, ChevronRight, CircleCheck, Clock3, DoorOpen, Hospital, Maximize, Minimize, RefreshCw, UsersRound, X } from 'lucide-react';
+import { CockpitAlerts, type CockpitAlert } from './CockpitAlerts';
 import { PlantaUnidade, ROOMS_PER_MAP, roomStatuses } from './PlantaUnidade';
 import type { MapRoom, Risk, RoomState } from './PlantaUnidade';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
@@ -17,16 +18,31 @@ const dateLabel = (day: string) => day.split('-').reverse().join('/');
 const riskOrder: Risk[] = ['vermelho', 'laranja', 'amarelo', 'verde', 'azul'];
 const asRisk = (label: string | null | undefined) => riskOrder.find(risk => risk === cockpitLabel(label));
 type Item = CockpitAppointment & { stage: ReturnType<typeof careStage>; arrival: string | null };
-type RecordLine = { id: string; title: string; detail: string; tone?: string };
-const asRecord = (a: Item, detail: string, tone?: string): RecordLine => ({ id: a.id, title: a.paciente_nome, detail, tone });
+type RecordLine = { id: string; title: string; detail: string; tone?: string; journey: [string, string | null][] };
+const WAIT_LIMIT = 20;
+const VISIT_LIMIT = 90;
 const orderNames = new Intl.Collator('pt-BR', { numeric: true });
+
+function PatientJourney({ steps }: { steps: RecordLine['journey'] }) {
+  const [open, setOpen] = useState(false);
+  return <details className="cockpit-journey" onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>Jornada do paciente</summary>
+    {open && <ol>{steps.map(([label, value]) => <li key={label}>
+      <span>{label}</span>
+      {value && clock(value) !== '—' ? <time dateTime={value}>{clock(value)}</time> : <span>Sem horário disponível</span>}
+    </li>)}</ol>}
+  </details>;
+}
 
 function RecordList({ records, empty }: { records: RecordLine[]; empty: string }) {
   const [limit, setLimit] = useState(12);
   if (!records.length) return <p className="planta-empty">{empty}</p>;
   return <>
     <ul className="planta-records">{records.slice(0, limit).map(item =>
-      <li key={item.id} data-tone={item.tone}><strong>{item.title}</strong><span>{item.detail}</span></li>
+      <li key={item.id} data-tone={item.tone}><div className="min-w-0">
+        <strong>{item.title}</strong><span>{item.detail}</span>
+        <PatientJourney steps={item.journey} />
+      </div></li>
     )}</ul>
     {records.length > limit && <button type="button" className="planta-action" onClick={() => setLimit(n => n + 12)}>
       Ver mais ({records.length - limit})
@@ -124,6 +140,7 @@ export default function CockpitUnidade() {
 function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName: string; day: string; now: number; theater: boolean }) {
   const [zone, setZone] = useState<string | null>(null);
   const [roomPage, setRoomPage] = useState(0);
+  const [acknowledged, setAcknowledged] = useState<Set<string>>(() => new Set());
   const viewport = useRef<HTMLDivElement>(null);
   const lastTrigger = useRef<HTMLElement | SVGElement | null>(null);
 
@@ -143,7 +160,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     target.focus({ preventScroll: true });
   };
   const { salas, funcionarios } = useOperacional();
-  const { rows, triage, arrivals, starts = {}, online, error, reload } = useCockpitFeed(unit, day);
+  const { rows, triage, arrivals, starts = {}, calledAt = {}, lastSyncedAt, online, error, reload } = useCockpitFeed(unit, day);
   const [calls, setCalls] = useState<Record<string, ChamadaPaciente>>({});
   useEffect(() => observarChamadas(unit, call => setCalls(previous => {
     const timestamp = Date.parse(call.criadoEm);
@@ -170,17 +187,16 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   const items = (rows || []).map<Item>(a => ({ ...a, stage: careStage(a.status), arrival: arrivals[a.id] || null }));
   const active = items.filter(a => a.stage !== 'outside' && a.stage !== 'done');
   const done = items.filter(a => a.stage === 'done');
-  const activeById = new Map(active.map(a => [a.id, a]));
+  const itemById = new Map(items.map(a => [a.id, a]));
   const recordByAppointment = new Map<string, typeof triage[number]>();
   for (const record of triage) {
-    const patient = activeById.get(record.agendamento_id);
-    if (!patient || !['reception', 'triage'].includes(patient.stage)) continue;
+    if (!itemById.has(record.agendamento_id)) continue;
     const previous = recordByAppointment.get(record.agendamento_id);
     if (!previous || (record.iniciado_em || '') > (previous.iniciado_em || '')) recordByAppointment.set(record.agendamento_id, record);
   }
   const classifying = active.filter(a => {
     const tri = recordByAppointment.get(a.id);
-    return a.stage === 'triage' || !!(tri?.iniciado_em && !tri?.confirmado_em);
+    return a.stage === 'triage' || (a.stage === 'reception' && !!(tri?.iniciado_em && !tri?.confirmado_em));
   });
   const classifyingIds = new Set(classifying.map(a => a.id));
   const waiting = active.filter(a => ['reception', 'ready'].includes(a.stage) && !classifyingIds.has(a.id));
@@ -266,10 +282,110 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     { icon: CircleCheck, label: 'Concluídos hoje', value: String(done.length), hint: 'atendimentos' },
   ];
 
+  const visitMinutes = (a: Item) => elapsedMinutes(a.iniciado_em || starts[a.id] || null, now);
+  const sameNameInRoom = new Map<string, number>();
+  if (zone && !theater) {
+    for (const item of items) {
+      const key = JSON.stringify([item.sala_id, cockpitLabel(item.paciente_nome)]);
+      sameNameInRoom.set(key, (sameNameInRoom.get(key) ?? 0) + 1);
+    }
+  }
+  const asRecord = (a: Item, text: string, tone?: string): RecordLine => {
+    const record = recordByAppointment.get(a.id);
+    const room = roomById.get(a.sala_id);
+    const call = room ? calls[cockpitLabel(room.nome)] : undefined;
+    const key = JSON.stringify([a.sala_id, cockpitLabel(a.paciente_nome)]);
+    const broadcastCall = call && cockpitLabel(call.pacienteNome) === cockpitLabel(a.paciente_nome) &&
+      sameNameInRoom.get(key) === 1 && (!a.concluido_em || Date.parse(call.criadoEm) <= Date.parse(a.concluido_em))
+      ? call.criadoEm : null;
+    return { id: a.id, title: a.paciente_nome, detail: text, tone, journey: [
+      ['Chegada', a.arrival],
+      ['Triagem iniciada', record?.iniciado_em ?? null],
+      ['Triagem concluída', record?.confirmado_em ?? null],
+      ['Chamada', calledAt[a.id] ?? broadcastCall],
+      ['Atendimento iniciado', a.iniciado_em || starts[a.id] || null],
+      ['Conclusão', a.concluido_em ?? null],
+    ] };
+  };
+
+  const alerts: CockpitAlert[] = [];
+  for (const room of roomViews) {
+    const overdue = room.visits.filter(visit => (visitMinutes(visit) ?? 0) > VISIT_LIMIT);
+    if (overdue.length) alerts.push({
+      id: `tempo:${room.map.id}`, zones: [room.map.id], title: room.map.name,
+      summary: `${overdue.length} acima de ${VISIT_LIMIT} min · maior tempo ${Math.max(...overdue.map(a => visitMinutes(a) ?? 0))} min`,
+      tone: 'danger', appointmentIds: overdue.map(a => a.id),
+    });
+  }
+  if (unmapped.length) alerts.push({
+    id: 'sem-sala', zones: [], title: 'Atendimento sem sala identificada',
+    summary: `${unmapped.length} em andamento · confira o vínculo da sala`, tone: 'warning', appointmentIds: unmapped.map(a => a.id),
+  });
+  const waitingTriage = waitingSorted.filter(({ a, minutes }) => a.stage === 'reception' && (minutes ?? 0) > WAIT_LIMIT);
+  if (waitingTriage.length) alerts.push({
+    id: 'espera-triagem', zones: ['recepcao', 'triagem'], title: 'Espera pela triagem',
+    summary: `${waitingTriage.length} acima de ${WAIT_LIMIT} min · maior espera ${waitingTriage[0].minutes} min`,
+    tone: 'warning', appointmentIds: waitingTriage.map(({ a }) => a.id),
+  });
+  const waitingConsultation = waitingSorted.filter(({ a, minutes }) => a.stage === 'ready' && (minutes ?? 0) > WAIT_LIMIT);
+  const specialties = new Map<string, typeof waitingConsultation>();
+  for (const entry of waitingConsultation) {
+    const name = staff.get(entry.a.profissional_id)?.profissao?.trim() || '';
+    const label = cockpitLabel(name);
+    const group = specialties.get(label) ?? [];
+    group.push(entry);
+    specialties.set(label, group);
+  }
+  for (const [specialty, entries] of specialties) {
+    const matchingRooms = specialty ? roomViews.filter(room => room.map.state === 'bottleneck' &&
+      room.team.some(person => cockpitLabel(person.profissao) === specialty)) : [];
+    const name = staff.get(entries[0].a.profissional_id)?.profissao?.trim();
+    alerts.push({
+      id: `espera-consulta:${specialty}`, zones: ['recepcao', ...matchingRooms.map(room => room.map.id)],
+      title: name ? `Espera · ${name}` : 'Espera pela consulta',
+      summary: `${entries.length} acima de ${WAIT_LIMIT} min · maior espera ${entries[0].minutes} min`,
+      tone: 'warning', appointmentIds: entries.map(({ a }) => a.id),
+    });
+  }
+  const procedureOverdue = procedureActive.filter(a => !consultationIds.has(a.sala_id) && (visitMinutes(a) ?? 0) > VISIT_LIMIT);
+  if (procedureOverdue.length) alerts.unshift({
+    id: 'procedimentos-demora', zones: ['procedimentos'], title: 'Procedimentos prolongados',
+    summary: `${procedureOverdue.length} acima de ${VISIT_LIMIT} min · maior tempo ${Math.max(...procedureOverdue.map(a => visitMinutes(a) ?? 0))} min`,
+    tone: 'danger', appointmentIds: procedureOverdue.map(a => a.id),
+  });
+  const alertZones = new Map<string, CockpitAlert['tone']>();
+  for (const alert of alerts) {
+    for (const id of alert.zones) {
+      if (alertZones.get(id) !== 'danger') alertZones.set(id, alert.tone);
+    }
+  }
+  const activeAlertKeys = JSON.stringify(alerts.map(alert => alert.id));
+  useEffect(() => {
+    const active = new Set(JSON.parse(activeAlertKeys) as string[]);
+    setAcknowledged(previous => {
+      const next = new Set([...previous].filter(id => active.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [activeAlertKeys]);
+
   let detail: { title: string; body: ReactNode } | undefined;
   if (zone && !theater) {
     const room = roomViews.find(r => r.map.id === zone);
-    if (room) {
+    if (zone.startsWith('alerta:')) {
+      const alert = alerts.find(item => `alerta:${item.id}` === zone);
+      const related = alert?.appointmentIds.map(id => itemById.get(id)).filter((item): item is Item => !!item) ?? [];
+      const roomLinks = alert?.zones.flatMap(id => roomViews.filter(item => item.map.id === id)) ?? [];
+      detail = { title: alert?.title ?? 'Alerta resolvido', body: <>
+        {alert && <p>{alert.summary}</p>}
+        {roomLinks.map(item => <button type="button" key={item.map.id} className="planta-action"
+          onClick={() => setZone(item.map.id)}>Abrir {item.map.name}</button>)}
+        <RecordList empty="A condição deste alerta deixou de ocorrer na leitura atual." records={related.map(a => {
+          const minutes = a.stage === 'consultation' ? visitMinutes(a) : elapsedMinutes(a.arrival, now);
+          return asRecord(a, [minutes === null ? '' : `${minutes} min ${a.stage === 'consultation' ? 'em atendimento' : 'de espera'}`,
+            a.profissional_nome].filter(Boolean).join(' · ') || 'Horário não disponível', alert?.tone);
+        })} />
+      </> };
+    } else if (room) {
       detail = { title: room.map.name, body: <>
         <span className="planta-badge" data-state={room.map.state}>{roomStatuses[room.map.state]}</span>
         <p>{room.map.specialty || 'Especialidade não informada'}{room.clinician && ' · ' + room.clinician}</p>
@@ -314,7 +430,10 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     }
   }
 
-  const syncLabel = error ? 'Falha de atualização' : !rows ? 'Carregando a unidade…' : online ? 'Ao vivo · Agenda' : 'Reconectando · Última leitura';
+  const stale = !online || error;
+  const lastReading = lastSyncedAt ? ` · Última leitura ${hourFormat.format(lastSyncedAt)}` : '';
+  const syncLabel = error ? 'Dados desatualizados · falha de atualização' : !rows ? 'Carregando a unidade…'
+    : online ? 'Ao vivo · Agenda' : 'Dados desatualizados · reconectando';
   return <div className="planta-page">
     {rows && <dl className="planta-metrics" aria-label="Indicadores da unidade">
       {metrics.map(({ icon: Icon, label, value, hint }) => <div key={label} className="planta-metric">
@@ -322,6 +441,13 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
         <dd>{value}<small>{hint}</small></dd>
       </div>)}
     </dl>}
+    {rows && <CockpitAlerts alerts={alerts} acknowledged={acknowledged} theater={theater} stale={stale}
+      onOpen={(alert, button) => openZone(`alerta:${alert.id}`, button)}
+      onAcknowledge={id => setAcknowledged(previous => {
+        const next = new Set(previous);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      })} />}
     <section className="planta-board" aria-label="Planta operacional">
       <header className="planta-board-head">
         <div className="planta-location"><Building2 size={20} aria-hidden="true" />
@@ -341,10 +467,10 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
           <button type="button" className="planta-action" onClick={() => scrollToZone('procedimentos')}>Procedimentos</button>
         </nav>}
         <PlantaUnidade rooms={currentRooms} waiting={mapWaiting} longest={longest} triage={triageQueue}
-          risk={triageQueue[0]?.risk} procedures={mapProcedures} waitingCare={waitingCare.length} viewport={viewport} onOpen={theater ? undefined : openZone} />
+          risk={triageQueue[0]?.risk} procedures={mapProcedures} waitingCare={waitingCare.length} viewport={viewport} alerts={alertZones} onOpen={theater ? undefined : openZone} />
       </>}
       <footer className="planta-footer">
-        <div className="planta-statuses"><span className="planta-sync" role="status" data-online={!!rows && online && !error}><i aria-hidden="true" />{syncLabel}</span>
+        <div className="planta-statuses"><span className="planta-sync" role="status" data-online={!!rows && online && !error}><i aria-hidden="true" />{syncLabel}{lastReading}</span>
           {!theater && unmapped.length > 0 && <button type="button" className="planta-action" onClick={e => openZone('sem-sala', e.currentTarget)}>{unmapped.length} em atendimento sem sala</button>}
           {theater && unmapped.length > 0 && <span>{unmapped.length} em atendimento sem sala</span>}
         </div>

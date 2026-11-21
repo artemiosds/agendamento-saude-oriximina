@@ -157,3 +157,31 @@ it('agrupa recepção cheia sem esconder o total ou impedir consultar toda a fil
   fireEvent.click(within(drawer).getByRole('button', { name: 'Ver mais (8)' }));
   expect(within(drawer).getAllByRole('listitem').length).toBe(20);
 });
+
+it('abre só os pacientes do alerta, registra ciência nesta tela e remove o alerta resolvido', async () => {
+  const older = new Date(Date.now() - 95 * 60_000).toISOString();
+  const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+  const overdue = { ...a, status: 'em_atendimento', iniciado_em: older };
+  const current = { ...a, id: 'outro', paciente_id: 'outro', paciente_nome: 'Paciente dentro do tempo', status: 'em_atendimento', iniciado_em: recent };
+  setup('em_atendimento', { rows: [overdue, current] });
+  const page = render(<CockpitUnidade />);
+  const details = screen.getByRole('button', { name: 'Ver detalhes de Sala teste' });
+  expect(consult()).toHaveAttribute('data-alert', 'danger');
+  const acknowledge = screen.getByRole('button', { name: 'Ciente de Sala teste' });
+  fireEvent.click(acknowledge);
+  expect(acknowledge).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(details);
+  const drawer = screen.getByRole('dialog');
+  expect(within(drawer).getByText('Paciente teste')).toBeInTheDocument();
+  expect(within(drawer).queryByText('Paciente dentro do tempo')).not.toBeInTheDocument();
+  fireEvent.click(within(drawer).getByText('Jornada do paciente'));
+  expect(await within(drawer).findByText('Atendimento iniciado')).toBeInTheDocument();
+  expect(drawer.querySelector('time')).toHaveAttribute('datetime', older);
+  close();
+  setup('em_atendimento', { rows: [current] });
+  page.rerender(<CockpitUnidade />);
+  expect(screen.queryByRole('button', { name: 'Ver detalhes de Sala teste' })).not.toBeInTheDocument();
+  setup('em_atendimento', { rows: [overdue, current] });
+  page.rerender(<CockpitUnidade />);
+  expect(screen.getByRole('button', { name: 'Ciente de Sala teste' })).toHaveAttribute('aria-pressed', 'false');
+});

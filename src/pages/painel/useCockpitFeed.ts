@@ -53,6 +53,8 @@ export function useCockpitFeed(unit: string, day: string) {
   const [rows, setRows] = useState<CockpitAppointment[] | null>(null);
   const [triage, setTriage] = useState<CockpitTriage[]>([]);
   const [arrivals, setArrivals] = useState<Record<string, string>>({});
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [calledAt, setCalledAt] = useState<Record<string, string>>({});
   const [starts, setStarts] = useState<Record<string, string>>({});
   const [online, setOnline] = useState(false);
   const [error, setError] = useState(false);
@@ -75,6 +77,7 @@ export function useCockpitFeed(unit: string, day: string) {
         known = new Map(appointments.map(a => [a.id, a.status]));
         setRows(appointments);
         setTriage(records);
+        setLastSyncedAt(Date.now());
         setError(false);
       } catch {
         if (active) setError(true);
@@ -108,6 +111,10 @@ export function useCockpitFeed(unit: string, day: string) {
             (event.eventType === 'INSERT' || (previous && careStage(previous) !== 'consultation'))) {
             const id = next.id;
             setStarts(prev => ({ ...prev, [id]: event.commit_timestamp }));
+          }
+          if (timestampAvailable && state === 'calling' && careStage(previous || '') !== 'calling') {
+            const id = next.id;
+            setCalledAt(prev => ({ ...prev, [id]: event.commit_timestamp }));
           }
           known.set(next.id, next.status);
           const row = projectEvent(next);
@@ -179,5 +186,5 @@ export function useCockpitFeed(unit: string, day: string) {
     };
   }, [ids, unit, day]);
 
-  return { rows, triage, arrivals, starts, online, error, reload: () => setRetry(n => n + 1) };
+  return { rows, triage, arrivals, starts, calledAt, lastSyncedAt, online, error, reload: () => setRetry(n => n + 1) };
 }
