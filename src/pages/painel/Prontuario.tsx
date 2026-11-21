@@ -256,6 +256,14 @@ const emptyForm = {
   custom_data: {} as any,
 };
 
+const DRAFT_TEXT_FIELDS = [
+  "queixa_principal", "anamnese", "sinais_sintomas", "exame_fisico", "hipotese",
+  "conduta", "evolucao", "observacoes", "resultado_exame", "motivo_alteracao",
+  "soap_subjetivo", "soap_objetivo", "soap_avaliacao", "soap_plano",
+] as const;
+type DraftTextField = typeof DRAFT_TEXT_FIELDS[number];
+type DraftTextPatch = Partial<Record<DraftTextField, string>>;
+
 const classificarIMC = (imc: number): string => {
   if (imc < 18.5) return "Abaixo do peso";
   if (imc < 25) return "Normal";
@@ -467,6 +475,44 @@ const ProntuarioPage: React.FC = () => {
   const editIdRef = useRef<string | null>(null);
   const formRef = useRef(emptyForm);
   const autosaveInFlightRef = useRef(false);
+  const performAutosaveRef = useRef<() => Promise<boolean>>(async () => false);
+  const pendingAutosaveRef = useRef(false);
+  const draftText = useRef<{ patient: string; patch: DraftTextPatch }>({ patient: "", patch: {} });
+  const textTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textRevision = useRef(0);
+  const savedTextRevision = useRef(0);
+  const closingDraft = useRef(false);
+
+  const readBufferedValue = useCallback((field: DraftTextField) =>
+    draftText.current.patient === formRef.current.paciente_id ? draftText.current.patch[field] : undefined, []);
+
+  const flushText = useCallback((base = formRef.current) => {
+    if (textTimer.current) clearTimeout(textTimer.current);
+    textTimer.current = null;
+    const { patient, patch } = draftText.current;
+    draftText.current = { patient: base.paciente_id, patch: {} };
+    if (patient !== base.paciente_id || !Object.keys(patch).length) return base;
+    formRef.current = { ...formRef.current, ...patch };
+    setForm(current => current.paciente_id === patient ? { ...current, ...patch } : current);
+    return { ...base, ...patch };
+  }, []);
+
+  const bufferText = useCallback((field: DraftTextField, value: string) => {
+    const patient = formRef.current.paciente_id;
+    if (draftText.current.patient !== patient) draftText.current = { patient, patch: {} };
+    draftText.current.patch[field] = value;
+    textRevision.current += 1;
+    if (textTimer.current) clearTimeout(textTimer.current);
+    textTimer.current = setTimeout(() => {
+      flushText();
+      void performAutosaveRef.current();
+    }, 800);
+  }, [flushText]);
+
+  useEffect(() => () => {
+    if (textTimer.current) clearTimeout(textTimer.current);
+  }, []);
+
   const savingRef = useRef(false);
   const finalizingRef = useRef(false);
   const registeringSessionRef = useRef(false);
@@ -2073,13 +2119,18 @@ const ProntuarioPage: React.FC = () => {
   const handleSave = async (formOverride?: any, keepOpenForFinalization = false): Promise<boolean> => {
     if (loadingScheduledExamsRef.current) return false;
     // Anti-duplo-clique: bloqueia chamadas concorrentes antes mesmo de setSaving refletir.
-    if (savingRef.current) {
+    if (closingDraft.current || registeringSessionRef.current || savingRef.current) {
       console.warn("[handleSave] Salvamento já em curso — clique duplo ignorado.");
       return false;
     }
     savingRef.current = true;
     console.log("[handleSave] Iniciando salvamento...", { hasEditId: !!editId, editId });
-    const f = formOverride || formRef.current;
+    const latest = flushText();
+    const f = formOverride ? { ...formOverride } : latest;
+    if (formOverride) {
+      for (const field of DRAFT_TEXT_FIELDS) f[field] = latest[field];
+    }
+    const revision = textRevision.current;
     const ef = especialidadeFieldsRef.current;
     const le = listaExamesRef.current;
     const lp = listaPrescricaoRef.current;
@@ -2491,6 +2542,11 @@ const ProntuarioPage: React.FC = () => {
       ]).catch(err => console.error('[Prontuario] background reload failed:', err));
 
       setSessionRegistrationRequested(false);
+      savedTextRevision.current = revision;
+      if (textRevision.current !== revision) {
+        toast.info("Há texto digitado após o início do salvamento. Revise e salve novamente.");
+        return false;
+      }
       // Mantenha o formulário aberto até que a Agenda confirme a finalização.
       if (!shouldRegisterSession && !keepOpenForFinalization) {
         setDialogOpen(false);
@@ -2534,8 +2590,13 @@ const ProntuarioPage: React.FC = () => {
   // Silent autosave: persists draft without validations/toasts/logs/navigation.
   // Does NOT change agendamento status. Finalize button continues to set "concluido".
   const performAutosave = useCallback(async () => {
-    if (loadingScheduledExamsRef.current || autosaveInFlightRef.current) return;
+    if (loadingScheduledExamsRef.current || savingRef.current || finalizingRef.current || registeringSessionRef.current || textTimer.current) return false;
+    if (autosaveInFlightRef.current) {
+      pendingAutosaveRef.current = true;
+      return false;
+    }
     const f = formRef.current;
+    const revision = textRevision.current;
     const ef = especialidadeFieldsRef.current;
     const lp = listaPrescricaoRef.current;
     const le = listaExamesRef.current;
@@ -2544,7 +2605,7 @@ const ProntuarioPage: React.FC = () => {
     const scbp = selectedCidsByProcRef.current;
 
     // Skip when no patient selected, no date, or in session-registration flow
-    if (!f.paciente_nome || !f.paciente_id || !f.data_atendimento) return;
+    if (!f.paciente_nome || !f.paciente_id || !f.data_atendimento) return false;
     
     // Check if there is actual content to save (at least one field should be non-empty)
     const hasContent = 
@@ -2554,11 +2615,11 @@ const ProntuarioPage: React.FC = () => {
       f.soap_subjetivo?.trim() || f.soap_objetivo?.trim() || f.soap_avaliacao?.trim() || f.soap_plano?.trim() ||
       spi.length > 0 || Object.keys(ef).length > 0;
 
-    if (!hasContent) return;
+    if (!hasContent && savedTextRevision.current === revision) return false;
 
-    if (f.tipo_registro === 'sessao' && !editIdRef.current) return; // require explicit "Registrar Sessão"
+    if (f.tipo_registro === 'sessao' && !editIdRef.current) return false; // require explicit "Registrar Sessão"
     const today = todayLocalStr();
-    if (!editIdRef.current && f.data_atendimento > today) return;
+    if (!editIdRef.current && f.data_atendimento > today) return false;
 
     autosaveInFlightRef.current = true;
     setAutosaveStatus('saving');
@@ -2654,20 +2715,26 @@ const ProntuarioPage: React.FC = () => {
         const links = await buildProcedureLinks(prontId, spi, scbp, pd);
         await syncProntuarioProcedimentos(prontId, links);
       }
+      savedTextRevision.current = revision;
       setAutosaveStatus('saved');
       setAutosaveAt(new Date());
+      return true;
     } catch (err) {
       console.error('[autosave] erro:', err);
       setAutosaveStatus('error');
       lastAutosaveHashRef.current = '';
+      return false;
     } finally {
       autosaveInFlightRef.current = false;
+      if (pendingAutosaveRef.current) {
+        pendingAutosaveRef.current = false;
+        void performAutosaveRef.current();
+      }
     }
   }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos, syncCreatedProfessional]);
 
   // Keep latest performAutosave in a ref so the debounce effect doesn't re-run
   // every time selectedProcIds/procDetails/selectedCidsByProc/procedimentos change.
-  const performAutosaveRef = useRef(performAutosave);
   useEffect(() => { performAutosaveRef.current = performAutosave; }, [performAutosave]);
 
   // Debounced trigger watching form changes while dialog is open
@@ -2677,10 +2744,8 @@ const ProntuarioPage: React.FC = () => {
     if (loadingScheduledExams) return;
     // Build a hash of editable text fields to detect real changes
     const hash = JSON.stringify({
-      qp: form.queixa_principal, an: form.anamnese, ss: form.sinais_sintomas,
-      ef: form.exame_fisico, hp: form.hipotese, cd: form.conduta,
-      pr: form.prescricao, se: form.solicitacao_exames, ev: form.evolucao,
-      ob: form.observacoes, ir: form.indicacao_retorno, op: form.outro_procedimento,
+      pr: form.prescricao, se: form.solicitacao_exames,
+      ir: form.indicacao_retorno, op: form.outro_procedimento,
       pt: form.procedimentos_texto, ep: form.episodio_id, tr: form.tipo_registro,
       da: form.data_atendimento, ho: form.hora_atendimento,
       // Include selected procedures in hash to trigger autosave
@@ -2700,16 +2765,8 @@ const ProntuarioPage: React.FC = () => {
     loadingScheduledExams,
     form.paciente_id,
     form.paciente_nome,
-    form.queixa_principal,
-    form.anamnese,
-    form.sinais_sintomas,
-    form.exame_fisico,
-    form.hipotese,
-    form.conduta,
     form.prescricao,
     form.solicitacao_exames,
-    form.evolucao,
-    form.observacoes,
     form.indicacao_retorno,
     form.outro_procedimento,
     form.procedimentos_texto,
@@ -2732,16 +2789,23 @@ const ProntuarioPage: React.FC = () => {
         clearTimeout(autosaveTimerRef.current);
         autosaveTimerRef.current = null;
       }
+      flushText();
       void performAutosave();
     };
     const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
-    window.addEventListener('beforeunload', flush);
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (savedTextRevision.current !== textRevision.current) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('beforeunload', onBeforeUnload);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [dialogOpen, performAutosave]);
+  }, [dialogOpen, performAutosave, flushText]);
 
   // Reset autosave indicator when dialog closes/opens
   useEffect(() => {
@@ -3101,7 +3165,7 @@ const ProntuarioPage: React.FC = () => {
   // Dedicated handler: register session only (no close)
   const handleRegistrarSessaoOnly = async () => {
     if (loadingScheduledExamsRef.current) return;
-    if (registeringSessionRef.current) {
+    if (closingDraft.current || savingRef.current || registeringSessionRef.current) {
       console.warn("[handleRegistrarSessaoOnly] Registro já em curso — clique duplo ignorado.");
       return;
     }
@@ -3114,7 +3178,22 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     registeringSessionRef.current = true;
-    const soapPayload = sessionSoapPayload;
+    const autosaveStart = Date.now();
+    while (autosaveInFlightRef.current && Date.now() - autosaveStart < 5000) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (autosaveInFlightRef.current) {
+      registeringSessionRef.current = false;
+      toast.error("O rascunho ainda está sendo salvo. Aguarde e tente novamente.");
+      return;
+    }
+    const editId = editIdRef.current;
+    const form = flushText();
+    const revision = textRevision.current;
+    const soapPayload = normalizeSoapPayload({
+      subjetivo: form.soap_subjetivo, objetivo: form.soap_objetivo,
+      avaliacao: form.soap_avaliacao, plano: form.soap_plano,
+    });
     const soapError = null;
     setSoapErrors(false);
 
@@ -3339,6 +3418,7 @@ const ProntuarioPage: React.FC = () => {
         refreshAgendamentos(),
         loadSessaoData(buildTreatmentContext()),
       ]);
+      savedTextRevision.current = revision;
       setSessionRegistrationRequested(false);
     } catch (err: any) {
       if (insertedNewProntuario && prontuarioId) {
@@ -3804,15 +3884,17 @@ const ProntuarioPage: React.FC = () => {
   const handleDynamicFieldChange = useCallback((key: string, value: any) => {
     setForm(previous => Object.is((previous as any)[key], value) ? previous : { ...previous, [key]: value });
   }, []);
-  const textFieldHandlers = useMemo(() => Object.fromEntries([
-    'queixa_principal','anamnese','sinais_sintomas','exame_fisico','hipotese','conduta','evolucao','observacoes','resultado_exame','motivo_alteracao','outro_procedimento',
-  ].map(key => [key, (event: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+  const textFieldHandlers = useMemo(() => Object.fromEntries(([...DRAFT_TEXT_FIELDS, "outro_procedimento"] as const).map(key => [key, (event: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     const value = event.target.value;
-    setForm(previous => Object.is((previous as any)[key], value) ? previous : { ...previous, [key]: value });
-  }])), []);
+    if (key !== "outro_procedimento") {
+      bufferText(key, value);
+      return;
+    }
+    setForm(previous => previous.outro_procedimento === value ? previous : { ...previous, outro_procedimento: value });
+  }])), [bufferText]);
   const handleSoapChange = useCallback((field: keyof typeof soapValues, value: string) => {
-    setForm(p => ((p as any)[field] === value ? p : { ...p, [field]: value }));
-  }, []);
+    bufferText(field, value);
+  }, [bufferText]);
   const normalizePreviousSoap = (source: any) => ({
     soap_subjetivo: String(source?.soap_subjetivo ?? source?.subjetivo ?? ""),
     soap_objetivo: String(source?.soap_objetivo ?? source?.objetivo ?? ""),
@@ -3832,9 +3914,9 @@ const ProntuarioPage: React.FC = () => {
     }
   };
   const applyPreviousSoap = (values: { soap_subjetivo: string; soap_objetivo: string; soap_avaliacao: string; soap_plano: string }) => {
-    const nextForm = { ...formRef.current, ...values };
-    formRef.current = nextForm;
-    setForm(nextForm);
+    for (const field of Object.keys(values) as (keyof typeof values)[]) bufferText(field, values[field]);
+    flushText();
+    void performAutosaveRef.current();
     setSoapEnabled(true);
     setSoapErrors(false);
   };
@@ -3927,7 +4009,7 @@ const ProntuarioPage: React.FC = () => {
       }
       if (formRef.current.paciente_id !== patientId) return;
       setSoapHistoryCandidate(candidate);
-      if (hasSoapContent(normalizePreviousSoap(formRef.current))) {
+      if (hasSoapContent(normalizePreviousSoap(flushText()))) {
         setSoapHistoryConfirmOpen(true);
       } else {
         applyPreviousSoap(candidate.values);
@@ -3952,10 +4034,47 @@ const ProntuarioPage: React.FC = () => {
   const handleEspecialidadeChange = useCallback((key: string, val: string) => {
     setEspecialidadeFields(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
   }, []);
-  const handlePacienteChange = useCallback((id: string, nome: string) => {
-    setForm((prev) => prev.paciente_id === id && prev.paciente_nome === nome ? prev : { ...prev, paciente_id: id, paciente_nome: nome });
-    if (id) loadEpisodios(id);
-  }, []);
+  const persistTextBeforeLeaving = async () => {
+    if (closingDraft.current || savingRef.current || finalizingRef.current || registeringSessionRef.current) return false;
+    closingDraft.current = true;
+    try {
+      flushText();
+      const started = Date.now();
+      while (autosaveInFlightRef.current && Date.now() - started < 5000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      if (!autosaveInFlightRef.current && savedTextRevision.current !== textRevision.current) {
+        await performAutosaveRef.current();
+      }
+      if (autosaveInFlightRef.current || savedTextRevision.current !== textRevision.current) {
+        toast.error("O rascunho ainda não foi salvo. Salve o prontuário ou registre a sessão antes de sair.");
+        return false;
+      }
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+      return true;
+    } finally {
+      closingDraft.current = false;
+    }
+  };
+
+  const handlePacienteChange = async (id: string, nome: string) => {
+    const currentPatient = formRef.current.paciente_id;
+    if (id === currentPatient) {
+      setTrocarPacienteAberto(false);
+      return;
+    }
+    if (!currentPatient) {
+      flushText();
+      setForm(current => ({ ...current, paciente_id: id, paciente_nome: nome }));
+      if (id) loadEpisodios(id);
+    } else {
+      if (!(await persistTextBeforeLeaving())) return;
+      openNew(id, nome);
+    }
+    setTrocarPacienteAberto(false);
+  };
+
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -4178,12 +4297,17 @@ const ProntuarioPage: React.FC = () => {
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
+          if (open) {
+            setDialogOpen(true);
+            return;
+          }
+          void (async () => {
+            if (!(await persistTextBeforeLeaving())) return;
+            setDialogOpen(false);
             setActiveAtendimento(null);
             setSessionRegistrationRequested(false);
             setSoapErrors(false);
-          }
+          })();
         }}
       >
         <DialogContent className="w-screen max-w-none h-screen sm:rounded-none p-0 flex flex-col overflow-hidden gap-0" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
@@ -4383,7 +4507,7 @@ const ProntuarioPage: React.FC = () => {
                   <BuscaPaciente
                     pacientes={pacientes}
                     value={form.paciente_id}
-                    onChange={(...args: Parameters<typeof handlePacienteChange>) => { setTrocarPacienteAberto(false); return handlePacienteChange(...args); }}
+                    onChange={(id, nome) => { void handlePacienteChange(id, nome); }}
                   />
                 </div>
               ) : (
@@ -4500,6 +4624,7 @@ const ProntuarioPage: React.FC = () => {
                 profissao={effectiveProfissao}
                 values={soapValues}
                 onChange={handleSoapChange}
+                readBufferedValue={readBufferedValue}
                 soapErrors={soapErrors}
                 onClearErrors={handleClearSoapErrors}
                 soapEnabled={soapEnabled}
@@ -5152,14 +5277,14 @@ const ProntuarioPage: React.FC = () => {
             {/* Legacy types: show generic fields */}
             {!['avaliacao_inicial', 'retorno', 'sessao', 'urgencia', 'procedimento', 'visita_domiciliar'].includes(form.tipo_registro) && (
               <div className="space-y-3">
-                <div><Label>Queixa Principal</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={textFieldHandlers.queixa_principal} /></div>
-                <div><Label>Anamnese</Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={textFieldHandlers.anamnese} /></div>
-                <div><Label>Sinais e Sintomas</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={textFieldHandlers.sinais_sintomas} /></div>
-                <div><Label>Exame Físico</Label><DebouncedTextarea rows={3} value={form.exame_fisico} onChange={textFieldHandlers.exame_fisico} /></div>
-                <div><Label>Hipótese / Avaliação</Label><DebouncedTextarea rows={2} value={form.hipotese} onChange={textFieldHandlers.hipotese} /></div>
-                <div><Label>Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={textFieldHandlers.conduta} /></div>
-                <div><Label>Evolução</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={textFieldHandlers.evolucao} /></div>
-                <div><Label>Observações Gerais</Label><DebouncedTextarea rows={2} value={form.observacoes} onChange={textFieldHandlers.observacoes} /></div>
+                <div><Label>Queixa Principal</Label><DebouncedTextarea buffered rows={2} value={form.queixa_principal} onChange={textFieldHandlers.queixa_principal} /></div>
+                <div><Label>Anamnese</Label><DebouncedTextarea buffered rows={3} value={form.anamnese} onChange={textFieldHandlers.anamnese} /></div>
+                <div><Label>Sinais e Sintomas</Label><DebouncedTextarea buffered rows={2} value={form.sinais_sintomas} onChange={textFieldHandlers.sinais_sintomas} /></div>
+                <div><Label>Exame Físico</Label><DebouncedTextarea buffered rows={3} value={form.exame_fisico} onChange={textFieldHandlers.exame_fisico} /></div>
+                <div><Label>Hipótese / Avaliação</Label><DebouncedTextarea buffered rows={2} value={form.hipotese} onChange={textFieldHandlers.hipotese} /></div>
+                <div><Label>Conduta</Label><DebouncedTextarea buffered rows={2} value={form.conduta} onChange={textFieldHandlers.conduta} /></div>
+                <div><Label>Evolução</Label><DebouncedTextarea buffered rows={2} value={form.evolucao} onChange={textFieldHandlers.evolucao} /></div>
+                <div><Label>Observações Gerais</Label><DebouncedTextarea buffered rows={2} value={form.observacoes} onChange={textFieldHandlers.observacoes} /></div>
               </div>
             )}
 
@@ -5592,7 +5717,7 @@ const ProntuarioPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <DebouncedTextarea
+              <DebouncedTextarea buffered
                 value={form.resultado_exame}
                 onChange={textFieldHandlers.resultado_exame}
                 placeholder="Registre os resultados de exames apresentados pelo paciente, valores relevantes, alterações encontradas e interpretação clínica..."
@@ -5620,7 +5745,7 @@ const ProntuarioPage: React.FC = () => {
             {editId && (
               <div>
                 <Label className="text-muted-foreground">Motivo da Alteração <span className="text-xs">(opcional)</span></Label>
-                <DebouncedTextarea
+                <DebouncedTextarea buffered
                   rows={2}
                   value={form.motivo_alteracao}
                   onChange={textFieldHandlers.motivo_alteracao}

@@ -6,6 +6,7 @@ interface DebouncedTextareaProps extends Omit<TextareaProps, "onChange"> {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   debounceMs?: number;
+  buffered?: boolean;
 }
 
 /**
@@ -17,7 +18,7 @@ interface DebouncedTextareaProps extends Omit<TextareaProps, "onChange"> {
  * disparados por qualquer outra mudança causem re-render deste componente.
  */
 const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, DebouncedTextareaProps>(
-  ({ value, onChange, debounceMs = 500, onBlur, ...props }, ref) => {
+  ({ value, onChange, debounceMs = 500, buffered = false, onBlur, ...props }, ref) => {
     const [localValue, setLocalValue] = React.useState(value ?? "");
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const onChangeRef = React.useRef(onChange);
@@ -39,7 +40,7 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
     // rollback visual/stutter quando o formulário pai re-renderizava antes do debounce.
     React.useEffect(() => {
       const nextValue = value ?? "";
-      if (dirtyRef.current) {
+      if (dirtyRef.current && !buffered) {
         if (nextValue === localValue) {
           dirtyRef.current = false;
           lastPropValue.current = nextValue;
@@ -48,15 +49,20 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
       }
       if (nextValue !== lastPropValue.current) {
         lastPropValue.current = nextValue;
+        dirtyRef.current = false;
         setLocalValue(nextValue);
       }
-    }, [value, localValue]);
+    }, [value, localValue, buffered]);
 
     const handleChange = React.useCallback(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newValue = e.target.value;
         setLocalValue(newValue);
         dirtyRef.current = true;
+        if (buffered) {
+          emitChange(newValue, e.target.name);
+          return;
+        }
 
         if (timerRef.current) clearTimeout(timerRef.current);
         const fieldName = e.target.name;
@@ -67,7 +73,7 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
           timerRef.current = null;
         }, debounceMs);
       },
-      [debounceMs, emitChange],
+      [buffered, debounceMs, emitChange],
     );
 
     const handleBlur = React.useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
@@ -111,6 +117,8 @@ const arePropsEqual = (prev: DebouncedTextareaProps, next: DebouncedTextareaProp
     prev.name === next.name &&
     prev.readOnly === next.readOnly &&
     prev.debounceMs === next.debounceMs &&
+    prev.buffered === next.buffered &&
+    (!next.buffered || prev.onChange === next.onChange) &&
     prev.required === next.required
   );
 };

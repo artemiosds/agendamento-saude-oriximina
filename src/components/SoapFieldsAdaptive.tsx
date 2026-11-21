@@ -24,6 +24,7 @@ interface SoapFieldsAdaptiveProps {
   profissao: string | undefined;
   values: SoapValues;
   onChange: (field: keyof SoapValues, value: string) => void;
+  readBufferedValue?: (field: keyof SoapValues) => string | undefined;
   soapErrors: boolean;
   onClearErrors: () => void;
   soapEnabled: boolean;
@@ -48,6 +49,7 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
   profissao,
   values,
   onChange,
+  readBufferedValue,
   soapErrors,
   onClearErrors,
   soapEnabled,
@@ -92,7 +94,7 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
         newSet.add(option);
       }
 
-      const currentText = values[fieldKey];
+      const currentText = readBufferedValue?.(fieldKey) ?? values[fieldKey];
       const freeTextParts: string[] = [];
       const lines = currentText.split('\n');
       for (const line of lines) {
@@ -299,10 +301,11 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
                 )}
 
                 <DebouncedTextarea
+                  buffered={Boolean(readBufferedValue)}
                   rows={isMedicoMode ? 5 : 4}
                   value={values[field.key]}
                   onChange={(e) => {
-                    onClearErrors();
+                    if (!readBufferedValue) onClearErrors();
                     onChange(field.key, e.target.value);
                   }}
                   placeholder={showDropdown ? 'Complemento livre (opcional)...' : field.placeholder}
