@@ -56,7 +56,7 @@
     --gradient-hero: linear-gradient(135deg, hsl(215, 25%, 15%), hsl(199, 89%, 30%));
     --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
     --shadow-elevated: 0 20px 35px -8px rgba(0, 0, 0, 0.12), 0 5px 10px -4px rgba(0, 0, 0, 0.04);
-    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
+    --shadow-glass: 0 2px 8px rgba(0, 0, 0, 0.08);
 
     --font-display: 'DM Sans', 'Plus Jakarta Sans', sans-serif;
     --font-body: 'Inter', sans-serif;
@@ -71,9 +71,8 @@
     --clinical-card: 0 0% 100%;
     --clinical-border: 216 20% 90%;
 
-    --glass-bg: rgba(255, 255, 255, 0.72);
-    --glass-border: rgba(255, 255, 255, 0.35);
-    --glass-blur: 12px;
+    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-border: rgba(15, 23, 42, 0.1);
   }
 
   .dark {
@@ -125,7 +124,7 @@
     --gradient-hero: linear-gradient(135deg, hsl(222, 47%, 11%), hsl(217, 91%, 40%));
     --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
     --shadow-elevated: 0 20px 35px -8px rgba(0, 0, 0, 0.5), 0 5px 10px -4px rgba(0, 0, 0, 0.25);
-    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --shadow-glass: 0 2px 8px rgba(0, 0, 0, 0.24);
 
     --clinical-primary: 215 40% 70%;
     --clinical-accent: 174 51% 50%;
@@ -136,9 +135,8 @@
     --clinical-card: 220 40% 13%;
     --clinical-border: 217 33% 20%;
 
-    --glass-bg: rgba(30, 41, 59, 0.75);
+    --glass-bg: rgba(30, 41, 59, 0.95);
     --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-blur: 12px;
   }
 }
 
@@ -192,34 +190,18 @@
 }
 
 /* ─── GLASSMORPHISM UTILITIES ────────────────────────────────── */
-/* Blur ONLY for small overlays (modals, dropdowns, popovers, max 3 cards) */
-
-.glass {
+.glass,
+.glass-subtle {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+/* Keep the existing border sizing of each surface. */
+.glass {
   border: 1px solid var(--glass-border);
 }
 
 .glass-subtle {
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-/* Disable blur on mobile — huge perf win */
-@media (max-width: 768px) {
-  .glass,
-  .glass-subtle {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-  :root {
-    --glass-bg: rgba(255, 255, 255, 0.96);
-  }
-  .dark {
-    --glass-bg: rgba(30, 41, 59, 0.96);
-  }
+  box-shadow: inset 0 0 0 1px var(--glass-border);
 }
 
 /* Desliga backdrop-filter em containers densos (listas com muitos cards).
@@ -230,17 +212,16 @@
   -webkit-backdrop-filter: none !important;
 }
 
-/* Fallback for browsers without backdrop-filter support */
-@supports not (backdrop-filter: blur(1px)) {
-  .glass,
-  .glass-subtle {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    background: rgba(255, 255, 255, 0.97);
+@media screen {
+  .operational-list-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto none auto var(--operational-row-height);
+    overflow-clip-margin: 4px;
   }
-  .dark .glass,
-  .dark .glass-subtle {
-    background: rgba(30, 41, 59, 0.97);
+
+  .operational-list-row:focus-within {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
   }
 }
 
@@ -249,7 +230,6 @@
 /* Card hover lift */
 .card-hover {
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
 }
 .card-hover:hover {
   transform: translateY(-3px);
@@ -469,6 +449,20 @@ select:focus-visible,
 /* ─── REDUCE MOTION FOR ACCESSIBILITY & PERF ──────────────── */
 
 @media (prefers-reduced-motion: reduce) {
+  .glass,
+  .glass-subtle,
+  .shadow-glass,
+  .card-hover,
+  .list-item-hover {
+    transition: none !important;
+  }
+
+  .card-hover:hover,
+  .list-item-hover:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

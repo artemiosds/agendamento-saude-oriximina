@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 
 type Props<T> = {
@@ -89,7 +89,9 @@ export function OperationalVirtualList<T extends { id: string }>({
   }, []);
 
   function renderCard(item: T, index: number) {
-    return <div key={item.id} onFocusCapture={() => setFocusedItem(item.id)}
+    const canSkipLayout = !virtual && item.id !== openItem && item.id !== focusedItem;
+    return <div key={item.id} className={canSkipLayout ? "operational-list-row" : undefined}
+      onFocusCapture={() => setFocusedItem(item.id)}
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           setFocusedItem(current => current === item.id ? null : current);
@@ -100,18 +102,27 @@ export function OperationalVirtualList<T extends { id: string }>({
   }
 
   return (
-    <div ref={listRef} aria-label={label} role="region" style={{ overflowAnchor: virtual ? "none" : undefined }}>
+    <div ref={listRef} aria-label={label} role="region" style={{ overflowAnchor: virtual ? "none" : undefined, "--operational-row-height": estimateSize + "px" } as CSSProperties}>
       {virtual ? (
         <div style={{ position: "relative", height: virtualizer.getTotalSize() }}>
-          {virtualizer.getVirtualItems().map(row => (
-            <div key={row.key} ref={virtualizer.measureElement} data-index={row.index}
-              className={grid ? layout : undefined}
-              style={{ position: "absolute", width: "100%", top: row.start - scrollMargin }}>
-              {items.slice(row.index * columns, (row.index + 1) * columns).map(
-                (item, column) => renderCard(item, row.index * columns + column),
-              )}
-            </div>
-          ))}
+          {virtualizer.getVirtualItems().map(row => {
+            const firstIndex = row.index * columns;
+            const rowItems = items.slice(firstIndex, firstIndex + columns);
+            const retained = rowItems.some(item => item.id === openItem || item.id === focusedItem);
+
+            return (
+              <div key={row.key} ref={virtualizer.measureElement} data-index={row.index}
+                className={[grid ? layout : "", retained ? "" : "operational-list-row"].filter(Boolean).join(" ")}
+                style={{
+                  position: "absolute",
+                  width: "100%",
+                  top: row.start - scrollMargin,
+                  "--operational-row-height": row.size + "px",
+                } as CSSProperties}>
+                {rowItems.map((item, column) => renderCard(item, firstIndex + column))}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className={layout}>
