@@ -198,6 +198,12 @@ const sessionStatusLabels: Record<string, string> = {
 };
 
 const Tratamentos: React.FC = () => {
+  const { user } = useAuth();
+  if (!user?.id) return null;
+  return <TratamentosUnidade key={JSON.stringify([user.id, user.role, user.unidadeId, user.usuario])} />;
+};
+
+const TratamentosUnidade: React.FC = () => {
   const { pacientes, hydrateTreatmentPatients } = usePacientes();
   const { funcionarios, unidades, salas, disponibilidades, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
   const { fila, addToFila } = useFila();
@@ -227,7 +233,9 @@ const Tratamentos: React.FC = () => {
   const [selectedPtsId, setSelectedPtsId] = useState("");
   const [vinculandoPts, setVinculandoPts] = useState(false);
 
-  const [filterProf, setFilterProf] = useState("all");
+  const isProfissional = user?.role === "profissional";
+  const isMaster = user?.role === "master";
+  const [filterProf, setFilterProf] = useState(() => isProfissional ? user?.id || "" : "all");
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [integrityOnly, setIntegrityOnly] = useState(false);
@@ -377,7 +385,6 @@ const Tratamentos: React.FC = () => {
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
 
   const canManageFull = can('tratamento', 'can_delete');
-  const isProfissional = user?.role === "profissional";
   const canAgendarSessao = isProfissional || user?.role === 'master' || can('tratamento', 'can_execute');
 
   const treatmentSessionOperations = useMemo(() => createTreatmentSessionOperations({
@@ -516,12 +523,12 @@ const Tratamentos: React.FC = () => {
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_scoped', {
         p_page: currentPage,
         p_page_size: PAGE_SIZE,
-        p_professional_id: filterProf !== 'all' ? filterProf : null,
+        p_professional_id: isProfissional ? user?.id : (isMaster && filterProf !== 'all' ? filterProf : null),
         p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictTreatmentUnit ? user?.unidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
         p_search: debouncedSearchTerm || null,
         p_integrity_only: user?.role === 'master' && integrityOnly,
-        p_only_own_professional: false, // already handled via p_professional_id
+        p_only_own_professional: isProfissional,
       });
 
       if (rpcError) throw rpcError;
@@ -542,7 +549,7 @@ const Tratamentos: React.FC = () => {
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [user, restrictTreatmentUnit, currentPage, filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm]);
+  }, [user, isProfissional, isMaster, restrictTreatmentUnit, currentPage, filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm]);
 
   const sessionRefreshRef = React.useRef({ scope: '', startedAt: 0, verified: false });
 
@@ -1823,7 +1830,6 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  const isMaster = user?.role === 'master';
   const canControlSessions = isMaster || isProfissional;
 
   const remarcationTreatmentSession = async (
@@ -3358,7 +3364,7 @@ const Tratamentos: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Select value={filterProf} onValueChange={(v) => {
+        {isMaster && <Select value={filterProf} onValueChange={(v) => {
           setFilterProf(v);
         }}>
           <SelectTrigger className="w-full">
@@ -3372,7 +3378,7 @@ const Tratamentos: React.FC = () => {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select>}
         <Select value={filterUnit} onValueChange={(v) => {
           setFilterUnit(v);
         }}>
