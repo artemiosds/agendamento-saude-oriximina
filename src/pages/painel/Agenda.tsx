@@ -337,6 +337,10 @@ const Agenda: React.FC = () => {
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
   const location = useLocation();
+  const patientLink = location.state?.quickPatient as import("@/lib/quickSearch").QuickSearchPatientLink | undefined;
+  const agendaSearchPatient = patientLink && patientLink.userId === user?.id && patientLink.unitId === (user?.unidadeId || "")
+    ? patientLink : undefined;
+  const quickPatientId = agendaSearchPatient?.id;
   const requested = location.state?.regulation as (RegulationScope & { requestId?: string }) | undefined;
   const requestedManual = location.state?.manualAvailability as ManualAvailabilityScope | undefined;
   const [regulatedBooking, setRegulatedBooking] = useState<RegulationSelection>();
@@ -985,6 +989,7 @@ const Agenda: React.FC = () => {
 
     const base = agendamentosDoDia
       .filter((a) => {
+        if (quickPatientId && a.pacienteId !== quickPatientId) return false;
         if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
         if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
         if (isProfissional && user) {
@@ -1078,14 +1083,14 @@ const Agenda: React.FC = () => {
     // Regra centralizada: Se não estiver buscando por nome/CPF/CNS nem filtrando por status específico,
     // a lista principal deve omitir agendamentos que não ocupam vaga (cancelados/faltas)
     // APENAS para datas futuras ou hoje. Para datas passadas, mostramos tudo o que aconteceu.
-    if (!deferredSearchTerm && statusFilter === "all" && selectedDate >= todayLocalStr()) {
+    if (!quickPatientId && !deferredSearchTerm && statusFilter === "all" && selectedDate >= todayLocalStr()) {
       result = result.filter((a) => statusOcupaVaga(a.status));
     }
 
     return result;
 
 
-  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, deferredSearchTerm, statusFilter, tipoFilter, turnoFilter, pacienteById, triageMap, arrivalMap, nowMinutes, resolvePaciente]);
+  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, deferredSearchTerm, statusFilter, tipoFilter, turnoFilter, pacienteById, triageMap, arrivalMap, nowMinutes, resolvePaciente, quickPatientId]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
@@ -1117,15 +1122,16 @@ const Agenda: React.FC = () => {
       Turno: TURNO_FILTER_OPTIONS.find(option => option.value === turnoFilter)?.label || turnoFilter,
       Tipo: TIPO_FILTER_OPTIONS.find(option => option.value === tipoFilter)?.label || tipoFilter,
       Status: STATUS_FILTER_OPTIONS.find(option => option.value === statusFilter)?.label || statusFilter,
-      Busca: deferredSearchTerm ? searchTerm.trim() : "Sem busca",
+      Busca: [agendaSearchPatient?.nome, deferredSearchTerm ? searchTerm.trim() : ""].filter(Boolean).join(" · ") || "Sem busca",
       Total: String(filtered.length),
     }));
   }, [canPrintFilteredList, isGlobalAdmin, filterUnit, user, isProfissional, filterProf, unidadesVisiveis,
-    profissionais, filtered, pacienteById, resolvePaciente, selectedDate, turnoFilter, tipoFilter, statusFilter, deferredSearchTerm, searchTerm]);
+    profissionais, filtered, pacienteById, resolvePaciente, selectedDate, turnoFilter, tipoFilter, statusFilter, deferredSearchTerm, searchTerm, agendaSearchPatient?.nome]);
 
   // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
   const statusCounts = React.useMemo(() => {
     const base = agendamentosDoDia.filter((a) => {
+      if (quickPatientId && a.pacienteId !== quickPatientId) return false;
       if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
       if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
       if (isProfissional && a.profissionalId !== user?.id) return false;
@@ -1146,7 +1152,7 @@ const Agenda: React.FC = () => {
     );
     const todayStr = todayLocalStr();
     for (const ag of base) {
-      if (selectedDate < todayStr || statusOcupaVaga(ag.status)) total += 1;
+      if (quickPatientId || selectedDate < todayStr || statusOcupaVaga(ag.status)) total += 1;
       const displayStatus = getDisplayStatus(ag, todayStr);
       for (const [key, allowed] of Object.entries(STATUS_FILTER_GROUPS)) {
         if (allowed.includes(displayStatus)) byGroup[key] += 1;
@@ -1156,7 +1162,7 @@ const Agenda: React.FC = () => {
     // O total exibido nos chips rápidos deve ser o total de ativos que ocupam vaga
     return { total, byGroup };
 
-  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, deferredSearchTerm, pacienteById, resolvePaciente]);
+  }, [agendamentosDoDia, selectedDate, filterUnit, filterProf, isProfissional, user, deferredSearchTerm, pacienteById, resolvePaciente, quickPatientId]);
 
 
   // (primeiro item da manhã que ainda não foi concluído).
@@ -3535,6 +3541,14 @@ const Agenda: React.FC = () => {
 
               <div className="p-4 bg-card">
                 <div className="flex flex-col gap-4">
+                  {quickPatientId && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                      <span className="min-w-0 flex-1 break-words">Agendamentos de <strong>{agendaSearchPatient.nome}</strong> na data selecionada</span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() =>
+                        navigate(location.pathname + location.search, { replace: true, state: { ...location.state, quickPatient: undefined } })
+                      }>Limpar paciente</Button>
+                    </div>
+                  )}
                   <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-3">
                     {!isProfissional && showUnitSelector && (
                       <div className="w-full md:w-48 space-y-1.5">
@@ -3760,7 +3774,9 @@ const Agenda: React.FC = () => {
               <Card className="shadow-card border-0">
                 <CardContent className="p-8 text-center">
                   <p className="text-muted-foreground mb-3">
-                    {isProfissional
+                    {quickPatientId
+                      ? "Nenhum agendamento deste paciente na data selecionada com os filtros atuais."
+                      : isProfissional
                       ? "Nenhum paciente confirmado pela recepção para esta data."
                       : "Nenhum agendamento para esta data."}
                   </p>

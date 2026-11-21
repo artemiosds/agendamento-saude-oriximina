@@ -85,7 +85,7 @@ import { syncProntuarioProcedimentos, type ProntuarioProcedureLink } from "@/lib
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
@@ -458,6 +458,7 @@ const ProntuarioPage: React.FC = () => {
     },
   }), [addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate]);
   const [searchParams] = useSearchParams();
+  const quickPatient = useLocation().state?.quickPatient as import("@/lib/quickSearch").QuickSearchPatientLink | undefined;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
@@ -3827,7 +3828,9 @@ const ProntuarioPage: React.FC = () => {
     overscan: 8,
     measureElement: (el) => el?.getBoundingClientRect().height ?? 132,
   });
-  const queryPacienteNome = searchParams.get("pacienteNome");
+  const queryPacienteNome = searchParams.get("pacienteNome") ||
+    (quickPatient && quickPatient.id === queryPacienteId && quickPatient.userId === user?.id &&
+      quickPatient.unitId === (user?.unidadeId || "") ? quickPatient.nome : null);
 
   // Stable derived data for the side history panel — prevents re-renders on every keystroke
   const pacienteForPanel = useMemo(() => {

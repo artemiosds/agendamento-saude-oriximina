@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, Copy, FileText, Loader2, Printer, Search, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { buildSigtapConsultationPrint, escapeSigtapPrintText, formatSigtapValue as formatValue, sigtapRuleStatus as statusText } from '@/lib/sigtapConsultationPrint';
@@ -113,6 +114,9 @@ function CboPicker({ value, options, disabled, onChange }: {
 export default function ConsultaSigtap() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
+  const location = useLocation();
+  const shortcutCode: unknown = location.state?.sigtapCode;
+  const appliedShortcut = useRef('');
   const [rows, setRows] = useState<SigtapConsultationRow[]>([]);
   const [cbos, setCbos] = useState<CboOption[]>([]);
   const [catalog, setCatalog] = useState<SigtapConsultationCatalog | null>(null);
@@ -232,6 +236,25 @@ export default function ConsultaSigtap() {
       clearTimeout(copyTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (loading || typeof shortcutCode !== 'string' || !/^\d{10}$/.test(shortcutCode)) return;
+    const shortcutKey = location.key + ':' + shortcutCode;
+    if (appliedShortcut.current === shortcutKey) return;
+    appliedShortcut.current = shortcutKey;
+
+    searchRequest.current?.abort();
+    if (termInput.current) termInput.current.value = shortcutCode;
+    if (cidInput.current) cidInput.current.value = '';
+    setDraftCbo('');
+    setCidLoading(false);
+    setCidError('');
+    setFilters(new Set());
+    setSort('default');
+    setPage(1);
+    setApplied({ term: shortcutCode, cbo: '', cid: '', cidCodes: null });
+    setSelected(rows.find(row => row.codigo === shortcutCode) ?? null);
+  }, [loading, location.key, rows, shortcutCode]);
 
   const search = async () => {
     searchRequest.current?.abort();
