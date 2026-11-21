@@ -17,6 +17,7 @@ import logoSms from '@/assets/logo-sms-transparente.png';
 import { useBrand } from '@/hooks/useBrand';
 import { useLicense } from '@/hooks/useLicense';
 import { isPathLicensed } from '@/lib/licenseModules';
+import QuickSearch from '@/components/QuickSearch';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
@@ -177,6 +178,8 @@ const PainelLayout: React.FC = () => {
     [isMaster, can, permLoading, license, licenseLoading]
   );
 
+  const searchPaths = new Set(filteredGroups.flatMap(group => group.items.map(item => item.to)));
+
   // Collapsed groups state (persisted locally)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
     try {
@@ -322,6 +325,12 @@ const PainelLayout: React.FC = () => {
             </p>
           </div>
           <div className="hidden lg:block flex-1" />
+          {!permLoading && <QuickSearch
+            directory={searchPaths.has('/painel/pacientes')}
+            agenda={searchPaths.has('/painel/agenda')}
+            prontuario={searchPaths.has('/painel/prontuario')}
+            sigtap={searchPaths.has('/painel/procedimentos-sigtap')}
+          />}
           <ThemeToggle />
           <span className="text-sm text-muted-foreground hidden md:block ml-2 truncate max-w-[240px]">
             {user?.setor && `${user.setor} • `}{user?.cargo}
