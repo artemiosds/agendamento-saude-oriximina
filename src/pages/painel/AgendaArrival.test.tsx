@@ -12,7 +12,7 @@ const f = vi.hoisted(() => ({
   professionals: [{ id: 'prof1', nome: 'PROFISSIONAL TESTE', unidadeId: 'u1' }],
   user: { id: 'admin', usuario: 'admin.sms', role: 'master', unidadeId: 'u1', nome: 'TESTE' },
   triage: true, globalTriage: null as null | boolean, readStatus: 'confirmado', queryError: null as any,
-  update: vi.fn(), addQueue: vi.fn(), updateQueue: vi.fn(), refresh: vi.fn(), refreshQueue: vi.fn(),
+  print: vi.fn(), update: vi.fn(), addQueue: vi.fn(), updateQueue: vi.fn(), refresh: vi.fn(), refreshQueue: vi.fn(),
   loadRange: vi.fn(), hydrate: vi.fn(), exceptions: vi.fn(), selected: vi.fn(),
   deleteRow: vi.fn(), log: vi.fn(), notify: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), rpc: vi.fn(), apply: vi.fn(),
   createdPatient: vi.fn(), registrationMount: vi.fn(), savedPatient: vi.fn(), savePatient: vi.fn(),
@@ -45,6 +45,7 @@ vi.mock('@/hooks/useFilaAutomatica', () => ({ useFilaAutomatica: () => ({ handle
 vi.mock('@/hooks/useEnsurePortalAccess', () => ({ useEnsurePortalAccess: () => ({ ensurePortalAccess: vi.fn() }) }));
 vi.mock('@/lib/utils', async original => ({ ...await original<typeof import('@/lib/utils')>(), todayLocalStr: () => f.day }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: f.toastError, info: f.toastInfo, warning: vi.fn() } }));
+vi.mock('@/lib/printLayout', () => ({ openPrintDocument: f.print }));
 vi.mock('@/components/TriageReconciliationPanel', () => ({ default: () => null }));
 vi.mock('@/services/patientService', () => ({ patientService: { savePacienteCadastro: (...args: any[]) => f.savePatient(...args) } }));
 vi.mock('@/components/BuscaPaciente', () => ({ BuscaPaciente: ({onCadastrarNovo,value}:any) => <><output data-testid="patient-selected">{value}</output>{onCadastrarNovo && <button onClick={()=>onCadastrarNovo('MARIA')}>Cadastrar paciente teste</button>}</> }));
@@ -309,4 +310,49 @@ describe('cadastro dentro do mesmo diálogo da Agenda',()=>{
     expect(f.refresh).not.toHaveBeenCalled();
    }finally{f.user.id='admin';f.user.role='master';f.user.usuario='admin.sms';HTMLElement.prototype.scrollIntoView=originalScroll;vi.unstubAllGlobals();}
  });
+});
+
+it('imprime somente a lista filtrada, com o profissional selecionado e a unidade efetiva', async () => {
+  const oldUser = f.user;
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  const scrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+  f.user = { ...oldUser, usuario: 'master.unidade' };
+  f.patients[0] = { ...f.patients[0], cpf: '12345678901', cns: '123456789012345', telefone: '5593999991234' };
+  f.rows[0] = { ...f.rows[0], nomeProcedimento: 'Procedimento & teste' };
+  f.rows.push({ ...f.rows[0], id: 'outra-unidade', unidadeId: 'u2', hora: '09:11' });
+  try {
+    renderAgenda();
+    const professional = screen.getByRole('combobox', { name: /Profissional · Todos os profissionais/ });
+    fireEvent.click(professional);
+    const searchProfessional = await screen.findByPlaceholderText(/Buscar profissional, profissão ou conselho/);
+    fireEvent.change(searchProfessional, { target: { value: 'profissional teste' } });
+    await waitFor(() => expect(screen.queryByRole('option', { name: /Todos os profissionais/ })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('option', { name: /PROFISSIONAL TESTE/ }));
+    expect(screen.getByRole('combobox', { name: /Profissional · PROFISSIONAL TESTE/ })).toHaveAttribute('aria-expanded', 'false');
+    const search = screen.getByPlaceholderText('Buscar paciente, CPF, CNS...');
+    fireEvent.change(search, { target: { value: 'PACIENTE' } });
+    fireEvent.blur(search);
+    const print = await screen.findByRole('button', { name: /Imprimir Lista/i });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+    expect(f.print).toHaveBeenCalledOnce();
+    const [title, html, meta] = f.print.mock.calls[0];
+    expect(title).toBe('Lista de Agendamentos');
+    expect(meta).toMatchObject({
+      Data: '22/10/2026', Unidade: 'UNIDADE TESTE', Profissional: 'PROFISSIONAL TESTE',
+      Turno: 'Todos os turnos', Tipo: 'Todos os tipos', Status: 'Todos', Busca: 'PACIENTE', Total: '1',
+    });
+    expect(html).toContain('CPF/CNS');
+    expect(html).toContain('123.456.789-01');
+    expect(html).toContain('(93) 99999-1234');
+    expect(html).toContain('Procedimento &amp; teste');
+    expect(html).not.toContain('09:11');
+  } finally {
+    cleanup();
+    vi.unstubAllGlobals();
+    if (scrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', scrollIntoView);
+    else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    f.user = oldUser;
+  }
 });

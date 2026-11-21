@@ -1,3 +1,5 @@
+import AgendaProfessionalFilter from "./agenda/AgendaProfessionalFilter";
+import { buildAgendaListPrint, escapeAgendaPrintMeta } from "@/lib/agendaListPrint";
 import { OperationalVirtualList } from "@/components/OperationalVirtualList";
 import SigtapProcedurePicker from '@/components/documents/SigtapProcedurePicker';
 import { termoSigtap, type ExameAgendado } from '@/lib/agendamentoSigtap';
@@ -212,15 +214,33 @@ const getDisplayStatus = (ag: { status?: string; data?: string }, todayStr: stri
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "confirmado", label: "Confirmado" },
-  { value: "chegada_confirmada", label: "Chegada confirmada" },
+  { value: "chegada_confirmada", label: "Chegou / Presente (Confirmou na recepção)" },
   { value: "aguardando_triagem", label: "Aguardando triagem" },
   { value: "triagem_concluida", label: "Triagem concluída" },
-  { value: "apto_atendimento", label: "Apto p/ atendimento" },
-  { value: "em_atendimento", label: "Em atendimento" },
-  { value: "concluido", label: "Concluído" },
-  { value: "faltou", label: "Faltou" },
+  { value: "apto_atendimento", label: "Apto p/ Atendimento (Triagem realizada)" },
+  { value: "em_atendimento", label: "Em Atendimento (No consultório)" },
+  { value: "concluido", label: "Concluído (Atendimento finalizado)" },
+  { value: "faltou", label: "Falta / Não compareceu" },
   { value: "cancelado", label: "Cancelado" },
-  { value: "pendente", label: "Pendente" },
+  { value: "pendente", label: "Pendente (Aguardando chegada)" },
+];
+
+const TURNO_FILTER_OPTIONS = [
+  { value: "all", label: "Todos os turnos" },
+  { value: "manha", label: "Manhã (07:00 às 12:00)" },
+  { value: "tarde", label: "Tarde (12:00 às 18:00)" },
+  { value: "noite", label: "Noite (após as 18:00)" },
+];
+
+const TIPO_FILTER_OPTIONS = [
+  { value: "all", label: "Todos os tipos" },
+  { value: "Consulta", label: "Primeira Consulta (Caso novo)" },
+  { value: "Retorno", label: "Retorno (Acompanhamento)" },
+  { value: "Exame", label: "Exame (Diagnóstico)" },
+  { value: "Procedimento", label: "Procedimento" },
+  { value: "Sessão de Tratamento", label: "Sessão de Tratamento (Ciclo terapêutico)" },
+  { value: "Urgência", label: "Urgência (Encaixe prioritário)" },
+  { value: "Visita Domiciliar", label: "Visita Domiciliar" },
 ];
 
 const STATUS_QUICK_CHIPS: { value: string; label: string }[] = [
@@ -417,7 +437,6 @@ const Agenda: React.FC = () => {
       .catch(error => console.error('Erro ao consultar pendentes online:', error));
   }, [loadAgendaExceptions]);
   const [filterProf, setFilterProf] = useState(isProfissional ? (user?.id || "all") : "all");
-  const [searchProf, setSearchProf] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
@@ -771,26 +790,6 @@ const Agenda: React.FC = () => {
       }, {} as Record<string, typeof profissionais>)
   ), [profissionais]);
 
-  const profissionaisFiltradosBusca = React.useMemo(() => {
-    let list = profissionaisVisiveis.filter((p) => {
-      if (filterUnit !== "all" && p.unidadeId !== filterUnit) return false;
-      return true;
-    });
-
-    if (searchProf && searchProf.trim() !== "") {
-      const search = normalizeString(searchProf);
-      list = list.filter((p) => {
-        const nome = normalizeString(p.nome);
-        const espec = normalizeString(p.profissao || p.cargo || "");
-        return nome.includes(search) || espec.includes(search);
-      });
-    }
-
-    return list.sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [profissionaisVisiveis, filterUnit, searchProf]);
-
-  const filteredProfissionais = profissionaisFiltradosBusca;
-
   // NOVO: agendamentos online pendentes de aprovação
   const agendamentosPendentesOnline = React.useMemo(() => {
     return agendamentos
@@ -1099,79 +1098,30 @@ const Agenda: React.FC = () => {
   const dayListState = retainingDaySnapshot && requestedDayListState === 'loading'
     ? (filtered.length ? 'results' : 'empty') : requestedDayListState;
 
+  const canPrintFilteredList = requestedDayListState !== 'loading' && requestedDayListState !== 'error'
+    && deferredSearchTerm === searchTerm.trim().toLowerCase();
   const handleImprimirLista = React.useCallback(() => {
-    const fmtDate = (s: string) => { if (!s) return "-"; const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; };
-    const fmtCpf = (v?: string) => v ? v.replace(/\D/g, '').replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4") : "-";
-    const fmtTelefone = (v?: string) => {
-      if (!v) return "-";
-      let d = v.replace(/\D/g, "");
-      if ((d.length === 12 || d.length === 13) && d.startsWith("55")) d = d.slice(2);
-      if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-      if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-      return v;
-    };
-    const ordered = [...filtered].sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
-    const rows = ordered.map((ag, idx) => {
-      const pac = pacienteById.get(ag.pacienteId);
-      const nome = resolvePaciente(ag.pacienteId, ag.pacienteNome) || "-";
-      const cpf = fmtCpf(pac?.cpf);
-      const telefone = fmtTelefone(pac?.telefone);
-      const cns = pac?.cns ? formatCNS(pac.cns) : "-";
-      const nasc = pac?.dataNascimento || "";
-      const idade = nasc ? calcularIdade(nasc) : "-";
-      return `<tr>
-        <td style="text-align:center;font-weight:bold">${idx + 1}</td>
-        <td style="text-align:center">${ag.hora || "-"}</td>
-        <td>${nome}</td>
-        <td>${cpf}</td>
-        <td style="white-space:nowrap">${telefone}</td>
-        <td>${cns}</td>
-        <td style="text-align:center">${fmtDate(nasc)}</td>
-        <td style="text-align:center">${idade}</td>
-      </tr>`;
-    }).join("");
+    if (!canPrintFilteredList) return;
+    const unitId = isGlobalAdmin ? filterUnit : user?.unidadeId || filterUnit;
+    const professionalId = isProfissional ? user?.id : filterProf;
+    const unitLabel = unitId === "all" ? "Todas as unidades"
+      : unidadesVisiveis.find(unit => unit.id === unitId)?.nome || "Unidade atual";
+    const professionalLabel = professionalId === "all" ? "Todos os profissionais"
+      : (isProfissional ? user?.nome : profissionais.find(professional => professional.id === professionalId)?.nome)
+        || filtered.find(appointment => appointment.profissionalId === professionalId)?.profissionalNome || "Profissional selecionado";
 
-    const body = `
-      <style>
-        .agenda-print-table { width:100%; border-collapse:collapse; font-family: Arial, Helvetica, sans-serif; }
-        .agenda-print-table th, .agenda-print-table td {
-          border:1px solid #333; padding:3px 4px; font-size:9px; vertical-align:middle;
-        }
-        .agenda-print-table th { background:#e8eef5; text-align:center; font-weight:bold; text-transform:uppercase; letter-spacing:0.3px; }
-        .agenda-print-table tbody tr:nth-child(even) td { background:#f7f9fc; }
-      </style>
-      <table class="agenda-print-table">
-        <thead>
-          <tr>
-            <th style="width:4%">Nº</th>
-            <th style="width:7%">Hora</th>
-            <th style="width:27%">Paciente</th>
-            <th style="width:14%">CPF</th>
-            <th style="width:14%">Telefone</th>
-            <th style="width:15%">Cartão SUS</th>
-            <th style="width:10%">Nascimento</th>
-            <th style="width:9%">Idade</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows || `<tr><td colspan="8" style="text-align:center;padding:10px">Nenhum agendamento para os filtros selecionados.</td></tr>`}
-        </tbody>
-      </table>
-    `;
-
-    const profNome = filterProf !== "all" ? (profissionais.find((p) => p.id === filterProf)?.nome || "") : "Todos";
-    const unidNome = filterUnit !== "all" ? (unidades.find((u: any) => u.id === filterUnit)?.nome || "") : "Todas";
-    const statusLabel = statusFilter !== "all" ? (STATUS_FILTER_OPTIONS.find((o) => o.value === statusFilter)?.label || statusFilter) : "Todos";
-
-    void openPrintDocument("Lista de Agendamentos", body, {
-      Data: fmtDate(selectedDate),
-      Profissional: profNome,
-      Unidade: unidNome,
-      Status: statusLabel,
-      Total: String(ordered.length),
-    });
-  }, [filtered, pacienteById, resolvePaciente, filterProf, filterUnit, statusFilter, selectedDate, profissionais, unidades]);
-
+    void openPrintDocument("Lista de Agendamentos", buildAgendaListPrint(filtered, pacienteById, resolvePaciente), escapeAgendaPrintMeta({
+      Data: selectedDate.split("-").reverse().join("/"),
+      Unidade: unitLabel,
+      Profissional: professionalLabel,
+      Turno: TURNO_FILTER_OPTIONS.find(option => option.value === turnoFilter)?.label || turnoFilter,
+      Tipo: TIPO_FILTER_OPTIONS.find(option => option.value === tipoFilter)?.label || tipoFilter,
+      Status: STATUS_FILTER_OPTIONS.find(option => option.value === statusFilter)?.label || statusFilter,
+      Busca: deferredSearchTerm ? searchTerm.trim() : "Sem busca",
+      Total: String(filtered.length),
+    }));
+  }, [canPrintFilteredList, isGlobalAdmin, filterUnit, user, isProfissional, filterProf, unidadesVisiveis,
+    profissionais, filtered, pacienteById, resolvePaciente, selectedDate, turnoFilter, tipoFilter, statusFilter, deferredSearchTerm, searchTerm]);
 
   // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
   const statusCounts = React.useMemo(() => {
@@ -3611,96 +3561,9 @@ const Agenda: React.FC = () => {
                       </div>
                     )}
                     
-                    {!isProfissional && (
-                      <div className="w-full md:w-80 space-y-1.5">
-                        <Label className="text-xs font-semibold text-muted-foreground ml-1">Profissional</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className="h-11 w-full justify-between text-sm font-medium bg-background border-input hover:bg-accent hover:text-accent-foreground"
-                            >
-                              <div className="truncate text-left flex-1 mr-2" title={
-                                filterProf === "all" 
-                                  ? "Todos Profissionais" 
-                                  : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"
-                              }>
-                                {filterProf === "all" 
-                                  ? "Todos Profissionais" 
-                                  : filteredProfissionais.find(p => p.id === filterProf)?.nome || "Selecionar Profissional"}
-                              </div>
-                              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
-                            <Command className="w-full" shouldFilter={false}>
-                              <CommandInput 
-                                placeholder="Buscar profissional ou especialidade..." 
-                                className="h-9"
-                                onValueChange={(v) => setSearchProf(v)}
-                              />
-                              <CommandList className="max-h-[350px]">
-                                <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
-                                
-                                {(!searchProf || searchProf.trim() === "") && (
-                                  <CommandGroup>
-                                    <CommandItem
-                                      value="all"
-                                      onSelect={() => {
-                                        setFilterProf("all");
-                                        setSearchProf("");
-                                      }}
-                                      className="flex items-center justify-between cursor-pointer py-3 border-b border-muted/50"
-                                    >
-                                      <div className="flex flex-col">
-                                        <span className="font-semibold">Todos Profissionais</span>
-                                        <span className="text-[10px] text-muted-foreground">Exibir agenda global</span>
-                                      </div>
-                                      {filterProf === "all" && <Check className="h-4 w-4 text-primary" />}
-                                    </CommandItem>
-                                  </CommandGroup>
-                                )}
-
-                                {Object.entries(
-                                  profissionaisFiltradosBusca
-                                    .reduce((acc, p) => {
-                                      const cat = p.profissao || p.cargo || "Outros";
-                                      if (!acc[cat]) acc[cat] = [];
-                                      acc[cat].push(p);
-                                      return acc;
-                                    }, {} as Record<string, typeof filteredProfissionais>)
-                                ).map(([categoria, lista]) => (
-                                  <CommandGroup key={categoria} heading={categoria}>
-                                    {lista.map((p) => (
-                                      <CommandItem
-                                        key={p.id}
-                                        value={p.id}
-                                        onSelect={() => {
-                                          setFilterProf(p.id);
-                                          setSearchProf("");
-                                        }}
-                                        className="flex items-center justify-between cursor-pointer py-2.5"
-                                      >
-                                        <div className="flex flex-col min-w-0 pr-4 flex-1">
-                                          <span className="font-medium whitespace-normal leading-tight">
-                                            {p.nome}
-                                          </span>
-                                          <span className="text-[10px] text-muted-foreground whitespace-normal">
-                                            {p.profissao || p.cargo || "—"}
-                                          </span>
-                                        </div>
-                                        {filterProf === p.id && <Check className="h-4 w-4 text-primary shrink-0" />}
-                                      </CommandItem>
-                                    ))}
-                                  </CommandGroup>
-                                ))}
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    )}
+                    {!isProfissional && <AgendaProfessionalFilter
+                      professionals={profissionaisVisiveis} unitId={filterUnit} value={filterProf} onChange={setFilterProf}
+                    />}
 
                     <div className="w-full md:flex-1 md:min-w-[320px] space-y-1.5">
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Paciente</Label>
@@ -3719,10 +3582,10 @@ const Agenda: React.FC = () => {
                     <div className="w-full md:w-44 space-y-1.5">
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Status</Label>
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="h-11 text-sm font-medium">
+                        <SelectTrigger className="h-11 text-sm font-medium [&>span]:truncate">
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-w-[calc(100vw_-_2rem)]">
                           {STATUS_FILTER_OPTIONS.map((o) => (
                             <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                           ))}
@@ -3733,14 +3596,13 @@ const Agenda: React.FC = () => {
                     <div className="w-full md:w-36 space-y-1.5">
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Turno</Label>
                       <Select value={turnoFilter} onValueChange={setTurnoFilter}>
-                        <SelectTrigger className="h-11 text-sm font-medium">
+                        <SelectTrigger className="h-11 text-sm font-medium [&>span]:truncate">
                           <SelectValue placeholder="Turno" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos os turnos</SelectItem>
-                          <SelectItem value="manha">Manhã</SelectItem>
-                          <SelectItem value="tarde">Tarde</SelectItem>
-                          <SelectItem value="noite">Noite</SelectItem>
+                        <SelectContent className="max-w-[calc(100vw_-_2rem)]">
+                          {TURNO_FILTER_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -3748,18 +3610,13 @@ const Agenda: React.FC = () => {
                     <div className="w-full md:w-48 space-y-1.5">
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Tipo</Label>
                       <Select value={tipoFilter} onValueChange={setTipoFilter}>
-                        <SelectTrigger className="h-11 text-sm font-medium">
+                        <SelectTrigger className="h-11 text-sm font-medium [&>span]:truncate">
                           <SelectValue placeholder="Tipo" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos os tipos</SelectItem>
-                          <SelectItem value="Consulta">Primeira Consulta</SelectItem>
-                          <SelectItem value="Retorno">Retorno</SelectItem>
-                          <SelectItem value="Exame">Exame</SelectItem>
-                          <SelectItem value="Procedimento">Procedimento</SelectItem>
-                          <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
-                          <SelectItem value="Urgência">Urgência</SelectItem>
-                          <SelectItem value="Visita Domiciliar">Visita Domiciliar</SelectItem>
+                        <SelectContent className="max-w-[calc(100vw_-_2rem)]">
+                          {TIPO_FILTER_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -3786,7 +3643,7 @@ const Agenda: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleImprimirLista}
-                      disabled={dayListState === 'loading' || dayListState === 'error'}
+                      disabled={!canPrintFilteredList}
                       className="h-11 px-3 flex items-center gap-1.5 print:hidden"
                       title="Imprimir lista de agendamentos filtrados"
                     >
