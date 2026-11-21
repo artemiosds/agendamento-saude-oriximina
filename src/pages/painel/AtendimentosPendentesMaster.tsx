@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowUpRight, ChevronDown } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { formatOpenAttendanceDuration } from '@/lib/openAttendanceDuration';
 
@@ -19,6 +22,7 @@ function usePendingPage(scope: string, today: string, period: Period, page: numb
   return useQuery({
     queryKey: ['atendimentos-pendentes-master', scope, today, period, page],
     enabled,
+    refetchInterval: 30_000,
     placeholderData: undefined,
     queryFn: async ({ signal }) => {
       const { data, error } = await supabase.rpc('get_atendimentos_pendentes_master_page', {
@@ -70,10 +74,43 @@ export function AtendimentosPendentesMaster({ scope, today, agendaAllowed }: {
 }) {
   const [todayPage, setTodayPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [period, setPeriod] = useState<Period>('hoje');
+  const queryClient = useQueryClient();
+  const [confirmation, setConfirmation] = useState<number | null>(null);
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const closingRef = useRef(false);
+  const [feedback, setFeedback] = useState('');
+  const [failed, setFailed] = useState(false);
   const plantao = usePendingPage(scope, today, 'hoje', todayPage, true);
-  const history = usePendingPage(scope, today, 'anteriores', historyPage, historyOpen);
+  const history = usePendingPage(scope, today, 'anteriores', historyPage, period === 'anteriores');
   const total = plantao.data?.total;
+  async function regularize() {
+    if (closingRef.current || confirmation === null || reason.trim().length < 10) return;
+    closingRef.current = true;
+    setSaving(true);
+    setFailed(false);
+    setFeedback('');
+    try {
+      const { data, error } = await supabase.rpc('regularizar_atendimentos_anteriores_master', {
+        p_justificativa: reason.trim(), p_data_referencia: today, p_total_confirmado: confirmation,
+      });
+      if (error) throw error;
+      setConfirmation(null);
+      setHistoryPage(1);
+      setFeedback(`${data} agendamentos encerrados administrativamente.`);
+    } catch (error) {
+      setFailed(true);
+      setConfirmation(null);
+      setFeedback(error && typeof error === 'object' && 'code' in error && error.code === '40001'
+        ? 'O total ou a data do plantão mudou. Confira a lista atualizada e confirme novamente.'
+        : 'Não foi possível confirmar o encerramento. Confira a lista atualizada antes de tentar novamente.');
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ['atendimentos-pendentes-master', scope] });
+      closingRef.current = false;
+      setSaving(false);
+    }
+  }
   return <Card className={total ? 'border-destructive/30 bg-destructive/5' : 'shadow-none'}>
     <CardContent className="space-y-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -88,17 +125,41 @@ export function AtendimentosPendentesMaster({ scope, today, agendaAllowed }: {
           <Link to="/painel/agenda">Abrir Agenda <ArrowUpRight aria-hidden="true" className="ml-1 h-4 w-4" /></Link>
         </Button>}
       </div>
-      <PendingList query={plantao} page={todayPage} setPage={setTodayPage} empty="Nenhum atendimento de hoje acima do limite." />
-      <div className="space-y-3 border-t pt-3">
-        <Button type="button" variant="ghost" size="sm" aria-expanded={historyOpen} aria-controls="pendencias-anteriores"
-          onClick={() => setHistoryOpen(open => !open)}>
-          <ChevronDown aria-hidden="true" className={historyOpen ? 'mr-2 h-4 w-4 rotate-180' : 'mr-2 h-4 w-4'} />
-          Dias anteriores{history.data ? ` (${history.data.total})` : ''}
-        </Button>
-        <div id="pendencias-anteriores" hidden={!historyOpen}>
-          {historyOpen && <PendingList query={history} page={historyPage} setPage={setHistoryPage} empty="Nenhum atendimento em aberto em dias anteriores." />}
-        </div>
+      <div role="group" aria-label="Período dos atendimentos em aberto" className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant={period === 'hoje' ? 'secondary' : 'ghost'} aria-pressed={period === 'hoje'}
+          onClick={() => setPeriod('hoje')}>Hoje</Button>
+        <Button type="button" size="sm" variant={period === 'anteriores' ? 'secondary' : 'ghost'} aria-pressed={period === 'anteriores'}
+          onClick={() => setPeriod('anteriores')}>Passado{history.data ? ` (${history.data.total})` : ''}</Button>
       </div>
+      {period === 'hoje' ? <PendingList query={plantao} page={todayPage} setPage={setTodayPage} empty="Nenhum atendimento de hoje acima do limite." /> : <>
+        <PendingList query={history} page={historyPage} setPage={setHistoryPage} empty="Nenhum atendimento em aberto em dias anteriores." />
+        {!!history.data?.total && <Button variant="outline" disabled={saving || history.isFetching || history.isError} onClick={() => {
+          setReason('');
+          setFeedback('');
+          setConfirmation(history.data.total);
+        }}>Regularizar Atendimentos Anteriores</Button>}
+      </>}
+      {feedback && <p role={failed ? 'alert' : 'status'} className="text-sm">{feedback}</p>}
+      <Dialog open={confirmation !== null} onOpenChange={open => { if (!open && !saving) setConfirmation(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar encerramento administrativo</DialogTitle>
+            <DialogDescription>
+              A ação encerra {confirmation} agendamentos em aberto de dias anteriores no seu escopo. Cada encerramento será auditado com sua justificativa. O plantão de hoje é preservado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="historical-closure-reason">Justificativa (mínimo de 10 caracteres)</Label>
+            <Textarea id="historical-closure-reason" value={reason} onChange={event => setReason(event.target.value)}
+              maxLength={1000} disabled={saving} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={saving} onClick={() => setConfirmation(null)}>Cancelar</Button>
+            <Button variant="destructive" disabled={saving || reason.trim().length < 10}
+              onClick={() => void regularize()}>{saving ? 'Regularizando…' : 'Confirmar encerramento'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </CardContent>
   </Card>;
 }

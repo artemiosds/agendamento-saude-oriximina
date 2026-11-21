@@ -4657,6 +4657,10 @@ export type Database = {
         Args: { p_periodo: string; p_pagina: number }
         Returns: Json
       }
+      regularizar_atendimentos_anteriores_master: {
+        Args: { p_justificativa: string; p_data_referencia: string; p_total_confirmado: number }
+        Returns: number
+      }
       get_procedures_for_cid: {
         Args: { lim?: number; p_cid: string }
         Returns: Json

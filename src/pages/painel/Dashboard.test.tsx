@@ -21,10 +21,11 @@ vi.mock('@/contexts/OperacionalContext', () => ({ useOperacional: () => ({
   funcionarios: [], salas: [], disponibilidades: [], unidades: [{ id: 'u1', nome: 'Unidade teste' }],
 }) }));
 vi.mock('@/contexts/PermissionsContext', () => ({ usePermissions: () => ({ can: (module: string) => module === 'agenda', loading: false }) }));
+vi.mock('@/hooks/useRealtimeSync', () => ({ useRealtimeSync: () => {} }));
 vi.mock('@/hooks/useLicense', () => ({ useLicense: () => ({ license: {}, loading: false }) }));
 vi.mock('recharts', () => ({
   Area: () => null, AreaChart: () => null, CartesianGrid: () => null, ResponsiveContainer: () => null,
-  Tooltip: () => null, XAxis: () => null, YAxis: () => null,
+  Tooltip: () => null, Legend: () => null, XAxis: () => null, YAxis: () => null,
 }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   from: (table: string) => {
@@ -72,6 +73,11 @@ it('aplica o escopo profissional, restringe atalhos e filtra agenda e métricas 
   expect(screen.getByText('Paciente tarde')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Últimos 7 dias' }));
   expect(screen.getByText('1 faltas em 3 agendamentos válidos')).toBeInTheDocument();
+  expect(screen.getByText('Paciente tarde')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Modo Telão' }));
+  expect(screen.queryByText('Paciente tarde')).not.toBeInTheDocument();
+  expect(screen.getByText('Termômetro operacional')).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: 'Escape' });
   expect(screen.getByText('Paciente tarde')).toBeInTheDocument();
   expect(fixture.scope.filter(([column]) => column === 'profissional_id')).toHaveLength(3);
 });

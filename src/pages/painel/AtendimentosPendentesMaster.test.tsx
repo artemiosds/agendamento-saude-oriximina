@@ -8,7 +8,8 @@ const rpc = vi.hoisted(() => vi.fn());
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc } }));
 
 it('carrega o plantão primeiro e consulta o histórico em páginas quando expandido', async () => {
-  rpc.mockImplementation((_name, { p_periodo, p_pagina }) => ({
+  rpc.mockImplementation((name, { p_periodo, p_pagina }) => name === 'regularizar_atendimentos_anteriores_master'
+    ? Promise.resolve({ data: 16, error: null }) : ({
     abortSignal: async () => {
       const history = p_periodo === 'anteriores';
       return {
@@ -31,7 +32,7 @@ it('carrega o plantão primeiro e consulta o histórico em páginas quando expan
 
   expect(await screen.findByText('Atendimentos em aberto no plantão (0)')).toBeInTheDocument();
   expect(rpc.mock.calls).toEqual([['get_atendimentos_pendentes_master_page', { p_periodo: 'hoje', p_pagina: 1 }]]);
-  fireEvent.click(screen.getByRole('button', { name: 'Dias anteriores' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Passado' }));
   expect(await screen.findByText('Paciente 1-0')).toBeInTheDocument();
   expect(screen.getAllByText('há 22 dias · 28/10')).toHaveLength(15);
   fireEvent.click(screen.getByRole('button', { name: 'Ver mais' }));
@@ -39,6 +40,16 @@ it('carrega o plantão primeiro e consulta o histórico em páginas quando expan
   expect(screen.queryByText('Paciente 1-0')).not.toBeInTheDocument();
   expect(screen.getAllByRole('listitem')).toHaveLength(1);
   expect(rpc).toHaveBeenLastCalledWith('get_atendimentos_pendentes_master_page', { p_periodo: 'anteriores', p_pagina: 2 });
+  fireEvent.click(screen.getByRole('button', { name: 'Regularizar Atendimentos Anteriores' }));
+  const confirm = screen.getByRole('button', { name: 'Confirmar encerramento' });
+  expect(confirm).toBeDisabled();
+  expect(rpc.mock.calls.filter(([name]) => name === 'regularizar_atendimentos_anteriores_master')).toHaveLength(0);
+  fireEvent.change(screen.getByLabelText(/Justificativa/), { target: { value: 'Regularização conferida pela gestão' } });
+  fireEvent.click(confirm);
+  expect(await screen.findByText('16 agendamentos encerrados administrativamente.')).toBeInTheDocument();
+  expect(rpc).toHaveBeenCalledWith('regularizar_atendimentos_anteriores_master', {
+    p_justificativa: 'Regularização conferida pela gestão', p_data_referencia: '2026-11-19', p_total_confirmado: 16,
+  });
   ui.unmount();
   client.clear();
 });
