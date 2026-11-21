@@ -2771,7 +2771,7 @@ const Agenda: React.FC = () => {
     if (quickSelected.data !== todayLocalStr() || !["agendado", "confirmado"].includes(String(quickSelected.status || "").toLowerCase())) { toast.error("Este agendamento não está mais pendente de chegada. Atualize a busca."); return; }
     if (user?.usuario !== "admin.sms" && user?.unidadeId && quickSelected.unidadeId !== user.unidadeId) { toast.error("Agendamento fora da unidade autorizada."); return; }
     quickConfirmingRef.current = true; setQuickConfirming(true);
-    const patientName = agendaSearchPatient?.nome || quickSelected.pacienteNome || "Paciente";
+    const patientName = quickPatient?.nome || quickSelected.pacienteNome || "Paciente";
     const priorityLabels = [quickAgePriority.age !== null && quickAgePriority.age >= 60 ? (quickAgePriority.age >= 80 ? "Idoso 80+" : "Idoso 60+") : "", quickPriorityDraft.is_pne ? "Cadeirante/PNE" : "", quickPriorityDraft.is_gestante ? "Gestante" : "", quickPriorityDraft.is_autista ? "TEA/Autista" : ""].filter(Boolean);
     try {
       const current = quickExistingPriority;
@@ -2918,7 +2918,7 @@ const Agenda: React.FC = () => {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-base font-bold text-foreground">{resolvePaciente(quickSelected.pacienteId, quickSelected.pacienteNome)}</p>
-                    <p className="text-sm text-muted-foreground">Mãe: {agendaSearchPatient?.nomeMae || "Não informado"}</p>
+                    <p className="text-sm text-muted-foreground">Mãe: {quickPatient?.nomeMae || "Não informado"}</p>
                      {quickCpf && <p className="text-sm text-muted-foreground">CPF: {quickCpf.length === 11 ? quickCpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : quickPatient?.cpf}</p>}
                      {quickCns && <p className="text-sm text-muted-foreground">CNS: {formatCNS(quickCns)}</p>}
                     <p className="text-sm text-muted-foreground">Nascimento: {quickBirth ? `${String(quickBirth).split("-").reverse().join("/")} · ${calcularIdade(quickBirth)} anos` : "Não informado"}</p>
