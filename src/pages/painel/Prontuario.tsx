@@ -2461,7 +2461,7 @@ const ProntuarioPage: React.FC = () => {
         await syncProntuarioProcedimentos(prontuarioId, linksToSave);
       }
 
-      const shouldRegisterSession = Boolean(isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
+      const shouldRegisterSession = Boolean(!keepOpenForFinalization && isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
 
       if (shouldRegisterSession) {
         const procedureDone =
@@ -2960,79 +2960,87 @@ const ProntuarioPage: React.FC = () => {
       const saved = await handleSave(undefined, true);
       if (!saved) return;
 
-    // Resolve the agendamento ID — from activeAtendimento or form
-    const agendamentoId = activeAtendimento?.agendamentoId || form.agendamento_id;
-    if (!agendamentoId) {
-      toast.error("Nenhum agendamento vinculado para finalizar.");
-      return;
-    }
+      const agendamentoId = activeAtendimento?.agendamentoId || form.agendamento_id;
+      if (!agendamentoId) {
+        toast.error("Nenhum agendamento vinculado para finalizar.");
+        return;
+      }
 
-    const now = new Date();
-    const horaFim = nowTimeBrazilStr(now);
-    let duracaoMinutos = 0;
-    if (activeAtendimento?.horaInicio) {
-      const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
-      const [hf, mf] = horaFim.split(":").map(Number);
-      duracaoMinutos = hf * 60 + mf - (hi * 60 + mi);
-    }
-    const pac = pacientes.find((px) => px.id === form.paciente_id);
+      const agendamento = agendamentos.find((item) => item.id === agendamentoId);
+      let unidadeId = agendamento?.unidadeId || "";
+      let profissionalId = agendamento?.profissionalId || "";
+      if (!unidadeId || !profissionalId) {
+        const { data, error } = await supabase
+          .from("agendamentos")
+          .select("unidade_id, profissional_id")
+          .eq("id", agendamentoId)
+          .maybeSingle();
+        if (error) throw error;
+        unidadeId = data?.unidade_id || "";
+        profissionalId = data?.profissional_id || "";
+      }
 
-    // Confirma no banco a finalização do atendimento antes de navegar
-    const { data: finalizedAttendance, error: finalizeError } = await (supabase as any)
-      .from("atendimentos")
-      .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
-      .eq("agendamento_id", agendamentoId)
-      .select("id");
+      const horaFim = nowTimeBrazilStr();
+      let duracaoMinutos = 0;
+      if (activeAtendimento?.horaInicio) {
+        const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
+        const [hf, mf] = horaFim.split(":").map(Number);
+        const elapsed = hf * 60 + mf - (hi * 60 + mi);
+        duracaoMinutos = Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0;
+      }
 
-    if (finalizeError || !finalizedAttendance?.length) {
-      console.error("[Prontuario] Falha ao finalizar atendimento no banco:", finalizeError);
-      toast.error("Não foi possível confirmar o atendimento iniciado. Atualize a tela ou tente novamente.");
-      return;
-    }
+      const { data, error } = await supabase.rpc("complete_clinical_attendance", {
+        p_agendamento_id: agendamentoId,
+        p_hora_fim: horaFim,
+        p_duracao_minutos: duracaoMinutos,
+        p_unidade_id: unidadeId,
+        p_profissional_id: profissionalId,
+      });
+      if (error) throw error;
+      if (!data || typeof data !== "object" || Array.isArray(data) || data.status !== "concluido") {
+        throw new Error("O banco não confirmou a finalização.");
+      }
 
-    // The appointment status is what the professional sees in their Agenda.
-    // Wait for persistence before reporting success or returning to that screen.
-    try {
-      await updateAgendamento(agendamentoId, { status: "concluido" });
-    } catch (error) {
-      console.error("[Prontuario] Falha ao concluir agendamento na Agenda:", error);
-      toast.error("O atendimento foi registrado, mas não foi possível atualizar a Agenda. Tente novamente.");
-      return;
-    }
-    void refreshAgendamentos().catch((error) =>
-      console.error("[Prontuario] Falha ao atualizar a lista da Agenda:", error),
-    );
+      if (agendamento) applyTreatmentAgendamentoUpdate({ ...agendamento, status: "concluido" });
+      void refreshAgendamentos().catch((refreshError) =>
+        console.error("[Prontuario] Falha ao atualizar a lista da Agenda:", refreshError),
+      );
 
-    // Finalizar o atendimento encerra apenas este atendimento. A alta do ciclo
-    // é uma decisão clínica separada, confirmada explicitamente em "Dar Alta".
-    logAction({
-      acao: "atendimento_finalizado",
-      entidade: "atendimento",
-      entidadeId: agendamentoId,
-      modulo: "atendimento",
-      user,
-      detalhes: {
-        paciente_nome: form.paciente_nome,
-        paciente_cpf: pac?.cpf || "",
-        hora_inicio: activeAtendimento?.horaInicio || "",
-        hora_fim: horaFim,
-        duracao_minutos: Math.max(0, duracaoMinutos),
-        unidade: user?.unidadeId || "",
-        sala: user?.salaId || "",
-      },
-    });
+      logAction({
+        acao: "editar",
+        entidade: "agendamento",
+        entidadeId: agendamentoId,
+        detalhes: { status: "concluido" },
+      });
+      const pac = pacientes.find((item) => item.id === form.paciente_id);
+      logAction({
+        acao: "atendimento_finalizado",
+        entidade: "atendimento",
+        entidadeId: agendamentoId,
+        modulo: "atendimento",
+        user,
+        detalhes: {
+          paciente_nome: form.paciente_nome,
+          paciente_cpf: pac?.cpf || "",
+          hora_inicio: activeAtendimento?.horaInicio || "",
+          hora_fim: typeof data.hora_fim === "string" ? data.hora_fim : horaFim,
+          duracao_minutos: typeof data.duracao_minutos === "number" ? data.duracao_minutos : duracaoMinutos,
+          unidade: user?.unidadeId || "",
+          sala: user?.salaId || "",
+        },
+      });
 
-    localStorage.removeItem(`timer_${agendamentoId}`);
-    setActiveAtendimento(null);
-    toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
-    if (chamarProximo) {
-      await localizarProximoPaciente();
-    } else {
-      navigate("/painel/agenda", { replace: true });
-    }
+      localStorage.removeItem(`timer_${agendamentoId}`);
+      setActiveAtendimento(null);
+      toast.success("Atendimento finalizado com sucesso!");
+      if (chamarProximo) {
+        await localizarProximoPaciente();
+      } else {
+        navigate("/painel/agenda", { replace: true });
+      }
     } catch (error) {
       console.error("[Prontuario] Falha inesperada ao finalizar atendimento:", error);
-      toast.error("Não foi possível concluir todas as gravações. O prontuário permanece disponível para conferir e tentar novamente.");
+      toast.error("Não foi possível concluir o atendimento na Agenda. O prontuário permanece salvo para nova tentativa.");
     } finally {
       finalizingRef.current = false;
       setFinalizing(false);
@@ -5882,7 +5890,7 @@ const ProntuarioPage: React.FC = () => {
                   <Button
                     type="button"
                     onClick={handleRegistrarSessaoOnly}
-                    disabled={loadingScheduledExams || saving}
+                    disabled={loadingScheduledExams || saving || finalizing}
                     variant="outline"
                     className="border-primary/50 text-primary hover:bg-primary/10"
                   >
@@ -5894,11 +5902,12 @@ const ProntuarioPage: React.FC = () => {
                 {canFinalize ? (
                   <>
                   <Button
+                    type="button"
                     onClick={() => { void handleFinalizarAtendimento(false); }}
-                    disabled={loadingScheduledExams || saving}
+                    disabled={loadingScheduledExams || saving || finalizing}
                     className="bg-success hover:bg-success/90 text-success-foreground min-w-[200px]"
                   >
-                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                     Finalizar Prontuário
                   </Button>
                   {Boolean(activeAtendimento?.agendamentoId || form.agendamento_id) && (
