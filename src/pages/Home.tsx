@@ -95,6 +95,13 @@ const Home: React.FC = () => {
             >
               Contato
             </a>
+            <Link
+              to="/portal"
+              className="inline-flex min-h-12 items-center gap-2 font-semibold text-[#164563] underline-offset-4 hover:underline focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <User className="h-5 w-5 shrink-0" aria-hidden="true" />
+              Portal do Paciente
+            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -179,25 +186,32 @@ const Home: React.FC = () => {
               Agendamento online e serviços de saúde para você e sua família.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Link to="/agendar">
-                <Button
-                  size="lg"
-                  className="h-14 rounded-xl border border-sky-100 bg-white px-6 text-base text-[#164563] font-bold shadow-lg hover:bg-sky-100 active:scale-[0.98] transition-colors duration-200 w-full sm:w-auto"
-                >
-                  <Calendar className="w-5 h-5 mr-2" />
+              <Button
+                asChild
+                size="lg"
+                className="h-14 rounded-xl border border-sky-100 bg-white px-6 text-base text-[#164563] font-bold shadow-lg hover:bg-sky-100 active:scale-[0.98] transition-colors duration-200 w-full sm:w-auto"
+              >
+                <Link to="/agendar">
+                  <Calendar className="w-5 h-5 mr-2" aria-hidden="true" />
                   Agendar Online
-                </Button>
-              </Link>
-              <Link to="/portal">
+                </Link>
+              </Button>
+              <div className="min-w-0 sm:flex-1">
                 <Button
+                  asChild
                   size="lg"
                   variant="outline"
-                  className="h-14 rounded-xl border-white/70 bg-transparent px-6 text-base font-semibold text-white hover:bg-white/15 hover:text-white w-full sm:w-auto"
+                  className="h-auto min-h-14 w-full whitespace-normal rounded-xl border-white/70 bg-white/10 px-4 py-3 text-base font-semibold leading-snug text-white hover:bg-white/15 hover:text-white"
                 >
-                  <User className="w-5 h-5 mr-2" />
-                  Consultar Agendamento
+                  <Link to="/portal" aria-describedby="patient-portal-help">
+                    <User className="mr-2 h-5 w-5 shrink-0" aria-hidden="true" />
+                    Acessar Portal do Paciente
+                  </Link>
                 </Button>
-              </Link>
+                <p id="patient-portal-help" className="mt-3 text-sm leading-relaxed text-slate-100">
+                  Já tem consulta marcada? Veja seus agendamentos e imprima comprovantes no Portal do Paciente.
+                </p>
+              </div>
             </div>
           </motion.div>
         </div>

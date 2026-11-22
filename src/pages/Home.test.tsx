@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import Home from "./Home";
@@ -20,7 +20,19 @@ describe("Home navigation", () => {
     expect(hero.querySelectorAll("a")).toHaveLength(2);
     fireEvent.click(screen.getByRole("link", { name: "Agendar Online" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/agendar");
-    fireEvent.click(screen.getByRole("link", { name: "Consultar Agendamento" }));
+    const portal = screen.getByRole("link", { name: "Acessar Portal do Paciente" });
+    expect(portal).toHaveAccessibleDescription("Já tem consulta marcada? Veja seus agendamentos e imprima comprovantes no Portal do Paciente.");
+    expect(hero.querySelector("a button")).toBeNull();
+    fireEvent.click(portal);
+    expect(screen.getByTestId("location")).toHaveTextContent("/portal");
+  });
+
+  it("makes the patient portal available directly in the public navigation", () => {
+    renderHome();
+    const navigation = screen.getByRole("navigation", { name: "Navegação principal" });
+    const portal = within(navigation).getByRole("link", { name: "Portal do Paciente" });
+    expect(portal).toHaveAttribute("href", "/portal");
+    fireEvent.click(portal);
     expect(screen.getByTestId("location")).toHaveTextContent("/portal");
   });
 
