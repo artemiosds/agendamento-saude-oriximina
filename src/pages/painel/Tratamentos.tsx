@@ -22,14 +22,14 @@ import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -1156,6 +1156,14 @@ const TratamentosUnidade: React.FC = () => {
     }
   };
 
+  const openSessionRegistration = (session: TreatmentSession, status: "realizada" | "paciente_faltou" = "realizada") => {
+    setSelectedSessionForRegister(session);
+    setSelectSessionOpen(false);
+    setNewSession({ clinical_notes: "", procedure_done: "", status, absence_type: "" });
+    setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
+    setSessionOpen(true);
+  };
+
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
     if (registeringSession) return; // Double-click guard
@@ -2184,7 +2192,14 @@ const TratamentosUnidade: React.FC = () => {
 
   if (selectedCycle) {
     const awaitingManualDischarge = isLegacyCycleAwaitingDischarge(selectedCycle);
-    const cycleIsClinicallyActive = ["em_andamento", "ativo"].includes(selectedCycle.status) || awaitingManualDischarge;
+    const cycleIsActive = ["em_andamento", "ativo"].includes(selectedCycle.status);
+    const cycleIsClinicallyActive = cycleIsActive || awaitingManualDischarge;
+    const canRegisterSessions = cycleIsClinicallyActive && (isProfissional || canManageFull);
+    const today = todayLocalStr();
+    const pastScheduledSessionIds = new Set(
+      cycleSessions.filter((s) => s.status === "agendada" && s.scheduled_date && s.scheduled_date < today).map((s) => s.id),
+    );
+    const pastScheduledCount = pastScheduledSessionIds.size;
     const canDischargeSelectedCycle = canManageFull || (isProfissional && selectedCycle.professional_id === user?.id);
     const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
     const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
@@ -2345,7 +2360,7 @@ const TratamentosUnidade: React.FC = () => {
             </div>
 
             <div className="flex gap-2 flex-wrap pt-2">
-              {cycleIsClinicallyActive && (isProfissional || canManageFull) && (
+              {canRegisterSessions && (
                 <>
                   <Button
                     size="sm"
@@ -2530,6 +2545,17 @@ const TratamentosUnidade: React.FC = () => {
             </div>
             {linkLookup.cycleId === selectedCycle.id && linkLookup.status === 'error' && <div className="mb-3 rounded-lg border p-3 text-sm" role="alert">Não foi possível verificar os vínculos com a Agenda. <Button size="sm" variant="outline" onClick={() => loadSessionsForCycle(selectedCycle, false)}>Tentar novamente</Button></div>}
             <TreatmentCyclePendingPanel cycle={selectedCycle} sessions={cycleSessions} issues={cycleIntegrityIssues} appointments={appointmentByIdMap} canReview={canControlSessions && cycleIsClinicallyActive} availableDates={getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id)} onChanged={async () => { await loadSessionsForCycle(selectedCycle, false); await loadData(true); }} />
+            {cycleIsActive && pastScheduledCount > 0 && (
+              <div role="status" className="mb-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+                <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  {pastScheduledCount === 1
+                    ? "Há 1 sessão com data anterior aguardando regularização."
+                    : `Há ${pastScheduledCount} sessões com data anterior aguardando regularização.`}
+                  {" "}Você pode registrar o atendimento retroativo, lançar falta ou remarcar.
+                </p>
+              </div>
+            )}
             <div className="max-h-[500px] overflow-y-auto border rounded-lg">
               <div className="space-y-2">
                 {(() => {
@@ -2551,6 +2577,9 @@ const TratamentosUnidade: React.FC = () => {
                   const effectiveIsPendente = isPendente;
                   const canRemarcarThis = canAgendarSessao && isAgendada && !sharedLinkSessionIds.has(s.id) && cycleIsClinicallyActive;
                   const isRealizada = s.status === "realizada";
+                  const isPastScheduled = pastScheduledSessionIds.has(s.id);
+                  const isScheduledToday = s.status === "agendada" && s.scheduled_date === today;
+                  const canRegularizeThis = isPastScheduled && cycleIsActive && canRegisterSessions && s.professional_id === selectedCycle.professional_id;
 
                   return (
                     <div
@@ -2572,6 +2601,16 @@ const TratamentosUnidade: React.FC = () => {
                             {s.scheduled_date
                               ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
                               : "Sem data — aguarda agendamento"}
+                            {(isPastScheduled || isScheduledToday) && (
+                              <span className={cn(
+                                badgeVariants({ variant: "outline" }), "ml-2 align-middle",
+                                isPastScheduled
+                                  ? "border-amber-300 bg-amber-500/10 text-amber-700 dark:border-amber-700 dark:text-amber-400"
+                                  : "border-blue-300 bg-blue-500/10 text-blue-700 dark:border-blue-700 dark:text-blue-400",
+                              )}>
+                                {isPastScheduled ? "Data passada · Regularizar" : "Hoje"}
+                              </span>
+                            )}
                             {effectiveIsPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
                             {sharedLinkSessionIds.has(s.id) && <span className="ml-2 text-xs text-warning">· Reserva compartilhada — use Liberar para agendar na sessão a corrigir</span>}
                             {duplicateDate && <span className="ml-2 text-xs text-destructive font-medium">· Data duplicada — revisão necessária</span>}
@@ -2706,6 +2745,30 @@ const TratamentosUnidade: React.FC = () => {
                           </>
                         )}
                       </div>
+                      {canRegularizeThis && (
+                        <div className="flex flex-wrap gap-2 sm:pl-[3.75rem]">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-9 text-xs sm:h-7"
+                            aria-label={`Registrar sessão ${s.session_number}`}
+                            onClick={() => openSessionRegistration(s)}
+                          >
+                            Registrar Sessão
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-9 text-xs sm:h-7"
+                            aria-label={`Lançar falta na sessão ${s.session_number}`}
+                            onClick={() => openSessionRegistration(s, "paciente_faltou")}
+                          >
+                            Lançar Falta
+                          </Button>
+                        </div>
+                      )}
                       {s.clinical_notes && renderSessionNotes(s.clinical_notes)}
                     </div>
                   );
@@ -2786,18 +2849,7 @@ const TratamentosUnidade: React.FC = () => {
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => {
-                        setSelectedSessionForRegister(s);
-                        setSelectSessionOpen(false);
-                        setNewSession({
-                          clinical_notes: "",
-                          procedure_done: "",
-                          status: "realizada",
-                          absence_type: "",
-                        });
-                        setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
-                        setSessionOpen(true);
-                      }}
+                      onClick={() => openSessionRegistration(s)}
                       className="w-full text-left p-3 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-between gap-3"
                     >
                       <div className="flex-1 min-w-0">
@@ -2824,7 +2876,17 @@ const TratamentosUnidade: React.FC = () => {
         <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
             <DialogHeader>
-              <DialogTitle>Registrar Sessão</DialogTitle>
+              <DialogTitle>{newSession.status === "paciente_faltou" ? "Lançar Falta" : "Registrar Sessão"}</DialogTitle>
+              {selectedSessionForRegister && (
+                <DialogDescription>
+                  Sessão {selectedSessionForRegister.session_number}/{selectedCycle.total_sessions}
+                  {selectedSessionForRegister.scheduled_date && (
+                    <> · Data agendada <time dateTime={selectedSessionForRegister.scheduled_date}>
+                      {new Date(selectedSessionForRegister.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")}
+                    </time></>
+                  )}
+                </DialogDescription>
+              )}
             </DialogHeader>
             <div className="space-y-4">
               <div>
