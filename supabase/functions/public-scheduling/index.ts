@@ -1,4 +1,5 @@
 import { normalizePatientCpf, patientCpfError } from "../_shared/patient-cpf.ts";
+import { addSchedulingDays as addDays, buildPublicAvailability } from "../_shared/public-scheduling-availability.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -11,12 +12,6 @@ const corsHeaders = {
 
 const BRAZIL_TIMEZONE = "America/Sao_Paulo";
 const todayBrazilStr = () => new Intl.DateTimeFormat("sv-SE", { timeZone: BRAZIL_TIMEZONE }).format(new Date());
-
-const addDays = (dateStr: string, days: number): string => {
-  const d = new Date(dateStr + "T12:00:00Z");
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -43,11 +38,12 @@ serve(async (req) => {
 
     // Load online scheduling config
     const loadOnlineConfig = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("system_config")
         .select("configuracoes")
         .eq("id", "config_agendamento_online")
         .maybeSingle();
+      if (error) throw error;
       return data?.configuracoes as {
         habilitado?: boolean;
         antecedencia_minima_dias?: number;
@@ -60,37 +56,72 @@ serve(async (req) => {
     };
 
     if (req.method === "GET" && action === "data") {
-      const [unidadesRes, profRes, dispRes, bloqueiosRes, agendRes, configRes] = await Promise.all([
-        supabase.from("unidades").select("id, nome, endereco, telefone, whatsapp, ativo").eq("ativo", true),
-        supabase.from("funcionarios").select("id, nome, setor, unidade_id, sala_id, role, ativo, profissao, tempo_atendimento, pode_agendar_retorno").eq("role", "profissional").eq("ativo", true),
-        supabase.from("disponibilidades").select("id, profissional_id, unidade_id, data_inicio, data_fim, dias_semana, hora_inicio, hora_fim, vagas_por_hora, vagas_por_dia, duracao_consulta"),
-        supabase.from("bloqueios").select("id, data_inicio, data_fim, dia_inteiro, hora_inicio, hora_fim, profissional_id, unidade_id, tipo, titulo"),
-        supabase.from("agendamentos").select("id, profissional_id, unidade_id, data, hora, status, origem").not("status", "in", "(cancelado,falta)"),
-        loadOnlineConfig(),
-      ]);
-
-      const config = configRes || {};
-
-      // Filter out blocked professionals
-      let profs = profRes.data || [];
-      if (config.profissionais_bloqueados?.length) {
-        profs = profs.filter((p: any) => !config.profissionais_bloqueados!.includes(p.id));
+      const config = (await loadOnlineConfig()) || {};
+      const settings = {
+        habilitado: config.habilitado ?? true,
+        antecedencia_minima_dias: config.antecedencia_minima_dias ?? 1,
+        antecedencia_maxima_dias: config.antecedencia_maxima_dias ?? 30,
+        limite_por_dia_profissional: config.limite_por_dia_profissional ?? 99,
+        mensagem_confirmacao: config.mensagem_confirmacao ?? "",
+        exigir_confirmacao_sms: config.exigir_confirmacao_sms ?? false,
+      };
+      const from = addDays(todayBrazilStr(), Math.max(1, settings.antecedencia_minima_dias));
+      const to = addDays(todayBrazilStr(), settings.antecedencia_maxima_dias);
+      if (!settings.habilitado || from > to) {
+        return new Response(JSON.stringify({
+          unidades: [], profissionais: [], disponibilidades: [], bloqueios: [], agendamentos: [],
+          config_agendamento_online: settings,
+        }), { headers: corsHeaders });
       }
 
+      const loadAppointments = async () => {
+        const appointments = [];
+        const pageSize = 500;
+        for (let offset = 0; ; offset += pageSize) {
+          const { data, error } = await supabase.from("agendamentos")
+            .select("profissional_id, unidade_id, data, hora, origem")
+            .gte("data", from).lte("data", to)
+            .not("status", "in", "(cancelado,falta)").order("id").range(offset, offset + pageSize - 1);
+          if (error) throw error;
+          appointments.push(...data);
+          if (data.length < pageSize) return appointments;
+        }
+      };
+
+      const [units, professionals, windows, blocks, appointments] = await Promise.all([
+        supabase.from("unidades").select("id, nome, endereco, telefone, whatsapp, ativo").eq("ativo", true),
+        supabase.from("funcionarios").select("id, nome, setor, unidade_id, role, ativo, profissao").eq("role", "profissional").eq("ativo", true),
+        supabase.from("disponibilidades").select("profissional_id, unidade_id, data_inicio, data_fim, dias_semana, hora_inicio, hora_fim, vagas_por_hora, vagas_por_dia, duracao_consulta")
+          .lte("data_inicio", to).gte("data_fim", from),
+        supabase.from("bloqueios").select("data_inicio, data_fim, dia_inteiro, hora_inicio, hora_fim, profissional_id, unidade_id")
+          .lte("data_inicio", to).gte("data_fim", from),
+        loadAppointments(),
+      ]);
+      for (const result of [units, professionals, windows, blocks]) {
+        if (result.error) throw result.error;
+      }
+      const activeUnitIds = new Set((units.data || []).map(unit => unit.id));
+      const blockedIds = new Set(config.profissionais_bloqueados || []);
+      const allowedProfessionals = (professionals.data || []).filter(prof => !blockedIds.has(prof.id));
+      const allowedProfessionalIds = new Set(allowedProfessionals.map(prof => prof.id));
+      const slots = buildPublicAvailability({
+        from,
+        to,
+        onlineLimit: settings.limite_por_dia_profissional,
+        windows: (windows.data || []).filter(window => activeUnitIds.has(window.unidade_id) && allowedProfessionalIds.has(window.profissional_id)),
+        blocks: blocks.data || [],
+        appointments,
+      });
+      const unitsWithSlots = new Set(slots.map(slot => slot.unidade_id));
+      const professionalsWithSlots = new Set(slots.map(slot => slot.profissional_id));
+
       return new Response(JSON.stringify({
-        unidades: unidadesRes.data || [],
-        profissionais: profs,
-        disponibilidades: dispRes.data || [],
-        bloqueios: bloqueiosRes.data || [],
-        agendamentos: agendRes.data || [],
-        config_agendamento_online: {
-          habilitado: config.habilitado ?? true,
-          antecedencia_minima_dias: config.antecedencia_minima_dias ?? 1,
-          antecedencia_maxima_dias: config.antecedencia_maxima_dias ?? 30,
-          limite_por_dia_profissional: config.limite_por_dia_profissional ?? 99,
-          mensagem_confirmacao: config.mensagem_confirmacao ?? "",
-          exigir_confirmacao_sms: config.exigir_confirmacao_sms ?? false,
-        },
+        unidades: (units.data || []).filter(unit => unitsWithSlots.has(unit.id)),
+        profissionais: allowedProfessionals.filter(prof => professionalsWithSlots.has(prof.id)),
+        disponibilidades: slots,
+        bloqueios: [],
+        agendamentos: [],
+        config_agendamento_online: settings,
       }), { headers: corsHeaders });
     }
 

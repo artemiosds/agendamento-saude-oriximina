@@ -273,9 +273,9 @@ const AgendarOnline: React.FC = () => {
   }, [bloqueios]);
 
   const unidadesComDisponibilidade = useMemo(() => {
-    const unidadeIdsComDisp = new Set(disponibilidades.map(d => d.unidade_id));
-    const unidadeIdsComProf = new Set(profissionais.filter(f => f.role === 'profissional' && f.ativo && f.unidade_id).map(f => f.unidade_id));
-    return unidades.filter(u => u.ativo && unidadeIdsComProf.has(u.id) && unidadeIdsComDisp.has(u.id));
+    const profIds = new Set(profissionais.filter(f => f.role === 'profissional' && f.ativo).map(f => f.id));
+    const unidadeIdsComDisp = new Set(disponibilidades.filter(d => profIds.has(d.profissional_id)).map(d => d.unidade_id));
+    return unidades.filter(u => u.ativo && unidadeIdsComDisp.has(u.id));
   }, [unidades, profissionais, disponibilidades]);
 
   const profissionaisComDisponibilidade = useMemo(() => {
