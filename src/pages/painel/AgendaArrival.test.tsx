@@ -56,8 +56,9 @@ vi.mock('@/components/AgendaNotificacoes', () => ({ AgendaNotificacaoIndividual:
 vi.mock('./CalendarioAgenda', () => ({ CalendarioAgenda: ({ onVisibleRangeChange }: any) => {
   useEffect(() => { onVisibleRangeChange(f.day, f.day); }, [onVisibleRangeChange]); return null;
 } }));
-vi.mock('./agenda/AgendaItemCard', () => ({ default: ({ ag, onStatusChange, onDeleteInit }: any) => <div>
+vi.mock('./agenda/AgendaItemCard', () => ({ default: ({ ag, onStatusChange, onDeleteInit, onOpenEdit }: any) => <div>
   <button onClick={() => onDeleteInit(ag)}>Excluir teste</button>
+  <button onClick={() => onOpenEdit(ag)}>Editar teste</button>
   <output data-testid="status">{ag.status}</output>
   <button onClick={() => onStatusChange(ag.id, 'confirmado_chegada')}>Chegada teste</button>
 </div> }));
@@ -91,6 +92,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {
 import Agenda from './Agenda';
 
 beforeEach(() => {
+  f.user.role = 'master'; f.user.usuario = 'admin.sms';
   vi.clearAllMocks(); f.triage = true; f.globalTriage = null; f.readStatus = 'confirmado'; f.queryError = null;
   f.patients = [{ id: 'p1', nome: 'PACIENTE TESTE', criadoEm: '', cpf: '', cns: '', isPne: false, isGestante: false, isAutista: false }];
   f.savePatient.mockResolvedValue({ id: 'p1', nome: 'PACIENTE TESTE', is_pne: true }); f.savedPatient.mockReset();
@@ -105,7 +107,7 @@ beforeEach(() => {
   f.addQueue.mockReset().mockImplementation(async row => { f.queueSetter?.(rows => [...rows, row]); });
   f.updateQueue.mockReset().mockImplementation(async (id, patch) => { f.queueSetter?.(rows => rows.map(a => a.id === id ? { ...a, ...patch } : a)); });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 function renderAgenda() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(<QueryClientProvider client={queryClient}><MemoryRouter><Agenda /></MemoryRouter></QueryClientProvider>);
@@ -355,4 +357,54 @@ it('imprime somente a lista filtrada, com o profissional selecionado e a unidade
     else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
     f.user = oldUser;
   }
+});
+
+describe('encaixe Master na edição da Agenda', () => {
+  async function editTime(reason: string) {
+    f.rpc.mockResolvedValue({ data: { available: false, reason }, error: null });
+    const view = renderAgenda();
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar teste' }));
+    const time = view.container.ownerDocument.querySelector('input[type="time"]');
+    expect(time).not.toBeNull();
+    fireEvent.change(time!, { target: { value: '13:15' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }));
+  }
+
+  it.each(['no_availability', 'outside_grid', 'availability_conflict'])(
+    'aceita %s para Master com justificativa e registra auditoria', async reason => {
+      const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Continuidade do cuidado');
+      await editTime(reason);
+      await waitFor(() => expect(f.update).toHaveBeenCalledWith('ag1', expect.objectContaining({ hora: '13:15' })));
+      expect(prompt).toHaveBeenCalledWith(expect.stringContaining('Informe o motivo do agendamento livre como MASTER:'));
+      expect(f.rpc).toHaveBeenCalledWith('check_internal_slot_availability', expect.objectContaining({ p_unidade_id: 'u1' }));
+      await waitFor(() => expect(f.log).toHaveBeenCalledWith(expect.objectContaining({
+        acao: 'editar_agendamento',
+        detalhes: expect.objectContaining({ motivo_alteracao: 'Continuidade do cuidado' }),
+      })));
+    },
+  );
+
+  it.each([null, '', 'ab'])('cancela a edição com justificativa insuficiente %s', async reason => {
+    vi.spyOn(window, 'prompt').mockReturnValue(reason);
+    await editTime('no_availability');
+    await waitFor(() => expect(f.toastError).toHaveBeenCalledWith('O encaixe Master exige motivo para auditoria.'));
+    expect(f.update).not.toHaveBeenCalled();
+  });
+
+  it('preserva bloqueio oficial inclusive para Master', async () => {
+    const prompt = vi.spyOn(window, 'prompt');
+    await editTime('date_blocked');
+    await waitFor(() => expect(f.toastError).toHaveBeenCalledWith('Não é possível reagendar: Data bloqueada.'));
+    expect(prompt).not.toHaveBeenCalled();
+    expect(f.update).not.toHaveBeenCalled();
+  });
+
+  it('mantém a recepção bloqueada quando não existe grade', async () => {
+    f.user.role = 'recepcao'; f.user.usuario = 'recepcao';
+    const prompt = vi.spyOn(window, 'prompt');
+    await editTime('no_availability');
+    await waitFor(() => expect(f.toastError).toHaveBeenCalledWith('Não é possível reagendar: Sem disponibilidade cadastrada.'));
+    expect(prompt).not.toHaveBeenCalled();
+    expect(f.update).not.toHaveBeenCalled();
+  });
 });

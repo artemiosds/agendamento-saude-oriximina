@@ -1328,6 +1328,10 @@ const Agenda: React.FC = () => {
   };
 
   const executarCreate = async () => {
+    if (!isGlobalAdmin && (!user?.unidadeId || selectedProfUnit !== user.unidadeId)) {
+      toast.error("Agendamento fora da unidade autorizada.");
+      return;
+    }
     try {
       await loadAgendaRange(selectedDate, selectedDate);
     } catch {
@@ -1460,9 +1464,9 @@ const Agenda: React.FC = () => {
     // Server-side slot availability check da grade clínica; aparelhos usam slots da sala.
     let masterOverrideReason = "";
     if (!isDiagnosticBooking) {
-    // Apenas MASTER pode forçar capacidade; indisponibilidade, bloqueios e
-    // horários fora da grade continuam sendo restrições obrigatórias.
-    const canOverride = user?.role === "master";
+    // Master pode autorizar encaixe de capacidade ou grade com motivo auditável.
+    // Bloqueios oficiais continuam impedindo o agendamento.
+    const canOverride = isGlobalAdmin || user?.role === "master";
     
     try {
       const { data: slotCheck, error: slotCheckError } = await supabase.rpc("check_internal_slot_availability" as any, {
@@ -1485,6 +1489,8 @@ const Agenda: React.FC = () => {
           reason === "turno_full" ? "Limite de vagas atingido para este profissional neste dia/turno." :
           reason === "external_reservation" ? "As vagas internas terminaram; as vagas restantes estão reservadas para agendamento externo." :
           reason === "no_availability" ? "Sem disponibilidade cadastrada." :
+          reason === "outside_grid" ? "Horário fora do turno ou da grade configurada." :
+          reason === "availability_conflict" ? "Há conflito entre as grades de disponibilidade." :
           "Sem disponibilidade.";
         if (!canOverride || regulatedBooking) {
           toast.error(reasonMsg);
@@ -1495,7 +1501,7 @@ const Agenda: React.FC = () => {
           return;
         }
         masterOverrideReason = window.prompt(
-          `⚠️ ${reasonMsg}\n\nInforme o motivo do encaixe como MASTER:`,
+          `⚠️ ${reasonMsg}\n\nInforme o motivo do agendamento livre como MASTER:`,
         )?.trim() || "";
         if (masterOverrideReason.length < 3) {
           toast.error("O encaixe Master exige motivo para auditoria.");
@@ -2512,6 +2518,12 @@ const Agenda: React.FC = () => {
       await loadAgendaRange(editAg.data, editAg.data);
       const prof = profissionais.find((p) => p.id === editAg.profissionalId);
       const originalAg = agendamentos.find((a) => a.id === editAg.id);
+      const targetUnitId = editAg.unidadeId || originalAg?.unidadeId;
+      if (!targetUnitId || (!isGlobalAdmin && (!user?.unidadeId || targetUnitId !== user.unidadeId))) {
+        toast.error("Agendamento fora da unidade autorizada.");
+        return;
+      }
+      let masterOverrideReason = "";
       const dateOrHourChanged =
         originalAg && (originalAg.data !== editAg.data || originalAg.hora !== editAg.hora || originalAg.profissionalId !== editAg.profissionalId);
 
@@ -2527,11 +2539,11 @@ const Agenda: React.FC = () => {
         if (conflito && !window.confirm(`⚠️ Já existe ${conflito.pacienteNome || "um paciente"} às ${editAg.hora} com este profissional nesta data.\n\nDeseja salvar mesmo assim (encaixe)?`)) return;
       }
 
-      if (dateOrHourChanged && prof?.unidadeId) {
-        const canOverride = user?.role === "master";
+      if (dateOrHourChanged) {
+        const canOverride = isGlobalAdmin || user?.role === "master";
         const { data: slotCheck, error: slotCheckError } = await (supabase as any).rpc("check_internal_slot_availability", {
           p_profissional_id: editAg.profissionalId,
-          p_unidade_id: prof.unidadeId,
+          p_unidade_id: targetUnitId,
           p_data: editAg.data,
           p_hora: editAg.hora,
           p_exclude_agendamento_id: editAg.id,
@@ -2544,14 +2556,21 @@ const Agenda: React.FC = () => {
             reason === "day_full" ? "Vagas do dia esgotadas." :
             reason === "hour_full" ? "Vagas deste horário esgotadas." :
             reason === "outside_grid" ? "Horário fora do turno ou da grade configurada." :
+            reason === "no_availability" ? "Sem disponibilidade cadastrada." :
+            reason === "availability_conflict" ? "Há conflito entre as grades de disponibilidade." :
             reason === "external_reservation" ? "Horário reservado para vagas externas." :
             "Sem disponibilidade.";
           if (!canOverride || !isMasterCapacityOverrideReason(reason)) {
             toast.error(`Não é possível reagendar: ${reasonMsg}`);
             return;
           }
-          const confirmou = window.confirm(`${reasonMsg} Deseja forçar como ${user?.role}?`);
-          if (!confirmou) return;
+          masterOverrideReason = window.prompt(
+            `⚠️ ${reasonMsg}\n\nInforme o motivo do agendamento livre como MASTER:`,
+          )?.trim() || "";
+          if (masterOverrideReason.length < 3) {
+            toast.error("O encaixe Master exige motivo para auditoria.");
+            return;
+          }
         }
         if (slotCheck && typeof slotCheck === "object" && (slotCheck as any).available && (slotCheck as any).capacity_exceeded) {
           const okEncaixe = window.confirm(
@@ -2575,7 +2594,14 @@ const Agenda: React.FC = () => {
         entidadeId: editAg.id,
         modulo: "agenda",
         user,
-        detalhes: { tipo: editAg.tipo, data: editAg.data, hora: editAg.hora, profissional: prof?.nome },
+        unidadeId: targetUnitId,
+        agendamentoId: editAg.id,
+        before: originalAg,
+        after: editAg,
+        detalhes: {
+          tipo: editAg.tipo, data: editAg.data, hora: editAg.hora, profissional: prof?.nome,
+          ...(masterOverrideReason ? { motivo_alteracao: masterOverrideReason } : {}),
+        },
       });
       toast.success("Agendamento atualizado!");
       setEditDialogOpen(false);
@@ -2585,7 +2611,7 @@ const Agenda: React.FC = () => {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Erro ao editar agendamento.");
     }
-  }, [editAg, editTimeAllowed, profissionais, agendamentos, updateAgendamento, logAction, user, refreshAgendamentos, loadAgendaRange]);
+  }, [editAg, editTimeAllowed, profissionais, agendamentos, updateAgendamento, logAction, user, isGlobalAdmin, refreshAgendamentos, loadAgendaRange]);
 
   // Refs para handlers estáveis passados ao AgendaItemCard memoizado.
   const handleOpenEditRef = React.useRef(handleOpenEdit);

@@ -42,13 +42,17 @@ describe("seleção manual de horário em disponibilidade por turno", () => {
     expect(isTimeAfterSchedulingCutoff("06:59", "2026-10-01", "2026-10-01", 420, 0)).toBe(false);
   });
 
-  it("limita o encaixe Master a motivos de capacidade, sem ignorar bloqueios ou falta de disponibilidade", () => {
+  it("permite encaixe Master por capacidade ou grade, preservando bloqueios oficiais", () => {
     expect(isMasterCapacityOverrideReason("day_full")).toBe(true);
     expect(isMasterCapacityOverrideReason("hour_full")).toBe(true);
     expect(isMasterCapacityOverrideReason("turno_full")).toBe(true);
     expect(isMasterCapacityOverrideReason("external_reservation")).toBe(true);
     expect(isMasterCapacityOverrideReason("date_blocked")).toBe(false);
-    expect(isMasterCapacityOverrideReason("no_availability")).toBe(false);
+    expect(isMasterCapacityOverrideReason("no_availability")).toBe(true);
+    expect(isMasterCapacityOverrideReason("outside_grid")).toBe(true);
+    expect(isMasterCapacityOverrideReason("availability_conflict")).toBe(true);
+    expect(isMasterCapacityOverrideReason("invalid_time")).toBe(false);
+    expect(isMasterCapacityOverrideReason(undefined)).toBe(false);
     expect(isMasterCapacityOverrideReason(null)).toBe(false);
   });
 });

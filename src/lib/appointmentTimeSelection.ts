@@ -8,6 +8,9 @@ const MASTER_CAPACITY_OVERRIDE_REASONS = new Set([
   "day_full",
   "turno_full",
   "hour_full",
+  "no_availability",
+  "outside_grid",
+  "availability_conflict",
 ]);
 
 export function isMasterCapacityOverrideReason(reason: string | null | undefined): boolean {
