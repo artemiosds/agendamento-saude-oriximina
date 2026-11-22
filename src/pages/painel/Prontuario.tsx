@@ -979,6 +979,7 @@ const ProntuarioPage: React.FC = () => {
   } | null>(null);
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
   const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
+  const [clearingCompletedSession, setClearingCompletedSession] = useState(false);
   const soapRef = useRef<HTMLDivElement>(null);
 
   // Modal Agendar/Remarcar states
@@ -3538,47 +3539,23 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleClearRealizada = async (session: CycleSession) => {
-    if (!sessaoCycle) return;
+    if (!sessaoCycle || clearingCompletedSession) return;
     const confirmed = window.confirm(
       `Tem certeza que deseja limpar a sessão ${session.session_number}/${session.total_sessions}?\n\nIsto reverterá o status para "Agendada" e apagará os dados clínicos.`
     );
     if (!confirmed) return;
+    const reason = window.prompt("Justificativa obrigatória da revisão clínica:")?.trim();
+    if (!reason) return;
+    setClearingCompletedSession(true);
     try {
-      const { error } = await supabase
-        .from("treatment_sessions")
-        .update({
-          status: "agendada",
-          clinical_notes: "",
-          procedure_done: "",
-        })
-        .eq("id", session.id);
-      if (error) throw error;
-
-      const completedCount = sessaoCycleSessions.filter(s => s.id !== session.id && s.status === 'realizada').length;
-      const { error: cycErr } = await supabase
-        .from("treatment_cycles")
-        .update({
-          sessions_done: completedCount,
-          status: 'em_andamento',
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", sessaoCycle.id);
-      if (cycErr) throw cycErr;
-
-      await logAction({
-        acao: "limpar_sessao_realizada",
-        entidade: "treatment_session",
-        entidadeId: session.id,
-        modulo: "prontuario",
-        user,
-        detalhes: { ciclo: sessaoCycle.id, sessao: session.session_number },
-      });
-
+      await treatmentService.revertCompletedSession(session.id, reason);
       toast.success(`Sessão ${session.session_number} retornada ao status Agendada.`);
       await loadSessaoData(buildTreatmentContext());
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao limpar sessão: " + err.message);
+    } catch (err) {
+      console.error("Erro ao limpar sessão:", err);
+      toast.error(err instanceof Error ? err.message : "Não foi possível confirmar a reversão da sessão.");
+    } finally {
+      setClearingCompletedSession(false);
     }
   };
 
@@ -4961,6 +4938,7 @@ const ProntuarioPage: React.FC = () => {
                                              variant="outline" 
                                              className="h-6 text-[10px] px-2"
                                              onClick={() => handleClearRealizada(s)}
+                                             disabled={clearingCompletedSession}
                                            >
                                              <Eraser className="w-2.5 h-2.5 mr-1" /> Limpar
                                            </Button>

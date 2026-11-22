@@ -298,6 +298,7 @@ const TratamentosUnidade: React.FC = () => {
   const [editRealizadaProcedure, setEditRealizadaProcedure] = useState("");
   const [editRealizadaSoap, setEditRealizadaSoap] = useState({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
   const [editRealizadaSaving, setEditRealizadaSaving] = useState(false);
+  const [clearingCompletedSession, setClearingCompletedSession] = useState(false);
 
   const [newCycle, setNewCycle] = useState({
     patient_id: "",
@@ -1378,50 +1379,23 @@ const TratamentosUnidade: React.FC = () => {
   };
 
   const handleClearRealizada = async (session: TreatmentSession) => {
-    if (!selectedCycle) return;
+    if (!selectedCycle || clearingCompletedSession) return;
     const confirmed = window.confirm(
       `Tem certeza que deseja limpar a sessão ${session.session_number}/${session.total_sessions}?\n\nIsto reverterá o status para "Agendada" e apagará os dados clínicos.`
     );
     if (!confirmed) return;
     const reason = window.prompt("Justificativa obrigatória da revisão clínica:")?.trim();
     if (!reason) return;
+    setClearingCompletedSession(true);
     try {
-      const { error } = await supabase
-        .from("treatment_sessions")
-        .update({
-          status: "agendada",
-          clinical_notes: "",
-          procedure_done: "",
-          absence_type: null,
-        })
-        .eq("id", session.id);
-
-      if (error) throw error;
-
-      // Decrement sessions_done
-      const newDone = Math.max(0, selectedCycle.sessions_done - 1);
-      await supabase
-        .from("treatment_cycles")
-        .update({
-          sessions_done: newDone,
-          status: "em_andamento",
-        })
-        .eq("id", selectedCycle.id);
-
-      await logAction({
-        acao: "limpar_sessao_realizada",
-        entidade: "treatment_session",
-        entidadeId: session.id,
-        modulo: "tratamentos",
-        user,
-        detalhes: { ciclo: selectedCycle.id, sessao: session.session_number, motivo_alteracao: reason, valor_anterior: session },
-      });
-
+      await treatmentService.revertCompletedSession(session.id, reason);
       toast.success(`Sessão ${session.session_number} revertida para "Agendada".`);
-      loadData(true);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao limpar sessão: " + err.message);
+      await Promise.all([loadSessionsForCycle(selectedCycle, true), loadData(true)]);
+    } catch (err) {
+      console.error("Erro ao limpar sessão:", err);
+      toast.error(err instanceof Error ? err.message : "Não foi possível confirmar a reversão da sessão.");
+    } finally {
+      setClearingCompletedSession(false);
     }
   };
 
@@ -2765,6 +2739,7 @@ const TratamentosUnidade: React.FC = () => {
                               variant="outline"
                               className="h-7 text-xs border-destructive text-destructive hover:bg-destructive/10 shrink-0"
                               onClick={() => handleClearRealizada(s)}
+                              disabled={clearingCompletedSession}
                             >
                               <Eraser className="w-3 h-3 mr-1" /> Limpar
                             </Button>

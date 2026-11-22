@@ -158,6 +158,21 @@ export const treatmentService = {
     return data || [];
   },
 
+  async revertCompletedSession(sessionId: string, reason: string): Promise<void> {
+    const justification = reason.trim();
+    if (!justification) throw new Error("Informe a justificativa clínica.");
+
+    const { data, error } = await supabase.rpc("revert_completed_treatment_session", {
+      p_session_id: sessionId,
+      p_justificativa: justification,
+    });
+    if (error?.code) throw new Error(error.message);
+    if (error || !data || typeof data !== "object" || Array.isArray(data)
+      || data.success !== true || data.session_id !== sessionId) {
+      throw new Error("O banco não confirmou a reversão. Confira o ciclo antes de tentar novamente.");
+    }
+  },
+
   async registerCompletedSession(input: RegisterCompletedSessionInput): Promise<RegisterCompletedSessionResult> {
     if (!['em_andamento', 'ativo'].includes(input.cycle.status)) {
       throw new Error('O ciclo não está ativo para registrar sessões.');

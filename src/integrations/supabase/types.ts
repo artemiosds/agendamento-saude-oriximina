@@ -4922,6 +4922,10 @@ export type Database = {
         Args: { p_paciente_id: string }
         Returns: undefined
       }
+      revert_completed_treatment_session: {
+        Args: { p_justificativa: string; p_session_id: string }
+        Returns: Json
+      }
       resolve_form_template: {
         Args: {
           p_form_slug: string
