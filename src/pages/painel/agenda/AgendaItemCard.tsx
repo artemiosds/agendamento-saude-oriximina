@@ -242,7 +242,7 @@ const AgendaItemCardBase: React.FC<AgendaItemCardProps> = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {canViewClinical && ag.pacienteId && <PassaporteClinico patientId={ag.pacienteId} professionalId={user.id} profession={user.profissao || ""} enabled />}
+          {canViewClinical && ag.pacienteId && <PassaporteClinico patientId={ag.pacienteId} professionalId={user.id} profession={user.profissao || ""} enabled onOpenChange={open => onOverlayChange?.(ag.id, open)} />}
           <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
             {lastAppt && isProfissional && (
               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">

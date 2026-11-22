@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -10,8 +10,29 @@ import { todayLocalStr } from "@/lib/utils";
 import { strictSpecialtyOf } from "@/lib/localizarVagas";
 
 /** Resumo clínico sob demanda. O banco aplica as políticas de leitura existentes. */
-export default function PassaporteClinico({ patientId, professionalId, profession, enabled }: { patientId: string; professionalId: string; profession: string; enabled: boolean }) {
+export default function PassaporteClinico({ patientId, professionalId, profession, enabled, onOpenChange }: {
+  patientId: string;
+  professionalId: string;
+  profession: string;
+  enabled: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+
+  useEffect(() => () => onOpenChangeRef.current?.(false), []);
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen) {
+      // Keep a nested popover inside the enclosing modal's focus boundary.
+      setPortalContainer(triggerRef.current?.closest<HTMLElement>('[role="dialog"]') || null);
+    }
+    setOpen(nextOpen);
+    onOpenChangeRef.current?.(nextOpen);
+  }
   const { data, error, isPending } = useQuery({
     queryKey: ["passaporte-clinico", patientId, professionalId, profession],
     enabled: enabled && open && !!patientId,
@@ -70,9 +91,14 @@ export default function PassaporteClinico({ patientId, professionalId, professio
   });
 
   if (!enabled || !patientId) return null;
-  return <Popover open={open} onOpenChange={setOpen}>
-    <PopoverTrigger asChild><Button type="button" size="sm" variant="outline" aria-label="Abrir passaporte clínico do paciente"><IdCard className="w-4 h-4 mr-1" /> Passaporte clínico</Button></PopoverTrigger>
-    <PopoverContent align="start" className="w-[min(92vw,24rem)] max-h-[70vh] overflow-y-auto space-y-3 text-sm">
+  return <Popover open={open} onOpenChange={handleOpenChange}>
+    <PopoverTrigger asChild><Button ref={triggerRef} type="button" size="sm" variant="outline" aria-label="Abrir passaporte clínico do paciente"><IdCard className="w-4 h-4 mr-1" /> Passaporte clínico</Button></PopoverTrigger>
+    <PopoverContent
+      portalContainer={portalContainer}
+      onCloseAutoFocus={event => {
+        if (!triggerRef.current?.isConnected) event.preventDefault();
+      }}
+      align="start" className="w-[min(92vw,24rem)] max-h-[70vh] overflow-y-auto space-y-3 text-sm">
       <h3 className="font-semibold">Resumo clínico · {data?.patient.nome || "Paciente"}</h3>
       {isPending ? <p>Carregando informações autorizadas…</p> : error ? <p role="status" className="text-destructive">Não foi possível confirmar os dados clínicos.</p> : data && <>
         <div className="flex gap-1 flex-wrap" aria-label="Condições registradas">
