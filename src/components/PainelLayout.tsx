@@ -65,7 +65,7 @@ const menuGroups: MenuGroup[] = [
     title: 'Atendimento Clínico',
     icon: Stethoscope,
     items: [
-      { to: '/painel/prontuario', label: 'Consultório', icon: Stethoscope, modulo: 'prontuario' },
+      { to: '/painel/prontuario', label: 'Prontuários', icon: Stethoscope, modulo: 'prontuario' },
       { to: '/painel/tratamentos', label: 'Gestão de Tratamentos', icon: Activity, modulo: 'tratamento' },
       { to: '/painel/triagem', label: 'Triagem', icon: HeartPulse, modulo: 'triagem' },
       { to: '/painel/atendimentos', label: 'Atendimentos', icon: ClipboardList, modulo: 'atendimento' },

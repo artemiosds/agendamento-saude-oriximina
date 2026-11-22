@@ -78,14 +78,14 @@ describe('jornadas do menu lateral', () => {
     const menu = mount('/painel/prontuario');
     const clinical = menu.getByRole('button', { name: 'Atendimento Clínico' });
     expect(screen.getByText('Master de unidade')).toBeInTheDocument();
-    expect(menu.getByRole('link', { name: 'Consultório' })).toHaveAttribute('aria-current', 'page');
+    expect(menu.getByRole('link', { name: 'Prontuários' })).toHaveAttribute('aria-current', 'page');
     fireEvent.click(clinical);
     expect(clinical).toHaveAttribute('aria-expanded', 'false');
-    expect(menu.queryByRole('link', { name: 'Consultório' })).toBeNull();
+    expect(menu.queryByRole('link', { name: 'Prontuários' })).toBeNull();
 
     fireEvent.click(screen.getByRole('link', { name: 'Abrir prontuário pelo atalho' }));
     expect(clinical).toHaveAttribute('aria-expanded', 'true');
-    expect(menu.getByRole('link', { name: 'Consultório' })).toHaveAttribute('aria-current', 'page');
+    expect(menu.getByRole('link', { name: 'Prontuários' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('mostra somente os grupos com páginas liberadas por permissão e licença', () => {
