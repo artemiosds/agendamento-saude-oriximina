@@ -1,4 +1,4 @@
-import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo } from './bpaSigtapCatalog';
+import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo, getCidFromBpaCatalog } from './bpaSigtapCatalog';
 import { procedureService } from '@/services/procedureService';
 
 export interface ProcedureCidOption { codigo: string; descricao: string }
@@ -40,7 +40,9 @@ export async function resolveManualProcedureCid(procedure: string, competencia: 
   if (options.length) throw new Error('Este procedimento possui lista restritiva. Selecione um dos CIDs relacionados.');
   const code = normalizeProcedureCid(typedCode);
   if (!/^[A-Z][0-9]{2}[A-Z0-9]?$/.test(code)) throw new Error('Informe um código CID-10 válido, por exemplo Z000 ou Z00.0.');
-  const cid = await procedureService.getCidByCode(code);
+  const localCid = await procedureService.getCidByCode(code);
+  // The local table may contain only a subset; absence there is not an invalid CID.
+  const cid = localCid || getCidFromBpaCatalog(await loadBpaSigtapCatalog(competencia), code);
   if (!cid) throw new Error(`CID ${code} não encontrado no catálogo CID-10. Confira o código.`);
   return cid;
 }

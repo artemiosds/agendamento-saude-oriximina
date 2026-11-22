@@ -21,6 +21,8 @@ interface BpaSigtapFiles {
   procedimentosLayout?: string;
   servicos?: string;
   cids?: string;
+  /** Dicionário tb_cid, distinto da relação restritiva procedimento × CID. */
+  cidDefinitions?: string;
   detalhes?: string;
 }
 
@@ -31,6 +33,17 @@ interface LayoutField {
 
 const GITHUB_TABLES = "https://api.github.com/repos/RenatoKR/SIGTAP/contents/tabelas";
 const cache = new Map<string, Promise<BpaSigtapCatalog>>();
+const cidDefinitionsByCatalog = new WeakMap<BpaSigtapCatalog, Map<string, string>>();
+
+/** Exact fallback for a partial local CID table, using the same SIGTAP archive. */
+export function getCidFromBpaCatalog(catalog: BpaSigtapCatalog, value: string): { codigo: string; descricao: string } | null {
+  const code = value.trim().toUpperCase().replace(/\./g, '');
+  if (!/^[A-Z][0-9]{2}[A-Z0-9]?$/.test(code)) return null;
+  const dictionary = cidDefinitionsByCatalog.get(catalog);
+  if (!dictionary?.size) throw new Error('O dicionário CID-10 do SIGTAP está indisponível. Tente novamente; os CIDs já registrados foram preservados.');
+  const description = dictionary.get(code);
+  return description ? { codigo: code, descricao: description } : null;
+}
 
 const parseLayout = (layout?: string): Map<string, LayoutField> => {
   const fields = new Map<string, LayoutField>();
@@ -152,6 +165,16 @@ export function parseBpaSigtapCatalog(
   }
 
   if (catalog.size === 0) throw new Error(`Tabela SIGTAP ${competencia} vazia ou incompatível`);
+  if (files.cidDefinitions != null) {
+    const dictionary = new Map<string, string>();
+    for (const line of files.cidDefinitions.split(/\r?\n/)) {
+      if (line.length < 104) continue;
+      const code = line.slice(0, 4).trim().toUpperCase();
+      const description = line.slice(4, 104).trim();
+      if (/^[A-Z][0-9]{2}[A-Z0-9]?$/.test(code) && description) dictionary.set(code, description);
+    }
+    cidDefinitionsByCatalog.set(catalog, dictionary);
+  }
   return catalog;
 }
 
@@ -207,6 +230,10 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
     const detalhes = detalheEntry
       ? new TextDecoder("iso-8859-1").decode(await detalheEntry.async("uint8array"))
       : undefined;
+    const cidEntry = find("tb_cid.txt");
+    const cidDefinitions = cidEntry
+      ? new TextDecoder("iso-8859-1").decode(await cidEntry.async("uint8array"))
+      : undefined;
 
     const decoded = await Promise.all(
       entries.map(async (entry) =>
@@ -222,6 +249,7 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
       ocupacoes,
       servicos,
       cids,
+      cidDefinitions,
       detalhes,
     });
     competenciaUsadaPorCatalogo.set(catalog, competenciaUsada);

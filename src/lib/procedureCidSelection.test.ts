@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock('./bpaSigtapCatalog', () => ({ loadBpaSigtapCatalog: vi.fn(), getCompetenciaReferenciaCatalogo: vi.fn() }));
+vi.mock('./bpaSigtapCatalog', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./bpaSigtapCatalog')>(),
+  loadBpaSigtapCatalog: vi.fn(), getCompetenciaReferenciaCatalogo: vi.fn(),
+}));
 vi.mock('@/services/procedureService', () => ({ procedureService: { getCidsForProcedure: vi.fn(), getCidByCode: vi.fn() } }));
-import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo } from './bpaSigtapCatalog';
+import { loadBpaSigtapCatalog, getCompetenciaReferenciaCatalogo, parseBpaSigtapCatalog } from './bpaSigtapCatalog';
 import { procedureService } from '@/services/procedureService';
 import { loadProcedureCidOptions, partitionProcedureCids, resolveManualProcedureCid } from './procedureCidSelection';
 
@@ -43,7 +46,10 @@ describe('Vínculo CID × procedimento por competência', () => {
 
 describe('CID manual somente sem lista restritiva', () => {
  beforeEach(() => {
-  vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(new Map([['0301010048', { cids: new Set() }]]) as any);
+  vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(parseBpaSigtapCatalog('202610', {
+   procedimentos: '0301010048'.padEnd(330, ' ') + '202610', registros: '', ocupacoes: '',
+   cidDefinitions: 'Z000' + 'Exame médico geral'.padEnd(100, ' '),
+  }));
   vi.mocked(procedureService.getCidsForProcedure).mockResolvedValue([]);
   vi.mocked(procedureService.getCidByCode).mockResolvedValue({codigo:'Z000',descricao:'Exame médico geral'});
  });
@@ -55,6 +61,15 @@ describe('CID manual somente sem lista restritiva', () => {
   vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(new Map([['0303190019',{cids:new Set(['G800'])}]]) as any);
   await expect(resolveManualProcedureCid('0303190019','202610','F840')).rejects.toThrow('lista restritiva');
   expect(procedureService.getCidByCode).not.toHaveBeenCalled();
+ });
+ it('aceita Z000 do dicionário do SIGTAP quando a tabela local está incompleta', async () => {
+  vi.mocked(procedureService.getCidByCode).mockResolvedValue(null);
+  expect(await resolveManualProcedureCid('0301010048','202610','z00.0')).toEqual({codigo:'Z000',descricao:'Exame médico geral'});
+ });
+ it('não chama ausência de dicionário de código inexistente', async () => {
+  vi.mocked(loadBpaSigtapCatalog).mockResolvedValue(new Map([['0301010048',{cids:new Set()}]]) as any);
+  vi.mocked(procedureService.getCidByCode).mockResolvedValue(null);
+  await expect(resolveManualProcedureCid('0301010048','202610','Z000')).rejects.toThrow('dicionário CID-10 do SIGTAP está indisponível');
  });
  it('não confunde falha na consulta com lista vazia', async () => {
   vi.mocked(loadBpaSigtapCatalog).mockRejectedValue(new Error('Catálogo indisponível'));
