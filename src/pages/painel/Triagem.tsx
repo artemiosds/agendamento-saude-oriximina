@@ -1319,9 +1319,13 @@ const Triagem: React.FC = () => {
               <Button variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving || !vitalValidation.valid}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Seguir sem Enfermagem
               </Button>
-              <Button onClick={() => confirmarTriagem(false, true)} disabled={saving || !vitalValidation.valid}>
+              <Button variant="outline" onClick={() => confirmarTriagem(false, true)} disabled={saving || !vitalValidation.valid}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FastForward className="mr-2 h-4 w-4" />}
                 Concluir e preparar próximo
+              </Button>
+              <Button onClick={() => confirmarTriagem(true)} disabled={saving || !vitalValidation.valid}
+                title="Concluir a triagem e encaminhar o paciente para avaliação de enfermagem">
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <CheckCircle className="mr-2 h-4 w-4" /> Finalizar Triagem
               </Button>
             </div>
           </div>

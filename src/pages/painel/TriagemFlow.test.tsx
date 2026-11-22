@@ -37,6 +37,8 @@ describe('Triagem: bloqueio de valores antes da requisição', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Peso inválido. Informe um valor entre 0,5 kg e 400 kg.');
     const confirm = screen.getByRole('button', { name: 'Seguir sem Enfermagem' });
     expect(confirm).toBeDisabled(); expect(screen.getByRole('button', { name: 'Salvar Rascunho' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Finalizar Triagem' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Concluir e preparar próximo' })).toBeDisabled();
     fireEvent.click(confirm); expect(f.rpc).toHaveBeenCalledTimes(rpcCalls); expect(f.from).toHaveBeenCalledTimes(calls);
   });
   it('aceita vírgula decimal e recupera o botão depois da correção', async () => {
@@ -97,5 +99,48 @@ describe('Triagem: chamada do paciente dentro do modal', () => {
       defaultLocal: 'Sala de Triagem',
       buttonLabel: 'Chamar Paciente',
     }));
+  });
+});
+
+describe('Triagem: finalização normal e preparação opcional do próximo', () => {
+  it('restaura a finalização com enfermagem sem preparar nem chamar o próximo', async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '63' } });
+    f.rpc.mockResolvedValueOnce({ data: { already_processed: false, status: 'aguardando_enfermagem',
+      agendamento: { id: 'ag1', status: 'aguardando_enfermagem' }, fila: { id: 'ag1' } }, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Triagem' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(f.rpc).toHaveBeenLastCalledWith('concluir_triagem_atendimento', expect.objectContaining({
+      p_encaminhar_enfermagem: true, p_dados_triagem: expect.objectContaining({ peso: 63 }),
+    }));
+    expect(f.apply).toHaveBeenCalledWith(expect.objectContaining({ status: 'aguardando_enfermagem' }));
+    expect(screen.queryByText('Próximo paciente na fila de triagem')).not.toBeInTheDocument();
+    expect(f.update).not.toHaveBeenCalled();
+    expect(f.toast.success).toHaveBeenCalledWith('Encaminhado para enfermagem!');
+  });
+
+  it('mantém o botão opcional de preparar próximo e o encaminhamento direto existente', async () => {
+    await open();
+    f.rpc.mockResolvedValueOnce({ data: { already_processed: false, status: 'apto_atendimento',
+      agendamento: { id: 'ag1', status: 'apto_atendimento' }, fila: { id: 'ag1' } }, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Concluir e preparar próximo' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(f.rpc).toHaveBeenLastCalledWith('concluir_triagem_atendimento', expect.objectContaining({
+      p_encaminhar_enfermagem: false,
+    }));
+    expect(f.toast.info).toHaveBeenCalledWith('Triagem concluída. Não há outro paciente aguardando na fila.');
+  });
+
+  it('preserva a ficha e permite tentar a finalização normal novamente após falha', async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '63' } });
+    f.rpc.mockResolvedValueOnce({ data: null, error: { code: '40001', message: 'Atualize e tente novamente' } });
+    f.from.mockReturnValueOnce({ insert: async () => ({ error: null }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar Triagem' }));
+    await waitFor(() => expect(f.toast.error).toHaveBeenCalledWith('Atualize e tente novamente'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText('Peso (kg)')).toHaveValue('63');
+    expect(screen.getByRole('button', { name: 'Finalizar Triagem' })).toBeEnabled();
+    expect(f.update).not.toHaveBeenCalled();
   });
 });
