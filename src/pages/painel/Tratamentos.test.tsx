@@ -1,13 +1,22 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import Tratamentos from "./Tratamentos";
 
-const { user, getCycles, getSessions, getCycleAppointments } = vi.hoisted(() => ({
+const { user, getCycles, getSessions, getCycleAppointments, updateSession, sessionEq, sessionNeq, latestSession, recalcAbsence, logAction, toast } = vi.hoisted(() => ({
   user: { id: "prof-1", role: "profissional", unidadeId: "unit-1", usuario: "prof.teste" },
   getCycles: vi.fn(),
   getSessions: vi.fn(),
   getCycleAppointments: vi.fn(),
+  updateSession: vi.fn(),
+  sessionEq: vi.fn(),
+  sessionNeq: vi.fn(),
+  latestSession: vi.fn(),
+  recalcAbsence: vi.fn(),
+  logAction: vi.fn(),
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
+
+vi.mock("sonner", () => ({ toast }));
 
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user }) }));
 vi.mock("@/contexts/PermissionsContext", () => ({ usePermissions: () => ({ can: () => user.role === "master" }) }));
@@ -21,7 +30,7 @@ vi.mock("@/contexts/OperacionalContext", () => {
   const staff = [{ id: "prof-1", nome: "Profissional de teste" }];
   const data = {
     unidades: units, funcionarios: staff, salas: [], disponibilidades: [], bloqueios: [],
-    getAvailableDates: () => [], getAvailableSlots: () => [], getTurnoInfo: () => [],
+    getAvailableDates: () => [], getAvailableSlots: () => [], getTurnoInfo: () => [], logAction,
   };
   return { useOperacional: () => data };
 });
@@ -48,14 +57,16 @@ vi.mock("@/services/treatmentAppointmentRecovery", () => ({
 }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    rpc: getCycles,
+    rpc: (name: string, params: unknown) => name === "atualizar_status_falta" ? recalcAbsence(params) : getCycles(name, params),
     from: (table: string) => ({
+      update: updateSession,
       select: () => {
         const query = {
           eq: () => query,
           in: () => query,
           not: () => query,
           order: () => query,
+          maybeSingle: latestSession,
           then: (resolve: (result: { data: unknown[]; error: null }) => void) =>
             resolve({ data: table === "agendamentos" ? getCycleAppointments() : [], error: null }),
         };
@@ -92,6 +103,7 @@ const sessions = [
 }));
 
 beforeEach(() => {
+  vi.clearAllMocks();
   user.role = "profissional";
   getCycles.mockResolvedValue({ data: { cycles: [cycle], total: 1 }, error: null });
   getSessions.mockResolvedValue([
@@ -107,6 +119,92 @@ beforeEach(() => {
     profissional_id: cycle.professional_id,
     unidade_id: cycle.unit_id,
   })));
+  const updateQuery = { eq: sessionEq, neq: sessionNeq };
+  updateSession.mockReturnValue(updateQuery);
+  sessionEq.mockReturnValue(updateQuery);
+  sessionNeq.mockResolvedValue({ count: 1, error: null });
+  latestSession.mockResolvedValue({ data: { status: "realizada" }, error: null });
+  recalcAbsence.mockResolvedValue({ data: { ok: true }, error: null });
+});
+
+async function submitAbsence() {
+  await openCycle();
+  fireEvent.click(screen.getByRole("button", { name: "Lançar falta na sessão 1" }));
+  const dialog = screen.getByRole("dialog", { name: "Lançar Falta" });
+  fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "Enter" });
+  fireEvent.click(await screen.findByRole("option", { name: "Justificada" }));
+  fireEvent.change(within(dialog).getByPlaceholderText(/Motivo da falta/), {
+    target: { value: "Observação de teste" },
+  });
+  await act(async () => {
+    fireEvent.click(within(dialog).getByRole("button", { name: "Registrar" }));
+  });
+  return dialog;
+}
+
+describe("Lançar falta com confirmação do banco", () => {
+  const scrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  beforeAll(() => Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() }));
+  afterAll(() => {
+    if (scrollIntoView) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", scrollIntoView);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  });
+
+  it("mantém o formulário aberto quando a atualização é rejeitada", async () => {
+    sessionNeq.mockResolvedValue({ count: null, error: { code: "42501", message: "Acesso negado" } });
+    const dialog = await submitAbsence();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(within(dialog).getByPlaceholderText(/Motivo da falta/)).toHaveValue("Observação de teste");
+    expect(recalcAbsence).not.toHaveBeenCalled();
+    expect(logAction).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("preserva uma evolução gravada em outro terminal e recarrega o ciclo", async () => {
+    sessionNeq.mockResolvedValue({ count: 0, error: null });
+    await submitAbsence();
+
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
+      "Esta sessão já foi finalizada em outro terminal e não pode ser sobrescrita como falta.",
+    ));
+    expect(updateSession).toHaveBeenCalledWith(expect.objectContaining({ status: "paciente_faltou" }), { count: "exact" });
+    expect(sessionEq.mock.calls).toEqual([["id", "session-1"], ["status", "agendada"]]);
+    expect(sessionNeq).toHaveBeenCalledWith("status", "realizada");
+    await waitFor(() => expect(getSessions).toHaveBeenCalledTimes(2));
+    expect(recalcAbsence).not.toHaveBeenCalled();
+    expect(logAction).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("não confirma a falta se a conexão cai antes da resposta do banco", async () => {
+    sessionNeq.mockRejectedValueOnce(new TypeError("Conexão interrompida"));
+    const dialog = await submitAbsence();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(dialog).toBeInTheDocument();
+    expect(recalcAbsence).not.toHaveBeenCalled();
+    expect(logAction).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("calcula o status de faltas e mostra sucesso após a confirmação", async () => {
+    await submitAbsence();
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Sessão 1/8 registrada!"));
+    expect(recalcAbsence).toHaveBeenCalledWith({ p_paciente_id: "patient-1", p_profissional_id: null });
+    expect(logAction).toHaveBeenCalledWith(expect.objectContaining({ acao: "registrar_sessao", entidadeId: "session-1" }));
+  });
+
+  it("avisa se a falta foi gravada e o recálculo foi rejeitado", async () => {
+    recalcAbsence.mockResolvedValue({ data: null, error: { code: "42501" } });
+    await submitAbsence();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      "A falta foi gravada, mas não foi possível confirmar a atualização do status de faltas do paciente.",
+    ));
+    expect(toast.success).not.toHaveBeenCalled();
+  });
 });
 
 async function openCycle() {

@@ -82,6 +82,7 @@ import {
 } from "@/lib/sigtapClinicalValidation";
 import { resolveProntuarioProfessional } from "@/lib/prontuarioProfessional";
 import { syncProntuarioProcedimentos, type ProntuarioProcedureLink } from "@/lib/prontuarioProcedurePersistence";
+import { deleteProntuario } from "@/lib/prontuarioDeletion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
@@ -3583,8 +3584,7 @@ const ProntuarioPage: React.FC = () => {
 
   const handleDelete = async (p: ProntuarioDB) => {
     try {
-      await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", p.id);
-      await (supabase as any).from("prontuarios").delete().eq("id", p.id);
+      await deleteProntuario(p.id);
       await logAction({
         acao: "excluir",
         entidade: "prontuario",
@@ -3592,15 +3592,17 @@ const ProntuarioPage: React.FC = () => {
         detalhes: { paciente: p.paciente_nome, profissional: p.profissional_nome, data: p.data_atendimento },
         user,
       });
-      // Optimistic local update + cache invalidation to stay in sync with React Query
+      // A exclusão já foi confirmada pelo banco.
       queryClient.setQueryData<ProntuarioDB[]>(prontuariosQueryKey, (prev) =>
         (prev || []).filter((pr) => pr.id !== p.id),
       );
+      queryClient.removeQueries({ queryKey: ["prontuario", p.id], exact: true });
       queryClient.invalidateQueries({ queryKey: prontuariosQueryKey });
+      void queryClient.invalidateQueries({ queryKey: ["evolucao-clinica", p.paciente_id] });
       toast.success("Prontuário excluído!");
     } catch (err) {
       console.error("Error deleting:", err);
-      toast.error("Erro ao excluir prontuário.");
+      toast.error("Não foi possível confirmar a exclusão do prontuário.");
     }
   };
 

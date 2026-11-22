@@ -1199,25 +1199,22 @@ const TratamentosUnidade: React.FC = () => {
       return;
     }
 
-    if (registeringSession) return;
     setRegisteringSession(true);
-    
-    // Final duplicity check for the session itself
-    const { data: freshSession, error: freshErr } = await supabase
-      .from("treatment_sessions")
-      .select("status")
-      .eq("id", nextSession.id)
-      .single();
-    
-    if (freshErr || (freshSession && freshSession.status === "realizada")) {
-      toast.error("Esta sessão já foi registrada recentemente.");
-      setRegisteringSession(false);
-      return;
-    }
 
     try {
-
+      let absenceRecalculationFailed = false;
       if (newSession.status === "realizada") {
+        const { data: freshSession, error: freshErr } = await supabase
+          .from("treatment_sessions")
+          .select("status")
+          .eq("id", nextSession.id)
+          .single();
+        if (freshErr) throw freshErr;
+        if (freshSession.status === "realizada") {
+          toast.error("Esta sessão já foi registrada recentemente.");
+          return;
+        }
+
         const soapPayload = normalizeSoapPayload(soapNotes);
         const result = await treatmentService.registerCompletedSession({
           cycle: selectedCycle,
@@ -1232,7 +1229,7 @@ const TratamentosUnidade: React.FC = () => {
           toast.info("Todas as sessões previstas foram registradas. Avalie se deve solicitar extensão ou dar alta.");
         }
       } else {
-        await supabase
+        const { error: updSessionErr, count } = await supabase
           .from("treatment_sessions")
           .update({
             status: newSession.status,
@@ -1241,19 +1238,44 @@ const TratamentosUnidade: React.FC = () => {
             absence_type: newSession.status === "paciente_faltou" ? newSession.absence_type : null,
             tipo_falta: newSession.status === "paciente_faltou" ? (newSession.absence_type || 'injustificada') : null,
             falta_justificativa: newSession.status === "paciente_faltou" ? (newSession.clinical_notes || null) : null,
-          } as any)
-          .eq("id", nextSession.id);
+          }, { count: "exact" })
+          .eq("id", nextSession.id)
+          .eq("status", nextSession.status)
+          .neq("status", "realizada");
+        if (updSessionErr) throw updSessionErr;
+        if (count === 0) {
+          const { data: currentSession } = await supabase
+            .from("treatment_sessions")
+            .select("status")
+            .eq("id", nextSession.id)
+            .maybeSingle();
+          if (currentSession?.status === "realizada") {
+            toast.warning(newSession.status === "paciente_faltou"
+              ? "Esta sessão já foi finalizada em outro terminal e não pode ser sobrescrita como falta."
+              : "Esta sessão já foi finalizada em outro terminal e não pode ser alterada.");
+          } else {
+            toast.warning("A sessão foi alterada ou está indisponível. Confira o ciclo atualizado antes de tentar novamente.");
+          }
+          await Promise.all([loadSessionsForCycle(selectedCycle, true), loadData(true)]);
+          return;
+        }
+        if (count !== 1) throw new Error("O banco não confirmou a atualização da sessão.");
 
         // Recalcula status do paciente
         if (newSession.status === "paciente_faltou") {
           try {
-            await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: nextSession.patient_id });
-          } catch (err) {
-            console.error('[Faltosos] Erro na regra de faltas/exceção', {
-              pacienteId: nextSession.patient_id,
-              acao: 'atualizar_status_falta_tratamento',
-              errorMessage: (err as any)?.message,
+            // O argumento explícito seleciona a sobrecarga de dois parâmetros.
+            const { data, error } = await supabase.rpc("atualizar_status_falta", {
+              p_paciente_id: nextSession.patient_id,
+              p_profissional_id: null,
             });
+            if (error) throw error;
+            if (!data || typeof data !== "object" || Array.isArray(data) || data.ok !== true) {
+              throw new Error("O banco não confirmou o recálculo do status de faltas.");
+            }
+          } catch (err) {
+            absenceRecalculationFailed = true;
+            console.error("[Faltosos] Não foi possível recalcular o status após lançar falta:", err);
           }
         }
       }
@@ -1277,11 +1299,15 @@ const TratamentosUnidade: React.FC = () => {
         loadData(true),
       ]);
 
-      toast.success(
-        newSession.status === "realizada"
-          ? `✅ Sessão ${nextSession.session_number} registrada com sucesso!`
-          : `Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`,
-      );
+      if (absenceRecalculationFailed) {
+        toast.error("A falta foi gravada, mas não foi possível confirmar a atualização do status de faltas do paciente.");
+      } else {
+        toast.success(
+          newSession.status === "realizada"
+            ? `✅ Sessão ${nextSession.session_number} registrada com sucesso!`
+            : `Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`,
+        );
+      }
       setSessionOpen(false);
       setSelectedSessionForRegister(null);
       setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
