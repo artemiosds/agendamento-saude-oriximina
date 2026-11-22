@@ -103,20 +103,20 @@ describe('Triagem: chamada do paciente dentro do modal', () => {
 });
 
 describe('Triagem: finalização normal e preparação opcional do próximo', () => {
-  it('restaura a finalização com enfermagem sem preparar nem chamar o próximo', async () => {
+  it('finaliza liberando para o profissional sem preparar nem chamar o próximo', async () => {
     await open();
     fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '63' } });
-    f.rpc.mockResolvedValueOnce({ data: { already_processed: false, status: 'aguardando_enfermagem',
-      agendamento: { id: 'ag1', status: 'aguardando_enfermagem' }, fila: { id: 'ag1' } }, error: null });
+    f.rpc.mockResolvedValueOnce({ data: { already_processed: false, status: 'apto_atendimento',
+      agendamento: { id: 'ag1', status: 'apto_atendimento' }, fila: { id: 'ag1' } }, error: null });
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar Triagem' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(f.rpc).toHaveBeenLastCalledWith('concluir_triagem_atendimento', expect.objectContaining({
-      p_encaminhar_enfermagem: true, p_dados_triagem: expect.objectContaining({ peso: 63 }),
+      p_encaminhar_enfermagem: false, p_dados_triagem: expect.objectContaining({ peso: 63 }),
     }));
-    expect(f.apply).toHaveBeenCalledWith(expect.objectContaining({ status: 'aguardando_enfermagem' }));
+    expect(f.apply).toHaveBeenCalledWith(expect.objectContaining({ status: 'apto_atendimento' }));
     expect(screen.queryByText('Próximo paciente na fila de triagem')).not.toBeInTheDocument();
     expect(f.update).not.toHaveBeenCalled();
-    expect(f.toast.success).toHaveBeenCalledWith('Encaminhado para enfermagem!');
+    expect(f.toast.success).toHaveBeenCalledWith('Encaminhado diretamente!');
   });
 
   it('mantém o botão opcional de preparar próximo e o encaminhamento direto existente', async () => {
