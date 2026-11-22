@@ -4394,16 +4394,6 @@ export type Database = {
       }
     }
     Functions: {
-      complete_clinical_attendance: {
-        Args: {
-          p_agendamento_id: string
-          p_hora_fim: string
-          p_duracao_minutos: number
-          p_unidade_id: string
-          p_profissional_id: string
-        }
-        Returns: Json
-      }
       align_treatment_session_to_agenda: {
         Args: {
           p_appointment_id: string
@@ -4506,6 +4496,16 @@ export type Database = {
           p_expected_date: string
           p_reason: string
           p_session_id: string
+        }
+        Returns: Json
+      }
+      complete_clinical_attendance: {
+        Args: {
+          p_agendamento_id: string
+          p_duracao_minutos: number
+          p_hora_fim: string
+          p_profissional_id: string
+          p_unidade_id: string
         }
         Returns: Json
       }
@@ -4664,17 +4664,14 @@ export type Database = {
         }[]
       }
       get_atendimentos_pendentes_master_page: {
-        Args: { p_periodo: string; p_pagina: number }
+        Args: { p_pagina: number; p_periodo: string }
         Returns: Json
-      }
-      regularizar_atendimentos_anteriores_master: {
-        Args: { p_justificativa: string; p_data_referencia: string; p_total_confirmado: number }
-        Returns: number
       }
       get_procedures_for_cid: {
         Args: { lim?: number; p_cid: string }
         Returns: Json
       }
+      get_system_monitoring_usage: { Args: never; Returns: Json }
       get_tables_info: {
         Args: never
         Returns: {
@@ -4801,6 +4798,10 @@ export type Database = {
         Returns: Json
       }
       list_profession_careness_setup: { Args: never; Returns: Json }
+      listar_escalas_personalizadas: {
+        Args: { p_fim: string; p_inicio: string }
+        Returns: Json
+      }
       manage_external_quota: {
         Args: {
           p_action: string
@@ -4848,6 +4849,14 @@ export type Database = {
         }
         Returns: Json
       }
+      regularizar_atendimentos_anteriores_master: {
+        Args: {
+          p_data_referencia: string
+          p_justificativa: string
+          p_total_confirmado: number
+        }
+        Returns: number
+      }
       release_profession_careness_for_medical_referral: {
         Args: {
           p_patient_id: string
@@ -4864,6 +4873,10 @@ export type Database = {
           p_session_id: string
         }
         Returns: Json
+      }
+      remover_escala_personalizada: {
+        Args: { p_id: string }
+        Returns: undefined
       }
       reschedule_treatment_session: {
         Args: {
@@ -4922,10 +4935,6 @@ export type Database = {
         Args: { p_paciente_id: string }
         Returns: undefined
       }
-      revert_completed_treatment_session: {
-        Args: { p_justificativa: string; p_session_id: string }
-        Returns: Json
-      }
       resolve_form_template: {
         Args: {
           p_form_slug: string
@@ -4944,6 +4953,10 @@ export type Database = {
         }
         Returns: Json
       }
+      revert_completed_treatment_session: {
+        Args: { p_justificativa: string; p_session_id: string }
+        Returns: Json
+      }
       review_treatment_session_date: {
         Args: {
           p_date: string
@@ -4953,6 +4966,33 @@ export type Database = {
         }
         Returns: Json
       }
+      salvar_escala_informativa: {
+        Args: {
+          p_data: string
+          p_fim: string
+          p_inicio: string
+          p_origem?: string
+          p_profissional: string
+          p_sala: string
+          p_semanal: boolean
+          p_unidade: string
+        }
+        Returns: undefined
+      }
+      salvar_escalas_personalizadas: {
+        Args: {
+          p_datas: string[]
+          p_duracao: number
+          p_inicio: string
+          p_local: string
+          p_origem: string
+          p_profissional: string
+          p_semanal: boolean
+          p_setor: string
+          p_unidade: string
+        }
+        Returns: number
+      }
       salvar_rascunho_triagem_atendimento: {
         Args: {
           p_agendamento_id: string
@@ -4960,6 +5000,17 @@ export type Database = {
           p_tecnico_id: string
         }
         Returns: Json
+      }
+      save_availability_group: {
+        Args: {
+          p_data_fim: string
+          p_data_inicio: string
+          p_previous_ids: string[]
+          p_profissional_id: string
+          p_slots: Json
+          p_unidade_id: string
+        }
+        Returns: number
       }
       save_document_template: {
         Args: {
