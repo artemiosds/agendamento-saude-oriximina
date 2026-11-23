@@ -18,6 +18,7 @@ import { normalizeSoapPayload, treatmentService } from "@/services/treatmentServ
 import { createTreatmentSessionOperations, OPTIONAL_TREATMENT_REASON, type TreatmentOperationRpcClient } from "@/services/treatmentSessionOperations";
 import { getSoapOptions, hasDropdownSoap, isMedico, normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
+import { useTreatmentCyclesPageLoad } from "@/hooks/useTreatmentCyclesPageLoad";
 
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
@@ -657,29 +658,15 @@ const TratamentosUnidade: React.FC = () => {
     }
   }, [user, canAgendarSessao]);
 
-  // Primeiro load: com spinner. Re-loads (filtros/busca/paginação): silencioso, sem spinner.
-  const firstLoadRef = React.useRef(true);
-  // Re-load data when pagination or search/filters change
-  useEffect(() => {
-    // Ao mudar qualquer filtro ou termo de busca, voltamos para a página 1
-    // Isso evita ficar em uma página inexistente para o novo filtro
-    const isFirstRender = firstLoadRef.current;
-    
-    if (!isFirstRender) {
-      // Se algum filtro mudou e não estamos na página 1, resetamos
-      // O reset da página disparará este useEffect novamente via dependência currentPage
-      if (currentPage !== 1) {
-        setCurrentPage(1);
-        return; 
-      }
-    }
-    
-    const wasFirst = firstLoadRef.current;
-    firstLoadRef.current = false;
-    // Primeiro load: com spinner. Re-loads (busca/filtros/paginação): silencioso
-    // para não desmontar o input de busca e causar perda de foco a cada tecla.
-    loadData(!wasFirst);
-  }, [filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm, currentPage, loadData]);
+  useTreatmentCyclesPageLoad({
+    page: currentPage,
+    filterScope: JSON.stringify([
+      user?.id, user?.role, user?.unidadeId, user?.usuario, restrictTreatmentUnit,
+      filterProf, filterUnit, filterStatus, integrityOnly, debouncedSearchTerm,
+    ]),
+    setPage: setCurrentPage,
+    loadData,
+  });
 
   // Lazy load sessions when a cycle is selected
   useEffect(() => {
