@@ -17,13 +17,14 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { openPrintDocument } from '@/lib/printLayout';
 import { cn } from '@/lib/utils';
+import { buildEscalaProfissionaisPrint } from '@/lib/escalaProfissionaisPrint';
+import { toast } from 'sonner';
 
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const localDate = (date: string) => new Date(date + 'T12:00:00');
 const clock = (minutes: number) => String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
 const slotKey = (person: string, unit: string, room: string | null | undefined, start: string, end: string) =>
   JSON.stringify([person, unit, room || '', start.slice(0, 5), end.slice(0, 5)]);
-const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const normalized = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
 const EMPTY: RegistroEscala[] = [];
 const recordPlace = (r: RegistroEscala) => r.profissional
@@ -111,6 +112,7 @@ export function Escala() {
   const [snapshot, setSnapshot] = useState<{ key: string; rows: RegistroEscala[]; error?: string }>();
   const [target, setTarget] = useState<Entrada>();
   const [removing, setRemoving] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [removeError, setRemoveError] = useState('');
   const listId = useId();
   const deferredName = useDeferredValue(name);
@@ -279,13 +281,25 @@ export function Escala() {
       quantity + (quantity === 1 ? ' turno em ' : ' turnos em ') + label) };
   }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, canWrite]);
   const period = format(start, 'dd/MM/yyyy') + ' a ' + format(days[days.length - 1], 'dd/MM/yyyy');
-  const print = () => {
-    const entries = calendar.flatMap(({ day, entries }) => entries.map(r => '<tr>' + [format(day, 'dd/MM'), r.person, r.place, r.hours || 'Bloqueado', [r.mode, r.reason].filter(Boolean).join(' · ')].map(v => '<td>' + escape(v) + '</td>').join('') + '</tr>')).join('');
-    const printedPeople = new Set(calendar.flatMap(d => d.entries.map(r => r.personId)));
-    const identity = selected.filter(({ p }) => printedPeople.has(p.id)).map(({ p }) => [p.nome, p.profissao, p.tipoConselho, p.numeroConselho, p.ufConselho, 'CBO ' + (resolveProfessionalCbo(p) || 'não informado'), units.get(p.unidadeId)].filter(Boolean).join(' · ')).map(v => '<p>' + escape(v) + '</p>').join('');
-    const places = [...new Set(calendar.flatMap(d => d.entries.map(r => r.place)))].filter(Boolean).join(', ');
-    void openPrintDocument('ESCALA ' + (monthly ? 'MENSAL' : 'SEMANAL') + ' DE ATENDIMENTO — REDE MUNICIPAL DE SAÚDE',
-      identity + '<table><thead><tr><th>Data</th><th>Profissional</th><th>Local</th><th>Horário</th><th>Tipo / observação</th></tr></thead><tbody>' + entries + '</tbody></table><p>' + escape(summary) + '</p><p>' + escape(placeTotals.join(' · ')) + '</p><div style="display:flex;gap:2em;text-align:center;margin-top:4em;break-inside:avoid"><div style="flex:1;border-top:1px solid">Assinatura do(a) Profissional</div><div style="flex:1;border-top:1px solid">Chefia Imediata / Coordenação SMS</div></div>', { Período: period, Locais: escape(places), Emissão: new Date().toLocaleString('pt-BR') });
+  const print = async () => {
+    if (printing || name !== deferredName || !count || !current || current.error) return;
+    setPrinting(true);
+    try {
+      const document = buildEscalaProfissionaisPrint({
+        calendar, monthly,
+        people: selected.map(({ p }) => ({ id: p.id, profession: p.profissao,
+          registration: [p.tipoConselho, p.numeroConselho, p.ufConselho].filter(Boolean).join(' / '),
+          cbo: resolveProfessionalCbo(p), unit: units.get(p.unidadeId) })),
+        placeFilter: activePlace ? units.get(activePlace.replace(/^unidade:/, '')) || externalPlaces.find(([key]) => key === activePlace)?.[1] || activePlace : 'Todos os locais autorizados',
+        professionalFilter: deferredName, emittedBy: user?.nome || user?.usuario || 'Usuário autenticado',
+      });
+      await openPrintDocument(document.title, document.body, document.meta);
+    } catch (error) {
+      console.error('[Escala] Falha ao preparar impressão:', error);
+      toast.error('Não foi possível preparar a escala. Tente novamente.');
+    } finally {
+      setPrinting(false);
+    }
   };
 
   return <div className="space-y-4">
@@ -293,7 +307,7 @@ export function Escala() {
     <section className="space-y-3 rounded-xl border bg-card p-3 sm:p-4" aria-label="Filtros da escala">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h3 className="font-semibold">Consultar escala</h3><p className="text-xs text-muted-foreground">{period}</p></div>
-        <Button type="button" variant="outline" size="sm" disabled={!count || !current || !!current.error} onClick={print}><Printer className="h-4 w-4" /> Imprimir Escala Oficial (A4)</Button>
+        <Button type="button" variant="outline" size="sm" disabled={printing || name !== deferredName || !count || !current || !!current.error} onClick={() => void print()}><Printer className="h-4 w-4" /> {printing ? 'Preparando escala…' : 'Imprimir Escala Oficial (A4)'}</Button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex items-end gap-1" aria-label="Visão do calendário">
