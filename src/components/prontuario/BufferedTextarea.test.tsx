@@ -22,4 +22,32 @@ describe("texto clínico com buffer externo", () => {
     rerender(<DebouncedTextarea buffered value="SOAP anterior" onChange={onChange} />);
     expect(field.value).toBe("SOAP anterior");
   });
+
+  it("protege texto, foco e seleção contra prop atrasada no modo protegido", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<DebouncedTextarea buffered bufferedResetKey={0} value="Inicial" onChange={onChange} />);
+    const field = screen.getByRole('textbox') as HTMLTextAreaElement;
+    field.focus();
+    fireEvent.change(field, { target: { value: 'Texto clínico mais recente' } });
+    field.setSelectionRange(5, 12);
+    rerender(<DebouncedTextarea buffered bufferedResetKey={0} value="Resposta antiga do servidor" onChange={onChange} />);
+    expect(field).toHaveValue('Texto clínico mais recente');
+    expect(field).toHaveFocus();
+    expect([field.selectionStart, field.selectionEnd]).toEqual([5, 12]);
+    fireEvent.blur(field);
+    rerender(<DebouncedTextarea buffered bufferedResetKey={0} rows={4} value="Resposta antiga do servidor" onChange={onChange} />);
+    expect(field).toHaveValue('Texto clínico mais recente');
+  });
+
+  it("aceita comando explícito e outra ficha mesmo quando o valor externo não mudou", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<DebouncedTextarea buffered bufferedResetKey={0} value="" onChange={onChange} />);
+    const field = screen.getByRole('textbox');
+    fireEvent.change(field, { target: { value: 'Paciente anterior' } });
+    rerender(<DebouncedTextarea buffered bufferedResetKey={1} value="" onChange={onChange} />);
+    expect(field).toHaveValue('');
+    fireEvent.change(field, { target: { value: 'Texto digitado' } });
+    rerender(<DebouncedTextarea buffered bufferedResetKey={2} value="SOAP anterior confirmado" onChange={onChange} />);
+    expect(field).toHaveValue('SOAP anterior confirmado');
+  });
 });

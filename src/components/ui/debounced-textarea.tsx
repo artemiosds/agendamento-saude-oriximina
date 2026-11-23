@@ -7,6 +7,8 @@ interface DebouncedTextareaProps extends Omit<TextareaProps, "onChange"> {
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   debounceMs?: number;
   buffered?: boolean;
+  /** Opt-in guard: only a new key may intentionally replace a pending buffered edit. */
+  bufferedResetKey?: number;
 }
 
 /**
@@ -18,13 +20,14 @@ interface DebouncedTextareaProps extends Omit<TextareaProps, "onChange"> {
  * disparados por qualquer outra mudança causem re-render deste componente.
  */
 const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, DebouncedTextareaProps>(
-  ({ value, onChange, debounceMs = 500, buffered = false, onBlur, ...props }, ref) => {
+  ({ value, onChange, debounceMs = 500, buffered = false, bufferedResetKey, onBlur, ...props }, ref) => {
     const [localValue, setLocalValue] = React.useState(value ?? "");
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const onChangeRef = React.useRef(onChange);
     onChangeRef.current = onChange;
     const lastPropValue = React.useRef(value ?? "");
     const dirtyRef = React.useRef(false);
+    const lastResetKey = React.useRef(bufferedResetKey);
     const pendingChangeRef = React.useRef({ value: value ?? "", name: props.name });
 
     const emitChange = React.useCallback((newValue: string, name?: string) => {
@@ -40,9 +43,19 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
     // rollback visual/stutter quando o formulário pai re-renderizava antes do debounce.
     React.useEffect(() => {
       const nextValue = value ?? "";
-      if (dirtyRef.current && !buffered) {
+      if (lastResetKey.current !== bufferedResetKey) {
+        lastResetKey.current = bufferedResetKey;
+        lastPropValue.current = nextValue;
+        dirtyRef.current = false;
+        setLocalValue(nextValue);
+        return;
+      }
+      if (dirtyRef.current && (!buffered || bufferedResetKey !== undefined)) {
         if (nextValue === localValue) {
           dirtyRef.current = false;
+          lastPropValue.current = nextValue;
+        } else if (buffered) {
+          // An old response must not be applied later when another field gains focus.
           lastPropValue.current = nextValue;
         }
         return;
@@ -52,7 +65,7 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
         dirtyRef.current = false;
         setLocalValue(nextValue);
       }
-    }, [value, localValue, buffered]);
+    }, [value, localValue, buffered, bufferedResetKey]);
 
     const handleChange = React.useCallback(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -118,6 +131,7 @@ const arePropsEqual = (prev: DebouncedTextareaProps, next: DebouncedTextareaProp
     prev.readOnly === next.readOnly &&
     prev.debounceMs === next.debounceMs &&
     prev.buffered === next.buffered &&
+    prev.bufferedResetKey === next.bufferedResetKey &&
     (!next.buffered || prev.onChange === next.onChange) &&
     prev.required === next.required
   );

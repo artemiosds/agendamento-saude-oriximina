@@ -24,6 +24,8 @@ interface SoapFieldsAdaptiveProps {
   profissao: string | undefined;
   values: SoapValues;
   onChange: (field: keyof SoapValues, value: string) => void;
+  onTextChange?: (field: keyof SoapValues, value: string) => void;
+  bufferedResetKey?: number;
   readBufferedValue?: (field: keyof SoapValues) => string | undefined;
   soapErrors: boolean;
   onClearErrors: () => void;
@@ -49,6 +51,8 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
   profissao,
   values,
   onChange,
+  onTextChange,
+  bufferedResetKey,
   readBufferedValue,
   soapErrors,
   onClearErrors,
@@ -65,6 +69,12 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
   const options = React.useMemo(() => getSoapOptions(profissao), [profissao]);
   const isDropdownMode = React.useMemo(() => hasDropdownSoap(profissao), [profissao]);
   const isMedicoMode = React.useMemo(() => isMedico(profissao), [profissao]);
+  const textHandlers = React.useMemo(() => Object.fromEntries(FIELD_LABELS.map(field => [field.key,
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      if (!readBufferedValue) onClearErrors();
+      (onTextChange || onChange)(field.key, event.target.value);
+    },
+  ])) as Record<keyof SoapValues, (event: React.ChangeEvent<HTMLTextAreaElement>) => void>, [onChange, onTextChange, onClearErrors, readBufferedValue]);
 
   const [selectedOptions, setSelectedOptions] = useState<Record<string, Set<string>>>({
     soap_subjetivo: new Set(),
@@ -72,6 +82,8 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
     soap_avaliacao: new Set(),
     soap_plano: new Set(),
   });
+  const selectedOptionsRef = React.useRef(selectedOptions);
+  selectedOptionsRef.current = selectedOptions;
 
   // Track which field is adding a custom option
   const [addingField, setAddingField] = useState<string | null>(null);
@@ -86,30 +98,29 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
     const customOpts = customOptionsForField?.(soapFieldKey) || [];
     const allOptionTexts = [...defaultOpts, ...customOpts];
 
-    setSelectedOptions(prev => {
-      const newSet = new Set(prev[fieldKey]);
-      if (newSet.has(option)) {
-        newSet.delete(option);
-      } else {
-        newSet.add(option);
+    const newSet = new Set(selectedOptionsRef.current[fieldKey]);
+    if (newSet.has(option)) {
+      newSet.delete(option);
+    } else {
+      newSet.add(option);
+    }
+
+    const currentText = readBufferedValue?.(fieldKey) ?? values[fieldKey];
+    const freeTextParts: string[] = [];
+    const lines = currentText.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !allOptionTexts.some(opt => trimmed.startsWith(`• ${opt}`) || trimmed === opt)) {
+        freeTextParts.push(trimmed);
       }
+    }
 
-      const currentText = readBufferedValue?.(fieldKey) ?? values[fieldKey];
-      const freeTextParts: string[] = [];
-      const lines = currentText.split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed && !allOptionTexts.some(opt => trimmed.startsWith(`• ${opt}`) || trimmed === opt)) {
-          freeTextParts.push(trimmed);
-        }
-      }
-
-      const selectedParts = Array.from(newSet).map(o => `• ${o}`);
-      const combined = [...selectedParts, ...freeTextParts].join('\n');
-      onChange(fieldKey, combined);
-
-      return { ...prev, [fieldKey]: newSet };
-    });
+    const selectedParts = Array.from(newSet).map(o => `• ${o}`);
+    const combined = [...selectedParts, ...freeTextParts].join('\n');
+    const next = { ...selectedOptionsRef.current, [fieldKey]: newSet };
+    selectedOptionsRef.current = next;
+    setSelectedOptions(next);
+    onChange(fieldKey, combined);
   };
 
   const handleApplyTemplate = () => {
@@ -130,6 +141,7 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
       onChange(field.key, defaults.map(o => `• ${o}`).join('\n'));
     }
 
+    selectedOptionsRef.current = newSelected;
     setSelectedOptions(newSelected);
   };
 
@@ -301,13 +313,13 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
                 )}
 
                 <DebouncedTextarea
+                  name={field.key}
+                  aria-label={field.label}
                   buffered={Boolean(readBufferedValue)}
+                  bufferedResetKey={bufferedResetKey}
                   rows={isMedicoMode ? 5 : 4}
                   value={values[field.key]}
-                  onChange={(e) => {
-                    if (!readBufferedValue) onClearErrors();
-                    onChange(field.key, e.target.value);
-                  }}
+                  onChange={textHandlers[field.key]}
                   placeholder={showDropdown ? 'Complemento livre (opcional)...' : field.placeholder}
                   className={`min-h-[120px] ${
                     soapErrors && soapEnabled && !values[field.key]?.trim()
