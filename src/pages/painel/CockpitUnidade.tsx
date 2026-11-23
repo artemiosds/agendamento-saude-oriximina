@@ -187,7 +187,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     target.focus({ preventScroll: true });
   };
   const { salas, funcionarios } = useOperacional();
-  const { rows, triage, arrivals, starts = {}, calledAt = {}, lastSyncedAt, online, error, reload } = useCockpitFeed(unit, day);
+  const { rows, triage, arrivals, starts = {}, calledAt = {}, lastSyncedAt, online, connections, error, reload } = useCockpitFeed(unit, day);
+  const [callsOnline, setCallsOnline] = useState(false);
   const [calls, setCalls] = useState<Record<string, ChamadaPaciente>>({});
   useEffect(() => observarChamadas(unit, call => setCalls(previous => {
     const timestamp = Date.parse(call.criadoEm);
@@ -196,7 +197,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     if (previous[key] && Date.parse(previous[key].criadoEm) > Date.parse(call.criadoEm)) return previous;
     const recent = Object.fromEntries(Object.entries(previous).filter(([, a]) => freshCockpitCall(a.criadoEm, Date.now())));
     return { ...recent, [key]: call };
-  })), [unit, day]);
+  }), setCallsOnline), [unit, day]);
 
   const rooms = salas.filter(s => s.unidadeId === unit && s.ativo);
   const consultationIds = new Set(rooms.filter(r => roomSector(r.nome) === 'consultation').map(r => r.id));
@@ -500,10 +501,11 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     }
   }
 
-  const stale = !online || error;
+  const stale = !online || !callsOnline || error;
   const lastReading = lastSyncedAt ? ` · Última leitura ${hourFormat.format(lastSyncedAt)}` : '';
+  const missingSources = [!callsOnline ? 'Chamadas' : '', ...(connections ? Object.entries(connections).filter(([, connected]) => !connected).map(([source]) => ({ agenda: 'Agenda', fila: 'Fila', atendimentos: 'Atendimentos', triagem: 'Triagem' })[source]) : [])].filter(Boolean);
   const syncLabel = error ? 'Dados desatualizados · falha de atualização' : !rows ? 'Carregando a unidade…'
-    : online ? 'Ao vivo · Agenda' : 'Dados desatualizados · reconectando';
+    : online && callsOnline ? 'Ao vivo · Fluxo da unidade' : 'Sincronização parcial · reconectando' + (missingSources.length ? ' · ' + missingSources.join(', ') : '');
   return <div className="planta-page">
     {rows && <dl className="planta-metrics" aria-label="Indicadores da unidade">
       {metrics.map(({ icon: Icon, label, value, hint }) => <div key={label} className="planta-metric">
@@ -549,7 +551,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
           procedures={mapProcedures} waitingCare={waitingCare.length} viewport={viewport} alerts={alertZones} onOpen={theater ? undefined : openZone} />
       </>}
       <footer className="planta-footer">
-        <div className="planta-statuses"><span className="planta-sync" role="status" data-online={!!rows && online && !error}><i aria-hidden="true" />{syncLabel}{lastReading}</span>
+        <div className="planta-statuses"><span className="planta-sync" role="status" data-online={!!rows && !stale}><i aria-hidden="true" />{syncLabel}{lastReading}</span>
           {!theater && unmapped.length > 0 && <button type="button" className="planta-action" onClick={e => openZone('sem-sala', e.currentTarget)}>{unmapped.length} em atendimento sem sala</button>}
           {theater && unmapped.length > 0 && <span>{unmapped.length} em atendimento sem sala</span>}
         </div>

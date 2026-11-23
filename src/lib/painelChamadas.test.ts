@@ -62,3 +62,19 @@ describe('transporte e confirmação da TV', () => {
     expect(mapa.has('prof3|u1')).toBe(false);
   });
 });
+
+it('informa perda do canal ao observador, reconecta sem nova chamada e libera a inscrição ao sair', async () => {
+  const { observarChamadas } = await import('./painelChamadas');
+  const connected=vi.fn(), receive=vi.fn();
+  const stop=observarChamadas('u1',receive,connected);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(connected).toHaveBeenLastCalledWith(true);
+  const old=fixture.channels[0]; old.status('CHANNEL_ERROR');
+  expect(connected).toHaveBeenLastCalledWith(false);
+  await vi.advanceTimersByTimeAsync(3001);
+  expect(fixture.channels).toHaveLength(2);
+  expect(connected).toHaveBeenLastCalledWith(true);
+  old.status('CLOSED'); expect(connected).toHaveBeenLastCalledWith(true);
+  stop(); await vi.advanceTimersByTimeAsync(5000);
+  expect(fixture.channels).toHaveLength(2);
+});

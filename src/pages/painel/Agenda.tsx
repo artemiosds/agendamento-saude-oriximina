@@ -1,3 +1,5 @@
+import { AttendanceRoomDialog } from '@/components/agenda/AttendanceRoomDialog';
+import { startClinicalAttendance } from '@/services/clinicalAttendance';
 import AgendaProfessionalFilter from "./agenda/AgendaProfessionalFilter";
 import { buildAgendaListPrint, escapeAgendaPrintMeta } from "@/lib/agendaListPrint";
 import { OperationalVirtualList } from "@/components/OperationalVirtualList";
@@ -311,8 +313,10 @@ const Agenda: React.FC = () => {
     completeAgendaDates,
     setAgendaSelectedDate,
     loadAgendaExceptions,
-    addAtendimento,
   } = useAgendamentos();
+  const [startTarget, setStartTarget] = useState<(typeof agendamentos)[number] | null>(null);
+  const [startBusy, setStartBusy] = useState(false);
+  const startLock = React.useRef(false);
   const { fila, addToFila, updateFila, refreshFila } = useFila();
   const {
     funcionarios,
@@ -2275,121 +2279,43 @@ const Agenda: React.FC = () => {
     }
   };
 
-  const handleIniciarAtendimento = async (ag: (typeof agendamentos)[0]) => {
-    // Block starting attendance for future dates
-    const today = todayLocalStr();
-    if (ag.data > today) {
-      toast.error("Não é possível iniciar atendimento antes da data agendada.");
-      return;
+  const handleIniciarAtendimento = async (ag: (typeof agendamentos)[0], roomId?: string) => {
+    if (startLock.current) return;
+    if (ag.data > todayLocalStr()) {
+      toast.error("Não é possível iniciar atendimento antes da data agendada."); return;
     }
-
     if (["confirmado_chegada", "chegada_confirmada", "aguardando_triagem"].includes(String(ag.status))) {
-      toast.info("Aguardando liberação pela Triagem de Enfermagem.");
-      return;
+      toast.info("Aguardando liberação pela Triagem de Enfermagem."); return;
     }
-    const statusPermitidos = ["aguardando_atendimento", "apto_atendimento"];
-    if (!statusPermitidos.includes(ag.status)) {
-      toast.error("Este agendamento ainda não está liberado para iniciar atendimento.");
-      return;
+    if (!["aguardando_atendimento", "apto_atendimento"].includes(ag.status)) {
+      toast.error("Este agendamento ainda não está liberado para iniciar atendimento."); return;
     }
-
+    if (roomId === undefined) { setStartTarget(ag); return; }
+    startLock.current = true;
+    setStartBusy(true);
     try {
-      if (ag.status === "apto_atendimento") {
-        await updateAgendamento(ag.id, { status: "em_atendimento" as any });
-      } else {
-        const { error: rpcError } = await supabase.rpc("iniciar_atendimento", {
-          p_agendamento_id: ag.id,
-          p_profissional_id: user?.id || "",
-        });
-        if (rpcError) {
-          if (rpcError.message.includes("arrival_not_confirmed"))
-            toast.error("A chegada do paciente ainda não foi confirmada pela recepção.");
-          else if (rpcError.message.includes("not_authorized"))
-            toast.error("Você não tem permissão para este agendamento.");
-          else toast.error("Não foi possível iniciar o atendimento.");
-          return;
-        }
-      }
-    } catch (err) {
-      toast.error("Erro ao validar início do atendimento.");
-      return;
-    }
-
-    const now = new Date();
-    const horaInicio = nowTimeBrazilStr(now);
-    const pac = pacientes.find((p) => p.id === ag.pacienteId);
-    try {
-      // Persist the attendance before opening the chart so its finalization
-      // cannot race an attendance row that is still being inserted.
-      await addAtendimento({
-        id: crypto.randomUUID(),
-        agendamentoId: ag.id,
-        pacienteId: ag.pacienteId,
-        pacienteNome: ag.pacienteNome,
-        profissionalId: ag.profissionalId,
-        profissionalNome: ag.profissionalNome,
-        unidadeId: ag.unidadeId,
-        salaId: ag.salaId || "",
-        setor: user?.setor || "",
-        procedimento: ag.tipo,
-        observacoes: "",
-        data: ag.data,
-        horaInicio,
-        horaFim: "",
-        status: "em_atendimento",
-      });
-    } catch (error) {
-      console.error("[Agenda] Não foi possível persistir o início do atendimento:", error);
+      const result = await startClinicalAttendance(ag.id, ag.pacienteId, roomId);
+      applyCareFlowAgendamentoUpdate(result.agendamento);
+      const horaInicio = result.hora_inicio;
       try {
-        await updateAgendamento(ag.id, { status: ag.status as any });
-      } catch (rollbackError) {
-        console.error("[Agenda] Falha ao restaurar o status do agendamento:", rollbackError);
-      }
-      toast.error("Não foi possível iniciar o atendimento. Tente novamente.");
-      return;
+        localStorage.setItem(`timer_${ag.id}`, JSON.stringify({
+          agendamentoId: ag.id, horaInicio, tempoLimite: user?.tempoAtendimento || 30,
+          startTimestamp: result.iniciado_em ? Date.parse(result.iniciado_em) : Date.now(),
+        }));
+      } catch { /* The persisted start remains available if local storage is unavailable. */ }
+      setStartTarget(null);
+      toast.success(result.already_processed ? "Este atendimento já foi iniciado. Abrindo o prontuário." : "Atendimento iniciado!");
+      const params = new URLSearchParams({ pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+        agendamentoId: ag.id, horaInicio, data: ag.data, tipo: ag.tipo || '' });
+      navigate(`/painel/prontuario?${params.toString()}`);
+      void Promise.allSettled([refreshAgendamentos(), refreshFila()]);
+    } catch (error) {
+      toast.error(error && typeof error === 'object' && 'message' in error
+        ? String(error.message) : "Não foi possível confirmar o início do atendimento. Tente novamente.");
+    } finally {
+      startLock.current = false;
+      setStartBusy(false);
     }
-
-    localStorage.setItem(
-      `timer_${ag.id}`,
-      JSON.stringify({
-        agendamentoId: ag.id,
-        horaInicio,
-        tempoLimite: user?.tempoAtendimento || 30,
-        startTimestamp: Date.now(),
-      }),
-    );
-
-    toast.success("Atendimento iniciado!");
-    const params = new URLSearchParams({
-      pacienteId: ag.pacienteId,
-      pacienteNome: ag.pacienteNome,
-      agendamentoId: ag.id,
-      horaInicio,
-      data: ag.data,
-      tipo: ag.tipo || '',
-    });
-    navigate(`/painel/prontuario?${params.toString()}`);
-
-    void (async () => {
-      await Promise.allSettled([
-        refreshAgendamentos(),
-        refreshFila(),
-        logAction({
-          acao: "atendimento_iniciado",
-          entidade: "atendimento",
-          entidadeId: ag.id,
-          modulo: "atendimento",
-          user,
-          detalhes: {
-            paciente_nome: ag.pacienteNome,
-            paciente_cpf: pac?.cpf || "",
-            hora_inicio: horaInicio,
-            unidade: ag.unidadeId,
-            sala: ag.salaId || "",
-          },
-        }),
-      ]);
-    })();
   };
 
   const handleAgendarRetorno = async () => {
@@ -4348,6 +4274,12 @@ const Agenda: React.FC = () => {
       </DetalheDrawer>
 
       {/* Dialog de Cancelamento com Motivo */}
+      {startTarget && <AttendanceRoomDialog key={startTarget.id}
+        rooms={salas.filter(room => room.ativo && room.unidadeId === startTarget.unidadeId)}
+        suggestedRoomId={startTarget.salaId || user?.salaId}
+        busy={startBusy} onCancel={() => setStartTarget(null)}
+        onConfirm={roomId => { void handleIniciarAtendimento(startTarget, roomId); }} />}
+
       <Dialog open={!!cancelTarget} onOpenChange={(o) => { if (!o) { setCancelTarget(null); setCancelMotivo(''); } }}>
         <DialogContent>
           <DialogHeader>

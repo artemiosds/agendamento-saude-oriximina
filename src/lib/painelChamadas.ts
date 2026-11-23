@@ -65,25 +65,42 @@ export function chamadaValida(value: unknown, unidade: string, validarPrazo = tr
   return Number.isFinite(time) && (!validarPrazo || (time <= Date.now() + 60000 && time >= Date.now() - 15 * 60000));
 }
 
-interface ChannelEntry { channel: RealtimeChannel; ready: Promise<RealtimeChannel> }
+interface ChannelEntry { channel: RealtimeChannel; ready: Promise<RealtimeChannel>; connected: boolean }
 const canais = new Map<string, ChannelEntry>();
 const observadores = new Map<string, Set<(value: ChamadaPaciente) => void>>();
 
-export function observarChamadas(unidade: string, receber: (value: ChamadaPaciente) => void) {
+const connectionObservers = new Map<string, Set<(connected: boolean) => void>>();
+const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function reportConnection(unidade: string, connected: boolean) {
+  connectionObservers.get(unidade)?.forEach(listener => listener(connected));
+}
+function reconnectObservers(unidade: string) {
+  if (!observadores.has(unidade) || reconnectTimers.has(unidade)) return;
+  reconnectTimers.set(unidade, setTimeout(() => {
+    reconnectTimers.delete(unidade);
+    if (observadores.has(unidade)) void obterCanal(unidade).catch(() => {});
+  }, 3000));
+}
+
+export function observarChamadas(unidade: string, receber: (value: ChamadaPaciente) => void, onConnection?: (connected: boolean) => void) {
   const listeners = observadores.get(unidade) || new Set();
   listeners.add(receber);
   observadores.set(unidade, listeners);
-  const canal = obterCanal(unidade);
-  void canal.catch(() => {});
+  if (onConnection) {
+    const status = connectionObservers.get(unidade) ?? new Set();
+    status.add(onConnection); connectionObservers.set(unidade, status);
+    onConnection(canais.get(canalPainel(unidade))?.connected ?? false);
+  }
+  void obterCanal(unidade).catch(() => {});
   return () => {
     listeners.delete(receber);
+    if (onConnection) connectionObservers.get(unidade)?.delete(onConnection);
+    if (!connectionObservers.get(unidade)?.size) connectionObservers.delete(unidade);
     if (listeners.size) return;
     observadores.delete(unidade);
-    void canal.then(channel => {
-      if (!observadores.has(unidade) && !Array.from(pending.values()).some(p => p.unidade === unidade)) {
-        descartar(canalPainel(unidade), channel);
-      }
-    }).catch(() => {});
+    clearTimeout(reconnectTimers.get(unidade)); reconnectTimers.delete(unidade);
+    const current = canais.get(canalPainel(unidade));
+    if (current && !Array.from(pending.values()).some(p => p.unidade === unidade)) descartar(canalPainel(unidade), current.channel);
   };
 }
 
@@ -95,7 +112,10 @@ function obterCanal(unidadeId: string): Promise<RealtimeChannel> {
   if (existente) return existente.ready;
   const channel = supabase.channel(nome, { config: { broadcast: { ack: true } } });
   const p = new Promise<RealtimeChannel>((resolve, reject) => {
-    const t = setTimeout(() => { descartar(nome, channel); reject(new Error("timeout")); }, 4000);
+    const t = setTimeout(() => {
+      if (canais.get(nome)?.channel === channel) { reportConnection(unidadeId, false); descartar(nome, channel); reconnectObservers(unidadeId); }
+      reject(new Error("timeout"));
+    }, 4000);
     channel.on('broadcast', { event: 'chamada' }, ({ payload }) => {
       if (chamadaValida(payload, unidadeId)) observadores.get(unidadeId)?.forEach(receber => receber(payload));
     });
@@ -106,15 +126,22 @@ function obterCanal(unidadeId: string): Promise<RealtimeChannel> {
       item.resolve(payload.status as ConfirmacaoPainel);
     });
     channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") { clearTimeout(t); resolve(channel); }
+      if (status === "SUBSCRIBED") {
+        clearTimeout(t);
+        const current = canais.get(nome);
+        if (current?.channel === channel) { current.connected = true; reportConnection(unidadeId, true); }
+        resolve(channel);
+      }
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
         clearTimeout(t);
-        descartar(nome, channel);
+        if (canais.get(nome)?.channel === channel) {
+          reportConnection(unidadeId, false); descartar(nome, channel); reconnectObservers(unidadeId);
+        }
         reject(new Error(status));
       }
     });
   });
-  canais.set(nome, { channel, ready: p });
+  canais.set(nome, { channel, ready: p, connected: false });
   return p;
 }
 

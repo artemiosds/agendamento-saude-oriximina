@@ -4394,6 +4394,10 @@ export type Database = {
       }
     }
     Functions: {
+      start_clinical_attendance: {
+        Args: { p_agendamento_id: string; p_patient_id: string; p_room_id?: string | null };
+        Returns: Json;
+      };
       align_treatment_session_to_agenda: {
         Args: {
           p_appointment_id: string

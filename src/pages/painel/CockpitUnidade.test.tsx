@@ -19,7 +19,7 @@ vi.mock('@/lib/painelChamadas', () => ({ observarChamadas: fixture.observe }));
 
 const a = { id: 'ag', paciente_id: 'p', paciente_nome: 'Paciente teste', sala_id: 's', profissional_id: 'f', profissional_nome: 'Profissional teste', tipo: 'Consulta' };
 function setup(status: string, options: { rows?: unknown[]; arrivals?: Record<string,string>; starts?: Record<string,string>; triage?: unknown[] } = {}) {
-  fixture.observe.mockImplementation(() => () => {});
+  fixture.observe.mockImplementation((_unit, _receive, connected) => { connected?.(true); return () => {}; });
   fixture.feed.mockReturnValue({
     rows: options.rows ?? [{ ...a, status }], triage: options.triage ?? [], arrivals: options.arrivals ?? {},
     starts: options.starts ?? {}, online: true, reload: vi.fn(),
@@ -295,4 +295,17 @@ it('não inventa uma sala para o histórico quando há mais de uma triagem cadas
     expect(within(screen.getByRole('dialog')).getByRole('heading', { name: 'Triagens concluídas hoje · 1' })).toBeInTheDocument();
     close();
   }
+});
+
+it('não anuncia fluxo ao vivo quando o canal de chamadas está desconectado', () => {
+  setup('', { rows: [] });
+  render(<CockpitUnidade />);
+  expect(screen.getByRole('status')).toHaveTextContent('Ao vivo · Fluxo da unidade');
+  const connection: (connected: boolean) => void = fixture.observe.mock.calls[0][2];
+  act(() => connection(false));
+  expect(screen.getByRole('status')).toHaveTextContent('Sincronização parcial');
+  expect(screen.getByRole('status')).toHaveTextContent('Chamadas');
+  expect(screen.getByRole('status')).toHaveAttribute('data-online','false');
+  act(() => connection(true));
+  expect(screen.getByRole('status')).toHaveTextContent('Ao vivo · Fluxo da unidade');
 });

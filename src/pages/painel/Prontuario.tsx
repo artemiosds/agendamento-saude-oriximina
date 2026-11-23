@@ -1,3 +1,4 @@
+import { startClinicalAttendance } from '@/services/clinicalAttendance';
 import { examesAgendados } from '@/lib/agendamentoSigtap';
 import ProcedureCidPicker from "@/components/prontuario/ProcedureCidPicker";
 import { loadProcedureCidOptions, partitionProcedureCids, normalizeProcedureCid, resolveManualProcedureCid } from "@/lib/procedureCidSelection";
@@ -428,7 +429,7 @@ const ProntuarioPage: React.FC = () => {
   const { user, isGlobalAdmin } = useAuth();
   const { can } = usePermissions();
   const { pacientes } = usePacientes();
-  const { agendamentos, updateAgendamento, refreshAgendamentos, addAtendimento, addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate } = useAgendamentos();
+  const { agendamentos, updateAgendamento, refreshAgendamentos, addAgendamentoTransactionally, deleteAgendamentoTransactionally, applyTreatmentAgendamentoUpdate, applyCareFlowAgendamentoUpdate } = useAgendamentos();
   const { unidades, funcionarios, salas, bloqueios, logAction, getAvailableSlots, getAvailableDates, getTurnoInfo } = useOperacional();
   const sessionOperations = useMemo(() => createTreatmentSessionOperations({
     client: supabase as unknown as TreatmentOperationRpcClient,
@@ -524,6 +525,7 @@ const ProntuarioPage: React.FC = () => {
   const [transicaoBusy, setTransicaoBusy] = useState(false);
   const [transicaoChamadaBusy, setTransicaoChamadaBusy] = useState(false);
   const [transicaoSala, setTransicaoSala] = useState("");
+  const [transicaoSalaId, setTransicaoSalaId] = useState("");
   const transicaoLockRef = useRef(false);
 
   // Computed: can we finalize this appointment? Based on agendamento status, not just activeAtendimento
@@ -2911,6 +2913,8 @@ const ProntuarioPage: React.FC = () => {
       setProximoPacienteFila(proximo);
       setTransicaoFaltaConfirmada(false);
       setTransicaoSala(salaInicial);
+      const matchingRooms = salas.filter(item => item.ativo && item.unidadeId === unidadeId && item.nome.trim() === salaInicial);
+      setTransicaoSalaId(matchingRooms.length === 1 ? matchingRooms[0].id : '');
       if (salaInicial) {
         await enviarChamadaDaEsteira(proximo, salaInicial, false);
       } else {
@@ -3023,58 +3027,19 @@ const ProntuarioPage: React.FC = () => {
 
   const handlePacienteEntrouNaEsteira = async () => {
     const ag = proximoPacienteFila;
-    if (!ag || transicaoLockRef.current) return;
+    if (!ag || transicaoLockRef.current || !transicaoSalaId) return;
     transicaoLockRef.current = true;
     setTransicaoBusy(true);
-    const horaInicio = nowTimeBrazilStr(new Date());
-    const profissionalId = ag.profissional_id || user?.id || "";
-    const profissionalNome = ag.profissional_nome || user?.nome || "";
     try {
-      await updateAgendamento(ag.id, { status: "em_atendimento" as any });
+      const result = await startClinicalAttendance(ag.id, ag.paciente_id, transicaoSalaId === '__none__' ? '' : transicaoSalaId);
+      applyCareFlowAgendamentoUpdate(result.agendamento);
+      const horaInicio = result.hora_inicio;
       try {
-        await addAtendimento({
-          id: crypto.randomUUID(),
-          agendamentoId: ag.id,
-          pacienteId: ag.paciente_id,
-          pacienteNome: ag.paciente_nome,
-          profissionalId,
-          profissionalNome,
-          unidadeId: ag.unidade_id || user?.unidadeId || "",
-          salaId: ag.sala_id || user?.salaId || "",
-          setor: user?.setor || "",
-          procedimento: ag.tipo || "",
-          observacoes: "",
-          data: ag.data,
-          horaInicio,
-          horaFim: "",
-          status: "em_atendimento",
-        });
-      } catch (error) {
-        try { await updateAgendamento(ag.id, { status: "apto_atendimento" as any }); }
-        catch (rollbackError) { console.error("[Prontuario] Falha ao restaurar status do próximo paciente:", rollbackError); }
-        throw error;
-      }
-
-      localStorage.setItem("timer_" + ag.id, JSON.stringify({
-        agendamentoId: ag.id,
-        horaInicio,
-        tempoLimite: user?.tempoAtendimento || 30,
-        startTimestamp: Date.now(),
-      }));
-      logAction({
-        acao: "atendimento_iniciado",
-        entidade: "atendimento",
-        entidadeId: ag.id,
-        modulo: "atendimento",
-        user,
-        detalhes: {
-          paciente_nome: ag.paciente_nome,
-          hora_inicio: horaInicio,
-          unidade: ag.unidade_id || user?.unidadeId || "",
-          sala: ag.sala_id || user?.salaId || "",
-          origem: "esteira_finalizar_e_chamar_proximo",
-        },
-      });
+        localStorage.setItem("timer_" + ag.id, JSON.stringify({
+          agendamentoId: ag.id, horaInicio, tempoLimite: user?.tempoAtendimento || 30,
+          startTimestamp: result.iniciado_em ? Date.parse(result.iniciado_em) : Date.now(),
+        }));
+      } catch { /* Starting in the database does not depend on local storage. */ }
 
       const params = new URLSearchParams({
         pacienteId: ag.paciente_id,
@@ -3093,7 +3058,7 @@ const ProntuarioPage: React.FC = () => {
       void refreshAgendamentos().catch((error) => console.error("[Prontuario] Falha ao atualizar Agenda:", error));
     } catch (error) {
       console.error("[Prontuario] Não foi possível iniciar o próximo atendimento:", error);
-      toast.error("Não foi possível iniciar este atendimento. O paciente permanece na fila para nova tentativa.");
+      toast.error("Não foi possível confirmar o início deste atendimento. Atualize a Agenda antes de tentar novamente.");
     } finally {
       transicaoLockRef.current = false;
       setTransicaoBusy(false);
@@ -5948,13 +5913,18 @@ const ProntuarioPage: React.FC = () => {
               {!transicaoFaltaConfirmada && (
                 <div className="space-y-2">
                   <Label htmlFor="esteira-sala">Sala / consultório</Label>
-                  <Input
-                    id="esteira-sala"
-                    value={transicaoSala}
-                    onChange={(event) => setTransicaoSala(event.target.value)}
-                    placeholder="Ex.: Consultório 2"
-                    disabled={transicaoBusy || transicaoChamadaBusy}
-                  />
+                  <select id="esteira-sala" className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={transicaoSalaId} disabled={transicaoBusy || transicaoChamadaBusy}
+                    onChange={event => {
+                      const id = event.target.value;
+                      setTransicaoSalaId(id);
+                      setTransicaoSala(salas.find(room => room.id === id)?.nome || '');
+                    }}>
+                    <option value="">Selecione a sala utilizada</option>
+                    {salas.filter(room => room.ativo && room.unidadeId === proximoPacienteFila.unidade_id)
+                      .map(room => <option key={room.id} value={room.id}>{room.nome}</option>)}
+                    <option value="__none__">Sem sala física definida</option>
+                  </select>
                 </div>
               )}
 
@@ -5973,7 +5943,7 @@ const ProntuarioPage: React.FC = () => {
                   <Button
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                     onClick={() => { void handlePacienteEntrouNaEsteira(); }}
-                    disabled={transicaoBusy || transicaoChamadaBusy}
+                    disabled={transicaoBusy || transicaoChamadaBusy || !transicaoSalaId}
                   >
                     {transicaoBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserCheck className="h-4 w-4 mr-2" />}
                     Paciente Entrou / Iniciar Atendimento
