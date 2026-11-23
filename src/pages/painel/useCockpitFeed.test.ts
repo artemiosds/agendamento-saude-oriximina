@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { useCockpitFeed } from './useCockpitFeed';
+import { useCockpitFeed, type CockpitTriage } from './useCockpitFeed';
 
 type Event = { eventType: string; new: object; old: object; commit_timestamp: string };
 type Channel = { topic: string; filter?: Record<string,string>; receive?: (event: Event) => void };
@@ -15,11 +15,13 @@ const item = { id: 'a', unidade_id: 'u', data: day, paciente_id: 'p', paciente_n
   profissional_id: 'd', profissional_nome: 'Profissional teste', sala_id: 's', tipo: 'Consulta',
   status: 'confirmado', iniciado_em: null, concluido_em: null, nome_procedimento: null };
 let rows: typeof item[];
+let triageRows: CockpitTriage[];
 let channels: Channel[];
 
 beforeEach(() => {
   vi.useFakeTimers();
   rows = [item];
+  triageRows = [];
   channels = [];
   f.from.mockImplementation((table: string) => {
     const conditions: Record<string,string> = {};
@@ -27,7 +29,7 @@ beforeEach(() => {
       select: () => query, eq: (key: string, value: string) => { conditions[key] = value; return query; },
       order: () => query,
       range: async () => ({ data: rows.filter(r => r.unidade_id === conditions.unidade_id && r.data === conditions.data), error: null }),
-      in: async () => ({ data: [], error: null }),
+      in: async (_key: string, ids: string[]) => ({ data: triageRows.filter(t => ids.includes(t.agendamento_id)), error: null }),
     };
     if (!['agendamentos','triage_records'].includes(table)) throw Error('Unexpected table ' + table);
     return query;
@@ -86,4 +88,41 @@ it('mantém isolamento por unidade e data e retira apenas registros conhecidos q
   rows = [];
   emit({}, {id:'a'}, 'DELETE');
   expect(result.current.rows).toEqual([]);
+});
+
+it('carrega e mantém a triagem confirmada depois de concluir a consulta, sem incluir outras unidades ou datas', async () => {
+  const record = { agendamento_id: 'a', iniciado_em: time, confirmado_em: time, classificacao_risco: 'verde', tecnico_id: 't' };
+  rows = [
+    { ...item, status: 'apto_atendimento' },
+    { ...item, id: 'externa', unidade_id: 'outra', status: 'concluido' },
+    { ...item, id: 'ontem', data: '2026-11-18', status: 'concluido' },
+  ];
+  triageRows = [record, { ...record, agendamento_id: 'externa' }, { ...record, agendamento_id: 'ontem' }];
+  const { result, unmount } = renderHook(() => useCockpitFeed('u', day));
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(result.current.triage).toEqual([record]);
+  const triageChannelCount = channels.filter(c => c.topic.startsWith('cockpit-triagem:')).length;
+  rows = [{ ...item, status: 'concluido' }];
+  emit(rows[0]);
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(result.current.rows?.[0].status).toBe('concluido');
+  expect(result.current.triage).toEqual([record]);
+  expect(channels.filter(c => c.topic.startsWith('cockpit-triagem:'))).toHaveLength(triageChannelCount);
+  const triageChannel = channels.find(c => c.topic.startsWith('cockpit-triagem:'))!;
+  expect(triageChannel.filter?.filter).toBe('agendamento_id=in.(a)');
+  triageRows = [{ ...record, classificacao_risco: 'amarelo' }];
+  act(() => triageChannel.receive?.({ eventType: 'UPDATE', new: triageRows[0], old: record, commit_timestamp: time }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(160); });
+  expect(result.current.triage[0].classificacao_risco).toBe('amarelo');
+  unmount();
+  expect(f.removeChannel).toHaveBeenCalledTimes(2);
+});
+
+it('carrega o histórico de triagem ao abrir o cockpit com consultas já concluídas', async () => {
+  rows = [{ ...item, status: 'concluido' }];
+  const record = { agendamento_id: 'a', iniciado_em: time, confirmado_em: time, classificacao_risco: 'verde', tecnico_id: 't' };
+  triageRows = [record];
+  const { result } = renderHook(() => useCockpitFeed('u', day));
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(result.current.triage).toEqual([record]);
 });

@@ -236,3 +236,63 @@ it('limita a exibição inicial de alertas sem esconder seu total', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Ver mais alertas (2)' }));
   expect(screen.getAllByRole('button', { name: /Ver detalhes de Sala/ })).toHaveLength(5);
 });
+
+it('separa título e especialidade em linhas delimitadas mesmo com cinco salas por fileira', () => {
+  fixture.salas.push({ id: 'fono', nome: 'FONOAUDIOLOGIA 2', ativo: true, unidadeId: 'local' });
+  for (let i = 0; i < 3; i++) fixture.salas.push({ id: 'extra' + i, nome: 'Consultório ' + i, ativo: true, unidadeId: 'local' });
+  setup('em_atendimento', { rows: [{ ...a, sala_id: 'fono', status: 'em_atendimento' }] });
+  render(<CockpitUnidade />);
+  const room = screen.getByRole('button', { name: /^FONOAUDIOLOGIA 2\./ });
+  const title = within(room).getByText('FONOAUDIOLOGIA 2', { selector: 'text' });
+  const specialty = within(room).getByText('Nutrição', { selector: 'text' });
+  expect(title.parentElement).toBe(specialty.parentElement);
+  expect(title.parentElement?.tagName.toLowerCase()).toBe('svg');
+  expect(title.parentElement).toHaveAttribute('overflow', 'hidden');
+  expect(Number(specialty.getAttribute('y')) - Number(title.getAttribute('y'))).toBeGreaterThanOrEqual(13);
+  fireEvent.click(room);
+  expect(within(screen.getByRole('dialog')).getByRole('heading', { name: 'FONOAUDIOLOGIA 2' })).toBeInTheDocument();
+});
+
+it('abre o histórico real de triagem na sala cadastrada mesmo quando a consulta usa outro consultório ou já terminou', () => {
+  fixture.salas.push({ id: 'triagem-fisica', nome: 'Triagem', ativo: true, unidadeId: 'local' });
+  const now = new Date().toISOString();
+  setup('', { rows: [
+    { ...a, status: 'concluido' },
+    { ...a, id: 'apto', paciente_nome: 'Pessoa classificada', status: 'apto_atendimento' },
+    { ...a, id: 'rascunho', status: 'chegou' },
+    { ...a, id: 'antiga', status: 'concluido' },
+  ], triage: [
+    { agendamento_id: a.id, iniciado_em: now, confirmado_em: now, classificacao_risco: 'verde', tecnico_id: 'f' },
+    { agendamento_id: 'apto', iniciado_em: now, confirmado_em: now, classificacao_risco: 'amarelo' },
+    { agendamento_id: 'rascunho', iniciado_em: now, confirmado_em: null },
+    { agendamento_id: 'antiga', confirmado_em: '2020-01-01T12:00:00Z' },
+    { agendamento_id: 'sem-vinculo-na-unidade', confirmado_em: now },
+  ] });
+  render(<CockpitUnidade />);
+  const room = screen.getByRole('button', { name: /^Triagem\./ });
+  expect(within(room).queryByText('0 concluídos')).not.toBeInTheDocument();
+  fireEvent.click(room);
+  const drawer = screen.getByRole('dialog');
+  expect(within(drawer).getByRole('heading', { name: 'Triagens concluídas hoje · 2' })).toBeInTheDocument();
+  expect(within(drawer).getByText(/O registro de triagem não identifica a sala física/)).toBeInTheDocument();
+  expect(within(drawer).getByText('Pessoa classificada')).toBeInTheDocument();
+  expect(within(drawer).getByText(/Prioridade verde · Profissional teste/)).toBeInTheDocument();
+  expect(within(drawer).getByText('1 em classificação')).toBeInTheDocument();
+  close();
+  fireEvent.click(screen.getByRole('button', { name: /Em classificação/ }));
+  expect(within(screen.getByRole('dialog')).getByRole('heading', { name: 'Triagens concluídas hoje · 2' })).toBeInTheDocument();
+});
+
+it('não inventa uma sala para o histórico quando há mais de uma triagem cadastrada', () => {
+  fixture.salas.push({ id: 't1', nome: 'Triagem 1', ativo: true, unidadeId: 'local' },
+    { id: 't2', nome: 'Triagem 2', ativo: true, unidadeId: 'local' });
+  const now = new Date().toISOString();
+  setup('concluido', { triage: [{ agendamento_id: a.id, confirmado_em: now }] });
+  render(<CockpitUnidade />);
+  for (const name of [/^Triagem 1\./, /^Triagem 2\./]) {
+    fireEvent.click(screen.getByRole('button', { name }));
+    expect(within(screen.getByRole('dialog')).getByText(/Resumo da triagem da unidade/)).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByRole('heading', { name: 'Triagens concluídas hoje · 1' })).toBeInTheDocument();
+    close();
+  }
+});

@@ -17,7 +17,7 @@ export type Risk = keyof typeof riskColors;
 export type MapPatient = { id: string; tone?: 'safe' | 'warning' | 'danger' | 'neutral'; infusion?: boolean };
 export type MapRoom = {
   id: string; name: string; specialty: string; staff: boolean; state: RoomState;
-  elapsed: number | null; overdue: number; patients: MapPatient[]; completed: number;
+  elapsed: number | null; overdue: number; patients: MapPatient[]; completed: number; historyLabel?: string;
 };
 const ROOMS_PER_ROW = 5;
 const ROOM_ROW_HEIGHT = 166;
@@ -94,9 +94,9 @@ function Door({ x, y, down, width = 31 }: { x: number; y: number; down: boolean;
   </g>;
 }
 type OpenZone = (zone: string) => void;
-function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, state, onOpen, alert }: {
+function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, state, onOpen, alert, headerHeight = 29 }: {
   id: string; title: string; summary: string; x: number; y: number; w: number; h: number; color: string;
-  children: ReactNode; lower?: boolean; state?: RoomState; onOpen?: OpenZone; alert?: 'danger' | 'warning';
+  children: ReactNode; lower?: boolean; state?: RoomState; onOpen?: OpenZone; alert?: 'danger' | 'warning'; headerHeight?: number;
 }) {
   const doorX = x + (id === 'recepcao' ? w - 129 : Math.round(w * .54));
   const label = title + '. ' + summary;
@@ -108,7 +108,7 @@ function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, 
     <title>{label}</title>
     <rect x={x} y={y + 3} width={w} height={h} rx="5" fill="#b3cbc1" />
     <rect className="planta-room-floor" x={x} y={y} width={w} height={h} rx="5" fill={color} stroke="#9eb9b1" strokeWidth="2" />
-    <path d={`M${x + 2} ${y + 29}h${w - 4}`} stroke="#c5d9ce" />
+    <path d={`M${x + 2} ${y + headerHeight}h${w - 4}`} stroke="#c5d9ce" />
     <path d={`M${x + 5} ${y + 2}h${w - 10}`} stroke="#fff" opacity=".86" strokeWidth="1.3" />
     <Door x={doorX} y={lower ? y : y + h} down={lower} width={id === 'recepcao' ? 39 : 31} />
     {children}
@@ -118,12 +118,13 @@ function Zone({ id, title, summary, x, y, w, h, color, children, lower = false, 
 function RegisteredRoom({ room, x, y, w, onOpen, alert }: { room: MapRoom; x: number; y: number; w: number; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {
   const h = 142;
   const status = roomStatuses[room.state] + (room.elapsed === null ? '' : ' · ' + room.elapsed + ' min');
-  const singleLine = room.name.length < 19 && room.specialty.length < 14;
-  return <Zone id={room.id} title={room.name} summary={status} x={x} y={y} w={w} h={h} state={room.state} color="#f4f8f4" onOpen={onOpen} alert={alert}>
-    <text className="planta-room-title" x={x + 10} y={y + 20}>{short(room.name, Math.floor((w - 20) / (singleLine && room.specialty ? 11 : 7)))}</text>
-    {singleLine && <text className="planta-tile-label" textAnchor="end" x={x + w - 11} y={y + 19}>{room.specialty}</text>}
-    <Plate x={x + 10} y={y + 47} state={room.state} label={status} />
-    <Cabinet x={x + w - 41} y={y + 37} w={31} /><Stretcher x={x + w - 64} y={y + 64} />
+  return <Zone id={room.id} title={room.name} summary={status} x={x} y={y} w={w} h={h} state={room.state} color="#f4f8f4" onOpen={onOpen} alert={alert} headerHeight={35}>
+    <svg x={x + 10} y={y + 3} width={w - 20} height={30} overflow="hidden" aria-hidden="true">
+      <text className="planta-room-title" x="0" y="15">{short(room.name, Math.floor((w - 20) / 9))}</text>
+      <text className="planta-tile-label" x="0" y="28">{short(room.specialty, Math.floor((w - 20) / 6))}</text>
+    </svg>
+    <Plate x={x + 10} y={y + 53} state={room.state} label={status} />
+    <Cabinet x={x + w - 41} y={y + 43} w={31} /><Stretcher x={x + w - 64} y={y + 64} />
     <Chair x={x + w - 33} y={y + 109} rotate={90} color="#e3dfcf" /><Plant x={x + 19} y={y + 122} />
     <Chair x={x + 58} y={y + 72} />{room.staff && <AvatarPersonagem papel="clinico" x={x + 58} y={y + 65} variante={room.id} />}
     <Desk x={x + 42} y={y + 80} w={69} h={20} /><Screen x={x + 49} y={y + 83} />
@@ -134,7 +135,7 @@ function RegisteredRoom({ room, x, y, w, onOpen, alert }: { room: MapRoom; x: nu
       <rect x={x + w - 132} y={y + 100} width="126" height="21" rx="5" fill="#fbe7e6" />
       <text className="planta-mini" x={x + w - 126} y={y + 114} style={{ fill: '#832c36', fontWeight: 750 }}>{room.overdue} aguardando 20+ min</text>
     </>}
-    {room.state !== 'bottleneck' && <text className="planta-tile-label" x={x + w - 11} y={y + 133} textAnchor="end">{room.completed} concluídos</text>}
+    {room.state !== 'bottleneck' && <text className="planta-tile-label" x={x + w - 11} y={y + 133} textAnchor="end">{room.historyLabel ?? `${room.completed} concluídos`}</text>}
   </Zone>;
 }
 function Reception({ patients, longest, onOpen, alert }: { patients: MapPatient[]; longest: number | null; onOpen?: OpenZone; alert?: 'danger' | 'warning' }) {

@@ -19,7 +19,6 @@ async function readAppointments(unit: string, day: string) {
 }
 
 export type CockpitAppointment = NonNullable<Awaited<ReturnType<typeof page>>['data']>[number];
-const activeInCockpit = (row: CockpitAppointment) => !['done', 'outside'].includes(careStage(row.status));
 
 function readTriageBatch(batch: string[]) {
   return supabase.from('triage_records')
@@ -71,7 +70,7 @@ export function useCockpitFeed(unit: string, day: string) {
       const version = revision;
       try {
         const appointments = await readAppointments(unit, day);
-        const records = await readTriage(appointments.filter(activeInCockpit).map(a => a.id));
+        const records = await readTriage(appointments.map(a => a.id));
         if (!active) return;
         if (version !== revision) { dirty = true; return; }
         known = new Map(appointments.map(a => [a.id, a.status]));
@@ -154,8 +153,9 @@ export function useCockpitFeed(unit: string, day: string) {
     };
   }, [unit, day, retry]);
 
-  // Drafts can precede a status change. Scope each channel to active appointment IDs in the selected unit.
-  const ids = rows?.filter(activeInCockpit).map(row => row.id).sort().join(',') || '';
+  // Keep completed triage in today's history even after its consultation finishes.
+  // All IDs still come exclusively from the selected unit and day.
+  const ids = rows?.map(row => row.id).sort().join(',') || '';
   useEffect(() => {
     if (!ids) return;
     let alive = true, generation = 0;

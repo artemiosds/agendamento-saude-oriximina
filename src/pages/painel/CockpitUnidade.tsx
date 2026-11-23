@@ -284,6 +284,7 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
     const map: MapRoom = {
       id: room.id, name: room.nome, state, specialty, staff: visits.length > 0 || !!calling, overdue,
       elapsed: timedVisits.length ? Math.max(...timedVisits) : null, completed: history.length,
+      historyLabel: roomSector(room.nome) === 'triage' ? 'Triagem · ver detalhes' : undefined,
       patients: visits.map(a => ({ id: a.id })),
     };
     return { map, clinician, calling, visits, history, team, elapsed };
@@ -414,6 +415,25 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
   let detail: { title: string; body: ReactNode } | undefined;
   if (zone && !theater) {
     const room = roomViews.find(r => r.map.id === zone);
+    const triageDetail = () => {
+      const completedTriage = [...recordByAppointment.values()].filter(record =>
+        record.confirmado_em && Number.isFinite(Date.parse(record.confirmado_em)) && cockpitDay(Date.parse(record.confirmado_em)) === day
+      ).sort((a, b) => Date.parse(b.confirmado_em!) - Date.parse(a.confirmado_em!));
+      const describeTriage = (a: Item, entry: typeof triage[number] | undefined) => {
+        const risk = asRisk(entry?.classificacao_risco);
+        const technician = staff.get(entry?.tecnico_id || '')?.nome;
+        return asRecord(a, [entry?.confirmado_em ? clock(entry.confirmado_em) : '',
+          risk ? 'Prioridade ' + risk : 'Risco ainda não informado', technician].filter(Boolean).join(' · '), risk);
+      };
+      return <>
+        <p>Resumo da triagem da unidade em {dateLabel(day)}. O registro de triagem não identifica a sala física; a sala da consulta não determina onde a triagem ocorreu.</p>
+        <span className="planta-badge">{classifying.length ? classifying.length + ' em classificação' : 'Sem classificação em curso'}</span>
+        <RecordList empty="Sem classificação em andamento." records={classifying.map(a => describeTriage(a, recordByAppointment.get(a.id)))} />
+        <h3>Triagens concluídas hoje · {completedTriage.length}</h3>
+        <RecordList empty="Nenhuma triagem confirmada registrada nesta unidade hoje." records={completedTriage.map(entry =>
+          describeTriage(itemById.get(entry.agendamento_id)!, entry))} />
+      </>;
+    };
     if (zone.startsWith('alerta:')) {
       const alert = alerts.find(item => `alerta:${item.id}` === zone);
       const related = alert?.appointmentIds.map(id => itemById.get(id)).filter((item): item is Item => !!item) ?? [];
@@ -432,6 +452,8 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
             a.profissional_nome].filter(Boolean).join(' · ') || 'Horário não disponível', alert?.tone);
         })} />
       </> };
+    } else if (zone === 'triagem' || (room && roomSector(room.map.name) === 'triage')) {
+      detail = { title: room?.map.name || 'Triagem', body: triageDetail() };
     } else if (room) {
       detail = { title: room.map.name, body: <>
         <span className="planta-badge" data-state={room.map.state}>{roomStatuses[room.map.state]}</span>
@@ -464,15 +486,6 @@ function Monitor({ unit, unitName, day, now, theater }: { unit: string; unitName
           const origin = beforeTriage ? 'desde a chegada' : 'desde a classificação';
           return asRecord(a, wait === null ? 'Horário da etapa não registrado' : `${wait} min ${origin}`, waitingTone(wait));
         })} /> };
-    } else if (zone === 'triagem') {
-      detail = { title: 'Triagem', body: <>
-        <span className="planta-badge">{classifying.length ? classifying.length + ' em classificação' : 'Sem classificação em curso'}</span>
-        <RecordList empty="Sem classificação em andamento." records={classifying.map(a => {
-          const entry = recordByAppointment.get(a.id), risk = asRisk(entry?.classificacao_risco);
-          const technician = staff.get(entry?.tecnico_id || '')?.nome;
-          return asRecord(a, (risk ? 'Prioridade ' + risk : 'Risco ainda não informado') + (technician ? ' · ' + technician : ''), risk);
-        })} />
-      </> };
     } else if (zone === 'procedimentos') {
       detail = { title: 'Medicação e sessões', body: <>
         <span className="planta-badge">{procedureActive.length} em andamento</span>
