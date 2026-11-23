@@ -65,7 +65,7 @@ export function chamadaValida(value: unknown, unidade: string, validarPrazo = tr
   return Number.isFinite(time) && (!validarPrazo || (time <= Date.now() + 60000 && time >= Date.now() - 15 * 60000));
 }
 
-interface ChannelEntry { channel: RealtimeChannel; ready: Promise<RealtimeChannel>; connected: boolean }
+interface ChannelEntry { channel: RealtimeChannel; ready: Promise<RealtimeChannel>; connected: boolean; unidade: string }
 const canais = new Map<string, ChannelEntry>();
 const observadores = new Map<string, Set<(value: ChamadaPaciente) => void>>();
 
@@ -113,7 +113,7 @@ function obterCanal(unidadeId: string): Promise<RealtimeChannel> {
   const channel = supabase.channel(nome, { config: { broadcast: { ack: true } } });
   const p = new Promise<RealtimeChannel>((resolve, reject) => {
     const t = setTimeout(() => {
-      if (canais.get(nome)?.channel === channel) { reportConnection(unidadeId, false); descartar(nome, channel); reconnectObservers(unidadeId); }
+      if (canais.get(nome)?.channel === channel) descartar(nome, channel);
       reject(new Error("timeout"));
     }, 4000);
     channel.on('broadcast', { event: 'chamada' }, ({ payload }) => {
@@ -135,18 +135,23 @@ function obterCanal(unidadeId: string): Promise<RealtimeChannel> {
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
         clearTimeout(t);
         if (canais.get(nome)?.channel === channel) {
-          reportConnection(unidadeId, false); descartar(nome, channel); reconnectObservers(unidadeId);
+          descartar(nome, channel);
         }
         reject(new Error(status));
       }
     });
   });
-  canais.set(nome, { channel, ready: p, connected: false });
+  canais.set(nome, { channel, ready: p, connected: false, unidade: unidadeId });
   return p;
 }
 
 function descartar(nome: string, channel: RealtimeChannel) {
-  if (canais.get(nome)?.channel === channel) canais.delete(nome);
+  const current = canais.get(nome);
+  if (current?.channel === channel) {
+    canais.delete(nome);
+    reportConnection(current.unidade, false);
+    reconnectObservers(current.unidade);
+  }
   try { void supabase.removeChannel(channel).catch(() => {}); } catch { /* ignore */ }
 }
 

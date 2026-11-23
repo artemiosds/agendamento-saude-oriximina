@@ -78,3 +78,15 @@ it('informa perda do canal ao observador, reconecta sem nova chamada e libera a 
   stop(); await vi.advanceTimersByTimeAsync(5000);
   expect(fixture.channels).toHaveLength(2);
 });
+
+it('também informa desconexão quando o transporte de envio descarta um canal compartilhado', async () => {
+  fixture.response=null; fixture.transport='error';
+  const { observarChamadas, solicitarChamada }=await import('./painelChamadas');
+  const connected=vi.fn(); const stop=observarChamadas('u1',()=>{},connected);
+  await vi.advanceTimersByTimeAsync(1);
+  const sent=solicitarChamada('u1',data);
+  await vi.advanceTimersByTimeAsync(7000);
+  expect(await sent).toBe('erro');
+  expect(connected.mock.calls.some(([online])=>online===false)).toBe(true);
+  stop();
+});
