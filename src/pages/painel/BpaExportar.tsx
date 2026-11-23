@@ -53,6 +53,7 @@ import {
 } from "@/lib/bpaAddressNormalization";
 import { resolveBpaHeaderDocument } from "@/lib/bpaHeaderSource";
 import { normalizeBpaPhone } from "@/lib/bpaPhoneNormalization";
+import { hasValidBpaPatientCpf, prepareBpaTxtRecord } from "@/lib/bpaTxtPreparation";
 import { parseBpaDate as parseDataSegura } from "@/lib/bpaDate";
 import { extractBpaCidCodes as extrairCodigosCid, resolveBpaCidDetails, resolveBpaTreatmentCycleCid, resolveBpaTreatmentCycleCidsForProcedures, resolveBpaSamePatientProcedureCidsForProcedures } from "@/lib/bpaCid";
 import { includeBpaProductionResolution, loadBpaEntitiesByIds } from "@/lib/bpaSourceLoading";
@@ -862,6 +863,8 @@ const BpaExportar: React.FC = () => {
   const [results, setResults] = useState<{
     totalFound: number;
     exportedCount: number;
+    txtExportedCount?: number;
+    txtAudit?: Array<{ paciente: string; procedimento: string; motivos: string[] }>;
     warnings: string[];
     criticalCount: number;
     stats: {
@@ -2160,6 +2163,10 @@ const BpaExportar: React.FC = () => {
       }
 
       let exportedCount = 0;
+      let conferenceCount = 0;
+      const conferenceOnlyCns: Array<Record<string, unknown>> = [];
+      const conferenceExcludedIds = new Set<string>();
+      const txtAudit: Array<{ paciente: string; procedimento: string; motivos: string[] }> = [];
       let criticalCount = 0;
       const linhasProducao: string[] = [];
       const itensControle: Array<{ procedimento: string; quantidade: string }> = [];
@@ -2283,12 +2290,13 @@ const BpaExportar: React.FC = () => {
         // CNS Paciente — validação oficial (mod-11), com substituição automática
         // por outro CNS válido cadastrado, quando disponível.
         const cnsPick = pickValidCnsPaciente(pac);
+        const cpfPacienteValido = hasValidBpaPatientCpf(primeiroValorPreenchido(pac?.cpf, (pac?.custom_data as any)?.cpf));
         // Nunca substituir um CNS existente por 000000000000000. Um valor
         // cadastrado com 15 dígitos permanece rastreável no registro final;
         // ausência real só é emitida em branco quando o usuário autoriza pendências.
         const cnsOriginalDigits = somenteNumeros(cnsPick.original);
         const cns_pac = cnsPick.cns || (cnsOriginalDigits.length === 15 ? cnsOriginalDigits : "");
-        if (!cnsPick.cns) {
+        if (!cnsPick.cns && !cpfPacienteValido) {
           isCritical = true;
           errosCadastro.push(cnsPick.original ? `CNS inválido (${cnsPick.original})` : "CNS ausente");
           stats.missingCns++;
@@ -2301,6 +2309,10 @@ const BpaExportar: React.FC = () => {
             pendencia: "CNS Ausente/Inválido",
             valor_atual: cnsPick.original || "Vazio",
           });
+        } else if (!cnsPick.cns && cpfPacienteValido) {
+          // O TXT aceita CPF; a aba de pendências do Excel mantém seu retrato anterior.
+          conferenceOnlyCns.push({ ...itemDetail, pendencia: "CNS Ausente/Inválido", valor_atual: cnsPick.original || "Vazio" });
+          if (!formData.exportar_com_pendencias) conferenceExcludedIds.add(String(pront.id));
         } else if (cnsPick.substituido) {
           stats.autoCorrected++;
           details.autoCorrected.push({
@@ -2394,6 +2406,8 @@ const BpaExportar: React.FC = () => {
           });
         }
 
+        // Mantém a população original da Conferência/Excel; CPF alternativo só libera o TXT.
+        const conferenceEligible = formData.exportar_com_pendencias || (!isCritical && Boolean(cnsPick.cns));
         // Se não for crítico ou se o usuário permitiu exportar com pendências
         if (!isCritical || formData.exportar_com_pendencias) {
           const unitCd = unit?.custom_data as any;
@@ -2663,7 +2677,7 @@ const BpaExportar: React.FC = () => {
 
           for (const rej of validacaoProcs.rejeitados) {
             stats.rejectedProc++;
-            registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
+            if (conferenceEligible) registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
             const motivo = rej.rejeicoes.join(" | ");
             resumoIntegridade.rejeitados.push({
               paciente: nome_pac || ident,
@@ -2926,7 +2940,7 @@ const BpaExportar: React.FC = () => {
               resumoIntegridade.totalProcedimentosValidos += listaParaEmitir.length;
               for (const rej of valFallback.rejeitados) {
                 stats.rejectedProc++;
-                registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
+                if (conferenceEligible) registrarRejeicaoCid(rej, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend));
                 const motivo = rej.rejeicoes.join(" | ");
                 resumoIntegridade.rejeitados.push({
                   paciente: nome_pac || ident,
@@ -3024,7 +3038,7 @@ const BpaExportar: React.FC = () => {
                 });
               } else if (validacaoLinhaFinal.rejeitados.length > 0) {
                 const rejFinal = validacaoLinhaFinal.rejeitados[0];
-                registrarRejeicaoCid(rejFinal, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend, cidResolvido.adicionais));
+                if (conferenceEligible) registrarRejeicaoCid(rejFinal, nome_pac || ident, String(pront.data_atendimento || "").slice(0, 10), extraRejeicao(pront, pac, cns_pac, data_nasc, sexo, data_atend, cidResolvido.adicionais));
                 const motivoFinal = rejFinal.rejeicoes.join(" | ");
                 stats.rejectedProc++;
                 resumoIntegridade.rejeitados.push({
@@ -3120,35 +3134,26 @@ const BpaExportar: React.FC = () => {
                 origemSigtap: procEntry.origem || (sigtapReq.exige ? "—" : "Padrão"),
                 categoriaProfissional: sigtapReq.categoria || "",
               };
-              const registro = buildRegistro03(registroFinal);
-              const l = registro.line;
-              for (const issue of registro.errors) {
-                errosEstruturais.push({ ...issue, paciente: ident, data: data_atend, linha: exportedCount + 2 });
-              }
-              for (const issue of registro.adjustments) {
-                warnings.push(
-                  `${ident} (${data_atend}): campo ${issue.field} [${issue.start}-${issue.end}] foi limitado ao tamanho oficial.`,
-                );
-              }
+              // Cópia exclusiva do TXT: o registro original abaixo continua alimentando
+              // Conferência/Excel sem receber as normalizações do arquivo magnético.
+              const txtPrepared = prepareBpaTxtRecord({
+                record: registroFinal,
+                catalog: catalogoOficial,
+                cidOriginal: cidBrutoFinal,
+                explicitProcedureCids: [procEntry.cid, ...sigtapVinculadoItens
+                  .filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo))
+                  .map(item => item.cid)],
+                declaredMunicipality: resolveMunicipioBpa({ municipioCadastro: mun_raw, municipioPadrao: "" }).codigo,
+                rawCep: pac?.cep || pacCd.cep || "",
+                address: {
+                  catalog: dneCatalog,
+                  savedCode: primeiroValorPreenchido(pacCd.codigo_logradouro, pacCd.tipo_logradouro_codigo,
+                    pacCd.tipoLogradouroCodigo, pacCd.tipo_logradouro_dne),
+                  structuredType: primeiroValorPreenchido(pac?.tipo_logradouro, pacCd.tipo_logradouro, pacCd.tipoLogradouro),
+                  street: enderecoOriginal, number: numeroOriginal,
+                },
+              });
 
-              for (const issue of auditRegistro03Serialization(registroFinal, l)) {
-                if (issue.category === "missing-required-data" && formData.exportar_com_pendencias) {
-                  warnings.push(
-                    `${ident} (${data_atend}): ${issue.problem}. Linha emitida sem inventar ou substituir o dado ausente.`,
-                  );
-                  continue;
-                }
-                errosEstruturais.push({
-                  ...issue,
-                  paciente: ident,
-                  data: data_atend,
-                  linha: exportedCount + 2,
-                  procedimento: proc,
-                });
-              }
-
-              // A conferência é uma projeção do mesmo registro final entregue
-              // ao serializer; não há uma segunda resolução de CNS/endereço.
               const rowConf = {
                 paciente_nome: String(registroFinal.nomePaciente || "").toUpperCase(),
                 paciente_cns: String(registroFinal.cnsPaciente || ""),
@@ -3184,22 +3189,85 @@ const BpaExportar: React.FC = () => {
                 },
               };
 
-              linhasProducao.push(l);
-              if (formData.exportar_cbo_incompativel && catalogoOficial.get(proc) && avaliarCboSigtap(catalogoOficial.get(proc)!, cbo) === "incompativel") {
-                resumoIntegridade.cboExcecoesExportadas.push(`${nome_pac || ident} (${data_atend}): ${proc} / CBO ${cbo}`);
+              if (conferenceEligible) {
+                confRows.push(rowConf);
+                conferenceCount++;
+                if (formData.exportar_cbo_incompativel && catalogoOficial.get(proc) && avaliarCboSigtap(catalogoOficial.get(proc)!, cbo) === "incompativel") {
+                  resumoIntegridade.cboExcecoesExportadas.push(`${nome_pac || ident} (${data_atend}): ${proc} / CBO ${cbo}`);
+                }
               }
+              if (txtPrepared.errors.length) {
+                // Não passa pelo override de pendências: identificação/CID precisam ser válidos.
+                txtAudit.push({ paciente: ident, procedimento: proc, motivos: txtPrepared.errors });
+                warnings.push(`${ident}: linha ${proc} bloqueada somente no TXT — ${txtPrepared.errors.join(" | ")}`);
+                continue;
+              }
+              for (const warning of txtPrepared.warnings) warnings.push(`${ident}: TXT — ${warning}`);
+              if (txtPrepared.adjustments.length) {
+                stats.autoCorrected++;
+                details.autoCorrected.push({ ...itemDetail, pendencia: "Ajustes exclusivos do TXT",
+                  valor_atual: proc, motivo: txtPrepared.adjustments.join(" ") });
+              }
+              // Só as linhas aprovadas participam da numeração e do controle do TXT.
+              const registro = buildRegistro03(txtPrepared.record);
+              const l = registro.line;
+              for (const issue of registro.errors) {
+                errosEstruturais.push({ ...issue, paciente: ident, data: data_atend, linha: exportedCount + 2 });
+              }
+              for (const issue of registro.adjustments) {
+                warnings.push(`${ident} (${data_atend}): campo ${issue.field} [${issue.start}-${issue.end}] foi limitado ao tamanho oficial.`);
+              }
+              for (const issue of auditRegistro03Serialization(txtPrepared.record, l, { allowValidCpfIdentification: true })) {
+                if (issue.category === "missing-required-data" && formData.exportar_com_pendencias) {
+                  warnings.push(`${ident}: ${issue.problem}. Linha emitida sem inventar o dado ausente.`);
+                  continue;
+                }
+                errosEstruturais.push({ ...issue, paciente: ident, data: data_atend, linha: exportedCount + 2, procedimento: proc });
+              }
+              linhasProducao.push(l);
               itensControle.push({ procedimento: proc, quantidade });
               exportedCount++;
-              confRows.push(rowConf);
             }
           }
         }
       });
 
+      // Consolidar pendências por registro (Pendências tab)
+      const pendMap = new Map<string, any>();
+      const pushPend = (item: any, motivo: string) => {
+        const key = item.id || `${item.paciente_nome}-${item.data_atendimento}`;
+        const cur = pendMap.get(key) || { ...item, pendencias: [] as string[] };
+        if (!cur.pendencias.includes(motivo)) cur.pendencias.push(motivo);
+        pendMap.set(key, cur);
+      };
+      const pendCats: Array<[string, string]> = [
+        ["missingCns", "CNS paciente ausente"],
+        ["missingSexo", "Sexo ausente"],
+        ["invalidNascimento", "Data nascimento inválida"],
+        ["missingMunicipio", "Município ausente"],
+        ["missingCbo", "CBO profissional ausente"],
+        ["missingSigtap", "Procedimento SIGTAP ausente"],
+        ["rejectedProc", "Procedimento incompatível (não exportado)"],
+        ["missingNacionalidade", "Nacionalidade ausente/inválida"],
+        ["missingLogradouro", "Código de logradouro ausente"],
+        ["defaultProc", "Usando procedimento padrão"],
+        ["critical", "Erro crítico"],
+      ];
+      const baseConferenceCategories = new Set(["missingCns", "missingSexo", "invalidNascimento", "missingMunicipio"]);
+      pendCats.forEach(([k, lbl]) => {
+        if (k === "missingCns" || k === "critical") conferenceOnlyCns.forEach((item) => pushPend(item, lbl));
+        (details as any)[k]?.forEach((it: any) => {
+          if (conferenceExcludedIds.has(String(it.id)) && !baseConferenceCategories.has(k)) return;
+          pushPend(it, lbl);
+        });
+      });
+      pendRows.push(...Array.from(pendMap.values()));
+
       if (hasError) {
         setResults({
           totalFound: prontuarios.length,
-          exportedCount: 0,
+          exportedCount: conferenceCount,
+          txtExportedCount: 0, txtAudit,
           warnings,
           criticalCount,
           stats,
@@ -3212,6 +3280,18 @@ const BpaExportar: React.FC = () => {
           pendRows: [],
           headerPreview: null,
           headerDetails: null,
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (exportedCount === 0 && (txtAudit.length > 0 || criticalCount > 0)) {
+        setResults({
+          totalFound: prontuarios.length, exportedCount: conferenceCount,
+          txtExportedCount: 0, txtAudit, warnings, criticalCount, stats, details,
+          resumo: { ...resumoIntegridade, totalRegistros03: 0 },
+          error: "Nenhuma linha aprovada na auditoria do TXT. Corrija as pendências indicadas e gere novamente.",
+          fileName: "", blobUrl: null, confRows, pendRows, headerPreview: null, headerDetails: null,
         });
         setLoading(false);
         return;
@@ -3242,7 +3322,7 @@ const BpaExportar: React.FC = () => {
 
       if (hasError) {
         setResults({
-          totalFound: prontuarios.length, exportedCount: 0, warnings, criticalCount, stats, details,
+          totalFound: prontuarios.length, exportedCount: conferenceCount, txtExportedCount: 0, txtAudit, warnings, criticalCount, stats, details,
           resumo: { ...resumoIntegridade, totalRegistros03: 0 },
           error: "O TXT foi bloqueado pela validação estrutural. Revise os campos indicados nas pendências.",
           fileName: "", blobUrl: null, confRows, pendRows: [], headerPreview: null, headerDetails: null,
@@ -3376,7 +3456,7 @@ const BpaExportar: React.FC = () => {
       }
       if (bloqueiosFinais.length) {
         setResults({
-          totalFound: prontuarios.length, exportedCount: 0, warnings, criticalCount, stats, details,
+          totalFound: prontuarios.length, exportedCount: conferenceCount, txtExportedCount: 0, txtAudit, warnings, criticalCount, stats, details,
           error: `TXT bloqueado pela auditoria final: ${bloqueiosFinais.slice(0, 5).join(" | ")}${
             formData.exportar_com_pendencias ? "" : " — marque 'Exportar mesmo com pendências críticas' e gere novamente para exportar pendências não estruturais."
           }`,
@@ -3394,39 +3474,14 @@ const BpaExportar: React.FC = () => {
       console.log("[BPA] Header HEX (50):", bytesToHex(Array.from(headerBytes).slice(0, 50)));
       console.log("[BPA] Header texto:", header);
 
-      // Consolidar pendências por registro (Pendências tab)
-      const pendMap = new Map<string, any>();
-      const pushPend = (item: any, motivo: string) => {
-        const key = item.id || `${item.paciente_nome}-${item.data_atendimento}`;
-        const cur = pendMap.get(key) || { ...item, pendencias: [] as string[] };
-        if (!cur.pendencias.includes(motivo)) cur.pendencias.push(motivo);
-        pendMap.set(key, cur);
-      };
-      const pendCats: Array<[string, string]> = [
-        ["missingCns", "CNS paciente ausente"],
-        ["missingSexo", "Sexo ausente"],
-        ["invalidNascimento", "Data nascimento inválida"],
-        ["missingMunicipio", "Município ausente"],
-        ["missingCbo", "CBO profissional ausente"],
-        ["missingSigtap", "Procedimento SIGTAP ausente"],
-        ["rejectedProc", "Procedimento incompatível (não exportado)"],
-        ["missingNacionalidade", "Nacionalidade ausente/inválida"],
-        ["missingLogradouro", "Código de logradouro ausente"],
-        ["defaultProc", "Usando procedimento padrão"],
-        ["critical", "Erro crítico"],
-      ];
-      pendCats.forEach(([k, lbl]) => {
-        (details as any)[k]?.forEach((it: any) => pushPend(it, lbl));
-      });
-      pendRows.push(...Array.from(pendMap.values()));
-
       resumoIntegridade.totalRegistros03 = exportedCount;
       resumoIntegridade.municipios = Array.from(municipiosSet).sort();
       resumoIntegridade.codigosIbge = Array.from(ibgeSet).sort();
 
       setResults({
         totalFound: prontuarios.length,
-        exportedCount,
+        exportedCount: conferenceCount,
+        txtExportedCount: exportedCount, txtAudit,
         warnings,
         criticalCount,
         stats,
@@ -4257,12 +4312,26 @@ ${rejectedHtml}`;
       {results && (
         <div ref={resultsRef} className="scroll-mt-4 space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
           <p className="text-sm text-muted-foreground">Bloco da exportação: <strong>{generatedBlockLabel.current}</strong></p>
+          {!!results.txtAudit?.length && (
+            <Alert variant="destructive">
+              <AlertTitle>Linhas não incluídas no TXT ({results.txtAudit.length})</AlertTitle>
+              <AlertDescription>
+                <p>Conferência e Excel mantêm os dados de origem. Corrija as pendências abaixo e gere o TXT novamente.</p>
+                <ul className="mt-2 list-disc pl-5 space-y-1">
+                  {results.txtAudit.slice(0, 20).map((item, index) => (
+                    <li key={index}>{item.paciente} · {item.procedimento}: {item.motivos.join(" ")}</li>
+                  ))}
+                </ul>
+                {results.txtAudit.length > 20 && <p className="mt-2">Demais ocorrências disponíveis nos avisos da exportação.</p>}
+              </AlertDescription>
+            </Alert>
+          )}
           {results.blobUrl && (
             <Alert className="border-primary/30 bg-card">
               <CheckCircle2 className="h-4 w-4 text-primary" />
               <AlertTitle>Arquivo BPA-I pronto</AlertTitle>
               <AlertDescription className="mt-3 flex flex-wrap items-center gap-3">
-                <span>{results.exportedCount} Registros 03 foram gerados.</span>
+                <span>{(results.txtExportedCount ?? results.exportedCount)} Registros 03 foram gerados.</span>
                 <a
                   href={results.blobUrl}
                   download={results.fileName}
@@ -4723,7 +4792,7 @@ ${rejectedHtml}`;
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
                 <AlertTitle className="text-green-800">Processamento Concluído</AlertTitle>
                 <AlertDescription className="text-green-700">
-                  {results.exportedCount} linhas geradas com sucesso. Verifique os avisos acima antes de baixar.
+                  {(results.txtExportedCount ?? results.exportedCount)} linhas geradas com sucesso. Verifique os avisos acima antes de baixar.
                 </AlertDescription>
               </Alert>
 
@@ -4743,7 +4812,7 @@ ${rejectedHtml}`;
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">Exportados no TXT</div>
-                        <div className="font-bold text-lg text-green-700">{results.exportedCount}</div>
+                        <div className="font-bold text-lg text-green-700">{(results.txtExportedCount ?? results.exportedCount)}</div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">
@@ -4827,7 +4896,7 @@ ${rejectedHtml}`;
                     )}
                     <div className="pt-2 border-t text-xs text-muted-foreground">
                       ✓ Cabeçalho declara <b>{results.headerDetails?.registros}</b> registros — confere com{" "}
-                      {results.exportedCount} linhas no arquivo.
+                      {(results.txtExportedCount ?? results.exportedCount)} linhas no arquivo.
                       {formData.exportar_com_pendencias
                         ? " Atendimentos com pendência autorizada estão incluídos nessas linhas."
                         : " Registros bloqueados não entram no TXT nem na contagem."}
@@ -4993,6 +5062,10 @@ ${rejectedHtml}`;
 
               {!results.blobUrl && results.confRows?.length > 0 && (
                 <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
+                  <Button type="button" variant="outline" className="h-11 px-6" onClick={handleBaixarExcel}>
+                    <FileSpreadsheet className="mr-2 h-5 w-5 text-emerald-600" />
+                    Baixar Excel
+                  </Button>
                   <Button type="button" variant="outline" className="h-11 px-6" onClick={handleImprimirConferencia}>
                     <Printer className="mr-2 h-5 w-5" />
                     Imprimir Conferência (para revisar pendências)

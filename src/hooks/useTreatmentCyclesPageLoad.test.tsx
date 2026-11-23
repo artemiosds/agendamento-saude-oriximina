@@ -12,7 +12,7 @@ function setup() {
     }, [page, fetchPage]);
     useTreatmentCyclesPageLoad({ page, setPage, filterScope: scope, loadData });
     return { page, setPage };
-  }, { initialProps: { scope: "original", fetchPage } });
+  }, { initialProps: { scope: "original", fetchPage: fetchPage as (page: number, silent: boolean) => Promise<void> } });
   return { ...hook, fetchPage };
 }
 

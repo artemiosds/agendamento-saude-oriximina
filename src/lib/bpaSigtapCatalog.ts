@@ -24,6 +24,7 @@ interface BpaSigtapFiles {
   /** Dicionário tb_cid, distinto da relação restritiva procedimento × CID. */
   cidDefinitions?: string;
   detalhes?: string;
+  descricoesDetalhes?: string;
 }
 
 interface LayoutField {
@@ -34,6 +35,15 @@ interface LayoutField {
 const GITHUB_TABLES = "https://api.github.com/repos/RenatoKR/SIGTAP/contents/tabelas";
 const cache = new Map<string, Promise<BpaSigtapCatalog>>();
 const cidDefinitionsByCatalog = new WeakMap<BpaSigtapCatalog, Map<string, string>>();
+const competenciaUsadaPorCatalogo = new WeakMap<BpaSigtapCatalog, string>();
+const indigenousCpfExceptionCatalogs = new WeakSet<BpaSigtapCatalog>();
+
+/** The exception is enabled only by the official 058 text of this competence. */
+export const allowsBpaIndigenousCnsIdentification = (catalog: BpaSigtapCatalog): boolean =>
+  indigenousCpfExceptionCatalogs.has(catalog);
+
+export const hasBpaCidDictionary = (catalog: BpaSigtapCatalog): boolean =>
+  Boolean(cidDefinitionsByCatalog.get(catalog)?.size);
 
 /** Exact fallback for a partial local CID table, using the same SIGTAP archive. */
 export function getCidFromBpaCatalog(catalog: BpaSigtapCatalog, value: string): { codigo: string; descricao: string } | null {
@@ -163,6 +173,14 @@ export function parseBpaSigtapCatalog(
       catalog.get(line.slice(0, 10))?.detalhes?.add(line.slice(10, 13));
     }
   }
+  for (const line of (files.descricoesDetalhes || "").split(/\r?\n/)) {
+    if (line.slice(0, 3) !== "058" || line.slice(4003, 4009) !== competencia) continue;
+    const description = line.slice(3, 4003).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (description.includes("EXCETUAM-SE A ESTE REGRAMENTO A POPULACAO INDIGENA") &&
+        description.includes("IDENTIFICADA POR MEIO DO CARTAO NACIONAL DE SAUDE (CNS)")) {
+      indigenousCpfExceptionCatalogs.add(catalog);
+    }
+  }
 
   if (catalog.size === 0) throw new Error(`Tabela SIGTAP ${competencia} vazia ou incompatível`);
   if (files.cidDefinitions != null) {
@@ -175,11 +193,11 @@ export function parseBpaSigtapCatalog(
     }
     cidDefinitionsByCatalog.set(catalog, dictionary);
   }
+  competenciaUsadaPorCatalogo.set(catalog, competencia);
   return catalog;
 }
 
 /** Competência efetivamente usada por catálogo carregado (pode ser anterior à pedida). */
-const competenciaUsadaPorCatalogo = new WeakMap<BpaSigtapCatalog, string>();
 export const getCompetenciaReferenciaCatalogo = (catalog?: BpaSigtapCatalog | null): string =>
   (catalog && competenciaUsadaPorCatalogo.get(catalog)) || "";
 
@@ -230,6 +248,10 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
     const detalhes = detalheEntry
       ? new TextDecoder("iso-8859-1").decode(await detalheEntry.async("uint8array"))
       : undefined;
+    const descricaoDetalheEntry = find("tb_descricao_detalhe.txt");
+    const descricoesDetalhes = descricaoDetalheEntry
+      ? new TextDecoder("iso-8859-1").decode(await descricaoDetalheEntry.async("uint8array"))
+      : undefined;
     const cidEntry = find("tb_cid.txt");
     const cidDefinitions = cidEntry
       ? new TextDecoder("iso-8859-1").decode(await cidEntry.async("uint8array"))
@@ -251,6 +273,7 @@ export function loadBpaSigtapCatalog(competencia: string): Promise<BpaSigtapCata
       cids,
       cidDefinitions,
       detalhes,
+      descricoesDetalhes,
     });
     competenciaUsadaPorCatalogo.set(catalog, competenciaUsada);
     return catalog;

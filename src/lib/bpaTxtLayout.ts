@@ -1,3 +1,5 @@
+import { patientCpfError } from "./patientCpf";
+
 /**
  * Construtor posicional do arquivo BPA-I (SIA/SUS).
  * Referência: Layout de Exportação BPA — Registro 01 (130) e Registro 03 (351).
@@ -212,6 +214,7 @@ const AUDITED_REGISTRO_FIELDS: Array<keyof typeof BPA_I_FIELDS> = [
 export function auditRegistro03Serialization(
   data: BpaRegistroFinal,
   line: string,
+  options: { allowValidCpfIdentification?: boolean } = {},
 ): BpaSerializedAuditIssue[] {
   const issues: BpaSerializedAuditIssue[] = [];
   const cnsInformado = digits(data.cnsPaciente);
@@ -251,7 +254,7 @@ export function auditRegistro03Serialization(
     });
   }
 
-  if (!cnsInformado) {
+  if (!cnsInformado && !(options.allowValidCpfIdentification && !patientCpfError(String(data.cpfPaciente ?? "")))) {
     const definition = BPA_I_FIELDS.cnsPaciente;
     issues.push({
       field: "cnsPaciente",
