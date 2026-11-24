@@ -42,3 +42,14 @@ describe('fila de chamadas da TV', () => {
     q.queue.accept(call('2')); expect(repeat()).toBe(false);
   });
 });
+
+describe('fila MP3 com prazo de preparação próprio', () => {
+  it('mantém a ordem e espera a geração antes de processar a chamada seguinte', async () => {
+    const options = { display: vi.fn(), announce: vi.fn(() => new Promise<void>(resolve => setTimeout(resolve, 22000))),
+      stopAudio: vi.fn(), changed: vi.fn(), error: vi.fn(), announcementTimeoutMs: () => 40000 };
+    const queue = new PainelCallQueue(options); queues.push(queue); queue.resume(); queue.accept(call('1')); queue.accept(call('2'));
+    await vi.advanceTimersByTimeAsync(19000); expect(options.display).toHaveBeenCalledTimes(1); expect(options.error).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(25000); expect(options.display.mock.calls.map(([c]) => c.id)).toEqual(['1', '2']);
+    expect(options.error).not.toHaveBeenCalled();
+  });
+});

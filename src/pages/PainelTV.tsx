@@ -8,6 +8,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Volume2, Mic, Maximize } from "lucide-react";
 
 import { carregarVozPainel, escolherVozPainel, textoChamadaPainel } from "@/lib/painelVoice";
+import { PainelAudioModeSelect } from '@/components/painel/PainelAudioModeSelect';
+import { PAINEL_VOICE_TEST, preferenciaAudioPainel, salvarModoAudioPainel, type PainelAudioMode } from '@/lib/painelAudioMode';
+import { PainelMp3Player } from '@/lib/painelMp3';
 
 const HIST_KEY = (u: string) => `painel_tv_hist_${u}`;
 
@@ -133,6 +136,15 @@ export default function PainelTV() {
   const [audioOn, setAudioOn] = useState(false);
   const [iniciou, setIniciou] = useState(false);
   const [audioError, setAudioError] = useState('');
+  const requestedAudioMode = params.get('audio');
+  const [audioMode, setAudioMode] = useState<PainelAudioMode>(() => preferenciaAudioPainel(unidade, requestedAudioMode));
+  const audioModeRef = useRef(audioMode);
+  const [preparandoAudio, setPreparandoAudio] = useState(false);
+  const [testandoAudio, setTestandoAudio] = useState(false);
+  const [audioMessage, setAudioMessage] = useState('');
+  const preparingRef = useRef(false);
+  const mp3ElementRef = useRef<HTMLAudioElement | null>(null);
+  const mp3PlayerRef = useRef<PainelMp3Player | null>(null);
   const [pendentes, setPendentes] = useState(0);
   const [ocupado, setOcupado] = useState(false);
   const [agora, setAgora] = useState(new Date());
@@ -167,20 +179,53 @@ export default function PainelTV() {
 
   const stopAudio = () => {
     audioWork.current?.abort();
+    mp3PlayerRef.current?.stop();
     try { window.speechSynthesis?.cancel(); } catch { /* unsupported browser */ }
   };
+  const mp3Player = () => {
+    if (!mp3ElementRef.current) throw new Error('Reprodutor MP3 indisponível');
+    if (!mp3PlayerRef.current) mp3PlayerRef.current = new PainelMp3Player(mp3ElementRef.current);
+    return mp3PlayerRef.current;
+  };
+  const alterarModoAudio = (mode: PainelAudioMode) => {
+    if (queueRef.current?.busy || preparingRef.current || testandoRef.current) return;
+    stopAudio(); mp3PlayerRef.current?.dispose(); mp3PlayerRef.current = null;
+    audioModeRef.current = mode; setAudioMode(mode);
+    audioRef.current = false; setAudioOn(false); setAudioError(''); setAudioMessage('');
+    salvarModoAudioPainel(unidade, mode);
+    const next = new URLSearchParams(params);
+    if (mode === 'mp3') next.set('audio', 'mp3'); else next.delete('audio');
+    setParams(next, { replace: true });
+  };
+  useEffect(() => {
+    const next = preferenciaAudioPainel(unidade, requestedAudioMode);
+    if (next === audioModeRef.current) return;
+    stopAudio(); mp3PlayerRef.current?.dispose(); mp3PlayerRef.current = null;
+    audioModeRef.current = next; setAudioMode(next);
+    audioRef.current = false; setAudioOn(false); setAudioError(''); setAudioMessage('');
+    // Only explicit navigation/unit changes can change the selected mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unidade, requestedAudioMode]);
+  useEffect(() => () => {
+    mp3PlayerRef.current?.dispose(); mp3PlayerRef.current = null;
+  }, [unidade]);
   const anunciar = async (c: ChamadaPaciente, parent: AbortSignal, repeat: () => boolean) => {
-    if (!audioRef.current || !ctxRef.current) return;
+    if (!audioRef.current) return;
     const controller = new AbortController(); audioWork.current = controller;
     const abort = () => controller.abort();
     parent.addEventListener('abort', abort, { once: true });
     if (parent.aborted) controller.abort();
     const signal = controller.signal;
     try {
+      const txt = textoChamadaPainel(c.pacienteNome, c.local);
+      if (audioModeRef.current === 'mp3') {
+        await mp3Player().say(txt, signal);
+        return;
+      }
+      if (!ctxRef.current) return;
       if (ctxRef.current.state !== 'running') await limitarPainel(ctxRef.current.resume(), 2000, signal);
       if (ctxRef.current.state !== 'running') throw new Error('Áudio suspenso');
       await tocarSino(ctxRef.current, signal);
-      const txt = textoChamadaPainel(c.pacienteNome, c.local);
       // Um clique em "Chamar" = um único anúncio. Nova chamada só quando o usuário clicar novamente.
       void repeat;
       await falar(txt, signal);
@@ -216,6 +261,7 @@ export default function PainelTV() {
         try { localStorage.setItem(HIST_KEY(unidade), JSON.stringify(history)); } catch { /* storage may be disabled */ }
       },
       announce: anunciar,
+      announcementTimeoutMs: () => audioModeRef.current === 'mp3' ? 40000 : 18000,
       stopAudio,
       changed: (pending, busy) => {
         if (!active) return;
@@ -276,10 +322,17 @@ export default function PainelTV() {
   }, []);
 
   const ativarAudio = async () => {
+    if (preparingRef.current) return false;
     const scope = unidade;
+    const mode = audioModeRef.current;
     const controller = new AbortController();
     stopAudio(); audioWork.current = controller;
+    queueRef.current?.pause();
+    preparingRef.current = true; setPreparandoAudio(true);
     try {
+      if (mode === 'mp3') {
+        await mp3Player().activate(controller.signal);
+      } else {
       const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       if (!Ctx || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') throw new Error('Áudio não suportado');
       if (!ctxRef.current || ctxRef.current.state === 'closed') ctxRef.current = new Ctx();
@@ -287,8 +340,11 @@ export default function PainelTV() {
       if (controller.signal.aborted || audioScope.current !== scope) return false;
       if (ctxRef.current!.state !== 'running') throw new Error('Áudio suspenso');
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(' '));
+      }
+      if (controller.signal.aborted || audioScope.current !== scope || audioModeRef.current !== mode) return false;
       audioRef.current = true; startedRef.current = true;
       setAudioOn(true); setIniciou(true); setAudioError('');
+      if (mode === 'mp3') setAudioMessage('MP3 pronto. Use Testar voz para conferir o som nesta TV.');
       if (!testandoRef.current) queueRef.current?.resume();
       return true;
     } catch {
@@ -296,22 +352,31 @@ export default function PainelTV() {
       audioRef.current = false; setAudioOn(false);
       setAudioError('Não foi possível ativar o áudio. Verifique o navegador e o volume da TV.');
       return false;
-    } finally { if (audioWork.current === controller) audioWork.current = null; }
+    } finally {
+      if (audioWork.current === controller) {
+        audioWork.current = null; preparingRef.current = false; setPreparandoAudio(false);
+      }
+      if (startedRef.current && !testandoRef.current) queueRef.current?.resume();
+    }
   };
 
   const testarVoz = async () => {
     if (queueRef.current?.busy || testandoRef.current) return;
-    testandoRef.current = true; queueRef.current?.pause();
+    testandoRef.current = true; setTestandoAudio(true); queueRef.current?.pause();
     const controller = new AbortController();
     try {
       if (!audioRef.current && !(await ativarAudio())) return;
       queueRef.current?.pause(); audioWork.current = controller;
-      if (ctxRef.current) await tocarSino(ctxRef.current, controller.signal);
-      await falar('Teste de voz do painel de chamadas.', controller.signal);
+      if (audioModeRef.current === 'mp3') await mp3Player().say(PAINEL_VOICE_TEST, controller.signal);
+      else {
+        if (ctxRef.current) await tocarSino(ctxRef.current, controller.signal);
+        await falar(PAINEL_VOICE_TEST, controller.signal);
+      }
+      if (!controller.signal.aborted) setAudioMessage('Teste reproduzido. Confirme se ouviu o sino e a voz.');
     } catch {
       if (!controller.signal.aborted) { audioRef.current = false; setAudioOn(false); setAudioError('Teste de voz falhou. Confira o áudio da TV.'); }
     } finally {
-      testandoRef.current = false;
+      testandoRef.current = false; setTestandoAudio(false);
       if (audioWork.current === controller) audioWork.current = null;
       if (startedRef.current) queueRef.current?.resume();
     }
@@ -344,12 +409,14 @@ export default function PainelTV() {
 
   return (
     <div className="min-h-screen bg-primary text-primary-foreground flex flex-col select-none">
-      <header className="flex items-center justify-between px-10 py-5 border-b border-primary-foreground/20">
+      <audio ref={mp3ElementRef} preload="none" className="hidden" aria-hidden="true" />
+      <header className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-10 py-5 border-b border-primary-foreground/20">
         <h1 className="text-3xl font-bold tracking-wide">Painel de Chamadas</h1>
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-4">
+          {iniciou && <PainelAudioModeSelect id="painel-voz-ativo" value={audioMode} onChange={alterarModoAudio} disabled={ocupado || preparandoAudio || testandoAudio} />}
           <div className="flex gap-2 opacity-60 hover:opacity-100 transition-opacity">
-            <button onClick={() => void ativarAudio()} disabled={ocupado} title="Ativar som" className="rounded-lg bg-primary-foreground/10 p-2 disabled:opacity-40"><Volume2 className="w-5 h-5" /></button>
-            <button onClick={testarVoz} disabled={ocupado} title="Testar voz" className="rounded-lg bg-primary-foreground/10 p-2 disabled:opacity-40"><Mic className="w-5 h-5" /></button>
+            <button onClick={() => void ativarAudio()} disabled={ocupado || preparandoAudio || testandoAudio} title="Ativar som" className="rounded-lg bg-primary-foreground/10 p-2 disabled:opacity-40"><Volume2 className="w-5 h-5" /></button>
+            <button onClick={testarVoz} disabled={ocupado || preparandoAudio || testandoAudio} title="Testar voz" className="rounded-lg bg-primary-foreground/10 p-2 disabled:opacity-40"><Mic className="w-5 h-5" /></button>
             <button onClick={telaCheia} title="Tela cheia" className="rounded-lg bg-primary-foreground/10 p-2"><Maximize className="w-5 h-5" /></button>
           </div>
           <div className="text-right">
@@ -360,9 +427,10 @@ export default function PainelTV() {
       </header>
       <div role="status" className="flex flex-wrap justify-between gap-2 px-10 py-2 text-sm border-b border-primary-foreground/20">
         <span>{status === 'SUBSCRIBED' ? 'Painel conectado' : 'Painel desconectado — tentando reconectar. Novas chamadas podem não chegar.'}</span>
-        <span>{audioOn ? 'Som ativado' : 'Som inativo'} · {pendentes} chamada(s) aguardando</span>
+        <span>{preparandoAudio ? 'Preparando áudio…' : audioOn ? 'Som ativado' : 'Som inativo'} · {audioMode === 'mp3' ? 'MP3 local' : 'Voz do navegador'} · {pendentes} chamada(s) aguardando</span>
       </div>
       {audioError && <p role="alert" className="px-10 py-2 bg-amber-100 text-amber-950">{audioError}</p>}
+      {audioMessage && <p role="status" className="px-4 sm:px-10 py-2 text-sm">{audioMessage}</p>}
       {videoError && <p className="px-10 py-1 text-sm">{videoError}</p>}
 
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[7fr_3fr]">
@@ -411,19 +479,22 @@ export default function PainelTV() {
       {debug && (
         <div className="fixed bottom-2 left-2 max-w-md rounded-lg bg-foreground/80 text-background text-xs p-3 font-mono space-y-0.5">
           <div>unidade: {unidade} | canal: {status} | som: {audioOn ? "on" : "off"} | fila: {pendentes}</div>
-          <div>voz: {escolherVozPainel(window.speechSynthesis?.getVoices() || [])?.name || "nenhuma pt-BR"}</div>
+          <div>voz: {audioMode === 'mp3' ? 'MP3 local · português' : escolherVozPainel(window.speechSynthesis?.getVoices() || [])?.name || "nenhuma pt-BR"}</div>
           {logs.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
 
       {!iniciou && (
         <div
-          className="fixed inset-0 bg-foreground/70 flex flex-col items-center justify-center gap-4 text-background text-4xl font-bold"
+          className="fixed inset-0 overflow-y-auto bg-foreground/90 flex flex-col items-center justify-center gap-4 p-5 text-background text-2xl sm:text-4xl font-bold"
         >
           <Volume2 className="w-24 h-24" />
-          <button onClick={() => { void ativarAudio(); telaCheia(); }} className="rounded-xl border px-6 py-4">Clique para ativar o áudio</button>
+          <div className="w-full max-w-md"><PainelAudioModeSelect id="painel-voz-inicial" value={audioMode} onChange={alterarModoAudio} disabled={preparandoAudio || testandoAudio} /></div>
+          <p className="max-w-md text-center text-sm font-normal">MP3: voz sintética local em português, sem serviço externo nem áudio gravado no banco.</p>
+          <button disabled={preparandoAudio} onClick={() => { void ativarAudio(); telaCheia(); }} className="rounded-xl border px-6 py-4 disabled:opacity-60">{preparandoAudio ? 'Preparando áudio…' : 'Clique para ativar o áudio'}</button>
           {audioError && <p className="max-w-xl text-center text-lg">{audioError}</p>}
           <button className="text-lg underline" onClick={() => {
+            stopAudio(); audioRef.current = false; setAudioOn(false);
             startedRef.current = true; setIniciou(true); queueRef.current?.resume();
           }}>Continuar sem áudio (somente exibição)</button>
         </div>

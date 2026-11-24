@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Copy, ExternalLink, Save } from "lucide-react";
 import { toast } from "sonner";
 import { linkPainelTV, playlistPainel, videoPrincipalPainel } from '@/lib/painelVideo';
+import { PainelAudioModeSelect } from '@/components/painel/PainelAudioModeSelect';
+import type { PainelAudioMode } from '@/lib/painelAudioMode';
 
 const CONFIG_KEY = "painel_tv";
 
@@ -22,6 +24,7 @@ export default function PainelChamadasConfig() {
   const [video, setVideo] = useState("");
   const [playlists, setPlaylists] = useState<Record<string, string[]>>({});
   const [salvando, setSalvando] = useState(false);
+  const [audioMode, setAudioMode] = useState<PainelAudioMode>('navegador');
   const isMaster = user?.role === "master";
 
   useEffect(() => {
@@ -46,8 +49,8 @@ export default function PainelChamadasConfig() {
   useEffect(() => { setVideo(videos[unidade] || ""); }, [unidade, videos]);
 
   const link = useMemo(() => {
-    return linkPainelTV(window.location.origin, unidade);
-  }, [unidade]);
+    return linkPainelTV(window.location.origin, unidade, audioMode);
+  }, [unidade, audioMode]);
 
   const salvar = async () => {
     if (!isMaster || !unidade || (restrito && unidade !== user?.unidadeId)) return;
@@ -98,6 +101,10 @@ export default function PainelChamadasConfig() {
             <p className="text-xs text-muted-foreground">O vídeo toca sem som. Os demais vídeos da lista são preservados; ao limpar este campo, o próximo passa a ser o principal. Gerencie a lista completa em Unidades e Salas. Somente o Master altera.</p>
           </div>
 
+          <div className="max-w-md space-y-2">
+            <PainelAudioModeSelect id="link-painel-audio" value={audioMode} onChange={setAudioMode} />
+            <p className="text-xs text-muted-foreground">O MP3 usa voz sintética em português, gerada no próprio painel. Não exige serviço de voz externo nem armazena áudio no banco. Os links anteriores continuam usando a voz do navegador.</p>
+          </div>
           <div className="space-y-2">
             <Label>Link da TV</Label>
             <div className="flex gap-2">

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const fixture = vi.hoisted(() => ({ unit: 'A', channels: [] as any[], removed: [] as any[] }));
-vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams({ unidade: fixture.unit }), vi.fn()] }));
+const fixture = vi.hoisted(() => ({ unit: 'A', mode: '', channels: [] as any[], removed: [] as any[] }));
+vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams({ unidade: fixture.unit, ...(fixture.mode ? { audio: fixture.mode } : {}) }), vi.fn()] }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   from: () => {
@@ -17,7 +17,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {
 } }));
 import PainelTV from './PainelTV';
 const call = (id: string, unit = 'A') => ({ id, pacienteNome: `PACIENTE ${id}`, local: 'SALA', criadoEm: new Date().toISOString(), unidadeId: unit });
-beforeEach(() => { vi.useFakeTimers(); fixture.unit = 'A'; fixture.channels = []; fixture.removed = []; localStorage.clear(); });
+beforeEach(() => { vi.useFakeTimers(); fixture.unit = 'A'; fixture.mode = ''; fixture.channels = []; fixture.removed = []; localStorage.clear(); });
 afterEach(async () => { cleanup(); await act(async () => { await vi.advanceTimersByTimeAsync(0); }); vi.useRealTimers(); vi.unstubAllGlobals(); });
 async function show() { const r = render(<PainelTV />); await act(async () => { await vi.advanceTimersByTimeAsync(0); }); return r; }
 describe('TV: isolamento, recepção e áudio', () => {
@@ -62,5 +62,63 @@ describe('TV: isolamento, recepção e áudio', () => {
     const { unmount } = await show(); const ch = fixture.channels[0]; act(() => ch.event({ payload: call('1') }));
     unmount(); await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(fixture.removed).toContain(ch); expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+// A TV without Web Speech must still activate and speak with HTML audio + local MP3.
+describe('TV: modo MP3 sem suporte à síntese do navegador', () => {
+  it.each([false, true])('ativa sem Web Speech e mantém a fila visual se o MP3 falhar: %s', async (failCall) => {
+    fixture.mode = 'mp3';
+    vi.stubGlobal('AudioContext', undefined); vi.stubGlobal('webkitAudioContext', undefined);
+    vi.stubGlobal('speechSynthesis', undefined); vi.stubGlobal('SpeechSynthesisUtterance', undefined);
+    const workers: { postMessage: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn>; onmessage: ((v: unknown) => void) | null }[] = [];
+    vi.stubGlobal('Worker', class {
+      onmessage: ((v: unknown) => void) | null = null; onerror = null; terminate = vi.fn();
+      postMessage = vi.fn(({ id }) => {
+        if (failCall && workers.length > 1) {
+          queueMicrotask(() => this.onerror?.(new Event('error')));
+          return;
+        }
+        const audio = new Uint8Array(128); audio.set([0xff, 0xfb, 0x90]);
+        queueMicrotask(() => this.onmessage?.({ data: { id, audio: audio.buffer } }));
+      });
+      constructor() { workers.push(this); }
+    });
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function () {
+      queueMicrotask(() => this.dispatchEvent(new Event('ended'))); return Promise.resolve();
+    });
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const load = vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    const createUrl = vi.fn(() => 'blob:voice'); const revoke = vi.fn();
+    const originalCreate = URL.createObjectURL; const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = createUrl; URL.revokeObjectURL = revoke;
+    try {
+      await show(); fireEvent.click(screen.getByRole('button', { name: 'Clique para ativar o áudio' }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByText(/Som ativado.*MP3 local/)).toBeInTheDocument();
+      fireEvent.click(screen.getByTitle('Testar voz')); await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByText(/Teste reproduzido/)).toBeInTheDocument();
+      act(() => fixture.channels[0].event({ payload: call('MP3') }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByText('PACIENTE MP3')).toBeInTheDocument();
+      expect(workers).toHaveLength(2); expect(workers.every(w => w.terminate.mock.calls.length === 1)).toBe(true);
+      expect(workers[1].postMessage).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('paciente mp3') }));
+      expect(revoke).toHaveBeenCalledTimes(failCall ? 1 : 2);
+      expect(fixture.channels).toHaveLength(1);
+      if (failCall) {
+        expect(screen.getByText(/Falha no áudio. As chamadas continuam na tela/)).toBeInTheDocument();
+        act(() => fixture.channels[0].event({ payload: call('PROXIMO') }));
+        await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+        expect(screen.getByText('PACIENTE PROXIMO')).toBeInTheDocument();
+        expect(workers).toHaveLength(2);
+        await act(async () => { await vi.advanceTimersByTimeAsync(18000); });
+        expect(screen.getByRole('combobox', { name: 'Modo de voz' })).toBeEnabled();
+        fireEvent.change(screen.getByRole('combobox', { name: 'Modo de voz' }), { target: { value: 'navegador' } });
+        expect(screen.getByText(/Som inativo.*Voz do navegador/)).toBeInTheDocument();
+      }
+    } finally {
+      play.mockRestore(); pause.mockRestore(); load.mockRestore();
+      URL.createObjectURL = originalCreate; URL.revokeObjectURL = originalRevoke;
+    }
   });
 });

@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "build": "npm run build:panel-audio && vite build",
+    "build:dev": "npm run build:panel-audio && vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:panel-audio": "node scripts/build-panel-audio.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -99,6 +100,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@breezystack/lamejs": "1.2.7",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-plugin-dev-server-bridge": "^1.0.2",
     "@lovable.dev/vite-plugin-hmr-gate": "^1.8.3",
@@ -113,12 +115,14 @@
     "autoprefixer": "^10.4.21",
     "drizzle-kit": "0.x",
     "drizzle-orm": "0.x",
+    "esbuild": "0.25.12",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "jsdom": "^20.0.3",
     "lovable-tagger": "^1.1.13",
+    "mespeak": "2.0.2",
     "postcss": "^8.5.6",
     "postgres": "^3.4.9",
     "tailwindcss": "^3.4.17",

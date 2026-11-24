@@ -31,6 +31,7 @@ interface QueueOptions {
   stopAudio: () => void;
   changed: (pending: number, busy: boolean) => void;
   error: (error: unknown) => void;
+  announcementTimeoutMs?: () => number;
 }
 
 /** One worker per TV/unit. Accepted calls are never evicted by a new call. */
@@ -76,7 +77,7 @@ export class PainelCallQueue {
         const started = Date.now();
         const duration = this.pending >= 3 ? 5000 : this.pending ? 8000 : 15000;
         try {
-          await limitarPainel(this.options.announce(call, signal, () => this.pending === 0), 18000, signal);
+          await limitarPainel(this.options.announce(call, signal, () => this.pending === 0), this.options.announcementTimeoutMs?.() ?? 18000, signal);
         } catch (error) {
           this.options.stopAudio();
           if (!signal.aborted) this.options.error(error);

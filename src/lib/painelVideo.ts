@@ -14,8 +14,9 @@ export function videoPrincipalPainel(current: string[], primary: string): string
   return primary ? [...new Set([primary, ...current.slice(1)])] : current.slice(1);
 }
 
-export function linkPainelTV(origin: string, unidade: string): string {
+export function linkPainelTV(origin: string, unidade: string, audio?: 'mp3' | 'navegador'): string {
   const url = new URL('/painel-tv', origin);
   url.searchParams.set('unidade', unidade);
+  if (audio === 'mp3') url.searchParams.set('audio', 'mp3');
   return url.toString();
 }

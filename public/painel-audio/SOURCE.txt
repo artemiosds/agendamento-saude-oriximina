@@ -1,0 +1,29 @@
+Painel MP3 local — isolated speech synthesis program
+
+The MP3 worker is a separate program communicating only through postMessage.
+It has no access to the application's database or authenticated client and
+does not send call text to any speech provider. Audio is generated in memory.
+
+Worker/PCM source (GPL-3.0-or-later):
+  /painel-audio/painelMp3.worker.ts
+  /painel-audio/painelMp3Encoding.ts
+Build command in this project's source: npm run build:panel-audio
+Build recipe: scripts/build-panel-audio.mjs
+
+meSpeak 2.0.2 — Norbert Landsteiner, Mikola Lysenko; GNU GPL.
+  https://github.com/mikolalysenko/mespeak
+  https://www.masswerk.at/mespeak/
+  https://registry.npmjs.org/mespeak/-/mespeak-2.0.2.tgz
+  Original eSpeak/speak.js source: https://github.com/kripken/speak.js
+
+LAME/@breezystack/lamejs 1.2.7 — Alex Zhukov and contributors; LGPL-3.0.
+  https://github.com/shijinyu/lamejs
+  https://lame.sourceforge.io/
+  https://registry.npmjs.org/@breezystack/lamejs/-/lamejs-1.2.7.tgz
+The LAME encoder is used without modification.
+
+Licenses: https://www.gnu.org/licenses/gpl-3.0.html
+          https://www.gnu.org/licenses/lgpl-3.0.html
+
+The local synthetic voice is an optional accessibility/compatibility mode.
+The existing browser voice remains the default and does not load this worker.
