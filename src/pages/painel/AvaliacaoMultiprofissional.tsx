@@ -34,6 +34,8 @@ interface EvalExisting {
   created_at: string;
 }
 
+const TeamEvaluationPanel = React.lazy(() => import("@/components/prontuario/TeamEvaluationPanel"));
+
 const AvaliacaoMultiprofissional: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -209,6 +211,8 @@ const AvaliacaoMultiprofissional: React.FC = () => {
         <h1 className="text-2xl font-bold font-display text-foreground">Avaliação Multiprofissional</h1>
         <p className="text-muted-foreground text-sm">{pacientes.length} paciente(s) aguardando avaliação</p>
       </div>
+
+      <React.Suspense fallback={<p>Carregando solicitações da equipe…</p>}><TeamEvaluationPanel /></React.Suspense>
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
