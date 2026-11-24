@@ -6569,11 +6569,17 @@ const ProntuarioPage: React.FC = () => {
 
       {teamDialogOpen && (
         <Dialog open={teamDialogOpen} onOpenChange={setTeamDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Avaliação em equipe</DialogTitle></DialogHeader>
-            <React.Suspense fallback={<p>Carregando equipe…</p>}>
-              <TeamEvaluationPanel patientId={(dialogOpen ? form.paciente_id : queryPacienteId) || undefined} patientName={(dialogOpen ? form.paciente_nome : queryPacienteNome) || undefined} />
-            </React.Suspense>
+          <DialogContent className="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl sm:p-0">
+            <DialogHeader className="shrink-0 border-b bg-primary/[0.04] px-5 py-5 pr-12 text-left sm:px-6 sm:pr-14">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-primary">Prontuário · cuidado compartilhado</p>
+              <DialogTitle className="text-xl leading-snug">Avaliação em equipe</DialogTitle>
+              <p className="pt-1 text-sm text-muted-foreground">{(dialogOpen ? form.paciente_nome : queryPacienteNome) || 'Paciente'}</p>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2 sm:p-3">
+              <React.Suspense fallback={<p className="p-4 text-sm text-muted-foreground">Carregando equipe…</p>}>
+                <TeamEvaluationPanel patientId={(dialogOpen ? form.paciente_id : queryPacienteId) || undefined} patientName={(dialogOpen ? form.paciente_nome : queryPacienteNome) || undefined} />
+              </React.Suspense>
+            </div>
           </DialogContent>
         </Dialog>
       )}
