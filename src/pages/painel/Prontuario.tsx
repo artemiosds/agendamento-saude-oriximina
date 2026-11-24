@@ -99,6 +99,7 @@ import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import DeclaracaoRapidaModal from "@/components/documentos/DeclaracaoRapidaModal";
 import LocalErrorBoundary from "@/components/LocalErrorBoundary";
+const TeamEvaluationPanel = React.lazy(() => import("@/components/prontuario/TeamEvaluationPanel"));
 const DocumentosHistorico = React.lazy(() => import("@/components/DocumentosHistorico"));
 
 import SolicitacaoExames from "@/components/SolicitacaoExames";
@@ -778,6 +779,7 @@ const ProntuarioPage: React.FC = () => {
 
   const soapCustom = useSoapCustomOptions(user?.id);
 
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [docModalOpen, setDocModalOpen] = useState(false);
 
   const [declRapidaOpen, setDeclRapidaOpen] = useState(false);
@@ -4074,6 +4076,7 @@ const ProntuarioPage: React.FC = () => {
                 <Send className="w-4 h-4 mr-2" />
                 Encaminhar Paciente
               </Button>
+              <Button type="button" variant="outline" onClick={() => setTeamDialogOpen(true)}>Avaliação em equipe</Button>
               <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
                 Ver todos
               </Button>
@@ -5812,6 +5815,7 @@ const ProntuarioPage: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
+                {form.paciente_id && <Button type="button" variant="outline" onClick={() => setTeamDialogOpen(true)}>Avaliação em equipe</Button>}
                 {form.paciente_id && callUnitId && (
                   <ChamarPacienteButton
                     unidadeId={callUnitId}
@@ -6561,6 +6565,17 @@ const ProntuarioPage: React.FC = () => {
           profissional={user ? { nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
           unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
         />
+      )}
+
+      {teamDialogOpen && (
+        <Dialog open={teamDialogOpen} onOpenChange={setTeamDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Avaliação em equipe</DialogTitle></DialogHeader>
+            <React.Suspense fallback={<p>Carregando equipe…</p>}>
+              <TeamEvaluationPanel patientId={(dialogOpen ? form.paciente_id : queryPacienteId) || undefined} patientName={(dialogOpen ? form.paciente_nome : queryPacienteNome) || undefined} />
+            </React.Suspense>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Modal Gerar Documento Clínico */}

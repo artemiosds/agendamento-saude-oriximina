@@ -181,7 +181,8 @@ const ModuleRoute: React.FC<{
   const isMaster = user?.role?.toLowerCase().trim() === 'master';
 
   if (masterOnly && !isMaster) return <AccessDenied />;
-  if (!isMaster && !can(modulo, 'can_view')) return <AccessDenied />;
+  const teamClinicalAccess = modulo === 'avaliacao_multi' && user?.ativo && ['profissional', 'enfermagem'].includes(user.role);
+  if (!isMaster && !teamClinicalAccess && !can(modulo, 'can_view')) return <AccessDenied />;
 
   return <>{children}</>;
 };

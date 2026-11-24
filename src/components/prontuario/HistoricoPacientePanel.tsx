@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
 import { supabase } from "@/integrations/supabase/client";
 
+const TeamEvaluationPanel = React.lazy(() => import("./TeamEvaluationPanel"));
+
 const HISTORY_PAGE_SIZE = 20;
 const HISTORY_CARD_COLUMNS = [
   "id",
@@ -214,7 +216,7 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
   onGerarDocumento,
   documentosRefreshKey = 0,
 }) => {
-  const [activeTab, setActiveTab] = useState<"historico" | "documentos" | "triagens">("historico");
+  const [activeTab, setActiveTab] = useState<"historico" | "documentos" | "triagens" | "equipe">("historico");
   useEffect(() => {
     const h = () => setActiveTab("triagens");
     window.addEventListener("prontuario:abrir-triagens", h);
@@ -341,11 +343,12 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
       </div>
 
       {/* Abas laterais */}
-      <div className="px-3 pt-2 border-b border-border/60 shrink-0 flex gap-1" role="tablist">
+      <div className="px-3 pt-2 border-b border-border/60 shrink-0 flex flex-wrap gap-1" role="tablist">
         {([
           { id: "historico", label: "Histórico", icon: History },
           { id: "documentos", label: "Documentos", icon: FileText },
           { id: "triagens", label: "Triagens", icon: Activity },
+          { id: "equipe", label: "Equipe", icon: Stethoscope },
         ] as const).map((t) => (
           <button
             key={t.id}
@@ -597,6 +600,12 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({
         </div>
       </ScrollArea>
       </>)}
+
+      {activeTab === "equipe" && pacienteId && (
+        <ScrollArea className="flex-1 min-h-0"><React.Suspense fallback={<p className="p-3 text-sm">Carregando equipe…</p>}>
+          <TeamEvaluationPanel patientId={pacienteId} patientName={paciente?.nome} onHistory={() => setActiveTab("historico")} />
+        </React.Suspense></ScrollArea>
+      )}
 
       {activeTab === "triagens" && (
         <TriagensPacienteTab pacienteId={pacienteId} unidadeId={unidadeId} isGlobalAdmin={isGlobalAdmin} />
