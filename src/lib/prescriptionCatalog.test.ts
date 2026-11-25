@@ -1,0 +1,10 @@
+import {describe,it,expect} from 'vitest';
+import {addCatalogMedication,catalogLabel,editPrescriptionRow,emptyPrescriptionRow,isStandardPrescription,medicationWarning,searchCatalog,type CatalogMedication} from './prescriptionCatalog';
+const med:CatalogMedication={id:'m1',nome:'Medicamento Fictício',nome_comercial:'Exemplo',principio_ativo:'Substância',concentracao:'50 mg',forma_farmaceutica:'comprimido',apresentacao:'50 mg comprimido',origem:'rename',tipo:'comum',codigo_rename:null,estoque_controlado:false,estoque_quantidade:0,estoque_minimo:0};
+describe('catálogo do receituário padrão',()=>{
+ it('limita a integração ao modelo solicitado',()=>{expect(isStandardPrescription('Receituário Médico Padrão')).toBe(true);expect(isStandardPrescription('Receituário Especial')).toBe(false);});
+ it('busca sem acentos por princípio ativo, concentração e nome comercial',()=>{expect(searchCatalog([med],'substancia 50')).toEqual([med]);expect(searchCatalog([med],'exemplo')).toEqual([med]);expect(searchCatalog([med],'x')).toEqual([]);});
+ it('insere apresentação sem sugerir dose, via, frequência ou duração',()=>{const rows=addCatalogMedication([emptyPrescriptionRow()],med);expect(rows).toEqual([{...emptyPrescriptionRow(),medicamento:catalogLabel(med),catalogoId:'m1',catalogoTipo:'comum'}]);expect(addCatalogMedication(rows,med)).toBe(rows);});
+ it('não sobrescreve medicamento manual nem repete concentração',()=>{const manual={...emptyPrescriptionRow(),medicamento:'Manual',dosagem:'informada'};expect(addCatalogMedication([manual],med)[0]).toEqual(manual);expect(catalogLabel({...med,nome:'Fictício 50 mg'})).toBe('Fictício 50 mg — comprimido');});
+ it('não herda posologia quando produto selecionado muda e alerta para controle especial',()=>{const row={...addCatalogMedication([],med)[0],dosagem:'informada',frequencia:'informada'};expect(editPrescriptionRow(row,'medicamento','Outro')).toEqual({...emptyPrescriptionRow(),medicamento:'Outro'});expect(medicationWarning('psicotropico')).toContain('controle especial');expect(medicationWarning('antibiotico')).toContain('Antimicrobiano');});
+});

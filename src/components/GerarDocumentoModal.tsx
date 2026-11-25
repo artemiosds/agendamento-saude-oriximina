@@ -26,6 +26,8 @@ import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import { getCodigoIbge } from "@/lib/municipiosIbge";
 import StructuredOciForm from '@/components/documents/StructuredOciForm';
+import PrescriptionCatalogForm from '@/components/documents/PrescriptionCatalogForm';
+import {isStandardPrescription,emptyPrescriptionRow,type MedicationRow} from '@/lib/prescriptionCatalog';
 const RichTextEditor = React.lazy(() => import('@/components/editor/RichTextEditor'));
 import {
   buildOciAddress,
@@ -52,14 +54,7 @@ interface Props {
 
 const ENCAMINHAMENTO_TIPOS = ['encaminhamento', 'guia de encaminhamento'];
 
-interface MedicamentoRow {
-  medicamento: string;
-  dosagem: string;
-  via: string;
-  frequencia: string;
-  duracao: string;
-  observacao: string;
-}
+type MedicamentoRow = MedicationRow;
 
 const emptyMedicamento = (): MedicamentoRow => ({
   medicamento: '', dosagem: '', via: 'oral', frequencia: '', duracao: '', observacao: ''
@@ -372,9 +367,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     });
 
     // Medicamentos
-    if (medicamentos.length > 0 && medicamentos[0].medicamento) {
+    if (medicamentos.some(m => m.medicamento.trim())) {
       values.medicamentos = medicamentos
-        .filter(m => m.medicamento)
+        .filter(m => m.medicamento.trim())
         .map((m, i) => `${i + 1}. ${m.medicamento} — ${m.dosagem}, ${m.via}, ${m.frequencia}, ${m.duracao}${m.observacao ? ` (${m.observacao})` : ''}`)
         .join('\n');
     } else {
@@ -408,8 +403,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     setSelectedId(id);
     setProfDestinoId('');
     setCampos({});
-    setMedicamentos([emptyMedicamento()]);
     const m = modelos.find(x => x.id === id);
+    setMedicamentos([m&&isStandardPrescription(m.nome)?emptyPrescriptionRow():emptyMedicamento()]);
     if (m) {
       // Pre-fill type-specific defaults
       const tipo = `${m.tipo || ''} ${m.nome || ''}`.toLowerCase();
@@ -979,6 +974,18 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       );
     }
 
+    // Standard prescription uses the existing active medication catalog; other templates remain unchanged.
+    if (isStandardPrescription(selected.nome)) {
+      return (
+        <div className="space-y-4">
+          <PrescriptionCatalogForm key={selected.id+'|'+(profissional?.id||user?.id||'')} professionalId={profissional?.id||user?.id||''} rows={medicamentos} onChange={setMedicamentos}/>
+          <div className="space-y-3 rounded-lg border p-4">
+            <FieldArea label="Orientações gerais" value={campos.orientacoes} onChange={v => updateCampo('orientacoes', v)} />
+            <Field label="Validade da receita" value={campos.validade_receita} onChange={v => updateCampo('validade_receita', v)} type="date" />
+          </div>
+        </div>
+      );
+    }
     // RECEITUÁRIO
     if (tipoLower.includes('receitu') || tipoLower.includes('receita') || tipoLower.includes('prescriç')) {
       return (
