@@ -276,6 +276,17 @@ const PTS: React.FC = () => {
   };
 
   const [form, setForm] = useState(emptyForm);
+  const ptsDraftKey = `pts_draft_${user?.id || 'current'}_new`;
+  useEffect(() => {
+    if (!dialogOpen || editingPts) return;
+    const t = window.setTimeout(() => {
+      try {
+        const hasText = Object.values(form).some(v => typeof v === 'string' && v.trim() && v !== form.data_proxima_revisao) || metas.length > 0;
+        if (hasText) localStorage.setItem(ptsDraftKey, JSON.stringify({ form, metas }));
+      } catch { /* armazenamento indisponível */ }
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [form, metas, dialogOpen, editingPts, ptsDraftKey]);
   const ptsCidCompetencia = competenciaFromDate(todayLocalStr());
   const ptsCidScope = `${dialogOpen}|${editingPts?.id || ''}|${form.patient_id}|${selectedProcCodigo}|${ptsCidCompetencia}`;
   const ptsCidScopeRef = useRef(ptsCidScope);
@@ -870,6 +881,19 @@ const PTS: React.FC = () => {
     setMetas([]);
     resetSigtapState();
     setActiveTab('identificacao');
+    try {
+      const raw = localStorage.getItem(ptsDraftKey);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft?.form) {
+          setForm({ ...emptyForm, ...draft.form });
+          if (Array.isArray(draft.metas)) setMetas(draft.metas);
+          toast.info('Rascunho anterior restaurado automaticamente', {
+            action: { label: 'Descartar', onClick: () => { localStorage.removeItem(ptsDraftKey); setForm({ ...emptyForm, data_proxima_revisao: suggestReviewDate(30) }); setMetas([]); } },
+          });
+        }
+      }
+    } catch { /* rascunho inválido */ }
     setDialogOpen(true);
   };
 
@@ -1106,6 +1130,7 @@ const PTS: React.FC = () => {
       }
 
       toast.success(editingPts ? 'PTS atualizado com sucesso!' : 'PTS criado e registrado no prontuário!');
+      if (!editingPts) { try { localStorage.removeItem(ptsDraftKey); } catch { /* ignore */ } }
       setDialogOpen(false);
       setEditingPts(null);
       resetSigtapState();
@@ -1387,7 +1412,7 @@ const PTS: React.FC = () => {
 
       {/* CREATE / EDIT DIALOG */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) { setDialogOpen(false); setEditingPts(null); } }}>
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] flex flex-col p-0 gap-0">
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()} className="max-w-5xl w-[95vw] max-h-[95vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0">
             <DialogTitle className="font-display text-xl">{editingPts ? 'Editar PTS' : 'Novo PTS'}</DialogTitle>
           </DialogHeader>
@@ -1946,7 +1971,7 @@ const PTS: React.FC = () => {
                 <FileText className="w-4 h-4 mr-2" /> Gerar documento / OCI
               </Button>
             )}
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => { if (editingPts || window.confirm('Deseja fechar? Os dados preenchidos continuarão salvos no rascunho local.')) { setDialogOpen(false); setEditingPts(null); } }}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving} className="gradient-primary text-primary-foreground">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
               {editingPts ? 'Salvar Alterações' : 'Criar PTS'}
@@ -1957,7 +1982,7 @@ const PTS: React.FC = () => {
 
       {/* META DIALOG */}
       <Dialog open={metaDialogOpen} onOpenChange={setMetaDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingMetaIdx !== null ? 'Editar Meta' : 'Nova Meta'}</DialogTitle>
           </DialogHeader>
@@ -2046,7 +2071,7 @@ const PTS: React.FC = () => {
 
       {/* REVISÃO DIALOG */}
       <Dialog open={revisaoOpen} onOpenChange={v => { if (!v) { setRevisaoOpen(false); } }}>
-        <DialogContent className="max-w-md">
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RefreshCw className="w-5 h-5 text-primary" /> Registrar Revisão do PTS
@@ -2092,7 +2117,7 @@ const PTS: React.FC = () => {
 
       {/* ALTA / ENCERRAMENTO DIALOG */}
       <Dialog open={altaOpen} onOpenChange={v => { if (!v) setAltaOpen(false); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckSquare className="w-5 h-5 text-success" /> Alta / Encerramento do PTS
@@ -2159,7 +2184,7 @@ const PTS: React.FC = () => {
                 {/* Revisão alert */}
       <Dialog open={!!detailPts && !revisaoOpen && !altaOpen}
         onOpenChange={v => { if (!v) { setDetailPts(null); setDetailSigtap([]); setDetailCids([]); setDetailMetas([]); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display">Detalhes do PTS</DialogTitle>
           </DialogHeader>

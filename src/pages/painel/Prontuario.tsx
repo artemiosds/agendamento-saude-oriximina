@@ -5996,7 +5996,7 @@ const ProntuarioPage: React.FC = () => {
 
       {/* PTS Dialog */}
       <Dialog open={ptsOpen} onOpenChange={setPtsOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display">Criar PTS — {form.paciente_nome}</DialogTitle>
           </DialogHeader>
