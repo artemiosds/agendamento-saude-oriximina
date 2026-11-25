@@ -220,21 +220,78 @@ BEGIN
   UPDATE public.agendamentos SET status = 'cancelado',
     observacoes = concat_ws(E'\n',nullif(observacoes,''),v_motivo)
     WHERE id = v_appt.id;
-  INSERT INTO public.action_logs (user_id,user_nome,role,unidade_id,acao,entidade,entidade_id,
-    modulo,origem,paciente_id,paciente_nome,agendamento_id,profissional_id,profissional_nome,before,after,detalhes)
-  VALUES (v_patient.id,v_patient.nome,'paciente',v_appt.unidade_id,'cancelamento_portal','agendamentos',v_appt.id,
-    'portal_paciente','portal_paciente',v_patient.id,v_patient.nome,v_appt.id,v_appt.profissional_id,v_appt.profissional_nome,
-    jsonb_build_object('status',v_appt.status),jsonb_build_object('status','cancelado'),
-    jsonb_build_object('data',v_appt.data,'hora',v_appt.hora,'profissional_nome',v_appt.profissional_nome,'motivo',v_motivo,'origem','portal_paciente'));
+  -- Em sessão de funcionário que também possui ficha de paciente, a RPC audita explicitamente.
+  IF public.is_staff_member() THEN
+    INSERT INTO public.action_logs (user_id,user_nome,role,unidade_id,acao,entidade,entidade_id,
+      modulo,origem,paciente_id,paciente_nome,agendamento_id,profissional_id,profissional_nome,before,after,detalhes)
+    VALUES (v_patient.id,v_patient.nome,'paciente',v_appt.unidade_id,'cancelamento_portal','agendamentos',v_appt.id,
+      'portal_paciente','portal_paciente',v_patient.id,v_patient.nome,v_appt.id,v_appt.profissional_id,v_appt.profissional_nome,
+      jsonb_build_object('status',v_appt.status),jsonb_build_object('status','cancelado'),
+      jsonb_build_object('data',v_appt.data,'hora',v_appt.hora,'profissional_nome',v_appt.profissional_nome,'motivo',v_motivo,'origem','portal_paciente'));
+  END IF;
   RETURN jsonb_build_object('id',v_appt.id,'status','cancelado');
 END;
 $$;
 REVOKE ALL ON FUNCTION public.cancel_portal_appointment(text,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.cancel_portal_appointment(text,text) TO authenticated;
 
--- A antiga política deixava alterar colunas arbitrárias desde que o status final fosse cancelado.
--- O paciente passa a cancelar exclusivamente por RPC. Políticas dos funcionários intactas.
-DROP POLICY IF EXISTS "Pacientes cancel own agendamentos" ON public.agendamentos;
+-- Compatibilidade segura com o frontend antigo (VPS com publicação manual).
+-- A política legada permanece estritamente limitada pelo gatilho abaixo:
+-- mesmo a chamada direta é validada e auditada atomicamente.
+-- Após atualização de todos os clientes, a política pode ser removida em migration própria.
+CREATE OR REPLACE FUNCTION public.guard_portal_patient_cancellation()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $
+DECLARE
+  v_access jsonb;
+  v_patient public.pacientes%ROWTYPE;
+  v_motivo text;
+  v_prefix text;
+BEGIN
+  IF auth.uid() IS NULL OR public.is_staff_member() THEN RETURN NEW; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.pacientes WHERE auth_user_id = auth.uid()) THEN RETURN NEW; END IF;
+  -- O fluxo externo mantém seu próprio guard e auditoria transacional.
+  IF OLD.origem = 'externo' THEN RETURN NEW; END IF;
+  v_access := public.get_portal_patient_status();
+  IF NOT coalesce((v_access->>'allowed')::boolean AND (v_access->'permissoes'->>'cancelar')::boolean,false)
+    OR OLD.paciente_id IS DISTINCT FROM v_access->>'paciente_id' THEN
+    RAISE EXCEPTION 'Cancelamento não autorizado pelo portal';
+  END IF;
+  IF OLD.status NOT IN ('pendente','confirmado') OR NEW.status <> 'cancelado' THEN
+    RAISE EXCEPTION 'Somente consultas pendentes ou confirmadas podem ser canceladas antes da chegada';
+  END IF;
+  IF (to_jsonb(NEW) - ARRAY['status','observacoes','atualizado_em']) IS DISTINCT FROM
+     (to_jsonb(OLD) - ARRAY['status','observacoes','atualizado_em']) THEN
+    RAISE EXCEPTION 'O paciente só pode cancelar o próprio agendamento';
+  END IF;
+  v_prefix := CASE WHEN coalesce(OLD.observacoes,'') = '' THEN '' ELSE OLD.observacoes || E'\n' END;
+  IF NEW.observacoes IS NOT DISTINCT FROM OLD.observacoes THEN
+    v_motivo := 'Cancelamento solicitado pelo próprio paciente no Portal do Paciente';
+  ELSIF left(NEW.observacoes,length(v_prefix)) = v_prefix THEN
+    v_motivo := btrim(substr(NEW.observacoes,length(v_prefix)+1));
+  END IF;
+  IF v_motivo IS NULL OR length(v_motivo) NOT BETWEEN 3 AND 500 THEN
+    RAISE EXCEPTION 'Motivo de cancelamento inválido';
+  END IF;
+  SELECT * INTO STRICT v_patient FROM public.pacientes WHERE id = OLD.paciente_id AND auth_user_id = auth.uid();
+  NEW.observacoes := v_prefix || v_motivo;
+  INSERT INTO public.action_logs (user_id,user_nome,role,unidade_id,acao,entidade,entidade_id,
+    modulo,origem,paciente_id,paciente_nome,agendamento_id,profissional_id,profissional_nome,before,after,detalhes)
+  VALUES (v_patient.id,v_patient.nome,'paciente',OLD.unidade_id,'cancelamento_portal','agendamentos',OLD.id,
+    'portal_paciente','portal_paciente',v_patient.id,v_patient.nome,OLD.id,OLD.profissional_id,OLD.profissional_nome,
+    jsonb_build_object('status',OLD.status),jsonb_build_object('status','cancelado'),
+    jsonb_build_object('data',OLD.data,'hora',OLD.hora,'profissional_nome',OLD.profissional_nome,'motivo',v_motivo,'origem','portal_paciente'));
+  RETURN NEW;
+END;
+$;
+REVOKE ALL ON FUNCTION public.guard_portal_patient_cancellation() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_portal_patient_cancel_guard ON public.agendamentos;
+CREATE TRIGGER trg_portal_patient_cancel_guard BEFORE UPDATE ON public.agendamentos
+  FOR EACH ROW EXECUTE FUNCTION public.guard_portal_patient_cancellation();
+
+ALTER POLICY "Pacientes cancel own agendamentos" ON public.agendamentos
+  USING (origem <> 'externo' AND paciente_id = (SELECT CASE WHEN (s->>'allowed')::boolean AND (s->'permissoes'->>'cancelar')::boolean THEN s->>'paciente_id' END FROM public.get_portal_patient_status() s))
+  WITH CHECK (origem <> 'externo' AND status = 'cancelado' AND paciente_id = (SELECT CASE WHEN (s->>'allowed')::boolean AND (s->'permissoes'->>'cancelar')::boolean THEN s->>'paciente_id' END FROM public.get_portal_patient_status() s));
 ALTER POLICY "Pacientes read own agendamentos" ON public.agendamentos
   USING (paciente_id = (SELECT CASE WHEN (s->>'allowed')::boolean THEN s->>'paciente_id' END FROM public.get_portal_patient_status() s));
 ALTER POLICY "Pacientes read own data" ON public.pacientes

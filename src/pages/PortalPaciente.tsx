@@ -213,7 +213,42 @@ const PortalPaciente: React.FC = () => {
     setLoginLoading(false);
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); setPaciente(null); setAgendamentos([]); setFila([]); setIsLoggedIn(false); };
+  const clearPortalSession = () => {
+    setIsLoggedIn(false); setPaciente(null); setAgendamentos([]); setFila([]);
+    setDados(emptyDadosPaciente());
+  };
+  const handleLogout = async () => { clearPortalSession(); await supabase.auth.signOut(); };
+
+  useEffect(() => {
+    if (!isLoggedIn || !paciente?.id) return;
+    let active = true;
+    let checking = false;
+    const revalidate = async () => {
+      if (!active || checking || !navigator.onLine) return;
+      checking = true;
+      try {
+        const { data, error } = await (supabase as any).rpc('get_portal_patient_status');
+        if (!active || error) return; // falha de rede não é revogação confirmada
+        const status = parsePortalAccess(data);
+        if (!status.allowed || data.paciente_id !== paciente.id) {
+          clearPortalSession();
+          toast.error(status.message || 'Seu acesso ao portal foi alterado. Entre novamente.');
+          await supabase.auth.signOut();
+        } else {
+          setPerms(status.permissoes);
+        }
+      } finally { checking = false; }
+    };
+    window.addEventListener('focus', revalidate);
+    window.addEventListener('online', revalidate);
+    const timer = window.setInterval(revalidate, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', revalidate);
+      window.removeEventListener('online', revalidate);
+    };
+  }, [isLoggedIn, paciente?.id]);
 
   const handleSalvarDados = async () => {
     if (!perms.editarDados) { toast.error('Edição de dados desativada pela unidade.'); return; }

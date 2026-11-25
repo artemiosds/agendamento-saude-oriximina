@@ -36,6 +36,14 @@ serve(async (req) => {
 
     if (!action && req.method === "GET") action = "data";
 
+    // Authorize portal actions using the actual caller JWT, never the service role.
+    const portalAccess = async (token: string) => {
+      const caller = createClient(supabaseUrl, serviceKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
+      const { data, error } = await caller.rpc("get_portal_patient_status");
+      if (error || data?.allowed !== true || typeof data?.paciente_id !== "string") return null;
+      return data;
+    };
+
     // Load online scheduling config
     const loadOnlineConfig = async () => {
       const { data, error } = await supabase
@@ -193,9 +201,13 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Sessão inválida." }), { status: 401, headers: corsHeaders });
       }
       const authUserId = userData.user.id;
+      const access = await portalAccess(token);
+      if (!access || access.permissoes?.editarDados !== true) {
+        return new Response(JSON.stringify({ error: "Edição de dados não autorizada pelo portal." }), { status: 403, headers: corsHeaders });
+      }
       const body = await req.json();
       const { data: pac } = await supabase.from("pacientes").select("id, cpf, custom_data").eq("auth_user_id", authUserId).maybeSingle();
-      if (!pac) {
+      if (!pac || pac.id !== access.paciente_id) {
         return new Response(JSON.stringify({ error: "Paciente não vinculado a esta conta." }), { status: 403, headers: corsHeaders });
       }
       const allowed = [
@@ -242,6 +254,10 @@ serve(async (req) => {
         const { data: auth, error: authError } = await supabase.auth.getUser(token);
         if (authError || !auth.user) {
           return new Response(JSON.stringify({ error: "Sessão inválida. Entre novamente no Portal do Paciente." }), { status: 401, headers: corsHeaders });
+        }
+        const access = await portalAccess(token);
+        if (!access || access.paciente_id !== ag.paciente_id) {
+          return new Response(JSON.stringify({ error: "Acesso ao Portal do Paciente não autorizado." }), { status: 403, headers: corsHeaders });
         }
         const { data: patient, error: lookupError } = await supabase.from("pacientes").select("id, nome")
           .eq("auth_user_id", auth.user.id).maybeSingle();
