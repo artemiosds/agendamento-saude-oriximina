@@ -1,7 +1,7 @@
 import React from 'react';
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-const f=vi.hoisted(()=>({fill:vi.fn(async()=>new Uint8Array([1,2,3])),load:vi.fn(async()=>new ArrayBuffer(1))}));
+const f=vi.hoisted(()=>({fill:vi.fn(async(_source:unknown,_patient:unknown,_clinical:unknown,_normalized:unknown)=>new Uint8Array([1,2,3])),load:vi.fn(async()=>new ArrayBuffer(1))}));
 vi.mock('@/lib/apacPdf',()=>({APAC_DOCUMENT_NAME:'FORMULARIO_APAC_LAUDO',apacFilename:()=> 'TESTE.pdf',fillApacPdf:f.fill,loadApprovedApac:f.load}));
 vi.mock('@/integrations/supabase/client',()=>({supabase:{from:()=>({select:()=>({eq:(_k:string,id:string)=>({single:async()=>({data:{id,nome:id==='p1'?'Paciente':'Outro'},error:null})})})})}}));
 vi.mock('@/lib/useApacLaudoData',()=>({useApacLaudoData:(p:any)=>({data:{nome:p?.nome||''},ibgeLoading:false})}));
