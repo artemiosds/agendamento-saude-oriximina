@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import DocumentLibrary, {DocumentPatientBanner,classifyDocument,modelCode} from '@/components/documents/DocumentLibrary';
 import { toast } from 'sonner';
 import { FileText, Save, ShieldCheck, Plus, Trash2, Loader2, Paperclip, FileSignature, Search, Play, ArrowLeft, Printer } from 'lucide-react';
 import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, buildDocumentShell, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
@@ -463,21 +463,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   }, [campos, medicamentos, carimbo, selectedId, pacienteExtra, docConfig, dataAtendimento, paciente, profissional, unidade, user?.nome]);
 
 
-  const classifyModel = (m: DocumentTemplate): 'Cadastro' | 'Clínico' | 'Regulação' | 'CER' => {
-    const raw = `${m.tipo || ''} ${m.nome || ''}`.toLowerCase();
-    if (raw.includes('oci') || raw.includes('apac') || raw.includes('regula')) return 'Regulação';
-    if (raw.includes('cer') || raw.includes('alta')) return 'CER';
-    if (raw.includes('cadastr') || raw.includes('ficha')) return 'Cadastro';
-    return 'Clínico';
-  };
-
-  const visibleModels = modelos.filter((m) => {
-    const category = classifyModel(m);
-    if (modelCategory !== 'Todos' && category !== modelCategory) return false;
-    const q = modelSearch.trim().toLowerCase();
-    if (q && !`${m.nome} ${m.tipo}`.toLowerCase().includes(q)) return false;
-    return true;
-  });
+  const classifyModel = (m: DocumentTemplate) => classifyDocument(m.tipo,m.nome);
 
   const selected = modelos.find(x => x.id === selectedId);
   const selectedMeta = ((selected?.blocos_clinicos as any) || {}) as OciTemplateMeta & Record<string, any>;
@@ -1050,78 +1036,21 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className={selected?"max-w-3xl max-h-[90vh] overflow-y-auto":"w-[96vw] max-w-[1100px] max-h-[92dvh] overflow-y-auto"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" /> Gerar Documento Clínico
           </DialogTitle>
-          <DialogDescription>
-            {paciente?.nome ? `Paciente: ${paciente.nome}` : 'Selecione um modelo e preencha os campos'}
-          </DialogDescription>
+          <DialogDescription>Selecione um modelo e preencha os campos</DialogDescription>
+          {!selected&&<DocumentPatientBanner name={paciente?.nome}/>}
+          {selected&&paciente?.nome&&<p className="text-sm text-muted-foreground">Paciente: {paciente.nome}</p>}
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Central visual de modelos — mesmo padrão da Central de Documentos */}
           {!selected ? (
-            <div className="space-y-3">
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={modelSearch}
-                  onChange={(e) => setModelSearch(e.target.value)}
-                  placeholder="Buscar documento..."
-                  className="pl-9"
-                />
-              </div>
-
-              <Tabs value={modelCategory} onValueChange={(v) => setModelCategory(v as any)}>
-                <TabsList className="w-full grid grid-cols-5 h-9">
-                  {(['Todos','Cadastro','Clínico','Regulação','CER'] as const).map((cat) => (
-                    <TabsTrigger key={cat} value={cat} className="text-xs px-1">{cat}</TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-
-              <div className="max-h-[52vh] overflow-y-auto pr-1 space-y-2">
-                {modelos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    Nenhum modelo disponível para seu perfil.
-                  </p>
-                ) : visibleModels.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    Nenhum documento encontrado para este filtro.
-                  </p>
-                ) : (
-                  visibleModels.map((m) => (
-                    <div
-                      key={m.id}
-                      className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/50 p-3 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary/10 text-primary shrink-0">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium break-words leading-snug">{m.nome}</div>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                            {classifyModel(m)}
-                          </Badge>
-                          <span className="text-[10px] text-muted-foreground truncate">{m.tipo}</span>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-8 gap-1.5 shrink-0"
-                        onClick={() => handleSelect(m.id)}
-                      >
-                        <Play className="w-3.5 h-3.5" /> Gerar
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            <DocumentLibrary items={modelos.map(m=>({id:m.id,nome:m.nome,categoria:classifyModel(m),descricao:m.tipo,codigo:modelCode(m)}))} userId={user?.id}
+              search={modelSearch} onSearch={setModelSearch} category={modelCategory} onCategory={setModelCategory} onGenerate={handleSelect}/>
           ) : (
             <>
               <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3">

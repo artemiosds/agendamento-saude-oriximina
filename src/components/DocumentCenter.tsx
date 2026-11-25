@@ -4,17 +4,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { DebouncedInput } from '@/components/ui/debounced-input';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Search, Plus, Pencil, Play, Printer, FileSignature, Loader2 } from 'lucide-react';
+import DocumentLibrary, {DocumentPatientBanner,classifyDocument,modelCode,type DocumentCategory,type LibraryItem} from '@/components/documents/DocumentLibrary';
+import { FileText, FolderOpen, Plus, Printer, FileSignature, ContactRound, ClipboardList } from 'lucide-react';
 import GerarDocumentoModal from '@/components/GerarDocumentoModal';
 import { READY_TEMPLATES } from '@/lib/readyTemplates';
 import EnviarAssinaturaAutentiqueModal from '@/components/EnviarAssinaturaAutentiqueModal';
 
-type Categoria = 'Todos' | 'Cadastro' | 'Clínico' | 'Regulação' | 'CER';
-const CATEGORIAS: Categoria[] = ['Todos', 'Cadastro', 'Clínico', 'Regulação', 'CER'];
+type Categoria = DocumentCategory;
 
 interface PacienteLite {
   id: string;
@@ -32,12 +28,8 @@ interface PacienteLite {
   unidadeId?: string | null;
 }
 
-interface DocumentItem {
-  id: string;
-  nome: string;
-  categoria: Categoria;
+interface DocumentItem extends LibraryItem {
   builtin?: 'ficha_completa' | 'ficha_dados' | 'apac';
-  icon: React.ReactNode;
 }
 
 interface Props {
@@ -47,14 +39,6 @@ interface Props {
   onOpenFichaCompleta: () => void;
   onOpenFichaSoDados: () => void;
   onOpenApac: () => void;
-}
-
-function classifyTipo(tipo: string): Categoria {
-  const t = (tipo || '').toLowerCase();
-  if (t.includes('apac') || t.includes('regula')) return 'Regulação';
-  if (t.includes('cer') || t.includes('alta')) return 'CER';
-  if (t.includes('cadastr') || t.includes('ficha')) return 'Cadastro';
-  return 'Clínico';
 }
 
 const DocumentCenter: React.FC<Props> = ({
@@ -68,7 +52,8 @@ const DocumentCenter: React.FC<Props> = ({
   const [busca, setBusca] = useState('');
   const [cat, setCat] = useState<Categoria>('Todos');
   const [loading, setLoading] = useState(false);
-  const [templates, setTemplates] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
+  const [loadError,setLoadError]=useState('');
+  const [templates, setTemplates] = useState<Array<{ id: string; nome: string; tipo: string; blocos_clinicos?: unknown }>>([]);
   const [gerarTemplateId, setGerarTemplateId] = useState<string | undefined>(undefined);
   const [assinaturaOpen, setAssinaturaOpen] = useState(false);
   const [assinaturaCtx, setAssinaturaCtx] = useState<{ documentoGeradoId?: string; nomeSugerido?: string } | null>(null);
@@ -77,29 +62,31 @@ const DocumentCenter: React.FC<Props> = ({
     if (!open) return;
     setBusca('');
     setCat('Todos');
+    let active=true;
+    setLoading(true);setLoadError('');setTemplates([]);
     (async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from('document_templates')
-        .select('id, nome, tipo')
-        .eq('ativo', true)
-        .order('nome');
-      setTemplates((data as any) || []);
-      setLoading(false);
+      try {
+        const { data,error } = await supabase.from('document_templates')
+          .select('id, nome, tipo, blocos_clinicos').eq('ativo',true).order('nome');
+        if(error)throw error;
+        if(active)setTemplates(data||[]);
+      }catch{if(active)setLoadError('Não foi possível carregar os modelos cadastrados. Os modelos internos continuam disponíveis.');}
+      finally{if(active)setLoading(false);}
     })();
+    return()=>{active=false;};
   }, [open]);
 
   const items: DocumentItem[] = useMemo(() => {
     const builtins: DocumentItem[] = [
-      { id: 'b:ficha_completa', nome: 'Ficha Completa', categoria: 'Cadastro', builtin: 'ficha_completa', icon: <Printer className="w-4 h-4" /> },
-      { id: 'b:ficha_dados', nome: 'Imprimir Só Dados', categoria: 'Cadastro', builtin: 'ficha_dados', icon: <Printer className="w-4 h-4" /> },
-      { id: 'b:apac', nome: 'FORMULARIO_APAC_LAUDO', categoria: 'Regulação', builtin: 'apac', icon: <FileSignature className="w-4 h-4" /> },
+      { id: 'b:ficha_completa', nome: 'Ficha Completa', categoria: 'Cadastro', descricao:'Informações cadastrais completas do paciente', builtin: 'ficha_completa', icon: <ContactRound className="w-5 h-5" /> },
+      { id: 'b:ficha_dados', nome: 'Imprimir Só Dados', categoria: 'Cadastro', descricao:'Identificação cadastral simplificada', builtin: 'ficha_dados', icon: <Printer className="w-5 h-5" /> },
+      { id: 'b:apac', nome: 'FORMULARIO_APAC_LAUDO', categoria: 'Regulação', descricao:'Laudo APAC padrão e dados complementares especializados', builtin: 'apac', icon: <ClipboardList className="w-5 h-5" /> },
     ];
     const fromDb: DocumentItem[] = templates.map(t => ({
       id: t.id,
       nome: t.nome || t.tipo,
-      categoria: classifyTipo(t.tipo),
-      icon: <FileText className="w-4 h-4" />,
+      categoria: classifyDocument(t.tipo,t.nome),
+      descricao:t.tipo,codigo:modelCode(t),canEdit:true,
     }));
     const existingNames = new Set(fromDb.map(t => t.nome.trim().toLowerCase()));
     const readyItems: DocumentItem[] = READY_TEMPLATES
@@ -108,16 +95,10 @@ const DocumentCenter: React.FC<Props> = ({
         id: `ready:${rt.id}`,
         nome: rt.nome,
         categoria: 'Regulação',
-        icon: <FileText className="w-4 h-4" />,
+        descricao:rt.tipo,codigo:modelCode(rt),canEdit:true,
       }));
     return [...builtins, ...fromDb, ...readyItems];
   }, [templates]);
-
-  const filtered = items.filter(i => {
-    if (cat !== 'Todos' && i.categoria !== cat) return false;
-    if (busca.trim() && !i.nome.toLowerCase().includes(busca.trim().toLowerCase())) return false;
-    return true;
-  });
 
   const logGeracao = async (item: DocumentItem): Promise<string | undefined> => {
     if (!paciente?.id) return undefined;
@@ -186,88 +167,21 @@ const DocumentCenter: React.FC<Props> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          className="p-0 gap-0 flex flex-col border-0 bg-background overflow-hidden"
-          style={{ width: '95vw', maxWidth: '640px', maxHeight: '85vh', borderRadius: '20px' }}
-        >
-          <DialogHeader className="border-b border-border/70 p-4 space-y-3">
-            <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" />
-              Documentos — <span className="truncate">{paciente?.nome || ''}</span>
-            </DialogTitle>
-            <DialogDescription className="sr-only">Central de documentos do paciente</DialogDescription>
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <DebouncedInput
-                value={busca}
-                onChange={e => setBusca(e.target.value)}
-                placeholder="Buscar documento..."
-                className="pl-9 h-9"
-                debounceMs={300}
-              />
-            </div>
-            <Tabs value={cat} onValueChange={(v) => setCat(v as Categoria)}>
-              <TabsList className="w-full grid grid-cols-5 h-8">
-                {CATEGORIAS.map(c => (
-                  <TabsTrigger key={c} value={c} className="text-xs px-1">{c}</TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+        <DialogContent className="w-[96vw] max-w-[1100px] max-h-[92dvh] p-0 gap-0 flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0 border-b px-4 sm:px-6 py-4 pr-12 text-left">
+            <div className="flex items-center gap-3"><div className="shrink-0 rounded-xl bg-primary/10 text-primary p-2.5"><FolderOpen className="w-6 h-6"/></div><div><DialogTitle className="text-lg">Central de Documentos</DialogTitle><DialogDescription className="text-xs">Emissão e gestão documental do paciente</DialogDescription></div></div>
+            <DocumentPatientBanner name={paciente?.nome}/>
           </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
-              </div>
-            ) : filtered.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Nenhum documento encontrado.</p>
-            ) : (
-              filtered.map(item => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/50 p-2.5 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary/10 text-primary shrink-0">
-                    {item.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium break-words leading-snug" title={item.nome}>{item.nome}</div>
-                    <Badge variant="outline" className="mt-0.5 text-[10px] px-1.5 py-0 h-4">{item.categoria}</Badge>
-                  </div>
-                  <div className="flex gap-1.5 shrink-0">
-                    <Button size="sm" variant="default" className="h-8 gap-1" onClick={() => handleGerar(item)}>
-                      <Play className="w-3.5 h-3.5" /> Gerar
-                    </Button>
-                    <Button size="sm" variant="secondary" className="h-8 gap-1" onClick={() => handleAssinar(item)} disabled={!paciente}>
-                      <FileSignature className="w-3.5 h-3.5" /> Assinar
-                    </Button>
-                    {canManage && !item.builtin && (
-                      <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleEditar(item)}>
-                        <Pencil className="w-3.5 h-3.5" /> Editar
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4">
+            {open&&<DocumentLibrary items={items} userId={user?.id} loading={loading} error={loadError} search={busca} onSearch={setBusca} category={cat} onCategory={setCat} disabled={!paciente}
+              onGenerate={id=>{const item=items.find(i=>i.id===id);if(item)void handleGerar(item);}}
+              onSign={id=>{const item=items.find(i=>i.id===id);if(item)void handleAssinar(item);}}
+              onEdit={canManage?id=>{const item=items.find(i=>i.id===id);if(item&&!item.builtin)handleEditar(item);}:undefined}/>}
           </div>
-
-          <div className="border-t border-border/70 p-3 space-y-2">
-            <Button
-              variant="secondary"
-              className="w-full gap-1.5"
-              onClick={() => { setAssinaturaCtx(null); setAssinaturaOpen(true); }}
-              disabled={!paciente}
-            >
-              <FileSignature className="w-4 h-4" /> Enviar para assinatura eletrônica
-            </Button>
-            {canManage && (
-              <Button variant="outline" className="w-full gap-1.5" onClick={handleCriar}>
-                <Plus className="w-4 h-4" /> Criar novo tipo de documento
-              </Button>
-            )}
-          </div>
+          <footer className="shrink-0 border-t bg-background px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+            <Button variant="outline" className="gap-2" onClick={()=>{setAssinaturaCtx(null);setAssinaturaOpen(true);}} disabled={!paciente}><FileSignature className="w-4 h-4"/>Assinatura eletrônica avulsa</Button>
+            {canManage&&<Button variant="ghost" className="gap-2" onClick={handleCriar}><Plus className="w-4 h-4"/>Criar novo tipo de documento</Button>}
+          </footer>
         </DialogContent>
       </Dialog>
 
