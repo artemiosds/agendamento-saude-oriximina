@@ -1,5 +1,6 @@
 import { patientCpfError } from '@/lib/patientCpf';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { parsePortalAccess, mergePortalQueue, type PortalQueueEntry } from '@/lib/portalPatientSecurity';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,14 +40,7 @@ interface AgendamentoData {
   custom_data?: Record<string, any>;
 }
 
-interface FilaData {
-  id: string;
-  posicao: number;
-  status: string;
-  hora_chegada: string;
-  setor: string;
-  profissional_id: string;
-}
+type FilaData = PortalQueueEntry;
 
 const statusLabels: Record<string, { label: string; class: string }> = {
   pendente: { label: 'Pendente', class: 'bg-warning/10 text-warning' },
@@ -72,6 +66,7 @@ const PortalPaciente: React.FC = () => {
   const [paciente, setPaciente] = useState<PacienteData | null>(null);
   const [agendamentos, setAgendamentos] = useState<AgendamentoData[]>([]);
   const [fila, setFila] = useState<FilaData[]>([]);
+  const cancelPending = useRef(new Set<string>());
   const [unidades, setUnidades] = useState<any[]>([]);
   const [dados, setDados] = useState<DadosPacienteValue>(emptyDadosPaciente());
   const [savingDados, setSavingDados] = useState(false);
@@ -105,7 +100,7 @@ const PortalPaciente: React.FC = () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       // Check if portal is globally enabled and patient is not blocked
-      const accessCheck = await checkPortalAccess(session.user.id);
+      const accessCheck = await checkPortalAccess();
       if (!accessCheck.allowed) {
         await supabase.auth.signOut();
         toast.error(accessCheck.message);
@@ -117,39 +112,82 @@ const PortalPaciente: React.FC = () => {
     setIsLoading(false);
   };
 
-  const checkPortalAccess = async (authUserId: string): Promise<{ allowed: boolean; message: string }> => {
+  const checkPortalAccess = async (): Promise<{ allowed: boolean; message: string }> => {
     try {
-      // Load global config
-      const { data: configData } = await (supabase as any).from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-      const portalConfig = configData?.configuracoes?.portalPaciente;
-      setPerms({ ...PORTAL_PERMISSOES_PADRAO, ...(portalConfig?.permissoes || {}) });
-
-      // Check global portal toggle
-      if (portalConfig && portalConfig.permitirPortal === false) {
-        return { allowed: false, message: 'O portal do paciente está temporariamente desativado. Procure a unidade de saúde.' };
-      }
-
-      // Check per-patient block
-      const { data: pac } = await (supabase as any).from('pacientes').select('id').eq('auth_user_id', authUserId).single();
-      if (pac && portalConfig?.pacientesBloqueados?.includes(pac.id)) {
-        return { allowed: false, message: 'Seu acesso ao portal está temporariamente desativado. Procure a unidade.' };
-      }
-
-      return { allowed: true, message: '' };
+      const { data, error } = await (supabase as any).rpc('get_portal_patient_status');
+      if (error) throw error;
+      const status = parsePortalAccess(data);
+      if (status.allowed) setPerms(status.permissoes);
+      return status;
     } catch {
-      return { allowed: true, message: '' }; // fail open to not break existing flow
+      return { allowed: false, message: 'Não foi possível verificar seu acesso ao portal. Tente novamente ou procure a unidade de saúde.' };
     }
   };
 
+  // A inscrição só existe durante uma sessão autorizada, para a ficha atual.
+  useEffect(() => {
+    if (!isLoggedIn || !paciente?.id || !perms.verFila) { setFila([]); return; }
+    const patientId = paciente.id;
+    let active = true;
+    let revision = 0;
+    let queue: FilaData[] = [];
+    let initialized = false;
+    const notify = (item: FilaData) => {
+      try { navigator.vibrate?.([200, 100, 200, 100, 400]); } catch { /* dispositivo sem vibração */ }
+      toast.warning(`Atenção! Você foi chamado para atendimento no setor: ${item.setor || 'atendimento'}.`, { duration: 12000 });
+    };
+    const apply = (item: FilaData) => {
+      const result = mergePortalQueue(queue, item, patientId);
+      queue = result.queue;
+      setFila(queue);
+      if (result.called) notify(item);
+    };
+    const refresh = async () => {
+      const requestRevision = ++revision;
+      const { data, error } = await (supabase as any).from('fila_espera')
+        .select('id,paciente_id,posicao,status,hora_chegada,setor,profissional_id')
+        .eq('paciente_id', patientId).in('status', ['aguardando', 'chamado']);
+      if (!active || error || requestRevision !== revision) return;
+      const next = (data || []) as FilaData[];
+      if (initialized) next.filter(item => item.status === 'chamado' &&
+        !queue.some(old => old.id === item.id && old.status === 'chamado')).forEach(notify);
+      queue = next;
+      initialized = true;
+      setFila(queue);
+    };
+    const receive = (payload: { new: Record<string, unknown> }) => {
+      if (!active) return;
+      revision++;
+      apply(payload.new as unknown as FilaData);
+      // Se chegou um evento durante a carga inicial, recarrega os demais registros.
+      if (!initialized) void refresh();
+    };
+    const channel = supabase.channel('portal-fila-' + patientId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'fila_espera', filter: 'paciente_id=eq.' + patientId }, receive)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'fila_espera', filter: 'paciente_id=eq.' + patientId }, receive)
+      .subscribe(status => { if (status === 'SUBSCRIBED' && active) void refresh(); });
+    void refresh();
+    const onFocus = () => { if (active) void refresh(); };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
+    // Reconcilia também remoções e quedas de conexão sem confiar em DELETE sem filtro.
+    const timer = window.setInterval(onFocus, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
+      void supabase.removeChannel(channel);
+    };
+  }, [isLoggedIn, paciente?.id, perms.verFila]);
+
   const loadPacienteData = async (authUserId: string) => {
     const { data: pac } = await (supabase as any).from('pacientes').select('*').eq('auth_user_id', authUserId).single();
-    if (!pac) { setIsLoggedIn(false); return; }
+    if (!pac) { await supabase.auth.signOut(); setIsLoggedIn(false); toast.error('Não foi possível localizar sua ficha com segurança. Procure a unidade.'); return; }
     setPaciente(pac); setIsLoggedIn(true);
     setDados(deserializeDadosPaciente(pac));
     const { data: ags } = await (supabase as any).from('agendamentos').select('*').eq('paciente_id', pac.id).order('data', { ascending: false });
     if (ags) setAgendamentos(ags);
-    const { data: filaData } = await (supabase as any).from('fila_espera').select('*').eq('paciente_id', pac.id).in('status', ['aguardando', 'chamado']);
-    if (filaData) setFila(filaData);
     const { data: unis } = await (supabase as any).from('unidades').select('*');
     if (unis) setUnidades(unis);
   };
@@ -162,7 +200,7 @@ const PortalPaciente: React.FC = () => {
       if (error) { toast.error('E-mail ou senha incorretos.'); setLoginLoading(false); return; }
       if (data.session?.user) {
         // Check portal access before allowing login
-        const accessCheck = await checkPortalAccess(data.session.user.id);
+        const accessCheck = await checkPortalAccess();
         if (!accessCheck.allowed) {
           await supabase.auth.signOut();
           toast.error(accessCheck.message);
@@ -207,25 +245,24 @@ const PortalPaciente: React.FC = () => {
 
   const handleCancelar = async (agId: string) => {
     if (!perms.cancelar) { toast.error('Cancelamento pelo portal desativado. Procure a unidade.'); return; }
+    if (cancelPending.current.has(agId)) return;
+    cancelPending.current.add(agId);
     try {
       const appointment = agendamentos.find(a => a.id === agId);
       if (!appointment) { toast.error('Agendamento não encontrado. Atualize a página e tente novamente.'); return; }
-      if (appointment.origem === 'externo') {
-        const { error } = await (supabase as any).rpc('cancel_external_appointment', {
-          p_agendamento_id: agId,
-          p_motivo: 'Cancelamento solicitado pelo próprio paciente no Portal do Paciente',
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await (supabase as any).from('agendamentos')
-          .update({ status: 'cancelado' }).eq('id', agId);
-        if (error) throw error;
-      }
+      const { data, error } = await (supabase as any).rpc('cancel_portal_appointment', {
+        p_agendamento_id: agId,
+        p_motivo: 'Cancelamento solicitado pelo próprio paciente no Portal do Paciente',
+      });
+      if (error) throw error;
+      if (data?.id !== agId) throw new Error('Não foi possível confirmar o cancelamento. Atualize a página.');
       setAgendamentos(prev => prev.map(a => a.id === agId ? { ...a, status: 'cancelado' } : a));
       toast.success('Agendamento cancelado com sucesso.');
     } catch (error: any) {
       console.error('[PortalPaciente] Erro ao cancelar agendamento:', error);
       toast.error(error?.message || 'Não foi possível cancelar o agendamento. Tente novamente ou procure a unidade.');
+    } finally {
+      cancelPending.current.delete(agId);
     }
   };
 
@@ -300,7 +337,7 @@ const PortalPaciente: React.FC = () => {
       const { data: s, error } = await supabase.auth.signInWithPassword({ email: d.email, password: faSenha });
       resetFirst();
       if (error || !s.session) { setLoginForm({ email: d.email, senha: '' }); toast.info('Faça login com seu e-mail e a nova senha.'); return; }
-      const acc = await checkPortalAccess(s.session.user.id);
+      const acc = await checkPortalAccess();
       if (!acc.allowed) { await supabase.auth.signOut(); toast.error(acc.message); return; }
       await loadPacienteData(s.session.user.id);
     } catch { setFaErro('Erro ao conectar ao servidor.'); }
