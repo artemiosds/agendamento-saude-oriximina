@@ -1,0 +1,30 @@
+name: Prepare approved APAC source
+on:
+  push:
+    branches: [qa/apac-formulario-20261125]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/qa/apac-formulario-20261125'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recover and verify exact approved public form
+        run: |
+          python scripts/apac/fetch-approved.py
+      - name: Pin PDF library and update lockfile
+        run: npm install --save-exact pdf-lib@1.17.1 --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Save only approved asset and dependency lock on validation branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/Formulario_APAC_LAUDO.pdf package.json package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Inclui PDF APAC aprovado e dependência fixada"
+            git push origin HEAD:refs/heads/qa/apac-formulario-20261125
+          fi
