@@ -32,6 +32,7 @@ it('carrega nome e CNES do cadastro real da unidade antes de emitir e preserva a
  await waitFor(()=>expect(screen.getByRole('button',{name:'Baixar PDF'})).toBeEnabled());
  expect(f.fill.mock.calls.at(-1)?.[2]).toMatchObject({estabelecimento:'Unidade Teste',cnes:'0123456'});
  fireEvent.click(screen.getByRole('button',{name:'Preencher laudo'}));
+ fireEvent.click(screen.getByText('Estabelecimento solicitante e CNES', {exact:false}));
  expect(screen.getByLabelText('1 — Estabelecimento solicitante')).toHaveValue('Unidade Teste');
  expect(screen.getByLabelText('2 — CNES')).toHaveValue('0123456');
  const confirm=vi.spyOn(window,'confirm').mockReturnValue(true);
@@ -39,5 +40,32 @@ it('carrega nome e CNES do cadastro real da unidade antes de emitir e preserva a
   fireEvent.click(screen.getByRole('button',{name:'Somente dados do paciente'}));
   await waitFor(()=>expect(screen.getByRole('button',{name:'Baixar PDF'})).toBeEnabled());
   expect(f.fill.mock.calls.at(-1)?.[2]).toMatchObject({estabelecimento:'Unidade Teste',cnes:'0123456'});
+ }finally{confirm.mockRestore();}
+});
+
+it('abre o complemento diretamente e conserva o preenchimento ao trocar de etapa',async()=>{
+ render(<ApacLaudoModal open onOpenChange={()=>{}} paciente={patient}/>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Preencher laudo'})).toBeEnabled());
+ fireEvent.click(screen.getByRole('button',{name:'Preencher laudo'}));
+ fireEvent.change(screen.getByLabelText('36 — Descrição do diagnóstico'),{target:{value:'EXEMPLO'}});
+ fireEvent.click(screen.getByRole('button',{name:'Dados complementares'}));
+ expect(screen.getByRole('checkbox',{name:'Prótese mamária'})).toBeVisible();
+ fireEvent.click(screen.getByRole('checkbox',{name:'Prótese mamária'}));
+ expect(screen.getByLabelText('Ano de implantação')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Preencher laudo'}));
+ expect(screen.getByLabelText('36 — Descrição do diagnóstico')).toHaveValue('EXEMPLO');
+ expect(screen.getByRole('button',{name:'Baixar PDF'})).toBeDisabled();
+});
+it('protege contra descarte acidental de edição não baixada',async()=>{
+ const close=vi.fn();
+ render(<ApacLaudoModal open onOpenChange={close} paciente={patient}/>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Preencher laudo'})).toBeEnabled());
+ fireEvent.click(screen.getByRole('button',{name:'Preencher laudo'}));
+ fireEvent.change(screen.getByLabelText('36 — Descrição do diagnóstico'),{target:{value:'EXEMPLO'}});
+ const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+ try{
+ fireEvent.keyDown(screen.getByRole('dialog'),{key:'Escape'});
+ expect(close).not.toHaveBeenCalled();
+ expect(confirm).toHaveBeenCalled();
  }finally{confirm.mockRestore();}
 });
