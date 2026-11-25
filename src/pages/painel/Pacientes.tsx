@@ -169,14 +169,13 @@ const Pacientes: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [search]);
   const [importOpen, setImportOpen] = useState(false);
-  const [apacLaudo, setApacLaudo] = useState<{ paciente: any; unidadeNome: string; cnesUnidade: string } | null>(null);
+  const [apacLaudo, setApacLaudo] = useState<{ paciente: any; unidadeId: string; unidadeNome: string } | null>(null);
   const openApacLaudo = (p: any) => {
-    const u = unidades.find((x) => x.id === (p?.unidadeId || user?.unidadeId)) as any;
-    setApacLaudo({
-      paciente: p,
-      unidadeNome: u?.nome || "",
-      cnesUnidade: u?.cnes || u?.cnes_codigo || "",
-    });
+    // Unidade solicitante: vínculo operacional do emissor; no perfil global,
+    // utilizar a unidade vinculada ao paciente, sem escolher unidade arbitrária.
+    const unidadeId = (isGlobalAdminUser ? (p?.unidadeId || p?.unidade_id || unidadeIdFuncionario) : (unidadeIdFuncionario || p?.unidadeId || p?.unidade_id)) || "";
+    const u = unidades.find((x) => x.id === unidadeId);
+    setApacLaudo({ paciente: p, unidadeId, unidadeNome: u?.nome || "" });
   };
   const originalCpf = useRef("");
   const [editId, setEditId] = useState<string | null>(null);
@@ -1253,8 +1252,8 @@ const Pacientes: React.FC = () => {
         open={!!apacLaudo}
         onOpenChange={(o) => { if (!o) setApacLaudo(null); }}
         paciente={apacLaudo?.paciente || null}
+        unidadeId={apacLaudo?.unidadeId || ''}
         unidadeNome={apacLaudo?.unidadeNome || ''}
-        cnesUnidade={apacLaudo?.cnesUnidade || ''}
       />
 
       {/* Modal Detalhes - Paciente (página de Pacientes) */}

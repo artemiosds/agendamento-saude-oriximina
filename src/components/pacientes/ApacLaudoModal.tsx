@@ -7,20 +7,43 @@ import ApacClinicalForm from './ApacClinicalForm';
 import ApacComplementForm from './ApacComplementForm';
 import {emptyComplement,validateComplement} from '@/lib/apacComplementData';
 import {appendComplement,fillComplement,loadComplementSource} from '@/lib/apacComplementPdf';
-import { emptyApacClinicalData, validateApacClinicalData } from '@/lib/apacClinicalData';
+import { emptyApacClinicalData, validateApacClinicalData, apacSolicitanteDaUnidade } from '@/lib/apacClinicalData';
 import { APAC_DOCUMENT_NAME, apacFilename, fillApacPdf, loadApprovedApac } from '@/lib/apacPdf';
 import { useApacLaudoData } from '@/lib/useApacLaudoData';
 import { supabase } from '@/integrations/supabase/client';
 
-interface Props { open:boolean; onOpenChange:(open:boolean)=>void; paciente:any|null; unidadeNome?:string; cnesUnidade?:string }
+interface Props { open:boolean; onOpenChange:(open:boolean)=>void; paciente:any|null; unidadeId?:string; unidadeNome?:string; cnesUnidade?:string }
 export function ApacLaudoModal(props:Props){
  // Remount the whole emission session when the patient changes or dialog closes.
- return props.open&&props.paciente?<ApacSession key={String(props.paciente.id||props.paciente.cpf||props.paciente.cns||props.paciente.nome)} {...props}/>:null;
+ return props.open&&props.paciente?<ApacSession key={String(props.paciente.id||props.paciente.cpf||props.paciente.cns||props.paciente.nome)+'|'+(props.unidadeId||'')} {...props}/>:null;
 }
-function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:Props){
+function ApacSession({open,onOpenChange,paciente,unidadeId='',unidadeNome='',cnesUnidade=''}:Props){
  const [showForm,setShowForm]=useState(false);
  const [complement,setComplement]=useState(emptyComplement);
- const [clinical,setClinical]=useState(()=>({...emptyApacClinicalData(),estabelecimento:unidadeNome,cnes:/^\d{7}$/.test(cnesUnidade)?cnesUnidade:''}));
+ const [unitDefaults,setUnitDefaults]=useState(()=>({estabelecimento:unidadeNome,cnes:/^\d{7}$/.test(cnesUnidade)?cnesUnidade:''}));
+ const [unitLoading,setUnitLoading]=useState(!!unidadeId);
+ const [unitWarning,setUnitWarning]=useState('');
+ const [clinical,setClinical]=useState(()=>({...emptyApacClinicalData(),...unitDefaults}));
+ useEffect(()=>{
+  if(!unidadeId)return;
+  let alive=true;
+  setUnitLoading(true);
+  const load=async()=>{
+   try{
+    const {data,error}=await supabase.from('unidades').select('nome,custom_data').eq('id',unidadeId).single();
+    if(!alive)return;
+    if(error||!data)throw error||new Error('Unidade não encontrada');
+    const defaults=apacSolicitanteDaUnidade(data);
+    setUnitDefaults(defaults);
+    setClinical(prev=>({...prev,...defaults}));
+    setUnitWarning(defaults.cnes?'':'A unidade solicitante não possui CNES válido cadastrado. Confira o cadastro ou preencha o CNES manualmente.');
+   }catch{
+    if(alive)setUnitWarning('Não foi possível consultar o CNES da unidade solicitante. Confira e preencha manualmente antes de emitir.');
+   }finally{if(alive)setUnitLoading(false);}
+  };
+  void load();
+  return()=>{alive=false;};
+ },[unidadeId]);
  const [fullPatient,setFullPatient]=useState<any>(null);
  const [patientError,setPatientError]=useState('');
  useEffect(()=>{
@@ -39,7 +62,7 @@ function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:
  const [output,setOutput]=useState<{key:string;url:string}|null>(null);
  const [failure,setFailure]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{
-  if(!fullPatient||ibgeLoading||errors.length)return;
+  if(!fullPatient||unitLoading||ibgeLoading||errors.length)return;
   let alive=true;let url='';
   const timer=window.setTimeout(async()=>{
    try{
@@ -53,8 +76,8 @@ function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:
    }catch(e){if(alive)setFailure({key:signature,message:e instanceof Error?e.message:'Falha na geração do PDF.'});}
   },180);
   return()=>{alive=false;clearTimeout(timer);if(url)URL.revokeObjectURL(url);};
- },[signature,fullPatient,ibgeLoading]);
- const ready=!!output&&output.key===signature&&!errors.length&&!ibgeLoading&&!patientError;
+ },[signature,fullPatient,unitLoading,ibgeLoading]);
+ const ready=!!output&&output.key===signature&&!errors.length&&!unitLoading&&!ibgeLoading&&!patientError;
  const errorMessage=patientError||errors.join(' ')||(failure?.key===signature?failure.message:'');
  const print=()=>{
   if(!ready||!output)return;
@@ -73,14 +96,15 @@ function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:
    <DialogHeader className="px-4 py-3 border-b flex flex-row items-center justify-between space-y-0 flex-wrap gap-2">
     <DialogTitle className="text-base">{APAC_DOCUMENT_NAME} — {paciente.nome}</DialogTitle>
     <div className="flex items-center gap-2 mr-8 flex-wrap">
-     <Button size="sm" variant="outline" onClick={()=>setShowForm(v=>!v)} disabled={!fullPatient}>{showForm?'Ver prévia':'Preencher laudo'}</Button>
-     {!showForm&&<Button size="sm" variant="outline" disabled={!fullPatient} onClick={()=>setShowForm(true)}>{complement.areas.length?'Editar complemento':'Dados complementares'}</Button>}
-     {showForm&&<Button size="sm" variant="outline" onClick={()=>{if(window.confirm('Descartar os campos preenchidos?')){setClinical(emptyApacClinicalData());setComplement(emptyComplement());setShowForm(false);}}}>Somente dados do paciente</Button>}
+     <Button size="sm" variant="outline" onClick={()=>setShowForm(v=>!v)} disabled={!fullPatient||unitLoading}>{showForm?'Ver prévia':'Preencher laudo'}</Button>
+     {!showForm&&<Button size="sm" variant="outline" disabled={!fullPatient||unitLoading} onClick={()=>setShowForm(true)}>{complement.areas.length?'Editar complemento':'Dados complementares'}</Button>}
+     {showForm&&<Button size="sm" variant="outline" onClick={()=>{if(window.confirm('Descartar os campos preenchidos?')){setClinical({...emptyApacClinicalData(),...unitDefaults});setComplement(emptyComplement());setShowForm(false);}}}>Somente dados do paciente</Button>}
      <Button size="sm" onClick={print} disabled={!ready}><Printer className="w-4 h-4 mr-2"/>Imprimir Laudo APAC</Button>
      <Button size="sm" variant="secondary" onClick={download} disabled={!ready}><Download className="w-4 h-4 mr-2"/>Baixar PDF</Button>
      <Button size="sm" variant="outline" onClick={()=>onOpenChange(false)}><X className="w-4 h-4 mr-2"/>Fechar</Button>
     </div>
    </DialogHeader>
+   {unitWarning&&!clinical.cnes&&<div className="border-b px-4 py-2 text-sm text-amber-700">{unitWarning}</div>}
    {errorMessage&&<div role="alert" className="border-b px-4 py-2 text-sm text-destructive">{errorMessage}</div>}
    {showForm?<div className="flex-1 overflow-auto"><ApacClinicalForm value={clinical} onChange={setClinical}/><ApacComplementForm value={complement} onChange={setComplement}/></div>:
     <div className="flex-1 min-h-0 bg-muted p-2">

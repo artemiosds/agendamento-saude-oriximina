@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest';
-import { emptyApacClinicalData,validateApacClinicalData } from './apacClinicalData';
+import { emptyApacClinicalData,validateApacClinicalData,apacSolicitanteDaUnidade } from './apacClinicalData';
 describe('edição opcional APAC',()=>{
  it('mantém laudo em branco disponível e cria estados independentes',()=>{
   const a=emptyApacClinicalData(),b=emptyApacClinicalData();a.secundarios.push({codigo:'0301010048',nome:'Consulta',quantidade:1});
@@ -17,4 +17,10 @@ describe('edição opcional APAC',()=>{
   const d=emptyApacClinicalData();d.principal={codigo:'0301010048',nome:'Consulta',quantidade:1};d.cidPrincipal='M54.5';d.cidSecundario='F82';
   expect(validateApacClinicalData(d)).toEqual([]);expect(d).not.toHaveProperty('autorizacao');
  });
+});
+
+it('lê CNES da mesma fonte de UnidadesSalas, preserva zeros e não inventa identificadores',()=>{
+ expect(apacSolicitanteDaUnidade({nome:' UNIDADE ',custom_data:{cnes:'0123456'}})).toEqual({estabelecimento:'UNIDADE',cnes:'0123456'});
+ expect(apacSolicitanteDaUnidade({nome:'UNIDADE',custom_data:{cnes:'12345678'}}).cnes).toBe('');
+ expect(apacSolicitanteDaUnidade({nome:'UNIDADE',custom_data:null}).cnes).toBe('');
 });

@@ -47,3 +47,13 @@ export function validateApacClinicalData(d: ApacClinicalData): string[] {
   if(d.observacoes.length>650||d.diagnostico.length>100) errors.push('Texto excede o espaço disponível no formulário.');
   return [...new Set(errors)];
 }
+
+// Read the canonical CNES saved by UnidadesSalas in unidades.custom_data.
+// Keep leading zeros; never truncate or pad an invalid identifier.
+export function apacSolicitanteDaUnidade(row: {nome?: unknown; custom_data?: unknown} | null | undefined) {
+  const nome = typeof row?.nome === 'string' ? row.nome.trim() : '';
+  const custom = row?.custom_data;
+  const raw = custom && typeof custom === 'object' && 'cnes' in custom ? custom.cnes : '';
+  const cnes = typeof raw === 'string' || typeof raw === 'number' ? String(raw).trim().replace(/[.\s-]/g, '') : '';
+  return { estabelecimento: nome, cnes: /^\d{7}$/.test(cnes) ? cnes : '' };
+}
