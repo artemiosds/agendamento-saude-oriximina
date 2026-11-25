@@ -3513,6 +3513,81 @@ export type Database = {
         }
         Relationships: []
       }
+      team_evaluation_requests: {
+        Row: {
+          care_plan: string
+          created_at: string
+          id: string
+          members: Json
+          opinions: Json
+          patient_id: string
+          patient_name: string
+          priority: string
+          reason: string
+          requested_by: string
+          requested_name: string
+          source_id: string
+          source_snapshot: Json
+          status: string
+          unit_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          care_plan?: string
+          created_at?: string
+          id: string
+          members: Json
+          opinions?: Json
+          patient_id: string
+          patient_name: string
+          priority: string
+          reason: string
+          requested_by: string
+          requested_name: string
+          source_id: string
+          source_snapshot: Json
+          status?: string
+          unit_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          care_plan?: string
+          created_at?: string
+          id?: string
+          members?: Json
+          opinions?: Json
+          patient_id?: string
+          patient_name?: string
+          priority?: string
+          reason?: string
+          requested_by?: string
+          requested_name?: string
+          source_id?: string
+          source_snapshot?: Json
+          status?: string
+          unit_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_evaluation_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_evaluation_requests_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "prontuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       treatment_cycles: {
         Row: {
           clinical_notes: string
@@ -4394,10 +4469,6 @@ export type Database = {
       }
     }
     Functions: {
-      start_clinical_attendance: {
-        Args: { p_agendamento_id: string; p_patient_id: string; p_room_id?: string | null };
-        Returns: Json;
-      };
       align_treatment_session_to_agenda: {
         Args: {
           p_appointment_id: string
@@ -5214,6 +5285,18 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      start_clinical_attendance: {
+        Args: {
+          p_agendamento_id: string
+          p_patient_id: string
+          p_room_id?: string
+        }
+        Returns: Json
+      }
+      team_evaluation_command: {
+        Args: { p_action: string; p_payload: Json }
+        Returns: Json
+      }
       treatment_cycle_integrity_issues: {
         Args: { p_cycle_id: string }
         Returns: string[]
