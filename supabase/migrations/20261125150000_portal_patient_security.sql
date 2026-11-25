@@ -241,7 +241,7 @@ GRANT EXECUTE ON FUNCTION public.cancel_portal_appointment(text,text) TO authent
 -- Após atualização de todos os clientes, a política pode ser removida em migration própria.
 CREATE OR REPLACE FUNCTION public.guard_portal_patient_cancellation()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
-AS $
+AS $$
 DECLARE
   v_access jsonb;
   v_patient public.pacientes%ROWTYPE;
@@ -283,7 +283,7 @@ BEGIN
     jsonb_build_object('data',OLD.data,'hora',OLD.hora,'profissional_nome',OLD.profissional_nome,'motivo',v_motivo,'origem','portal_paciente'));
   RETURN NEW;
 END;
-$;
+$$;
 REVOKE ALL ON FUNCTION public.guard_portal_patient_cancellation() FROM PUBLIC, anon, authenticated;
 DROP TRIGGER IF EXISTS trg_portal_patient_cancel_guard ON public.agendamentos;
 CREATE TRIGGER trg_portal_patient_cancel_guard BEFORE UPDATE ON public.agendamentos
