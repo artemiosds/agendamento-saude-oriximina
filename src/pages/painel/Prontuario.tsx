@@ -48,6 +48,7 @@ import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
+import { usePtsDebouncedForm } from "@/hooks/usePtsDebouncedForm";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -575,7 +576,7 @@ const ProntuarioPage: React.FC = () => {
   // PTS inline creation
   const [ptsOpen, setPtsOpen] = useState(false);
   const [ptsSaving, setPtsSaving] = useState(false);
-  const [ptsForm, setPtsForm] = useState({
+  const { value: ptsForm, setValue: setPtsForm, setText: setPtsFormText, read: readPtsForm, flush: flushPtsForm, resetKey: ptsFormResetKey } = usePtsDebouncedForm({
     diagnostico_funcional: '', objetivos_terapeuticos: '',
     metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
     especialidades: [] as string[],
@@ -3635,6 +3636,7 @@ const ProntuarioPage: React.FC = () => {
 
   // ---- PTS inline creation ----
   const handleCreatePTS = async () => {
+    const ptsForm = flushPtsForm();
     if (!form.paciente_id || !ptsForm.diagnostico_funcional || !ptsForm.objetivos_terapeuticos) {
       toast.error("Preencha diagnóstico funcional e objetivos terapêuticos.");
       return;
@@ -6003,29 +6005,29 @@ const ProntuarioPage: React.FC = () => {
           <div className="space-y-4">
             <div>
               <Label>Diagnóstico Funcional *</Label>
-              <Textarea rows={3} value={ptsForm.diagnostico_funcional}
-                onChange={(e) => setPtsForm(p => ({ ...p, diagnostico_funcional: e.target.value }))}
+              <DebouncedTextarea rows={3} debounceMs={350} buffered bufferedResetKey={ptsFormResetKey} value={readPtsForm().diagnostico_funcional}
+                          onChange={e => setPtsFormText('diagnostico_funcional', e.target.value)} onBlur={flushPtsForm}
                 placeholder="Descrição funcional global do paciente..." />
             </div>
             <div>
               <Label>Objetivos Terapêuticos *</Label>
-              <Textarea rows={2} value={ptsForm.objetivos_terapeuticos}
-                onChange={(e) => setPtsForm(p => ({ ...p, objetivos_terapeuticos: e.target.value }))} />
+              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={ptsFormResetKey} value={readPtsForm().objetivos_terapeuticos}
+                          onChange={e => setPtsFormText('objetivos_terapeuticos', e.target.value)} onBlur={flushPtsForm} />
             </div>
             <div>
               <Label>Metas de Curto Prazo</Label>
-              <Textarea rows={2} value={ptsForm.metas_curto_prazo}
-                onChange={(e) => setPtsForm(p => ({ ...p, metas_curto_prazo: e.target.value }))} />
+              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={ptsFormResetKey} value={readPtsForm().metas_curto_prazo}
+                          onChange={e => setPtsFormText('metas_curto_prazo', e.target.value)} onBlur={flushPtsForm} />
             </div>
             <div>
               <Label>Metas de Médio Prazo</Label>
-              <Textarea rows={2} value={ptsForm.metas_medio_prazo}
-                onChange={(e) => setPtsForm(p => ({ ...p, metas_medio_prazo: e.target.value }))} />
+              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={ptsFormResetKey} value={readPtsForm().metas_medio_prazo}
+                          onChange={e => setPtsFormText('metas_medio_prazo', e.target.value)} onBlur={flushPtsForm} />
             </div>
             <div>
               <Label>Metas de Longo Prazo</Label>
-              <Textarea rows={2} value={ptsForm.metas_longo_prazo}
-                onChange={(e) => setPtsForm(p => ({ ...p, metas_longo_prazo: e.target.value }))} />
+              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={ptsFormResetKey} value={readPtsForm().metas_longo_prazo}
+                          onChange={e => setPtsFormText('metas_longo_prazo', e.target.value)} onBlur={flushPtsForm} />
             </div>
             <div>
               <Label className="mb-2 block">Especialidades Envolvidas</Label>

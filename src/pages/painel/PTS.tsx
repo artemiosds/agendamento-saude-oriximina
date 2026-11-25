@@ -10,7 +10,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { DebouncedTextarea } from '@/components/ui/debounced-textarea';
+import { usePtsDebouncedForm } from '@/hooks/usePtsDebouncedForm';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -215,13 +216,13 @@ const PTS: React.FC = () => {
   const [sigtapSelecionados, setSigtapSelecionados] = useState<SelectedSigtap[]>([]);
   const [cidsSelecionados, setCidsSelecionados] = useState<SelectedCid[]>([]);
   const [sigtapValidationByCode, setSigtapValidationByCode] = useState<Record<string, SigtapClinicalValidationResult>>({});
-  const [sigtapJustificationByCode, setSigtapJustificationByCode] = useState<Record<string, string>>({});
+  const { setValue: setSigtapJustificationByCode, setText: setSigtapJustificationText, read: readSigtapJustification, flush: flushSigtapJustification, resetKey: sigtapJustificationByCodeResetKey } = usePtsDebouncedForm<Record<string, string>>({});
 
   // Structured metas state
   const [metas, setMetas] = useState<PTSMeta[]>([]);
   const [editingMetaIdx, setEditingMetaIdx] = useState<number | null>(null);
   const [metaDialogOpen, setMetaDialogOpen] = useState(false);
-  const [metaForm, setMetaForm] = useState<PTSMeta>({
+  const { value: metaForm, setValue: setMetaForm, setText: setMetaFormText, read: readMetaForm, flush: flushMetaForm, resetKey: metaFormResetKey } = usePtsDebouncedForm<PTSMeta>({
     titulo: '', descricao: '', categoria: 'Curto Prazo', especialidade: '',
     responsavel: '', status: 'Não iniciada', prazo_estimado: '',
     indicador: '', prioridade: 'Média', obs: '',
@@ -229,13 +230,13 @@ const PTS: React.FC = () => {
 
   // Revisão modal state
   const [revisaoOpen, setRevisaoOpen] = useState(false);
-  const [revisaoForm, setRevisaoForm] = useState({
+  const { value: revisaoForm, setValue: setRevisaoForm, setText: setRevisaoFormText, read: readRevisaoForm, flush: flushRevisaoForm, resetKey: revisaoFormResetKey } = usePtsDebouncedForm({
     obs: '', data_proxima: '',
   });
 
   // Alta/encerramento modal state
   const [altaOpen, setAltaOpen] = useState(false);
-  const [altaForm, setAltaForm] = useState({
+  const { value: altaForm, setValue: setAltaForm, setText: setAltaFormText, read: readAltaForm, flush: flushAltaForm, resetKey: altaFormResetKey } = usePtsDebouncedForm({
     motivo_encerramento: '', resumo_desfecho: '', orientacoes_finais: '',
     criterio_alta_atingido: false, ciencia_familia: false, status_final: 'encerrado',
   });
@@ -275,18 +276,25 @@ const PTS: React.FC = () => {
     data_proxima_revisao: suggestReviewDate(30),
   };
 
-  const [form, setForm] = useState(emptyForm);
+  const { value: form, setValue: setForm, setText: setFormText, read: readForm, flush: flushForm, resetKey: formResetKey } = usePtsDebouncedForm(emptyForm);
   const ptsDraftKey = `pts_draft_${user?.id || 'current'}_new`;
   useEffect(() => {
     if (!dialogOpen || editingPts) return;
-    const t = window.setTimeout(() => {
+    const writeDraft = () => {
       try {
-        const hasText = Object.values(form).some(v => typeof v === 'string' && v.trim() && v !== form.data_proxima_revisao) || metas.length > 0;
-        if (hasText) localStorage.setItem(ptsDraftKey, JSON.stringify({ form, metas }));
+        const latest = readForm();
+        const hasText = Object.values(latest).some(v => typeof v === 'string' && v.trim() && v !== latest.data_proxima_revisao) || metas.length > 0;
+        if (hasText) localStorage.setItem(ptsDraftKey, JSON.stringify({ form: latest, metas }));
       } catch { /* armazenamento indisponível */ }
-    }, 600);
-    return () => window.clearTimeout(t);
-  }, [form, metas, dialogOpen, editingPts, ptsDraftKey]);
+    };
+    const t = window.setTimeout(writeDraft, 600);
+    // Captura inclusive a digitação ainda no buffer em um recarregamento.
+    window.addEventListener('pagehide', writeDraft);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('pagehide', writeDraft);
+    };
+  }, [form, metas, dialogOpen, editingPts, ptsDraftKey, readForm]);
   const ptsCidCompetencia = competenciaFromDate(todayLocalStr());
   const ptsCidScope = `${dialogOpen}|${editingPts?.id || ''}|${form.patient_id}|${selectedProcCodigo}|${ptsCidCompetencia}`;
   const ptsCidScopeRef = useRef(ptsCidScope);
@@ -947,6 +955,9 @@ const PTS: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // Capture o texto atual antes de qualquer await, inclusive sem blur.
+    const form = flushForm();
+    const sigtapJustificationByCode = flushSigtapJustification();
     let finalSigtap = [...sigtapSelecionados];
     let finalCids = [...cidsSelecionados];
 
@@ -1164,6 +1175,7 @@ const PTS: React.FC = () => {
   };
 
   const handleRevisao = async () => {
+    const revisaoForm = flushRevisaoForm();
     const ptsId = detailPts?.id;
     if (!ptsId) return;
     try {
@@ -1189,6 +1201,7 @@ const PTS: React.FC = () => {
   };
 
   const handleAlta = async () => {
+    const altaForm = flushAltaForm();
     const ptsId = detailPts?.id;
     if (!ptsId) return;
     if (!altaForm.motivo_encerramento) { toast.error('Informe o motivo do encerramento.'); return; }
@@ -1230,6 +1243,7 @@ const PTS: React.FC = () => {
   };
 
   const handleSaveMeta = () => {
+    const metaForm = flushMetaForm();
     if (!metaForm.titulo) { toast.error('Título da meta é obrigatório.'); return; }
     if (editingMetaIdx !== null) {
       setMetas(prev => prev.map((m, i) => i === editingMetaIdx ? { ...metaForm } : m));
@@ -1442,8 +1456,8 @@ const PTS: React.FC = () => {
 
                   <div>
                     <Label>Motivo do Encaminhamento</Label>
-                    <Textarea rows={2} value={form.motivo_encaminhamento}
-                      onChange={e => setForm(p => ({ ...p, motivo_encaminhamento: e.target.value }))}
+                    <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().motivo_encaminhamento}
+                          onChange={e => setFormText('motivo_encaminhamento', e.target.value)} onBlur={flushForm}
                       placeholder="Descreva o motivo pelo qual o paciente está sendo encaminhado para o PTS..." />
                   </div>
 
@@ -1540,22 +1554,22 @@ const PTS: React.FC = () => {
                     <div className="space-y-4">
                       <div>
                         <Label className="text-sm font-semibold">Diagnóstico Funcional Global *</Label>
-                        <Textarea rows={6} value={form.diagnostico_funcional}
-                          onChange={e => setForm(p => ({ ...p, diagnostico_funcional: e.target.value }))}
+                        <DebouncedTextarea rows={6} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().diagnostico_funcional}
+                          onChange={e => setFormText('diagnostico_funcional', e.target.value)} onBlur={flushForm}
                           placeholder="Diagnóstico funcional completo do paciente contemplando aspectos físicos, cognitivos e sociais..."
                           className="mt-1.5 resize-none focus-visible:ring-primary" />
                       </div>
                       <div>
                         <Label className="text-sm font-semibold">Potencialidades do Paciente</Label>
-                        <Textarea rows={4} value={form.potencialidades}
-                          onChange={e => setForm(p => ({ ...p, potencialidades: e.target.value }))}
+                        <DebouncedTextarea rows={4} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().potencialidades}
+                          onChange={e => setFormText('potencialidades', e.target.value)} onBlur={flushForm}
                           placeholder="Recursos, habilidades, pontos fortes e fatores de proteção..."
                           className="mt-1.5 resize-none" />
                       </div>
                       <div>
                         <Label className="text-sm font-semibold">Barreiras e Dificuldades</Label>
-                        <Textarea rows={4} value={form.barreiras}
-                          onChange={e => setForm(p => ({ ...p, barreiras: e.target.value }))}
+                        <DebouncedTextarea rows={4} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().barreiras}
+                          onChange={e => setFormText('barreiras', e.target.value)} onBlur={flushForm}
                           placeholder="Obstáculos ambientais, familiares ou individuais para o progresso terapêutico..."
                           className="mt-1.5 resize-none" />
                       </div>
@@ -1564,15 +1578,15 @@ const PTS: React.FC = () => {
                     <div className="space-y-4">
                       <div>
                         <Label className="text-sm font-semibold">Objetivo Geral do Tratamento</Label>
-                        <Textarea rows={3} value={form.objetivo_geral}
-                          onChange={e => setForm(p => ({ ...p, objetivo_geral: e.target.value }))}
+                        <DebouncedTextarea rows={3} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().objetivo_geral}
+                          onChange={e => setFormText('objetivo_geral', e.target.value)} onBlur={flushForm}
                           placeholder="O principal resultado esperado ao final do processo terapêutico..."
                           className="mt-1.5 resize-none" />
                       </div>
                       <div>
                         <Label className="text-sm font-semibold">Objetivos Terapêuticos Específicos *</Label>
-                        <Textarea rows={5} value={form.objetivos_terapeuticos}
-                          onChange={e => setForm(p => ({ ...p, objetivos_terapeuticos: e.target.value }))}
+                        <DebouncedTextarea rows={5} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().objetivos_terapeuticos}
+                          onChange={e => setFormText('objetivos_terapeuticos', e.target.value)} onBlur={flushForm}
                           placeholder="Descreva metas claras e mensuráveis..."
                           className="mt-1.5 resize-none" />
                       </div>
@@ -1584,8 +1598,8 @@ const PTS: React.FC = () => {
                             <span className="absolute -left-2 top-2 w-1 h-8 bg-blue-500 rounded-full" />
                             <div className="pl-3">
                               <Label className="text-xs text-blue-600 font-bold uppercase tracking-wider">Curto Prazo (1-3 meses)</Label>
-                              <Textarea rows={2} value={form.metas_curto_prazo}
-                                onChange={e => setForm(p => ({ ...p, metas_curto_prazo: e.target.value }))}
+                              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().metas_curto_prazo}
+                          onChange={e => setFormText('metas_curto_prazo', e.target.value)} onBlur={flushForm}
                                 className="mt-1 text-sm bg-blue-50/30 border-blue-100" />
                             </div>
                           </div>
@@ -1593,8 +1607,8 @@ const PTS: React.FC = () => {
                             <span className="absolute -left-2 top-2 w-1 h-8 bg-amber-500 rounded-full" />
                             <div className="pl-3">
                               <Label className="text-xs text-amber-600 font-bold uppercase tracking-wider">Médio Prazo (3-6 meses)</Label>
-                              <Textarea rows={2} value={form.metas_medio_prazo}
-                                onChange={e => setForm(p => ({ ...p, metas_medio_prazo: e.target.value }))}
+                              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().metas_medio_prazo}
+                          onChange={e => setFormText('metas_medio_prazo', e.target.value)} onBlur={flushForm}
                                 className="mt-1 text-sm bg-amber-50/30 border-amber-100" />
                             </div>
                           </div>
@@ -1602,8 +1616,8 @@ const PTS: React.FC = () => {
                             <span className="absolute -left-2 top-2 w-1 h-8 bg-emerald-500 rounded-full" />
                             <div className="pl-3">
                               <Label className="text-xs text-emerald-600 font-bold uppercase tracking-wider">Longo Prazo (6-12 meses)</Label>
-                              <Textarea rows={2} value={form.metas_longo_prazo}
-                                onChange={e => setForm(p => ({ ...p, metas_longo_prazo: e.target.value }))}
+                              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().metas_longo_prazo}
+                          onChange={e => setFormText('metas_longo_prazo', e.target.value)} onBlur={flushForm}
                                 className="mt-1 text-sm bg-emerald-50/30 border-emerald-100" />
                             </div>
                           </div>
@@ -1613,8 +1627,8 @@ const PTS: React.FC = () => {
                   </div>
                   <div className="pt-2 border-t mt-4">
                     <Label className="text-sm font-semibold">Plano de Conduta Terapêutica</Label>
-                    <Textarea rows={4} value={form.plano_conduta}
-                      onChange={e => setForm(p => ({ ...p, plano_conduta: e.target.value }))}
+                    <DebouncedTextarea rows={4} debounceMs={350} buffered bufferedResetKey={formResetKey} value={readForm().plano_conduta}
+                          onChange={e => setFormText('plano_conduta', e.target.value)} onBlur={flushForm}
                       placeholder="Estratégias detalhadas, frequência de atendimentos, abordagens específicas e orientações..."
                       className="mt-1.5 resize-none bg-muted/20" />
                   </div>
@@ -1853,15 +1867,14 @@ const PTS: React.FC = () => {
                                     </div>
                                     <div>
                                       <Label className="text-[10px] uppercase text-red-800">Justificativa clínica obrigatória</Label>
-                                      <Textarea
+                                      <DebouncedTextarea
                                         rows={2}
-                                        value={sigtapJustificationByCode[s.procedimento_codigo] || ""}
-                                        onChange={(e) =>
-                                          setSigtapJustificationByCode((prev) => ({
-                                            ...prev,
-                                            [s.procedimento_codigo]: e.target.value,
-                                          }))
-                                        }
+                                        debounceMs={350}
+                                        buffered
+                                        bufferedResetKey={sigtapJustificationByCodeResetKey}
+                                        value={readSigtapJustification()[s.procedimento_codigo] || ""}
+                                        onChange={e => setSigtapJustificationText(s.procedimento_codigo, e.target.value)}
+                                        onBlur={flushSigtapJustification}
                                         placeholder="Justifique a manutenção clínica deste procedimento..."
                                         className="mt-1 bg-background text-foreground"
                                       />
@@ -2052,14 +2065,14 @@ const PTS: React.FC = () => {
             </div>
             <div>
               <Label>Descrição</Label>
-              <Textarea rows={2} value={metaForm.descricao}
-                onChange={e => setMetaForm(p => ({ ...p, descricao: e.target.value }))}
+              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={metaFormResetKey} value={readMetaForm().descricao}
+                          onChange={e => setMetaFormText('descricao', e.target.value)} onBlur={flushMetaForm}
                 placeholder="Descreva a meta em detalhes..." />
             </div>
             <div>
               <Label>Observações</Label>
-              <Textarea rows={2} value={metaForm.obs || ''}
-                onChange={e => setMetaForm(p => ({ ...p, obs: e.target.value }))} />
+              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={metaFormResetKey} value={readMetaForm().obs || ''}
+                          onChange={e => setMetaFormText('obs', e.target.value)} onBlur={flushMetaForm} />
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setMetaDialogOpen(false)}>Cancelar</Button>
@@ -2090,8 +2103,8 @@ const PTS: React.FC = () => {
             )}
             <div>
               <Label>Observações da Revisão</Label>
-              <Textarea rows={3} value={revisaoForm.obs}
-                onChange={e => setRevisaoForm(p => ({ ...p, obs: e.target.value }))}
+              <DebouncedTextarea rows={3} debounceMs={350} buffered bufferedResetKey={revisaoFormResetKey} value={readRevisaoForm().obs}
+                          onChange={e => setRevisaoFormText('obs', e.target.value)} onBlur={flushRevisaoForm}
                 placeholder="Descreva as alterações, progresso e decisões desta revisão..." />
             </div>
             <div>
@@ -2148,14 +2161,14 @@ const PTS: React.FC = () => {
             </div>
             <div>
               <Label>Resumo do Desfecho Clínico</Label>
-              <Textarea rows={3} value={altaForm.resumo_desfecho}
-                onChange={e => setAltaForm(p => ({ ...p, resumo_desfecho: e.target.value }))}
+              <DebouncedTextarea rows={3} debounceMs={350} buffered bufferedResetKey={altaFormResetKey} value={readAltaForm().resumo_desfecho}
+                          onChange={e => setAltaFormText('resumo_desfecho', e.target.value)} onBlur={flushAltaForm}
                 placeholder="Descreva os resultados alcançados e o estado do paciente ao encerrar..." />
             </div>
             <div>
               <Label>Orientações Finais</Label>
-              <Textarea rows={2} value={altaForm.orientacoes_finais}
-                onChange={e => setAltaForm(p => ({ ...p, orientacoes_finais: e.target.value }))}
+              <DebouncedTextarea rows={2} debounceMs={350} buffered bufferedResetKey={altaFormResetKey} value={readAltaForm().orientacoes_finais}
+                          onChange={e => setAltaFormText('orientacoes_finais', e.target.value)} onBlur={flushAltaForm}
                 placeholder="Orientações para continuidade do cuidado..." />
             </div>
             <div className="grid grid-cols-2 gap-3">
