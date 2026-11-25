@@ -10,8 +10,8 @@ describe('edição opcional APAC',()=>{
   expect(validateApacClinicalData(d)).toHaveLength(4);
  });
  it('não aceita mais secundários que o formulário comporta nem documento incompleto',()=>{
-  const d=emptyApacClinicalData();d.secundarios=Array.from({length:6},()=>({codigo:'0301010048',nome:'Consulta',quantidade:1}));d.tipoDocumento='CPF';d.documento='123';
-  expect(validateApacClinicalData(d)).toEqual(expect.arrayContaining(['O formulário comporta até 5 procedimentos secundários.','Confira o tipo e o número do documento do solicitante.']));
+  const d=emptyApacClinicalData();d.secundarios=Array.from({length:11},()=>({codigo:'0301010048',nome:'Consulta',quantidade:1}));d.tipoDocumento='CPF';d.documento='123';
+  expect(validateApacClinicalData(d)).toEqual(expect.arrayContaining(['O formulário comporta até 10 procedimentos secundários.','Confira o tipo e o número do documento do solicitante.']));
  });
  it('permite principal, secundário e CIDs separados sem gerar autorização',()=>{
   const d=emptyApacClinicalData();d.principal={codigo:'0301010048',nome:'Consulta',quantidade:1};d.cidPrincipal='M54.5';d.cidSecundario='F82';

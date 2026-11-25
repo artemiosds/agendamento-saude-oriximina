@@ -1,150 +1,87 @@
-import ApacClinicalForm from "./ApacClinicalForm";
-import { emptyApacClinicalData, validateApacClinicalData } from "@/lib/apacClinicalData";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Printer, Download, X } from "lucide-react";
-import { toast } from "sonner";
-import ApacLaudoTemplate, { type ApacLaudoTemplateHandle } from "./ApacLaudoTemplate";
-import { printApacLaudo, downloadApacLaudoPDF } from "@/lib/apacLaudoPrint";
-import { A4_WIDTH_MM, A4_HEIGHT_MM } from "@/lib/apacLaudoOverlay";
+import { useEffect, useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Printer, Download, X } from 'lucide-react';
+import { toast } from 'sonner';
+import ApacClinicalForm from './ApacClinicalForm';
+import { emptyApacClinicalData, validateApacClinicalData } from '@/lib/apacClinicalData';
+import { APAC_DOCUMENT_NAME, apacFilename, fillApacPdf, loadApprovedApac } from '@/lib/apacPdf';
+import { useApacLaudoData } from '@/lib/useApacLaudoData';
+import { supabase } from '@/integrations/supabase/client';
 
-interface ApacLaudoModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  paciente: any | null;
+interface Props { open:boolean; onOpenChange:(open:boolean)=>void; paciente:any|null; unidadeNome?:string; cnesUnidade?:string }
+export function ApacLaudoModal(props:Props){
+ // Remount the whole emission session when the patient changes or dialog closes.
+ return props.open&&props.paciente?<ApacSession key={String(props.paciente.id||props.paciente.cpf||props.paciente.cns||props.paciente.nome)} {...props}/>:null;
 }
-
-const MM_TO_PX = 96 / 25.4;
-const A4_PX_W = A4_WIDTH_MM * MM_TO_PX;
-const A4_PX_H = A4_HEIGHT_MM * MM_TO_PX;
-
-export function ApacLaudoModal({ open, onOpenChange, paciente }: ApacLaudoModalProps) {
-  const carregando = !paciente;
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const templateRef = useRef<ApacLaudoTemplateHandle>(null);
-  const [scale, setScale] = useState(1);
-  const [printing, setPrinting] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-
-  const [editing, setEditing] = useState(false);
-  const [clinical, setClinical] = useState(emptyApacClinicalData);
-  const [showForm, setShowForm] = useState(false);
-  const patientKey = paciente?.id || paciente?.cpf || paciente?.cns || paciente?.nome || '';
-  useEffect(() => {
-    setEditing(false); setShowForm(false); setClinical(emptyApacClinicalData());
-  }, [open, patientKey]);
-  const errors = editing ? validateApacClinicalData(clinical) : [];
-
-  useLayoutEffect(() => {
-    const recalc = () => {
-      const el = wrapRef.current;
-      if (!el) return;
-      const w = el.clientWidth - 16;
-      const h = el.clientHeight - 16;
-      const s = Math.min(w / A4_PX_W, h / A4_PX_H, 1);
-      setScale(s > 0 ? s : 1);
-    };
-    recalc();
-    const ro = new ResizeObserver(recalc);
-    if (wrapRef.current) ro.observe(wrapRef.current);
-    return () => ro.disconnect();
-  }, [open, showForm]);
-
-  const handlePrint = async () => {
-    if (printing || errors.length) return;
-    setPrinting(true);
-    try {
-      await templateRef.current?.waitReady(5000);
-      await printApacLaudo(paciente, templateRef.current?.svg || null);
-    } catch (e) {
-      console.error(e);
-      toast.error("Não foi possível abrir a impressão. Tente novamente.");
-    } finally {
-      setPrinting(false);
-    }
-  };
-
-  const handleDownload = async () => {
-    if (downloading || errors.length) return;
-    setDownloading(true);
-    try {
-      await templateRef.current?.waitReady(5000);
-      await downloadApacLaudoPDF(templateRef.current?.svg || null, paciente);
-    } catch (e) {
-      console.error(e);
-      toast.error("Não foi possível gerar o PDF. Tente novamente.");
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-[96vw] h-[92vh] p-0 flex flex-col gap-0">
-        <DialogHeader className="px-4 py-3 border-b flex flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-base">
-            Laudo APAC{paciente?.nome ? ` — ${paciente.nome}` : ""}
-          </DialogTitle>
-          <div className="flex items-center gap-2 mr-8 flex-wrap">
-            <Button size="sm" variant="outline" disabled={carregando || printing || downloading} onClick={() => {setEditing(true);setShowForm(!showForm);}}>{showForm ? 'Ver prévia' : 'Preencher laudo'}</Button>
-            {editing && <Button size="sm" variant="outline" disabled={printing || downloading} onClick={() => {if(window.confirm('Descartar os campos preenchidos e manter somente a identificação do paciente?')) {setEditing(false);setShowForm(false);setClinical(emptyApacClinicalData());}}}>Somente dados do paciente</Button>}
-            <Button size="sm" onClick={handlePrint} disabled={carregando || printing || downloading || errors.length > 0}>
-              <Printer className="w-4 h-4 mr-2" />
-              {printing ? "Preparando impressão..." : "Imprimir Laudo APAC"}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleDownload}
-              disabled={carregando || downloading || printing || errors.length > 0}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {downloading ? "Gerando PDF..." : "Baixar PDF"}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
-              <X className="w-4 h-4 mr-2" />
-              Fechar
-            </Button>
-          </div>
-        </DialogHeader>
-        {errors.length > 0 && <div role="alert" className="border-b px-4 py-2 text-sm text-destructive">{errors.join(' ')}</div>}
-        {showForm && <div className="flex-1 overflow-auto"><ApacClinicalForm value={clinical} onChange={setClinical}/></div>}
-        <div ref={wrapRef} className={`flex-1 overflow-auto bg-muted flex items-start justify-center p-2 ${showForm ? "hidden" : ""}`}>
-          {carregando ? (
-            <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-              Carregando dados do paciente...
-            </div>
-          ) : (
-            <div
-              style={{
-                width: A4_PX_W * scale,
-                height: A4_PX_H * scale,
-                position: "relative",
-                flexShrink: 0,
-              }}
-            >
-              <div
-                style={{
-                  width: A4_PX_W,
-                  height: A4_PX_H,
-                  transform: `scale(${scale})`,
-                  transformOrigin: "top left",
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  boxShadow: "0 0 6px rgba(0,0,0,0.18)",
-                  background: "#fff",
-                }}
-              >
-                <ApacLaudoTemplate ref={templateRef} paciente={paciente} clinicalData={editing ? clinical : undefined} />
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:Props){
+ const [showForm,setShowForm]=useState(false);
+ const [clinical,setClinical]=useState(()=>({...emptyApacClinicalData(),estabelecimento:unidadeNome,cnes:/^\d{7}$/.test(cnesUnidade)?cnesUnidade:''}));
+ const [fullPatient,setFullPatient]=useState<any>(null);
+ const [patientError,setPatientError]=useState('');
+ useEffect(()=>{
+  let alive=true;
+  if(!paciente?.id){setPatientError('Paciente sem identificação válida.');return;}
+  supabase.from('pacientes').select('*').eq('id',paciente.id).single().then(({data,error})=>{
+   if(!alive)return;
+   if(error||!data)setPatientError('Não foi possível confirmar os dados do paciente. Feche e tente novamente.');
+   else setFullPatient(data);
+  });
+  return()=>{alive=false;};
+ },[paciente?.id]);
+ const {data,ibgeLoading}=useApacLaudoData(fullPatient);
+ const errors=validateApacClinicalData(clinical);
+ const signature=JSON.stringify([fullPatient?.id,data,clinical]);
+ const [output,setOutput]=useState<{key:string;url:string}|null>(null);
+ const [failure,setFailure]=useState<{key:string;message:string}|null>(null);
+ useEffect(()=>{
+  if(!fullPatient||ibgeLoading||errors.length)return;
+  let alive=true;let url='';
+  const timer=window.setTimeout(async()=>{
+   try{
+    const bytes=await fillApacPdf(await loadApprovedApac(),fullPatient,clinical,data);
+    if(!alive)return;
+    const copy=new Uint8Array(bytes);
+    url=URL.createObjectURL(new Blob([copy.buffer],{type:'application/pdf'}));
+    setOutput({key:signature,url});
+    setFailure(null);
+   }catch(e){if(alive)setFailure({key:signature,message:e instanceof Error?e.message:'Falha na geração do PDF.'});}
+  },180);
+  return()=>{alive=false;clearTimeout(timer);if(url)URL.revokeObjectURL(url);};
+ },[signature,fullPatient,ibgeLoading]);
+ const ready=!!output&&output.key===signature&&!errors.length&&!ibgeLoading&&!patientError;
+ const errorMessage=patientError||errors.join(' ')||(failure?.key===signature?failure.message:'');
+ const print=()=>{
+  if(!ready||!output)return;
+  // Native browser PDF viewer uses the exact same PDF (not a recreated HTML sheet).
+  const win=window.open(output.url,'_blank');
+  if(!win){toast.error('Permita a abertura de janelas para imprimir o PDF.');return;}
+  try{win.opener=null;}catch{/* viewer may be isolated */}
+  toast.info('Use o botão Imprimir do visualizador de PDF.');
+ };
+ const download=()=>{
+  if(!ready||!output)return;
+  const a=document.createElement('a');a.href=output.url;a.download=apacFilename(fullPatient?.nome);document.body.appendChild(a);a.click();a.remove();
+ };
+ return <Dialog open={open} onOpenChange={onOpenChange}>
+  <DialogContent className="max-w-5xl w-[96vw] h-[92vh] p-0 flex flex-col gap-0">
+   <DialogHeader className="px-4 py-3 border-b flex flex-row items-center justify-between space-y-0 flex-wrap gap-2">
+    <DialogTitle className="text-base">{APAC_DOCUMENT_NAME} — {paciente.nome}</DialogTitle>
+    <div className="flex items-center gap-2 mr-8 flex-wrap">
+     <Button size="sm" variant="outline" onClick={()=>setShowForm(v=>!v)} disabled={!fullPatient}>{showForm?'Ver prévia':'Preencher laudo'}</Button>
+     {showForm&&<Button size="sm" variant="outline" onClick={()=>{if(window.confirm('Descartar os campos preenchidos?')){setClinical(emptyApacClinicalData());setShowForm(false);}}}>Somente dados do paciente</Button>}
+     <Button size="sm" onClick={print} disabled={!ready}><Printer className="w-4 h-4 mr-2"/>Imprimir Laudo APAC</Button>
+     <Button size="sm" variant="secondary" onClick={download} disabled={!ready}><Download className="w-4 h-4 mr-2"/>Baixar PDF</Button>
+     <Button size="sm" variant="outline" onClick={()=>onOpenChange(false)}><X className="w-4 h-4 mr-2"/>Fechar</Button>
+    </div>
+   </DialogHeader>
+   {errorMessage&&<div role="alert" className="border-b px-4 py-2 text-sm text-destructive">{errorMessage}</div>}
+   {showForm?<div className="flex-1 overflow-auto"><ApacClinicalForm value={clinical} onChange={setClinical}/></div>:
+    <div className="flex-1 min-h-0 bg-muted p-2">
+     {ready&&output?<iframe title={APAC_DOCUMENT_NAME} src={output.url} className="w-full h-full border-0 bg-white"/>:
+      <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{errorMessage?'Revise os dados antes de emitir.':'Preparando formulário de duas páginas...'}</div>}
+    </div>}
+  </DialogContent>
+ </Dialog>;
 }
-
 export default ApacLaudoModal;

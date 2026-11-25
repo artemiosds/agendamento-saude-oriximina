@@ -4,6 +4,8 @@ export interface ApacClinicalData {
   principal: ApacProcedure; secundarios: ApacProcedure[];
   diagnostico: string; cidPrincipal: string; cidSecundario: string; cidAssociado: string;
   observacoes: string; solicitante: string; dataSolicitacao: string;
+  servico?: string; classificacao?: string; histoData?: string; histoCid?: string; histoDescricao?: string;
+  executante?: string; cnesExecutante?: string;
   tipoDocumento: '' | 'CPF' | 'CNS'; documento: string;
 }
 export const emptyApacClinicalData = (): ApacClinicalData => ({
@@ -27,17 +29,19 @@ export function apacObservationLines(value: string): string[] {
 export function validateApacClinicalData(d: ApacClinicalData): string[] {
   const errors: string[]=[];
   if (d.cnes && !/^\d{7}$/.test(d.cnes)) errors.push('CNES deve ter 7 dígitos.');
-  if(d.secundarios.length>5) errors.push('O formulário comporta até 5 procedimentos secundários.');
+  if(d.secundarios.length>10) errors.push('O formulário comporta até 10 procedimentos secundários.');
   for(const p of [d.principal,...d.secundarios]) {
     if((p.codigo||p.nome) && (!/^\d{10}$/.test(p.codigo)||!p.nome.trim())) errors.push('Selecione código e nome do procedimento SIGTAP.');
     if((p.codigo||p.nome) && (!Number.isInteger(p.quantidade)||p.quantidade<1||p.quantidade>999)) errors.push('Quantidade deve ser inteira entre 1 e 999.');
   }
-  for(const cid of [d.cidPrincipal,d.cidSecundario,d.cidAssociado]) if(cid&&!/^[A-Z]\d{2}(?:\.?[A-Z0-9])?$/.test(cid)) errors.push('CID inválido: use um código por campo.');
+  if(d.cnesExecutante && !/^\d{7}$/.test(d.cnesExecutante)) errors.push('CNES executante deve ter 7 dígitos.');
+  for(const code of [d.servico,d.classificacao]) if(code && !/^\d{3}$/.test(code)) errors.push('Serviço e classificação devem ter 3 dígitos.');
+  for(const cid of [d.cidPrincipal,d.cidSecundario,d.cidAssociado,d.histoCid]) if(cid&&!/^[A-Z]\d{2}(?:\.?[A-Z0-9])?$/.test(cid)) errors.push('CID inválido: use um código por campo.');
   if(d.documento && (!d.tipoDocumento || !new RegExp(`^\\d{${d.tipoDocumento==='CPF'?11:15}}$`).test(d.documento))) errors.push('Confira o tipo e o número do documento do solicitante.');
   if(d.tipoDocumento&&!d.documento) errors.push('Preencha o documento do solicitante ou remova o tipo selecionado.');
-  if(d.dataSolicitacao) {
-    const date = new Date(`${d.dataSolicitacao}T12:00:00Z`);
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(d.dataSolicitacao) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0,10)!==d.dataSolicitacao) errors.push('Data da solicitação inválida.');
+  for(const value of [d.dataSolicitacao,d.histoData]) if(value) {
+    const date = new Date(`${value}T12:00:00Z`);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0,10)!==value) errors.push('Data do laudo inválida.');
   }
   if(apacObservationLines(d.observacoes).length > 8) errors.push('Observações excedem 8 linhas no formulário. Reduza as quebras de linha.');
   if(d.observacoes.length>650||d.diagnostico.length>100) errors.push('Texto excede o espaço disponível no formulário.');

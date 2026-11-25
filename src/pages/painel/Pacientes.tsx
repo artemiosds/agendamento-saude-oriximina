@@ -1253,6 +1253,8 @@ const Pacientes: React.FC = () => {
         open={!!apacLaudo}
         onOpenChange={(o) => { if (!o) setApacLaudo(null); }}
         paciente={apacLaudo?.paciente || null}
+        unidadeNome={apacLaudo?.unidadeNome || ''}
+        cnesUnidade={apacLaudo?.cnesUnidade || ''}
       />
 
       {/* Modal Detalhes - Paciente (página de Pacientes) */}
