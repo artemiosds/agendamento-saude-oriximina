@@ -1,7 +1,9 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, X, ContactRound, Phone, MapPin, Stethoscope, FolderOpen } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatCNS } from '@/lib/cnsUtils';
 import { cn } from '@/lib/utils';
 
 // ---------- Formatters ----------
@@ -50,6 +52,11 @@ export const calcularIdadeAnos = (dataNascimento?: string | null): string => {
   return `${age} anos`;
 };
 
+export const patientInitials = (nome?: string | null): string => {
+  const parts=String(nome||'').trim().split(/\s+/).filter(Boolean);
+  return parts.length ? (parts[0][0]+(parts.length>1?parts[parts.length-1][0]:'')).toLocaleUpperCase('pt-BR') : '—';
+};
+
 // ---------- Sub-components ----------
 
 const EMPTY = <span className="italic text-muted-foreground/70">—</span>;
@@ -60,8 +67,7 @@ export const PCampo: React.FC<{ label: string; valor?: React.ReactNode | string 
   const display = hasValue(valor) ? valor : EMPTY;
   return (
     <div
-      className="grid items-start gap-2 py-1.5"
-      style={{ gridTemplateColumns: '110px 1fr' }}
+      className="grid items-start grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] gap-2 py-1.5"
     >
       <span className="text-[12px] text-muted-foreground leading-snug">{label}</span>
       <span
@@ -83,9 +89,9 @@ export const PCampo: React.FC<{ label: string; valor?: React.ReactNode | string 
 };
 
 export const PSecao: React.FC<{ titulo: string; children: React.ReactNode; className?: string }> = ({ titulo, children, className }) => (
-  <section className={cn('rounded-xl border border-border/70 bg-card/50 p-3', className)}>
+  <section className={cn('min-w-0 rounded-xl border border-border/70 bg-card p-3.5', className)}>
     <h3
-      className="mb-2 text-[10px] font-semibold uppercase text-primary"
+      className="mb-2 text-xs font-semibold uppercase text-primary"
       style={{ letterSpacing: '1.2px' }}
     >
       {titulo}
@@ -103,7 +109,10 @@ interface PacienteDetalheModalProps {
   prontuarioNumero?: string | null;
   dataNascimento?: string | null;
   badges?: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  cpf?: string | null;
+  cns?: string | null;
+  sections?: { id: string; label: string; content: React.ReactNode }[];
   footer?: React.ReactNode;
 }
 
@@ -115,91 +124,46 @@ const PacienteDetalheModal: React.FC<PacienteDetalheModalProps> = ({
   dataNascimento,
   badges,
   children,
+  cpf,cns,sections,
   footer,
 }) => {
   const idade = calcularIdadeAnos(dataNascimento);
   const dataFmt = formatarDataBR(dataNascimento);
+  const [tab,setTab]=React.useState('geral');
+  const bodyRef=React.useRef<HTMLDivElement>(null);
+  React.useEffect(()=>{if(open)setTab(sections?.[0]?.id||'geral');},[open,nome,prontuarioNumero]);
+  React.useEffect(()=>{if(bodyRef.current)bodyRef.current.scrollTop=0;},[tab]);
+  const icons:Record<string,React.ElementType>={geral:ContactRound,contato:Phone,endereco:MapPin,clinico:Stethoscope,anexos:FolderOpen};
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="p-0 gap-0 flex flex-col border-0 bg-background overflow-hidden [&>button.absolute]:hidden"
-        style={{
-          width: '95vw',
-          maxWidth: '480px',
-          maxHeight: '90vh',
-          borderRadius: '20px',
-          boxSizing: 'border-box',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-        }}
-      >
-        {/* Zona 1 - Header */}
-        <div className="relative border-b border-border/70" style={{ padding: '20px' }}>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            aria-label="Fechar"
-            className="absolute flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            style={{ top: '12px', right: '12px', width: '32px', height: '32px' }}
-          >
-            <X className="w-4 h-4" />
-          </button>
-
-          <DialogTitle asChild>
-            <h2
-              className="text-foreground pr-10"
-              style={{
-                fontWeight: 700,
-                fontSize: '18px',
-                lineHeight: 1.25,
-                wordBreak: 'break-word',
-                whiteSpace: 'normal',
-                overflow: 'visible',
-              }}
-            >
-              {nome || EMPTY}
-            </h2>
-          </DialogTitle>
-          <DialogDescription className="sr-only">Detalhes do paciente {nome}</DialogDescription>
-
-          {hasValue(prontuarioNumero) && (
-            <div className="mt-1 text-[12px] text-muted-foreground" style={{ wordBreak: 'break-word' }}>
-              Prontuário Nº {prontuarioNumero}
+      <DialogContent className="w-[96vw] max-w-[900px] max-h-[92dvh] p-0 gap-0 flex flex-col overflow-hidden [&>button.absolute]:hidden">
+        <div className="relative shrink-0 border-b bg-background p-4 sm:p-5 space-y-3">
+          <button type="button" onClick={()=>onOpenChange(false)} aria-label="Fechar" className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"><X className="w-4 h-4"/></button>
+          <div className="flex items-start gap-3 pr-9">
+            <div aria-hidden="true" className="flex shrink-0 h-11 w-11 sm:h-14 sm:w-14 rounded-xl bg-primary/10 text-primary items-center justify-center text-lg font-bold">{patientInitials(nome)}</div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] uppercase tracking-wide font-medium text-muted-foreground">Identificação do paciente</p>
+              <DialogTitle className="text-base sm:text-xl leading-snug break-words [overflow-wrap:anywhere]">{nome||EMPTY}</DialogTitle>
+              <DialogDescription className="sr-only">Detalhes do paciente {nome}</DialogDescription>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1">{hasValue(prontuarioNumero)&&<span>Prontuário Nº {prontuarioNumero}</span>}{idade&&<span>{idade}</span>}{dataFmt&&<span>Nascimento: {dataFmt}</span>}</div>
+              {badges&&<div className="flex flex-wrap gap-1.5 mt-2">{badges}</div>}
             </div>
-          )}
-
-          {(hasValue(idade) || hasValue(dataFmt)) && (
-            <div className="mt-1 text-[12px] text-muted-foreground" style={{ wordBreak: 'break-word' }}>
-              {hasValue(idade) ? idade : '—'}
-              {hasValue(dataFmt) ? ` • ${dataFmt}` : ''}
-            </div>
-          )}
-
-          {badges && <div className="mt-2 flex flex-wrap gap-1.5">{badges}</div>}
-        </div>
-
-        {/* Zona 2 - Body */}
-        <div
-          className="flex-1 flex flex-col gap-3"
-          style={{
-            padding: '16px 20px',
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            minHeight: 0,
-          }}
-        >
-          {children}
-        </div>
-
-        {/* Zona 3 - Footer */}
-        {footer && (
-          <div
-            className="border-t border-border/70 bg-background"
-            style={{ padding: '16px 20px' }}
-          >
-            {footer}
           </div>
-        )}
+          {sections&&<div className="grid grid-cols-2 gap-3 rounded-lg border border-border/70 bg-muted/25 p-3">
+            <div className="min-w-0"><p className="text-xs text-muted-foreground">CPF</p><p className="text-sm font-semibold tabular-nums break-words [overflow-wrap:anywhere]">{formatCPF(cpf)||'Não informado'}</p></div>
+            <div className="min-w-0"><p className="text-xs text-muted-foreground">Cartão SUS — CNS</p><p className="text-sm font-semibold tabular-nums break-words [overflow-wrap:anywhere]">{formatCNS(cns||'')||'Não informado'}</p></div>
+          </div>}
+        </div>
+        {sections?<div className="flex flex-col min-h-0 flex-1">
+          <Tabs value={tab} onValueChange={setTab} className="shrink-0 px-3 sm:px-5 py-2 border-b bg-background">
+            <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1 bg-transparent p-0">{sections.map(s=>{const Icon=icons[s.id]||ContactRound;return <TabsTrigger key={s.id} value={s.id} id={'patient-tab-'+s.id} aria-controls={'patient-panel-'+s.id} className="gap-1.5 px-2.5 py-2 text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Icon className="w-4 h-4"/>{s.label}</TabsTrigger>;})}</TabsList>
+          </Tabs>
+          <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-3 bg-muted/10">
+            {sections.map(s=><div key={s.id} id={'patient-panel-'+s.id} role="tabpanel" aria-labelledby={'patient-tab-'+s.id} hidden={tab!==s.id} tabIndex={0} className="space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{s.content}</div>)}
+          </div>
+        </div>:<div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-3">{children}</div>}
+        {footer&&<div className="shrink-0 border-t bg-background px-3 sm:px-5 py-3">{footer}</div>}
       </DialogContent>
     </Dialog>
   );

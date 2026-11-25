@@ -916,6 +916,11 @@ const Pacientes: React.FC = () => {
     setDetalhePaciente(p);
     setDetalheOpen(true);
   }, []);
+  const stableOpenDocuments = useCallback((p: any) => {
+    setDetalhePaciente(p);
+    setDetalheOpen(false);
+    setDocumentCenterOpen(true);
+  }, []);
   const stableVerProntuarios = useCallback((p: any) => {
     navigate(`/painel/prontuario?pacienteId=${p.id}&pacienteNome=${encodeURIComponent(p.nome)}`);
   }, [navigate]);
@@ -1210,7 +1215,7 @@ const Pacientes: React.FC = () => {
       </div>
 
       <div className={`${filtered.length > 50 ? 'perf-dense' : ''}`}>
-        <OperationalVirtualList items={filtered.slice(0, visibleCount)} threshold={30} estimateSize={220} grid label="Lista de pacientes"
+        <OperationalVirtualList items={filtered.slice(0, visibleCount)} threshold={30} estimateSize={248} grid label="Lista de pacientes"
           renderItem={(p, _index, onOverlayChange) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
@@ -1230,6 +1235,7 @@ const Pacientes: React.FC = () => {
               onImprimirLaudoApac={stableImprimirLaudoApac}
               onAddFila={stableAddFila}
               onOpenDetalhe={stableOpenDetalhe}
+              onOpenDocuments={stableOpenDocuments}
               onVerProntuarios={stableVerProntuarios}
               onEditar={stableEditar}
               onDelete={stableDelete}
@@ -1326,11 +1332,12 @@ const Pacientes: React.FC = () => {
         ].filter(Boolean).join(', ');
 
         const footer = (
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid gap-2 ${canEdit?'grid-cols-3':'grid-cols-2'}`}>
+            {canEdit&&<Button variant="outline" size="sm" className="w-full min-w-0 h-auto min-h-10 whitespace-normal" onClick={()=>{setDetalheOpen(false);stableEditar(detalhePaciente);}}><Pencil className="w-4 h-4 mr-1 shrink-0"/>Editar cadastro</Button>}
             <Button
               variant="outline"
               size="sm"
-              className="w-full min-w-0"
+              className="w-full min-w-0 h-auto min-h-10 whitespace-normal"
               onClick={() => {
                 setDetalheOpen(false);
                 navigate(
@@ -1339,16 +1346,16 @@ const Pacientes: React.FC = () => {
               }}
             >
               <FileText className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Ver Prontuários</span>
+              <span>Prontuários</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="w-full min-w-0"
+              className="w-full min-w-0 h-auto min-h-10 whitespace-normal"
               onClick={() => setDocumentCenterOpen(true)}
             >
               <FileText className="w-4 h-4 mr-1.5" />
-              <span className="truncate">Documentos</span>
+              <span>Documentos</span>
             </Button>
           </div>
         );
@@ -1362,18 +1369,18 @@ const Pacientes: React.FC = () => {
             prontuarioNumero={(detalhePaciente as any).numeroProntuario || detalhePaciente.id?.slice(0, 8)}
             dataNascimento={detalhePaciente.dataNascimento}
             badges={badges}
+            cpf={detalhePaciente.cpf}
+            cns={detalhePaciente.cns}
             footer={footer}
-          >
+            sections={[
+              {id:'geral',label:'Visão geral',content:<div className="grid gap-3 md:grid-cols-2 items-start"><div className="space-y-3">
             <PSecao titulo="Dados Pessoais">
               <PCampo label={L('nome', 'Nome completo')} valor={detalhePaciente.nome} />
-              <PCampo label={L('cpf', 'CPF')} valor={formatCPF(detalhePaciente.cpf)} />
-              <PCampo label={L('cns', 'Cartão SUS')} valor={formatCNS(detalhePaciente.cns)} />
               <PCampo label={L('nomeMae', 'Nome da mãe')} valor={detalhePaciente.nomeMae} />
               <PCampo label="Sexo" valor={sexoLabel} />
               <PCampo label="Raça / Cor" valor={racaCor} />
               <PCampo label="Nacionalidade" valor={nacionalidade} />
               <PCampo label="Naturalidade" valor={naturalidade} />
-              <PCampo label="CID" valor={cidVal} />
             </PSecao>
 
             {responsavel && (
@@ -1382,13 +1389,25 @@ const Pacientes: React.FC = () => {
               </PSecao>
             )}
 
-            <PSecao titulo="Contato">
+
+</div><div className="space-y-3">
+            <PSecao titulo="Histórico">
+              <PCampo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarDataBR(detalhePaciente.criadoEm) : ''} />
+              <PCampo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : ''} />
+              <PCampo label="Último atendimento" valor={ultimoAg ? formatarDataBR(ultimoAg.data) : ''} />
+            </PSecao>
+
+
+</div></div>},
+              {id:'contato',label:'Contato',content:<>            <PSecao titulo="Contato">
               <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
               <PCampo label="Tel. secundário" valor={formatTelefoneBR(telSecundario)} />
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
+              <div className="mt-2 flex justify-end"><ContactActionButton phone={detalhePaciente.telefone} patientName={detalhePaciente.nome} unitName={unidadesById.get(detalhePaciente.unidadeId || user?.unidadeId || "")?.nome || ""} showLabel variant="outline"/></div>
             </PSecao>
 
-            <PSecao titulo="Endereço">
+</>},
+              {id:'endereco',label:'Endereço',content:<>            <PSecao titulo="Endereço">
               <PCampo label="Logradouro" valor={enderecoLinha1} />
               <PCampo label="Bairro" valor={cd.bairro} />
               <PCampo label="Município / UF" valor={[p.municipio, cd.uf].filter(Boolean).join(' - ')} />
@@ -1398,19 +1417,14 @@ const Pacientes: React.FC = () => {
               )}
             </PSecao>
 
-            {flagsPrioridade && (
+</>},
+              {id:'clinico',label:'Clínico',content:<div className="grid gap-3 md:grid-cols-2 items-start"><div className="space-y-3"><PSecao titulo="Informações clínicas cadastradas"><PCampo label="CID" valor={cidVal}/></PSecao>            {flagsPrioridade && (
               <PSecao titulo="Prioridades / Condições">
                 <PCampo label="Sinalizações" valor={flagsPrioridade} />
               </PSecao>
             )}
 
-            <PSecao titulo="Histórico">
-              <PCampo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarDataBR(detalhePaciente.criadoEm) : ''} />
-              <PCampo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : ''} />
-              <PCampo label="Último atendimento" valor={ultimoAg ? formatarDataBR(ultimoAg.data) : ''} />
-            </PSecao>
-
-            <PSecao titulo="Alergias">
+</div><div className="space-y-3">            <PSecao titulo="Alergias">
               <AlergiasBlock alergias={alergiasRaw} />
             </PSecao>
 
@@ -1420,10 +1434,13 @@ const Pacientes: React.FC = () => {
               </PSecao>
             )}
 
-            <PSecao titulo="Documentos e Anexos">
+</div></div>},
+              {id:'anexos',label:'Anexos',content:<>            <PSecao titulo="Documentos e Anexos">
               <PatientAttachmentManager pacienteId={detalhePaciente.id} unidadeId={detalhePaciente.unidadeId} />
             </PSecao>
-          </PacienteDetalheModal>
+</>},
+            ]}
+          />
         );
       })()}
 
