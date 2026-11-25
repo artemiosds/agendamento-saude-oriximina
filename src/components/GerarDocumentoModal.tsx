@@ -31,6 +31,7 @@ import {isStandardPrescription,emptyPrescriptionRow,type MedicationRow} from '@/
 const RichTextEditor = React.lazy(() => import('@/components/editor/RichTextEditor'));
 import {
   buildOciAddress,
+  formatOciPatientCpf,
   createEmptyOciData,
   renderOciDocument,
   resolveOciEthnicity,
@@ -477,7 +478,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       return;
     }
 
-    const raw: any = pacienteExtra || paciente || {};
+    // Never hydrate an OCI from a previous patient's asynchronous response.
+    const raw: any = pacienteExtra?.id && pacienteExtra.id === paciente?.id ? pacienteExtra : (paciente || {});
     const custom: any = raw?.custom_data || raw?.customData || {};
     const pick = (...keys: string[]) => {
       for (const key of keys) {
@@ -519,6 +521,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       sexo: pick("sexo"),
       prontuario: pick("numero_prontuario", "prontuario", "id") || paciente?.id || "",
       cns: pick("cns"),
+      cpf: formatOciPatientCpf(raw.cpf),
       dataNascimento: pick("data_nascimento"),
       racaCor: pick("raca_cor", "racaCor", "raca"),
       etnia: resolveOciEthnicity(pick("etnia"), pick("etnia_outra", "etniaOutra")),

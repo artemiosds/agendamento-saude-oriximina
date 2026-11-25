@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyOciData, renderOciDocument, resolveOciEthnicity, type OciPatientData } from "./ociDocument";
+import { createEmptyOciData, renderOciDocument, resolveOciEthnicity, formatOciPatientCpf, type OciPatientData } from "./ociDocument";
 import { getCodigoIbge } from "@/lib/municipiosIbge";
 
 const paciente: OciPatientData = {
@@ -98,6 +98,27 @@ describe("documento OCI", () => {
     expect(pacienteSection).toContain("X238 — MUNDURUKÚ");
     expect(data.paciente.municipio).toBe("Oriximiná");
     expect(data.paciente.racaCor).toBe("parda");
+  });
+
+  it("imprime CPF ao lado do CNS na mesma linha, sem modificar os demais campos", () => {
+    const data = createEmptyOciData({...paciente, cns:"000000000000000", cpf:"01234567890", dataNascimento:"2000-01-01"}, profissional, "", "");
+    const html = renderOciDocument(data);
+    const line = html.split('grid-template-columns:33% 28% 16% 14% 9%">')[1].split('<div class="oci-grid"')[0];
+    expect(line).toContain("000000000000000");
+    expect(line).toContain("012.345.678-90");
+    expect(line.indexOf("Cartão Nacional de Saúde (CNS)")).toBeLessThan(line.indexOf(">CPF<"));
+    expect(line.indexOf(">CPF<")).toBeLessThan(line.indexOf("Data de nascimento"));
+    expect(line).toContain("01/01/2000");
+    expect(data.paciente.cpf).toBe("01234567890");
+  });
+
+  it("preserva documentos legados e deixa CPF ausente ou malformado vazio", () => {
+    expect(formatOciPatientCpf(undefined)).toBe("");
+    expect(formatOciPatientCpf("")).toBe("");
+    expect(formatOciPatientCpf("123")).toBe("");
+    expect(formatOciPatientCpf("012.345.678-90")).toBe("012.345.678-90");
+    const html = renderOciDocument(createEmptyOciData(paciente, profissional, "", ""));
+    expect(html).toMatch(/>CPF<\/span>\s*<div class="oci-field-value"[^>]*>&nbsp;<\/div>/);
   });
 
   it("resolve o código IBGE a partir do município e UF quando o cadastro não tem código", () => {

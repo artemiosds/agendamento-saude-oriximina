@@ -103,8 +103,9 @@ const StructuredOciForm: React.FC<Props> = ({ value, onChange, validation, princ
 
   const patientRows = useMemo(() => [
     ["Paciente", value.paciente.nome],
-    ["CNS", value.paciente.cns],
     ["Nascimento", value.paciente.dataNascimento],
+    ["CNS", value.paciente.cns],
+    ["CPF", value.paciente.cpf || ""],
     ["Sexo", value.paciente.sexo],
     ["Telefone", value.paciente.telefone],
     ["Endereço", value.paciente.enderecoCompleto],

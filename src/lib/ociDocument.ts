@@ -12,6 +12,7 @@ export interface OciPatientData {
   sexo: string;
   prontuario: string;
   cns: string;
+  cpf?: string; // Optional for legacy OCI documents and patients without CPF.
   dataNascimento: string;
   racaCor: string;
   etnia: string;
@@ -145,6 +146,14 @@ export function resolveOciEthnicity(value: unknown, otherValue?: unknown): strin
   const code = codeOrName.toLocaleUpperCase("pt-BR");
   if (code === "X999") return other ? `X999 — ${other}` : "X999 — Outra";
   return OCI_ETHNICITY_LABELS[code] || codeOrName;
+}
+
+/** Format the patient's registered CPF only; never substitute CNS or a guardian's CPF. */
+export function formatOciPatientCpf(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!/^(?:\d{11}|\d{3}\.\d{3}\.\d{3}-\d{2})$/.test(raw)) return "";
+  const digits = raw.replace(/\D/g, "");
+  return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
 }
 
 export const createEmptyOciData = (
@@ -480,8 +489,9 @@ export const renderOciDocument = (
       </div>
       ${field("Nº do prontuário", p.prontuario, "", "text-align:center")}
     </div>
-    <div class="oci-grid" style="grid-template-columns:61% 16% 14% 9%">
+    <div class="oci-grid" style="grid-template-columns:33% 28% 16% 14% 9%">
       ${field("Cartão Nacional de Saúde (CNS)", p.cns)}
+      ${field("CPF", formatOciPatientCpf(p.cpf), "", "text-align:center")}
       ${field("Data de nascimento", fmtDate(p.dataNascimento), "", "text-align:center")}
       ${field("Raça/Cor", p.racaCor, "", "text-align:center")}
       ${field("Etnia", p.etnia, "", "text-align:center")}
