@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Printer, Download, X } from 'lucide-react';
 import { toast } from 'sonner';
 import ApacClinicalForm from './ApacClinicalForm';
+import ApacComplementForm from './ApacComplementForm';
+import {emptyComplement,validateComplement} from '@/lib/apacComplementData';
+import {appendComplement,fillComplement,loadComplementSource} from '@/lib/apacComplementPdf';
 import { emptyApacClinicalData, validateApacClinicalData } from '@/lib/apacClinicalData';
 import { APAC_DOCUMENT_NAME, apacFilename, fillApacPdf, loadApprovedApac } from '@/lib/apacPdf';
 import { useApacLaudoData } from '@/lib/useApacLaudoData';
@@ -16,6 +19,7 @@ export function ApacLaudoModal(props:Props){
 }
 function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:Props){
  const [showForm,setShowForm]=useState(false);
+ const [complement,setComplement]=useState(emptyComplement);
  const [clinical,setClinical]=useState(()=>({...emptyApacClinicalData(),estabelecimento:unidadeNome,cnes:/^\d{7}$/.test(cnesUnidade)?cnesUnidade:''}));
  const [fullPatient,setFullPatient]=useState<any>(null);
  const [patientError,setPatientError]=useState('');
@@ -30,8 +34,8 @@ function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:
   return()=>{alive=false;};
  },[paciente?.id]);
  const {data,ibgeLoading}=useApacLaudoData(fullPatient);
- const errors=validateApacClinicalData(clinical);
- const signature=JSON.stringify([fullPatient?.id,data,clinical]);
+ const errors=[...validateApacClinicalData(clinical),...validateComplement(complement)];
+ const signature=JSON.stringify([fullPatient?.id,data,clinical,complement]);
  const [output,setOutput]=useState<{key:string;url:string}|null>(null);
  const [failure,setFailure]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{
@@ -39,7 +43,8 @@ function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:
   let alive=true;let url='';
   const timer=window.setTimeout(async()=>{
    try{
-    const bytes=await fillApacPdf(await loadApprovedApac(),fullPatient,clinical,data);
+    let bytes=await fillApacPdf(await loadApprovedApac(),fullPatient,clinical,data);
+    if(complement.areas.length)bytes=await appendComplement(bytes,await fillComplement(await loadComplementSource(),complement));
     if(!alive)return;
     const copy=new Uint8Array(bytes);
     url=URL.createObjectURL(new Blob([copy.buffer],{type:'application/pdf'}));
@@ -61,7 +66,7 @@ function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:
  };
  const download=()=>{
   if(!ready||!output)return;
-  const a=document.createElement('a');a.href=output.url;a.download=apacFilename(fullPatient?.nome);document.body.appendChild(a);a.click();a.remove();
+  const a=document.createElement('a');a.href=output.url;a.download=apacFilename(fullPatient?.nome).replace('.pdf',complement.areas.length?'_COM_COMPLEMENTAR.pdf':'.pdf');document.body.appendChild(a);a.click();a.remove();
  };
  return <Dialog open={open} onOpenChange={onOpenChange}>
   <DialogContent className="max-w-5xl w-[96vw] h-[92vh] p-0 flex flex-col gap-0">
@@ -69,17 +74,18 @@ function ApacSession({open,onOpenChange,paciente,unidadeNome='',cnesUnidade=''}:
     <DialogTitle className="text-base">{APAC_DOCUMENT_NAME} — {paciente.nome}</DialogTitle>
     <div className="flex items-center gap-2 mr-8 flex-wrap">
      <Button size="sm" variant="outline" onClick={()=>setShowForm(v=>!v)} disabled={!fullPatient}>{showForm?'Ver prévia':'Preencher laudo'}</Button>
-     {showForm&&<Button size="sm" variant="outline" onClick={()=>{if(window.confirm('Descartar os campos preenchidos?')){setClinical(emptyApacClinicalData());setShowForm(false);}}}>Somente dados do paciente</Button>}
+     {!showForm&&<Button size="sm" variant="outline" disabled={!fullPatient} onClick={()=>setShowForm(true)}>{complement.areas.length?'Editar complemento':'Dados complementares'}</Button>}
+     {showForm&&<Button size="sm" variant="outline" onClick={()=>{if(window.confirm('Descartar os campos preenchidos?')){setClinical(emptyApacClinicalData());setComplement(emptyComplement());setShowForm(false);}}}>Somente dados do paciente</Button>}
      <Button size="sm" onClick={print} disabled={!ready}><Printer className="w-4 h-4 mr-2"/>Imprimir Laudo APAC</Button>
      <Button size="sm" variant="secondary" onClick={download} disabled={!ready}><Download className="w-4 h-4 mr-2"/>Baixar PDF</Button>
      <Button size="sm" variant="outline" onClick={()=>onOpenChange(false)}><X className="w-4 h-4 mr-2"/>Fechar</Button>
     </div>
    </DialogHeader>
    {errorMessage&&<div role="alert" className="border-b px-4 py-2 text-sm text-destructive">{errorMessage}</div>}
-   {showForm?<div className="flex-1 overflow-auto"><ApacClinicalForm value={clinical} onChange={setClinical}/></div>:
+   {showForm?<div className="flex-1 overflow-auto"><ApacClinicalForm value={clinical} onChange={setClinical}/><ApacComplementForm value={complement} onChange={setComplement}/></div>:
     <div className="flex-1 min-h-0 bg-muted p-2">
      {ready&&output?<iframe title={APAC_DOCUMENT_NAME} src={output.url} className="w-full h-full border-0 bg-white"/>:
-      <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{errorMessage?'Revise os dados antes de emitir.':'Preparando formulário de duas páginas...'}</div>}
+      <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{errorMessage?'Revise os dados antes de emitir.':'Preparando formulário APAC...'}</div>}
     </div>}
   </DialogContent>
  </Dialog>;
