@@ -1,0 +1,35 @@
+name: Portal patient security PostgreSQL
+on:
+  push:
+    branches: [main, qa/portal-paciente-seguranca-20261125]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  isolated-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: portal_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d portal_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: test-only
+      PGDATABASE: portal_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate portal authorizations, legacy compatibility, audit and quota delegation
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/external_quota_schema.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/portal_patient_security.sql
