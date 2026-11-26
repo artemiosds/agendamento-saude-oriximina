@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, CheckCircle2, Clock3, FileText, Loader2, Search, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,8 +61,16 @@ export default function AgendaExames() {
   const [selectedRoom, setSelectedRoom] = useState("");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [date, setDate] = useState(dateToday());
-  const [unitMetadata, setUnitMetadata] = useState<Record<string, any>>({});
-  const [rows, setRows] = useState<ExamRow[]>([]);
+  const [unitMetadata, setUnitMetadata] = useState<{ unit: string; data: Record<string, any> }>({ unit: "", data: {} });
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [roomSnapshot, setRoomSnapshot] = useState<{ key: string; rows: ExamRow[] } | null>(null);
+  const [rowError, setRowError] = useState(false);
+  const metadataRequest = useRef(0);
+  const rowsRequest = useRef(0);
+  const bookingLock = useRef(false);
+  const scopeKey = JSON.stringify([user?.id, user?.unidadeId, isGlobalAdmin, selectedUnit, selectedRoom, date]);
+  const scopeRef = useRef(scopeKey);
+  scopeRef.current = scopeKey;
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
   const [patientId, setPatientId] = useState("");
@@ -77,10 +85,13 @@ export default function AgendaExames() {
     () => isGlobalAdmin ? unidades : unidades.filter(u => u.id === user?.unidadeId),
     [isGlobalAdmin, unidades, user?.unidadeId],
   );
+  const unitAllowed = !!selectedUnit && visibleUnits.some(u => u.id === selectedUnit);
   const rooms = useMemo(() => salas.filter(s => s.unidadeId === selectedUnit && s.ativo), [salas, selectedUnit]);
+  const metadata = unitAllowed && unitMetadata.unit === selectedUnit ? unitMetadata.data : null;
+  const diagnosticRooms = useMemo(() => rooms.filter(r => !!getDiagnosticRoomConfig(metadata, r.id)), [rooms, metadata]);
   const roomConfig = useMemo<DiagnosticRoomConfig | null>(
-    () => selectedRoom ? getDiagnosticRoomConfig(unitMetadata, selectedRoom) : null,
-    [unitMetadata, selectedRoom],
+    () => diagnosticRooms.some(r => r.id === selectedRoom) ? getDiagnosticRoomConfig(metadata, selectedRoom) : null,
+    [diagnosticRooms, metadata, selectedRoom],
   );
 
   const selectedExam = useMemo<DiagnosticExamConfig | null>(
@@ -89,29 +100,74 @@ export default function AgendaExames() {
   );
 
   const loadUnitMetadata = useCallback(async () => {
-    if (!selectedUnit) { setUnitMetadata({}); return; }
-    const { data, error } = await supabase.from("unidades" as any).select("custom_data").eq("id", selectedUnit).maybeSingle();
-    if (error) { toast.error("Não foi possível carregar a configuração da unidade."); return; }
-    setUnitMetadata(((data as any)?.custom_data || {}) as Record<string, any>);
-  }, [selectedUnit]);
+    const request = ++metadataRequest.current;
+    setUnitMetadata({ unit: "", data: {} });
+    if (!unitAllowed) { setMetadataLoading(false); return; }
+    setMetadataLoading(true);
+    try {
+      const { data, error } = await supabase.from("unidades" as any).select("custom_data").eq("id", selectedUnit).maybeSingle();
+      if (request !== metadataRequest.current) return;
+      if (error) throw error;
+      setUnitMetadata({ unit: selectedUnit, data: ((data as any)?.custom_data || {}) as Record<string, any> });
+    } catch {
+      if (request === metadataRequest.current) toast.error("Não foi possível carregar a configuração da unidade.");
+    } finally {
+      if (request === metadataRequest.current) setMetadataLoading(false);
+    }
+  }, [selectedUnit, unitAllowed]);
 
-  const loadRows = useCallback(async () => {
-    if (!selectedUnit || !selectedRoom || !date) { setRows([]); return; }
-    setLoading(true);
-    const { data, error } = await (supabase as any).from("agendamentos").select("*")
-      .eq("unidade_id", selectedUnit).eq("sala_id", selectedRoom).eq("data", date)
-      .eq("tipo", "exame").order("hora", { ascending: true });
-    setLoading(false);
-    if (error) { toast.error("Não foi possível carregar a fila do aparelho."); return; }
-    setRows(((data || []) as ExamRow[]).filter(isDiagnosticAppointment));
+  // Same occupancy scope as Agenda Geral; ordinary bookings occupy the room
+  // but only explicitly tagged diagnostic exams enter the technical queue.
+  const readRoomRows = useCallback(async (): Promise<ExamRow[]> => {
+    const result: ExamRow[] = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await (supabase as any).from("agendamentos")
+        .select("id,paciente_id,paciente_nome,unidade_id,sala_id,profissional_id,profissional_nome,data,hora,status,tipo,custom_data")
+        .eq("unidade_id", selectedUnit).eq("sala_id", selectedRoom).eq("data", date)
+        .order("hora", { ascending: true }).order("id", { ascending: true }).range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      const page = (data || []) as ExamRow[];
+      result.push(...page);
+      if (page.length < pageSize) return result;
+    }
   }, [selectedUnit, selectedRoom, date]);
 
-  useEffect(() => { void loadUnitMetadata(); }, [loadUnitMetadata]);
+  const loadRows = useCallback(async () => {
+    const request = ++rowsRequest.current;
+    setRoomSnapshot(null);
+    setRowError(false);
+    if (!unitAllowed || !roomConfig || !date) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const data = await readRoomRows();
+      if (request !== rowsRequest.current || scopeRef.current !== scopeKey) return;
+      setRoomSnapshot({ key: scopeKey, rows: data });
+    } catch {
+      if (request !== rowsRequest.current || scopeRef.current !== scopeKey) return;
+      setRowError(true);
+      toast.error("Não foi possível carregar a fila do aparelho.");
+    } finally {
+      if (request === rowsRequest.current && scopeRef.current === scopeKey) setLoading(false);
+    }
+  }, [unitAllowed, roomConfig, date, readRoomRows, scopeKey]);
+
+  const roomRows = roomSnapshot?.key === scopeKey ? roomSnapshot.rows : null;
+  const rows = useMemo(() => (roomRows || []).filter(isDiagnosticAppointment), [roomRows]);
+
+  useEffect(() => {
+    void loadUnitMetadata();
+    return () => { ++metadataRequest.current; };
+  }, [loadUnitMetadata]);
   useEffect(() => {
     if (!selectedRoom || !roomConfig) { setSelectedExamId(""); return; }
     if (!roomConfig.exames.some(exam => exam.id === selectedExamId)) setSelectedExamId(roomConfig.exames[0]?.id || "");
   }, [selectedRoom, roomConfig, selectedExamId]);
-  useEffect(() => { void loadRows(); }, [loadRows]);
+  useEffect(() => {
+    void loadRows();
+    return () => { ++rowsRequest.current; };
+  }, [loadRows]);
+  useEffect(() => { setSlot(""); setLaudoRow(null); }, [scopeKey]);
 
   useEffect(() => {
     let active = true;
@@ -132,22 +188,32 @@ export default function AgendaExames() {
     return () => { active = false; clearTimeout(timer); };
   }, [patientSearch]);
 
-  const occupied = useMemo(() => rows.map(r => ({
-    id: r.id, hora: r.hora, status: r.status, custom_data: r.custom_data,
-  })), [rows]);
   const slots = useMemo(
-    () => roomConfig && selectedExam ? getAvailableDiagnosticSlots({ ...roomConfig, duracaoSlot: selectedExam.duracaoSlot }, occupied) : [],
-    [roomConfig, selectedExam, occupied],
+    () => roomConfig && selectedExam && roomRows && !loading && !rowError ? getAvailableDiagnosticSlots({ ...roomConfig, duracaoSlot: selectedExam.duracaoSlot }, roomRows) : [],
+    [roomConfig, selectedExam, roomRows, loading, rowError],
   );
 
   const createExam = async () => {
-    if (!roomConfig || !selectedExam || !patientId || !slot || !selectedUnit || !selectedRoom) {
+    if (bookingLock.current) return;
+    if (!unitAllowed || !roomConfig || !selectedExam || !patientId || !slot || !selectedUnit || !selectedRoom || !roomRows || loading || rowError || !slots.includes(slot)) {
       toast.error("Selecione paciente, sala e horário.");
       return;
     }
     const patient = selectedPatient;
     if (!patient || patient.id !== patientId) { toast.error("Selecione novamente o paciente."); return; }
+    bookingLock.current = true;
     setSaving(true);
+    const bookingScope = scopeKey;
+    try {
+      // Fresh read reduces stale-slot mistakes; this is NOT an atomic reservation.
+      const freshRows = await readRoomRows();
+      if (scopeRef.current !== bookingScope) return;
+      if (!getAvailableDiagnosticSlots({ ...roomConfig, duracaoSlot: selectedExam.duracaoSlot }, freshRows).includes(slot)) {
+        setSlot("");
+        toast.error("Este horário não está mais disponível. Selecione outro horário.");
+        await loadRows();
+        return;
+      }
     const id = crypto.randomUUID();
     const custom = {
       sala_tipo: "aparelho_diagnostico",
@@ -169,7 +235,6 @@ export default function AgendaExames() {
       observacoes: selectedExam.exigePreparo ? selectedExam.instrucoesPreparo : "",
       origem: "recepcao", criado_por: user?.id || "", custom_data: custom,
     });
-    setSaving(false);
     if (error) { toast.error(error.message || "Não foi possível agendar o exame."); return; }
     void auditService.log({
       acao: "agendamento_exame_diagnostico", modulo: "exames_diagnosticos", entidade: "agendamentos",
@@ -177,9 +242,17 @@ export default function AgendaExames() {
       user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
       detalhes: { sala_id: selectedRoom, exame: selectedExam.tipoExame, data: date, hora: slot },
     });
-    setPatientId(""); setSelectedPatient(null); setPatientSearch(""); setSlot("");
     toast.success("Exame agendado.");
-    await loadRows();
+    if (scopeRef.current === bookingScope) {
+      setPatientId(""); setSelectedPatient(null); setPatientSearch(""); setSlot("");
+      await loadRows();
+    }
+    } catch {
+      toast.error("Não foi possível confirmar a disponibilidade ou agendar o exame.");
+    } finally {
+      bookingLock.current = false;
+      setSaving(false);
+    }
   };
 
   const changeStatus = async (row: ExamRow, next: DiagnosticExamStatus) => {
@@ -295,15 +368,15 @@ export default function AgendaExames() {
       </div>
 
       <Card><CardContent className="grid gap-3 p-4 md:grid-cols-3">
-        <div><Label>Unidade</Label><Select value={selectedUnit} onValueChange={v => { setSelectedUnit(v); setSelectedRoom(""); }}>
+        <div><Label>Unidade</Label><Select value={selectedUnit} onValueChange={v => { setSelectedUnit(v); setSelectedRoom(""); setSelectedExamId(""); setSlot(""); }}>
           <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
           <SelectContent>{visibleUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
         </Select></div>
-        <div><Label>Aparelho / Sala</Label><Select value={selectedRoom} onValueChange={value => { setSelectedRoom(value); setSelectedExamId(""); setSlot(""); }}>
+        <div><Label>Aparelho / Sala</Label><Select value={selectedRoom} disabled={!unitAllowed || metadataLoading} onValueChange={value => { setSelectedRoom(value); setSelectedExamId(""); setSlot(""); }}>
           <SelectTrigger><SelectValue placeholder="Selecione o aparelho" /></SelectTrigger>
-          <SelectContent>{rooms.filter(r => getDiagnosticRoomConfig(unitMetadata, r.id)).map(r => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}</SelectContent>
+          <SelectContent>{diagnosticRooms.map(r => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}</SelectContent>
         </Select></div>
-        <div><Label>Data</Label><Input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
+        <div><Label>Data</Label><Input type="date" value={date} onChange={e => { setDate(e.target.value); setSlot(""); }} /></div>
       </CardContent></Card>
 
       {roomConfig ? <>
@@ -319,13 +392,13 @@ export default function AgendaExames() {
             </div>
             {selectedExam?.exigePreparo && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>Orientações de preparo — {selectedExam.tipoExame}</strong><p className="mt-1 whitespace-pre-wrap">{selectedExam.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme com a equipe antes do agendamento."}</p></div>}
             <p className="text-xs text-muted-foreground">Duração: {selectedExam?.duracaoSlot || "—"} min • Contraste: {selectedExam?.exigeContraste || "—"} • Resultado: {selectedExam?.prazoResultadoDias || 0} dia(s)</p>
-            <Button onClick={createExam} disabled={saving || !patientId || !slot || !selectedExam}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Agendar exame</Button>
+            <Button onClick={createExam} disabled={saving || loading || rowError || !roomRows || !patientId || !slot || !selectedExam || !slots.includes(slot)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Agendar exame</Button>
           </CardContent>
         </Card>
 
         <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Clock3 className="h-4 w-4" /> Fila do aparelho — {rows.length}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            {loading ? <div className="py-6 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div> : rows.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum exame agendado para esta data.</p> : rows.map(row => {
+            {loading || (!roomRows && !rowError) ? <div className="py-6 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div> : rowError ? <div className="space-y-2 text-center text-sm text-destructive"><p>Não foi possível confirmar a ocupação da sala.</p><Button variant="outline" size="sm" onClick={() => void loadRows()}>Tentar novamente</Button></div> : rows.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum exame agendado para esta data.</p> : rows.map(row => {
               const status = String(row.custom_data?.status_exame || "agendado");
               return <div key={row.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong>{row.hora}</strong><Badge variant={statusTone[status] as any || "secondary"}>{getDiagnosticStatusLabel(status)}</Badge></div><p className="font-medium">{row.paciente_nome}</p><p className="text-xs text-muted-foreground">{row.custom_data?.exame_nome || "Exame diagnóstico"}</p></div>
@@ -351,7 +424,7 @@ export default function AgendaExames() {
           </CardContent>
         </Card>}
       </> : <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">
-        {selectedUnit && selectedRoom ? "Esta sala não está configurada como aparelho de diagnóstico." : "Selecione uma unidade e uma sala configurada como aparelho diagnóstico."}
+        {metadataLoading ? "Carregando aparelhos da unidade..." : unitAllowed && metadata && diagnosticRooms.length === 0 ? "Nenhum aparelho diagnóstico ativo configurado nesta unidade. Confira o cadastro em Unidades e Salas." : selectedUnit && selectedRoom ? "Esta sala não está configurada como aparelho de diagnóstico." : "Selecione uma unidade e uma sala configurada como aparelho diagnóstico."}
       </CardContent></Card>}
     </div>
   );
