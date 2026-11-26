@@ -13,7 +13,9 @@ export function canShowLinkedSoap(session:SessionSoapSource){
 }
 export function resolveLinkedSoap(session:SessionSoapSource,unitId:string,records:RecordSoapSource[],claims:number){
  if(!canShowLinkedSoap(session)||claims!==1)return null;
- const matches=records.filter(p=>p.agendamento_id===session.appointment_id&&p.paciente_id===session.patient_id&&p.profissional_id===session.professional_id&&p.unidade_id===unitId&&p.data_atendimento===session.scheduled_date);
+ // Link is the appointment itself (same patient/unit); any team professional and date drift are accepted.
+ const hasSoap=(p:RecordSoapSource)=>[p.soap_subjetivo,p.soap_objetivo,p.soap_avaliacao,p.soap_plano].some(v=>(v||"").trim());
+ const matches=records.filter(p=>p.agendamento_id===session.appointment_id&&p.paciente_id===session.patient_id&&p.unidade_id===unitId&&hasSoap(p));
  if(matches.length!==1)return null;
  const p=matches[0],soap={subjetivo:p.soap_subjetivo||"",objetivo:p.soap_objetivo||"",avaliacao:p.soap_avaliacao||"",plano:p.soap_plano||""};
  return Object.values(soap).some(v=>v.trim())?{recordId:p.id,soap}:null;

@@ -659,7 +659,7 @@ const TratamentosUnidade: React.FC = () => {
         for(let i=0;i<ids.length;i+=50){
           const batch=ids.slice(i,i+50);
           const [records,claims]=await Promise.all([
-            (supabase as any).from("prontuarios").select("id,agendamento_id,paciente_id,profissional_id,unidade_id,data_atendimento,soap_subjetivo,soap_objetivo,soap_avaliacao,soap_plano").in("agendamento_id",batch).eq("paciente_id",cycle.patient_id).eq("profissional_id",cycle.professional_id).eq("unidade_id",cycle.unit_id).limit(1000),
+            (supabase as any).from("prontuarios").select("id,agendamento_id,paciente_id,profissional_id,unidade_id,data_atendimento,soap_subjetivo,soap_objetivo,soap_avaliacao,soap_plano").in("agendamento_id",batch).eq("paciente_id",cycle.patient_id).eq("unidade_id",cycle.unit_id).limit(1000),
             supabase.from("treatment_sessions").select("id,appointment_id").in("appointment_id",batch).limit(1000),
           ]);
           if(records.error||claims.error||(records.data||[]).length>=1000||(claims.data||[]).length>=1000)throw Error("Não foi possível verificar SOAP vinculado");
