@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Printer, X } from 'lucide-react';
+import { Printer, X, ClipboardList, History } from 'lucide-react';
 import { receivedReferralBody, referralFields } from '@/lib/encaminhamentoDocument';
 import { openPrintDocument, loadDocumentConfig, type DocumentConfig } from '@/lib/printLayout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,11 +50,9 @@ const ModalVerEncaminhamento: React.FC<Props> = ({ open, onOpenChange, encaminha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            📋 Encaminhamento — {encaminhamento.paciente_nome}
-          </DialogTitle>
+      <DialogContent className="w-[96vw] max-w-3xl max-h-[90dvh] overflow-y-auto">
+        <DialogHeader className="clinical-hub-hero pr-8">
+          <div className="flex items-center gap-3"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><ClipboardList className="w-5 h-5" /></span><div className="flex-1 min-w-0"><p className="clinical-hub-eyebrow">Referência assistencial</p><DialogTitle className="clinical-hub-name font-display break-words">{encaminhamento.paciente_nome}</DialogTitle><p className="clinical-patient-sub text-xs mt-1">{encaminhamento.tipo_documento || "Encaminhamento"} · {dataFormatada}</p></div></div>
           <DialogDescription className="sr-only">Detalhes do encaminhamento recebido</DialogDescription>
         </DialogHeader>
 
@@ -77,7 +75,7 @@ const ModalVerEncaminhamento: React.FC<Props> = ({ open, onOpenChange, encaminha
           </div>
 
           {/* Metadata */}
-          <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
+          <div className="clinical-premium p-3 text-xs space-y-2"><h3 className="flex items-center gap-2 text-sm font-bold"><History className="w-4 h-4 text-[var(--cp-blue)]" /> Informações documentais</h3>
             <p><strong>Recebido em:</strong> {dataFormatada} às {horaFormatada}</p>
             <p><strong>Gerado por:</strong> {encaminhamento.gerado_por} — {encaminhamento.gerado_por_perfil}</p>
             <p><strong>Especialidade:</strong> {encaminhamento.especialidade_destino}</p>
@@ -88,11 +86,11 @@ const ModalVerEncaminhamento: React.FC<Props> = ({ open, onOpenChange, encaminha
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 sticky bottom-0 bg-background border-t py-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             <X className="w-4 h-4 mr-1" /> Fechar
           </Button>
-          <Button onClick={handlePrint} className="gap-1.5">
+          <Button onClick={handlePrint} className="gap-1.5 bg-[#075f66] text-white hover:bg-[#064d53] hover:text-white">
             <Printer className="w-4 h-4" /> Imprimir
           </Button>
         </DialogFooter>
