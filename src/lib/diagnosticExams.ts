@@ -149,6 +149,27 @@ export function isDiagnosticAppointment(row: { tipo?: string | null; custom_data
   return String(row.tipo || "").toLowerCase() === "exame" && data.sala_tipo === "aparelho_diagnostico";
 }
 
+/**
+ * Read-only projection: clinical arrival can inform the diagnostic queue,
+ * but a generic clinical completion is never proof of a performed exam or a signed report.
+ * Do not rewrite historical JSON or the general appointment status here.
+ */
+export function getEffectiveDiagnosticStatus(row: { status?: string | null; custom_data?: unknown }): string {
+  const data = row.custom_data && typeof row.custom_data === "object" ? row.custom_data as Record<string, unknown> : {};
+  const technical = String(data.status_exame || "agendado");
+  const general = String(row.status || "").toLowerCase();
+  // A released report remains available as historical clinical documentation.
+  if (technical === "laudo_liberado") return technical;
+  if (general === "cancelado" || technical === "cancelado") return "cancelado";
+  if (general === "falta" || general === "paciente_faltou") return "falta";
+  if (general === "remarcado") return "remarcado";
+  if (technical === "agendado" && [
+    "confirmado_chegada", "chegada_confirmada", "aguardando_triagem", "triagem_concluida",
+    "aguardando_enfermagem", "aguardando_atendimento", "apto_atendimento", "chamado", "em_atendimento",
+  ].includes(general)) return "paciente_chegou";
+  return technical;
+}
+
 function toMinutes(value: string): number {
   const [hours, minutes] = String(value || "00:00").split(":").map(Number);
   return (hours || 0) * 60 + (minutes || 0);
@@ -205,6 +226,8 @@ export function getDiagnosticStatusLabel(status: string): string {
     exame_realizado_em_laudo: "Exame realizado / em laudo",
     laudo_liberado: "Laudo liberado",
     cancelado: "Cancelado",
+    falta: "Falta registrada",
+    remarcado: "Remarcado",
   };
   return labels[status] || "Status desconhecido";
 }
