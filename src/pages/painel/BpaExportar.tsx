@@ -4363,7 +4363,6 @@ ${rejectedHtml}`;
                 </p>
               )}
             </div>
-          </div>
         </CardContent>
       </Card>
 
