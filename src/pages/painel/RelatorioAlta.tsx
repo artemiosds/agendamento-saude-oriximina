@@ -23,13 +23,14 @@ import {
   Save, Send, ClipboardList, Stethoscope, Heart, Activity,
   Clock, AlertCircle, Check, Info, LayoutDashboard, History,
   ShieldCheck, ExternalLink, Download, Lock, Unlock, Hash,
-  ChevronRight, ListTodo, AlertTriangle, RefreshCw
+  ChevronRight, ListTodo, AlertTriangle, RefreshCw, Database as DatabaseIcon
 } from "lucide-react";
 import { openPrintDocument } from "@/lib/printLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import RelatorioFonoAvaliativo from "@/components/RelatorioFonoAvaliativo";
+import { ALTA_NOTE_TYPES, ALTA_NOTE_STATUS, ALTA_SESSION_STATUS, selectAltaSources, firstRecorded, lastRecorded, recordedProcedures, type AltaNote, type AltaCycle, type AltaSession, type AltaPts, type AltaGoal, type AltaSourceBundle, type AltaSourceMeta } from "@/lib/altaSources";
 
 /* ── types ─────────────────────────────────────────── */
 interface ProfSection {
@@ -382,10 +383,15 @@ const RelatorioAlta: React.FC = () => {
   const [conflict,setConflict] = useState(false);
   const [savedSnapshot,setSavedSnapshot] = useState<string | null>(null);
   const loadedSnapshotPending = React.useRef(false);
+  const [sourceBundle,setSourceBundle] = useState<AltaSourceBundle|null>(null);
+  const [sourceScope,setSourceScope] = useState("");
+  const [sourcePts,setSourcePts] = useState("");
+  const [sourceMeta,setSourceMeta] = useState<AltaSourceMeta|null>(null);
   const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId;
 
   const resetReportTracking = () => {
     revisionRef.current = null;
+    setSourceBundle(null);setSourceScope("");setSourcePts("");setSourceMeta(null);
     loadedSnapshotPending.current = false;
     setSavedSnapshot(null);
     setConflict(false);
@@ -526,98 +532,113 @@ const RelatorioAlta: React.FC = () => {
     }
   }, [pacienteId, modo]);
 
-  const loadProfessionalsForPatient = async (pid: string, token = reportLoadTokenRef.current) => {
-    // Get all professionals who created prontuarios for this patient
-    const { data: pronts } = await supabase
-      .from("prontuarios")
-      .select("profissional_id, profissional_nome, data_atendimento, hipotese, procedimentos_texto")
-      .eq("paciente_id", pid)
-      .order("data_atendimento", { ascending: true });
-
-    if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
-    if (!pronts || pronts.length === 0) {
-      setProfSections([]);
-      return;
+  // Read-only, deterministic pagination; fail closed rather than treat a truncated/error result as zero.
+  const fetchSourcePages = async <T,>(query: (start: number,end: number) => PromiseLike<{data: unknown;error: {message: string}|null}>): Promise<T[]> => {
+    const rows:T[]=[];
+    const size=500;
+    for(let offset=0;offset<20000;offset+=size){
+      const result=await query(offset,offset+size-1);
+      if(result.error)throw new Error(result.error.message);
+      if(!Array.isArray(result.data))throw new Error("Fonte clínica não retornou registros válidos.");
+      rows.push(...result.data as T[]);
+      if(result.data.length<size)return rows;
     }
+    throw new Error("Volume de registros acima do limite de conferência. Não foi importada uma contagem parcial.");
+  };
 
-    // Group by professional
-    const profMap = new Map<string, { nome: string; datas: string[]; lastPront?: any }>();
-    pronts.forEach(p => {
-      const existing = profMap.get(p.profissional_id);
-      if (existing) {
-        existing.datas.push(p.data_atendimento);
-        existing.lastPront = p;
-      } else {
-        profMap.set(p.profissional_id, { nome: p.profissional_nome, datas: [p.data_atendimento], lastPront: p });
+  const applyAltaSources = (bundle: AltaSourceBundle, scope: string, ptsId: string, through: string) => {
+    const selected=selectAltaSources(bundle,scope,ptsId,through);
+    const {notes,sessions,pts,goals,meta}=selected;
+    setSourceMeta(meta);
+    setSourceScope(scope);
+    setSourcePts(ptsId || "none");
+    if(bundle.professionalId){
+      setIndPeriodoInicio(meta.periodStart);
+      setIndPeriodoFim(meta.periodEnd);
+      setIndSessoes(meta.performed);
+      setIndFaltas(meta.absences);
+      setIndDiagCid(bundle.patientCid);
+      setIndQueixaPrincipal(firstRecorded(notes,n=>n.queixa_principal));
+      const hypothesis=lastRecorded(notes,n=>n.hipotese);
+      if(hypothesis)setIndDiagClinico("Hipótese registrada no prontuário (revisar): "+hypothesis);
+      setIndIntervencoes(recordedProcedures(notes,sessions));
+      const latestEvolution=[...notes].reverse().find(n=>n.evolucao?.trim());
+      if(latestEvolution)setIndEvolucao("Última evolução registrada em "+fmt(latestEvolution.data_atendimento)+" (revisar para a alta):\n"+latestEvolution.evolucao);
+      if(pts){
+        setIndDiagFuncional(pts.diagnostico_funcional||"");
+        setIndObjetivos(goals.length?goals.map(g=>g.titulo).filter(Boolean).join("\n"):"");
+        setIndMotivoEncaminhamento(pts.motivo_encaminhamento||"");
+        setPtsMetas(goals.map(g=>({id:g.id,titulo:g.titulo,status:g.status})));
       }
-    });
-
-    // Count sessions from treatment_sessions
-    const { data: sessions } = await supabase
-      .from("treatment_sessions")
-      .select("professional_id, status")
-      .eq("patient_id", pid)
-      .eq("status", "realizada");
-
-    if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
-    const sessionCounts = new Map<string, number>();
-    sessions?.forEach(s => {
-      sessionCounts.set(s.professional_id, (sessionCounts.get(s.professional_id) || 0) + 1);
-    });
-
-    const sections: ProfSection[] = [];
-    profMap.forEach((val, profId) => {
-      const func = funcionarios.find(f => f.id === profId);
-      const datas = val.datas.sort();
-      sections.push({
-        profissional_id: profId,
-        profissional_nome: val.nome,
-        profissao: func?.profissao || "",
-        conselho: func ? `${func.tipoConselho} ${func.numeroConselho}/${func.ufConselho}` : "",
-        periodo_inicio: datas[0] || "",
-        periodo_fim: datas[datas.length - 1] || "",
-        sessoes: sessionCounts.get(profId) || val.datas.length,
-        objetivos: "",
-        intervencoes: val.lastPront?.procedimentos_texto || "",
-        evolucao: "",
-        metas_status: "",
-        metas_justificativa: "",
-        tecnologia_assistiva: "",
-        status_contribuicao: "nao_iniciada",
-        data_contribuicao: "",
-        orientacoes_especificas: "",
-        encaminhamentos_especificos: "",
-        objetivos_especificos: "",
-        adesao: "",
-        intercorrencias: ""
+    }else{
+      // Team derives from completed clinical notes/real sessions, never old alta documents.
+      const ids=new Set([...notes.map(n=>n.profissional_id),...sessions.filter(s=>s.status==="realizada").map(s=>s.professional_id)].filter(Boolean));
+      const sections:ProfSection[]=[...ids].map(profId=>{
+        const n=notes.filter(x=>x.profissional_id===profId);
+        const ss=sessions.filter(x=>x.professional_id===profId);
+        const dates=[...n.map(x=>x.data_atendimento),...ss.map(x=>x.scheduled_date||"")].filter(Boolean).sort();
+        const func=funcionarios.find(f=>f.id===profId);
+        return {profissional_id:profId,profissional_nome:func?.nome||lastRecorded(n,x=>x.profissional_nome)||"Profissional sem nome cadastrado",
+          profissao:func?.profissao||"",conselho:func?[func.tipoConselho,func.numeroConselho,func.ufConselho].filter(Boolean).join(" "):"",
+          periodo_inicio:dates[0]||"",periodo_fim:dates[dates.length-1]||"",sessoes:ss.filter(x=>x.status==="realizada").length,
+          objetivos:"",intervencoes:recordedProcedures(n,ss),evolucao:"",metas_status:"",metas_justificativa:"",tecnologia_assistiva:"",
+          status_contribuicao:"nao_iniciada",data_contribuicao:"",orientacoes_especificas:"",encaminhamentos_especificos:"",objetivos_especificos:"",adesao:"",intercorrencias:""};
       });
-    });
-
-
-    setProfSections(sections);
-    if (sections.length > 0) setTabProf(sections[0].profissional_id);
-
-    // Pre-fill CID from patient or most recent prontuario
-    const pat = pacientes.find(p => p.id === pid);
-    const lastP = pronts[pronts.length - 1];
-    if (lastP?.hipotese) setCid10(lastP.hipotese);
-    else if (pat?.cid) setCid10(pat.cid);
-    
-    // Auto-fill from PTS if exists
-    const { data: activePts } = await supabase
-      .from("pts")
-      .select("*")
-      .eq("patient_id", pid)
-      .eq("status", "ativo")
-      .maybeSingle();
-
-    if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
-    if (activePts) {
-      setMultiDiagFuncional(activePts.diagnostico_funcional || "");
-      setMultiObjetivosGerais(activePts.objetivos_terapeuticos || "");
-      setMultiBarreiras(activePts.barreiras || "");
-      setMultiPotencialidades(activePts.potencialidades || "");
+      setProfSections(sections);
+      if(sections.length)setTabProf(sections[0].profissional_id);
+      setCid10(bundle.patientCid);
+      if(pts){
+        setMultiDiagFuncional(pts.diagnostico_funcional||"");
+        setMultiObjetivosGerais(pts.objetivos_terapeuticos||pts.objetivo_geral||"");
+        setMultiBarreiras(pts.barreiras||"");
+        setMultiPotencialidades(pts.potencialidades||"");
+      }
     }
+  };
+
+  const loadNewAltaSources = async (pid: string,type:"multi"|"individual",token:number) => {
+    const unitId=user?.unidadeId;
+    const professionalId=type==="individual"?user?.id:null;
+    if(!unitId || (type==="individual"&&!professionalId))throw new Error("Selecione uma unidade e um profissional válidos para consultar as fontes clínicas.");
+    const through=new Date().toLocaleDateString("sv-SE",{timeZone:"America/Fortaleza"});
+    const [notes,cycles,sessions,pts,patientResult]=await Promise.all([
+      fetchSourcePages<AltaNote>((start,end)=>{
+        let q=supabase.from("prontuarios").select("id,paciente_id,profissional_id,profissional_nome,unidade_id,data_atendimento,tipo_registro,status,hipotese,procedimentos_texto,queixa_principal,evolucao,agendamento_id,custom_data")
+          .eq("paciente_id",pid).eq("unidade_id",unitId).in("tipo_registro",[...ALTA_NOTE_TYPES]).in("status",[...ALTA_NOTE_STATUS]).lte("data_atendimento",through);
+        if(professionalId)q=q.eq("profissional_id",professionalId);
+        return q.order("id").range(start,end);
+      }),
+      fetchSourcePages<AltaCycle>((start,end)=>{
+        let q=supabase.from("treatment_cycles").select("id,patient_id,professional_id,unit_id,specialty,treatment_type,start_date,status,pts_id").eq("patient_id",pid).eq("unit_id",unitId);
+        if(professionalId)q=q.eq("professional_id",professionalId);
+        return q.order("id").range(start,end);
+      }),
+      fetchSourcePages<AltaSession>((start,end)=>{
+        let q=supabase.from("treatment_sessions").select("id,cycle_id,patient_id,professional_id,appointment_id,scheduled_date,status,procedure_done,treatment_cycles!inner(unit_id)").eq("patient_id",pid).eq("treatment_cycles.unit_id",unitId).in("status",[...ALTA_SESSION_STATUS]);
+        if(professionalId)q=q.eq("professional_id",professionalId);
+        return q.order("id").range(start,end);
+      }),
+      fetchSourcePages<AltaPts>((start,end)=>supabase.from("pts").select("id,patient_id,unit_id,professional_id,status,updated_at,diagnostico_funcional,objetivos_terapeuticos,objetivo_geral,motivo_encaminhamento,barreiras,potencialidades,rede_apoio").eq("patient_id",pid).eq("unit_id",unitId).order("id").range(start,end)),
+      supabase.from("pacientes").select("id,cid").eq("id",pid).maybeSingle(),
+    ]);
+    if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+    if(patientResult.error||!patientResult.data)throw new Error("Não foi possível conferir o cadastro do paciente.");
+    // Offer active plans and plans explicitly linked to eligible treatment cycles.
+    const linked=new Set(cycles.map(c=>c.pts_id).filter(Boolean));
+    const eligiblePts=pts.filter(p=>p.status==="ativo"||linked.has(p.id));
+    const goals:AltaGoal[]=[];
+    for(const plan of eligiblePts){
+      goals.push(...await fetchSourcePages<AltaGoal>((start,end)=>supabase.from("pts_metas").select("id,pts_id,titulo,status,responsavel_id").eq("pts_id",plan.id).order("id").range(start,end)));
+      if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+    }
+    const bundle:AltaSourceBundle={patientId:pid,unitId,professionalId:professionalId||null,through,notes,cycles,sessions,pts:eligiblePts,goals,patientCid:patientResult.data.cid||""};
+    setSourceBundle(bundle);
+    if(type==="individual")setIndDataAlta(through);else setDataAlta(through);
+    const scope=cycles.length===0?"all":cycles.length===1?cycles[0].id:"";
+    const singleLinked=cycles.length===1?cycles[0].pts_id:null;
+    const chosen=singleLinked&&eligiblePts.some(p=>p.id===singleLinked)?singleLinked:eligiblePts.length===1?eligiblePts[0].id:eligiblePts.length===0?"none":"";
+    setSourceScope(scope);setSourcePts(chosen);
+    if(scope&&chosen)applyAltaSources(bundle,scope,chosen==="none"?"":chosen,through);
   };
 
   const loadMultiData = async (pid: string, token = reportLoadTokenRef.current) => {
@@ -642,6 +663,7 @@ const RelatorioAlta: React.FC = () => {
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
         revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
+        setSourceMeta(data.altaSourceMeta && typeof data.altaSourceMeta === "object" ? data.altaSourceMeta : null);
         
         setModalidades(data.modalidades || []);
         setCid10(data.cid10 || "");
@@ -690,7 +712,7 @@ const RelatorioAlta: React.FC = () => {
       }
 
       // Somente monta uma nova estrutura quando não existe relatório salvo.
-      await loadProfessionalsForPatient(pid, token);
+      await loadNewAltaSources(pid, "multi", token);
     } catch (err: any) {
       console.error(err);
       if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
@@ -729,6 +751,7 @@ const RelatorioAlta: React.FC = () => {
         setStatus(existingDraft.status as any || "rascunho");
         const data = parseAltaPayload(existingDraft.observacoes);
         revisionRef.current = { id: existingDraft.id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
+        setSourceMeta(data.altaSourceMeta && typeof data.altaSourceMeta === "object" ? data.altaSourceMeta : null);
         // Load all data from draft
         setIndDiagCid(data.diagCid || "");
         setIndCif(data.cif || "");
@@ -782,66 +805,7 @@ const RelatorioAlta: React.FC = () => {
         return;
       }
 
-      // 2. Carrega dados clínicos de origem somente quando não existe relatório salvo
-      const { data: pronts } = await supabase
-        .from("prontuarios")
-        .select("data_atendimento, hipotese, procedimentos_texto, queixa_principal, evolucao, conduta")
-        .eq("paciente_id", pid)
-        .eq("profissional_id", user.id)
-        .order("data_atendimento", { ascending: true });
-
-      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
-      if (pronts && pronts.length > 0) {
-        setIndPeriodoInicio(pronts[0].data_atendimento);
-        setIndPeriodoFim(pronts[pronts.length - 1].data_atendimento);
-        setIndQueixaPrincipal(pronts[0].queixa_principal || "");
-        
-        const lastPront = pronts[pronts.length - 1];
-        setIndDiagCid(lastPront.hipotese || "");
-        setIndIntervencoes(lastPront.procedimentos_texto || "");
-        setIndEvolucao(lastPront.evolucao || "");
-        setIndOrientacoes(lastPront.conduta || "");
-      }
-      // Load sessions and absences
-      const { data: sessions } = await supabase
-        .from("treatment_sessions")
-        .select("status")
-        .eq("patient_id", pid)
-        .eq("professional_id", user.id);
-
-      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
-      const realizada = sessions?.filter(s => s.status === "realizada").length || 0;
-      const faltas = sessions?.filter(s => s.status === "falta").length || 0;
-      setIndSessoes(realizada);
-      setIndFaltas(faltas);
-
-      // Load PTS
-      const { data: activePts } = await supabase
-        .from("pts")
-        .select("*")
-        .eq("patient_id", pid)
-        .eq("status", "ativo")
-        .maybeSingle();
-
-      if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
-      if (activePts) {
-        setIndDiagFuncional(activePts.diagnostico_funcional || "");
-        setIndObjetivos(activePts.objetivos_terapeuticos || "");
-        setIndMotivoEncaminhamento(activePts.motivo_encaminhamento || "");
-        
-        const { data: metas } = await supabase
-          .from("pts_metas")
-          .select("id, titulo, status")
-          .eq("pts_id", activePts.id);
-        
-        if (token !== reportLoadTokenRef.current || activePatientRef.current !== pid) return;
-        if (metas) setPtsMetas(metas);
-      }
-
-      const pat = pacientes.find(p => p.id === pid);
-      if (pat?.cid && !indDiagCid) setIndDiagCid(pat.cid);
-
-
+      await loadNewAltaSources(pid, "individual", token);
     } catch (error: any) {
       console.error("Error loading individual data:", error);
       if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
@@ -943,10 +907,11 @@ const RelatorioAlta: React.FC = () => {
     if (formReadOnly) return;
     if (!indMetas) { toast.error("Avalie as metas antes de gerar o resumo."); return; }
     const summary = [
-      `Paciente em acompanhamento no período de ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}, totalizando ${indSessoes} sessões.`,
+      indPeriodoInicio && indPeriodoFim && `Período informado: ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}.`,
+      `Sessões realizadas registradas: ${indSessoes}.`,
       `Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : indMetas === "parcialmente" ? "parcialmente" : "não"} atingidos.`,
       indEvolucaoGlobal && `A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}.`,
-      indDiagFuncional && `Na alta, apresenta ${indDiagFuncional}.`,
+      indDiagFuncional && `Diagnóstico funcional informado: ${indDiagFuncional}.`,
       indContinuarTerapia && `Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`,
     ].filter(Boolean).join("\n");
     setIndResumoConsolidado(summary);
@@ -1082,23 +1047,23 @@ const RelatorioAlta: React.FC = () => {
       <div class="section">
         <div class="section-title">Quadro Diagnóstico Multiprofissional</div>
         <div class="info-grid">
-           <div class="field"><span class="field-label">CID-10 Principal</span><div class="field-value">${cid10 || "—"}</div></div>
+           <div class="field"><span class="field-label">CID-10 Principal</span><div class="field-value">${altaPrintText(cid10) || "—"}</div></div>
            <div class="field"><span class="field-label">CID-10 Secundário</span><div class="field-value">${multiCid10Secundario || "—"}</div></div>
         </div>
         <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${multiDiagClinico || "—"}</div></div>
-        <div class="field"><span class="field-label">Diagnóstico Funcional Global</span><div class="field-value">${multiDiagFuncional || "—"}</div></div>
+        <div class="field"><span class="field-label">Diagnóstico Funcional Global</span><div class="field-value">${altaPrintText(multiDiagFuncional) || "—"}</div></div>
         <div class="field"><span class="field-label">Contexto Biopsicossocial</span><div class="field-value">${multiContextoBiopsicossocial || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Funções do Corpo</span><div class="field-value">${cifFuncoes || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Atividades e Participação</span><div class="field-value">${cifAtividades || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Fatores Ambientais</span><div class="field-value">${cifFatores || "—"}</div></div>
-        <div class="field"><span class="field-label">Barreiras</span><div class="field-value">${multiBarreiras || "—"}</div></div>
-        <div class="field"><span class="field-label">Potencialidades</span><div class="field-value">${multiPotencialidades || "—"}</div></div>
+        <div class="field"><span class="field-label">Barreiras</span><div class="field-value">${altaPrintText(multiBarreiras) || "—"}</div></div>
+        <div class="field"><span class="field-label">Potencialidades</span><div class="field-value">${altaPrintText(multiPotencialidades) || "—"}</div></div>
         ${multiFatoresContextuais ? `<div class="field"><span class="field-label">Fatores contextuais</span><div class="field-value">${altaPrintText(multiFatoresContextuais)}</div></div>` : ""}
       </div>
 
       <div class="section">
         <div class="section-title">Resumo do Percurso Terapêutico</div>
-        <div class="field"><span class="field-label">Objetivos Gerais</span><div class="field-value">${multiObjetivosGerais || "—"}</div></div>
+        <div class="field"><span class="field-label">Objetivos Gerais</span><div class="field-value">${altaPrintText(multiObjetivosGerais) || "—"}</div></div>
         <div class="field"><span class="field-label">Resumo do Plano Executado</span><div class="field-value">${multiPlanoExecutado || "—"}</div></div>
       </div>
     `;
@@ -1115,7 +1080,7 @@ const RelatorioAlta: React.FC = () => {
             <div><span class="info-label">Adesão</span><br/><span class="info-value">${s.adesao || "—"}</span></div>
           </div>
           <div class="field"><span class="field-label">Objetivos Específicos</span><div class="field-value">${s.objetivos_especificos || s.objetivos || "—"}</div></div>
-          <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${s.intervencoes || "—"}</div></div>
+          <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${altaPrintText(s.intervencoes) || "—"}</div></div>
           <div class="field"><span class="field-label">Evolução Clínica e Funcional da Área</span><div class="field-value">${s.evolucao || "—"}</div></div>
           <div class="field"><span class="field-label">Status das Metas</span><div class="field-value">${
             s.metas_status === "totalmente" ? "Totalmente atingidas" :
@@ -1202,8 +1167,8 @@ const RelatorioAlta: React.FC = () => {
 
       <div class="section">
         <div class="section-title">Contexto Clínico</div>
-        <div class="field"><span class="field-label">Queixa Principal</span><div class="field-value">${indQueixaPrincipal || "—"}</div></div>
-        <div class="field"><span class="field-label">Motivo do Encaminhamento</span><div class="field-value">${indMotivoEncaminhamento || "—"}</div></div>
+        <div class="field"><span class="field-label">Queixa Principal</span><div class="field-value">${altaPrintText(indQueixaPrincipal) || "—"}</div></div>
+        <div class="field"><span class="field-label">Motivo do Encaminhamento</span><div class="field-value">${altaPrintText(indMotivoEncaminhamento) || "—"}</div></div>
         <div class="field"><span class="field-label">Contexto Familiar/Social</span><div class="field-value">${indContextoFamiliar || "—"}</div></div>
         <div class="field"><span class="field-label">Comorbidades</span><div class="field-value">${indComorbidades || "—"}</div></div>
         <div class="field"><span class="field-label">Medicação</span><div class="field-value">${indMedicacao || "—"}</div></div>
@@ -1211,10 +1176,10 @@ const RelatorioAlta: React.FC = () => {
 
       <div class="section">
         <div class="section-title">Diagnóstico</div>
-        <div class="field"><span class="field-label">CID-10</span><div class="field-value">${indDiagCid || "—"}</div></div>
+        <div class="field"><span class="field-label">CID-10</span><div class="field-value">${altaPrintText(indDiagCid) || "—"}</div></div>
         <div class="field"><span class="field-label">CIF</span><div class="field-value">${indCif || "—"}</div></div>
-        <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${indDiagClinico || "—"}</div></div>
-        <div class="field"><span class="field-label">Diagnóstico Funcional</span><div class="field-value">${indDiagFuncional || "—"}</div></div>
+        <div class="field"><span class="field-label">Diagnóstico Clínico</span><div class="field-value">${altaPrintText(indDiagClinico) || "—"}</div></div>
+        <div class="field"><span class="field-label">Diagnóstico Funcional</span><div class="field-value">${altaPrintText(indDiagFuncional) || "—"}</div></div>
         <div class="field"><span class="field-label">Nível de Comprometimento</span><div class="field-value">${indNivelComprometimento || "—"}</div></div>
         <div class="field"><span class="field-label">Observações Diagnósticas</span><div class="field-value">${indObsDiagnosticas || "—"}</div></div>
       </div>
@@ -1233,9 +1198,9 @@ const RelatorioAlta: React.FC = () => {
 
       <div class="section">
         <div class="section-title">Evolução Clínica e Funcional</div>
-        <div class="field"><span class="field-label">Objetivos Terapêuticos Iniciais</span><div class="field-value">${indObjetivos || "—"}</div></div>
-        <div class="field"><span class="field-label">Intervenções/Procedimentos Realizados</span><div class="field-value">${indIntervencoes || "—"}</div></div>
-        <div class="field"><span class="field-label">Evolução Clínica</span><div class="field-value">${indEvolucao || "—"}</div></div>
+        <div class="field"><span class="field-label">Objetivos Terapêuticos Iniciais</span><div class="field-value">${altaPrintText(indObjetivos) || "—"}</div></div>
+        <div class="field"><span class="field-label">Intervenções/Procedimentos Realizados</span><div class="field-value">${altaPrintText(indIntervencoes) || "—"}</div></div>
+        <div class="field"><span class="field-label">Evolução Clínica</span><div class="field-value">${altaPrintText(indEvolucao) || "—"}</div></div>
         <div class="field"><span class="field-label">Evolução Global</span><div class="field-value">${indEvolucaoGlobal || "—"}</div></div>
         <div class="field"><span class="field-label">Metas Atingidas</span><div class="field-value">${
           indMetas === "totalmente" ? "Totalmente atingidas" :
@@ -1287,6 +1252,7 @@ const RelatorioAlta: React.FC = () => {
   };
 
   const buildDraftPayload = (type: "multi" | "individual", signedSections?: ProfSection[]) => type === "multi" ? {
+      altaSourceMeta:sourceMeta,
       modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
       multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
       multiBarreiras, multiPotencialidades, multiFatoresContextuais,
@@ -1298,6 +1264,7 @@ const RelatorioAlta: React.FC = () => {
       encaminhamentos, freqAps, multiContinuarTerapia, multiPrazoRetorno,
       multiResponsavelTecnico, resumoConsolidado: multiResumoConsolidado,
     } : {
+      altaSourceMeta:sourceMeta,
       diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
       diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
       obsDiagnosticas: indObsDiagnosticas, queixaPrincipal: indQueixaPrincipal,
@@ -1368,6 +1335,10 @@ const RelatorioAlta: React.FC = () => {
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
     if (savingRef.current || loading || loadFailed || conflict) return;
     if (!pacienteId || !user?.id) { toast.error("Selecione um paciente"); return; }
+    if (!reportId && (!sourceBundle || !sourceMeta)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
+    if (!reportId && sourceBundle && sourceMeta && (sourceMeta.unitId!==user.unidadeId || sourceBundle.patientId!==pacienteId || (type==="individual"&&sourceBundle.professionalId!==user.id))) { toast.error("O contexto da fonte mudou. Selecione novamente o paciente."); return; }
+    if (sourceMeta && (type==="multi"?dataAlta:indDataAlta)!==sourceMeta.through) { toast.error("A data de alta foi alterada. Confira a data de referência das fontes antes de salvar."); return; }
+    if (type==="individual"&&sourceMeta&&(indPeriodoInicio!==sourceMeta.periodStart||indPeriodoFim!==sourceMeta.periodEnd)) { toast.error("O período foi alterado. Confira as contagens das fontes antes de salvar."); return; }
 
     if (isReportLocked && customStatus !== "rascunho") {
       toast.error("Este relatório está finalizado. Reabra o relatório antes de alterar ou salvar.");
@@ -1509,6 +1480,25 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
+  const sourcePanel = pacienteId && !loading && !loadFailed && <section className="clinical-premium p-3 space-y-2 min-w-0" aria-label="Fontes do preenchimento">
+    <div className="flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-teal"><DatabaseIcon className="w-4 h-4"/></span><div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Fontes do preenchimento inteligente</h2><p className="text-xs text-muted-foreground">Dados registrados na unidade; revise o conteúdo clínico antes de finalizar.</p></div></div>
+    {sourceMeta?<div className="space-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[{label:"Prontuários clínicos",value:sourceMeta.noteCount},{label:"Sessões realizadas",value:sourceMeta.performed},{label:"Faltas",value:sourceMeta.absences},{label:"Sessões sem data",value:sourceMeta.undated}].map(x=><div key={x.label} className="clinical-inset border rounded-md p-2"><span className="block text-muted-foreground">{x.label}</span><strong className="text-base tabular-nums">{x.value}</strong></div>)}</div>
+      <p className="text-xs text-muted-foreground">{sourceMeta.cycleId?"Ciclo selecionado":"Histórico da unidade no período"} · {sourceMeta.ptsId?"PTS selecionado":"Sem PTS vinculado"} · referência {fmt(sourceMeta.through)}.</p>
+      {sourceMeta.undated>0&&<p className="text-xs text-amber-700 dark:text-amber-300">Sessões sem data não foram somadas ao período.</p>}
+      {reportId&&<p className="text-xs text-muted-foreground">Fontes preservadas da versão salva. Nenhuma importação automática sobre o rascunho.</p>}
+      {!reportId&&sourceBundle&&<Button type="button" variant="outline" size="sm" disabled={formReadOnly||conflict||hasUnsavedChanges} onClick={()=>{setSourceMeta(null);resetMultiForm();resetIndividualForm();setSourceScope("");setSourcePts("");setDataAlta(sourceBundle.through);setIndDataAlta(sourceBundle.through);loadedSnapshotPending.current=true;}}>Escolher outras fontes antes de editar</Button>}
+    </div>:sourceBundle&&!reportId?<div className="space-y-2">
+      <p className="text-xs">Escolha o recorte de atendimento e o PTS. Não há combinação automática de ciclos ou de vários planos.</p>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <div className="space-y-1"><Label className="text-xs">Ciclo / recorte de atendimento</Label><Select value={sourceScope} disabled={formReadOnly||hasUnsavedChanges} onValueChange={v=>{setSourceScope(v);const linked=sourceBundle.cycles.find(c=>c.id===v)?.pts_id;setSourcePts(linked&&sourceBundle.pts.some(p=>p.id===linked)?linked:sourceBundle.pts.length===1?sourceBundle.pts[0].id:sourceBundle.pts.length===0?"none":"");}}><SelectTrigger className="h-auto min-h-9 whitespace-normal text-left"><SelectValue placeholder="Escolher recorte"/></SelectTrigger><SelectContent><SelectItem value="all">Histórico completo da unidade (todos os ciclos)</SelectItem>{sourceBundle.cycles.map(c=><SelectItem key={c.id} value={c.id}>{c.specialty||c.treatment_type||"Ciclo"} · {c.start_date?fmt(c.start_date):"Sem data inicial"} · {c.status||"Sem situação"}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1"><Label className="text-xs">Projeto Terapêutico Singular (PTS)</Label><Select value={sourcePts} onValueChange={setSourcePts} disabled={formReadOnly||hasUnsavedChanges}><SelectTrigger className="h-auto min-h-9 whitespace-normal text-left"><SelectValue placeholder="Escolher PTS"/></SelectTrigger><SelectContent><SelectItem value="none">Sem vincular PTS</SelectItem>{sourceBundle.pts.map(plan=><SelectItem key={plan.id} value={plan.id}>{plan.status} · {plan.updated_at?fmtDateTime(plan.updated_at):"Sem atualização"} · {funcionarios.find(f=>f.id===plan.professional_id)?.nome||"Profissional responsável"}</SelectItem>)}</SelectContent></Select></div>
+      </div>
+      {hasUnsavedChanges&&<p className="text-xs text-amber-700">Para preservar os campos já editados, descarte as alterações e selecione novamente o paciente antes de importar.</p>}
+      <Button type="button" size="sm" disabled={!sourceScope||!sourcePts||formReadOnly||conflict||hasUnsavedChanges} onClick={()=>{try{applyAltaSources(sourceBundle,sourceScope,sourcePts==="none"?"":sourcePts,sourceBundle.through);loadedSnapshotPending.current=true;toast.success("Fontes importadas para revisão profissional.");}catch(e){toast.error(e instanceof Error?e.message:"Falha ao importar fontes.");}}}><RefreshCw className="w-4 h-4 mr-1"/>Importar fontes selecionadas</Button>
+    </div>:<p className="text-xs text-muted-foreground">Relatório existente: conteúdo salvo preservado. O registro não possui metadados das novas fontes.</p>}
+  </section>;
+
   /* ── MODE SELECTOR ─── */
   if (modo === "selector") {
     return (
@@ -1649,6 +1639,7 @@ const RelatorioAlta: React.FC = () => {
         </div>
       
 
+        {sourcePanel}
         {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
@@ -1703,7 +1694,7 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-3 clinical-inset rounded-xl border text-sm">
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
                     <div><span className="text-muted-foreground text-xs block">Nasc.</span>{fmt(paciente.dataNascimento)}</div>
-                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
+                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly || !!sourceMeta} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
                     {lastUpdatedAt && (
                       <div><span className="text-muted-foreground text-xs block">Última atualização</span>{fmtDateTime(lastUpdatedAt)} por {lastUpdatedBy}</div>
                     )}
@@ -1942,13 +1933,14 @@ const RelatorioAlta: React.FC = () => {
       </header>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
         <AltaMetric icon={User} label="Paciente" value={!pacienteId?"Selecionar paciente":loading?"Carregando…":loadFailed?"Não carregado":paciente?.id===pacienteId?paciente.nome:"Selecionado"} />
-        <AltaMetric icon={Activity} label="Sessões registradas" tone="teal" value={!pacienteId||loading||loadFailed?"—":indSessoes} />
-        <AltaMetric icon={Clock} label="Faltas registradas" tone="violet" value={!pacienteId||loading||loadFailed?"—":indFaltas} />
+        <AltaMetric icon={Activity} label="Sessões registradas" tone="teal" value={!pacienteId||loading||loadFailed||(!reportId&&!sourceMeta)?"—":indSessoes} />
+        <AltaMetric icon={Clock} label="Faltas registradas" tone="violet" value={!pacienteId||loading||loadFailed||(!reportId&&!sourceMeta)?"—":indFaltas} />
         <AltaMetric icon={ListTodo} label="Validação" tone="slate" value={!pacienteId||loading||loadFailed?"Aguardando":isReportLocked?"Finalizado":validateInd().length===0?"Pronto para finalizar":`${validateInd().length} pendência(s)`} />
       </div>
       
 
-      {evolutionPreview}
+      {sourcePanel}
+        {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
@@ -2033,7 +2025,7 @@ const RelatorioAlta: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Sessões / Faltas</span>
-                        <Badge variant="outline" className="text-xs font-mono">{indSessoes} realizada(s) / {indFaltas} falta(s)</Badge>
+                        <Badge variant="outline" className="text-xs font-mono">{!reportId&&!sourceMeta?"Aguardando seleção de fontes":`${indSessoes} realizada(s) / ${indFaltas} falta(s)`}</Badge>
                       </div>
                     </div>
                   )}
@@ -2042,14 +2034,14 @@ const RelatorioAlta: React.FC = () => {
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Período de Acompanhamento</Label>
                       <div className="flex items-center gap-2">
-                        <Input disabled={formReadOnly} type="date" value={indPeriodoInicio} onChange={e => setIndPeriodoInicio(e.target.value)} className="h-9 text-sm" />
+                        <Input disabled={formReadOnly || !!sourceMeta} type="date" value={indPeriodoInicio} onChange={e => setIndPeriodoInicio(e.target.value)} className="h-9 text-sm" />
                         <span className="text-muted-foreground">até</span>
-                        <Input disabled={formReadOnly} type="date" value={indPeriodoFim} onChange={e => setIndPeriodoFim(e.target.value)} className="h-9 text-sm" />
+                        <Input disabled={formReadOnly || !!sourceMeta} type="date" value={indPeriodoFim} onChange={e => setIndPeriodoFim(e.target.value)} className="h-9 text-sm" />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Data de Alta</Label>
-                      <Input disabled={formReadOnly} type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-9 text-sm" />
+                      <Input disabled={formReadOnly || !!sourceMeta} type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-9 text-sm" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Modalidade</Label>
