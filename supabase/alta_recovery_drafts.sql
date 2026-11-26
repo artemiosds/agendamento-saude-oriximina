@@ -63,4 +63,7 @@ $fn$;
 REVOKE ALL ON FUNCTION public.alta_recovery_stamp() FROM PUBLIC,anon,authenticated;
 DROP TRIGGER IF EXISTS trg_alta_recovery_stamp ON public.alta_recovery_drafts;
 CREATE TRIGGER trg_alta_recovery_stamp BEFORE INSERT OR UPDATE ON public.alta_recovery_drafts FOR EACH ROW EXECUTE FUNCTION public.alta_recovery_stamp();
+-- Purge only expired private recovery copies, never official records.
+SELECT cron.schedule('alta-recovery-expired-purge','17 4 * * *',
+  $cleanup$DELETE FROM public.alta_recovery_drafts WHERE expira_em < now()$cleanup$);
 COMMIT;
