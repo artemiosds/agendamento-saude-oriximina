@@ -3182,7 +3182,7 @@ const BpaExportar: React.FC = () => {
                 explicitProcedureCids: [procEntry.cid, ...sigtapVinculadoItens
                   .filter(item => somenteNumeros(item.codigo) === somenteNumeros(procEntry.codigo))
                   .map(item => item.cid)],
-                declaredMunicipality: resolveMunicipioBpa({ municipioCadastro: mun_raw, municipioPadrao: "" }).codigo,
+                declaredMunicipality: municipio,
                 rawCep: pac?.cep || pacCd.cep || "",
                 address: {
                   catalog: dneCatalog,
