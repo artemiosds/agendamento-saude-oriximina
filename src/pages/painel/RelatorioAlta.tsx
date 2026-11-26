@@ -153,6 +153,53 @@ const parseAltaPayload = (raw?: string | null): any => {
 };
 
 
+// Visual navigation only. The clinical form retains its original values and handlers.
+type AltaStep = { value: string; label: string; icon: typeof User };
+const INDIVIDUAL_STEPS: AltaStep[] = [
+  { value: "identificacao", label: "Identificação", icon: User },
+  { value: "contexto", label: "Contexto clínico", icon: Info },
+  { value: "diagnostico", label: "Diagnóstico", icon: Stethoscope },
+  { value: "evolucao", label: "Evolução", icon: Activity },
+  { value: "alta", label: "Alta e plano", icon: Heart },
+];
+const MULTI_STEPS: AltaStep[] = [
+  { value: "identificacao", label: "Identificação", icon: User },
+  { value: "diagnostico", label: "Diagnóstico", icon: Stethoscope },
+  { value: "resumo", label: "Percurso terapêutico", icon: ClipboardList },
+  { value: "equipe", label: "Contribuições", icon: Users },
+  { value: "alta", label: "Alta e plano", icon: Heart },
+];
+function AltaWorkflow({ steps, children }: { steps: AltaStep[]; children: React.ReactNode }) {
+  const [active, setActive] = useState(steps[0].value);
+  const index = Math.max(0, steps.findIndex(step => step.value === active));
+  return <Tabs value={active} onValueChange={setActive} className="w-full min-w-0 space-y-2">
+    <div className="clinical-premium p-3 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0"><p className="clinical-field-label text-[10px] font-semibold uppercase tracking-wider">Percurso do relatório</p><h2 className="font-semibold text-sm">{steps[index].label}</h2></div>
+        <span className="text-xs font-medium tabular-nums text-muted-foreground">Etapa {index+1} de {steps.length}</span>
+      </div>
+      <div className="flex gap-1" aria-hidden="true">{steps.map((step,i)=><span key={step.value} className={`h-1.5 flex-1 rounded-full ${i === index ? "bg-[var(--cp-blue)]" : "bg-muted"}`}/>)}</div>
+      <TabsList aria-label="Etapas do relatório" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-1 bg-transparent w-full h-auto p-0">
+        {steps.map(({value,label,icon:Icon},i)=><TabsTrigger key={value} value={value} className="min-w-0 h-auto min-h-[46px] justify-start whitespace-normal text-left gap-2 rounded-lg px-2 py-2 text-xs font-medium border border-transparent data-[state=active]:border-[var(--cp-blue)] data-[state=active]:bg-[var(--cp-inset)] data-[state=active]:text-[var(--cp-ink)] data-[state=active]:shadow-none">
+          <span className="clinical-dock-icon clinical-tone-blue !w-7 !h-7"><Icon className="w-3.5 h-3.5" aria-hidden="true"/></span><span className="min-w-0"><span className="block text-[10px] text-muted-foreground">{String(i+1).padStart(2,"0")}</span>{label}</span>
+        </TabsTrigger>)}
+      </TabsList>
+    </div>
+    {children}
+    <nav aria-label="Navegação entre etapas" className="clinical-premium flex flex-wrap items-center justify-between gap-2 p-2">
+      <Button type="button" variant="outline" size="sm" disabled={index===0} onClick={()=>setActive(steps[Math.max(0,index-1)].value)}><ArrowLeft className="w-4 h-4 mr-1"/>Anterior</Button>
+      <span className="text-xs text-muted-foreground">{index+1} / {steps.length}</span>
+      <Button type="button" size="sm" disabled={index===steps.length-1} onClick={()=>setActive(steps[Math.min(steps.length-1,index+1)].value)}>Próxima etapa<ChevronRight className="w-4 h-4 ml-1"/></Button>
+    </nav>
+  </Tabs>;
+}
+function AltaMetric({ icon: Icon, label, value, tone = "blue" }: { icon: typeof User; label: string; value: React.ReactNode; tone?: "blue" | "teal" | "violet" | "slate" }) {
+  return <div className="clinical-premium p-2.5 sm:p-3 flex items-center gap-2.5 min-w-0">
+    <span className={`clinical-dock-icon clinical-tone-${tone}`}><Icon className="w-4 h-4" aria-hidden="true"/></span>
+    <div className="min-w-0"><p className="clinical-field-label text-[10px] uppercase tracking-wide font-semibold">{label}</p><div className="font-semibold text-sm break-words leading-snug">{value}</div></div>
+  </div>;
+}
+
 const RelatorioAlta: React.FC = () => {
   const { user } = useAuth();
   const { pacientes } = usePacientes();
@@ -1566,33 +1613,41 @@ const RelatorioAlta: React.FC = () => {
   /* ═══ MULTIPROFISSIONAL ═══ */
   if (modo === "multiprofissional") {
     return (
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={returnToSelector} disabled={loading}>
+      <div className="space-y-3 min-w-0">
+        <header className="clinical-hub-hero flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <Button variant="outline" size="icon" className="clinical-hub-new shrink-0" aria-label="Voltar à seleção de relatórios" onClick={returnToSelector} disabled={loading}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <div>
-              <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" />
+            <div className="min-w-0">
+              <p className="clinical-hub-eyebrow">Continuidade assistencial · CER II</p>
+              <h1 className="text-xl font-bold clinical-hub-name flex items-center gap-2">
+                <Users className="w-5 h-5 shrink-0" aria-hidden="true" />
                 Relatório de Alta — Multiprofissional
               </h1>
-              <p className="text-xs text-muted-foreground">Documento consolidado da equipe</p>
+              <p className="clinical-patient-sub text-xs mt-1">Documento consolidado da equipe</p>
             </div>
           </div>
           {pacienteId && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant={status === "rascunho" ? "secondary" : "default"} className="px-3 py-1">
                 {status === "rascunho" ? "Rascunho" : "Finalizado"}
               </Badge>
               {isReportLocked && canReopenReport && (
-                <Button variant="outline" size="sm" onClick={() => setIsReopening(true)} disabled={loading}>
+                <Button variant="outline" size="sm" className="clinical-hub-new" onClick={() => setIsReopening(true)} disabled={loading}>
                   <Unlock className="w-4 h-4 mr-1" /> Reabrir relatório
                 </Button>
               )}
             </div>
           )}
+        </header>
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+          <AltaMetric icon={User} label="Paciente" value={!pacienteId?"Selecionar paciente":loading?"Carregando…":loadFailed?"Não carregado":paciente?.id===pacienteId?paciente.nome:"Selecionado"} />
+          <AltaMetric icon={Users} label="Equipe identificada" tone="teal" value={!pacienteId||loading||loadFailed?"—":profSections.length} />
+          <AltaMetric icon={ShieldCheck} label="Contribuições assinadas" tone="violet" value={!pacienteId||loading||loadFailed?"—":`${profSections.filter(s=>s.status_contribuicao==="assinada").length} / ${profSections.length}`} />
+          <AltaMetric icon={ListTodo} label="Validação" tone="slate" value={!pacienteId||loading||loadFailed?"Aguardando":isReportLocked?"Finalizado":validateMulti().length===0?"Pronto para finalizar":`${validateMulti().length} pendência(s)`} />
         </div>
+      
 
         {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
@@ -1631,17 +1686,10 @@ const RelatorioAlta: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        <Tabs defaultValue="identificacao" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
-            <TabsTrigger value="identificacao" className="py-2">Identificação</TabsTrigger>
-            <TabsTrigger value="diagnostico" className="py-2">Diagnóstico</TabsTrigger>
-            <TabsTrigger value="resumo" className="py-2">Resumo Multiprof.</TabsTrigger>
-            <TabsTrigger value="equipe" className="py-2">Contribuições</TabsTrigger>
-            <TabsTrigger value="alta" className="py-2">Alta e Plano</TabsTrigger>
-          </TabsList>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,25%)] gap-3 items-start"><div className="min-w-0"><AltaWorkflow key="multi" steps={MULTI_STEPS}>
 
-          <TabsContent value="identificacao" className="space-y-4 pt-4">
-            <Card>
+          <TabsContent value="identificacao" className="space-y-3 pt-1">
+            <Card className="clinical-premium min-w-0">
               <CardHeader className="pb-3 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm">Identificação</CardTitle>
                 <div className="flex items-center gap-2">
@@ -1652,7 +1700,7 @@ const RelatorioAlta: React.FC = () => {
               <CardContent className="space-y-4">
                 <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={handlePacienteChange} />
                 {paciente && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-xl text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-3 clinical-inset rounded-xl border text-sm">
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
                     <div><span className="text-muted-foreground text-xs block">Nasc.</span>{fmt(paciente.dataNascimento)}</div>
                     <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
@@ -1671,8 +1719,8 @@ const RelatorioAlta: React.FC = () => {
           </TabsContent>
 
 
-          <TabsContent value="diagnostico" className="space-y-4 pt-4">
-            <Card>
+          <TabsContent value="diagnostico" className="space-y-3 pt-1">
+            <Card className="clinical-premium min-w-0">
               <CardHeader className="pb-3"><CardTitle className="text-sm">Diagnóstico Multiprofissional</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1694,24 +1742,27 @@ const RelatorioAlta: React.FC = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="resumo" className="space-y-4 pt-4">
-            <Card>
-              <CardContent className="space-y-4 pt-4">
+          <TabsContent value="resumo" className="space-y-3 pt-1">
+            <Card className="clinical-premium min-w-0">
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ClipboardList className="w-4 h-4 text-primary"/>Percurso terapêutico</CardTitle><CardDescription>Objetivos e plano terapêutico executado.</CardDescription></CardHeader>
+              <CardContent className="space-y-4 pt-2">
                  <Textarea disabled={formReadOnly} value={multiObjetivosGerais} onChange={e => setMultiObjetivosGerais(e.target.value)} placeholder="Objetivos Terapêuticos Gerais..." rows={4} />
                  <Textarea disabled={formReadOnly} value={multiPlanoExecutado} onChange={e => setMultiPlanoExecutado(e.target.value)} placeholder="Resumo do plano terapêutico executado..." rows={4} />
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="equipe" className="space-y-4 pt-4">
+          <TabsContent value="equipe" className="space-y-3 pt-1">
+             <div className="clinical-premium p-3 space-y-2"><h2 className="font-semibold text-sm flex items-center gap-2"><Users className="w-4 h-4 text-primary"/>Equipe multiprofissional</h2><p className="text-xs text-muted-foreground">Abra cada contribuição para consultar ou preencher conforme suas permissões.</p><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[{label:"Não iniciadas",status:"nao_iniciada"},{label:"Em preenchimento",status:"em_preenchimento"},{label:"Concluídas",status:"concluida"},{label:"Assinadas",status:"assinada"}].map(item=><div key={item.status} className="clinical-inset rounded-lg border p-2"><p className="text-muted-foreground">{item.label}</p><strong className="text-base tabular-nums">{!pacienteId||loading||loadFailed?"—":profSections.filter(s=>s.status_contribuicao===item.status).length}</strong></div>)}</div></div>
+             {profSections.length===0&&<div className="clinical-premium p-5 text-sm text-center text-muted-foreground">{!pacienteId?"Selecione um paciente na identificação.":loading?"Carregando equipe…":loadFailed?"Não foi possível carregar a equipe.":"Nenhuma contribuição identificada para este relatório."}</div>}
              {profSections.map(s => (
-               <Card key={s.profissional_id}>
-                 <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                   <CardTitle className="text-sm">{s.profissional_nome}</CardTitle>
+               <Card key={s.profissional_id} className="clinical-premium min-w-0">
+                 <details open={s.profissional_id === user?.id} className="group">
+                 <summary className="list-none cursor-pointer rounded-lg p-3 flex flex-wrap items-center gap-2 [&::-webkit-details-marker]:hidden"><span className="clinical-dock-icon clinical-tone-teal"><User className="w-4 h-4"/></span><span className="flex-1 min-w-[8rem]"><span className="block font-semibold text-sm break-words">{s.profissional_nome}</span><span className="block text-xs text-muted-foreground break-words">{s.profissao || "Profissão não informada"}</span></span>
                    <Badge variant={s.status_contribuicao === "assinada" ? "default" : "secondary"}>
                      {s.status_contribuicao.replace("_", " ")}
-                   </Badge>
-                 </CardHeader>
+                   </Badge><ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground group-open:rotate-90"/>
+                 </summary>
                  <CardContent className="space-y-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -1736,7 +1787,7 @@ const RelatorioAlta: React.FC = () => {
                     <div className="flex items-center justify-between mt-4 flex-wrap gap-2">
                       <div className="flex gap-4">
                         <Select value={s.status_contribuicao} onValueChange={(v: any) => { if(v==="concluida"){const errors=validateContribution(s);if(errors.length){toast.error(errors[0]);return;}} updateProfSection(s.profissional_id, "status_contribuicao", v); }} disabled={!canEditContribution(s)}>
-                          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="w-full min-w-[150px] max-w-[230px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
                             <SelectItem value="em_preenchimento">Em preenchimento</SelectItem>
@@ -1756,47 +1807,13 @@ const RelatorioAlta: React.FC = () => {
                       )}
                     </div>
                  </CardContent>
+                 </details>
                </Card>
              ))}
           </TabsContent>
 
-          <TabsContent value="alta" className="space-y-4 pt-4">
-            {isReportLocked && (
-        <Alert className="border-amber-300 bg-amber-50">
-          <Lock className="h-4 w-4 text-amber-700" />
-          <AlertTitle className="text-amber-800">Relatório finalizado — alterações bloqueadas</AlertTitle>
-          <AlertDescription className="text-amber-700">
-            Reabra o relatório para editar. O sistema criará uma nova versão e registrará o motivo na auditoria.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Dialog open={isReopening} onOpenChange={setIsReopening}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reabertura de Relatório</DialogTitle>
-            <DialogDescription>
-              O documento finalizado será reaberto como nova versão. Os dados persistidos serão preservados e o motivo ficará registrado na auditoria.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Label>Motivo da Reabertura *</Label>
-            <Textarea
-              value={reopenReason}
-              onChange={e => setReopenReason(e.target.value)}
-              placeholder="Descreva o motivo pelo qual este documento precisa ser alterado..."
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsReopening(false)}>Cancelar</Button>
-            <Button onClick={handleReopen} disabled={loading}>Confirmar Reabertura</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              <div className="lg:col-span-3 space-y-4">
-                <Card>
+          <TabsContent value="alta" className="space-y-3 pt-1">
+                <Card className="clinical-premium min-w-0">
                   <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Conclusão Multiprofissional</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1849,11 +1866,14 @@ const RelatorioAlta: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
 
+          </TabsContent>
+        </AltaWorkflow>
+        </div>
+        <aside className="min-w-0 lg:sticky lg:top-3 space-y-2">
               <div className="space-y-4">
-                <Card>
-                  <CardHeader className="pb-3"><CardTitle className="text-xs font-semibold flex items-center gap-2"><ListTodo className="w-4 h-4" /> Checklist de Alta</CardTitle></CardHeader>
+                <Card className="clinical-premium min-w-0">
+                  <CardHeader className="pb-3"><CardTitle className="text-xs font-semibold flex items-center gap-2"><ListTodo className="w-4 h-4" /> Resumo e Ações · Checklist de Alta</CardTitle></CardHeader>
                   <CardContent className="space-y-3">
                     {[
                       { label: "Paciente Selecionado", ok: !!pacienteId },
@@ -1871,19 +1891,15 @@ const RelatorioAlta: React.FC = () => {
                       Status: <strong className="text-foreground">{validateMulti().length === 0 ? "Pronto para Emitir" : "Incompleto"}</strong>
                       {validateMulti().map((err,i)=><p key={i} className="mt-1">{err}</p>)}
                     </div>
+        <div className="flex flex-col gap-2 pt-3 border-t">
+          <Button className="w-full justify-start" variant="outline" onClick={() => handleSave("multi", true)} disabled={formReadOnly || conflict}><Save className="w-4 h-4 mr-1"/>Salvar Rascunho</Button>
+          <Button className="w-full justify-start clinical-record-action clinical-action-main" onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict}>Finalizar Consolidação</Button>
+          <Button className="w-full justify-start" variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
+        </div>
                   </CardContent>
                 </Card>
               </div>
-            </div>
-          </TabsContent>
-
-        </Tabs>
-
-        {/* Footer Actions */}
-        <div className="flex flex-wrap gap-3 pt-6 border-t">
-          <Button variant="outline" onClick={() => handleSave("multi", true)} disabled={formReadOnly || conflict}><Save className="w-4 h-4 mr-1"/>Salvar Rascunho</Button>
-          <Button onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict}>Finalizar Consolidação</Button>
-          <Button variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
+        </aside>
         </div>
       </div>
     );
@@ -1891,57 +1907,91 @@ const RelatorioAlta: React.FC = () => {
 
   /* ═══ INDIVIDUAL ═══ */
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={returnToSelector} disabled={loading}>
+    <div className="space-y-3 min-w-0">
+      <header className="clinical-hub-hero flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Button variant="outline" size="icon" className="clinical-hub-new shrink-0" aria-label="Voltar à seleção de relatórios" onClick={returnToSelector} disabled={loading}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
-            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
+          <div className="min-w-0">
+            <p className="clinical-hub-eyebrow">Continuidade assistencial · CER II</p>
+            <h1 className="text-xl font-bold clinical-hub-name flex items-center gap-2">
+              <User className="w-5 h-5 shrink-0" aria-hidden="true" />
               Relatório de Alta — Individual
             </h1>
-            <p className="text-xs text-muted-foreground">Relatório clínico completo e automatizado</p>
+            <p className="clinical-patient-sub text-xs mt-1">Relatório clínico completo e automatizado</p>
           </div>
         </div>
 
         {pacienteId && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant={status === "rascunho" ? "secondary" : "default"} className="px-3 py-1">
               {status === "rascunho" ? "Rascunho" : "Finalizado"}
             </Badge>
             {status === "rascunho" ? (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <span className="clinical-patient-sub text-xs flex items-center gap-1">
                 <Clock className="w-3 h-3" /> Editando...
               </span>
             ) : canReopenReport ? (
-              <Button variant="outline" size="sm" onClick={() => setIsReopening(true)} disabled={loading}>
+              <Button variant="outline" size="sm" className="clinical-hub-new" onClick={() => setIsReopening(true)} disabled={loading}>
                 <Unlock className="w-4 h-4 mr-1" /> Reabrir relatório
               </Button>
             ) : null}
           </div>
         )}
+      </header>
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+        <AltaMetric icon={User} label="Paciente" value={!pacienteId?"Selecionar paciente":loading?"Carregando…":loadFailed?"Não carregado":paciente?.id===pacienteId?paciente.nome:"Selecionado"} />
+        <AltaMetric icon={Activity} label="Sessões registradas" tone="teal" value={!pacienteId||loading||loadFailed?"—":indSessoes} />
+        <AltaMetric icon={Clock} label="Faltas registradas" tone="violet" value={!pacienteId||loading||loadFailed?"—":indFaltas} />
+        <AltaMetric icon={ListTodo} label="Validação" tone="slate" value={!pacienteId||loading||loadFailed?"Aguardando":isReportLocked?"Finalizado":validateInd().length===0?"Pronto para finalizar":`${validateInd().length} pendência(s)`} />
       </div>
+      
 
       {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
         {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Main Form Content */}
-        <div className="lg:col-span-3 space-y-6">
-          <Tabs defaultValue="identificacao" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
-              <TabsTrigger value="identificacao" className="py-2">Identificação</TabsTrigger>
-              <TabsTrigger value="contexto" className="py-2">Contexto Clínico</TabsTrigger>
-              <TabsTrigger value="diagnostico" className="py-2">Diagnóstico</TabsTrigger>
-              <TabsTrigger value="evolucao" className="py-2">Evolução</TabsTrigger>
-              <TabsTrigger value="alta" className="py-2">Alta e Plano</TabsTrigger>
-            </TabsList>
+            {isReportLocked && (
+        <Alert className="border-amber-300 bg-amber-50">
+          <Lock className="h-4 w-4 text-amber-700" />
+          <AlertTitle className="text-amber-800">Relatório finalizado — alterações bloqueadas</AlertTitle>
+          <AlertDescription className="text-amber-700">
+            Reabra o relatório para editar. O sistema criará uma nova versão e registrará o motivo na auditoria.
+          </AlertDescription>
+        </Alert>
+      )}
 
-            <TabsContent value="identificacao" className="space-y-4 pt-4">
-              <Card>
+      <Dialog open={isReopening} onOpenChange={setIsReopening}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reabertura de Relatório</DialogTitle>
+            <DialogDescription>
+              O documento finalizado será reaberto como nova versão. Os dados persistidos serão preservados e o motivo ficará registrado na auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Label>Motivo da Reabertura *</Label>
+            <Textarea
+              value={reopenReason}
+              onChange={e => setReopenReason(e.target.value)}
+              placeholder="Descreva o motivo pelo qual este documento precisa ser alterado..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsReopening(false)}>Cancelar</Button>
+            <Button onClick={handleReopen} disabled={loading}>Confirmar Reabertura</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,25%)] gap-3 items-start">
+        {/* Main Form Content */}
+        <div className="min-w-0 space-y-3">
+          <AltaWorkflow key="individual" steps={INDIVIDUAL_STEPS}>
+
+            <TabsContent value="identificacao" className="space-y-3 pt-1">
+              <Card className="clinical-premium min-w-0">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <ClipboardList className="w-4 h-4 text-primary" />
@@ -1952,7 +2002,7 @@ const RelatorioAlta: React.FC = () => {
                   <BuscaPaciente pacientes={pacientes} value={pacienteId} onChange={handlePacienteChange} />
                   
                   {paciente && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-xl border border-border/50 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-3 clinical-inset rounded-xl border border border-border/50 text-sm">
                       <div className="space-y-1">
                         <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Paciente</span>
                         <strong className="text-foreground">{paciente.nome}</strong>
@@ -2017,8 +2067,8 @@ const RelatorioAlta: React.FC = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="contexto" className="space-y-4 pt-4">
-              <Card>
+            <TabsContent value="contexto" className="space-y-3 pt-1">
+              <Card className="clinical-premium min-w-0">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <Info className="w-4 h-4 text-primary" />
@@ -2049,8 +2099,8 @@ const RelatorioAlta: React.FC = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="diagnostico" className="space-y-4 pt-4">
-              <Card>
+            <TabsContent value="diagnostico" className="space-y-3 pt-1">
+              <Card className="clinical-premium min-w-0">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <Stethoscope className="w-4 h-4 text-primary" />
@@ -2096,8 +2146,8 @@ const RelatorioAlta: React.FC = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="evolucao" className="space-y-4 pt-4">
-              <Card>
+            <TabsContent value="evolucao" className="space-y-3 pt-1">
+              <Card className="clinical-premium min-w-0">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <Activity className="w-4 h-4 text-primary" />
@@ -2198,8 +2248,8 @@ const RelatorioAlta: React.FC = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="alta" className="space-y-4 pt-4">
-              <Card>
+            <TabsContent value="alta" className="space-y-3 pt-1">
+              <Card className="clinical-premium min-w-0">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <Heart className="w-4 h-4 text-primary" />
@@ -2289,12 +2339,12 @@ const RelatorioAlta: React.FC = () => {
                 </CardContent>
               </Card>
             </TabsContent>
-          </Tabs>
+          </AltaWorkflow>
         </div>
 
         {/* Sidebar Actions & Info */}
-        <div className="space-y-6">
-          <Card className="sticky top-6">
+        <aside className="min-w-0 space-y-3 lg:sticky lg:top-3">
+          <Card className="clinical-premium min-w-0">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <LayoutDashboard className="w-4 h-4 text-primary" />
@@ -2333,7 +2383,7 @@ const RelatorioAlta: React.FC = () => {
                 </Button>
                 
                 <Button 
-                  className="w-full justify-start h-9 bg-primary" 
+                  className="w-full justify-start h-10 clinical-record-action clinical-action-main" 
                   onClick={() => handleSave("individual", false)}
                   disabled={formReadOnly || conflict}
                 >
@@ -2380,7 +2430,7 @@ const RelatorioAlta: React.FC = () => {
           </Card>
 
           {ptsMetas.length > 0 && (
-            <Card>
+            <Card className="clinical-premium min-w-0">
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-semibold flex items-center gap-2">
                   <History className="w-3 h-3 text-primary" />
@@ -2391,7 +2441,7 @@ const RelatorioAlta: React.FC = () => {
                 <div className="space-y-1">
                   {ptsMetas.map(meta => (
                     <div key={meta.id} className="text-[10px] flex items-center justify-between p-1 hover:bg-muted/30 rounded">
-                      <span className="truncate max-w-[120px]">{meta.titulo}</span>
+                      <span className="min-w-0 break-words pr-2">{meta.titulo}</span>
                       <Badge variant="outline" className="text-[9px] h-3 px-1">
                         {meta.status}
                       </Badge>
@@ -2401,7 +2451,7 @@ const RelatorioAlta: React.FC = () => {
               </CardContent>
             </Card>
           )}
-        </div>
+        </aside>
       </div>
     </div>
   );
