@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, FileText, Loader2, Search, Stethoscope } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, FileText, Loader2, Search, Stethoscope, Activity, Monitor, Plus, RefreshCw, UserCheck, ChevronDown, ChevronRight, CalendarX, AlertCircle, Hospital } from "lucide-react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +62,10 @@ export default function AgendaExames() {
   const { unidades, salas, funcionarios } = useOperacional();
   const { can } = usePermissions();
   const [responsibleId, setResponsibleId] = useState("");
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [queueFilter, setQueueFilter] = useState("all");
+  const [queueSearch, setQueueSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const statusLock = useRef(false);
   const [selectedUnit, setSelectedUnit] = useState(user?.unidadeId || "");
@@ -166,6 +171,24 @@ export default function AgendaExames() {
 
   const roomRows = unitAllowed && roomConfig && roomSnapshot?.key === scopeKey ? roomSnapshot.rows : null;
   const rows = useMemo(() => (roomRows || []).filter(isDiagnosticAppointment), [roomRows]);
+  const queueGroups = useMemo(() => {
+    const result: Record<string, number> = { all: rows.length };
+    for (const row of rows) {
+      const status = getEffectiveDiagnosticStatus(row);
+      result[status] = (result[status] || 0) + 1;
+    }
+    result.encerrados = (result.cancelado || 0) + (result.falta || 0) + (result.remarcado || 0);
+    return result;
+  }, [rows]);
+  const visibleRows = useMemo(() => {
+    const term = queueSearch.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return rows.filter(row => {
+      const status = getEffectiveDiagnosticStatus(row);
+      if (queueFilter !== "all" && (queueFilter === "encerrados" ? !["cancelado", "falta", "remarcado"].includes(status) : status !== queueFilter)) return false;
+      return !term || [row.paciente_nome, row.custom_data?.exame_nome, row.profissional_nome, row.hora].some(value =>
+        String(value || "").toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(term));
+    });
+  }, [rows, queueFilter, queueSearch]);
 
   useEffect(() => {
     void loadUnitMetadata();
@@ -179,7 +202,7 @@ export default function AgendaExames() {
     void loadRows();
     return () => { ++rowsRequest.current; };
   }, [loadRows]);
-  useEffect(() => { setSlot(""); setLaudoRow(null); setResponsibleId(""); }, [scopeKey]);
+  useEffect(() => { setSlot(""); setLaudoRow(null); setResponsibleId(""); setBookingOpen(false); setQueueFilter("all"); setQueueSearch(""); setExpandedId(null); }, [scopeKey]);
   useEffect(() => {
     if (!unitAllowed || !roomConfig || !date) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -445,73 +468,173 @@ export default function AgendaExames() {
   const canWorkUnit = isGlobalAdmin || !!user?.unidadeId && user.unidadeId === selectedUnit;
   const canWriteReport = canWorkUnit && can("agenda", "can_execute") && String(user?.role || "").toLowerCase() === "profissional";
 
+  const busy = saving || statusBusy;
+  const metrics = [
+    { id: "all", label: "Total de exames", icon: CalendarDays, tone: "blue" },
+    { id: "agendado", label: "Agendados", icon: Clock3, tone: "blue" },
+    { id: "paciente_chegou", label: "Presentes", icon: UserCheck, tone: "teal" },
+    { id: "exame_realizado_em_laudo", label: "Aguardando laudo", icon: FileText, tone: "violet" },
+    { id: "laudo_liberado", label: "Laudos liberados", icon: CheckCircle2, tone: "teal" },
+    { id: "encerrados", label: "Cancelados / faltas / remarcados", icon: CalendarX, tone: "slate" },
+  ];
+  const selectedRoomName = diagnosticRooms.find(room => room.id === selectedRoom)?.nome;
+  const selectedUnitName = visibleUnits.find(unit => unit.id === selectedUnit)?.nome;
+  const activeLaudoStatus = laudoRow && rows.find(row => row.id === laudoRow.id);
+  const reportStillAvailable = !!activeLaudoStatus && getEffectiveDiagnosticStatus(activeLaudoStatus) === "exame_realizado_em_laudo";
+  const queueReady = !!roomRows && !rowError;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="text-2xl font-bold">Agenda de Exames</h1><p className="text-sm text-muted-foreground">Agendamento por aparelho, fila técnica e liberação de laudos</p></div>
-        <Badge variant="outline">Módulo por sala</Badge>
+    <div className="space-y-3">
+      <div className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Activity className="h-5 w-5" /></span>
+        <div className="flex-1 min-w-[9rem]">
+          <p className="clinical-hub-eyebrow">Apoio diagnóstico e assistencial</p>
+          <h1 className="clinical-hub-name text-xl font-bold font-display">Agenda de Exames</h1>
+          <p className="clinical-patient-sub text-xs mt-1">Agendamento por aparelho · Fila técnica · Laudos</p>
+        </div>
+        {canBook && roomConfig && <Button type="button" className="clinical-hub-new" disabled={busy} aria-expanded={bookingOpen} aria-controls="diagnostic-booking" onClick={() => setBookingOpen(v => !v)}>
+          {bookingOpen ? <ChevronDown className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{bookingOpen ? "Recolher agendamento" : "Novo agendamento"}
+        </Button>}
       </div>
 
-      <Card><CardContent className="grid gap-3 p-4 md:grid-cols-3">
-        <div><Label>Unidade</Label><Select value={selectedUnit} disabled={saving || statusBusy} onValueChange={v => { setSelectedUnit(v); setSelectedRoom(""); setSelectedExamId(""); setSlot(""); }}>
-          <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
-          <SelectContent>{visibleUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-        </Select></div>
-        <div><Label>Aparelho / Sala</Label><Select value={selectedRoom} disabled={!unitAllowed || metadataLoading || saving || statusBusy} onValueChange={value => { setSelectedRoom(value); setSelectedExamId(""); setSlot(""); }}>
-          <SelectTrigger><SelectValue placeholder="Selecione o aparelho" /></SelectTrigger>
-          <SelectContent>{diagnosticRooms.map(r => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}</SelectContent>
-        </Select></div>
-        <div><Label>Data</Label><Input type="date" value={date} disabled={saving || statusBusy} onChange={e => { setDate(e.target.value); setSlot(""); }} /></div>
-      </CardContent></Card>
+      <section className="clinical-premium p-3 space-y-3" aria-label="Contexto do aparelho">
+        <div className="flex items-center gap-2">
+          <span className="clinical-dock-icon clinical-tone-blue"><Hospital className="h-4 w-4" /></span>
+          <div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Unidade e aparelho</h2><p className="text-xs text-muted-foreground">Selecione o contexto de trabalho</p></div>
+          {unitAllowed && metadata && !metadataLoading && <Badge variant="outline" className="shrink-0">{diagnosticRooms.length} aparelho(s)</Badge>}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-1 min-w-0"><Label className="text-xs">Unidade</Label><Select value={selectedUnit} disabled={busy} onValueChange={v => { setSelectedUnit(v); setSelectedRoom(""); setSelectedExamId(""); setSlot(""); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+            <SelectContent>{visibleUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+          </Select></div>
+          <div className="space-y-1 min-w-0"><Label className="text-xs">Aparelho / Sala</Label><Select value={selectedRoom} disabled={!unitAllowed || metadataLoading || busy} onValueChange={value => { setSelectedRoom(value); setSelectedExamId(""); setSlot(""); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder={metadataLoading ? "Carregando..." : "Selecione o aparelho"} /></SelectTrigger>
+            <SelectContent>{diagnosticRooms.map(r => <SelectItem key={r.id} value={r.id}>{r.nome}</SelectItem>)}</SelectContent>
+          </Select></div>
+          <div className="space-y-1 min-w-0"><Label className="text-xs">Data da agenda</Label><Input type="date" value={date} disabled={busy} onChange={e => { setDate(e.target.value); setSlot(""); }} /></div>
+        </div>
+        {roomConfig && <div className="clinical-inset rounded-lg border p-2.5 flex flex-wrap items-center gap-2.5">
+          <span className="clinical-dock-icon clinical-tone-teal"><Monitor className="h-4 w-4" /></span>
+          <div className="flex-1 min-w-[8rem]"><p className="font-semibold text-sm break-words">{selectedRoomName}</p><p className="text-xs text-muted-foreground break-words">{selectedUnitName}</p></div>
+          <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Funcionamento</p><p className="text-sm font-semibold tabular-nums">{roomConfig.horarioInicio} – {roomConfig.horarioFim}</p></div>
+          <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Modalidades</p><p className="text-sm font-semibold tabular-nums">{roomConfig.exames.length}</p></div>
+          <Button type="button" variant="outline" size="sm" className="clinical-record-action ml-auto" disabled={busy || loading || !date} onClick={() => void loadRows()}><RefreshCw className="h-4 w-4" /> Atualizar</Button>
+        </div>}
+      </section>
 
       {roomConfig ? <>
-        <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Novo agendamento — {selectedExam?.tipoExame || "Selecione o exame"}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div><Label>Tipo de exame *</Label><Select value={selectedExamId} disabled={saving || statusBusy} onValueChange={value => { setSelectedExamId(value); setSlot(""); }}><SelectTrigger><SelectValue placeholder="Selecione o exame" /></SelectTrigger><SelectContent>{roomConfig.exames.map(exam => <SelectItem key={exam.id} value={exam.id}>{exam.tipoExame}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="md:col-span-2"><Label>Buscar paciente (nome ou CPF)</Label>
-                <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" disabled={saving || statusBusy} value={patientSearch} onChange={e => { setPatientSearch(e.target.value); setPatientId(""); setSelectedPatient(null); }} placeholder="Digite ao menos 3 caracteres" /></div>
-                {patients.length > 0 && <div className="mt-1 max-h-40 overflow-y-auto rounded-md border">{patients.map(p => <button key={p.id} type="button" disabled={saving || statusBusy} onClick={() => { setPatientId(p.id); setSelectedPatient(p); setPatientSearch(`${p.nome}${p.cpf ? " — "+p.cpf : ""}`); setPatients([]); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">{p.nome} <span className="text-muted-foreground">{p.cpf || ""}</span></button>)}</div>}
+        <section className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2" aria-label="Indicadores da fila do aparelho">
+          {metrics.map(({ id, label, icon: Icon, tone }) => <button key={id} type="button" aria-pressed={queueFilter === id} disabled={!queueReady} onClick={() => { setQueueFilter(id); setExpandedId(null); }} className={`clinical-premium min-w-0 text-left p-2.5 flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70 ${queueFilter === id ? "clinical-record-expanded ring-1 ring-primary/30" : ""}`}>
+            <span className={`clinical-dock-icon clinical-tone-${tone}`}><Icon className="h-4 w-4" /></span>
+            <span className="flex-1 min-w-0"><span className="block clinical-field-label text-[11px] leading-tight break-words">{label}</span><strong className="block text-lg leading-tight tabular-nums">{queueReady ? (queueGroups[id] || 0) : "—"}</strong></span>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 hidden lg:block xl:hidden" aria-hidden="true" />
+          </button>)}
+        </section>
+
+        {canBook && bookingOpen && <Card id="diagnostic-booking" className="clinical-premium">
+          <CardContent className="p-3 space-y-3">
+            <div className="flex items-center gap-2"><span className="clinical-dock-icon clinical-tone-teal"><CalendarDays className="h-4 w-4" /></span><div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Novo agendamento</h2><p className="text-xs text-muted-foreground break-words">{selectedRoomName}</p></div><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setBookingOpen(false)}>Recolher</Button></div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1 min-w-0"><Label className="text-xs">Tipo de exame *</Label><Select value={selectedExamId} disabled={busy} onValueChange={value => { setSelectedExamId(value); setSlot(""); }}><SelectTrigger className="w-full"><SelectValue placeholder="Selecione o exame" /></SelectTrigger><SelectContent>{roomConfig.exames.map(exam => <SelectItem key={exam.id} value={exam.id}>{exam.tipoExame}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1 min-w-0"><Label className="text-xs">Profissional responsável pelo exame *</Label><Select value={responsibleId} onValueChange={setResponsibleId} disabled={!canBook || busy}><SelectTrigger className="w-full"><SelectValue placeholder="Selecione o responsável" /></SelectTrigger><SelectContent>{responsibleOptions.map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1 min-w-0 sm:col-span-2"><Label className="text-xs">Buscar paciente (nome ou CPF) *</Label>
+                <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input className="pl-9" disabled={busy} value={patientSearch} onChange={e => { setPatientSearch(e.target.value); setPatientId(""); setSelectedPatient(null); }} placeholder="Digite ao menos 3 caracteres" /></div>
+                {patientId && selectedPatient && <p className="flex items-center gap-1 text-xs clinical-record-type"><CheckCircle2 className="h-3.5 w-3.5" /> Paciente selecionado</p>}
+                {patients.length > 0 && !patientId && <div className="max-h-40 overflow-y-auto rounded-md border divide-y">{patients.map(p => <button key={p.id} type="button" disabled={busy} onClick={() => { setPatientId(p.id); setSelectedPatient(p); setPatientSearch(`${p.nome}${p.cpf ? " — "+p.cpf : ""}`); setPatients([]); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{p.nome} <span className="text-muted-foreground">{p.cpf || ""}</span></button>)}</div>}
               </div>
-              <div><Label>Horário disponível</Label><Select value={slot} disabled={saving || statusBusy || loading} onValueChange={setSlot}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{slots.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            {selectedExam?.exigePreparo && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>Orientações de preparo — {selectedExam.tipoExame}</strong><p className="mt-1 whitespace-pre-wrap">{selectedExam.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme com a equipe antes do agendamento."}</p></div>}
-            <p className="text-xs text-muted-foreground">Duração: {selectedExam?.duracaoSlot || "—"} min • Contraste: {selectedExam?.exigeContraste || "—"} • Resultado: {selectedExam?.prazoResultadoDias || 0} dia(s)</p>
-            <div><Label>Profissional responsável pelo exame *</Label><Select value={responsibleId} onValueChange={setResponsibleId} disabled={!canBook || saving || statusBusy}><SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger><SelectContent>{responsibleOptions.map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}</SelectContent></Select></div>
-            <Button onClick={createExam} disabled={!canBook || !responsible || saving || statusBusy || loading || rowError || !roomRows || !patientId || !slot || !selectedExam || !slots.includes(slot)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Agendar exame</Button>
-          </CardContent>
-        </Card>
-
-        <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Clock3 className="h-4 w-4" /> Fila do aparelho — {rows.length}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {loading || (!roomRows && !rowError) ? <div className="py-6 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div> : rowError ? <div className="space-y-2 text-center text-sm text-destructive"><p>Não foi possível confirmar a ocupação da sala.</p><Button variant="outline" size="sm" onClick={() => void loadRows()}>Tentar novamente</Button></div> : rows.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum exame agendado para esta data.</p> : rows.map(row => {
-              const status = getEffectiveDiagnosticStatus(row);
-              return <div key={row.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong>{row.hora}</strong><Badge variant={statusTone[status] as any || "secondary"}>{getDiagnosticStatusLabel(status)}</Badge></div><p className="font-medium">{row.paciente_nome}</p><p className="text-xs text-muted-foreground">{row.custom_data?.exame_nome || "Exame diagnóstico"}</p></div>
-                <div className="flex flex-wrap gap-2">
-                  {status === "agendado" && canArrive && <Button disabled={statusBusy || saving || row.data > dateToday()} size="sm" variant="outline" onClick={() => void changeStatus(row, "paciente_chegou")}>Paciente chegou</Button>}
-                  {status === "paciente_chegou" && canPerform && <Button disabled={statusBusy || saving || row.data > dateToday()} size="sm" onClick={() => void changeStatus(row, "exame_realizado_em_laudo")}>Exame realizado</Button>}
-                  {status === "exame_realizado_em_laudo" && canWriteReport && <Button disabled={statusBusy || saving || row.data > dateToday()} size="sm" onClick={() => openLaudo(row)}><FileText className="mr-1 h-4 w-4" />Laudar / liberar</Button>}
-                  {status === "laudo_liberado" && <Badge variant="outline"><CheckCircle2 className="mr-1 h-3 w-3" />Laudo liberado</Badge>}
-                </div>
-              </div>;
-            })}
-          </CardContent>
-        </Card>
-
-        {laudoRow && <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Stethoscope className="h-4 w-4" /> Laudo — {laudoRow.paciente_nome}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div><Label>Descrição / Achados</Label><Textarea rows={4} disabled={statusBusy} value={laudo.descricao} onChange={e => setLaudo(p => ({ ...p, descricao: e.target.value }))} /></div>
-            <div><Label>Conclusão *</Label><Textarea rows={3} disabled={statusBusy} value={laudo.conclusao} onChange={e => setLaudo(p => ({ ...p, conclusao: e.target.value }))} /></div>
-            <div><Label>Hipótese / Impressão</Label><Textarea rows={2} disabled={statusBusy} value={laudo.hipotese} onChange={e => setLaudo(p => ({ ...p, hipotese: e.target.value }))} /></div>
-            <div><Label>CRM do laudista *</Label><Input disabled={statusBusy} value={laudo.crm} onChange={e => setLaudo(p => ({ ...p, crm: e.target.value }))} placeholder="CRM/UF e número" /></div>
-            <div className="flex flex-wrap gap-2"><Button disabled={statusBusy || saving || !canWriteReport} onClick={() => void changeStatus(laudoRow, "laudo_liberado")}>Liberar Laudo Oficial</Button><Button disabled={statusBusy} variant="outline" onClick={() => setLaudoRow(null)}>Cancelar</Button></div>
-            <p className="text-xs text-muted-foreground">A liberação grava o profissional, CRM, data/hora e histórico de status na trilha auditável do agendamento.</p>
+            {selectedExam && <div className="clinical-inset rounded-lg border p-2.5 grid grid-cols-3 gap-2">
+              <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Duração</p><p className="font-semibold text-sm">{selectedExam.duracaoSlot} min</p></div>
+              <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Contraste</p><p className="font-semibold text-sm">{selectedExam.exigeContraste === "sim" ? "Sim" : selectedExam.exigeContraste === "opcional" ? "Opcional" : "Não"}</p></div>
+              <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Prazo de resultado</p><p className="font-semibold text-sm">{selectedExam.prazoResultadoDias} dia(s)</p></div>
+            </div>}
+            {selectedExam?.exigePreparo && <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-950 dark:text-amber-100"><div className="flex items-center gap-2 font-semibold"><AlertCircle className="h-4 w-4 shrink-0" /> Orientações de preparo — {selectedExam.tipoExame}</div><p className="mt-1 whitespace-pre-wrap">{selectedExam.instrucoesPreparo || "A unidade exige preparo, mas ainda não cadastrou as instruções. Confirme com a equipe antes do agendamento."}</p></div>}
+            <div className="space-y-1"><Label className="text-xs">Horário disponível *</Label><Select value={slot} disabled={busy || loading || rowError || !roomRows} onValueChange={setSlot}><SelectTrigger className="w-full sm:max-w-xs"><SelectValue placeholder="Selecione o horário" /></SelectTrigger><SelectContent>{slots.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
+              <p className="text-xs text-muted-foreground">{loading || !roomRows ? "Verificando a disponibilidade..." : rowError ? "Ocupação não confirmada." : slots.length ? `${slots.length} horário(s) disponível(is) para a modalidade selecionada.` : "Nenhum horário disponível para a modalidade selecionada."}</p></div>
+            <div className="flex justify-end border-t pt-2"><Button type="button" className="clinical-record-action clinical-action-main w-full sm:w-auto" onClick={createExam} disabled={!canBook || !responsible || saving || statusBusy || loading || rowError || !roomRows || !patientId || !slot || !selectedExam || !slots.includes(slot)}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />} Agendar exame</Button></div>
           </CardContent>
         </Card>}
-      </> : <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">
-        {metadataLoading ? "Carregando aparelhos da unidade..." : unitAllowed && metadata && diagnosticRooms.length === 0 ? "Nenhum aparelho diagnóstico ativo configurado nesta unidade. Confira o cadastro em Unidades e Salas." : selectedUnit && selectedRoom ? "Esta sala não está configurada como aparelho de diagnóstico." : "Selecione uma unidade e uma sala configurada como aparelho diagnóstico."}
-      </CardContent></Card>}
+
+        <section className="clinical-premium p-3 space-y-2" aria-label="Filtros da fila técnica">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="clinical-dock-icon clinical-tone-blue"><Clock3 className="h-4 w-4" /></span>
+            <div className="flex-1 min-w-[8rem]"><h2 className="text-sm font-semibold">Fila técnica do aparelho</h2><p className="text-xs text-muted-foreground">{queueReady ? `${visibleRows.length} de ${rows.length} exame(s) · Ordem de horário` : "Aguardando confirmação da fila"}</p></div>
+            {loading && <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Atualizando</span>}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar paciente, exame, responsável ou horário..." aria-label="Buscar na fila técnica" value={queueSearch} onChange={e => setQueueSearch(e.target.value)} /></div>
+            <Button type="button" variant="outline" onClick={() => { setQueueFilter("all"); setQueueSearch(""); setExpandedId(null); }}>Limpar filtros</Button>
+          </div>
+          {queueFilter !== "all" && <p className="text-xs clinical-record-type font-medium">Filtro: {metrics.find(m => m.id === queueFilter)?.label}</p>}
+        </section>
+
+        {rowError ? <div className="clinical-premium p-5 text-center space-y-2 text-sm text-destructive"><AlertCircle className="h-7 w-7 mx-auto" /><p>Não foi possível confirmar a ocupação da sala.</p><Button variant="outline" size="sm" onClick={() => void loadRows()}>Tentar novamente</Button></div>
+          : !roomRows ? <div className="clinical-premium p-6 text-center text-sm text-muted-foreground" role="status"><Loader2 className="mx-auto h-5 w-5 animate-spin mb-2" />Carregando fila do aparelho...</div>
+          : visibleRows.length === 0 ? <div className="clinical-premium p-6 text-center space-y-2"><span className="clinical-dock-icon clinical-tone-slate mx-auto"><CalendarDays className="h-4 w-4" /></span><p className="font-semibold text-sm">{rows.length ? "Nenhum exame neste filtro." : "Nenhum exame agendado para esta data."}</p><p className="text-xs text-muted-foreground">{rows.length ? "Altere a busca ou limpe os filtros." : "Os agendamentos vinculados a este aparelho serão exibidos aqui."}</p>{rows.length ? <Button size="sm" variant="outline" onClick={() => { setQueueFilter("all"); setQueueSearch(""); }}>Ver todos</Button> : canBook && <Button size="sm" variant="outline" disabled={busy} onClick={() => setBookingOpen(true)}><Plus className="h-4 w-4" /> Novo agendamento</Button>}</div>
+          : <div className="space-y-2">{visibleRows.map(row => {
+              const status = getEffectiveDiagnosticStatus(row);
+              const step = ["agendado", "paciente_chegou", "exame_realizado_em_laudo", "laudo_liberado"].indexOf(status);
+              const initials = row.paciente_nome.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+              const expanded = expandedId === row.id;
+              return <Card key={row.id} className={`clinical-premium ${expanded ? "clinical-record-expanded" : ""}`}>
+                <CardContent className="p-3 space-y-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="clinical-dock-icon clinical-tone-blue treatment-avatar" aria-hidden="true">{initials || "—"}</span>
+                    <div className="flex-1 min-w-0"><p className="font-semibold text-sm sm:text-base break-words [overflow-wrap:anywhere]">{row.paciente_nome}</p><p className="clinical-record-type font-semibold text-xs break-words">{row.custom_data?.exame_nome || "Exame diagnóstico"}</p><p className="text-xs text-muted-foreground break-words">{row.profissional_nome || "Responsável não informado"}</p></div>
+                    <Badge variant={statusTone[status] as any || "secondary"} className="border text-xs whitespace-normal shrink-0 max-w-[42%] text-center">{getDiagnosticStatusLabel(status)}</Badge>
+                  </div>
+                  <div className="clinical-inset rounded-lg border p-2 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-2 items-center">
+                    <div><p className="clinical-field-label text-[10px] font-semibold uppercase">Horário</p><p className="clinical-record-time text-left">{row.hora}</p>{row.custom_data?.duracao_slot_minutos && <p className="text-xs text-muted-foreground">{row.custom_data.duracao_slot_minutos} min</p>}</div>
+                    {step >= 0 ? <div className="grid grid-cols-4 gap-1 text-center" aria-label={`Etapa: ${getDiagnosticStatusLabel(status)}`}>
+                      {["Agendado", "Chegada", "Realizado", "Laudo"].map((label, i) => <div key={label} className="min-w-0"><div className={`h-1.5 rounded-full ${i <= step ? "bg-teal-600 dark:bg-teal-400" : "bg-muted-foreground/20"}`} /><span className={`block text-[10px] mt-1 leading-tight break-words ${i <= step ? "font-semibold clinical-record-type" : "text-muted-foreground"}`}>{label}</span></div>)}
+                    </div> : <p className="text-xs font-medium text-muted-foreground">{getDiagnosticStatusLabel(status)}</p>}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Button type="button" size="sm" variant="outline" className="clinical-record-action" aria-expanded={expanded} onClick={() => setExpandedId(expanded ? null : row.id)}>Detalhes <ChevronDown className={`h-4 w-4 ${expanded ? "rotate-180" : ""}`} /></Button>
+                    <div className="flex flex-wrap gap-2 ml-auto">
+                      {status === "agendado" && canArrive && <Button disabled={busy || row.data > dateToday()} size="sm" className="clinical-record-action clinical-action-main" onClick={() => void changeStatus(row, "paciente_chegou")}><UserCheck className="h-4 w-4" />Paciente chegou</Button>}
+                      {status === "paciente_chegou" && canPerform && <Button disabled={busy || row.data > dateToday()} size="sm" className="clinical-record-action clinical-action-main" onClick={() => void changeStatus(row, "exame_realizado_em_laudo")}><CheckCircle2 className="h-4 w-4" />Exame realizado</Button>}
+                      {status === "exame_realizado_em_laudo" && canWriteReport && <Button disabled={busy || row.data > dateToday()} size="sm" className="clinical-record-action clinical-action-main" onClick={() => openLaudo(row)}><FileText className="h-4 w-4" />Laudar / liberar</Button>}
+                      {status === "laudo_liberado" && <span className="inline-flex items-center gap-1 text-xs font-semibold clinical-record-type"><CheckCircle2 className="h-4 w-4" />Laudo liberado</span>}
+                    </div>
+                  </div>
+                  {expanded && <div className="clinical-inset rounded-lg border p-2.5 space-y-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="min-w-0"><p className="clinical-field-label text-[10px] uppercase font-semibold">Responsável agendado</p><p className="font-medium break-words">{row.profissional_nome || "Não informado"}</p></div>
+                      <div><p className="clinical-field-label text-[10px] uppercase font-semibold">Contraste</p><p className="font-medium">{row.custom_data?.exige_contraste === "sim" ? "Sim" : row.custom_data?.exige_contraste === "opcional" ? "Opcional" : row.custom_data?.exige_contraste === "nao" ? "Não" : "Não informado"}</p></div>
+                      <div><p className="clinical-field-label text-[10px] uppercase font-semibold">Prazo cadastrado</p><p className="font-medium">{row.custom_data?.prazo_resultado_dias != null ? `${row.custom_data.prazo_resultado_dias} dia(s)` : "Não informado"}</p></div>
+                    </div>
+                    {row.custom_data?.exige_preparo && <div className="border-t pt-2 text-xs"><p className="font-semibold">Preparo registrado</p><p className="whitespace-pre-wrap break-words text-muted-foreground">{row.custom_data?.preparo_instrucoes || "Orientações não cadastradas."}</p></div>}
+                  </div>}
+                </CardContent>
+              </Card>;
+            })}</div>}
+
+        <Dialog open={!!laudoRow && canWriteReport} onOpenChange={open => { if (!open && !statusBusy) setLaudoRow(null); }}>
+          {laudoRow && <DialogContent className="clinical-premium max-w-2xl p-0 gap-0 bg-card motion-reduce:animate-none" onEscapeKeyDown={e => { if (statusBusy) e.preventDefault(); }} onPointerDownOutside={e => e.preventDefault()}>
+            <div className="clinical-patient-hero flex items-center gap-3 pr-12"><span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Stethoscope className="h-5 w-5" /></span><div className="min-w-0"><p className="clinical-hub-eyebrow">Documentação diagnóstica</p><DialogTitle className="clinical-hub-name text-lg">Laudo de exame</DialogTitle><DialogDescription className="clinical-patient-sub text-xs mt-1 break-words">{laudoRow.paciente_nome} · {laudoRow.custom_data?.exame_nome || "Exame diagnóstico"} · {laudoRow.hora}</DialogDescription></div></div>
+            <div className="p-3 sm:p-4 space-y-3">
+              {!reportStillAvailable && <div className="rounded-md border border-amber-300 dark:border-amber-800 p-2 text-xs text-muted-foreground">A etapa não está confirmada na fila atual. Aguarde a atualização ou reabra o exame antes de liberar.</div>}
+              <div className="space-y-1"><Label className="text-xs">Descrição / Achados</Label><Textarea rows={4} disabled={statusBusy} value={laudo.descricao} onChange={e => setLaudo(p => ({ ...p, descricao: e.target.value }))} /></div>
+              <div className="space-y-1"><Label className="text-xs">Conclusão *</Label><Textarea rows={3} disabled={statusBusy} value={laudo.conclusao} onChange={e => setLaudo(p => ({ ...p, conclusao: e.target.value }))} /></div>
+              <div className="space-y-1"><Label className="text-xs">Hipótese / Impressão</Label><Textarea rows={2} disabled={statusBusy} value={laudo.hipotese} onChange={e => setLaudo(p => ({ ...p, hipotese: e.target.value }))} /></div>
+              <div className="clinical-inset rounded-lg border p-3 space-y-2"><Label className="text-xs">CRM do laudista *</Label><Input disabled={statusBusy} value={laudo.crm} onChange={e => setLaudo(p => ({ ...p, crm: e.target.value }))} placeholder="Número/UF" /><p className="text-xs text-muted-foreground">A liberação grava profissional, CRM, data/hora e histórico de status na trilha auditável do agendamento.</p></div>
+            </div>
+            <div className="sticky bottom-0 bg-card border-t p-3 flex flex-wrap justify-end gap-2"><Button disabled={statusBusy} variant="outline" onClick={() => setLaudoRow(null)}>Cancelar</Button><Button className="clinical-record-action clinical-action-main" disabled={statusBusy || saving || !canWriteReport || !reportStillAvailable || !laudo.conclusao.trim() || !laudo.crm.trim()} onClick={() => void changeStatus(laudoRow, "laudo_liberado")}>{statusBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Liberar Laudo Oficial</Button></div>
+          </DialogContent>}
+        </Dialog>
+      </> : <section className="clinical-premium p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <div className="clinical-inset border rounded-xl p-3 shrink-0 flex items-center justify-center w-28 h-24" aria-hidden="true"><svg viewBox="0 0 96 76" className="w-full h-full" fill="none"><rect x="13" y="8" width="70" height="46" rx="7" stroke="var(--cp-blue)" strokeWidth="2.5" /><path d="M21 32h13l7-13 9 25 8-12h17" stroke="var(--cp-teal)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M48 54v11m-15 0h30" stroke="var(--cp-blue)" strokeWidth="2.5" strokeLinecap="round"/><circle cx="75" cy="15" r="2" fill="var(--cp-teal)"/></svg></div>
+          <div className="flex-1 min-w-0 text-center sm:text-left space-y-1.5">
+            <h2 className="font-semibold text-sm">{metadataLoading ? "Carregando aparelhos..." : !selectedUnit ? "Selecione uma unidade" : unitAllowed && metadata && diagnosticRooms.length === 0 ? "Nenhum aparelho diagnóstico configurado" : "Selecione um aparelho"}</h2>
+            <p className="text-sm text-muted-foreground">{metadataLoading ? "Consultando a configuração da unidade." : unitAllowed && metadata && diagnosticRooms.length === 0 ? "Cadastre ou configure um aparelho ativo em Unidades e Salas. Apenas salas com finalidade diagnóstica aparecem aqui." : selectedUnit && selectedRoom ? "Esta sala não está configurada como aparelho de diagnóstico." : "Selecione a unidade, o aparelho e a data para acompanhar a fila técnica, agendar exames e trabalhar com laudos."}</p>
+            {unitAllowed && !metadata && !metadataLoading && <Button size="sm" variant="outline" onClick={() => void loadUnitMetadata()}>Tentar carregar aparelhos</Button>}
+            <p className="text-xs clinical-field-label">Os exames comuns continuam na Agenda Geral.</p>
+          </div>
+        </div>
+      </section>}
     </div>
   );
 }
