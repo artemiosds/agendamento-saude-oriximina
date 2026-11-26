@@ -354,7 +354,7 @@ const RelatorioAlta: React.FC = () => {
   const awaitingSources=!!sourceBundle&&!reportId&&!sourceMeta;
   const isAltaMode=modo==="individual"||modo==="multiprofissional";
   const evolutionThrough=modo==="multiprofissional"?dataAlta:indDataAlta;
-  const evolutionScopeReady=!!sourceMeta&&!!user?.id&&!!user.unidadeId&&sourceMeta.unitId===user.unidadeId&&sourceMeta.through===evolutionThrough&&(modo==="multiprofissional"||!!indPeriodoInicio&&!!indPeriodoFim&&indPeriodoInicio===sourceMeta.periodStart&&indPeriodoFim===sourceMeta.periodEnd);
+  const evolutionScopeReady=scopeMatches&&!!sourceMeta&&!!user?.id&&!!user.unidadeId&&sourceMeta.unitId===user.unidadeId&&sourceMeta.through===evolutionThrough&&(modo==="multiprofissional"||!!indPeriodoInicio&&!!indPeriodoFim&&indPeriodoInicio===sourceMeta.periodStart&&indPeriodoFim===sourceMeta.periodEnd);
   const evolutionQuery=useQuery({
     queryKey:["alta-medidas-v5",pacienteId,user?.id,user?.unidadeId,modo,sourceMeta?.cycleId,evolutionThrough],
     enabled:!!pacienteId&&isAltaMode&&!isReportLocked&&!loading&&!loadFailed&&!conflict&&evolutionScopeReady,
@@ -1327,12 +1327,15 @@ const RelatorioAlta: React.FC = () => {
   const returnToSelector = () => {
     if (savingRef.current) return;
     if (hasUnsavedChanges && !window.confirm("Há alterações não salvas. Voltar e descartá-las?")) return;
+    reportLoadTokenRef.current+=1;
+    activePatientRef.current="";
+    resetReportTracking();resetMultiForm();resetIndividualForm();setPacienteId("");
     setModo("selector");
   };
 
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
     if (savingRef.current || loading || loadFailed || conflict || !scopeMatches) return;
-    if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente"); return; }
+    if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente e uma unidade"); return; }
     if (!reportId && (!sourceBundle || !sourceMeta)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
     if (!reportId && sourceBundle && sourceMeta && (sourceMeta.unitId!==user.unidadeId || sourceBundle.patientId!==pacienteId || (type==="individual"&&sourceBundle.professionalId!==user.id))) { toast.error("O contexto da fonte mudou. Selecione novamente o paciente."); return; }
     if (sourceMeta && (type==="multi"?dataAlta:indDataAlta)!==sourceMeta.through) { toast.error("A data de alta foi alterada. Confira a data de referência das fontes antes de salvar."); return; }
@@ -1481,9 +1484,9 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
-  const scopeInvalidated=!!pacienteId&&!!loadedScope&&!scopeMatches;
+  const scopeInvalidated=!!pacienteId&&!!loadedScope&&(loadedScope.userId!==user?.id||loadedScope.unitId!==user?.unidadeId);
   if(scopeInvalidated){
-    return <div className="clinical-premium p-4 space-y-3"><Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Contexto de acesso alterado</AlertTitle><AlertDescription>A unidade ou o profissional ativo mudou. O relatório anterior não será exibido, impresso nem gravado neste contexto.</AlertDescription></Alert><Button type="button" variant="outline" disabled={savingRef.current} onClick={()=>{if(hasUnsavedChanges&&!window.confirm("Existem alterações não salvas. Descartá-las e retornar à seleção?"))return;handlePacienteChange("");setModo("selector");}}>Retornar à seleção</Button></div>;
+    return <div className="clinical-premium p-4 space-y-3"><Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Contexto de acesso alterado</AlertTitle><AlertDescription>A unidade ou o profissional ativo mudou. O relatório anterior não será exibido, impresso nem gravado neste contexto.</AlertDescription></Alert><Button type="button" variant="outline" disabled={savingRef.current} onClick={()=>{if(hasUnsavedChanges&&!window.confirm("Existem alterações não salvas. Descartá-las e retornar à seleção?"))return;reportLoadTokenRef.current+=1;activePatientRef.current="";resetReportTracking();resetMultiForm();resetIndividualForm();setPacienteId("");setModo("selector");}}>Retornar à seleção</Button></div>;
   }
   const sourceDatesChanged = !!sourceMeta && ((modo==="multiprofissional"?dataAlta:indDataAlta)!==sourceMeta.through || (modo==="individual"&&(indPeriodoInicio!==sourceMeta.periodStart||indPeriodoFim!==sourceMeta.periodEnd)));
   const hasSignedContribution=profSections.some(s=>s.status_contribuicao==="assinada");
