@@ -460,7 +460,7 @@ const RelatorioAlta: React.FC = () => {
   const formReadOnly = isReportLocked || loading || permissionsLoading || loadFailed || !pacienteId || !scopeMatches || !altaHasAction("can_view") || !altaHasAction(reportId?"can_edit":"can_create");
   const printAccessRef=React.useRef({allowed:false,key:""});
   const printContextKey=JSON.stringify([user?.id,user?.unidadeId,pacienteId,modo,reportId]);
-  React.useLayoutEffect(()=>{printAccessRef.current={allowed:scopeMatches&&isReportLocked&&altaHasAction("can_view")&&!loadFailed&&!conflict,key:printContextKey};});
+  React.useLayoutEffect(()=>{printAccessRef.current={allowed:scopeMatches&&isReportLocked&&altaHasAction("can_view")&&!loadFailed&&!conflict,key:printContextKey};return()=>{printAccessRef.current={allowed:false,key:""};};});
   const printInFlightRef=React.useRef(false);
   const awaitingSources=!!sourceBundle&&!reportId&&!sourceMeta;
   const isAltaMode=modo==="individual"||modo==="multiprofissional";
@@ -1805,7 +1805,7 @@ const RelatorioAlta: React.FC = () => {
   const recoveryScopeKey=scopeMatches&&user?.id&&user.unidadeId&&autoDraftType?JSON.stringify([user.id,user.unidadeId,pacienteId,autoDraftType]):"";
   const recoveryScopeRef=React.useRef("");
   const recoveryViewRef=React.useRef({snapshot:currentSnapshot,dirty:hasUnsavedChanges,blocked:formReadOnly||conflict||awaitingSources});
-  React.useLayoutEffect(()=>{recoveryScopeRef.current=recoveryScopeKey;recoveryViewRef.current={snapshot:currentSnapshot,dirty:hasUnsavedChanges,blocked:formReadOnly||conflict||awaitingSources};});
+  React.useLayoutEffect(()=>{recoveryScopeRef.current=recoveryScopeKey;recoveryViewRef.current={snapshot:currentSnapshot,dirty:hasUnsavedChanges,blocked:formReadOnly||conflict||awaitingSources};return()=>{recoveryScopeRef.current="";};});
   useEffect(()=>{
     if(!recoveryScopeKey||!autoDraftType||!user?.id||!user.unidadeId||!savedSnapshot||loading||permissionsLoading||loadFailed||isReportLocked||recoveryChecked)return;
     let live=true;
@@ -1839,7 +1839,7 @@ const RelatorioAlta: React.FC = () => {
         try{
           const hash=await altaRecoveryHash(base);
           const patch=buildAltaRecoveryPatch(JSON.parse(base),JSON.parse(next));
-          if(recoveryScopeRef.current!==key)return;
+          if(recoveryScopeRef.current!==key||recoveryViewRef.current.blocked&& !conflict)return;
           const res=await altaRecoveryTable().upsert({id,profissional_id:user.id,unidade_id:user.unidadeId,paciente_id:pacienteId,modo:autoDraftType,report_id:record,base_updated_at:revision,base_hash:hash,changes:patch},{onConflict:"id"}).select("id").single();
           if(res.error||res.data?.id!==id)throw new Error("checkpoint não confirmado");
           if(recoveryScopeRef.current===key){recoveryConfirmedRef.current=next;setRecoveryState("confirmed");}
@@ -2948,7 +2948,7 @@ const RelatorioAlta: React.FC = () => {
                 <Button 
                   className="w-full justify-start h-10 clinical-record-action clinical-action-main" 
                   onClick={() => handleSave("individual", false)}
-                  disabled={formReadOnly || conflict || awaitingSources || validateInd().length > 0}
+                  disabled={formReadOnly || conflict || awaitingSources || !altaHasAction("can_execute") || validateInd().length > 0}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Finalizar Relatório
