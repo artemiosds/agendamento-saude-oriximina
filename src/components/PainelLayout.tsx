@@ -30,6 +30,8 @@ type MenuItem = {
   roles_master_only?: boolean;
   owner_only?: boolean;
   hide_from_master?: boolean;
+  // Rotas antigas continuam válidas e identificam o mesmo atalho visual.
+  alternateTo?: string[];
 };
 
 type MenuGroup = {
@@ -111,6 +113,19 @@ const menuGroups: MenuGroup[] = [
 const SIDEBAR_GROUPS_STORAGE_KEY = 'sidebar-workflow-groups-v1';
 const SIDEBAR_FAVORITES_STORAGE_KEY = 'sidebar-quick-access-v1';
 const itemDestination = (item: MenuItem) => item.to + (item.search || '');
+
+// Unifica SOMENTE após aplicar permissões e licenciamento de cada rota.
+// Quem tem acesso a apenas uma funcionalidade mantém seu atalho original.
+const combineProductionItems = (items: MenuItem[]): MenuItem[] => {
+  const bpa = items.find(item => item.to === '/painel/bpa-exportar');
+  const sigtap = items.find(item => item.to === '/painel/procedimentos-sigtap');
+  if (!bpa || !sigtap) return items;
+  return items.filter(item => item !== sigtap).map(item => item === bpa ? {
+    ...item,
+    label: 'Exportação BPA / Consulta SIGTAP',
+    alternateTo: [sigtap.to],
+  } : item);
+};
 const normalizeModuleSearch = (value: string) =>
   value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
@@ -190,16 +205,19 @@ const PainelLayout: React.FC = () => {
   const filteredGroups = useMemo(
     () =>
       menuGroups
-        .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
+        .map(g => {
+          const authorized = g.items.filter(isItemVisible);
+          return { ...g, items: g.id === 'producao' ? combineProductionItems(authorized) : authorized };
+        })
         .filter(g => g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isMaster, isGlobalAdmin, can, permLoading, license, licenseLoading]
   );
 
-  const searchPaths = new Set(filteredGroups.flatMap(group => group.items.map(item => item.to)));
+  const searchPaths = new Set(filteredGroups.flatMap(group => group.items.flatMap(item => [item.to, ...(item.alternateTo || [])])));
   const showingSchedule = new URLSearchParams(location.search).get('aba') === 'escala';
   const matchesItem = (item: MenuItem) => {
-    if (!matchPath({ path: item.to, end: item.to === '/painel' }, location.pathname)) return false;
+    if (![item.to, ...(item.alternateTo || [])].some(path => matchPath({ path, end: path === '/painel' }, location.pathname))) return false;
     return item.to !== '/painel/disponibilidade' || Boolean(item.search) === showingSchedule;
   };
   const currentGroup = filteredGroups.find(group => group.items.some(matchesItem));
@@ -227,7 +245,10 @@ const PainelLayout: React.FC = () => {
   const visibleItems = filteredGroups.flatMap(group => group.items);
   const visibleByDestination = new Map(visibleItems.map(item => [itemDestination(item), item]));
   const suggestedFavorites = (defaultGroup?.items || []).slice(0, 3).map(itemDestination);
-  const favoriteDestinations = Array.from(new Set(savedFavorites[favoritesKey] ?? suggestedFavorites));
+  // Reaproveita a estrela antiga de SIGTAP no atalho unificado, sem duplicar favoritos.
+  const favoriteAliases = new Map(visibleItems.flatMap(item => (item.alternateTo || []).map(path => [path, itemDestination(item)] as const)));
+  const favoriteDestinations = Array.from(new Set((savedFavorites[favoritesKey] ?? suggestedFavorites)
+    .map(destination => favoriteAliases.get(destination) ?? destination)));
   const favorites = permLoading || licenseLoading ? [] : favoriteDestinations
     .map(destination => visibleByDestination.get(destination))
     .filter((item): item is MenuItem => !!item);
