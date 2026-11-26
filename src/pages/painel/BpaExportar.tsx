@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer, Plus, Trash2, RefreshCw } from "lucide-react";
+import { Loader2, Download, AlertCircle, CheckCircle2, User, UserCog, X, FileSpreadsheet, Printer, Plus, Trash2, RefreshCw, CalendarDays, SlidersHorizontal, ChevronDown, ChevronRight, Settings, ClipboardList, ShieldAlert, Database } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
@@ -3987,20 +3987,16 @@ ${rejectedHtml}`;
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Exportar BPA-I Real</h1>
-        <p className="text-muted-foreground">
-          Gere arquivo BPA-I utilizando atendimentos realizados e dados cadastrais do sistema.
-        </p>
-      </div>
+    <div className="space-y-3 min-w-0 pb-8">
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><FileSpreadsheet className="h-5 w-5" aria-hidden="true" /></span>
+        <div className="flex-1 min-w-[9rem]"><p className="clinical-hub-eyebrow">Gestão de produção ambulatorial</p><h1 className="clinical-hub-name text-xl font-bold font-display">Exportar BPA-I Real</h1><p className="clinical-patient-sub text-xs mt-1">Processamento, conferência e exportação de atendimentos realizados</p></div>
+      </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros e Configurações</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <Card className="clinical-premium">
+        <CardHeader className="p-3 pb-2"><div className="flex items-center gap-2"><span className="clinical-dock-icon clinical-tone-blue"><CalendarDays className="h-4 w-4" /></span><div><CardTitle className="text-sm">Seleção da produção</CardTitle><p className="text-xs text-muted-foreground">Competência, unidade e profissional</p></div></div></CardHeader>
+        <CardContent className="p-3 pt-0 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label htmlFor="competencia">Competência (AAAAMM) *</Label>
               <Input
@@ -4066,9 +4062,14 @@ ${rejectedHtml}`;
 
           {/* Filtros avançados (opcionais) — apenas estreitam a seleção de
               atendimentos. Vazio/"todos" = comportamento atual. */}
-          <div className="rounded-lg border border-dashed p-4 space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-sm font-semibold">Filtros avançados (opcional)</Label>
+          <details open className="clinical-inset rounded-lg border group">
+            <summary className="flex items-center gap-2 p-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <span className="clinical-dock-icon clinical-tone-blue"><SlidersHorizontal className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm">Filtros avançados (opcional)</strong><span className="block text-xs text-muted-foreground">Data, turno e blocos de atendimento{formData.data_especifica || formData.turno !== "todos" || formData.blocos.length ? " · Filtros ativos" : ""}</span></span>
+              <ChevronDown className="h-4 w-4 shrink-0 group-open:rotate-180" />
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+            <div className="flex items-center justify-end gap-2">
               <Button
                 type="button"
                 variant="ghost"
@@ -4079,7 +4080,7 @@ ${rejectedHtml}`;
                 Limpar filtros
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="data_especifica">Data do atendimento</Label>
                 <Input
@@ -4121,9 +4122,11 @@ ${rejectedHtml}`;
                 <p className="text-xs text-muted-foreground">{blocksLoading ? "Carregando blocos…" : blocksError || (formData.profissional_id === "all" ? "Selecione um profissional para ver os blocos." : "Marque um ou mais blocos. “Todos os blocos” remove a seleção específica.")}</p>
               </div>
             </div>
-          </div>
+          </div></details>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4 border-t">
+          <details className="clinical-inset rounded-lg border group">
+            <summary className="flex items-center gap-2 p-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden"><span className="clinical-dock-icon clinical-tone-teal"><Settings className="h-4 w-4" /></span><span className="flex-1 min-w-0"><strong className="block text-sm">Configurações complementares</strong><span className="block text-xs text-muted-foreground">CNES, CNS, CBO e município padrão</span></span><ChevronDown className="h-4 w-4 shrink-0 group-open:rotate-180" /></summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-3 pb-3">
             <div className="space-y-2">
               <Label htmlFor="cnes">CNES (Fallback)</Label>
               <Input id="cnes" name="cnes" value={formData.cnes} onChange={handleChange} maxLength={7} />
@@ -4142,7 +4145,22 @@ ${rejectedHtml}`;
               <Label htmlFor="cbo">CBO (Fallback)</Label>
               <Input id="cbo" name="cbo" value={formData.cbo} onChange={handleChange} maxLength={6} />
             </div>
-            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+            <div className="space-y-2">
+              <Label htmlFor="municipio_padrao">Município Padrão (IBGE)</Label>
+              <Input
+                id="municipio_padrao"
+                name="municipio_padrao"
+                value={formData.municipio_padrao}
+                onChange={handleChange}
+                maxLength={6}
+              />
+            </div>
+            </div>
+          </details>
+          <details className="clinical-inset rounded-lg border group">
+            <summary className="flex items-center gap-2 p-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden"><span className="clinical-dock-icon clinical-tone-violet"><ClipboardList className="h-4 w-4" /></span><span className="min-w-0 flex-1"><strong className="block text-sm">Procedimentos padrão</strong><span className="block text-xs text-muted-foreground">Listas SIGTAP, CID e Técnico de Enfermagem</span></span><ChevronDown className="h-4 w-4 shrink-0 group-open:rotate-180" /></summary>
+            <div className="px-3 pb-3 space-y-3">
+            <div className="space-y-2">
               <Label>Procedimentos Padrão</Label>
               <p className="text-xs text-muted-foreground">
                 Lista de SIGTAPs usada quando a profissão NÃO exige SIGTAP e o prontuário não traz código. Cada código gera 1 linha BPA-I. O CID ao lado só é usado quando o atendimento não tem nenhum CID registrado (prontuário/paciente).
@@ -4232,20 +4250,12 @@ ${rejectedHtml}`;
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="municipio_padrao">Município Padrão (IBGE)</Label>
-              <Input
-                id="municipio_padrao"
-                name="municipio_padrao"
-                value={formData.municipio_padrao}
-                onChange={handleChange}
-                maxLength={6}
-              />
-            </div>
-          </div>
+          </div></details>
 
-          <div className="flex flex-col gap-4 mt-8">
-            <div className="flex items-center space-x-2 border border-amber-300 p-3 rounded-md bg-amber-50/60">
+          <details className="clinical-inset rounded-lg border group">
+            <summary className="flex items-center gap-2 p-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden"><span className="clinical-dock-icon clinical-tone-slate"><ShieldAlert className="h-4 w-4" /></span><span className="flex-1 min-w-0"><strong className="block text-sm">Exceções de exportação</strong><span className="block text-xs text-muted-foreground">{[formData.exportar_cbo_incompativel, formData.exportar_com_pendencias, formData.incluir_agenda_sem_prontuario].filter(Boolean).length} opção(ões) ativa(s) · revise antes de gerar</span></span><ChevronDown className="h-4 w-4 shrink-0 group-open:rotate-180" /></summary>
+            <div className="flex flex-col gap-2 px-3 pb-3">
+            <div className="flex items-start gap-2 border border-amber-300 dark:border-amber-800 p-3 rounded-md bg-amber-50/60 dark:bg-amber-950/30">
               <input
                 type="checkbox"
                 id="exportar_cbo_incompativel"
@@ -4257,14 +4267,14 @@ ${rejectedHtml}`;
                 <label htmlFor="exportar_cbo_incompativel" className="text-sm font-medium leading-none">
                   Exportar com CBO incompatível com o procedimento
                 </label>
-                <p className="text-xs text-amber-900">
+                <p className="text-xs text-amber-900 dark:text-amber-200">
                   Exceção manual apenas para CBO válido que não consta na relação SIGTAP do procedimento.
                   O relatório identifica essas linhas, que podem ser rejeitadas pelo SIA/SUS. Idade, instrumento BPA-I,
                   CID e demais validações continuam obrigatórios.
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2 border p-3 rounded-md bg-slate-50">
+            <div className="flex items-start gap-2 border p-3 rounded-md bg-card">
               <input
                 type="checkbox"
                 id="exportar_com_pendencias"
@@ -4285,13 +4295,13 @@ ${rejectedHtml}`;
                   registradas no relatório para auditoria; erros de tamanho ou deslocamento do TXT permanecem bloqueados.
                 </p>
                 {results && (
-                  <p className="text-xs font-medium text-amber-700">
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
                     Após marcar ou desmarcar, clique novamente em "Gerar Arquivo BPA-I" para aplicar.
                   </p>
                 )}
             </div>
 
-            <div className="flex items-center space-x-2 border p-3 rounded-md bg-amber-50/40">
+            <div className="flex items-start gap-2 border p-3 rounded-md bg-amber-50/40 dark:bg-amber-950/30">
               <input
                 type="checkbox"
                 id="incluir_agenda_sem_prontuario"
@@ -4313,20 +4323,20 @@ ${rejectedHtml}`;
               </div>
             </div>
 
-            </div>
+            </div></details>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <Button onClick={handleGerar} disabled={loading || loadingData} className="px-8">
+            <div className="flex flex-wrap items-center gap-2 justify-end border-t pt-3">
+              <Button onClick={handleGerar} disabled={loading || loadingData} className="clinical-record-action clinical-action-main px-5">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Gerando... {generationSeconds > 0 ? `${generationSeconds}s` : ""}
                   </>
                 ) : (
-                  "Gerar Arquivo BPA-I"
+                  <><FileSpreadsheet className="h-4 w-4" /> Gerar Arquivo BPA-I</>
                 )}
               </Button>
-              <Button variant="outline" onClick={handleLimpar} disabled={loading}>
+              <Button variant="outline" className="clinical-record-action" onClick={handleLimpar} disabled={loading}>
                 Limpar Filtros
               </Button>
               {loading && (
@@ -4339,8 +4349,10 @@ ${rejectedHtml}`;
         </CardContent>
       </Card>
 
+      {!results && !loading && <div className="clinical-premium p-4 flex items-center gap-3"><span className="clinical-dock-icon clinical-tone-slate"><FileSpreadsheet className="h-4 w-4" /></span><div><p className="text-sm font-semibold">Conferência da produção</p><p className="text-xs text-muted-foreground">Gere o arquivo para consultar os indicadores, pendências e relatórios.</p></div></div>}
+
       {results && (
-        <div ref={resultsRef} className="scroll-mt-4 space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div ref={resultsRef} className="scroll-mt-4 space-y-3 min-w-0">
           <p className="text-sm text-muted-foreground">Bloco da exportação: <strong>{generatedBlockLabel.current}</strong></p>
           {!!results.txtAudit?.length && (
             <Alert variant="destructive">
@@ -4374,7 +4386,7 @@ ${rejectedHtml}`;
             </Alert>
           )}
           {results.headerDetails && (
-            <Card className="border-blue-200 bg-blue-50/30">
+            <Card className="clinical-premium">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-blue-600" />
@@ -4448,13 +4460,10 @@ ${rejectedHtml}`;
             </Card>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
-            <Card className="bg-blue-50">
-              <CardContent className="p-4 text-center">
-                <div className="text-xl font-bold">{results.totalFound}</div>
-                <div className="text-xs text-blue-600">Registros</div>
-              </CardContent>
-            </Card>
+          <section aria-label="Indicadores da produção" className="space-y-2">
+          <div className="flex items-center gap-2 px-1"><span className="clinical-dock-icon clinical-tone-blue"><ClipboardList className="h-4 w-4" /></span><div><h2 className="text-sm font-semibold">Indicadores da produção</h2><p className="text-xs text-muted-foreground">Selecione uma categoria para conferir seus registros</p></div></div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+            <div className="clinical-premium p-2.5 flex items-center gap-2 min-w-0"><span className="clinical-dock-icon clinical-tone-blue"><Database className="h-4 w-4" /></span><div className="min-w-0"><span className="block clinical-field-label text-xs font-semibold">Registros encontrados</span><strong className="block text-xl tabular-nums text-[var(--cp-blue)]">{results.totalFound}</strong></div></div>
 
             {[
               { id: "all", label: "Todos os Registros", count: results.stats.all, color: "slate" },
@@ -4497,29 +4506,20 @@ ${rejectedHtml}`;
                 color: "emerald",
               },
             ].map((stat) => (
-              <Card
-                key={stat.id}
-                className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary/50 ${
-                  selectedCategory === stat.id
-                    ? "ring-2 ring-primary bg-white shadow-md"
-                    : stat.count > 0
-                      ? `bg-${stat.color}-50`
-                      : "bg-green-50"
-                }`}
-                onClick={() => setSelectedCategory(selectedCategory === stat.id ? null : stat.id)}
-              >
-                <CardContent className="p-4 text-center">
-                  <div className="text-xl font-bold">{stat.count}</div>
-                  <div className={`text-xs text-${stat.color === "slate" ? "slate-600" : stat.color + "-700"}`}>
-                    {stat.label}
-                  </div>
-                </CardContent>
-              </Card>
+              <button key={stat.id} type="button" aria-pressed={selectedCategory === stat.id}
+                className={`clinical-premium p-2.5 flex items-center gap-2 text-left min-w-0 focus-visible:ring-2 focus-visible:ring-ring ${selectedCategory === stat.id ? "clinical-record-expanded ring-1 ring-primary/30" : ""}`}
+                onClick={() => setSelectedCategory(selectedCategory === stat.id ? null : stat.id)}>
+                <span className={`clinical-dock-icon ${stat.color === "red" ? "bg-red-700" : stat.color === "amber" ? "bg-amber-700" : stat.color === "emerald" ? "clinical-tone-teal" : stat.color === "slate" ? "clinical-tone-slate" : "clinical-tone-blue"}`}>
+                  {stat.color === "red" || stat.color === "amber" ? <AlertCircle className="h-4 w-4" /> : stat.color === "emerald" ? <CheckCircle2 className="h-4 w-4" /> : <ClipboardList className="h-4 w-4" />}
+                </span>
+                <span className="flex-1 min-w-0"><span className="block text-xs font-semibold clinical-field-label break-words">{stat.label}</span><strong className="block text-xl tabular-nums leading-tight text-[var(--cp-blue)]">{stat.count}</strong></span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" aria-hidden="true" />
+              </button>
             ))}
-          </div>
+          </div></section>
 
           {selectedCategory && results.details[selectedCategory as keyof typeof results.details] && (
-            <Card className="animate-in slide-in-from-top-2 duration-200 border-primary/20">
+            <Card className="clinical-premium border-primary/20">
               <CardHeader className="pb-2 flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
@@ -4638,9 +4638,9 @@ ${rejectedHtml}`;
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border overflow-hidden">
+                <div className="rounded-lg border overflow-x-auto">
                   <Table>
-                    <TableHeader className="bg-slate-50">
+                    <TableHeader className="clinical-inset">
                       <TableRow>
                         <TableHead>Paciente</TableHead>
                         <TableHead>Data Atendimento</TableHead>
@@ -4675,7 +4675,7 @@ ${rejectedHtml}`;
                               <span className="text-xs font-semibold uppercase">{item.pendencia}</span>
                               <span className="text-xs text-muted-foreground">{item.valor_atual}</span>
                               {item.sugestao && (
-                                <span className="text-xs text-blue-600 italic">Sugestão: {item.sugestao}</span>
+                                <span className="text-xs text-primary italic">Sugestão: {item.sugestao}</span>
                               )}
                             </div>
                           </TableCell>
@@ -4818,16 +4818,16 @@ ${rejectedHtml}`;
             </Alert>
           ) : (
             <>
-              <Alert className="bg-green-50 border-green-200">
+              <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <AlertTitle className="text-green-800">Processamento Concluído</AlertTitle>
-                <AlertDescription className="text-green-700">
+                <AlertTitle className="text-green-800 dark:text-green-200">Processamento Concluído</AlertTitle>
+                <AlertDescription className="text-green-700 dark:text-green-300">
                   {(results.txtExportedCount ?? results.exportedCount)} linhas geradas com sucesso. Verifique os avisos acima antes de baixar.
                 </AlertDescription>
               </Alert>
 
               {results.blobUrl && (
-                <Card className="border-primary/30 bg-slate-50">
+                <Card className="clinical-premium border-primary/30">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-primary" />
@@ -4842,13 +4842,13 @@ ${rejectedHtml}`;
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">Exportados no TXT</div>
-                        <div className="font-bold text-lg text-green-700">{(results.txtExportedCount ?? results.exportedCount)}</div>
+                        <div className="font-bold text-lg text-green-700 dark:text-green-300">{(results.txtExportedCount ?? results.exportedCount)}</div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">
                           {formData.exportar_com_pendencias ? "Com pendência (exportados)" : "Bloqueados"}
                         </div>
-                        <div className={`font-bold text-lg ${formData.exportar_com_pendencias ? "text-amber-700" : "text-red-700"}`}>
+                        <div className={`font-bold text-lg ${formData.exportar_com_pendencias ? "text-amber-700 dark:text-amber-300" : "text-red-700 dark:text-red-300"}`}>
                           {results.criticalCount}
                         </div>
                       </div>
@@ -4866,7 +4866,7 @@ ${rejectedHtml}`;
                     )}
                     {results.criticalCount > 0 && (
                       <div className="pt-2 border-t text-xs space-y-1">
-                        <div className={`font-semibold ${formData.exportar_com_pendencias ? "text-amber-700" : "text-red-700"}`}>
+                        <div className={`font-semibold ${formData.exportar_com_pendencias ? "text-amber-700 dark:text-amber-300" : "text-red-700 dark:text-red-300"}`}>
                           {formData.exportar_com_pendencias
                             ? "Pendências autorizadas — estes atendimentos ESTÃO no TXT e na conferência:"
                             : "Motivos dos bloqueios:"}
@@ -4911,7 +4911,7 @@ ${rejectedHtml}`;
                     )}
                     {results.stats.autoCorrected > 0 && (
                       <div className="pt-2 border-t text-xs space-y-1">
-                        <div className="font-semibold text-emerald-700">
+                        <div className="font-semibold text-emerald-700 dark:text-emerald-300">
                           Correções automáticas aplicadas (auditável):
                         </div>
                         <div>
@@ -4936,7 +4936,7 @@ ${rejectedHtml}`;
               )}
 
               {results.resumo && (
-                <Card className="border-primary/30">
+                <Card className="clinical-premium border-primary/30">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">Validação final de integridade (antes do download)</CardTitle>
                   </CardHeader>
@@ -5001,7 +5001,7 @@ ${rejectedHtml}`;
                         CBO incompatível: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO incompatível")).length}</b>
                       </div>
                       <div>
-                        CBO exportado por exceção: <b className="text-amber-700">{results.resumo.cboExcecoesExportadas.length}</b>
+                        CBO exportado por exceção: <b className="text-amber-700 dark:text-amber-300">{results.resumo.cboExcecoesExportadas.length}</b>
                       </div>
                       <div>
                         CBO ausente/inválido: <b>{results.resumo.rejeitados.filter((r) => r.motivo.includes("CBO do profissional inválido ou ausente")).length}</b>
@@ -5022,7 +5022,7 @@ ${rejectedHtml}`;
 
                     {results.resumo.cboExcecoesExportadas.length > 0 && (
                       <div className="pt-2 border-t text-xs space-y-1">
-                        <div className="font-semibold text-amber-700">
+                        <div className="font-semibold text-amber-700 dark:text-amber-300">
                           Linhas exportadas com exceção de CBO (sujeitas à rejeição pelo SIA/SUS):
                         </div>
                         <div className="max-h-32 overflow-auto space-y-0.5">
@@ -5059,7 +5059,7 @@ ${rejectedHtml}`;
                             { titulo: 'Outros motivos de rejeição', itens: results.resumo.rejeitados.filter(r => !isInstrumentRejection(r.motivo)) },
                           ].filter(grupo => grupo.itens.length > 0).map(grupo => (
                             <div key={grupo.titulo} className="space-y-1">
-                              <p className="font-medium text-amber-700">{grupo.titulo} ({grupo.itens.length})</p>
+                              <p className="font-medium text-amber-700 dark:text-amber-300">{grupo.titulo} ({grupo.itens.length})</p>
                               {grupo.itens.slice(0, 100).map((r, i) => <div key={i} className="text-muted-foreground">
                                 • {r.paciente} — {r.data} — {r.codigo} (CBO {r.cbo}): {r.motivo}
                               </div>)}
@@ -5071,7 +5071,7 @@ ${rejectedHtml}`;
 
                     {results.resumo.inconsistencias.length > 0 && (
                       <div className="pt-2 border-t text-xs space-y-1">
-                        <div className="font-semibold text-amber-700">Inconsistências (não bloqueiam):</div>
+                        <div className="font-semibold text-amber-700 dark:text-amber-300">Inconsistências (não bloqueiam):</div>
                         <div className="max-h-32 overflow-auto space-y-0.5">
                           {results.resumo.inconsistencias.slice(0, 50).map((m, i) => (
                             <div key={i} className="text-muted-foreground">
@@ -5091,12 +5091,12 @@ ${rejectedHtml}`;
               )}
 
               {!results.blobUrl && results.confRows?.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
-                  <Button type="button" variant="outline" className="h-11 px-6" onClick={handleBaixarExcel}>
+                <div className="clinical-premium flex flex-wrap justify-center gap-2 p-3">
+                  <Button type="button" variant="outline" className="clinical-record-action min-h-11 h-auto whitespace-normal px-4" onClick={handleBaixarExcel}>
                     <FileSpreadsheet className="mr-2 h-5 w-5 text-emerald-600" />
                     Baixar Excel
                   </Button>
-                  <Button type="button" variant="outline" className="h-11 px-6" onClick={handleImprimirConferencia}>
+                  <Button type="button" variant="outline" className="clinical-record-action min-h-11 h-auto whitespace-normal px-4" onClick={handleImprimirConferencia}>
                     <Printer className="mr-2 h-5 w-5" />
                     Imprimir Conferência (para revisar pendências)
                   </Button>
@@ -5105,7 +5105,7 @@ ${rejectedHtml}`;
 
               {results.blobUrl && (
 
-                <div className="flex flex-wrap justify-center gap-3 p-4 bg-white border rounded-lg shadow-sm">
+                <div className="clinical-premium flex flex-wrap justify-center gap-2 p-3">
                   <a
                     href={results.blobUrl}
                     download={results.fileName}
@@ -5117,7 +5117,7 @@ ${rejectedHtml}`;
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-11 px-6"
+                    className="clinical-record-action min-h-11 h-auto whitespace-normal px-4"
                     onClick={handleBaixarExcel}
                     disabled={!results.confRows?.length}
                   >
@@ -5127,7 +5127,7 @@ ${rejectedHtml}`;
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-11 px-6"
+                    className="clinical-record-action min-h-11 h-auto whitespace-normal px-4"
                     onClick={handleImprimirConferencia}
                     disabled={!results.confRows?.length}
                   >
@@ -5160,9 +5160,9 @@ ${rejectedHtml}`;
                   return { i, msg: w, nome, item, kind: classify(w) };
                 });
                 return (
-                  <Card>
+                  <Card className="clinical-premium">
                     <CardHeader>
-                      <CardTitle className="text-amber-700 flex items-center gap-2">
+                      <CardTitle className="text-amber-700 dark:text-amber-300 flex items-center gap-2">
                         <AlertCircle className="h-5 w-5" />
                         Avisos e Pendências ({results.warnings.length})
                         <Button
@@ -5178,9 +5178,9 @@ ${rejectedHtml}`;
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="max-h-80 overflow-y-auto rounded border bg-slate-50">
+                      <div className="max-h-80 overflow-auto rounded border bg-card">
                         <Table>
-                          <TableHeader className="bg-slate-100 sticky top-0">
+                          <TableHeader className="clinical-inset sticky top-0">
                             <TableRow>
                               <TableHead className="w-[55%]">Aviso</TableHead>
                               <TableHead>Tipo</TableHead>
