@@ -93,6 +93,7 @@ import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
 import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
+import ClinicalPatientHubHeader, { type ClinicalHubSection } from "@/components/prontuario/ClinicalPatientHubHeader";
 import {collectClinicalHistory,clinicalHistorySections,escapeClinicalHtml,periodBounds,HISTORY_PAGE_SIZE,type HistoryRow} from "@/lib/clinicalRecordList";
 import { Lock, FileDown } from "lucide-react";
 import type { TreatmentDischargeResult } from "@/services/treatmentDischargeService";
@@ -573,7 +574,12 @@ const ProntuarioPage: React.FC = () => {
   );
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const triagemRequestRef = useRef(0);
-  const [showHistorico, setShowHistorico] = useState(false);
+  const [hubView,setHubView]=useState<{patientId:string;section:ClinicalHubSection}>({patientId:"",section:"records"});
+  const hubSection:ClinicalHubSection=hubView.patientId===queryPacienteId?hubView.section:"records";
+  const [hubSearch,setHubSearch]=useState({patientId:"",value:""});
+  const [hubDebouncedSearch,setHubDebouncedSearch]=useState({patientId:"",value:""});
+  const patientListSearch=hubSearch.patientId===queryPacienteId?hubSearch.value:"";
+  useEffect(()=>{if(!queryPacienteId)return;const t=window.setTimeout(()=>setHubDebouncedSearch({patientId:queryPacienteId,value:patientListSearch.trim()}),350);return()=>window.clearTimeout(t);},[queryPacienteId,patientListSearch]);
   const printRef = useRef<HTMLDivElement>(null);
 
   // PTS inline creation
@@ -1296,7 +1302,7 @@ const ProntuarioPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const effectiveListSearch = queryPacienteId ? "" : debouncedListSearch;
+  const effectiveListSearch = queryPacienteId ? (hubDebouncedSearch.patientId===queryPacienteId?hubDebouncedSearch.value:"") : debouncedListSearch;
   const listScope = useMemo(
     () => JSON.stringify({
       unidade: user?.usuario === "admin.sms" ? "all" : (user?.unidadeId || "none"),
@@ -1339,7 +1345,7 @@ const ProntuarioPage: React.FC = () => {
 
     const searchTerm = sanitizePostgrestSearch(effectiveListSearch);
     let matchingPatientIds: string[] = [];
-    if (searchTerm) {
+    if (searchTerm && !queryPacienteId) {
       const digits = searchTerm.replace(/\D/g, "");
       const patientFilters = [`nome.ilike.%${searchTerm}%`];
       if (digits) patientFilters.push(`cpf.ilike.%${digits}%`, `cns.ilike.%${digits}%`);
@@ -1377,6 +1383,7 @@ const ProntuarioPage: React.FC = () => {
         `paciente_nome.ilike.%${searchTerm}%`,
         `profissional_nome.ilike.%${searchTerm}%`,
       ];
+      if(queryPacienteId)filters.push(`procedimentos_texto.ilike.%${searchTerm}%`,`setor.ilike.%${searchTerm}%`);
       if (matchingPatientIds.length > 0) filters.push(`paciente_id.in.(${matchingPatientIds.join(",")})`);
       query = query.or(filters.join(","));
     }
@@ -1474,6 +1481,7 @@ const ProntuarioPage: React.FC = () => {
     const next={...appliedListFilters,...periodBounds(period,todayLocalStr())};setDraftListFilters(next);setAppliedListFilters(next);resetListPagination();setListFiltersError("");
   };
   const toggleMine=()=>{if(!user?.id)return;const next={...appliedListFilters,profissionalId:appliedListFilters.profissionalId===user.id?"":user.id};setDraftListFilters(next);setAppliedListFilters(next);resetListPagination();setListFiltersError("");};
+  useEffect(()=>{clearListFilters();setListFiltersOpen(false);},[queryPacienteId,clearListFilters]);
   const clearDraftProfessionalFilter = useCallback(() => {
     setDraftListFilters((current) => ({ ...current, profissionalId: "" }));
   }, []);
@@ -3747,6 +3755,7 @@ const ProntuarioPage: React.FC = () => {
     overscan: 8,
     measureElement: (el) => el?.getBoundingClientRect().height ?? 132,
   });
+  useEffect(()=>{if(hubSection==="records")rowVirtualizer.measure();},[hubSection,rowVirtualizer]);
   const queryPacienteNome = searchParams.get("pacienteNome") ||
     (quickPatient && quickPatient.id === queryPacienteId && quickPatient.userId === user?.id &&
       quickPatient.unitId === (user?.unidadeId || "") ? quickPatient.nome : null);
@@ -4021,110 +4030,63 @@ const ProntuarioPage: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">
-            {queryPacienteId ? `Prontuários — ${queryPacienteNome || "Paciente"}` : "Prontuários"}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {filtered.length} registro(s) carregado(s){hasMoreProntuarios ? " · há mais resultados" : ""}
-          </p>
+      {queryPacienteId ? (
+        <ClinicalPatientHubHeader
+          name={currentPacienteNome(queryPacienteId,queryPacienteNome||"Paciente")}
+          loaded={filtered.length}
+          hasMore={hasMoreProntuarios}
+          loading={loading}
+          canEdit={canEdit}
+          printing={historyPrinting}
+          outputBusy={!!outputId}
+          section={hubSection}
+          onSection={section=>setHubView({patientId:queryPacienteId,section})}
+          onBack={()=>navigate("/painel/prontuario")}
+          onNew={()=>openNew(queryPacienteId,queryPacienteNome||undefined)}
+          onHistory={()=>{setHistoricoPacienteId({id:queryPacienteId,nome:currentPacienteNome(queryPacienteId,queryPacienteNome||"Paciente")});setHistoricoCompletoOpen(true);}}
+          onPrint={()=>void handlePrintFullHistory(queryPacienteId,queryPacienteNome||"Paciente")}
+          onDocument={()=>setDocModalOpen(true)}
+          onDeclaration={()=>setDeclRapidaOpen(true)}
+          onReferral={()=>setEncInternoOpen(true)}
+          onTeam={()=>setTeamDialogOpen(true)}
+        />
+      ):(
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div><h1 className="text-2xl font-bold font-display text-foreground">Prontuários</h1><p className="text-muted-foreground text-sm">{filtered.length} registro(s) carregado(s){hasMoreProntuarios?" · há mais resultados":""}</p></div>
+          {canEdit&&<Button onClick={()=>openNew(undefined,undefined)} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2"/>Novo Prontuário</Button>}
         </div>
-        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
-          {queryPacienteId && (
-            <>
-              <Button variant="outline" onClick={() => setShowHistorico(!showHistorico)}>
-                <Activity className="w-4 h-4 mr-2" />
-                {showHistorico ? "Ocultar" : "Ver"} Histórico
-              </Button>
-              <Button variant="default" onClick={() => setHistoricoCompletoOpen(true)} className="gradient-primary text-primary-foreground">
-                <FileText className="w-4 h-4 mr-2" />
-                Histórico Completo
-              </Button>
-              <Button
-                variant="outline"
-                disabled={historyPrinting||!!outputId}
-                 onClick={() => handlePrintFullHistory(queryPacienteId, queryPacienteNome || "Paciente")}
-              >
-                <Printer className="w-4 h-4 mr-2" />
-                {historyPrinting?"Preparando histórico…":"Imprimir histórico de prontuários"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setDocModalOpen(true)}
-              >
-                <Stamp className="w-4 h-4 mr-2" />
-                Gerar Documento
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setDeclRapidaOpen(true)}
-              >
-                <Printer className="w-4 h-4 mr-2" />
-                Declaração Rápida
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setEncInternoOpen(true)}
-              >
-                <Send className="w-4 h-4 mr-2" />
-                Encaminhar Paciente
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setTeamDialogOpen(true)}>Avaliação em equipe</Button>
-              <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
-                Ver todos
-              </Button>
-            </>
-          )}
-          {canEdit && (
-            <Button onClick={() => openNew(queryPacienteId || undefined, queryPacienteNome || undefined)} className="gradient-primary text-primary-foreground">
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Prontuário
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
 
-      {queryPacienteId && showHistorico && (
-        <Card className="shadow-card border-0">
-          <CardContent className="p-4">
-            <SecondaryPanelBoundary><React.Suspense fallback={null}><HistoricoClinico
+      {queryPacienteId&&hubSection==="history"&&(
+        <section id="clinical-hub-history" aria-label="Histórico clínico" className="min-w-0">
+          <Card className="clinical-premium"><CardContent className="p-3 sm:p-4">
+            <SecondaryPanelBoundary key={queryPacienteId}><React.Suspense fallback={<p className="text-sm text-muted-foreground p-3">Carregando histórico…</p>}><HistoricoClinico
               pacienteId={queryPacienteId}
-              pacienteNome={queryPacienteNome || ""}
+              pacienteNome={queryPacienteNome||""}
               currentProfissionalId={user?.id}
               unidades={unidades}
-              onOpenFullHistory={() => {
-                setHistoricoPacienteId({ id: queryPacienteId, nome: queryPacienteNome || "Paciente" });
-                setHistoricoCompletoOpen(true);
-              }}
+              onOpenFullHistory={()=>{setHistoricoPacienteId({id:queryPacienteId,nome:queryPacienteNome||"Paciente"});setHistoricoCompletoOpen(true);}}
             /></React.Suspense></SecondaryPanelBoundary>
-          </CardContent>
-        </Card>
+          </CardContent></Card>
+        </section>
+      )}
+      {queryPacienteId&&hubSection==="documents"&&(
+        <section id="clinical-hub-documents" aria-label="Documentos emitidos" className="min-w-0">
+          <Card className="clinical-premium"><CardContent className="p-3 sm:p-4 overflow-x-auto">
+            <SecondaryPanelBoundary key={queryPacienteId}><React.Suspense fallback={<p className="text-sm text-muted-foreground p-3">Carregando documentos…</p>}><DocumentosHistorico key={queryPacienteId} pacienteId={queryPacienteId} pacienteNome={queryPacienteNome||"Paciente"}/></React.Suspense></SecondaryPanelBoundary>
+          </CardContent></Card>
+        </section>
       )}
 
-
-
-
-      {queryPacienteId && (
-        <Card className="shadow-card border-0">
-          <CardContent className="p-4">
-            <SecondaryPanelBoundary><React.Suspense fallback={null}><DocumentosHistorico
-              pacienteId={queryPacienteId}
-              pacienteNome={queryPacienteNome || "Paciente"}
-            /></React.Suspense></SecondaryPanelBoundary>
-          </CardContent>
-        </Card>
-      )}
-
-      {!queryPacienteId && (
+      {(!queryPacienteId||hubSection==="records") && (
         <div className="space-y-2">
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por paciente, profissional, CPF ou CNS..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                placeholder={queryPacienteId?"Buscar nos prontuários: profissional, setor ou procedimento...":"Buscar por paciente, profissional, CPF ou CNS..."}
+                value={queryPacienteId?patientListSearch:search}
+                onChange={(e)=>{if(queryPacienteId)setHubSearch({patientId:queryPacienteId,value:e.target.value});else setSearch(e.target.value);}}
                 className="pl-10"
               />
             </div>
@@ -4149,7 +4111,7 @@ const ProntuarioPage: React.FC = () => {
           </div>
           {listFiltersOpen && (
             <div id="prontuario-list-filters" className="rounded-md border bg-card p-3">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(260px,1.4fr)_auto] xl:items-end">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Data inicial</Label>
                   <Popover>
@@ -6310,6 +6272,7 @@ const ProntuarioPage: React.FC = () => {
       />
       </React.Suspense></SecondaryPanelBoundary>}
 
+      <section id={queryPacienteId?"clinical-hub-records":undefined} aria-label="Registros de prontuário" hidden={!!queryPacienteId&&hubSection!=="records"}>
       {prontuariosError&&<div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 p-3 text-sm">Não foi possível atualizar os prontuários.<Button variant="outline" size="sm" onClick={()=>void refetchProntuarios()}>Tentar novamente</Button></div>}
       {loading ? (
         <div className="space-y-3" aria-label="Carregando prontuários">
@@ -6346,7 +6309,7 @@ const ProntuarioPage: React.FC = () => {
         <div
           ref={listParentRef}
           className="overflow-auto rounded-lg"
-          style={{ height: "calc(100vh - 280px)", minHeight: 420, contain: "strict" }}
+          style={{ height: queryPacienteId?"clamp(280px, calc(100dvh - 340px), 760px)":"calc(100vh - 280px)", minHeight: queryPacienteId?280:420, contain: "strict" }}
         >
           <div
             style={{
@@ -6383,8 +6346,8 @@ const ProntuarioPage: React.FC = () => {
                       <div className="flex gap-2 items-start">
                         <button type="button" className="flex flex-1 min-w-0 items-start gap-2.5 text-left rounded-md focus-visible:ring-2 focus-visible:ring-ring" aria-expanded={expandedRecord===p.id} onClick={()=>setExpandedRecord(x=>x===p.id?"":p.id)}>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm sm:text-base break-words [overflow-wrap:anywhere]">{currentPacienteNome(p.paciente_id,p.paciente_nome)}</p>
-                            <p className="text-xs text-muted-foreground break-words">{p.profissional_nome||"Profissional não informado"}{p.setor?" · "+p.setor:""}</p>
+                            <p className="font-semibold text-sm sm:text-base break-words [overflow-wrap:anywhere]">{queryPacienteId?(p.profissional_nome||"Profissional não informado"):currentPacienteNome(p.paciente_id,p.paciente_nome)}</p>
+                            <p className="text-xs text-muted-foreground break-words">{queryPacienteId?(p.setor||""):(p.profissional_nome||"Profissional não informado")+(p.setor?" · "+p.setor:"")}</p>
                             <div className="flex flex-wrap gap-1.5 mt-1 items-center text-xs text-muted-foreground"><span className="clinical-record-type font-semibold">{TIPOS_REGISTRO.find(t=>t.value===(p as any).tipo_registro)?.label.replace(/^[🟢🔵🟡🔴🟣🏠]\s*/u,"")||((p as any).tipo_registro||"Tipo não informado").replace(/_/g," ")}</span>{isProfissional&&!isOwn&&<span className="inline-flex items-center gap-1"><Lock className="w-3 h-3"/>Somente leitura</span>}{p.indicacao_retorno&&p.indicacao_retorno!=="sem_retorno"&&p.indicacao_retorno!=="no_indication"&&<Badge variant="outline" className="text-[10px]">Retorno: {retornoOptions.find(o=>o.value===p.indicacao_retorno)?.label||p.indicacao_retorno}</Badge>}</div>
                           </div>
                           <div className="shrink-0 text-right text-xs text-muted-foreground"><ChevronDown className={cn("ml-auto mt-1 w-4 h-4",expandedRecord===p.id&&"rotate-180")}/></div>
@@ -6433,6 +6396,7 @@ const ProntuarioPage: React.FC = () => {
         </div>
       )}
 
+      </section>
       <AlertDialog open={!!deleteRecord} onOpenChange={open=>{if(!open)setDeleteRecord(null);}}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir prontuário?</AlertDialogTitle><AlertDialogDescription>Excluir o prontuário de {deleteRecord?.paciente_nome} ({deleteRecord&&formatFilterDate(deleteRecord.data_atendimento)})?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground" onClick={()=>{if(deleteRecord)void handleDelete(deleteRecord);}}>Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>

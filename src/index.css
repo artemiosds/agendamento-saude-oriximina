@@ -692,3 +692,33 @@ select:focus-visible,
   .clinical-premium, .clinical-premium button { transition:none !important; }
   .clinical-premium button:active { transform:none !important; }
 }
+
+
+/* Individual clinical hub: reuses the clinical card palette, without animated effects. */
+.clinical-hub-hero {
+  padding: .95rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(17,93,110,.4);
+  background: radial-gradient(ellipse at 100% 0%,rgba(255,255,255,.1),transparent 58%),
+    linear-gradient(115deg,#153b62,#08677d 65%,#0c7168);
+  color:#fff;
+  box-shadow:0 2px 5px rgba(19,55,83,.10);
+}
+.clinical-hub-name { color:#d0ffed; letter-spacing:-.01em; }
+.clinical-hub-eyebrow { color:#ccebf0; font-size:.65rem; font-weight:700; letter-spacing:.11em; text-transform:uppercase; margin-bottom:.25rem; }
+.clinical-hub-hero .clinical-hub-new { background:#fff; color:#075b63; border:1px solid rgba(255,255,255,.8); box-shadow:none; }
+.clinical-hub-hero .clinical-hub-new:hover { background:#e5f7f3; color:#06494e; }
+.clinical-hub-hero .clinical-hub-new:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.clinical-hub-dock { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:.25rem; padding:.4rem; }
+.clinical-hub .clinical-hub-tile {
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  gap:.4rem; min-width:0; height:auto; min-height:4.15rem; padding:.35rem .25rem;
+  font-size:.75rem; text-align:center; line-height:1.2; white-space:normal;
+}
+.clinical-tone-slate { background:linear-gradient(145deg,#66859e,#3a526b); }
+.clinical-hub-tabs { display:flex; align-items:stretch; flex-wrap:wrap; gap:.25rem; border-bottom:1px solid hsl(var(--border)); }
+.clinical-hub .clinical-hub-tab { border-radius:.45rem .45rem 0 0; border-bottom:2px solid transparent; color:hsl(var(--muted-foreground)); height:auto; min-height:2.5rem; padding:.55rem .65rem; white-space:normal; font-size:.82rem; }
+.clinical-hub .clinical-hub-tab[aria-pressed="true"] { color:hsl(var(--primary)); border-bottom-color:hsl(var(--primary)); background:hsl(var(--accent)/.55); font-weight:700; }
+@media(max-width:760px){ .clinical-hub-dock{grid-template-columns:repeat(3,minmax(0,1fr));} }
+@media(max-width:380px){ .clinical-hub-dock{grid-template-columns:repeat(2,minmax(0,1fr));} .clinical-hub-hero{padding:.75rem;} }
+@media(prefers-reduced-motion:reduce){.clinical-hub button{transition:none!important;}.clinical-hub button:active{transform:none!important;}}
