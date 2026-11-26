@@ -388,6 +388,7 @@ const RelatorioAlta: React.FC = () => {
   const [sourcePts,setSourcePts] = useState("");
   const [sourceMeta,setSourceMeta] = useState<AltaSourceMeta|null>(null);
   const formReadOnly = isReportLocked || loading || loadFailed || !pacienteId;
+  const awaitingSources=!!sourceBundle&&!reportId&&!sourceMeta;
 
   const resetReportTracking = () => {
     revisionRef.current = null;
@@ -596,7 +597,7 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
-  const loadNewAltaSources = async (pid: string,type:"multi"|"individual",token:number) => {
+  const fetchAltaSourceBundle = async (pid: string,type:"multi"|"individual",token:number):Promise<AltaSourceBundle|null> => {
     const unitId=user?.unidadeId;
     const professionalId=type==="individual"?user?.id:null;
     if(!unitId || (type==="individual"&&!professionalId))throw new Error("Selecione uma unidade e um profissional válidos para consultar as fontes clínicas.");
@@ -621,7 +622,7 @@ const RelatorioAlta: React.FC = () => {
       fetchSourcePages<AltaPts>((start,end)=>supabase.from("pts").select("id,patient_id,unit_id,professional_id,status,updated_at,diagnostico_funcional,objetivos_terapeuticos,objetivo_geral,motivo_encaminhamento,barreiras,potencialidades,rede_apoio").eq("patient_id",pid).eq("unit_id",unitId).order("id").range(start,end)),
       supabase.from("pacientes").select("id,cid").eq("id",pid).maybeSingle(),
     ]);
-    if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+    if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return null;
     if(patientResult.error||!patientResult.data)throw new Error("Não foi possível conferir o cadastro do paciente.");
     // Offer active plans and plans explicitly linked to eligible treatment cycles.
     const linked=new Set(cycles.map(c=>c.pts_id).filter(Boolean));
@@ -629,9 +630,15 @@ const RelatorioAlta: React.FC = () => {
     const goals:AltaGoal[]=[];
     for(const plan of eligiblePts){
       goals.push(...await fetchSourcePages<AltaGoal>((start,end)=>supabase.from("pts_metas").select("id,pts_id,titulo,status,responsavel_id").eq("pts_id",plan.id).order("id").range(start,end)));
-      if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+      if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return null;
     }
-    const bundle:AltaSourceBundle={patientId:pid,unitId,professionalId:professionalId||null,through,notes,cycles,sessions,pts:eligiblePts,goals,patientCid:patientResult.data.cid||""};
+    return {patientId:pid,unitId,professionalId:professionalId||null,through,notes,cycles,sessions,pts:eligiblePts,goals,patientCid:patientResult.data.cid||""};
+  };
+
+  const loadNewAltaSources = async (pid:string,type:"multi"|"individual",token:number) => {
+    const bundle=await fetchAltaSourceBundle(pid,type,token);
+    if(!bundle||token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+    const {cycles,pts:eligiblePts,through}=bundle;
     setSourceBundle(bundle);
     if(type==="individual")setIndDataAlta(through);else setDataAlta(through);
     const scope=cycles.length===0?"all":cycles.length===1?cycles[0].id:"";
@@ -1480,6 +1487,35 @@ const RelatorioAlta: React.FC = () => {
     }
   };
 
+  const sourceDatesChanged = !!sourceMeta && ((modo==="multiprofissional"?dataAlta:indDataAlta)!==sourceMeta.through || (modo==="individual"&&(indPeriodoInicio!==sourceMeta.periodStart||indPeriodoFim!==sourceMeta.periodEnd)));
+  const hasSignedContribution=profSections.some(s=>s.status_contribuicao==="assinada");
+  const recountAltaSources=async()=>{
+    if(!sourceMeta||formReadOnly||conflict||savingRef.current||!user?.id)return;
+    const type=modo==="multiprofissional"?"multi":"individual";
+    if(type==="multi"&&hasSignedContribution){toast.error("Há contribuições assinadas. Preserve o período já conferido.");return;}
+    if(sourceMeta.unitId!==user.unidadeId){toast.error("A unidade atual não corresponde às fontes do relatório.");return;}
+    const pid=pacienteId, token=reportLoadTokenRef.current;
+    const through=type==="multi"?dataAlta:indDataAlta;
+    const from=type==="individual"?indPeriodoInicio:"";
+    const to=type==="individual"?indPeriodoFim||through:through;
+    if(!through||through>new Date().toLocaleDateString("sv-SE",{timeZone:"America/Fortaleza"})||(from&&from>to)||to>through){toast.error("Confira o período e a data de alta; não utilize datas futuras.");return;}
+    savingRef.current=true;setLoading(true);
+    try{
+      const bundle=await fetchAltaSourceBundle(pid,type,token);
+      if(!bundle||token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+      const scoped=selectAltaSources(bundle,sourceMeta.cycleId||"all","",through,from,to);
+      if(type==="individual"){
+        setIndSessoes(scoped.meta.performed);setIndFaltas(scoped.meta.absences);
+        setIndPeriodoInicio(from||scoped.meta.periodStart);setIndPeriodoFim(to||scoped.meta.periodEnd);
+      }else{
+        const counts=new Map<string,number>();for(const s of scoped.sessions)if(s.status==="realizada")counts.set(s.professional_id,(counts.get(s.professional_id)||0)+1);
+        setProfSections(prev=>prev.map(s=>{const n=scoped.notes.filter(x=>x.profissional_id===s.profissional_id);const ss=scoped.sessions.filter(x=>x.professional_id===s.profissional_id);const ds=[...n.map(x=>x.data_atendimento),...ss.map(x=>x.scheduled_date||"")].filter(Boolean).sort();return {...s,sessoes:counts.get(s.profissional_id)||0,periodo_inicio:ds[0]||"",periodo_fim:ds[ds.length-1]||""};}));
+      }
+      setSourceMeta({...scoped.meta,ptsId:sourceMeta.ptsId,periodStart:type==="individual"?from||scoped.meta.periodStart:scoped.meta.periodStart,periodEnd:type==="individual"?to||scoped.meta.periodEnd:scoped.meta.periodEnd});
+      toast.success("Contagens reconferidas. Revise os textos clínicos para o novo período; eles foram preservados.");
+    }catch(e){toast.error(e instanceof Error?e.message:"Não foi possível reconferir as fontes.");}
+    finally{savingRef.current=false;setLoading(false);}
+  };
   const sourcePanel = pacienteId && !loading && !loadFailed && <section className="clinical-premium p-3 space-y-2 min-w-0" aria-label="Fontes do preenchimento">
     <div className="flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-teal"><DatabaseIcon className="w-4 h-4"/></span><div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Fontes do preenchimento inteligente</h2><p className="text-xs text-muted-foreground">Dados registrados na unidade; revise o conteúdo clínico antes de finalizar.</p></div></div>
     {sourceMeta?<div className="space-y-2">
@@ -1487,6 +1523,8 @@ const RelatorioAlta: React.FC = () => {
       <p className="text-xs text-muted-foreground">{sourceMeta.cycleId?"Ciclo selecionado":"Histórico da unidade no período"} · {sourceMeta.ptsId?"PTS selecionado":"Sem PTS vinculado"} · referência {fmt(sourceMeta.through)}.</p>
       {sourceMeta.undated>0&&<p className="text-xs text-amber-700 dark:text-amber-300">Sessões sem data não foram somadas ao período.</p>}
       {reportId&&<p className="text-xs text-muted-foreground">Fontes preservadas da versão salva. Nenhuma importação automática sobre o rascunho.</p>}
+      {sourceDatesChanged&&<div role="status" className="rounded-md border p-2 text-xs space-y-2"><p className="text-amber-700 dark:text-amber-300">Data ou período alterado. Reconferir os números antes de salvar. Os textos clínicos não serão substituídos.</p><Button type="button" size="sm" variant="outline" disabled={formReadOnly||conflict||(modo==="multiprofissional"&&hasSignedContribution)} onClick={()=>void recountAltaSources()}><RefreshCw className="w-4 h-4 mr-1"/>Reconferir sessões e faltas</Button></div>}
+      {modo==="multiprofissional"&&hasSignedContribution&&<p className="text-xs text-muted-foreground">A data de referência fica preservada após assinatura de contribuição.</p>}
       {!reportId&&sourceBundle&&<Button type="button" variant="outline" size="sm" disabled={formReadOnly||conflict||hasUnsavedChanges} onClick={()=>{setSourceMeta(null);resetMultiForm();resetIndividualForm();setSourceScope("");setSourcePts("");setDataAlta(sourceBundle.through);setIndDataAlta(sourceBundle.through);loadedSnapshotPending.current=true;}}>Escolher outras fontes antes de editar</Button>}
     </div>:sourceBundle&&!reportId?<div className="space-y-2">
       <p className="text-xs">Escolha o recorte de atendimento e o PTS. Não há combinação automática de ciclos ou de vários planos.</p>
@@ -1694,7 +1732,7 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-3 clinical-inset rounded-xl border text-sm">
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
                     <div><span className="text-muted-foreground text-xs block">Nasc.</span>{fmt(paciente.dataNascimento)}</div>
-                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly || !!sourceMeta} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
+                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly || awaitingSources || (!!sourceMeta && hasSignedContribution)} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
                     {lastUpdatedAt && (
                       <div><span className="text-muted-foreground text-xs block">Última atualização</span>{fmtDateTime(lastUpdatedAt)} por {lastUpdatedBy}</div>
                     )}
@@ -1702,7 +1740,7 @@ const RelatorioAlta: React.FC = () => {
                 )}
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">Modalidades de reabilitação *</Label>
-                  <div className="flex flex-wrap gap-3">{MODALIDADES.map(m => <label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={modalidades.includes(m)} disabled={formReadOnly} onCheckedChange={v => setModalidades(prev => v === true ? Array.from(new Set([...prev,m])) : prev.filter(x => x !== m))}/>{m}</label>)}</div>
+                  <div className="flex flex-wrap gap-3">{MODALIDADES.map(m => <label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={modalidades.includes(m)} disabled={formReadOnly || awaitingSources} onCheckedChange={v => setModalidades(prev => v === true ? Array.from(new Set([...prev,m])) : prev.filter(x => x !== m))}/>{m}</label>)}</div>
                 </div>
               </CardContent>
             </Card>
@@ -1715,19 +1753,19 @@ const RelatorioAlta: React.FC = () => {
               <CardHeader className="pb-3"><CardTitle className="text-sm">Diagnóstico Multiprofissional</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input disabled={formReadOnly} value={cid10} onChange={e => setCid10(e.target.value)} placeholder="CID-10 Principal" />
-                    <Input disabled={formReadOnly} value={multiCid10Secundario} onChange={e => setMultiCid10Secundario(e.target.value)} placeholder="CID-10 Secundário" />
+                    <Input disabled={formReadOnly || awaitingSources} value={cid10} onChange={e => setCid10(e.target.value)} placeholder="CID-10 Principal" />
+                    <Input disabled={formReadOnly || awaitingSources} value={multiCid10Secundario} onChange={e => setMultiCid10Secundario(e.target.value)} placeholder="CID-10 Secundário" />
                  </div>
-                 <Textarea disabled={formReadOnly} value={multiDiagClinico} onChange={e => setMultiDiagClinico(e.target.value)} placeholder="Diagnóstico clínico..." />
-                 <Textarea disabled={formReadOnly} value={multiDiagFuncional} onChange={e => setMultiDiagFuncional(e.target.value)} placeholder="Diagnóstico funcional..." />
+                 <Textarea disabled={formReadOnly || awaitingSources} value={multiDiagClinico} onChange={e => setMultiDiagClinico(e.target.value)} placeholder="Diagnóstico clínico..." />
+                 <Textarea disabled={formReadOnly || awaitingSources} value={multiDiagFuncional} onChange={e => setMultiDiagFuncional(e.target.value)} placeholder="Diagnóstico funcional..." />
                  <details className="border rounded-lg p-3 space-y-3"><summary className="text-sm font-medium cursor-pointer">Contexto funcional e CIF</summary>
-                 <div className="space-y-1"><Label className="text-xs font-semibold">Contexto biopsicossocial</Label><Textarea disabled={formReadOnly} value={multiContextoBiopsicossocial} onChange={e=>setMultiContextoBiopsicossocial(e.target.value)} rows={2} /></div>
-                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — funções do corpo</Label><Textarea disabled={formReadOnly} value={cifFuncoes} onChange={e=>setCifFuncoes(e.target.value)} rows={2} /></div>
-                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — atividades e participação</Label><Textarea disabled={formReadOnly} value={cifAtividades} onChange={e=>setCifAtividades(e.target.value)} rows={2} /></div>
-                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — fatores ambientais</Label><Textarea disabled={formReadOnly} value={cifFatores} onChange={e=>setCifFatores(e.target.value)} rows={2} /></div>
-                 <div className="space-y-1"><Label className="text-xs font-semibold">Barreiras</Label><Textarea disabled={formReadOnly} value={multiBarreiras} onChange={e=>setMultiBarreiras(e.target.value)} rows={2} /></div>
-                 <div className="space-y-1"><Label className="text-xs font-semibold">Potencialidades</Label><Textarea disabled={formReadOnly} value={multiPotencialidades} onChange={e=>setMultiPotencialidades(e.target.value)} rows={2} /></div>
-                 <div className="space-y-1"><Label className="text-xs font-semibold">Fatores contextuais</Label><Textarea disabled={formReadOnly} value={multiFatoresContextuais} onChange={e=>setMultiFatoresContextuais(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Contexto biopsicossocial</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiContextoBiopsicossocial} onChange={e=>setMultiContextoBiopsicossocial(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — funções do corpo</Label><Textarea disabled={formReadOnly || awaitingSources} value={cifFuncoes} onChange={e=>setCifFuncoes(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — atividades e participação</Label><Textarea disabled={formReadOnly || awaitingSources} value={cifAtividades} onChange={e=>setCifAtividades(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">CIF — fatores ambientais</Label><Textarea disabled={formReadOnly || awaitingSources} value={cifFatores} onChange={e=>setCifFatores(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Barreiras</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiBarreiras} onChange={e=>setMultiBarreiras(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Potencialidades</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiPotencialidades} onChange={e=>setMultiPotencialidades(e.target.value)} rows={2} /></div>
+                 <div className="space-y-1"><Label className="text-xs font-semibold">Fatores contextuais</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiFatoresContextuais} onChange={e=>setMultiFatoresContextuais(e.target.value)} rows={2} /></div>
                  </details>
               </CardContent>
             </Card>
@@ -1737,8 +1775,8 @@ const RelatorioAlta: React.FC = () => {
             <Card className="clinical-premium min-w-0">
               <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ClipboardList className="w-4 h-4 text-primary"/>Percurso terapêutico</CardTitle><CardDescription>Objetivos e plano terapêutico executado.</CardDescription></CardHeader>
               <CardContent className="space-y-4 pt-2">
-                 <Textarea disabled={formReadOnly} value={multiObjetivosGerais} onChange={e => setMultiObjetivosGerais(e.target.value)} placeholder="Objetivos Terapêuticos Gerais..." rows={4} />
-                 <Textarea disabled={formReadOnly} value={multiPlanoExecutado} onChange={e => setMultiPlanoExecutado(e.target.value)} placeholder="Resumo do plano terapêutico executado..." rows={4} />
+                 <Textarea disabled={formReadOnly || awaitingSources} value={multiObjetivosGerais} onChange={e => setMultiObjetivosGerais(e.target.value)} placeholder="Objetivos Terapêuticos Gerais..." rows={4} />
+                 <Textarea disabled={formReadOnly || awaitingSources} value={multiPlanoExecutado} onChange={e => setMultiPlanoExecutado(e.target.value)} placeholder="Resumo do plano terapêutico executado..." rows={4} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1810,14 +1848,14 @@ const RelatorioAlta: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-xs">Tipo de Alta *</Label>
-                        <Select disabled={formReadOnly} value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
+                        <Select disabled={formReadOnly || awaitingSources} value={multiTipoAlta} onValueChange={setMultiTipoAlta}>
                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                            <SelectContent>{TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs">Nível de Independência</Label>
-                        <Select disabled={formReadOnly} value={nivelIndep} onValueChange={setNivelIndep}>
+                        <Select disabled={formReadOnly || awaitingSources} value={nivelIndep} onValueChange={setNivelIndep}>
                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                            <SelectContent>{NIVEIS_INDEPENDENCIA.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
                         </Select>
@@ -1825,35 +1863,35 @@ const RelatorioAlta: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Motivo da Alta *</Label>
-                      <Select disabled={formReadOnly} value={motivoAlta} onValueChange={setMotivoAlta}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{MOTIVOS_ALTA.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select>
+                      <Select disabled={formReadOnly || awaitingSources} value={motivoAlta} onValueChange={setMotivoAlta}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{MOTIVOS_ALTA.map(m=><SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select>
                       <Label className="text-xs">Detalhes do motivo</Label>
-                      <Textarea disabled={formReadOnly} value={motivoDetalhe} onChange={e=>setMultiMotivoDetalhe(e.target.value)} rows={2}/>
+                      <Textarea disabled={formReadOnly || awaitingSources} value={motivoDetalhe} onChange={e=>setMultiMotivoDetalhe(e.target.value)} rows={2}/>
                     </div>
                     <details className="border rounded-lg p-3 space-y-3"><summary className="text-sm font-medium cursor-pointer">Condição funcional e plano pós-alta</summary>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Condição funcional</Label><Textarea disabled={formReadOnly} value={condicaoFuncional} onChange={e=>setCondicaoFuncional(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Comparação admissão e alta</Label><Textarea disabled={formReadOnly} value={multiComparacaoFuncional} onChange={e=>setMultiComparacaoFuncional(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Ganhos clínicos</Label><Textarea disabled={formReadOnly} value={multiGanhosPrincipais} onChange={e=>setMultiGanhosPrincipais(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Limitações persistentes</Label><Textarea disabled={formReadOnly} value={multiLimitacoesPersistentes} onChange={e=>setMultiLimitacoesPersistentes(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Risco de regressão</Label><Select disabled={formReadOnly} value={multiRiscoRegressao} onValueChange={setMultiRiscoRegressao}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{RISCO_POS_ALTA.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Fatores de alerta</Label><Textarea disabled={formReadOnly} value={multiFatoresAlerta} onChange={e=>setMultiFatoresAlerta(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações ao paciente/família</Label><Textarea disabled={formReadOnly} value={orientacoesUsuario} onChange={e=>setOrientacoesUsuario(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações UBS/ESF</Label><Textarea disabled={formReadOnly} value={orientacoesUbs} onChange={e=>setOrientacoesUbs(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações à escola</Label><Textarea disabled={formReadOnly} value={multiOrientacoesEscola} onChange={e=>setMultiOrientacoesEscola(e.target.value)} rows={2} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Pontos de atenção</Label><Textarea disabled={formReadOnly} value={multiPontosAtencao} onChange={e=>setMultiPontosAtencao(e.target.value)} rows={2} /></div>
-                    <div className="space-y-2"><Label className="text-xs">Encaminhamentos</Label><div className="flex flex-wrap gap-3">{ENCAMINHAMENTOS.map(m=><label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={encaminhamentos.includes(m)} disabled={formReadOnly} onCheckedChange={v=>setEncaminhamentos(prev=>v===true?Array.from(new Set([...prev,m])):prev.filter(x=>x!==m))}/>{m}</label>)}</div></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Frequência APS</Label><Select disabled={formReadOnly} value={freqAps} onValueChange={setFreqAps}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{FREQUENCIAS_APS.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="space-y-1"><Label className="text-xs">Continuidade do cuidado</Label><Select disabled={formReadOnly} value={multiContinuarTerapia} onValueChange={setMultiContinuarTerapia}><SelectTrigger><SelectValue placeholder="Selecione..."/></SelectTrigger><SelectContent><SelectItem value="sim_mesma">Sim, na mesma área</SelectItem><SelectItem value="sim_outra">Sim, em outra área</SelectItem><SelectItem value="nao">Não indicada</SelectItem><SelectItem value="vigilancia">Vigilância em saúde</SelectItem></SelectContent></Select></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Prazo de retorno</Label><Textarea disabled={formReadOnly} value={multiPrazoRetorno} onChange={e=>setMultiPrazoRetorno(e.target.value)} rows={1} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-semibold">Responsável técnico</Label><Textarea disabled={formReadOnly} value={multiResponsavelTecnico} onChange={e=>setMultiResponsavelTecnico(e.target.value)} rows={1} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Condição funcional</Label><Textarea disabled={formReadOnly || awaitingSources} value={condicaoFuncional} onChange={e=>setCondicaoFuncional(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Comparação admissão e alta</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiComparacaoFuncional} onChange={e=>setMultiComparacaoFuncional(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Ganhos clínicos</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiGanhosPrincipais} onChange={e=>setMultiGanhosPrincipais(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Limitações persistentes</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiLimitacoesPersistentes} onChange={e=>setMultiLimitacoesPersistentes(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Risco de regressão</Label><Select disabled={formReadOnly || awaitingSources} value={multiRiscoRegressao} onValueChange={setMultiRiscoRegressao}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{RISCO_POS_ALTA.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Fatores de alerta</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiFatoresAlerta} onChange={e=>setMultiFatoresAlerta(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações ao paciente/família</Label><Textarea disabled={formReadOnly || awaitingSources} value={orientacoesUsuario} onChange={e=>setOrientacoesUsuario(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações UBS/ESF</Label><Textarea disabled={formReadOnly || awaitingSources} value={orientacoesUbs} onChange={e=>setOrientacoesUbs(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Orientações à escola</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiOrientacoesEscola} onChange={e=>setMultiOrientacoesEscola(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Pontos de atenção</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiPontosAtencao} onChange={e=>setMultiPontosAtencao(e.target.value)} rows={2} /></div>
+                    <div className="space-y-2"><Label className="text-xs">Encaminhamentos</Label><div className="flex flex-wrap gap-3">{ENCAMINHAMENTOS.map(m=><label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={encaminhamentos.includes(m)} disabled={formReadOnly || awaitingSources} onCheckedChange={v=>setEncaminhamentos(prev=>v===true?Array.from(new Set([...prev,m])):prev.filter(x=>x!==m))}/>{m}</label>)}</div></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Frequência APS</Label><Select disabled={formReadOnly || awaitingSources} value={freqAps} onValueChange={setFreqAps}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{FREQUENCIAS_APS.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs">Continuidade do cuidado</Label><Select disabled={formReadOnly || awaitingSources} value={multiContinuarTerapia} onValueChange={setMultiContinuarTerapia}><SelectTrigger><SelectValue placeholder="Selecione..."/></SelectTrigger><SelectContent><SelectItem value="sim_mesma">Sim, na mesma área</SelectItem><SelectItem value="sim_outra">Sim, em outra área</SelectItem><SelectItem value="nao">Não indicada</SelectItem><SelectItem value="vigilancia">Vigilância em saúde</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Prazo de retorno</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiPrazoRetorno} onChange={e=>setMultiPrazoRetorno(e.target.value)} rows={1} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">Responsável técnico</Label><Textarea disabled={formReadOnly || awaitingSources} value={multiResponsavelTecnico} onChange={e=>setMultiResponsavelTecnico(e.target.value)} rows={1} /></div>
                     </details>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-semibold">Resumo Consolidado Final (Editável)</Label>
-                        <Button variant="ghost" size="sm" disabled={formReadOnly} className="h-7 text-[10px]" onClick={generateMultiSummary}>
+                        <Button variant="ghost" size="sm" disabled={formReadOnly || awaitingSources} className="h-7 text-[10px]" onClick={generateMultiSummary}>
                           <RefreshCw className="w-3 h-3 mr-1" /> Gerar Automático
                         </Button>
                       </div>
-                      <Textarea disabled={formReadOnly} value={multiResumoConsolidado} onChange={e => setMultiResumoConsolidado(e.target.value)} rows={6} className="text-sm font-serif" />
+                      <Textarea disabled={formReadOnly || awaitingSources} value={multiResumoConsolidado} onChange={e => setMultiResumoConsolidado(e.target.value)} rows={6} className="text-sm font-serif" />
                     </div>
                   </CardContent>
                 </Card>
@@ -1883,8 +1921,8 @@ const RelatorioAlta: React.FC = () => {
                       {validateMulti().map((err,i)=><p key={i} className="mt-1">{err}</p>)}
                     </div>
         <div className="flex flex-col gap-2 pt-3 border-t">
-          <Button className="w-full justify-start" variant="outline" onClick={() => handleSave("multi", true)} disabled={formReadOnly || conflict}><Save className="w-4 h-4 mr-1"/>Salvar Rascunho</Button>
-          <Button className="w-full justify-start clinical-record-action clinical-action-main" onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict}>Finalizar Consolidação</Button>
+          <Button className="w-full justify-start" variant="outline" onClick={() => handleSave("multi", true)} disabled={formReadOnly || conflict || awaitingSources}><Save className="w-4 h-4 mr-1"/>Salvar Rascunho</Button>
+          <Button className="w-full justify-start clinical-record-action clinical-action-main" onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict || awaitingSources}>Finalizar Consolidação</Button>
           <Button className="w-full justify-start" variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
         </div>
                   </CardContent>
@@ -2034,18 +2072,18 @@ const RelatorioAlta: React.FC = () => {
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Período de Acompanhamento</Label>
                       <div className="flex items-center gap-2">
-                        <Input disabled={formReadOnly || !!sourceMeta} type="date" value={indPeriodoInicio} onChange={e => setIndPeriodoInicio(e.target.value)} className="h-9 text-sm" />
+                        <Input disabled={formReadOnly || awaitingSources} type="date" value={indPeriodoInicio} onChange={e => setIndPeriodoInicio(e.target.value)} className="h-9 text-sm" />
                         <span className="text-muted-foreground">até</span>
-                        <Input disabled={formReadOnly || !!sourceMeta} type="date" value={indPeriodoFim} onChange={e => setIndPeriodoFim(e.target.value)} className="h-9 text-sm" />
+                        <Input disabled={formReadOnly || awaitingSources} type="date" value={indPeriodoFim} onChange={e => setIndPeriodoFim(e.target.value)} className="h-9 text-sm" />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Data de Alta</Label>
-                      <Input disabled={formReadOnly || !!sourceMeta} type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-9 text-sm" />
+                      <Input disabled={formReadOnly || awaitingSources} type="date" value={indDataAlta} onChange={e => setIndDataAlta(e.target.value)} className="h-9 text-sm" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Modalidade</Label>
-                      <Select disabled={formReadOnly} value={indModalidade} onValueChange={setIndModalidade}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indModalidade} onValueChange={setIndModalidade}>
                         <SelectTrigger className="h-9 text-sm">
                           <SelectValue placeholder="Selecione..." />
                         </SelectTrigger>
@@ -2070,21 +2108,21 @@ const RelatorioAlta: React.FC = () => {
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Queixa Principal</Label>
-                    <Textarea disabled={formReadOnly} value={indQueixaPrincipal} onChange={e => setIndQueixaPrincipal(e.target.value)} rows={3} className="text-sm" placeholder="Resumo da queixa inicial..." />
+                    <Textarea disabled={formReadOnly || awaitingSources} value={indQueixaPrincipal} onChange={e => setIndQueixaPrincipal(e.target.value)} rows={3} className="text-sm" placeholder="Resumo da queixa inicial..." />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Motivo do Encaminhamento</Label>
-                    <Textarea disabled={formReadOnly} value={indMotivoEncaminhamento} onChange={e => setIndMotivoEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Por que o paciente foi encaminhado?" />
+                    <Textarea disabled={formReadOnly || awaitingSources} value={indMotivoEncaminhamento} onChange={e => setIndMotivoEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Por que o paciente foi encaminhado?" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Contexto Familiar / Social</Label>
-                    <Textarea disabled={formReadOnly} value={indContextoFamiliar} onChange={e => setIndContextoFamiliar(e.target.value)} rows={3} className="text-sm" placeholder="Rede de apoio, barreiras sociais..." />
+                    <Textarea disabled={formReadOnly || awaitingSources} value={indContextoFamiliar} onChange={e => setIndContextoFamiliar(e.target.value)} rows={3} className="text-sm" placeholder="Rede de apoio, barreiras sociais..." />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Comorbidades / Medicamentos</Label>
                     <div className="space-y-2">
-                      <Input disabled={formReadOnly} value={indComorbidades} onChange={e => setIndComorbidades(e.target.value)} placeholder="Outras doenças conhecidas" className="h-9 text-sm" />
-                      <Input disabled={formReadOnly} value={indMedicacao} onChange={e => setIndMedicacao(e.target.value)} placeholder="Medicamentos em uso" className="h-9 text-sm" />
+                      <Input disabled={formReadOnly || awaitingSources} value={indComorbidades} onChange={e => setIndComorbidades(e.target.value)} placeholder="Outras doenças conhecidas" className="h-9 text-sm" />
+                      <Input disabled={formReadOnly || awaitingSources} value={indMedicacao} onChange={e => setIndMedicacao(e.target.value)} placeholder="Medicamentos em uso" className="h-9 text-sm" />
                     </div>
                   </div>
                 </CardContent>
@@ -2103,11 +2141,11 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">CID-10 Principal</Label>
-                      <Input disabled={formReadOnly} value={indDiagCid} onChange={e => setIndDiagCid(e.target.value)} placeholder="Código ou descrição" className="h-9 text-sm" />
+                      <Input disabled={formReadOnly || awaitingSources} value={indDiagCid} onChange={e => setIndDiagCid(e.target.value)} placeholder="Código ou descrição" className="h-9 text-sm" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Nível de Comprometimento</Label>
-                      <Select disabled={formReadOnly} value={indNivelComprometimento} onValueChange={setIndNivelComprometimento}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indNivelComprometimento} onValueChange={setIndNivelComprometimento}>
                         <SelectTrigger className="h-9 text-sm">
                           <SelectValue placeholder="Selecione..." />
                         </SelectTrigger>
@@ -2124,15 +2162,15 @@ const RelatorioAlta: React.FC = () => {
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Diagnóstico Clínico / Funcional</Label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Textarea disabled={formReadOnly} value={indDiagClinico} onChange={e => setIndDiagClinico(e.target.value)} placeholder="Hipótese diagnóstica clínica..." rows={3} className="text-sm" />
-                      <Textarea disabled={formReadOnly} value={indDiagFuncional} onChange={e => setIndDiagFuncional(e.target.value)} placeholder="Descrição da funcionalidade (CIF base)..." rows={3} className="text-sm" />
+                      <Textarea disabled={formReadOnly || awaitingSources} value={indDiagClinico} onChange={e => setIndDiagClinico(e.target.value)} placeholder="Hipótese diagnóstica clínica..." rows={3} className="text-sm" />
+                      <Textarea disabled={formReadOnly || awaitingSources} value={indDiagFuncional} onChange={e => setIndDiagFuncional(e.target.value)} placeholder="Descrição da funcionalidade (CIF base)..." rows={3} className="text-sm" />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <div className="space-y-1"><Label className="text-xs font-semibold">CIF</Label><Textarea disabled={formReadOnly} value={indCif} onChange={e=>setIndCif(e.target.value)} rows={2} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-semibold">CIF</Label><Textarea disabled={formReadOnly || awaitingSources} value={indCif} onChange={e=>setIndCif(e.target.value)} rows={2} /></div>
                     <Label className="text-xs font-semibold">Observações Diagnósticas Adicionais</Label>
-                    <Textarea disabled={formReadOnly} value={indObsDiagnosticas} onChange={e => setIndObsDiagnosticas(e.target.value)} rows={2} className="text-sm" />
+                    <Textarea disabled={formReadOnly || awaitingSources} value={indObsDiagnosticas} onChange={e => setIndObsDiagnosticas(e.target.value)} rows={2} className="text-sm" />
                   </div>
                 </CardContent>
               </Card>
@@ -2150,7 +2188,7 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Adesão ao Tratamento</Label>
-                      <Select disabled={formReadOnly} value={indAdesaoTratamento} onValueChange={setIndAdesaoTratamento}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indAdesaoTratamento} onValueChange={setIndAdesaoTratamento}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {ADESAO_TRATAMENTO.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
@@ -2159,7 +2197,7 @@ const RelatorioAlta: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Evolução Global</Label>
-                      <Select disabled={formReadOnly} value={indEvolucaoGlobal} onValueChange={setIndEvolucaoGlobal}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indEvolucaoGlobal} onValueChange={setIndEvolucaoGlobal}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {EVOLUCAO_GLOBAL.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
@@ -2168,7 +2206,7 @@ const RelatorioAlta: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Frequência de Atendimento</Label>
-                      <Select disabled={formReadOnly} value={indFrequenciaAtendimento} onValueChange={setIndFrequenciaAtendimento}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indFrequenciaAtendimento} onValueChange={setIndFrequenciaAtendimento}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="semanal">Semanal</SelectItem>
@@ -2183,24 +2221,24 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Objetivos Terapêuticos Alcançados</Label>
-                      <Textarea disabled={formReadOnly} value={indObjetivos} onChange={e => setIndObjetivos(e.target.value)} rows={4} className="text-sm" placeholder="Liste os objetivos trabalhados..." />
+                      <Textarea disabled={formReadOnly || awaitingSources} value={indObjetivos} onChange={e => setIndObjetivos(e.target.value)} rows={4} className="text-sm" placeholder="Liste os objetivos trabalhados..." />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Resumo das Intervenções Realizadas</Label>
-                      <Textarea disabled={formReadOnly} value={indIntervencoes} onChange={e => setIndIntervencoes(e.target.value)} rows={4} className="text-sm" placeholder="Quais procedimentos foram mais frequentes?" />
+                      <Textarea disabled={formReadOnly || awaitingSources} value={indIntervencoes} onChange={e => setIndIntervencoes(e.target.value)} rows={4} className="text-sm" placeholder="Quais procedimentos foram mais frequentes?" />
                     </div>
                   </div>
 
-                  <div className="space-y-1"><Label className="text-xs font-semibold">Tecnologia assistiva</Label><Textarea disabled={formReadOnly} value={indTA} onChange={e=>setIndTA(e.target.value)} rows={2} /></div>
+                  <div className="space-y-1"><Label className="text-xs font-semibold">Tecnologia assistiva</Label><Textarea disabled={formReadOnly || awaitingSources} value={indTA} onChange={e=>setIndTA(e.target.value)} rows={2} /></div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Evolução Clínica e Funcional (Texto Livre)</Label>
-                    <Textarea disabled={formReadOnly} value={indEvolucao} onChange={e => setIndEvolucao(e.target.value)} rows={5} className="text-sm" placeholder="Descreva detalhadamente a evolução do paciente no período..." />
+                    <Textarea disabled={formReadOnly || awaitingSources} value={indEvolucao} onChange={e => setIndEvolucao(e.target.value)} rows={5} className="text-sm" placeholder="Descreva detalhadamente a evolução do paciente no período..." />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-primary">Status das Metas (PTS)</Label>
-                      <Select disabled={formReadOnly} value={indMetas} onValueChange={v => setIndMetas(v as "totalmente" | "parcialmente" | "nao_atingidas")}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indMetas} onValueChange={v => setIndMetas(v as "totalmente" | "parcialmente" | "nao_atingidas")}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Avalie as metas" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="totalmente">Totalmente atingidas</SelectItem>
@@ -2209,19 +2247,19 @@ const RelatorioAlta: React.FC = () => {
                         </SelectContent>
                       </Select>
                       {!!indMetas && indMetas !== "totalmente" && (
-                        <Textarea disabled={formReadOnly} value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa clínica para metas não atingidas..." rows={2} className="text-sm mt-2" />
+                        <Textarea disabled={formReadOnly || awaitingSources} value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa clínica para metas não atingidas..." rows={2} className="text-sm mt-2" />
                       )}
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-primary">Intercorrências no Período</Label>
-                      <Select disabled={formReadOnly} value={indIntercorrencias} onValueChange={setIndIntercorrencias}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indIntercorrencias} onValueChange={setIndIntercorrencias}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {INTERCORRENCIAS_OPCOES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       {indIntercorrencias !== "Nenhuma" && (
-                        <Input disabled={formReadOnly} value={indIntercorrenciasObs} onChange={e => setIndIntercorrenciasObs(e.target.value)} placeholder="Detalhes da intercorrência..." className="h-9 text-sm mt-2" />
+                        <Input disabled={formReadOnly || awaitingSources} value={indIntercorrenciasObs} onChange={e => setIndIntercorrenciasObs(e.target.value)} placeholder="Detalhes da intercorrência..." className="h-9 text-sm mt-2" />
                       )}
                     </div>
                   </div>
@@ -2229,11 +2267,11 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Resposta Terapêutica</Label>
-                      <Textarea disabled={formReadOnly} value={indRespostaTerapeutica} onChange={e => setIndRespostaTerapeutica(e.target.value)} rows={3} className="text-sm" placeholder="Como o paciente respondeu às estratégias?" />
+                      <Textarea disabled={formReadOnly || awaitingSources} value={indRespostaTerapeutica} onChange={e => setIndRespostaTerapeutica(e.target.value)} rows={3} className="text-sm" placeholder="Como o paciente respondeu às estratégias?" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Comparação Início vs Alta</Label>
-                      <Textarea disabled={formReadOnly} value={indComparacaoInicioAlta} onChange={e => setIndComparacaoInicioAlta(e.target.value)} rows={3} className="text-sm" placeholder="Diferença clínica observada entre a admissão e agora..." />
+                      <Textarea disabled={formReadOnly || awaitingSources} value={indComparacaoInicioAlta} onChange={e => setIndComparacaoInicioAlta(e.target.value)} rows={3} className="text-sm" placeholder="Diferença clínica observada entre a admissão e agora..." />
                     </div>
                   </div>
                 </CardContent>
@@ -2252,7 +2290,7 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Tipo de Alta *</Label>
-                      <Select disabled={formReadOnly} value={indTipoAlta} onValueChange={setIndTipoAlta}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indTipoAlta} onValueChange={setIndTipoAlta}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {TIPOS_ALTA.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
@@ -2261,7 +2299,7 @@ const RelatorioAlta: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Motivo da Alta *</Label>
-                      <Select disabled={formReadOnly} value={indMotivo} onValueChange={setIndMotivo}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indMotivo} onValueChange={setIndMotivo}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           {MOTIVOS_ALTA.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
@@ -2270,7 +2308,7 @@ const RelatorioAlta: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Necessidade de Continuidade</Label>
-                      <Select disabled={formReadOnly} value={indContinuarTerapia} onValueChange={setIndContinuarTerapia}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indContinuarTerapia} onValueChange={setIndContinuarTerapia}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="sim_mesma">Sim, na mesma área</SelectItem>
@@ -2285,7 +2323,7 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Risco de Regressão</Label>
-                      <Select disabled={formReadOnly} value={indRiscoRegressao} onValueChange={setIndRiscoRegressao}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indRiscoRegressao} onValueChange={setIndRiscoRegressao}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="baixo">Baixo</SelectItem>
@@ -2297,30 +2335,30 @@ const RelatorioAlta: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Prazo para Reavaliação</Label>
-                      <Input disabled={formReadOnly} value={indPrazoReavaliacao} onChange={e => setIndPrazoReavaliacao(e.target.value)} placeholder="Ex: 6 meses, 1 ano..." className="h-9 text-sm" />
+                      <Input disabled={formReadOnly || awaitingSources} value={indPrazoReavaliacao} onChange={e => setIndPrazoReavaliacao(e.target.value)} placeholder="Ex: 6 meses, 1 ano..." className="h-9 text-sm" />
                     </div>
                   </div>
 
-                  <div className="space-y-1"><Label className="text-xs font-semibold">Detalhes do motivo da alta</Label><Textarea disabled={formReadOnly} value={indMotivoDet} onChange={e=>setIndMotivoDet(e.target.value)} rows={2} /></div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><div className="space-y-1"><Label className="text-xs font-semibold">Risco pós-alta</Label><Select disabled={formReadOnly} value={indRiscoPosAlta} onValueChange={setIndRiscoPosAlta}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{RISCO_POS_ALTA.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-xs font-semibold">Complexidade do caso</Label><Select disabled={formReadOnly} value={indComplexidade} onValueChange={setIndComplexidade}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{COMPLEXIDADE_CASO.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div></div>
+                  <div className="space-y-1"><Label className="text-xs font-semibold">Detalhes do motivo da alta</Label><Textarea disabled={formReadOnly || awaitingSources} value={indMotivoDet} onChange={e=>setIndMotivoDet(e.target.value)} rows={2} /></div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><div className="space-y-1"><Label className="text-xs font-semibold">Risco pós-alta</Label><Select disabled={formReadOnly || awaitingSources} value={indRiscoPosAlta} onValueChange={setIndRiscoPosAlta}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{RISCO_POS_ALTA.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-xs font-semibold">Complexidade do caso</Label><Select disabled={formReadOnly || awaitingSources} value={indComplexidade} onValueChange={setIndComplexidade}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{COMPLEXIDADE_CASO.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div></div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Orientações Específicas para Paciente / Cuidador</Label>
-                    <Textarea disabled={formReadOnly} value={indOrientacoes} onChange={e => setIndOrientacoes(e.target.value)} rows={4} className="text-sm" placeholder="Exercícios domiciliares, sinais de alerta..." />
+                    <Textarea disabled={formReadOnly || awaitingSources} value={indOrientacoes} onChange={e => setIndOrientacoes(e.target.value)} rows={4} className="text-sm" placeholder="Exercícios domiciliares, sinais de alerta..." />
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold">Encaminhamentos (Internos e Externos)</Label>
-                    <Textarea disabled={formReadOnly} value={indEncaminhamento} onChange={e => setIndEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Liste para onde o paciente está sendo encaminhado..." />
+                    <Textarea disabled={formReadOnly || awaitingSources} value={indEncaminhamento} onChange={e => setIndEncaminhamento(e.target.value)} rows={3} className="text-sm" placeholder="Liste para onde o paciente está sendo encaminhado..." />
                   </div>
 
                   <div className="space-y-2 pt-2 border-t">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-semibold">Resumo Final Consolidado *</Label>
-                      <Button variant="ghost" size="sm" disabled={formReadOnly} className="h-7 text-[10px]" onClick={generateIndSummary}>
+                      <Button variant="ghost" size="sm" disabled={formReadOnly || awaitingSources} className="h-7 text-[10px]" onClick={generateIndSummary}>
                         Gerar automaticamente
                       </Button>
                     </div>
-                    <Textarea disabled={formReadOnly}
+                    <Textarea disabled={formReadOnly || awaitingSources}
                       value={indResumoConsolidado}
                       onChange={e => setIndResumoConsolidado(e.target.value)}
                       rows={6}
@@ -2368,7 +2406,7 @@ const RelatorioAlta: React.FC = () => {
                   variant="outline" 
                   className="w-full justify-start h-9" 
                   onClick={() => handleSave("individual", true)}
-                  disabled={formReadOnly || conflict}
+                  disabled={formReadOnly || conflict || awaitingSources}
                 >
                   <Clock className="w-4 h-4 mr-2 text-muted-foreground" />
                   Salvar Rascunho
@@ -2377,7 +2415,7 @@ const RelatorioAlta: React.FC = () => {
                 <Button 
                   className="w-full justify-start h-10 clinical-record-action clinical-action-main" 
                   onClick={() => handleSave("individual", false)}
-                  disabled={formReadOnly || conflict}
+                  disabled={formReadOnly || conflict || awaitingSources}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Finalizar Relatório
