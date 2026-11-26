@@ -282,6 +282,7 @@ const RelatorioAlta: React.FC = () => {
       multiContinuarTerapia && `Continuidade do cuidado: ${multiContinuarTerapia === "nao" ? "Não indicada" : multiContinuarTerapia === "sim_mesma" ? "Na mesma área" : multiContinuarTerapia === "sim_outra" ? "Em outra área" : multiContinuarTerapia === "vigilancia" ? "Vigilância em saúde" : multiContinuarTerapia}.`,
     ].filter(Boolean).join("\n");
     if (!summary) { toast.error("Preencha os dados clínicos antes de gerar o resumo."); return; }
+    if (multiResumoConsolidado.trim() && multiResumoConsolidado !== summary && !window.confirm("O resumo existente será substituído. Deseja gerar outro resumo?")) return;
     setMultiResumoConsolidado(summary);
   };
 
@@ -301,7 +302,7 @@ const RelatorioAlta: React.FC = () => {
   const [indObjetivos, setIndObjetivos] = useState("");
   const [indIntervencoes, setIndIntervencoes] = useState("");
   const [indEvolucao, setIndEvolucao] = useState("");
-  const [indMetas, setIndMetas] = useState<"" | "totalmente" | "parcialmente" | "nao_atingidas">("");
+  const [indMetas, setIndMetas] = useState<"" | "totalmente" | "parcialmente" | "nao_atingidas" | "nao_se_aplica">("");
   const [indMetasJust, setIndMetasJust] = useState("");
   const [indTA, setIndTA] = useState("");
   const [indFrequenciaAtendimento, setIndFrequenciaAtendimento] = useState("");
@@ -825,6 +826,8 @@ const RelatorioAlta: React.FC = () => {
 
   const userRoleNorm = String(user?.role || "").toLowerCase().trim();
   const canManageOtherContribution = ["master", "gestao", "gestão", "coordenador"].includes(userRoleNorm);
+  // A consolidação segue a autorização já usada para reabrir o documento.
+  const canFinalizeMulti = scopeMatches && (!reportId || reportOwnerId === user?.id || canManageOtherContribution);
   const canReopenReport =
     scopeMatches && !!reportId &&
     (modo === "individual" || reportOwnerId === user?.id || canManageOtherContribution);
@@ -870,6 +873,13 @@ const RelatorioAlta: React.FC = () => {
     if (s.metas_status && s.metas_status !== "totalmente" && !s.metas_justificativa?.trim()) errors.push(`Justificativa de metas obrigatória para ${s.profissional_nome}`);
     return errors;
   };
+  const isValidAltaDate = (value: string): boolean => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(value + "T00:00:00Z");
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  const isContributionComplete = (s: ProfSection) => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada";
+  const allowIndMetasNotApplicable = !sourceMeta?.ptsId && ptsMetas.length === 0;
   const validateMulti = (): string[] => {
     const errors: string[] = [];
     if (!pacienteId) errors.push("Selecione um paciente");
@@ -879,12 +889,11 @@ const RelatorioAlta: React.FC = () => {
     if (modalidades.length === 0) errors.push("Selecione pelo menos uma modalidade");
     if (!multiResumoConsolidado.trim()) errors.push("Informe o resumo final consolidado");
     
-    const hasCompletedContribution = profSections.some(
-      s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada"
-    );
-    if (!hasCompletedContribution) {
-      errors.push("Pelo menos um profissional deve concluir ou assinar sua contribuição");
-    }
+    if (!isValidAltaDate(dataAlta)) errors.push("Informe uma data de alta válida");
+    if (!profSections.length) errors.push("Nenhuma contribuição profissional identificada");
+    const pending = profSections.filter(s => !isContributionComplete(s));
+    if (pending.length) errors.push(`${pending.length} contribuição(ões) pendente(s): ${pending.map(s => s.profissional_nome).join(", ")}. Todas devem ser concluídas ou assinadas.`);
+    if (profSections.some(s => (s.periodo_inicio && (!isValidAltaDate(s.periodo_inicio) || s.periodo_inicio > dataAlta)) || (s.periodo_fim && (!isValidAltaDate(s.periodo_fim) || s.periodo_fim > dataAlta)) || (s.periodo_inicio && s.periodo_fim && s.periodo_inicio > s.periodo_fim))) errors.push("Confira as datas das contribuições: o período não pode terminar após a alta nem estar invertido.");
 
     profSections.forEach(s => {
       if (s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada") errors.push(...validateContribution(s));
@@ -901,7 +910,12 @@ const RelatorioAlta: React.FC = () => {
     if (!indOrientacoes.trim()) errors.push("Orientações de alta são obrigatórias");
     if (!indDiagClinico.trim()) errors.push("Diagnóstico clínico é obrigatório");
     if (!indResumoConsolidado.trim()) errors.push("O resumo final consolidado é obrigatório");
+    if (!isValidAltaDate(indDataAlta)) errors.push("Informe uma data de alta válida");
+    if (!isValidAltaDate(indPeriodoInicio) || !isValidAltaDate(indPeriodoFim)) errors.push("Informe as datas válidas de início e fim do acompanhamento");
+    else if (indPeriodoInicio > indPeriodoFim || (isValidAltaDate(indDataAlta) && indPeriodoFim > indDataAlta)) errors.push("O início deve ser anterior ou igual ao fim do acompanhamento, e o fim não pode ser posterior à alta");
+    if (!indModalidade) errors.push("Selecione a modalidade de acompanhamento");
     if (!indMetas) errors.push("Informe a avaliação profissional das metas do PTS");
+    if (indMetas === "nao_se_aplica" && !allowIndMetasNotApplicable) errors.push("Há PTS ou metas vinculadas: selecione a avaliação correspondente");
     if (indMetas && indMetas !== "totalmente" && !indMetasJust.trim()) errors.push("Justificativa de metas obrigatória");
     return errors;
   };
@@ -912,11 +926,12 @@ const RelatorioAlta: React.FC = () => {
     const summary = [
       indPeriodoInicio && indPeriodoFim && `Período informado: ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}.`,
       `Sessões realizadas registradas: ${indSessoes}.`,
-      `Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : indMetas === "parcialmente" ? "parcialmente" : "não"} atingidos.`,
+      indMetas === "nao_se_aplica" ? "Avaliação das metas do PTS: não se aplica, conforme avaliação profissional." : `Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : indMetas === "parcialmente" ? "parcialmente" : "não"} atingidos.`,
       indEvolucaoGlobal && `A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}.`,
       indDiagFuncional && `Diagnóstico funcional informado: ${indDiagFuncional}.`,
-      indContinuarTerapia && `Recomenda-se ${indContinuarTerapia === "nao" ? "alta definitiva" : "continuidade do cuidado"}.`,
+      indContinuarTerapia && (indContinuarTerapia === "nao" ? "Continuidade da terapia não indicada neste relatório." : "Recomenda-se continuidade do cuidado."),
     ].filter(Boolean).join("\n");
+    if (indResumoConsolidado.trim() && indResumoConsolidado !== summary && !window.confirm("O resumo existente será substituído. Deseja gerar outro resumo?")) return;
     setIndResumoConsolidado(summary);
   };
 
@@ -1210,7 +1225,7 @@ const RelatorioAlta: React.FC = () => {
         <div class="field"><span class="field-label">Metas Atingidas</span><div class="field-value">${
           indMetas === "totalmente" ? "Totalmente atingidas" :
           indMetas === "parcialmente" ? "Parcialmente atingidas" :
-          indMetas === "nao_atingidas" ? "Não atingidas" : "Aguardando avaliação profissional"
+          indMetas === "nao_atingidas" ? "Não atingidas" : indMetas === "nao_se_aplica" ? "Não se aplica" : "Aguardando avaliação profissional"
         }${indMetasJust ? ` — ${altaPrintText(indMetasJust)}` : ""}</div></div>
         <div class="field"><span class="field-label">Resposta Terapêutica</span><div class="field-value">${altaPrintText(indRespostaTerapeutica || "—")}</div></div>
         <div class="field"><span class="field-label">Comparação Início/Alta</span><div class="field-value">${altaPrintText(indComparacaoInicioAlta || "—")}</div></div>
@@ -1346,6 +1361,7 @@ const RelatorioAlta: React.FC = () => {
       return;
     }
 
+    if (!isDraft && type === "multi" && !canFinalizeMulti) { toast.error("Somente o responsável pelo relatório ou a gestão autorizada pode finalizar a consolidação."); return; }
     if (!isDraft && !customStatus) {
       const errs = type === "multi" ? validateMulti() : validateInd();
       if (errs.length > 0) { toast.error(errs[0]); return; }
@@ -1916,7 +1932,7 @@ const RelatorioAlta: React.FC = () => {
                       { label: "Paciente Selecionado", ok: !!pacienteId },
                       { label: "Tipo de Alta", ok: !!multiTipoAlta },
                       { label: "Resumo Consolidado", ok: !!multiResumoConsolidado },
-                      { label: "Mín. 1 Contribuição", ok: profSections.some(s => s.status_contribuicao === "concluida" || s.status_contribuicao === "assinada") }
+                      { label: `Contribuições concluídas: ${profSections.filter(isContributionComplete).length}/${profSections.length}`, ok: profSections.length > 0 && profSections.every(isContributionComplete) }
                     ].map((item, i) => (
                       <div key={i} className="flex items-center justify-between text-[11px]">
                         <span className={item.ok ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
@@ -1927,10 +1943,11 @@ const RelatorioAlta: React.FC = () => {
                     <div className="text-[10px] bg-muted p-2 rounded-lg text-muted-foreground">
                       Status: <strong className="text-foreground">{validateMulti().length === 0 ? "Pronto para Emitir" : "Incompleto"}</strong>
                       {validateMulti().map((err,i)=><p key={i} className="mt-1">{err}</p>)}
+                       {!canFinalizeMulti && !!reportId && <p className="mt-1">A consolidação final é reservada ao responsável pelo relatório ou à gestão autorizada.</p>}
                     </div>
         <div className="flex flex-col gap-2 pt-3 border-t">
           <Button className="w-full justify-start" variant="outline" onClick={() => handleSave("multi", true)} disabled={formReadOnly || conflict || awaitingSources}><Save className="w-4 h-4 mr-1"/>Salvar Rascunho</Button>
-          <Button className="w-full justify-start clinical-record-action clinical-action-main" onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict || awaitingSources}>Finalizar Consolidação</Button>
+          <Button className="w-full justify-start clinical-record-action clinical-action-main" onClick={() => handleSave("multi", false)} disabled={formReadOnly || conflict || awaitingSources || !canFinalizeMulti || validateMulti().length > 0}>Finalizar Consolidação</Button>
           <Button className="w-full justify-start" variant="outline" onClick={() => handlePrint("multi")} disabled={!pacienteId || !reportId || !isReportLocked || loading || loadFailed || conflict}><Printer className="w-4 h-4 mr-1"/>Imprimir / Salvar PDF</Button>
         </div>
                   </CardContent>
@@ -2246,16 +2263,17 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-primary">Status das Metas (PTS)</Label>
-                      <Select disabled={formReadOnly || awaitingSources} value={indMetas} onValueChange={v => setIndMetas(v as "totalmente" | "parcialmente" | "nao_atingidas")}>
+                      <Select disabled={formReadOnly || awaitingSources} value={indMetas} onValueChange={v => setIndMetas(v as "totalmente" | "parcialmente" | "nao_atingidas" | "nao_se_aplica")}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Avalie as metas" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="totalmente">Totalmente atingidas</SelectItem>
                           <SelectItem value="parcialmente">Parcialmente atingidas</SelectItem>
                           <SelectItem value="nao_atingidas">Não atingidas</SelectItem>
+                          {(allowIndMetasNotApplicable || indMetas === "nao_se_aplica") && <SelectItem value="nao_se_aplica" disabled={!allowIndMetasNotApplicable}>Não se aplica (sem PTS/metas vinculadas)</SelectItem>}
                         </SelectContent>
                       </Select>
                       {!!indMetas && indMetas !== "totalmente" && (
-                        <Textarea disabled={formReadOnly || awaitingSources} value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder="Justificativa clínica para metas não atingidas..." rows={2} className="text-sm mt-2" />
+                        <Textarea disabled={formReadOnly || awaitingSources} value={indMetasJust} onChange={e => setIndMetasJust(e.target.value)} placeholder={indMetas === "nao_se_aplica" ? "Justifique por que a avaliação das metas não se aplica..." : "Justificativa clínica para metas não atingidas..."} rows={2} className="text-sm mt-2" />
                       )}
                     </div>
                     <div className="space-y-2">
@@ -2423,7 +2441,7 @@ const RelatorioAlta: React.FC = () => {
                 <Button 
                   className="w-full justify-start h-10 clinical-record-action clinical-action-main" 
                   onClick={() => handleSave("individual", false)}
-                  disabled={formReadOnly || conflict || awaitingSources}
+                  disabled={formReadOnly || conflict || awaitingSources || validateInd().length > 0}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Finalizar Relatório
