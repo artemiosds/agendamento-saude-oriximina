@@ -106,7 +106,7 @@ export function EscalaProfissionais() {
 
 export function Escala() {
   const { user } = useAuth();
-  const { funcionarios, disponibilidades, bloqueios, refreshDisponibilidades, refreshBloqueios, refreshFuncionarios } = useOperacional();
+  const { funcionarios, disponibilidades, bloqueios, refreshDisponibilidades, refreshBloqueios, refreshFuncionarios, configuracoes, refreshConfiguracoes } = useOperacional();
   const { unidadesVisiveis, salasVisiveis, isGlobalAdmin, userUnidadeId } = useUnidadeFilter();
   const [place, setPlace] = useState('');
   const [name, setName] = useState('');
@@ -152,7 +152,7 @@ export function Escala() {
   const refreshScale = async () => {
     if (refreshing) return;
     setRefreshing(true);
-    try { await Promise.all([refreshDisponibilidades(), refreshBloqueios(), refreshFuncionarios()]); }
+    try { await Promise.all([refreshDisponibilidades(), refreshBloqueios(), refreshFuncionarios(), refreshConfiguracoes()]); }
     catch { toast.error('Não foi possível confirmar todos os dados da grade. Tente novamente.'); }
     finally { setReload(n => n+1); setRefreshing(false); }
   };
@@ -176,6 +176,14 @@ export function Escala() {
   const units = useMemo(() => new Map(unidadesVisiveis.filter(u => isGlobalAdmin || u.id === userUnidadeId)
     .map(u => [u.id, u.nome])), [unidadesVisiveis, isGlobalAdmin, userUnidadeId]);
   const rooms = useMemo(() => new Map(salasVisiveis.map(s => [s.id, s.nome])), [salasVisiveis]);
+  const turnLabels = useMemo(() => {
+    const configured = (configuracoes as {config_fluxo_atendimento?: {turnos?: unknown}}).config_fluxo_atendimento?.turnos;
+    const labels = new Map<string,string>();
+    if (Array.isArray(configured)) for (const item of configured) {
+      if (item && typeof item.id === 'string' && typeof item.nome === 'string' && item.nome.trim()) labels.set(item.id,item.nome);
+    }
+    return labels;
+  }, [configuracoes]);
   const { staff, gradesByDay, externalPlaces } = useMemo(() => {
     const gradesByDay = Array.from({ length: 7 }, () => [] as typeof disponibilidades);
     const gradeStaff = new Set<string>();
@@ -273,7 +281,7 @@ export function Escala() {
         if (manualCoverage.has(coverage)) { coveredUnits.set(coverage,grade.unidadeId); continue; }
         dayBlocks ??= bloqueios.filter(b => key >= b.dataInicio && key <= b.dataFim);
         entries.push({ id: 'grade:' + grade.id, personId: person.id, person: person.nome, placeGroup: units.get(grade.unidadeId) || '',
-          place: [units.get(grade.unidadeId), rooms.get(grade.salaId || '')].filter(Boolean).join(' · '),
+          place: [units.get(grade.unidadeId), grade.vagasPorHora > 0 ? rooms.get(grade.salaId || '') : (turnLabels.get(grade.salaId || '') || rooms.get(grade.salaId || '') || (grade.salaId ? 'Turno cadastrado: ' + grade.salaId : 'Turno sem identificação'))].filter(Boolean).join(' · '),
           start: from, ...applyBlocks(from, to, dayBlocks, grade.unidadeId, person.id),
           mode: grade.vagasPorHora > 0 ? 'Por hora' : 'Por turno', duration: grade.vagasPorHora > 0 ? grade.duracaoConsulta : undefined, currentInactive: !person.ativo });
       }
@@ -305,7 +313,7 @@ export function Escala() {
       + ' · ' + Math.floor(minutes / 60) + 'h ' + minutes % 60 + 'min de carga prevista sem sobreposição';
     return { calendar, summary, count, overlapMinutes, conflictDays, invalidHours, unidentifiedGrades:unidentified.size, placeTotals: [...totals.values()].sort((a, b) => b.quantity - a.quantity).map(({ label, quantity }) =>
       quantity + (quantity === 1 ? ' turno em ' : ' turnos em ') + label) };
-  }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, canWrite, funcionarios, deferredName, today]);
+  }, [selected, activePlace, days, from, gradesByDay, bloqueios, units, rooms, turnLabels, canWrite, funcionarios, deferredName, today]);
   const period = format(start, 'dd/MM/yyyy') + ' a ' + format(days[days.length - 1], 'dd/MM/yyyy');
   const print = async () => {
     if (printing || refreshing || name !== deferredName || !count || !current || current.error || invalidHours || unidentifiedGrades) return;
