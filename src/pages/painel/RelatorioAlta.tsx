@@ -1333,53 +1333,43 @@ Conclui-se que o paciente ${multiContinuarTerapia === "nao" ? "está apto para a
   /* ── MODE SELECTOR ─── */
   if (modo === "selector") {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <FileText className="w-6 h-6 text-primary" />
-            Relatório de Alta — CER II
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Selecione o tipo de relatório que deseja gerar
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
-          <Card
-            className="cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all group"
-            onClick={() => setModo("multiprofissional")}
-          >
-            <CardContent className="p-8 text-center space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <Users className="w-8 h-8 text-primary" />
+      <div className="space-y-3 min-w-0">
+        <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+          <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><FileText className="w-5 h-5" aria-hidden="true" /></span>
+          <div className="flex-1 min-w-[9rem]">
+            <p className="clinical-hub-eyebrow">Documentação e continuidade assistencial</p>
+            <h1 className="clinical-hub-name text-xl font-bold font-display">Relatório de Alta — CER II</h1>
+            <p className="clinical-patient-sub text-xs mt-1">Consolidação clínica e encerramento terapêutico</p>
+          </div>
+        </header>
+        <h2 className="text-sm font-semibold px-1">Selecione o modelo de relatório</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { key: "multi", label: "Relatório Multiprofissional", description: "Toda a equipe em um documento consolidado. Cada profissional preenche sua seção.", features: ["Contribuições por profissional", "Consolidação da equipe"], action: () => setModo("multiprofissional"), Icon: Users, tone: "clinical-tone-blue" },
+            { key: "individual", label: "Relatório Individual", description: "Relatório específico do profissional responsável pelo atendimento.", features: ["Evolução clínica individual", "Emissão e impressão"], action: handleIndividualClick, Icon: User, tone: "clinical-tone-teal" },
+          ].map(({ key, label, description, features, action, Icon, tone }) => (
+            <button key={key} type="button" onClick={action} className="clinical-premium group min-w-0 text-left p-3 sm:p-4 flex flex-col gap-3 hover:ring-1 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors">
+              <div className="clinical-inset rounded-lg border flex items-center justify-center h-24 sm:h-28 overflow-hidden" aria-hidden="true">
+                {key === "multi" ? <svg viewBox="0 0 220 100" className="h-full w-full max-w-[250px]" fill="none">
+                  {[42, 82, 122].map((x, i) => <g key={x} fill={i === 1 ? "var(--cp-teal)" : "var(--cp-blue)"} opacity={i === 1 ? 1 : 0.75}><circle cx={x} cy="30" r="10"/><path d={`M${x-15} 63V53Q${x-15} 42 ${x} 42Q${x+15} 42 ${x+15} 53V63Z`}/></g>)}
+                  <rect x="151" y="23" width="43" height="55" rx="5" fill="hsl(var(--card))" stroke="var(--cp-blue)" strokeWidth="1.5"/>
+                  {[39,47,55,63].map(y => <path key={y} d={`M161 ${y}h23`} stroke="var(--cp-blue)" opacity=".5" strokeWidth="2" strokeLinecap="round"/>)}
+                  <circle cx="190" cy="76" r="11" fill="var(--cp-teal)"/><path d="M185 76l4 4 6-8" stroke="white" strokeWidth="2"/>
+                </svg> : <svg viewBox="0 0 220 100" className="h-full w-full max-w-[250px]" fill="none">
+                  <circle cx="65" cy="29" r="14" fill="var(--cp-blue)" opacity=".75"/>
+                  <path d="M37 81V64Q37 47 65 47Q93 47 93 64V81Z" fill="hsl(var(--card))" stroke="var(--cp-blue)" strokeWidth="1.5"/>
+                  <path d="M54 49l11 17 11-17M65 66v15" stroke="var(--cp-teal)" strokeWidth="2"/>
+                  <rect x="115" y="18" width="60" height="66" rx="6" fill="hsl(var(--card))" stroke="var(--cp-teal)" strokeWidth="1.5"/>
+                  <rect x="130" y="13" width="30" height="12" rx="4" fill="var(--cp-teal)"/>
+                  {[37,47,57,67].map(y => <path key={y} d={`M127 ${y}h36`} stroke="var(--cp-teal)" opacity=".5" strokeWidth="2" strokeLinecap="round"/>)}
+                  <path d="M153 78l28-27 6 6-28 27-8 2z" fill="var(--cp-blue)"/>
+                </svg>}
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Relatório Multiprofissional</h3>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Toda a equipe em um documento consolidado. Cada profissional preenche sua seção.
-                </p>
-              </div>
-              <Badge variant="secondary" className="text-xs">Consolidado</Badge>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all group"
-            onClick={handleIndividualClick}
-          >
-            <CardContent className="p-8 text-center space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <User className="w-8 h-8 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Relatório Individual</h3>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Por profissional separado, independente dos demais membros da equipe.
-                </p>
-              </div>
-              <Badge variant="secondary" className="text-xs">Por profissional</Badge>
-            </CardContent>
-          </Card>
+              <div className="flex gap-2.5 items-start"><span className={`clinical-dock-icon ${tone}`}><Icon className="h-4 w-4" /></span><div className="min-w-0"><h3 className="text-base font-semibold break-words">{label}</h3><p className="mt-1 text-xs text-muted-foreground leading-relaxed">{description}</p></div></div>
+              <div className="space-y-1.5 border-t pt-2 flex-1">{features.map(feature => <p key={feature} className="flex items-center gap-1.5 text-xs"><CheckCircle className="h-3.5 w-3.5 shrink-0 text-[var(--cp-teal)]" />{feature}</p>)}</div>
+              <span className="clinical-record-action clinical-action-main inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold">Acessar relatório <ChevronRight className="w-4 h-4" /></span>
+            </button>
+          ))}
         </div>
 
         {/* Sub-seletor exclusivo Fonoaudiologia (CBO 223810) */}
