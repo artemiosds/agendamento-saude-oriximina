@@ -149,3 +149,18 @@ describe("shared diagnostic status projection", () => {
     expect(JSON.stringify(input)).toBe(before);
   });
 });
+
+import { getDiagnosticBpaSigtap, normalizeSigtapCode } from "./diagnosticExams";
+describe("Fase 6 — SIGTAP do exame diagnóstico no BPA-I", () => {
+  const base = { tipo: "Exame", status: "confirmado", custom_data: { sala_tipo: "aparelho_diagnostico", status_exame: "laudo_liberado", sigtap_codigo: "0204030153" } };
+  it("entra no BPA só com laudo liberado e SIGTAP de 10 dígitos", () => {
+    expect(getDiagnosticBpaSigtap(base)).toBe("0204030153");
+    expect(getDiagnosticBpaSigtap({ ...base, custom_data: { ...base.custom_data, status_exame: "exame_realizado_em_laudo" } })).toBe("");
+    expect(getDiagnosticBpaSigtap({ ...base, custom_data: { ...base.custom_data, sigtap_codigo: "123" } })).toBe("");
+    expect(getDiagnosticBpaSigtap({ ...base, status: "cancelado" })).toBe("");
+  });
+  it("não inventa código", () => {
+    expect(normalizeSigtapCode("02.04.03.015-3")).toBe("0204030153");
+    expect(normalizeSigtapCode("")).toBe("");
+  });
+});

@@ -17,6 +17,7 @@ import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadDocumentConfig, buildDocumentShell, printViaIframe } from "@/lib/printLayout";
 import { bpaService } from "@/services/bpaService";
+import { getDiagnosticBpaSigtap } from "@/lib/diagnosticExams";
 import BpaResolverSigtapModal, { ResolverSigtapItem } from "@/components/bpa/BpaResolverSigtapModal";
 import {
   isValidCnsAlgo,
@@ -1550,6 +1551,34 @@ const BpaExportar: React.FC = () => {
         );
 
 
+        // Fase 6: exames diagnósticos com laudo liberado e SIGTAP cadastrado.
+        // O status geral do agendamento continua "confirmado"; o laudo vive em custom_data.
+        const diagRowsRaw = await fetchAllRowsBpa<any>(() => {
+          let q = (supabase as any)
+            .from("agendamentos")
+            .select("id, paciente_id, paciente_nome, profissional_id, profissional_nome, unidade_id, data, hora, custom_data, status, tipo")
+            .gte("data", startDate)
+            .lte("data", endDate)
+            .ilike("tipo", "exame")
+            .eq("custom_data->>status_exame", "laudo_liberado")
+            .order("id", { ascending: true });
+          if (formData.unidade_id !== "all") q = q.eq("unidade_id", formData.unidade_id);
+          if (formData.profissional_id !== "all") q = q.eq("profissional_id", formData.profissional_id);
+          return q;
+        }).catch(() => []);
+        const agsIdsExistentes = new Set(agsRows.map((a: any) => a.id));
+        const diagIds = new Set<string>();
+        ((diagRowsRaw as any[]) || []).forEach((a) => {
+          const codigo = getDiagnosticBpaSigtap(a);
+          if (!codigo) return;
+          diagIds.add(a.id);
+          const linha = { ...a, custom_data: { ...(a.custom_data || {}), bpa_manual: a.custom_data?.bpa_manual || { sigtap: codigo, origem: "exame_diagnostico" } } };
+          if (agsIdsExistentes.has(a.id)) {
+            const idx = agsRows.findIndex((r: any) => r.id === a.id);
+            if (idx >= 0 && !agsRows[idx]?.custom_data?.bpa_manual?.sigtap) agsRows[idx] = linha;
+          } else agsRows.push(linha);
+        });
+
         // Chaves de prontuário/triagem já cobertos: mesmo paciente+profissional+data
         const cobertos = new Set<string>(
           (prontuarios as any[]).map(
@@ -1561,6 +1590,7 @@ const BpaExportar: React.FC = () => {
           .filter((a) => a?.paciente_id && a?.profissional_id && a?.unidade_id && a?.data)
           .filter(
             (a) =>
+              diagIds.has(a.id) ||
               !cobertos.has(
                 `${a.paciente_id}|${a.profissional_id}|${String(a.data).slice(0, 10)}`,
               ),

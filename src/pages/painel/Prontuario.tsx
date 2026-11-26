@@ -106,6 +106,7 @@ const TeamEvaluationPanel = React.lazy(() => import("@/components/prontuario/Tea
 const DocumentosHistorico = React.lazy(() => import("@/components/DocumentosHistorico"));
 
 import SolicitacaoExames from "@/components/SolicitacaoExames";
+import LaudosDiagnosticosPaciente from "@/components/prontuario/LaudosDiagnosticosPaciente";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 const HistoricoCompletoModal = React.lazy(() => import("@/components/HistoricoCompletoModal"));
@@ -5618,6 +5619,8 @@ const ProntuarioPage: React.FC = () => {
               unidadeNome={unidadeAtualNome}
             />
             )}
+
+            <LaudosDiagnosticosPaciente pacienteId={form.paciente_id} />
 
             {/* Resultado de Exame trazido pelo paciente (transcrição manual) */}
             <div className="bg-muted/30 rounded-lg p-4 border space-y-3 mt-2 mb-2">

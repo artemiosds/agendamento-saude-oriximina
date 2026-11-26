@@ -294,6 +294,7 @@ export default function AgendaExames() {
       exige_contraste: selectedExam.exigeContraste,
       duracao_slot_minutos: selectedExam.duracaoSlot,
       prazo_resultado_dias: selectedExam.prazoResultadoDias,
+      ...(selectedExam.codigoSigtap ? { sigtap_codigo: selectedExam.codigoSigtap } : {}),
       status_exame: "agendado",
       historico_status: [{ status: "agendado", em: new Date().toISOString(), por: user?.id || "" }],
     };

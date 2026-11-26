@@ -15,6 +15,8 @@ export interface DiagnosticExamConfig {
   instrucoesPreparo: string;
   exigeContraste: DiagnosticContrast;
   prazoResultadoDias: number;
+  /** Código SIGTAP (10 dígitos) usado no BPA-I após o laudo liberado. Vazio = não faturável. */
+  codigoSigtap: string;
 }
 
 export interface DiagnosticRoomConfig {
@@ -87,7 +89,26 @@ export function createDiagnosticExamConfig(tipoExame: string, id?: string): Diag
     instrucoesPreparo: "",
     exigeContraste: "nao",
     prazoResultadoDias: 0,
+    codigoSigtap: "",
   };
+}
+
+/** Aceita apenas código SIGTAP com 10 dígitos; nunca inventa código. */
+export function normalizeSigtapCode(value: unknown): string {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.length === 10 ? digits : "";
+}
+
+/**
+ * Exame diagnóstico entra no BPA-I somente com laudo oficialmente liberado
+ * e código SIGTAP gravado no próprio agendamento.
+ */
+export function getDiagnosticBpaSigtap(row: { tipo?: string | null; status?: string | null; custom_data?: unknown }): string {
+  if (!isDiagnosticAppointment(row)) return "";
+  const data = row.custom_data as Record<string, any>;
+  if (String(data.status_exame || "") !== "laudo_liberado") return "";
+  if (["cancelado", "remarcado", "falta", "paciente_faltou"].includes(String(row.status || "").toLowerCase())) return "";
+  return normalizeSigtapCode(data.sigtap_codigo);
 }
 
 export function normalizeDiagnosticExamConfig(value: unknown, index = 0): DiagnosticExamConfig {
@@ -105,6 +126,7 @@ export function normalizeDiagnosticExamConfig(value: unknown, index = 0): Diagno
     instrucoesPreparo: String(raw.instrucoesPreparo || "").trim(),
     exigeContraste: contrast,
     prazoResultadoDias: Number.isInteger(resultDays) && resultDays >= 0 && resultDays <= 90 ? resultDays : 0,
+    codigoSigtap: normalizeSigtapCode(raw.codigoSigtap),
   };
 }
 
