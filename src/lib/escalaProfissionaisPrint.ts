@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { summarizeEscalaDay } from './escalaInformativa';
 
 export interface EscalaPrintEntry {
   personId: string;
@@ -12,6 +13,8 @@ export interface EscalaPrintEntry {
   mode: string;
   informational?: boolean;
   continuation?: boolean;
+  conflict?: boolean;
+  currentInactive?: boolean;
 }
 
 export interface EscalaPrintPerson {
@@ -85,6 +88,7 @@ const stylesheet = `<style>
   .escala-t { background: #e7f5f1; color: #17685b; }
   .escala-mt, .escala-n, .escala-h { background: #e9ecfa; color: #484e88; }
   .escala-block { background: #fff4dd; color: #8d5915; }
+  .escala-conflict { outline: 1px solid #a33c25; outline-offset: -1px; }
   .escala-print sup { font-size: 5pt; }
   .escala-legend { border: 1px solid #d5e0e7; padding: 6px 8px; margin: 7px 0; break-inside: avoid; font-size: 7pt; }
   .escala-legend-items { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
@@ -102,6 +106,12 @@ export function buildEscalaProfissionaisPrint(input: EscalaPrintInput) {
   if (!input.calendar.length) throw new Error('Selecione um período para imprimir a escala.');
   const people = new Map(input.people.map(p => [p.id, p]));
   const days = input.calendar.map(d => d.day);
+  const audits=input.calendar.map(day=>summarizeEscalaDay(day.entries));
+  if(audits.some(a=>a.invalid)) throw new Error('Há horários inválidos na escala. Confira antes de imprimir.');
+  const uniqueTotal=audits.reduce((sum,a)=>sum+a.uniqueMinutes,0);
+  const overlapTotal=audits.reduce((sum,a)=>sum+a.overlapMinutes,0);
+  const conflictDays=audits.filter(a=>a.conflicts.size>0).length;
+  const conflictedEntries=new Set(input.calendar.flatMap((day,i)=>[...audits[i].conflicts].map(index=>day.entries[index])));
   const period = `${format(days[0], 'dd/MM/yyyy')} a ${format(days[days.length - 1], 'dd/MM/yyyy')}`;
   const reference = input.monthly ? format(days[0], 'MMMM / yyyy', { locale: ptBR }).toUpperCase() : period;
   const title = `ESCALA ${input.monthly ? 'MENSAL' : 'SEMANAL'} DOS PROFISSIONAIS - ${reference}`;
@@ -150,20 +160,20 @@ export function buildEscalaProfissionaisPrint(input: EscalaPrintInput) {
           const slot = codes.get(e.hours);
           const code = e.minutes > 0 ? slot?.code || 'H' : 'B';
           const css = e.minutes > 0 ? `escala-${(slot?.prefix || 'H').toLowerCase()}` : 'escala-block';
-          return `<span class="escala-token ${css}" title="${escape([e.hours || 'Bloqueado', e.mode, e.reason].filter(Boolean).join(' · '))}">${escape(code)}${e.informational ? '<sup>i</sup>' : ''}${e.continuation ? '<sup>c</sup>' : ''}${e.reason ? '<sup>*</sup>' : ''}</span>`;
+          return `<span class="escala-token ${css}${e.conflict || conflictedEntries.has(e) ? ' escala-conflict' : ''}" title="${escape([e.hours || 'Bloqueado', e.mode, e.reason].filter(Boolean).join(' · '))}">${escape(code)}${e.informational ? '<sup>i</sup>' : ''}${e.continuation ? '<sup>c</sup>' : ''}${e.reason ? '<sup>*</sup>' : ''}${e.conflict || conflictedEntries.has(e) ? '<sup>!</sup>' : ''}</span>`;
         }).join('');
         return `<td class="${day.getDay() % 6 === 0 ? 'escala-weekend' : ''}">${tokens || '-'}</td>`;
       }).join('');
-      const minutes = [...dates.values()].flat().reduce((sum, e) => sum + Math.max(0, e.minutes), 0);
-      return `<tr><th scope="row" class="escala-person"><strong>${escape(entry.person)}</strong><small>${escape(location)}</small><small>${escape(identity)}</small>${person?.unit && person.unit !== unit ? `<small>Lotação: ${escape(person.unit)}</small>` : ''}</th>${cells}<td class="escala-total">${hoursLabel(minutes)}</td></tr>`;
+      const minutes = [...dates.values()].reduce((sum, entries) => sum + summarizeEscalaDay(entries).uniqueMinutes, 0);
+      return `<tr><th scope="row" class="escala-person"><strong>${escape(entry.person)}</strong><small>${escape(location)}</small><small>${escape(identity)}</small>${entry.currentInactive ? '<small>Cadastro atualmente inativo</small>' : ''}${person?.unit && person.unit !== unit ? `<small>Lotação: ${escape(person.unit)}</small>` : ''}</th>${cells}<td class="escala-total">${hoursLabel(minutes)}</td></tr>`;
     }).join('');
     return `<table class="escala-table" aria-label="Escala de ${escape(unit)}"><colgroup><col style="width:56mm">${days.map(() => '<col>').join('')}<col style="width:15mm"></colgroup><thead><tr><th colspan="${days.length + 2}" class="escala-group">${escape(unit)} · ${period}</th></tr><tr class="escala-days"><th scope="col" class="escala-person">Profissional / local</th>${header}<th scope="col" class="escala-total">Carga prevista</th></tr></thead><tbody>${body}</tbody></table>`;
   }).join('');
   const legend = [...codes].map(([hours, { code, prefix }]) => `<span class="escala-legend-item"><span class="escala-legend-code escala-${prefix.toLowerCase()}">${escape(code)}</span>${escape(hours)}</span>`).join('');
-  const body = `${stylesheet}<div class="escala-print">${tables}
-    <div class="escala-legend"><strong>Legenda dos horários cadastrados</strong><div class="escala-legend-items">${legend}<span><b>B</b> Bloqueado</span><span><b>-</b> Sem escala cadastrada</span>${hasInformational ? '<span><b>i</b> Escala informativa; não oferece vagas</span>' : ''}${hasContinuation ? '<span><b>c</b> Continuação do dia anterior</span>' : ''}${notes.length ? '<span><b>*</b> Conferir bloqueio abaixo</span>' : ''}</div></div>
+  const body = `${stylesheet}<div class="escala-print"><p><strong>Carga prevista sem dupla contagem: ${hoursLabel(uniqueTotal)}</strong>${conflictDays ? ` · ${conflictDays} dia(s) com sobreposição · ${hoursLabel(overlapTotal)} de registros simultâneos descontados` : ''}</p>${tables}
+    <div class="escala-legend"><strong>Legenda dos horários cadastrados</strong><div class="escala-legend-items">${legend}<span><b>B</b> Bloqueado</span><span><b>-</b> Sem escala cadastrada</span>${hasInformational ? '<span><b>i</b> Escala informativa; não oferece vagas</span>' : ''}${hasContinuation ? '<span><b>c</b> Continuação do dia anterior</span>' : ''}${notes.length ? '<span><b>*</b> Conferir bloqueio abaixo</span>' : ''}${conflictDays ? '<span><b>!</b> Horários simultâneos: conferir</span>' : ''}</div></div>
     ${notes.length ? `<div class="escala-notes"><strong>Bloqueios e ajustes do período</strong><ul>${[...new Set(notes)].map(note => `<li>${escape(note)}</li>`).join('')}</ul></div>` : ''}
-    <p class="escala-notes">Carga prevista: soma dos registros exibidos, com os descontos de bloqueio já aplicados. Registros simultâneos são mantidos para conferência; este documento não comprova frequência. Sem escala cadastrada não significa folga.</p>
+    <p class="escala-notes">Carga prevista: união dos intervalos por profissional e dia, com descontos de bloqueio já aplicados. O total geral desconta sobreposições entre locais; os totais de cada linha são por local e não devem ser somados quando há conflitos. Registros simultâneos permanecem visíveis para conferência. Este documento não comprova frequência. Sem escala cadastrada não significa folga.</p>
     <div class="escala-signatures"><div>Assinatura do(a) Profissional<br><small>Identificação / conselho profissional</small></div><div>Chefia Imediata / Coordenação SMS<br><small>Identificação / carimbo</small></div></div></div>`;
   return { title, body, meta: {
     Período: period,
