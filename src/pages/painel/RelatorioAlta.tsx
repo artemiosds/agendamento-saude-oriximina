@@ -41,11 +41,12 @@ interface ProfSection {
   conselho: string;
   periodo_inicio: string;
   periodo_fim: string;
-  sessoes: number;
+  sessoes: number | null;
+  pts_manual?: "nao_conferido"|"sem_pts"|"com_pts";
   objetivos: string;
   intervencoes: string;
   evolucao: string;
-  metas_status: "" | "totalmente" | "parcialmente" | "nao_atingidas";
+  metas_status: "" | "totalmente" | "parcialmente" | "nao_atingidas" | "nao_se_aplica";
   metas_justificativa: string;
   tecnologia_assistiva: string;
   // Novos campos para evolução multiprofissional
@@ -61,6 +62,14 @@ interface ProfSection {
   retificacoes?: AltaContributionCorrection[];
 }
 
+type AltaManualTeam = { motivo:string; equipeConfirmada:boolean };
+type AltaManualStaff = {id:string;nome:string;profissao:string|null;tipo_conselho:string|null;numero_conselho:string|null;uf_conselho:string|null};
+const readManualAltaTeam = (value:unknown):AltaManualTeam|null => {
+  if (value===null || value===undefined) return null;
+  const m=value as AltaManualTeam;
+  if(!m || typeof m.motivo!=="string" || typeof m.equipeConfirmada!=="boolean") throw new Error("Dados da equipe manual inválidos.");
+  return m;
+};
 type AltaManualSource = { motivo:string; sessoes:string; faltas:string; pts:"nao_conferido"|"sem_pts"|"com_pts" };
 const manualCount = (value:string):number|null => /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
 const readManualAltaSource = (value:unknown):AltaManualSource|null => {
@@ -421,6 +430,9 @@ const RelatorioAlta: React.FC = () => {
   const [sourceMeta,setSourceMeta] = useState<AltaSourceMeta|null>(null);
   const [manualSource,setManualSource] = useState<AltaManualSource|null>(null);
   const [manualAvailable,setManualAvailable] = useState(false);
+  const [manualTeam,setManualTeam] = useState<AltaManualTeam|null>(null);
+  const [manualStaff,setManualStaff] = useState<AltaManualStaff[]>([]);
+  const [manualStaffChoice,setManualStaffChoice] = useState("");
   const [loadedScope,setLoadedScope] = useState<{userId:string;unitId:string;patientId:string;mode:ModoRelatorio}|null>(null);
   const scopeMatches=!!loadedScope&&loadedScope.userId===user?.id&&loadedScope.unitId===user?.unidadeId&&loadedScope.patientId===pacienteId&&loadedScope.mode===modo;
   const formReadOnly = isReportLocked || loading || permissionsLoading || loadFailed || !pacienteId || !scopeMatches;
@@ -452,7 +464,7 @@ const RelatorioAlta: React.FC = () => {
   const resetReportTracking = () => {
     revisionRef.current = null;
     setLoadedScope(null);
-    setSourceBundle(null);setSourceScope("");setSourcePts("");setSourceMeta(null);setManualSource(null);setManualAvailable(false);
+    setSourceBundle(null);setSourceScope("");setSourcePts("");setSourceMeta(null);setManualSource(null);setManualAvailable(false);setManualTeam(null);setManualStaff([]);setManualStaffChoice("");
     loadedSnapshotPending.current = false;
     setSavedSnapshot(null);
     lastAutosaveAttempt.current=null;setAutosaveFailed(false);
@@ -754,6 +766,7 @@ const RelatorioAlta: React.FC = () => {
         setMultiObjetivosGerais(data.multiObjetivosGerais || "");
         setMultiPlanoExecutado(data.multiPlanoExecutado || "");
         setProfSections(data.profissionais || []);
+        setManualTeam(readManualAltaTeam(data.altaManualTeam));
         setMotivoAlta(data.motivoAlta || "");
         setMultiTipoAlta(data.multiTipoAlta || "");
         setMultiMotivoDetalhe(data.motivoDetalhe || "");
@@ -786,7 +799,13 @@ const RelatorioAlta: React.FC = () => {
       }
 
       // Somente monta uma nova estrutura quando não existe relatório salvo.
-      await loadNewAltaSources(pid, "multi", token);
+      try { await loadNewAltaSources(pid, "multi", token); }
+      catch (sourceError) {
+        const patientCheck=await supabase.from("pacientes").select("id").eq("id",pid).maybeSingle();
+        if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+        if(!patientCheck.error&&patientCheck.data?.id===pid)setManualAvailable(true);
+        throw sourceError;
+      }
     } catch (err: any) {
       console.error(err);
       if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
@@ -919,7 +938,7 @@ const RelatorioAlta: React.FC = () => {
   const canEditContribution = (section: ProfSection) =>
     !formReadOnly && !awaitingSources &&
     section.status_contribuicao !== "assinada" &&
-    (section.profissional_id === user?.id || (canManageOtherContribution && !section.retificacoes?.length));
+    (section.profissional_id === user?.id || (canManageOtherContribution && !section.retificacoes?.length && !manualTeam));
 
   const updateProfSection = (profId: string, field: keyof ProfSection, value: any) => {
     const section = profSections.find(s => s.profissional_id === profId);
@@ -938,6 +957,7 @@ const RelatorioAlta: React.FC = () => {
       toast.error("Somente o profissional responsável pode assinar sua própria contribuição.");
       return;
     }
+    if (manualTeam && !reportId) {toast.error("Salve a equipe conferida antes de assinar sua contribuição.");return;}
     const errors = validateContribution(section);
     if (errors.length) { toast.error(errors[0]); return; }
     const nowIso = new Date().toISOString();
@@ -949,11 +969,41 @@ const RelatorioAlta: React.FC = () => {
     await handleSave("multi", true, undefined, signed);
   };
 
+  const beginManualMulti = async () => {
+    if (!manualAvailable || !scopeMatches || permissionsLoading || loading || savingRef.current || reportId || modo!=="multiprofissional" || !user?.unidadeId) return;
+    const pid=pacienteId, token=reportLoadTokenRef.current;
+    savingRef.current=true;setLoading(true);
+    try {
+      const staff=await fetchSourcePages<AltaManualStaff>((start,end)=>supabase.from("funcionarios")
+        .select("id,nome,profissao,tipo_conselho,numero_conselho,uf_conselho").eq("unidade_id",user.unidadeId)
+        .eq("ativo",true).in("role",["profissional","enfermagem"]).order("id").range(start,end));
+      if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+      if(!staff.length)throw new Error("Nenhum profissional ativo da unidade pôde ser conferido. O modo manual permanece bloqueado.");
+      resetMultiForm();setSourceBundle(null);setSourceMeta(null);setSourceScope("");setSourcePts("");
+      setManualStaff(staff);setManualStaffChoice("");setManualTeam({motivo:"",equipeConfirmada:false});setManualAvailable(false);
+      loadedSnapshotPending.current=true;setLoadFailed(false);
+    } catch(e){toast.error(e instanceof Error?e.message:"Não foi possível conferir a equipe da unidade.");}
+    finally{savingRef.current=false;setLoading(false);}
+  };
+  const addManualTeamMember = () => {
+    if(!manualTeam||reportId||formReadOnly||conflict||!manualStaffChoice||profSections.some(s=>s.profissional_id===manualStaffChoice))return;
+    const f=manualStaff.find(p=>p.id===manualStaffChoice);
+    if(!f)return;
+    setProfSections(prev=>[...prev,{profissional_id:f.id,profissional_nome:f.nome,profissao:f.profissao||"",conselho:[f.tipo_conselho,f.numero_conselho,f.uf_conselho].filter(Boolean).join(" "),periodo_inicio:"",periodo_fim:"",sessoes:null,pts_manual:"nao_conferido",objetivos:"",intervencoes:"",evolucao:"",metas_status:"",metas_justificativa:"",tecnologia_assistiva:"",status_contribuicao:"nao_iniciada",data_contribuicao:""}]);
+    setManualTeam(prev=>prev?{...prev,equipeConfirmada:false}:prev);setManualStaffChoice("");
+  };
+
   /* ── VALIDATION ─── */
   const validateContribution = (s: ProfSection): string[] => {
     const errors: string[] = [];
     if (!s.evolucao?.trim()) errors.push(`Informe a evolução clínica de ${s.profissional_nome}`);
     if (!s.metas_status) errors.push(`Avalie as metas de ${s.profissional_nome}`);
+    if (s.metas_status==="nao_se_aplica" && !(manualTeam?s.pts_manual==="sem_pts":!!sourceMeta&&!sourceMeta.ptsId)) errors.push(`Confirme a ausência de PTS para ${s.profissional_nome}`);
+    if (manualTeam) {
+      if (!isValidAltaDate(s.periodo_inicio)||!isValidAltaDate(s.periodo_fim)||s.periodo_inicio>s.periodo_fim||s.periodo_fim>dataAlta) errors.push(`Informe o período válido de ${s.profissional_nome}`);
+      if (s.sessoes===null||!Number.isSafeInteger(s.sessoes)||s.sessoes<0) errors.push(`Informe as sessões conferidas de ${s.profissional_nome}`);
+      if (!s.pts_manual||s.pts_manual==="nao_conferido") errors.push(`Confirme a situação do PTS de ${s.profissional_nome}`);
+    }
     if (s.metas_status && s.metas_status !== "totalmente" && !s.metas_justificativa?.trim()) errors.push(`Justificativa de metas obrigatória para ${s.profissional_nome}`);
     return errors;
   };
@@ -962,7 +1012,7 @@ const RelatorioAlta: React.FC = () => {
     const parsed = new Date(value + "T00:00:00Z");
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
   };
-  const isContributionComplete = (s: ProfSection) => s.status_contribuicao === "assinada" || (s.status_contribuicao === "concluida" && !s.retificacoes?.length);
+  const isContributionComplete = (s: ProfSection) => s.status_contribuicao === "assinada" || (s.status_contribuicao === "concluida" && !s.retificacoes?.length && !manualTeam);
   const allowIndMetasNotApplicable = manualSource ? manualSource.pts==="sem_pts" : !sourceMeta?.ptsId && ptsMetas.length === 0;
   const displayIndSessoes = manualSource ? (manualCount(manualSource.sessoes) ?? "—") : indSessoes;
   const displayIndFaltas = manualSource ? (manualCount(manualSource.faltas) ?? "—") : indFaltas;
@@ -977,6 +1027,7 @@ const RelatorioAlta: React.FC = () => {
     
     if (!isValidAltaDate(dataAlta)) errors.push("Informe uma data de alta válida");
     if (!profSections.length) errors.push("Nenhuma contribuição profissional identificada");
+    if (manualTeam&&(!manualTeam.motivo.trim()||!manualTeam.equipeConfirmada)) errors.push("Justifique a fonte manual e confirme a equipe completa.");
     const pending = profSections.filter(s => !isContributionComplete(s));
     if (pending.length) errors.push(`${pending.length} contribuição(ões) pendente(s): ${pending.map(s => s.profissional_nome).join(", ")}. Todas devem ser concluídas ou assinadas; retificações exigem nova assinatura do autor.`);
     if (profSections.some(s => (s.periodo_inicio && (!isValidAltaDate(s.periodo_inicio) || s.periodo_inicio > dataAlta)) || (s.periodo_fim && (!isValidAltaDate(s.periodo_fim) || s.periodo_fim > dataAlta)) || (s.periodo_inicio && s.periodo_fim && s.periodo_inicio > s.periodo_fim))) errors.push("Confira as datas das contribuições: o período não pode terminar após a alta nem estar invertido.");
@@ -1195,7 +1246,8 @@ const RelatorioAlta: React.FC = () => {
         <div class="info-item"><span class="info-label">Responsável</span><br/><span class="info-value">${altaPrintText(p.nomeMae || "—")}</span></div>
         <div class="info-item"><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(dataAlta)}</span></div>
         <div class="info-item"><span class="info-label">Modalidades</span><br/><span class="info-value">${altaPrintText(modalidades.join(", ") || "—")}</span></div>
-        <div class="info-item"><span class="info-label">Período de referência</span><br/><span class="info-value">${sourceMeta?altaDateLabel(sourceMeta.periodStart)+" a "+altaDateLabel(sourceMeta.periodEnd):"—"}</span></div>
+        <div class="info-item"><span class="info-label">Período de referência</span><br/><span class="info-value">${sourceMeta?altaDateLabel(sourceMeta.periodStart)+" a "+altaDateLabel(sourceMeta.periodEnd):manualTeam?"Conferido individualmente nas contribuições":"—"}</span></div>
+        ${manualTeam?`<div class="info-item"><span class="info-label">Fonte das informações</span><br/><span class="info-value">Equipe e informações conferidas manualmente — ${altaPrintText(manualTeam.motivo)}</span></div>`:""}
       </div>
 
       <div class="section">
@@ -1230,7 +1282,7 @@ const RelatorioAlta: React.FC = () => {
           <div class="section-title">Evolução: ${altaPrintText(s.profissao || "Área")} — ${altaPrintText(s.profissional_nome)}</div>
           <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
             <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(s.periodo_inicio)} a ${fmt(s.periodo_fim)}</span></div>
-            <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${s.sessoes}</span></div>
+            <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${s.sessoes??"—"}</span></div>
             <div><span class="info-label">Adesão</span><br/><span class="info-value">${altaPrintText(s.adesao || "—")}</span></div>
           </div>
           <div class="field"><span class="field-label">Objetivos Específicos</span><div class="field-value">${altaPrintText(s.objetivos_especificos || s.objetivos || "—")}</div></div>
@@ -1238,7 +1290,7 @@ const RelatorioAlta: React.FC = () => {
           <div class="field"><span class="field-label">Evolução Clínica e Funcional da Área</span><div class="field-value">${altaPrintText(s.evolucao || "—")}</div></div>
           <div class="field"><span class="field-label">Status das Metas</span><div class="field-value">${
             s.metas_status === "totalmente" ? "Totalmente atingidas" :
-            s.metas_status === "parcialmente" ? "Parcialmente atingidas" : s.metas_status === "nao_atingidas" ? "Não atingidas" : "Aguardando avaliação profissional"
+            s.metas_status === "parcialmente" ? "Parcialmente atingidas" : s.metas_status === "nao_atingidas" ? "Não atingidas" : s.metas_status==="nao_se_aplica"?"Não se aplica":"Aguardando avaliação profissional"
           }${s.metas_justificativa ? ` — ${altaPrintText(s.metas_justificativa)}` : ""}</div></div>
           ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva Concedida</span><div class="field-value">${altaPrintText(s.tecnologia_assistiva)}</div></div>` : ""}
           ${s.intercorrencias ? `<div class="field"><span class="field-label">Intercorrências</span><div class="field-value">${altaPrintText(s.intercorrencias)}</div></div>` : ""}
@@ -1402,6 +1454,7 @@ const RelatorioAlta: React.FC = () => {
 
   const buildDraftPayload = (type: "multi" | "individual", signedSections?: ProfSection[]) => type === "multi" ? {
       altaSourceMeta:sourceMeta,
+      ...(manualTeam?{altaManualTeam:manualTeam}:{}),
       modalidades, cid10, multiCid10Secundario, multiDiagClinico, multiDiagFuncional,
       multiContextoBiopsicossocial, cifFuncoes, cifAtividades, cifFatores,
       multiBarreiras, multiPotencialidades, multiFatoresContextuais,
@@ -1489,7 +1542,8 @@ const RelatorioAlta: React.FC = () => {
     if (savingRef.current || loading || permissionsLoading || loadFailed || conflict || !scopeMatches) return;
     if (automatic && (!isDraft || !reportId || isReportLocked)) return;
     if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente e uma unidade"); return; }
-    if (!reportId && (!sourceBundle || !sourceMeta) && !(type==="individual"&&manualSource)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
+    if (!reportId && (!sourceBundle || !sourceMeta) && !(type==="individual"&&manualSource) && !(type==="multi"&&manualTeam)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
+    if (type==="multi"&&manualTeam&&(!manualTeam.motivo.trim()||!manualTeam.equipeConfirmada||!profSections.length)) {toast.error("Informe a fonte consultada e confirme toda a equipe antes de salvar.");return;}
     if (type==="individual" && manualSource && !manualSource.motivo.trim()) {toast.error("Informe a justificativa do preenchimento manual antes de salvar.");return;}
     if (!reportId && sourceBundle && sourceMeta && (sourceMeta.unitId!==user.unidadeId || sourceBundle.patientId!==pacienteId || (type==="individual"&&sourceBundle.professionalId!==user.id))) { toast.error("O contexto da fonte mudou. Selecione novamente o paciente."); return; }
     if (sourceMeta && (type==="multi"?dataAlta:indDataAlta)!==sourceMeta.through) { toast.error("A data de alta foi alterada. Confira a data de referência das fontes antes de salvar."); return; }
@@ -1729,7 +1783,15 @@ const RelatorioAlta: React.FC = () => {
   </section>;
   const sourcePanel = pacienteId && !loading && !loadFailed && <section className="clinical-premium p-3 space-y-2 min-w-0" aria-label="Fontes do preenchimento">
     <div className="flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-teal"><DatabaseIcon className="w-4 h-4"/></span><div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Fontes do preenchimento inteligente</h2><p className="text-xs text-muted-foreground">Dados registrados na unidade; revise o conteúdo clínico antes de finalizar.</p></div></div>
-    {modo==="individual"&&manualSource?<div className="space-y-2">
+    {modo==="multiprofissional"&&manualTeam?<div className="space-y-2">
+      <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Fontes automáticas indisponíveis. A equipe deve ser confirmada integralmente com base em registros verificáveis, e cada integrante deverá assinar sua própria contribuição.</p>
+      <Label className="text-xs">Justificativa e registros consultados *</Label>
+      <Textarea value={manualTeam.motivo} disabled={formReadOnly||conflict||!!reportId} onChange={e=>setManualTeam(prev=>prev?{...prev,motivo:e.target.value}:prev)} rows={3}/>
+      {!reportId&&<><div className="flex gap-2"><Select value={manualStaffChoice} onValueChange={setManualStaffChoice} disabled={formReadOnly||conflict}><SelectTrigger><SelectValue placeholder="Selecionar profissional da unidade"/></SelectTrigger><SelectContent>{manualStaff.filter(f=>!profSections.some(s=>s.profissional_id===f.id)).map(f=><SelectItem key={f.id} value={f.id}>{f.nome} — {f.profissao||"Profissão não informada"}</SelectItem>)}</SelectContent></Select><Button type="button" size="sm" disabled={formReadOnly||conflict||!manualStaffChoice} onClick={addManualTeamMember}>Adicionar</Button></div>
+      {profSections.map(s=><div key={s.profissional_id} className="flex items-center gap-2 text-xs border rounded p-2"><span className="flex-1">{s.profissional_nome} — {s.profissao}</span><Button type="button" size="sm" variant="outline" disabled={formReadOnly||conflict} onClick={()=>{if(!window.confirm("Remover este integrante da equipe ainda não salva?"))return;setProfSections(prev=>prev.filter(p=>p.profissional_id!==s.profissional_id));setManualTeam(prev=>prev?{...prev,equipeConfirmada:false}:prev);}}>Remover</Button></div>)}
+      <label className="flex gap-2 items-start text-xs"><Checkbox checked={manualTeam.equipeConfirmada} disabled={formReadOnly||conflict||!profSections.length} onCheckedChange={v=>setManualTeam(prev=>prev?{...prev,equipeConfirmada:v===true}:prev)}/> Confirmei nos registros a relação completa dos profissionais responsáveis pelo acompanhamento. A composição da equipe ficará preservada após o primeiro salvamento.</label></>}
+      {!!reportId&&<p className="text-xs text-muted-foreground">Equipe conferida e preservada no rascunho. Cada profissional informa seu período, sessões e PTS e assina a própria contribuição.</p>}
+    </div>:modo==="individual"&&manualSource?<div className="space-y-2">
       <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Preenchimento manual: as fontes automáticas não foram conferidas. Utilize somente informações verificadas por você.</p>
       <Label className="text-xs">Justificativa e referência utilizada *</Label>
       <Textarea value={manualSource.motivo} disabled={formReadOnly||conflict} onChange={e=>setManualSource(prev=>prev?{...prev,motivo:e.target.value}:prev)} placeholder="Informe o motivo e a fonte clínica consultada..." rows={3}/>
@@ -1908,7 +1970,7 @@ const RelatorioAlta: React.FC = () => {
         {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>{autosaveFailed?"O salvamento automático falhou. Tente salvar manualmente antes de sair.":reportId&&autoReady?"Salvamento automático após uma pausa na edição. Não feche a página até a confirmação.":"Salve o rascunho manualmente antes de sair."} Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}{draftStatus&&<p role="status" className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-600"/> Rascunho confirmado no banco.</p>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
-        {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
+        {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. {manualAvailable?"A consulta do relatório existente foi concluída, mas as fontes clínicas estão indisponíveis.":"Limpe a seleção e selecione o paciente novamente."}{manualAvailable&&<Button type="button" size="sm" variant="outline" className="mt-2" disabled={loading||permissionsLoading||!scopeMatches||!!reportId} onClick={()=>void beginManualMulti()}>Iniciar preenchimento manual da equipe</Button>}</AlertDescription></Alert>}
         {isReportLocked && (
           <Alert className="border-amber-300 bg-amber-50">
             <Lock className="h-4 w-4 text-amber-700" />
@@ -1959,7 +2021,7 @@ const RelatorioAlta: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-3 clinical-inset rounded-xl border text-sm">
                     <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
                     <div><span className="text-muted-foreground text-xs block">Nasc.</span>{fmt(paciente.dataNascimento)}</div>
-                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly || awaitingSources || (!!sourceMeta && hasSignedContribution)} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
+                    <div><span className="text-muted-foreground text-xs block">Data de Alta</span><Input disabled={formReadOnly || awaitingSources || hasSignedContribution} type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8" /></div>
                     {lastUpdatedAt && (
                       <div><span className="text-muted-foreground text-xs block">Última atualização</span>{fmtDateTime(lastUpdatedAt)} por {lastUpdatedBy}</div>
                     )}
@@ -2020,6 +2082,12 @@ const RelatorioAlta: React.FC = () => {
                    </Badge><ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground group-open:rotate-90"/>
                  </summary>
                  <CardContent className="space-y-2">
+                    {manualTeam&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div><Label className="text-xs">Início do acompanhamento *</Label><Input type="date" value={s.periodo_inicio} disabled={!canEditContribution(s)} onChange={e=>updateProfSection(s.profissional_id,"periodo_inicio",e.target.value)}/></div>
+                      <div><Label className="text-xs">Fim do acompanhamento *</Label><Input type="date" value={s.periodo_fim} disabled={!canEditContribution(s)} onChange={e=>updateProfSection(s.profissional_id,"periodo_fim",e.target.value)}/></div>
+                      <div><Label className="text-xs">Sessões realizadas conferidas *</Label><Input type="number" min="0" step="1" placeholder="Não conferido" value={s.sessoes??""} disabled={!canEditContribution(s)} onChange={e=>updateProfSection(s.profissional_id,"sessoes",manualCount(e.target.value))}/></div>
+                      <div><Label className="text-xs">Situação do PTS *</Label><Select value={s.pts_manual||"nao_conferido"} disabled={!canEditContribution(s)} onValueChange={v=>updateProfSection(s.profissional_id,"pts_manual",v)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="nao_conferido">Não conferido</SelectItem><SelectItem value="sem_pts">Sem PTS — conferido</SelectItem><SelectItem value="com_pts">Com PTS — conferido</SelectItem></SelectContent></Select></div>
+                    </div>}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-xs">Objetivos Específicos</Label>
@@ -2031,7 +2099,7 @@ const RelatorioAlta: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="space-y-1"><Label className="text-xs">Avaliação das metas *</Label><Select disabled={!canEditContribution(s)} value={s.metas_status || ""} onValueChange={v=>updateProfSection(s.profissional_id,"metas_status",v)}><SelectTrigger><SelectValue placeholder="Avalie as metas" /></SelectTrigger><SelectContent><SelectItem value="totalmente">Totalmente atingidas</SelectItem><SelectItem value="parcialmente">Parcialmente atingidas</SelectItem><SelectItem value="nao_atingidas">Não atingidas</SelectItem></SelectContent></Select></div>
+                      <div className="space-y-1"><Label className="text-xs">Avaliação das metas *</Label><Select disabled={!canEditContribution(s)} value={s.metas_status || ""} onValueChange={v=>updateProfSection(s.profissional_id,"metas_status",v)}><SelectTrigger><SelectValue placeholder="Avalie as metas" /></SelectTrigger><SelectContent><SelectItem value="totalmente">Totalmente atingidas</SelectItem><SelectItem value="parcialmente">Parcialmente atingidas</SelectItem><SelectItem value="nao_atingidas">Não atingidas</SelectItem>{((manualTeam?s.pts_manual==="sem_pts":!!sourceMeta&&!sourceMeta.ptsId)||s.metas_status==="nao_se_aplica")&&<SelectItem value="nao_se_aplica">Não se aplica</SelectItem>}</SelectContent></Select></div>
                       {s.metas_status&&s.metas_status!=="totalmente"&&<div className="space-y-1"><Label className="text-xs">Justificativa das metas *</Label><Textarea disabled={!canEditContribution(s)} value={s.metas_justificativa} onChange={e=>updateProfSection(s.profissional_id,"metas_justificativa",e.target.value)} rows={2}/></div>}
                       <div className="space-y-1"><Label className="text-xs">Adesão</Label><Select disabled={!canEditContribution(s)} value={s.adesao || ""} onValueChange={v=>updateProfSection(s.profissional_id,"adesao",v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{ADESAO_TRATAMENTO.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
                       <div className="space-y-1"><Label className="text-xs">Intercorrências</Label><Textarea disabled={!canEditContribution(s)} value={s.intercorrencias || ""} onChange={e=>updateProfSection(s.profissional_id,"intercorrencias",e.target.value)} rows={2}/></div>
@@ -2047,7 +2115,7 @@ const RelatorioAlta: React.FC = () => {
                           <SelectContent>
                             <SelectItem value="nao_iniciada">Não Iniciada</SelectItem>
                             <SelectItem value="em_preenchimento">Em preenchimento</SelectItem>
-                            <SelectItem value="concluida" disabled={!!s.retificacoes?.length}>Concluída</SelectItem>
+                            <SelectItem value="concluida" disabled={!!s.retificacoes?.length||!!manualTeam}>Concluída</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
