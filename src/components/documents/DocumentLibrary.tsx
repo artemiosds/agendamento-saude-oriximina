@@ -38,9 +38,9 @@ export function DocumentPatientBanner({name}:{name?:string}){
 interface Props{
  items:LibraryItem[];userId?:string;loading?:boolean;error?:string;
  search:string;onSearch:(s:string)=>void;category:DocumentCategory;onCategory:(v:DocumentCategory)=>void;
- onGenerate:(id:string)=>void;onSign?:(id:string)=>void;onEdit?:(id:string)=>void;disabled?:boolean;
+ onGenerate:(id:string)=>void;actionLabel?:string;onSign?:(id:string)=>void;onEdit?:(id:string)=>void;disabled?:boolean;
 }
-export default function DocumentLibrary({items,userId='',loading=false,error,search,onSearch,category,onCategory,onGenerate,onSign,onEdit,disabled=false}:Props){
+export default function DocumentLibrary({items,userId='',loading=false,error,search,onSearch,category,onCategory,onGenerate,actionLabel='Gerar',onSign,onEdit,disabled=false}:Props){
  const [favorites,setFavorites]=useState<string[]>(()=>readFavorites(userId));
  const [onlyFavorites,setOnlyFavorites]=useState(false);
  useEffect(()=>{setFavorites(readFavorites(userId));setOnlyFavorites(false);},[userId]);
@@ -70,9 +70,9 @@ export default function DocumentLibrary({items,userId='',loading=false,error,sea
  <div className="flex items-center gap-2 border-b pb-1.5"><Icon className="h-4 w-4 text-primary"/><h3 className="text-sm font-semibold">{c}</h3><span className="ml-auto text-xs text-muted-foreground tabular-nums">{group.length}</span></div>
  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
  {group.map(item=><article key={item.id} className="group flex min-w-0 rounded-xl border bg-card transition-colors hover:border-primary/40 hover:bg-muted/20">
- <button type="button" disabled={disabled} onClick={()=>onGenerate(item.id)} aria-label={'Gerar '+item.nome} className="flex flex-1 min-w-0 items-start gap-3 text-left p-3 rounded-l-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
+ <button type="button" disabled={disabled} onClick={()=>onGenerate(item.id)} aria-label={actionLabel+' '+item.nome} className="flex flex-1 min-w-0 items-start gap-3 text-left p-3 rounded-l-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
  <div className="flex shrink-0 items-center justify-center h-9 w-9 rounded-lg bg-primary/10 text-primary">{item.icon||<Icon className="h-5 w-5"/>}</div>
- <div className="flex-1 min-w-0 space-y-1"><p className="text-sm font-semibold leading-snug break-words [overflow-wrap:anywhere]">{item.nome}</p>{item.descricao&&<p className="text-xs text-muted-foreground leading-snug break-words">{item.descricao}</p>}{item.codigo&&<p className="text-xs font-mono text-muted-foreground">SIGTAP {item.codigo}</p>}<span className="inline-flex items-center gap-1 text-xs font-medium text-primary">Gerar <ArrowRight className="w-3 h-3"/></span></div>
+ <div className="flex-1 min-w-0 space-y-1"><p className="text-sm font-semibold leading-snug break-words [overflow-wrap:anywhere]">{item.nome}</p>{item.descricao&&<p className="text-xs text-muted-foreground leading-snug break-words">{item.descricao}</p>}{item.codigo&&<p className="text-xs font-mono text-muted-foreground">SIGTAP {item.codigo}</p>}<span className="inline-flex items-center gap-1 text-xs font-medium text-primary">{actionLabel} <ArrowRight className="w-3 h-3"/></span></div>
  </button>
  <div className="flex shrink-0 items-start gap-0.5 pt-2 pr-2">
  <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={(favorites.includes(item.id)?'Remover favorito ':'Favoritar ')+item.nome} aria-pressed={favorites.includes(item.id)} onClick={()=>toggle(item.id)}><Star className={'h-4 w-4 '+(favorites.includes(item.id)?'fill-amber-400 text-amber-600':'text-muted-foreground')}/></Button>
