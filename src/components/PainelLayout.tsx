@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
-  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown, MonitorDot
+  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown, MonitorDot, Search, Star, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -109,6 +109,21 @@ const menuGroups: MenuGroup[] = [
 ];
 
 const SIDEBAR_GROUPS_STORAGE_KEY = 'sidebar-workflow-groups-v1';
+const SIDEBAR_FAVORITES_STORAGE_KEY = 'sidebar-quick-access-v1';
+const itemDestination = (item: MenuItem) => item.to + (item.search || '');
+const normalizeModuleSearch = (value: string) =>
+  value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+function readSidebarFavorites(): Record<string, string[]> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(SIDEBAR_FAVORITES_STORAGE_KEY) || '{}');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).filter(([, items]) =>
+      Array.isArray(items) && items.every(item => typeof item === 'string')));
+  } catch {
+    return {};
+  }
+}
 const defaultGroupByRole: Record<string, string> = {
   master: 'gestao', gestor: 'gestao', gestao: 'gestao', coordenador: 'gestao',
   recepcao: 'recepcao', profissional: 'clinica', tecnico: 'clinica',
@@ -138,6 +153,8 @@ const PainelLayout: React.FC = () => {
   const location = useLocation();
   
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [moduleSearch, setModuleSearch] = useState('');
+  const [savedFavorites, setSavedFavorites] = useState(readSidebarFavorites);
 
   const role = user?.role?.toLowerCase().trim() || '';
   const isMaster = role === 'master';
@@ -202,6 +219,40 @@ const PainelLayout: React.FC = () => {
   const preferenceKey = (user?.id || 'anon') + ':' + role;
   const currentLocationKey = preferenceKey + ':' + location.key;
   React.useEffect(() => setCollapsedLocation(undefined), [currentLocationKey]);
+  const favoritesKey = JSON.stringify([user?.id || '', role, user?.unidadeId || '', isGlobalAdmin]);
+  React.useEffect(() => setModuleSearch(''), [favoritesKey, location.key]);
+
+  // Search and favorites only use the existing, permission- and license-filtered menu.
+  // Destinations include query strings to distinguish Escala from Disponibilidade.
+  const visibleItems = filteredGroups.flatMap(group => group.items);
+  const visibleByDestination = new Map(visibleItems.map(item => [itemDestination(item), item]));
+  const suggestedFavorites = (defaultGroup?.items || []).slice(0, 3).map(itemDestination);
+  const favoriteDestinations = Array.from(new Set(savedFavorites[favoritesKey] ?? suggestedFavorites));
+  const favorites = permLoading || licenseLoading ? [] : favoriteDestinations
+    .map(destination => visibleByDestination.get(destination))
+    .filter((item): item is MenuItem => !!item);
+  const searchTerm = normalizeModuleSearch(moduleSearch);
+  const searching = !!searchTerm;
+  const displayedGroups = searching
+    ? filteredGroups.map(group => ({
+        ...group,
+        items: group.items.filter(item =>
+          normalizeModuleSearch(item.label).includes(searchTerm) ||
+          normalizeModuleSearch(group.title || '').includes(searchTerm)),
+      })).filter(group => group.items.length > 0)
+    : filteredGroups;
+
+  const toggleFavorite = (item: MenuItem) => {
+    if (!user?.id || permLoading || licenseLoading) return;
+    const destination = itemDestination(item);
+    if (!visibleByDestination.has(destination)) return;
+    const nextDestinations = favoriteDestinations.includes(destination)
+      ? favoriteDestinations.filter(value => value !== destination)
+      : [...favoriteDestinations, destination];
+    const next = { ...savedFavorites, [favoritesKey]: nextDestinations };
+    setSavedFavorites(next);
+    try { localStorage.setItem(SIDEBAR_FAVORITES_STORAGE_KEY, JSON.stringify(next)); } catch { /* Preferência local opcional. */ }
+  };
 
   const isExpanded = (group: MenuGroup) => {
     if (!group.title) return true;
@@ -215,6 +266,45 @@ const PainelLayout: React.FC = () => {
     const next = { ...savedGroups, [preferenceKey]: { ...savedGroups[preferenceKey], [group.id]: open } };
     setSavedGroups(next);
     try { localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(next)); } catch { /* Preferência opcional. */ }
+  };
+
+  const renderMenuItem = (item: MenuItem) => {
+    const isActive = item === currentItem;
+    const destination = itemDestination(item);
+    const isFavorite = favoriteDestinations.includes(destination);
+    return (
+      <div key={destination} className="flex items-center gap-0.5 min-w-0">
+        <Link
+          to={destination}
+          aria-current={isActive ? 'page' : undefined}
+          onClick={() => { setSidebarOpen(false); setModuleSearch(''); }}
+          className={cn(
+            "relative flex min-h-10 flex-1 min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium leading-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-primary",
+            isActive
+              ? "bg-sidebar-primary/20 font-semibold text-sidebar-foreground ring-1 ring-inset ring-sidebar-primary/50"
+              : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          )}
+        >
+          <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
+          <span className="min-w-0 break-words">{item.label}</span>
+        </Link>
+        {!permLoading && !licenseLoading && user?.id && (
+          <button
+            type="button"
+            aria-pressed={isFavorite}
+            aria-label={isFavorite ? 'Remover ' + item.label + ' do acesso rápido' : 'Fixar ' + item.label + ' no acesso rápido'}
+            title={isFavorite ? 'Remover do acesso rápido' : 'Fixar no acesso rápido'}
+            onClick={() => toggleFavorite(item)}
+            className={cn(
+              "flex h-9 w-8 shrink-0 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary hover:bg-sidebar-accent",
+              isFavorite ? "text-sidebar-primary" : "text-sidebar-foreground/55 hover:text-sidebar-foreground"
+            )}
+          >
+            <Star className={cn("h-3.5 w-3.5", isFavorite && "fill-current")} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -251,8 +341,35 @@ const PainelLayout: React.FC = () => {
         )}
 
         <nav aria-label="Menu principal" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-2.5 py-3">
-          {filteredGroups.map(group => {
-            const expanded = isExpanded(group);
+          {!permLoading && !licenseLoading && (
+            <div className="space-y-2 pb-2 border-b border-sidebar-border">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-sidebar-foreground/60 pointer-events-none" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={moduleSearch}
+                  onChange={event => setModuleSearch(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Escape') setModuleSearch(''); }}
+                  placeholder="Localizar módulo..."
+                  aria-label="Localizar módulo"
+                  className="h-9 w-full rounded-lg border border-sidebar-border bg-sidebar-accent/50 pl-8 pr-8 text-xs text-sidebar-foreground placeholder:text-sidebar-foreground/60 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary [&::-webkit-search-cancel-button]:hidden"
+                />
+                {moduleSearch && <button type="button" aria-label="Limpar busca de módulos" title="Limpar busca" onClick={() => setModuleSearch('')} className="absolute right-1 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-primary"><X className="h-3.5 w-3.5" /></button>}
+              </div>
+              {!searching && (
+                <section aria-label="Acesso rápido" className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/60">
+                    <Star className="h-3 w-3" aria-hidden="true" /> Acesso rápido
+                  </div>
+                  {favorites.length ? favorites.map(renderMenuItem) : <p className="px-2.5 pb-1 text-xs leading-tight text-sidebar-foreground/60">Use a estrela ao lado de um módulo para fixá-lo aqui.</p>}
+                </section>
+              )}
+              {searching && <p role="status" className="px-2 text-xs text-sidebar-foreground/70">{displayedGroups.reduce((sum, group) => sum + group.items.length, 0)} módulo(s) encontrado(s)</p>}
+            </div>
+          )}
+          {searching && !permLoading && !licenseLoading && displayedGroups.length === 0 && <p className="px-2.5 py-3 text-xs text-sidebar-foreground/70">Nenhum módulo encontrado. Tente outro termo.</p>}
+          {displayedGroups.map(group => {
+            const expanded = searching || isExpanded(group);
             const containsCurrent = group.id === activeGroup;
             const groupRegionId = 'menu-grupo-' + group.id;
             return (
@@ -261,6 +378,7 @@ const PainelLayout: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => toggleGroup(group)}
+                    disabled={searching}
                     aria-expanded={expanded}
                     aria-controls={groupRegionId}
                     className={cn(
@@ -280,27 +398,7 @@ const PainelLayout: React.FC = () => {
                 )}
                 <div id={group.title ? groupRegionId : undefined} hidden={!expanded}
                   className={cn("space-y-0.5", group.title && "ml-4 border-l border-sidebar-border pl-2")}>
-                  {expanded && group.items.map(item => {
-                    const isActive = item === currentItem;
-                    const destination = item.to + (item.search || '');
-                    return (
-                      <Link
-                        key={destination}
-                        to={destination}
-                        aria-current={isActive ? 'page' : undefined}
-                        onClick={() => setSidebarOpen(false)}
-                        className={cn(
-                          "relative flex min-h-10 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium leading-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-primary",
-                          isActive
-                            ? "bg-sidebar-primary/20 font-semibold text-sidebar-foreground ring-1 ring-inset ring-sidebar-primary/50"
-                            : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        )}
-                      >
-                        <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
-                        <span>{item.label}</span>
-                      </Link>
-                    );
-                  })}
+                  {expanded && group.items.map(renderMenuItem)}
                 </div>
               </div>
             );
