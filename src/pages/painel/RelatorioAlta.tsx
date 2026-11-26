@@ -61,6 +61,16 @@ interface ProfSection {
   retificacoes?: AltaContributionCorrection[];
 }
 
+type AltaManualSource = { motivo:string; sessoes:string; faltas:string; pts:"nao_conferido"|"sem_pts"|"com_pts" };
+const manualCount = (value:string):number|null => /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+const readManualAltaSource = (value:unknown):AltaManualSource|null => {
+  if (value===null || value===undefined) return null;
+  const m=value as AltaManualSource;
+  if (!m || typeof m.motivo!=="string" || typeof m.sessoes!=="string" || typeof m.faltas!=="string" ||
+      !["nao_conferido","sem_pts","com_pts"].includes(m.pts)) throw new Error("Dados das fontes manuais inválidos.");
+  return m;
+};
+
 type AltaContributionCorrection = {
   motivo: string;
   solicitado_em: string;
@@ -407,6 +417,8 @@ const RelatorioAlta: React.FC = () => {
   const [sourceScope,setSourceScope] = useState("");
   const [sourcePts,setSourcePts] = useState("");
   const [sourceMeta,setSourceMeta] = useState<AltaSourceMeta|null>(null);
+  const [manualSource,setManualSource] = useState<AltaManualSource|null>(null);
+  const [manualAvailable,setManualAvailable] = useState(false);
   const [loadedScope,setLoadedScope] = useState<{userId:string;unitId:string;patientId:string;mode:ModoRelatorio}|null>(null);
   const scopeMatches=!!loadedScope&&loadedScope.userId===user?.id&&loadedScope.unitId===user?.unidadeId&&loadedScope.patientId===pacienteId&&loadedScope.mode===modo;
   const formReadOnly = isReportLocked || loading || permissionsLoading || loadFailed || !pacienteId || !scopeMatches;
@@ -438,7 +450,7 @@ const RelatorioAlta: React.FC = () => {
   const resetReportTracking = () => {
     revisionRef.current = null;
     setLoadedScope(null);
-    setSourceBundle(null);setSourceScope("");setSourcePts("");setSourceMeta(null);
+    setSourceBundle(null);setSourceScope("");setSourcePts("");setSourceMeta(null);setManualSource(null);setManualAvailable(false);
     loadedSnapshotPending.current = false;
     setSavedSnapshot(null);
     setConflict(false);
@@ -815,6 +827,7 @@ const RelatorioAlta: React.FC = () => {
         const data = parseAltaPayload(existingDraft.observacoes);
         revisionRef.current = { id: existingDraft.id, unitId:existingDraft.unidade_id, updated: existingDraft.atualizado_em ?? null, status: existingDraft.status ?? null, payload: data };
         setSourceMeta(data.altaSourceMeta && typeof data.altaSourceMeta === "object" ? data.altaSourceMeta : null);
+        setManualSource(readManualAltaSource(data.altaManualSource));
         // Load all data from draft
         setIndDiagCid(data.diagCid || "");
         setIndCif(data.cif || "");
@@ -868,7 +881,16 @@ const RelatorioAlta: React.FC = () => {
         return;
       }
 
-      await loadNewAltaSources(pid, "individual", token);
+      try {
+        await loadNewAltaSources(pid, "individual", token);
+      } catch (sourceError) {
+        // The existing-report lookup already succeeded. Verify the patient
+        // separately before offering manual entry; never bypass a failed lookup.
+        const patientCheck=await supabase.from("pacientes").select("id").eq("id",pid).maybeSingle();
+        if(token!==reportLoadTokenRef.current||activePatientRef.current!==pid)return;
+        if(!patientCheck.error&&patientCheck.data?.id===pid) setManualAvailable(true);
+        throw sourceError;
+      }
     } catch (error: any) {
       console.error("Error loading individual data:", error);
       if (token === reportLoadTokenRef.current && activePatientRef.current === pid) {
@@ -938,7 +960,9 @@ const RelatorioAlta: React.FC = () => {
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
   };
   const isContributionComplete = (s: ProfSection) => s.status_contribuicao === "assinada" || (s.status_contribuicao === "concluida" && !s.retificacoes?.length);
-  const allowIndMetasNotApplicable = !sourceMeta?.ptsId && ptsMetas.length === 0;
+  const allowIndMetasNotApplicable = manualSource ? manualSource.pts==="sem_pts" : !sourceMeta?.ptsId && ptsMetas.length === 0;
+  const displayIndSessoes = manualSource ? (manualCount(manualSource.sessoes) ?? "—") : indSessoes;
+  const displayIndFaltas = manualSource ? (manualCount(manualSource.faltas) ?? "—") : indFaltas;
   const validateMulti = (): string[] => {
     const errors: string[] = [];
     if (!pacienteId) errors.push("Selecione um paciente");
@@ -973,6 +997,11 @@ const RelatorioAlta: React.FC = () => {
     if (!isValidAltaDate(indPeriodoInicio) || !isValidAltaDate(indPeriodoFim)) errors.push("Informe as datas válidas de início e fim do acompanhamento");
     else if (indPeriodoInicio > indPeriodoFim || (isValidAltaDate(indDataAlta) && indPeriodoFim > indDataAlta)) errors.push("O início deve ser anterior ou igual ao fim do acompanhamento, e o fim não pode ser posterior à alta");
     if (!indModalidade) errors.push("Selecione a modalidade de acompanhamento");
+    if (manualSource) {
+      if (!manualSource.motivo.trim()) errors.push("Informe a justificativa e a referência utilizada no preenchimento manual");
+      if (manualCount(manualSource.sessoes)===null || manualCount(manualSource.faltas)===null) errors.push("Informe as contagens de sessões e faltas conferidas manualmente");
+      if (manualSource.pts==="nao_conferido") errors.push("Confirme a situação do PTS antes de finalizar");
+    }
     if (!indMetas) errors.push("Informe a avaliação profissional das metas do PTS");
     if (indMetas === "nao_se_aplica" && !allowIndMetasNotApplicable) errors.push("Há PTS ou metas vinculadas: selecione a avaliação correspondente");
     if (indMetas && indMetas !== "totalmente" && !indMetasJust.trim()) errors.push("Justificativa de metas obrigatória");
@@ -984,7 +1013,7 @@ const RelatorioAlta: React.FC = () => {
     if (!indMetas) { toast.error("Avalie as metas antes de gerar o resumo."); return; }
     const summary = [
       indPeriodoInicio && indPeriodoFim && `Período informado: ${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}.`,
-      `Sessões realizadas registradas: ${indSessoes}.`,
+      manualSource ? (manualCount(manualSource.sessoes)===null ? "Contagem de sessões ainda não conferida." : `Sessões realizadas informadas manualmente: ${displayIndSessoes}.`) : `Sessões realizadas registradas: ${indSessoes}.`,
       indMetas === "nao_se_aplica" ? "Avaliação das metas do PTS: não se aplica, conforme avaliação profissional." : `Durante o tratamento, os objetivos terapêuticos foram ${indMetas === "totalmente" ? "plenamente" : indMetas === "parcialmente" ? "parcialmente" : "não"} atingidos.`,
       indEvolucaoGlobal && `A evolução global foi considerada ${indEvolucaoGlobal.toLowerCase()}.`,
       indDiagFuncional && `Diagnóstico funcional informado: ${indDiagFuncional}.`,
@@ -1311,8 +1340,9 @@ const RelatorioAlta: React.FC = () => {
         <div class="section-title">Acompanhamento Terapêutico</div>
         <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
           <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}</span></div>
-          <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${altaPrintText(indSessoes)}</span></div>
-          <div><span class="info-label">Faltas no período</span><br/><span class="info-value">${altaPrintText(indFaltas)}</span></div>
+          <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${altaPrintText(String(displayIndSessoes))}</span></div>
+          <div><span class="info-label">Faltas no período</span><br/><span class="info-value">${altaPrintText(String(displayIndFaltas))}</span></div>
+          ${manualSource?`<div><span class="info-label">Fonte das informações</span><br/><span class="info-value">Preenchimento manual conferido pelo profissional — ${altaPrintText(manualSource.motivo)}. PTS: ${manualSource.pts==="sem_pts"?"sem PTS confirmado pelo profissional":manualSource.pts==="com_pts"?"com PTS informado pelo profissional":"não conferido"}</span></div>`:""}
           <div><span class="info-label">Modalidade</span><br/><span class="info-value">${altaPrintText(indModalidade || "—")}</span></div>
         </div>
         <div class="field"><span class="field-label">Frequência de Atendimento</span><div class="field-value">${altaPrintText(indFrequenciaAtendimento || "—")}</div></div>
@@ -1381,6 +1411,7 @@ const RelatorioAlta: React.FC = () => {
       multiResponsavelTecnico, resumoConsolidado: multiResumoConsolidado,
     } : {
       altaSourceMeta:sourceMeta,
+      ...(manualSource?{altaManualSource:manualSource}:{}),
       diagCid: indDiagCid, cif: indCif, diagClinico: indDiagClinico,
       diagFuncional: indDiagFuncional, nivelComprometimento: indNivelComprometimento,
       obsDiagnosticas: indObsDiagnosticas, queixaPrincipal: indQueixaPrincipal,
@@ -1396,7 +1427,7 @@ const RelatorioAlta: React.FC = () => {
       complexidade: indComplexidade,
       motivo: indMotivo, tipoAlta: indTipoAlta, motivoDet: indMotivoDet,
       orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
-      modalidade: indModalidade, sessoes: indSessoes, faltas: indFaltas,
+      modalidade: indModalidade, sessoes: manualSource?manualCount(manualSource.sessoes):indSessoes, faltas: manualSource?manualCount(manualSource.faltas):indFaltas,
       periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim,
       continuarTerapia: indContinuarTerapia, riscoRegressao: indRiscoRegressao,
       prazoReavaliacao: indPrazoReavaliacao,
@@ -1454,7 +1485,8 @@ const RelatorioAlta: React.FC = () => {
   const handleSave = async (type: "multi" | "individual", isDraft: boolean = false, customStatus?: any, signedSections?: ProfSection[]) => {
     if (savingRef.current || loading || permissionsLoading || loadFailed || conflict || !scopeMatches) return;
     if (!pacienteId || !user?.id || !user.unidadeId) { toast.error("Selecione um paciente e uma unidade"); return; }
-    if (!reportId && (!sourceBundle || !sourceMeta)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
+    if (!reportId && (!sourceBundle || !sourceMeta) && !(type==="individual"&&manualSource)) { toast.error("Confirme as fontes clínicas antes de salvar o novo relatório."); return; }
+    if (type==="individual" && manualSource && !manualSource.motivo.trim()) {toast.error("Informe a justificativa do preenchimento manual antes de salvar.");return;}
     if (!reportId && sourceBundle && sourceMeta && (sourceMeta.unitId!==user.unidadeId || sourceBundle.patientId!==pacienteId || (type==="individual"&&sourceBundle.professionalId!==user.id))) { toast.error("O contexto da fonte mudou. Selecione novamente o paciente."); return; }
     if (sourceMeta && (type==="multi"?dataAlta:indDataAlta)!==sourceMeta.through) { toast.error("A data de alta foi alterada. Confira a data de referência das fontes antes de salvar."); return; }
     if (type==="individual"&&sourceMeta&&(indPeriodoInicio!==sourceMeta.periodStart||indPeriodoFim!==sourceMeta.periodEnd)) { toast.error("O período foi alterado. Confira as contagens das fontes antes de salvar."); return; }
@@ -1635,7 +1667,7 @@ const RelatorioAlta: React.FC = () => {
     return <div className="clinical-premium p-4 space-y-3"><Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Contexto de acesso alterado</AlertTitle><AlertDescription>A unidade ou o profissional ativo mudou. O relatório anterior não será exibido, impresso nem gravado neste contexto.</AlertDescription></Alert><Button type="button" variant="outline" disabled={savingRef.current} onClick={()=>{if(hasUnsavedChanges&&!window.confirm("Existem alterações não salvas. Descartá-las e retornar à seleção?"))return;reportLoadTokenRef.current+=1;activePatientRef.current="";resetReportTracking();resetMultiForm();resetIndividualForm();setPacienteId("");setModo("selector");}}>Retornar à seleção</Button></div>;
   }
   const sourceDatesChanged = !!sourceMeta && ((modo==="multiprofissional"?dataAlta:indDataAlta)!==sourceMeta.through || (modo==="individual"&&(indPeriodoInicio!==sourceMeta.periodStart||indPeriodoFim!==sourceMeta.periodEnd)));
-  const hasSignedContribution=profSections.some(s=>s.status_contribuicao==="assinada");
+  const hasSignedContribution=profSections.some(s=>s.status_contribuicao==="assinada"||!!s.retificacoes?.length);
   const recountAltaSources=async()=>{
     if(!sourceMeta||formReadOnly||conflict||savingRef.current||!user?.id)return;
     const type=modo==="multiprofissional"?"multi":"individual";
@@ -1672,7 +1704,17 @@ const RelatorioAlta: React.FC = () => {
   </section>;
   const sourcePanel = pacienteId && !loading && !loadFailed && <section className="clinical-premium p-3 space-y-2 min-w-0" aria-label="Fontes do preenchimento">
     <div className="flex flex-wrap items-center gap-2"><span className="clinical-dock-icon clinical-tone-teal"><DatabaseIcon className="w-4 h-4"/></span><div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Fontes do preenchimento inteligente</h2><p className="text-xs text-muted-foreground">Dados registrados na unidade; revise o conteúdo clínico antes de finalizar.</p></div></div>
-    {sourceMeta?<div className="space-y-2">
+    {modo==="individual"&&manualSource?<div className="space-y-2">
+      <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Preenchimento manual: as fontes automáticas não foram conferidas. Utilize somente informações verificadas por você.</p>
+      <Label className="text-xs">Justificativa e referência utilizada *</Label>
+      <Textarea value={manualSource.motivo} disabled={formReadOnly||conflict} onChange={e=>setManualSource(prev=>prev?{...prev,motivo:e.target.value}:prev)} placeholder="Informe o motivo e a fonte clínica consultada..." rows={3}/>
+      <div className="grid sm:grid-cols-3 gap-2">
+        <div><Label className="text-xs">Sessões realizadas conferidas</Label><Input type="number" min="0" step="1" value={manualSource.sessoes} disabled={formReadOnly||conflict} onChange={e=>setManualSource(prev=>prev?{...prev,sessoes:e.target.value}:prev)} placeholder="Não conferido"/></div>
+        <div><Label className="text-xs">Faltas conferidas</Label><Input type="number" min="0" step="1" value={manualSource.faltas} disabled={formReadOnly||conflict} onChange={e=>setManualSource(prev=>prev?{...prev,faltas:e.target.value}:prev)} placeholder="Não conferido"/></div>
+        <div><Label className="text-xs">Situação do PTS</Label><Select value={manualSource.pts} disabled={formReadOnly||conflict} onValueChange={v=>setManualSource(prev=>prev?{...prev,pts:v as AltaManualSource["pts"]}:prev)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="nao_conferido">Ainda não conferido</SelectItem><SelectItem value="sem_pts">Sem PTS — conferido</SelectItem><SelectItem value="com_pts">Com PTS — conferido</SelectItem></SelectContent></Select></div>
+      </div>
+      <p className="text-xs text-muted-foreground">O rascunho pode ser salvo sem as contagens; o documento final exige conferência manual e será identificado como tal.</p>
+    </div>:sourceMeta?<div className="space-y-2">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[{label:"Prontuários clínicos",value:sourceMeta.noteCount},{label:"Sessões realizadas",value:sourceMeta.performed},{label:"Faltas",value:sourceMeta.absences},{label:"Sessões sem data",value:sourceMeta.undated}].map(x=><div key={x.label} className="clinical-inset border rounded-md p-2"><span className="block text-muted-foreground">{x.label}</span><strong className="text-base tabular-nums">{x.value}</strong></div>)}</div>
       <p className="text-xs text-muted-foreground">{sourceMeta.cycleId?"Ciclo selecionado":"Histórico da unidade no período"} · {sourceMeta.ptsId?"PTS selecionado":"Sem PTS vinculado"} · referência {fmt(sourceMeta.through)}.</p>
       {sourceMeta.undated>0&&<p className="text-xs text-amber-700 dark:text-amber-300">Sessões sem data não foram somadas ao período.</p>}
@@ -2134,8 +2176,8 @@ const RelatorioAlta: React.FC = () => {
       </header>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
         <AltaMetric icon={User} label="Paciente" value={!pacienteId?"Selecionar paciente":loading?"Carregando…":loadFailed?"Não carregado":paciente?.id===pacienteId?paciente.nome:"Selecionado"} />
-        <AltaMetric icon={Activity} label="Sessões registradas" tone="teal" value={!pacienteId||loading||loadFailed||(!reportId&&!sourceMeta)?"—":indSessoes} />
-        <AltaMetric icon={Clock} label="Faltas registradas" tone="violet" value={!pacienteId||loading||loadFailed||(!reportId&&!sourceMeta)?"—":indFaltas} />
+        <AltaMetric icon={Activity} label="Sessões registradas" tone="teal" value={!pacienteId||loading||loadFailed||(!reportId&&!sourceMeta&&!manualSource)?"—":displayIndSessoes} />
+        <AltaMetric icon={Clock} label="Faltas registradas" tone="violet" value={!pacienteId||loading||loadFailed||(!reportId&&!sourceMeta&&!manualSource)?"—":displayIndFaltas} />
         <AltaMetric icon={ListTodo} label="Validação" tone="slate" value={!pacienteId||loading||loadFailed?"Aguardando":isReportLocked?"Finalizado":validateInd().length===0?"Pronto para finalizar":`${validateInd().length} pendência(s)`} />
       </div>
       
@@ -2144,7 +2186,9 @@ const RelatorioAlta: React.FC = () => {
         {evolutionPreview}
         {hasUnsavedChanges && <Alert><Clock className="h-4 w-4"/><AlertTitle>Alterações ainda não salvas</AlertTitle><AlertDescription>Salve o rascunho antes de sair. Somente dados confirmados pelo banco são recuperados.</AlertDescription></Alert>}
         {conflict && <Alert variant="destructive"><AlertTriangle className="h-4 w-4"/><AlertTitle>Conflito de gravação</AlertTitle><AlertDescription>O relatório foi alterado por outra operação ou seu acesso mudou. As alterações não salvas continuam nesta tela. Revise-as antes de recarregar; nenhuma sobrescrita foi efetuada. <Button type="button" variant="outline" size="sm" className="mt-2" disabled={loading} onClick={()=>{if(!window.confirm("Recarregar o registro do banco e descartar as alterações ainda não salvas?"))return;resetReportTracking();if(modo==="multiprofissional"){resetMultiForm();void loadMultiData(pacienteId,++reportLoadTokenRef.current);}else{resetIndividualForm();void loadIndividualData(pacienteId,++reportLoadTokenRef.current);}}}>Recarregar relatório</Button></AlertDescription></Alert>}
-        {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar o relatório</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. Limpe a seleção e selecione o paciente novamente.</AlertDescription></Alert>}
+        {loadFailed && <Alert variant="destructive"><AlertCircle className="h-4 w-4"/><AlertTitle>Não foi possível carregar as informações</AlertTitle><AlertDescription>Para evitar perda de dados, a edição e a impressão estão bloqueadas. {manualAvailable?"A consulta do relatório existente foi concluída, mas as fontes clínicas estão indisponíveis. Você pode iniciar o preenchimento manual.":"Limpe a seleção e selecione o paciente novamente."}
+          {manualAvailable&&<Button type="button" className="mt-2" size="sm" variant="outline" disabled={loading||permissionsLoading||!scopeMatches||!!reportId} onClick={()=>{if(!scopeMatches||permissionsLoading||reportId||!manualAvailable)return;resetIndividualForm();setSourceBundle(null);setSourceMeta(null);setSourceScope("");setSourcePts("");setManualSource({motivo:"",sessoes:"",faltas:"",pts:"nao_conferido"});setManualAvailable(false);loadedSnapshotPending.current=true;setLoadFailed(false);}}>Iniciar preenchimento manual</Button>}
+        </AlertDescription></Alert>}
             {isReportLocked && (
         <Alert className="border-amber-300 bg-amber-50">
           <Lock className="h-4 w-4 text-amber-700" />
@@ -2226,7 +2270,7 @@ const RelatorioAlta: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider block">Sessões / Faltas</span>
-                        <Badge variant="outline" className="text-xs font-mono">{!reportId&&!sourceMeta?"Aguardando seleção de fontes":`${indSessoes} realizada(s) / ${indFaltas} falta(s)`}</Badge>
+                        <Badge variant="outline" className="text-xs font-mono">{!reportId&&!sourceMeta&&!manualSource?"Aguardando seleção de fontes":`${displayIndSessoes} realizada(s) / ${displayIndFaltas} falta(s)${manualSource?" · manual":""}`}</Badge>
                       </div>
                     </div>
                   )}
