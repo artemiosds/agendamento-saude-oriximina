@@ -4052,10 +4052,15 @@ const ProntuarioPage: React.FC = () => {
           onTeam={()=>setTeamDialogOpen(true)}
         />
       ):(
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div><h1 className="text-2xl font-bold font-display text-foreground">Prontuários</h1><p className="text-muted-foreground text-sm">{filtered.length} registro(s) carregado(s){hasMoreProntuarios?" · há mais resultados":""}</p></div>
-          {canEdit&&<Button onClick={()=>openNew(undefined,undefined)} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2"/>Novo Prontuário</Button>}
-        </div>
+        <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+          <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><ClipboardList className="w-5 h-5" aria-hidden="true" /></span>
+          <div className="flex-1 min-w-[9rem]">
+            <p className="clinical-hub-eyebrow">Documentação assistencial</p>
+            <h1 className="clinical-hub-name text-xl font-bold font-display">Prontuários</h1>
+            <p className="clinical-patient-sub text-xs mt-1">{loading ? "Carregando registros…" : filtered.length.toLocaleString("pt-BR") + " registro(s) carregado(s)" + (hasMoreProntuarios ? " · há mais resultados" : "")}</p>
+          </div>
+          {canEdit&&<Button type="button" onClick={()=>openNew(undefined,undefined)} className="clinical-hub-new"><Plus className="w-4 h-4"/>Novo Prontuário</Button>}
+        </header>
       )}
 
       {queryPacienteId&&hubSection==="history"&&(
@@ -4080,7 +4085,7 @@ const ProntuarioPage: React.FC = () => {
       )}
 
       {(!queryPacienteId||hubSection==="records") && (
-        <div className="space-y-2">
+        <div className={cn("space-y-2", !queryPacienteId && "clinical-premium p-3")}>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -4088,7 +4093,7 @@ const ProntuarioPage: React.FC = () => {
                 placeholder={queryPacienteId?"Buscar nos prontuários: profissional, setor ou procedimento...":"Buscar por paciente, profissional, CPF ou CNS..."}
                 value={queryPacienteId?patientListSearch:search}
                 onChange={(e)=>{if(queryPacienteId)setHubSearch({patientId:queryPacienteId,value:e.target.value});else setSearch(e.target.value);}}
-                className="pl-10"
+                className={cn("pl-10", !queryPacienteId && "bg-background")}
               />
             </div>
             <Button
@@ -4097,7 +4102,7 @@ const ProntuarioPage: React.FC = () => {
               onClick={() => setListFiltersOpen((current) => !current)}
               aria-expanded={listFiltersOpen}
               aria-controls="prontuario-list-filters"
-              className="shrink-0"
+              className={cn("shrink-0", !queryPacienteId && "clinical-record-action", !queryPacienteId && appliedListFilterCount > 0 && "ring-1 ring-primary/50")}
             >
               <ListFilter className="mr-2 h-4 w-4" />
               Filtros{appliedListFilterCount > 0 ? ` (${appliedListFilterCount})` : ""}
@@ -4106,12 +4111,12 @@ const ProntuarioPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {([{id:"all",label:"Todos"},{id:"today",label:"Hoje"},{id:"week",label:"7 dias"},{id:"month",label:"Este mês"}] as const).map(period=>{const bounds=periodBounds(period.id,todayLocalStr());const active=appliedListFilters.dataInicial===bounds.dataInicial&&appliedListFilters.dataFinal===bounds.dataFinal;return <Button key={period.id} type="button" size="sm" variant={active?"secondary":"outline"} aria-pressed={active} onClick={()=>quickListPeriod(period.id)}>{period.label}</Button>;})}
-            {user?.id&&<Button type="button" size="sm" variant={appliedListFilters.profissionalId===user.id?"secondary":"outline"} aria-pressed={appliedListFilters.profissionalId===user.id} onClick={toggleMine}><User className="w-3.5 h-3.5 mr-1"/>Meus registros</Button>}
+            {([{id:"all",label:"Todos"},{id:"today",label:"Hoje"},{id:"week",label:"7 dias"},{id:"month",label:"Este mês"}] as const).map(period=>{const bounds=periodBounds(period.id,todayLocalStr());const active=appliedListFilters.dataInicial===bounds.dataInicial&&appliedListFilters.dataFinal===bounds.dataFinal;return <Button key={period.id} type="button" size="sm" variant={active?"secondary":"outline"} aria-pressed={active} className={cn(!queryPacienteId && "clinical-record-action", !queryPacienteId && active && "clinical-action-main")} onClick={()=>quickListPeriod(period.id)}>{period.label}</Button>;})}
+            {user?.id&&<Button type="button" size="sm" variant={appliedListFilters.profissionalId===user.id?"secondary":"outline"} aria-pressed={appliedListFilters.profissionalId===user.id} className={cn(!queryPacienteId && "clinical-record-action", !queryPacienteId && appliedListFilters.profissionalId===user.id && "clinical-action-main")} onClick={toggleMine}><User className="w-3.5 h-3.5 mr-1"/>Meus registros</Button>}
             {prontuariosFetching&&<span role="status" className="text-xs text-muted-foreground">Atualizando…</span>}
           </div>
           {listFiltersOpen && (
-            <div id="prontuario-list-filters" className="rounded-md border bg-card p-3">
+            <div id="prontuario-list-filters" className={cn("rounded-lg border p-3", queryPacienteId ? "bg-card" : "clinical-inset")}>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Data inicial</Label>
@@ -4193,8 +4198,8 @@ const ProntuarioPage: React.FC = () => {
 
                 <div className="space-y-1.5"><Label className="text-xs">Tipo de atendimento</Label><Select value={draftListFilters.tipoRegistro||"all"} onValueChange={v=>setDraftListFilters(prev=>({...prev,tipoRegistro:v==="all"?"":v}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todos os tipos</SelectItem>{TIPOS_REGISTRO.map(t=><SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
                 <div className="flex flex-wrap gap-2 xl:justify-end">
-                  <Button type="button" onClick={applyListFilters}>Aplicar</Button>
-                  <Button type="button" variant="ghost" onClick={clearListFilters}>Limpar filtros</Button>
+                  <Button type="button" className={cn(!queryPacienteId && "clinical-record-action clinical-action-main")} onClick={applyListFilters}>Aplicar</Button>
+                  <Button type="button" variant="ghost" className={cn(!queryPacienteId && "clinical-record-action")} onClick={clearListFilters}>Limpar filtros</Button>
                 </div>
               </div>
               {listFiltersError && (
