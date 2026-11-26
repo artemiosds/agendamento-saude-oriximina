@@ -82,6 +82,19 @@ describe("diagnostic slots", () => {
     expect(isDiagnosticAppointment({ tipo: "exame", custom_data: { sala_tipo: "aparelho_diagnostico" } })).toBe(true);
     expect(isDiagnosticAppointment({ tipo: "Exame", custom_data: { sala_tipo: "aparelho_diagnostico" } })).toBe(true);
     expect(isDiagnosticAppointment({ tipo: "consulta", custom_data: { sala_tipo: "aparelho_diagnostico" } })).toBe(false);
+    expect(isDiagnosticAppointment({ tipo: "Exame", custom_data: {} })).toBe(false);
+    expect(isDiagnosticAppointment({ tipo: "exame", custom_data: null })).toBe(false);
+    expect(isDiagnosticAppointment({ tipo: "EXAME", custom_data: { sala_tipo: "aparelho_diagnostico" } })).toBe(true);
+  });
+
+  it("reserves room occupancy even when an ordinary booking is not in the diagnostic queue", () => {
+    const bookings = [
+      { id: "ordinary", tipo: "Consulta", hora: "08:00", status: "confirmado", custom_data: {} },
+      { id: "diagnostic", tipo: "Exame", hora: "08:30", status: "confirmado", custom_data: { sala_tipo: "aparelho_diagnostico", duracao_slot_minutos: 45 } },
+      { id: "cancelled", tipo: "exame", hora: "09:30", status: "cancelado", custom_data: { sala_tipo: "aparelho_diagnostico", duracao_slot_minutos: 30 } },
+    ];
+    expect(bookings.filter(isDiagnosticAppointment).map(row => row.id)).toEqual(["diagnostic", "cancelled"]);
+    expect(getAvailableDiagnosticSlots(config, bookings)).toEqual(["09:30"]);
   });
 });
 
