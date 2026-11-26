@@ -792,6 +792,7 @@ const ProntuarioPage: React.FC = () => {
 
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [blankLibraryOpen, setBlankLibraryOpen] = useState(false);
 
   const [declRapidaOpen, setDeclRapidaOpen] = useState(false);
   const [painelDocOpen, setPainelDocOpen] = useState(false);
@@ -4059,6 +4060,7 @@ const ProntuarioPage: React.FC = () => {
             <h1 className="clinical-hub-name text-xl font-bold font-display">Prontuários</h1>
             <p className="clinical-patient-sub text-xs mt-1">{loading ? "Carregando registros…" : filtered.length.toLocaleString("pt-BR") + " registro(s) carregado(s)" + (hasMoreProntuarios ? " · há mais resultados" : "")}</p>
           </div>
+          {(canEdit || user?.role === 'master')&&<Button type="button" variant="outline" className="clinical-hub-new gap-2" onClick={()=>setBlankLibraryOpen(true)}><Printer className="w-4 h-4"/>Biblioteca de Documentos</Button>}
           {canEdit&&<Button type="button" onClick={()=>openNew(undefined,undefined)} className="clinical-hub-new"><Plus className="w-4 h-4"/>Novo Prontuário</Button>}
         </header>
       )}
@@ -6439,6 +6441,8 @@ const ProntuarioPage: React.FC = () => {
           </DialogContent>
         </Dialog>
       )}
+
+      {blankLibraryOpen && (canEdit || user?.role === 'master') && <LocalErrorBoundary label="a biblioteca de formulários" onReset={()=>setBlankLibraryOpen(false)}><GerarDocumentoModal open={blankLibraryOpen} onOpenChange={setBlankLibraryOpen} initialMode="blank"/></LocalErrorBoundary>}
 
       {/* Modal Gerar Documento Clínico */}
       {docModalOpen && (
