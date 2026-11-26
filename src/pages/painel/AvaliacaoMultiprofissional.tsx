@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader2, CheckCircle, XCircle, ClipboardList, User } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, ClipboardList, User, Users, RefreshCw, Clock3, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -43,6 +43,7 @@ const AvaliacaoMultiprofissional: React.FC = () => {
   const { refreshAgendamentos } = useAgendamentos();
   const [pacientes, setPacientes] = useState<PacienteMulti[]>([]);
   const [loading, setLoading] = useState(true);
+  const [queueError, setQueueError] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<PacienteMulti | null>(null);
   const [existingEvals, setExistingEvals] = useState<EvalExisting[]>([]);
@@ -56,6 +57,7 @@ const AvaliacaoMultiprofissional: React.FC = () => {
 
   const loadPacientes = useCallback(async () => {
     setLoading(true);
+    setQueueError(false);
     try {
       let query = (supabase as any).from('agendamentos')
         .select('*')
@@ -66,7 +68,8 @@ const AvaliacaoMultiprofissional: React.FC = () => {
         query = query.eq('unidade_id', user.unidadeId);
       }
 
-      const { data } = await query;
+      const { data, error } = await query;
+      if (error) throw error;
       if (data) {
         setPacientes(data.map((ag: any) => ({
           agendamentoId: ag.id,
@@ -79,6 +82,7 @@ const AvaliacaoMultiprofissional: React.FC = () => {
         })));
       }
     } catch (err) {
+      setQueueError(true);
       console.error('Error loading multiprofessional queue:', err);
     }
     setLoading(false);
@@ -206,40 +210,52 @@ const AvaliacaoMultiprofissional: React.FC = () => {
   const desfavoraveis = existingEvals.filter(e => e.parecer === 'desfavoravel').length;
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Avaliação Multiprofissional</h1>
-        <p className="text-muted-foreground text-sm">{pacientes.length} paciente(s) aguardando avaliação</p>
-      </div>
-
-      <React.Suspense fallback={<p>Carregando solicitações da equipe…</p>}><TeamEvaluationPanel /></React.Suspense>
-
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-      ) : pacientes.length === 0 ? (
-        <Card className="shadow-card border-0">
-          <CardContent className="p-8 text-center text-muted-foreground">
-            Nenhum paciente aguardando avaliação multiprofissional no momento.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {pacientes.map(pac => (
-            <Card key={pac.agendamentoId} className="shadow-card border-0">
-              <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{pac.pacienteNome}</p>
-                  <p className="text-sm text-muted-foreground">{pac.profissionalNome} • {pac.data} às {pac.hora}</p>
-                </div>
-                <Badge className="bg-warning/10 text-warning">Aguardando Avaliações</Badge>
-                <Button size="sm" onClick={() => openEvaluation(pac)}>
-                  <ClipboardList className="w-4 h-4 mr-1" /> Avaliar
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+    <div className="space-y-3 min-w-0 animate-fade-in">
+      <header className="clinical-hub-hero flex flex-wrap items-center gap-3">
+        <span className="clinical-patient-avatar flex items-center justify-center shrink-0"><Users className="h-5 w-5" aria-hidden="true" /></span>
+        <div className="flex-1 min-w-[9rem]">
+          <p className="clinical-hub-eyebrow">Cuidado compartilhado e interdisciplinar</p>
+          <h1 className="clinical-hub-name text-xl font-bold font-display">Avaliação Multiprofissional</h1>
+          <p className="clinical-patient-sub text-xs mt-1">Solicitações, pareceres e continuidade assistencial</p>
         </div>
-      )}
+      </header>
+
+      <React.Suspense fallback={<div className="clinical-premium p-4 text-sm text-muted-foreground" role="status">Carregando solicitações da equipe…</div>}><TeamEvaluationPanel dashboard /></React.Suspense>
+
+      <section className="clinical-premium p-3 space-y-3" aria-label="Avaliações vinculadas à fila">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="clinical-dock-icon clinical-tone-blue"><ClipboardList className="h-4 w-4" /></span>
+          <div className="flex-1 min-w-0"><h2 className="text-sm font-semibold">Avaliações vinculadas à fila</h2><p className="text-xs text-muted-foreground">Fluxo assistencial de aprovação e indeferimento · independente das solicitações da equipe</p></div>
+          <span className="font-semibold text-sm tabular-nums" aria-label="Agendamentos aguardando avaliação">{loading || queueError ? '—' : pacientes.length}</span>
+          <Button type="button" variant="outline" size="sm" className="clinical-record-action" onClick={()=>void loadPacientes()} disabled={loading || saving}><RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`} />Atualizar fila</Button>
+        </div>
+        {loading ? (
+          <div role="status" className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+        ) : queueError ? (
+          <div role="alert" className="clinical-inset rounded-lg border p-4 text-sm flex items-center gap-2 text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />Não foi possível consultar a fila. Use Atualizar fila para tentar novamente.</div>
+        ) : pacientes.length === 0 ? (
+          <div className="clinical-inset rounded-lg border p-4 flex items-center gap-2.5"><span className="clinical-dock-icon clinical-tone-slate"><Clock3 className="h-4 w-4" /></span><div><p className="text-sm font-medium">Nenhum agendamento aguardando avaliação.</p><p className="text-xs text-muted-foreground">Os registros do fluxo assistencial serão apresentados aqui quando disponíveis.</p></div></div>
+        ) : (
+          <div className="space-y-2">
+            {pacientes.map(pac => (
+              <Card key={pac.agendamentoId} className="clinical-premium">
+                <CardContent className="p-3 flex flex-wrap items-center gap-2.5">
+                  <span className="clinical-dock-icon clinical-tone-blue treatment-avatar" aria-hidden="true">{(pac.pacienteNome||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase()||'—'}</span>
+                  <div className="flex-1 min-w-[8rem]">
+                    <p className="font-semibold text-sm break-words">{pac.pacienteNome}</p>
+                    <p className="clinical-record-type font-semibold text-xs break-words">{pac.profissionalNome}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">{pac.data} às {pac.hora}</p>
+                  </div>
+                  <Badge className="bg-warning/10 text-warning whitespace-normal">Aguardando avaliações</Badge>
+                  <Button type="button" size="sm" className="clinical-record-action clinical-action-main" onClick={() => openEvaluation(pac)}>
+                    <ClipboardList className="w-4 h-4" /> Avaliar
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
