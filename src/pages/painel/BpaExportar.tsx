@@ -4316,6 +4316,7 @@ ${rejectedHtml}`;
                     Após marcar ou desmarcar, clique novamente em "Gerar Arquivo BPA-I" para aplicar.
                   </p>
                 )}
+              </div>
             </div>
 
             <div className="flex items-start gap-2 border p-3 rounded-md bg-amber-50/40 dark:bg-amber-950/30">
